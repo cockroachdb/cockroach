@@ -198,11 +198,12 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 	// Generate implicit filters from constraints and computed columns and add
 	// them to the list of explicit filters provided in the query.
-	checkFilters := c.checkConstraintFilters(scanPrivate.Table)
-	expandedFilters := append(explicitFilters, checkFilters...)
+	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
+	computedColFilters := c.computedColFilters(scanPrivate.Table, explicitFilters, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
 
-	computedColFilters := c.computedColFilters(scanPrivate.Table, expandedFilters)
-	expandedFilters = append(expandedFilters, computedColFilters...)
+	filterColumns := c.FilterOuterCols(explicitFilters)
+	filterColumns.UnionWith(c.FilterOuterCols(optionalFilters))
 
 	// Iterate over all indexes.
 	var iter scanIndexIter
@@ -210,46 +211,25 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	tabMeta := md.TableMeta(scanPrivate.Table)
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
-		// We may append to this slice below; avoid any potential aliasing by
-		// limiting its capacity (forcing append to reallocate).
-		allFilters := expandedFilters[:len(expandedFilters):len(expandedFilters)]
-		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
-		filterColumns := c.FilterOuterCols(allFilters)
-		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
-
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
 		// add no benefit as they don't really constrain anything.
 		// Furthermore, if the filters don't take advantage of the index (use any of the
 		// index columns), using the partition values add no benefit.
-		var constrainedInBetweenFilters memo.FiltersExpr
-		var isIndexPartitioned bool
-		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
-			// Add any partition filters if appropriate.
-			partitionFilters, inBetweenFilters := c.partitionValuesFilters(scanPrivate.Table, iter.index)
-
-			if len(partitionFilters) > 0 {
-				// We must add the filters so when we generate the inBetween spans, they are
-				// also constrained. This is also needed so the remaining filters are generated
-				// correctly using the in between spans (some remaining filters may be blown
-				// by the partition constraints).
-				constrainedInBetweenFilters = append(inBetweenFilters, allFilters...)
-				allFilters = append(allFilters, partitionFilters...)
-				isIndexPartitioned = true
-			}
-		}
-
-		// Check whether the filter can constrain the index.
-		constraint, remainingFilters, ok := c.tryConstrainIndex(
-			allFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
-		if !ok {
-			continue
-		}
-
-		// If the index is partitioned (by list), then the constraints above only
-		// contain spans within the partition ranges. For correctness, we must
-		// also add the spans for the in between ranges. Consider the following index
-		// and its partition:
+		//
+		// If the index is partitioned (by list), we generate two constraints and
+		// union them: the "main" constraint and the "in-between" constraint.The
+		// "main" constraint restricts the index to the known partition ranges. The
+		// "in-between" constraint restricts the index to the rest of the ranges
+		// (i.e. everything that falls in-between the main ranges); the in-between
+		// constraint is necessary for correctness (there can be rows outside of the
+		// partitioned ranges).
+		//
+		// For both constraints, the partition-related filters are passed as
+		// "optional" which guarantees that they return no remaining filters. This
+		// allows us to merge the remaining filters from both constraints.
+		//
+		// Consider the following index and its partition:
 		//
 		// CREATE INDEX orders_by_seq_num
 		//     ON orders (region, seq_num, id)
@@ -268,8 +248,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		//   [/'us-east1'/100 - /'us-east1'/199]
 		//   [/'us-west1'/100 - /'us-west1'/199]
 		//
-		// You'll notice that the spans before europe-west2, after us-west1 and in between
-		// the defined partitions are missing. We must add these spans now, appropriately
+		// The spans before europe-west2, after us-west1 and in between the defined
+		// partitions are missing. We must add these spans now, appropriately
 		// constrained using the filters.
 		//
 		// It is important that we add these spans after the partition spans are generated
@@ -292,11 +272,37 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		//
 		// Notice how we 'skip' all the europe-west2 rows with seq_num < 100.
 		//
-		if isIndexPartitioned {
+		var partitionFilters, inBetweenFilters memo.FiltersExpr
+
+		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
+		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
+		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
+			// Calculate any partition filters if appropriate (see below.
+			partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, iter.index)
+		}
+
+		// Check whether the filter (along with any partitioning filters) can constrain the index.
+		constraint, remainingFilters, ok := c.tryConstrainIndex(
+			explicitFilters,
+			append(optionalFilters, partitionFilters...),
+			scanPrivate.Table,
+			iter.indexOrdinal,
+			false, /* isInverted */
+		)
+		if !ok {
+			continue
+		}
+
+		if len(partitionFilters) > 0 {
 			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
-				constrainedInBetweenFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
+				explicitFilters,
+				append(optionalFilters, inBetweenFilters...),
+				scanPrivate.Table,
+				iter.indexOrdinal,
+				false, /* isInverted */
+			)
 			if !ok {
-				panic(errors.AssertionFailedf("constraining index should not failed with the in between filters"))
+				panic(errors.AssertionFailedf("in-between filters didn't yield a constraint"))
 			}
 
 			constraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
@@ -313,26 +319,12 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			remainingFilters.Deduplicate()
 		}
 
-		// If a check constraint filter or a partition filter wasn't able to
-		// constrain the index, it should not be used anymore for this group
-		// expression.
-		// TODO(ridwanmsharif): Does it ever make sense for us to continue
-		// using any constraint filter that wasn't able to constrain a scan?
-		// Maybe once we have more information about data distribution, we may
-		// use it to further constrain an index scan. We should revisit this
-		// once we have index skip scans.  A constraint that may not constrain
-		// an index scan may still allow the index to be used more effectively
-		// if an index skip scan is possible.
-		if len(explicitFilters) != len(allFilters) {
-			remainingFilters.RetainCommonFilters(explicitFilters)
-		}
-
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
 		newScanPrivate.Constraint = constraint
 		// Record whether we were able to use partitions to constrain the scan.
-		newScanPrivate.PartitionConstrainedScan = isIndexPartitioned
+		newScanPrivate.PartitionConstrainedScan = (len(partitionFilters) > 0)
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
@@ -479,7 +471,7 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 // The values of both columns in that index are known, enabling a single value
 // constraint to be generated.
 func (c *CustomFuncs) computedColFilters(
-	tabID opt.TableID, filters memo.FiltersExpr,
+	tabID opt.TableID, requiredFilters, optionalFilters memo.FiltersExpr,
 ) memo.FiltersExpr {
 	tabMeta := c.e.mem.Metadata().TableMeta(tabID)
 	if len(tabMeta.ComputedCols) == 0 {
@@ -488,7 +480,9 @@ func (c *CustomFuncs) computedColFilters(
 
 	// Start with set of constant columns, as derived from the list of filter
 	// conditions.
-	constCols := c.findConstantFilterCols(tabID, filters)
+	constCols := make(map[opt.ColumnID]opt.ScalarExpr)
+	c.findConstantFilterCols(constCols, tabID, requiredFilters)
+	c.findConstantFilterCols(constCols, tabID, optionalFilters)
 	if len(constCols) == 0 {
 		// No constant values could be derived from filters, so assume that there
 		// are also no constant computed columns.
@@ -501,27 +495,27 @@ func (c *CustomFuncs) computedColFilters(
 	for colID := range tabMeta.ComputedCols {
 		if c.tryFoldComputedCol(tabMeta, colID, constCols) {
 			constVal := constCols[colID]
-			eqOp := c.e.f.ConstructEq(c.e.f.ConstructVariable(colID), constVal)
+			// Note: Eq is not correct here because of NULLs.
+			eqOp := c.e.f.ConstructIs(c.e.f.ConstructVariable(colID), constVal)
 			computedColFilters = append(computedColFilters, c.e.f.ConstructFiltersItem(eqOp))
 		}
 	}
 	return computedColFilters
 }
 
-// findConstantFilterCols returns a mapping from table column ID to the constant
-// value of that column. It does this by iterating over the given list of
-// filters and finding expressions that constrain columns to a single constant
-// value. For example:
+// findConstantFilterCols adds to constFilterCols mappings from table column ID
+// to the constant value of that column. It does this by iterating over the
+// given lists of filters and finding expressions that constrain columns to a
+// single constant value. For example:
 //
 //   x = 5 AND y = 'foo'
 //
-// This would return a mapping from x => 5 and y => 'foo', which constants can
+// This would add a mapping from x => 5 and y => 'foo', which constants can
 // then be used to prove that dependent computed columns are also constant.
 func (c *CustomFuncs) findConstantFilterCols(
-	tabID opt.TableID, filters memo.FiltersExpr,
-) map[opt.ColumnID]opt.ScalarExpr {
+	constFilterCols map[opt.ColumnID]opt.ScalarExpr, tabID opt.TableID, filters memo.FiltersExpr,
+) {
 	tab := c.e.mem.Metadata().Table(tabID)
-	constFilterCols := make(map[opt.ColumnID]opt.ScalarExpr)
 	for i := range filters {
 		// If filter constraints are not tight, then no way to derive constant
 		// values.
@@ -561,7 +555,6 @@ func (c *CustomFuncs) findConstantFilterCols(
 			}
 		}
 	}
-	return constFilterCols
 }
 
 // tryFoldComputedCol tries to reduce the computed column with the given column
@@ -874,7 +867,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	for iter.nextInverted() {
 		// Check whether the filter can constrain the index.
 		constraint, remaining, ok := c.tryConstrainIndex(
-			filters, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
+			filters, nil /* optioanlFilters */, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
 		if !ok {
 			continue
 		}
@@ -907,7 +900,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 }
 
 func (c *CustomFuncs) initIdxConstraintForIndex(
-	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int, isInverted bool,
+	requiredFilters, optionalFilters memo.FiltersExpr,
+	tabID opt.TableID,
+	indexOrd int,
+	isInverted bool,
 ) (ic *idxconstraint.Instance) {
 	ic = &idxconstraint.Instance{}
 
@@ -930,7 +926,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	}
 
 	// Generate index constraints.
-	ic.Init(filters, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
+	ic.Init(requiredFilters, optionalFilters, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
 	return ic
 }
 
@@ -939,14 +935,19 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 // filter remaining after extracting the constraint. If no constraint can be
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
-	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int, isInverted bool,
+	requiredFilters, optionalFilters memo.FiltersExpr,
+	tabID opt.TableID,
+	indexOrd int,
+	isInverted bool,
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
-	if !isInverted && !c.canMaybeConstrainIndex(filters, tabID, indexOrd) {
+	if !isInverted &&
+		!c.canMaybeConstrainIndex(requiredFilters, tabID, indexOrd) &&
+		!c.canMaybeConstrainIndex(optionalFilters, tabID, indexOrd) {
 		return nil, nil, false
 	}
 
-	ic := c.initIdxConstraintForIndex(filters, tabID, indexOrd, isInverted)
+	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, isInverted)
 	constraint = ic.Constraint()
 	if constraint.IsUnconstrained() {
 		return nil, nil, false
@@ -966,7 +967,7 @@ func (c *CustomFuncs) tryConstrainIndex(
 func (c *CustomFuncs) allInvIndexConstraints(
 	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) (constraints []*constraint.Constraint, ok bool) {
-	ic := c.initIdxConstraintForIndex(filters, tabID, indexOrd, true /* isInverted */)
+	ic := c.initIdxConstraintForIndex(filters, nil /* optionalFilters */, tabID, indexOrd, true /* isInverted */)
 	constraints, err := ic.AllInvertedIndexConstraints()
 	if err != nil {
 		return nil, false

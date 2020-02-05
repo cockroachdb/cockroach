@@ -233,10 +233,8 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 }
 
 // SetScalarRoot stores the root memo expression when it is a scalar expression.
+// Used only for testing.
 func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
-	if m.rootExpr != nil {
-		panic(errors.AssertionFailedf("cannot set scalar root multiple times"))
-	}
 	m.rootExpr = scalar
 }
 

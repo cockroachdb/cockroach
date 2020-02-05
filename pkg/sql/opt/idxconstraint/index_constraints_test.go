@@ -67,7 +67,6 @@ func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
@@ -120,8 +119,17 @@ func TestIndexConstraints(t *testing.T) {
 
 			switch d.Cmd {
 			case "index-constraints":
-				expr, err := parser.ParseExpr(d.Input)
-				if err != nil {
+				// Allow specifying optional filters using the "optional:" delimiter.
+				var filters, optionalFilters memo.FiltersExpr
+				if idx := strings.Index(d.Input, "optional:"); idx >= 0 {
+					optional := d.Input[idx+len("optional:"):]
+					optionalFilters, err = buildFilters(optional, &semaCtx, &evalCtx, &f)
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+					d.Input = d.Input[:idx]
+				}
+				if filters, err = buildFilters(d.Input, &semaCtx, &evalCtx, &f); err != nil {
 					d.Fatalf(t, "%v", err)
 				}
 
@@ -129,20 +137,8 @@ func TestIndexConstraints(t *testing.T) {
 				for i := range varNames {
 					varNames[i] = fmt.Sprintf("@%d", i+1)
 				}
-				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, &f)
-				b.AllowUnsupportedExpr = true
-				err = b.Build(expr)
-				if err != nil {
-					return fmt.Sprintf("error: %v\n", err)
-				}
-				root := f.Memo().RootExpr().(opt.ScalarExpr)
-				filters := memo.FiltersExpr{f.ConstructFiltersItem(root)}
-				if _, ok := root.(*memo.TrueExpr); ok {
-					filters = memo.TrueFilter
-				}
-
 				var ic idxconstraint.Instance
-				ic.Init(filters, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
+				ic.Init(filters, optionalFilters, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
 				result := ic.Constraint()
 				var buf bytes.Buffer
 				for i := 0; i < result.Spans.Count(); i++ {
@@ -221,6 +217,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 		testCases = append(testCases, tc)
 	}
 
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for _, tc := range testCases {
@@ -237,26 +234,15 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			}
 			indexCols, notNullCols := parseIndexColumns(b, md, strings.Split(tc.indexInfo, ", "))
 
-			expr, err := parser.ParseExpr(tc.expr)
+			filters, err := buildFilters(tc.expr, &semaCtx, &evalCtx, &f)
 			if err != nil {
 				b.Fatal(err)
 			}
-
-			semaCtx := tree.MakeSemaContext()
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
-
-			err = bld.Build(expr)
-			if err != nil {
-				b.Fatal(err)
-			}
-			nd := f.Memo().RootExpr()
-			filters := memo.FiltersExpr{f.ConstructFiltersItem(nd.(opt.ScalarExpr))}
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic idxconstraint.Instance
-				ic.Init(filters, indexCols, notNullCols, false /*isInverted */, &evalCtx, &f)
+				ic.Init(filters, nil /* optionalFilters */, indexCols, notNullCols, false /*isInverted */, &evalCtx, &f)
 				_ = ic.Constraint()
 				_ = ic.RemainingFilters()
 			}
@@ -303,4 +289,26 @@ func parseIndexColumns(
 		}
 	}
 	return columns, notNullCols
+}
+
+func buildFilters(
+	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
+) (memo.FiltersExpr, error) {
+	if input == "" {
+		return memo.TrueFilter, nil
+	}
+	expr, err := parser.ParseExpr(input)
+	if err != nil {
+		return memo.FiltersExpr{}, err
+	}
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	b.AllowUnsupportedExpr = true
+	if err := b.Build(expr); err != nil {
+		return memo.FiltersExpr{}, err
+	}
+	root := f.Memo().RootExpr().(opt.ScalarExpr)
+	if _, ok := root.(*memo.TrueExpr); ok {
+		return memo.TrueFilter, nil
+	}
+	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
 }
