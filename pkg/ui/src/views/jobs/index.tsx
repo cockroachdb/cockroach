@@ -12,6 +12,7 @@ import succeededIcon from "!!raw-loader!assets/jobStatusIcons/checkMark.svg";
 import failedIcon from "!!raw-loader!assets/jobStatusIcons/exclamationPoint.svg";
 import _ from "lodash";
 import moment from "moment";
+import { DATE_FORMAT } from "src/util/format";
 import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
@@ -20,6 +21,7 @@ import { withRouter } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
@@ -37,7 +39,6 @@ import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 const statusOptions = [
   { value: "", label: "All" },
@@ -170,7 +171,7 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     }
     return (
       <ToolTipWrapper text={`System Time: ${tooltip}`}>
-        High-water Timestamp: {highwaterMoment.fromNow()}
+        High-water Timestamp: {highwaterMoment.format(DATE_FORMAT)}
       </ToolTipWrapper>
     );
   }
@@ -209,7 +210,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Creation Time",
-    cell: job => TimestampToMoment(job.created).fromNow(),
+    cell: job => TimestampToMoment(job.created).format(DATE_FORMAT),
     sort: job => TimestampToMoment(job.created).valueOf(),
   },
   {

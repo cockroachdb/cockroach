@@ -136,3 +136,5 @@ export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   const n = durationUnits.indexOf(scale) ;
   return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
 };
+
+export const DATE_FORMAT = "MMM DD, YYYY [at] h:mm A";

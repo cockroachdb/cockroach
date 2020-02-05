@@ -11,18 +11,25 @@ package importccl_test
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func bankBuf(numAccounts int) *bytes.Buffer {
@@ -36,6 +43,51 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 		}
 	}
 	return &buf
+}
+
+func TestGetDescriptorFromDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	aliceDesc := &sqlbase.DatabaseDescriptor{Name: "alice"}
+	bobDesc := &sqlbase.DatabaseDescriptor{Name: "bob"}
+
+	err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		batch := txn.NewBatch()
+		batch.Put(sqlbase.NewDatabaseKey("bob").Key(), 9999)
+		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(), 10000)
+
+		batch.Put(sqlbase.MakeDescMetadataKey(9999), sqlbase.WrapDescriptor(bobDesc))
+		batch.Put(sqlbase.MakeDescMetadataKey(10000), sqlbase.WrapDescriptor(aliceDesc))
+		return txn.CommitInBatch(ctx, batch)
+	})
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		dbName string
+
+		expected    *sqlbase.DatabaseDescriptor
+		expectedErr error
+	}{
+		{"bob", bobDesc, nil},
+		{"alice", aliceDesc, nil},
+		{"not_found", nil, gosql.ErrNoRows},
+	} {
+		t.Run(tc.dbName, func(t *testing.T) {
+			ret, err := importccl.TestingGetDescriptorFromDB(ctx, sqlDB, tc.dbName)
+			if tc.expectedErr != nil {
+				assert.Error(t, err)
+				assert.Equal(t, tc.expectedErr, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expected, ret)
+			}
+		})
+	}
 }
 
 func TestImportChunking(t *testing.T) {
