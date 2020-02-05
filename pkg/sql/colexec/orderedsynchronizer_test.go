@@ -220,7 +220,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 
 	inputs := make([]Operator, len(batches))
 	for i := range batches {
-		inputs[i] = NewRepeatableBatchSource(batches[i])
+		inputs[i] = NewRepeatableBatchSource(testAllocator, batches[i])
 	}
 
 	op := OrderedSynchronizer{

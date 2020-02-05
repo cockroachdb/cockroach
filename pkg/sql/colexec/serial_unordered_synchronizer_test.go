@@ -33,7 +33,7 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
 		batch := RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
-		source := NewRepeatableBatchSource(batch)
+		source := NewRepeatableBatchSource(testAllocator, batch)
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
 	}

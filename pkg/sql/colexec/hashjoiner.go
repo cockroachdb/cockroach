@@ -39,7 +39,7 @@ const (
 	hjEmittingUnmatched
 )
 
-// hashJoinerSpec is the specification for a hash joiner operator. The hash
+// hashJoinerSpec is the specification for a hash join operator. The hash
 // joiner performs a join on the left and right's equal columns and returns
 // combined left and right output columns.
 type hashJoinerSpec struct {
@@ -67,14 +67,11 @@ type hashJoinerSourceSpec struct {
 	// the hash joiner.
 	sourceTypes []coltypes.T
 
-	// source specifies the input operator to the hash join.
-	source Operator
-
 	// outer specifies whether an outer join is required over the input.
 	outer bool
 }
 
-// hashJoinEqOp performs a hash join on the input tables equality columns.
+// hashJoiner performs a hash join on the input tables equality columns.
 // It requires that the output for every input batch in the probe phase fits
 // within coldata.BatchSize(), otherwise the behavior is undefined. A join is
 // performed and there is no guarantee on the ordering of the output columns.
@@ -89,7 +86,7 @@ type hashJoinerSourceSpec struct {
 // 1. The bucket number (hash value) of each key tuple is computed and stored
 //    into a buckets array.
 // 2. The values in the buckets array is normalized to fit within the hash table
-//    bucketSize.
+//    numBuckets.
 // 3. The bucket-chaining hash table organization is prepared with the computed
 //    buckets.
 //
@@ -158,78 +155,104 @@ type hashJoinerSourceSpec struct {
 // emitUnmatched is performed after the probing ends. This is done by gathering
 // all build table rows that have never been matched and stitching it together
 // with NULL values on the probe side.
-type hashJoinEqOp struct {
+type hashJoiner struct {
 	twoInputNode
 
 	allocator *Allocator
-	// spec, if not nil, holds the specification for the current hash joiner
-	// process.
+	// spec holds the specification for the current hash join process.
 	spec hashJoinerSpec
-
-	// ht holds the hashTable that is populated during the build
-	// phase and used during the probe phase.
+	// state stores the current state of the hash joiner.
+	state hashJoinerState
+	// ht holds the hashTable that is populated during the build phase and used
+	// during the probe phase.
 	ht *hashTable
-
-	// prober, if not nil, stores the batch prober used by the hashJoiner in the
-	// probe phase.
-	prober *hashJoinProber
-
-	// runningState stores the current state hashJoiner.
-	runningState hashJoinerState
-
+	// output stores the resulting output batch that is constructed and returned
+	// for every input batch during the probe phase.
+	output coldata.Batch
 	// outputBatchSize specifies the desired length of the output batch which by
 	// default is coldata.BatchSize() but can be varied in tests.
 	outputBatchSize uint16
 
-	// emittingUnmatchedState is used when hjEmittingUnmatched.
+	// probeState is used in hjProbing state.
+	probeState struct {
+		// buildIdx and probeIdx represents the matching row indices that are used to
+		// stitch together the join results. Since probing is done on a per-batch
+		// basis, the indices will always fit within uint16. However, the matching
+		// build table row index should be an uint64 since it refers to the entirety
+		// of the build table.
+		buildIdx []uint64
+		probeIdx []uint16
+
+		// probeRowUnmatched is used in the case that the prober.spec.outer is true.
+		// This means that an outer join is performed on the probe side and we use
+		// probeRowUnmatched to represent that the resulting columns should be NULL on
+		// the build table. This indicates that the probe table row did not match any
+		// build table rows.
+		probeRowUnmatched []bool
+		// buildRowMatched is used in the case that prober.buildOuter is true. This
+		// means that an outer join is performed on the build side and buildRowMatched
+		// marks all the build table rows that have been matched already. The rows
+		// that were unmatched are emitted during the emitUnmatched phase.
+		buildRowMatched []bool
+
+		// prevBatch, if not nil, indicates that the previous probe input batch has
+		// not been fully processed.
+		prevBatch coldata.Batch
+		// prevBatchResumeIdx indicates the index of the probe row to resume the
+		// collection from. It is used only in case of non-distinct build source
+		// (every probe row can have multiple matching build rows).
+		prevBatchResumeIdx uint16
+	}
+
+	// emittingUnmatchedState is used in hjEmittingUnmatched state.
 	emittingUnmatchedState struct {
 		rowIdx uint64
 	}
+
+	exportBufferedState struct {
+		rightExported      uint64
+		rightWindowedBatch coldata.Batch
+	}
 }
 
-var _ Operator = &hashJoinEqOp{}
+var _ bufferingInMemoryOperator = &hashJoiner{}
+var _ resetter = &hashJoiner{}
 
-func (hj *hashJoinEqOp) Init() {
-	hj.spec.left.source.Init()
-	hj.spec.right.source.Init()
+func (hj *hashJoiner) Init() {
+	hj.inputOne.Init()
+	hj.inputTwo.Init()
 
 	hj.ht = newHashTable(
 		hj.allocator,
-		hashTableBucketSize,
+		hashTableNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
 		hj.spec.right.outCols,
 		false, /* allowNullEquality */
 	)
 
-	hj.prober = newHashJoinProber(
-		hj.allocator,
-		hj.ht,
-		hj.spec,
-		hj.outputBatchSize,
-	)
-
-	hj.runningState = hjBuilding
+	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithSize(hj.spec.right.sourceTypes, 0 /* size */)
+	hj.state = hjBuilding
 }
 
-func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
-	hj.prober.batch.ResetInternalBatch()
+func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
+	hj.resetOutput()
 	for {
-		switch hj.runningState {
+		switch hj.state {
 		case hjBuilding:
 			hj.build(ctx)
 			continue
 		case hjProbing:
-			hj.prober.exec(ctx)
+			hj.exec(ctx)
 
-			if hj.prober.batch.Length() == 0 && hj.spec.right.outer {
-				hj.runningState = hjEmittingUnmatched
+			if hj.output.Length() == 0 && hj.spec.right.outer {
+				hj.state = hjEmittingUnmatched
 				continue
 			}
-			return hj.prober.batch
+			return hj.output
 		case hjEmittingUnmatched:
 			hj.emitUnmatched()
-			return hj.prober.batch
+			return hj.output
 		default:
 			execerror.VectorizedInternalPanic("hash joiner in unhandled state")
 			// This code is unreachable, but the compiler cannot infer that.
@@ -238,135 +261,70 @@ func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (hj *hashJoinEqOp) build(ctx context.Context) {
-	hj.ht.build(ctx, hj.spec.right.source)
+func (hj *hashJoiner) build(ctx context.Context) {
+	hj.ht.build(ctx, hj.inputTwo)
 
 	if !hj.spec.rightDistinct {
-		hj.ht.same = make([]uint64, hj.ht.vals.length+1)
-		hj.ht.allocateVisited()
+		hj.ht.maybeAllocateSameAndVisited()
 	}
 
 	if hj.spec.right.outer {
-		hj.prober.buildRowMatched = make([]bool, hj.ht.vals.length)
+		if uint64(cap(hj.probeState.buildRowMatched)) < hj.ht.vals.length {
+			hj.probeState.buildRowMatched = make([]bool, hj.ht.vals.length)
+		} else {
+			hj.probeState.buildRowMatched = hj.probeState.buildRowMatched[:hj.ht.vals.length]
+			for n := uint64(0); n < hj.ht.vals.length; n += uint64(copy(hj.probeState.buildRowMatched[n:], zeroBoolColumn)) {
+			}
+		}
 	}
 
-	hj.runningState = hjProbing
+	hj.state = hjProbing
 }
 
-func (hj *hashJoinEqOp) emitUnmatched() {
+func (hj *hashJoiner) emitUnmatched() {
 	// Set all elements in the probe columns of the output batch to null.
-	for i := range hj.prober.spec.left.outCols {
-		outCol := hj.prober.batch.ColVec(i)
+	for i := range hj.spec.left.outCols {
+		outCol := hj.output.ColVec(i)
 		outCol.Nulls().SetNulls()
 	}
 
 	nResults := uint16(0)
 
 	for nResults < hj.outputBatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.vals.length {
-		if !hj.prober.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
-			hj.prober.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
+		if !hj.probeState.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
+			hj.probeState.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
 			nResults++
 		}
 		hj.emittingUnmatchedState.rowIdx++
 	}
 
-	outCols := hj.prober.batch.ColVecs()[len(hj.spec.left.outCols) : len(hj.spec.left.outCols)+len(hj.ht.outCols)]
-	hj.allocator.PerformOperation(outCols, func() {
-		for outColIdx, inColIdx := range hj.ht.outCols {
-			outCol := outCols[outColIdx]
-			valCol := hj.ht.vals.colVecs[inColIdx]
-			colType := hj.ht.valTypes[inColIdx]
-
-			outCol.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						ColType:   colType,
-						Src:       valCol,
-						SrcEndIdx: uint64(nResults),
-					},
-					Sel64: hj.prober.buildIdx,
+	outCols := hj.output.ColVecs()[len(hj.spec.left.outCols) : len(hj.spec.left.outCols)+len(hj.ht.outCols)]
+	for outColIdx, inColIdx := range hj.ht.outCols {
+		outCol := outCols[outColIdx]
+		valCol := hj.ht.vals.colVecs[inColIdx]
+		colType := hj.ht.valTypes[inColIdx]
+		// NOTE: this Copy is not accounted for because we don't want for memory
+		// limit error to occur at this point - we have already built the hash
+		// table and now are only consuming the left source one batch at a time,
+		// so such behavior should be a minor deviation from the limit. If we were
+		// to hit the limit here, it would have been very hard to fall back to disk
+		// backed hash joiner because we might have already emitted partial output.
+		// This behavior is acceptable - we allocated hj.output batch already, so
+		// the concern here is only for the variable-sized types that exceed our
+		// estimations.
+		outCol.Copy(
+			coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
+					ColType:   colType,
+					Src:       valCol,
+					SrcEndIdx: uint64(nResults),
 				},
-			)
-		}
-	})
-
-	hj.prober.batch.SetLength(nResults)
-}
-
-// hashJoinProber is used by the hashJoinEqOp during the probe phase. It
-// operates on a single batch of obtained from the probe relation and probes the
-// hashTable to construct the resulting output batch.
-type hashJoinProber struct {
-	ht *hashTable
-
-	// batch stores the resulting output batch that is constructed and returned
-	// for every input batch during the probe phase.
-	batch coldata.Batch
-	// outputBatchSize specifies the desired length of the output batch which by
-	// default is coldata.BatchSize() but can be varied in tests.
-	outputBatchSize uint16
-
-	// buildIdx and probeIdx represents the matching row indices that are used to
-	// stitch together the join results. Since probing is done on a per-batch
-	// basis, the indices will always fit within uint16. However, the matching
-	// build table row index should be an uint64 since it refers to the entirety
-	// of the build table.
-	buildIdx []uint64
-	probeIdx []uint16
-
-	// probeRowUnmatched is used in the case that the prober.spec.outer is true.
-	// This means that an outer join is performed on the probe side and we use
-	// probeRowUnmatched to represent that the resulting columns should be NULL on
-	// the build table. This indicates that the probe table row did not match any
-	// build table rows.
-	probeRowUnmatched []bool
-	// buildRowMatched is used in the case that prober.buildOuter is true. This
-	// means that an outer join is performed on the build side and buildRowMatched
-	// marks all the build table rows that have been matched already. The rows
-	// that were unmatched are emitted during the emitUnmatched phase.
-	buildRowMatched []bool
-
-	// spec holds the specifications for the source operator used in the probe
-	// phase.
-	spec hashJoinerSpec
-
-	// prevBatch, if not nil, indicates that the previous probe input batch has
-	// not been fully processed.
-	prevBatch coldata.Batch
-	// prevBatchResumeIdx indicates the index of the probe row to resume the
-	// collection from. It is used only in case of non-distinct build source
-	// (every probe row can have multiple matching build rows).
-	prevBatchResumeIdx uint16
-}
-
-func newHashJoinProber(
-	allocator *Allocator, ht *hashTable, spec hashJoinerSpec, outputBatchSize uint16,
-) *hashJoinProber {
-	var outColTypes []coltypes.T
-	for _, probeOutCol := range spec.left.outCols {
-		outColTypes = append(outColTypes, spec.left.sourceTypes[probeOutCol])
-	}
-	for _, buildOutCol := range spec.right.outCols {
-		outColTypes = append(outColTypes, spec.right.sourceTypes[buildOutCol])
+				Sel64: hj.probeState.buildIdx,
+			},
+		)
 	}
 
-	var probeRowUnmatched []bool
-	if spec.left.outer {
-		probeRowUnmatched = make([]bool, coldata.BatchSize())
-	}
-
-	return &hashJoinProber{
-		ht: ht,
-
-		batch:           allocator.NewMemBatch(outColTypes),
-		outputBatchSize: outputBatchSize,
-
-		buildIdx: make([]uint64, coldata.BatchSize()),
-		probeIdx: make([]uint16, coldata.BatchSize()),
-
-		spec:              spec,
-		probeRowUnmatched: probeRowUnmatched,
-	}
+	hj.output.SetLength(nResults)
 }
 
 // exec is a general prober that works with non-distinct build table equality
@@ -381,51 +339,51 @@ func newHashJoinProber(
 // rightDistinct is true if the build table equality columns are distinct. It
 // performs the same operation as the exec() function normally would while
 // taking a shortcut to improve speed.
-func (prober *hashJoinProber) exec(ctx context.Context) {
-	prober.batch.SetLength(0)
+func (hj *hashJoiner) exec(ctx context.Context) {
+	hj.output.SetLength(0)
 
-	if batch := prober.prevBatch; batch != nil {
+	if batch := hj.probeState.prevBatch; batch != nil {
 		// The previous result was bigger than the maximum batch size, so we didn't
 		// finish outputting it in the last call to probe. Continue outputting the
 		// result from the previous batch.
-		prober.prevBatch = nil
+		hj.probeState.prevBatch = nil
 		batchSize := batch.Length()
 		sel := batch.Selection()
 
-		nResults := prober.collect(batch, batchSize, sel)
-		prober.congregate(nResults, batch, batchSize)
+		nResults := hj.collect(batch, batchSize, sel)
+		hj.congregate(nResults, batch, batchSize)
 	} else {
 		for {
-			batch := prober.spec.left.source.Next(ctx)
+			batch := hj.inputOne.Next(ctx)
 			batchSize := batch.Length()
 
 			if batchSize == 0 {
 				break
 			}
 
-			for i, colIdx := range prober.spec.left.eqCols {
-				prober.ht.keys[i] = batch.ColVec(int(colIdx))
+			for i, colIdx := range hj.spec.left.eqCols {
+				hj.ht.keys[i] = batch.ColVec(int(colIdx))
 			}
 
 			sel := batch.Selection()
 
 			var nToCheck uint16
-			switch prober.spec.joinType {
+			switch hj.spec.joinType {
 			case sqlbase.JoinType_LEFT_ANTI:
 				// The setup of probing for LEFT ANTI join needs a special treatment in
 				// order to reuse the same "check" functions below.
 				//
 				// First, we compute the hash values for all tuples in the batch.
-				prober.ht.computeBuckets(ctx, prober.ht.buckets, prober.ht.keys, uint64(batchSize), sel)
+				hj.ht.computeBuckets(ctx, hj.ht.buckets, hj.ht.keys, uint64(batchSize), sel)
 				// Then, we iterate over all tuples to see whether there is at least
 				// one tuple in the hash table that has the same hash value.
 				for i := uint16(0); i < batchSize; i++ {
-					if prober.ht.first[prober.ht.buckets[i]] != 0 {
+					if hj.ht.first[hj.ht.buckets[i]] != 0 {
 						// Non-zero "first" key indicates that there is a match of hashes
 						// and we need to include the current tuple to check whether it is
 						// an actual match.
-						prober.ht.groupID[i] = prober.ht.first[prober.ht.buckets[i]]
-						prober.ht.toCheck[nToCheck] = i
+						hj.ht.groupID[i] = hj.ht.first[hj.ht.buckets[i]]
+						hj.ht.toCheck[nToCheck] = i
 						nToCheck++
 					}
 				}
@@ -435,43 +393,43 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 				// definitely don't have a match, the zero value will remain until the
 				// "collecting" and "congregation" step in which such tuple will be
 				// included into the output.
-				copy(prober.ht.headID[:batchSize], zeroUint64Column)
+				copy(hj.ht.headID[:batchSize], zeroUint64Column)
 			default:
 				// Initialize groupID with the initial hash buckets and toCheck with all
 				// applicable indices.
-				prober.ht.lookupInitial(ctx, batchSize, sel)
+				hj.ht.lookupInitial(ctx, batchSize, sel)
 				nToCheck = batchSize
 			}
 
 			var nResults uint16
 
-			if prober.spec.rightDistinct {
+			if hj.spec.rightDistinct {
 				for nToCheck > 0 {
 					// Continue searching along the hash table next chains for the corresponding
 					// buckets. If the key is found or end of next chain is reached, the key is
 					// removed from the toCheck array.
-					nToCheck = prober.ht.distinctCheck(nToCheck, sel)
-					prober.ht.findNext(nToCheck)
+					nToCheck = hj.ht.distinctCheck(nToCheck, sel)
+					hj.ht.findNext(nToCheck)
 				}
 
-				nResults = prober.distinctCollect(batch, batchSize, sel)
+				nResults = hj.distinctCollect(batch, batchSize, sel)
 			} else {
 				for nToCheck > 0 {
 					// Continue searching for the build table matching keys while the toCheck
 					// array is non-empty.
-					nToCheck = prober.ht.check(nToCheck, sel)
-					prober.ht.findNext(nToCheck)
+					nToCheck = hj.ht.check(nToCheck, sel)
+					hj.ht.findNext(nToCheck)
 				}
 
 				// We're processing a new batch, so we'll reset the index to start
 				// collecting from.
-				prober.prevBatchResumeIdx = 0
-				nResults = prober.collect(batch, batchSize, sel)
+				hj.probeState.prevBatchResumeIdx = 0
+				nResults = hj.collect(batch, batchSize, sel)
 			}
 
-			prober.congregate(nResults, batch, batchSize)
+			hj.congregate(nResults, batch, batchSize)
 
-			if prober.batch.Length() > 0 {
+			if hj.output.Length() > 0 {
 				break
 			}
 		}
@@ -481,39 +439,47 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 // congregate uses the probeIdx and buildIdx pairs to stitch together the
 // resulting join rows and add them to the output batch with the left table
 // columns preceding the right table columns.
-func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, batchSize uint16) {
-	rightColOffset := len(prober.spec.left.outCols)
+func (hj *hashJoiner) congregate(nResults uint16, batch coldata.Batch, batchSize uint16) {
+	// NOTE: Copy() calls are not accounted for because we don't want for memory
+	// limit error to occur at this point - we have already built the hash
+	// table and now are only consuming the left source one batch at a time,
+	// so such behavior should be a minor deviation from the limit. If we were
+	// to hit the limit here, it would have been very hard to fall back to disk
+	// backed hash joiner because we might have already emitted partial output.
+	// This behavior is acceptable - we allocated hj.output batch already, so the
+	// concern here is only for the variable-sized types that exceed our
+	// estimations.
+
+	rightColOffset := len(hj.spec.left.outCols)
 	// If the hash table is empty, then there is nothing to copy. The nulls
 	// will be set below.
-	if prober.ht.vals.length > 0 {
-		outCols := prober.batch.ColVecs()[rightColOffset : rightColOffset+len(prober.ht.outCols)]
-		prober.ht.allocator.PerformOperation(outCols, func() {
-			for outColIdx, inColIdx := range prober.ht.outCols {
-				outCol := outCols[outColIdx]
-				valCol := prober.ht.vals.colVecs[inColIdx]
-				colType := prober.ht.valTypes[inColIdx]
-				// Note that if for some index i, probeRowUnmatched[i] is true, then
-				// prober.buildIdx[i] == 0 which will copy the garbage zeroth row of the
-				// hash table, but we will set the NULL value below.
-				outCol.Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							ColType:   colType,
-							Src:       valCol,
-							SrcEndIdx: uint64(nResults),
-						},
-						Sel64: prober.buildIdx,
+	if hj.ht.vals.length > 0 {
+		outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.ht.outCols)]
+		for outColIdx, inColIdx := range hj.ht.outCols {
+			outCol := outCols[outColIdx]
+			valCol := hj.ht.vals.colVecs[inColIdx]
+			colType := hj.ht.valTypes[inColIdx]
+			// Note that if for some index i, probeRowUnmatched[i] is true, then
+			// hj.buildIdx[i] == 0 which will copy the garbage zeroth row of the
+			// hash table, but we will set the NULL value below.
+			outCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:   colType,
+						Src:       valCol,
+						SrcEndIdx: uint64(nResults),
 					},
-				)
-			}
-		})
+					Sel64: hj.probeState.buildIdx,
+				},
+			)
+		}
 	}
-	if prober.spec.left.outer {
+	if hj.spec.left.outer {
 		// Add in the nulls we needed to set for the outer join.
-		for outColIdx := range prober.ht.outCols {
-			outCol := prober.batch.ColVec(outColIdx + rightColOffset)
+		for outColIdx := range hj.ht.outCols {
+			outCol := hj.output.ColVec(outColIdx + rightColOffset)
 			nulls := outCol.Nulls()
-			for i, isNull := range prober.probeRowUnmatched {
+			for i, isNull := range hj.probeState.probeRowUnmatched {
 				if isNull {
 					nulls.SetNull(uint16(i))
 				}
@@ -521,61 +487,126 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		}
 	}
 
-	outCols := prober.batch.ColVecs()[:len(prober.spec.left.outCols)]
-	prober.ht.allocator.PerformOperation(outCols, func() {
-		for outColIdx, inColIdx := range prober.spec.left.outCols {
-			outCol := outCols[outColIdx]
-			valCol := batch.ColVec(int(inColIdx))
-			colType := prober.spec.left.sourceTypes[inColIdx]
+	outCols := hj.output.ColVecs()[:len(hj.spec.left.outCols)]
+	for outColIdx, inColIdx := range hj.spec.left.outCols {
+		outCol := outCols[outColIdx]
+		valCol := batch.ColVec(int(inColIdx))
+		colType := hj.spec.left.sourceTypes[inColIdx]
 
-			outCol.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						ColType:   colType,
-						Src:       valCol,
-						Sel:       prober.probeIdx,
-						SrcEndIdx: uint64(nResults),
-					},
+		outCol.Copy(
+			coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
+					ColType:   colType,
+					Src:       valCol,
+					Sel:       hj.probeState.probeIdx,
+					SrcEndIdx: uint64(nResults),
 				},
-			)
-		}
-	})
+			},
+		)
+	}
 
-	if prober.spec.right.outer {
+	if hj.spec.right.outer {
 		// In order to determine which rows to emit for the outer join on the build
 		// table in the end, we need to mark the matched build table rows.
-		if prober.spec.left.outer {
+		if hj.spec.left.outer {
 			for i := uint16(0); i < nResults; i++ {
-				if !prober.probeRowUnmatched[i] {
-					prober.buildRowMatched[prober.buildIdx[i]] = true
+				if !hj.probeState.probeRowUnmatched[i] {
+					hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
 				}
 			}
 		} else {
 			for i := uint16(0); i < nResults; i++ {
-				prober.buildRowMatched[prober.buildIdx[i]] = true
+				hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
 			}
 		}
 	}
 
-	prober.batch.SetLength(nResults)
+	hj.output.SetLength(nResults)
 }
 
-// NewEqHashJoinerOp creates a new equality hash join operator on the left and
-// right input tables. leftEqCols and rightEqCols specify the equality columns
-// while leftOutCols and rightOutCols specifies the output columns. leftTypes
-// and rightTypes specify the input column types of the two sources.
-func NewEqHashJoinerOp(
-	allocator *Allocator,
-	leftSource Operator,
-	rightSource Operator,
+func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
+	if hj.inputOne == input {
+		// We do not buffer anything from the left source. Furthermore, the memory
+		// limit can only hit during the building of the hash table step at which
+		// point we haven't requested a single batch from the left.
+		return coldata.ZeroBatch
+	} else if hj.inputTwo == input {
+		if hj.exportBufferedState.rightExported == hj.ht.vals.length {
+			return coldata.ZeroBatch
+		}
+		newRightExported := hj.exportBufferedState.rightExported + uint64(coldata.BatchSize())
+		if newRightExported > hj.ht.vals.length {
+			newRightExported = hj.ht.vals.length
+		}
+		startIdx, endIdx := hj.exportBufferedState.rightExported, newRightExported
+		b := hj.exportBufferedState.rightWindowedBatch
+		for i, t := range hj.spec.right.sourceTypes {
+			window := hj.ht.vals.colVecs[i].Window(t, startIdx, endIdx)
+			b.ReplaceCol(window, i)
+		}
+		b.SetLength(uint16(endIdx - startIdx))
+		hj.exportBufferedState.rightExported = newRightExported
+		return b
+	} else {
+		execerror.VectorizedInternalPanic(errors.New(
+			"unexpectedly ExportBuffered is called with neither left nor right inputs to hash join",
+		))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
+	}
+}
+
+func (hj *hashJoiner) resetOutput() {
+	if hj.output == nil {
+		var outColTypes []coltypes.T
+		for _, probeOutCol := range hj.spec.left.outCols {
+			outColTypes = append(outColTypes, hj.spec.left.sourceTypes[probeOutCol])
+		}
+		for _, buildOutCol := range hj.spec.right.outCols {
+			outColTypes = append(outColTypes, hj.spec.right.sourceTypes[buildOutCol])
+		}
+		hj.output = hj.allocator.NewMemBatch(outColTypes)
+	} else {
+		hj.output.ResetInternalBatch()
+	}
+}
+
+func (hj *hashJoiner) reset() {
+	for _, input := range []Operator{hj.inputOne, hj.inputTwo} {
+		if r, ok := input.(resetter); ok {
+			r.reset()
+		}
+	}
+	hj.state = hjBuilding
+	hj.ht.reset()
+	copy(hj.probeState.buildIdx[:coldata.BatchSize()], zeroUint64Column)
+	copy(hj.probeState.probeIdx[:coldata.BatchSize()], zeroUint16Column)
+	if hj.spec.left.outer {
+		copy(hj.probeState.probeRowUnmatched[:coldata.BatchSize()], zeroBoolColumn)
+	}
+	// hj.probeState.buildRowMatched is reset after building the hash table is
+	// complete in build() method.
+	hj.emittingUnmatchedState.rowIdx = 0
+	hj.exportBufferedState.rightExported = 0
+}
+
+// makeHashJoinerSpec creates a specification for columnar hash join operator.
+// leftEqCols and rightEqCols specify the equality columns while leftOutCols
+// and rightOutCols specifies the output columns. leftTypes and rightTypes
+// specify the input column types of the two sources. rightDistinct indicates
+// whether the equality columns of the right source form a key.
+func makeHashJoinerSpec(
+	joinType sqlbase.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
 	rightDistinct bool,
-	joinType sqlbase.JoinType,
-) (Operator, error) {
-	var leftOuter, rightOuter bool
+) (hashJoinerSpec, error) {
+	var (
+		spec                  hashJoinerSpec
+		leftOuter, rightOuter bool
+	)
 	// TODO(yuzefovich): get rid of "outCols" entirely and plumb the assumption
 	// of outputting all columns into the hash joiner itself.
 	leftOutCols := make([]uint32, len(leftTypes))
@@ -608,35 +639,45 @@ func NewEqHashJoinerOp(
 	case sqlbase.JoinType_LEFT_ANTI:
 		rightOutCols = rightOutCols[:0]
 	default:
-		return nil, errors.Errorf("hash join of type %s not supported", joinType)
+		return spec, errors.Errorf("hash join of type %s not supported", joinType)
 	}
 
 	left := hashJoinerSourceSpec{
 		eqCols:      leftEqCols,
 		outCols:     leftOutCols,
 		sourceTypes: leftTypes,
-		source:      leftSource,
 		outer:       leftOuter,
 	}
 	right := hashJoinerSourceSpec{
 		eqCols:      rightEqCols,
 		outCols:     rightOutCols,
 		sourceTypes: rightTypes,
-		source:      rightSource,
 		outer:       rightOuter,
 	}
-
-	spec := hashJoinerSpec{
+	spec = hashJoinerSpec{
 		joinType:      joinType,
 		left:          left,
 		right:         right,
 		rightDistinct: rightDistinct,
 	}
+	return spec, nil
+}
 
-	return &hashJoinEqOp{
+// newHashJoiner creates a new equality hash join operator on the left and
+// right input tables.
+func newHashJoiner(
+	allocator *Allocator, spec hashJoinerSpec, leftSource, rightSource Operator,
+) Operator {
+	hj := &hashJoiner{
 		twoInputNode:    newTwoInputNode(leftSource, rightSource),
 		allocator:       allocator,
 		spec:            spec,
 		outputBatchSize: coldata.BatchSize(),
-	}, nil
+	}
+	hj.probeState.buildIdx = make([]uint64, coldata.BatchSize())
+	hj.probeState.probeIdx = make([]uint16, coldata.BatchSize())
+	if spec.left.outer {
+		hj.probeState.probeRowUnmatched = make([]bool, coldata.BatchSize())
+	}
+	return hj
 }

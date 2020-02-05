@@ -942,7 +942,7 @@ var _ Operator = &finiteBatchSource{}
 // batch a specified number of times.
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
-		repeatableBatch: NewRepeatableBatchSource(batch),
+		repeatableBatch: NewRepeatableBatchSource(testAllocator, batch),
 		usableCount:     usableCount,
 	}
 }
@@ -957,6 +957,10 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 		return f.repeatableBatch.Next(ctx)
 	}
 	return coldata.ZeroBatch
+}
+
+func (f *finiteBatchSource) reset(usableCount int) {
+	f.usableCount = usableCount
 }
 
 // finiteChunksSource is an Operator that returns a batch specified number of
@@ -976,7 +980,7 @@ var _ Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
-		repeatableBatch: NewRepeatableBatchSource(batch),
+		repeatableBatch: NewRepeatableBatchSource(testAllocator, batch),
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -1038,7 +1042,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batchLen := uint16(10)
 	batch.SetLength(batchLen)
-	input := NewRepeatableBatchSource(batch)
+	input := NewRepeatableBatchSource(testAllocator, batch)
 
 	b := input.Next(context.Background())
 	b.SetLength(0)
@@ -1066,7 +1070,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
 	copy(batch.Selection(), sel)
-	input := NewRepeatableBatchSource(batch)
+	input := NewRepeatableBatchSource(testAllocator, batch)
 	b := input.Next(context.Background())
 
 	b.SetLength(0)

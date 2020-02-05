@@ -103,7 +103,7 @@ func BenchmarkDeselector(b *testing.B) {
 				batch.SetSelection(true)
 				copy(batch.Selection(), sel)
 				batch.SetLength(batchLen)
-				input := NewRepeatableBatchSource(batch)
+				input := NewRepeatableBatchSource(testAllocator, batch)
 				op := NewDeselectorOp(testAllocator, input, inputTypes)
 				op.Init()
 				b.ResetTimer()

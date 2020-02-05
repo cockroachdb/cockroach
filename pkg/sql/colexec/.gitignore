@@ -8,6 +8,7 @@ count_agg.eg.go
 distinct.eg.go
 hashjoiner.eg.go
 hashtable.eg.go
+hash_utils.eg.go
 like_ops.eg.go
 mergejoinbase.eg.go
 mergejoiner_fullouter.eg.go
@@ -32,4 +33,3 @@ sort.eg.go
 sum_agg.eg.go
 tuples_differ.eg.go
 vec_comparators.eg.go
-zerocolumns.eg.go

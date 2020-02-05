@@ -28,7 +28,7 @@ func NewUnorderedDistinct(
 	}
 	ht := newHashTable(
 		allocator,
-		hashTableBucketSize,
+		hashTableNumBuckets,
 		colTypes,
 		distinctCols,
 		outCols,

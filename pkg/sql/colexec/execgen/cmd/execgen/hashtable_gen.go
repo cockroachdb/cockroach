@@ -30,17 +30,9 @@ func genHashTable(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_SEL_IND", "{{.SelInd}}", -1)
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
 	s = assignNeRe.ReplaceAllString(s, `{{.Global.Assign "$1" "$2" "$3"}}`)
-
-	assignHash := makeFunctionRegex("_ASSIGN_HASH", 2)
-	s = assignHash.ReplaceAllString(s, `{{.Global.UnaryAssign "$1" "$2"}}`)
-
-	rehash := makeFunctionRegex("_REHASH_BODY", 9)
-	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "HasSel" $8 "HasNulls" $9}}`)
 
 	checkCol := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 7)
 	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "UseSel" $7}}`)
@@ -57,15 +49,7 @@ func genHashTable(wr io.Writer) error {
 		return err
 	}
 
-	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.NE], hashOverloads)
-
-	return tmpl.Execute(wr, struct {
-		NETemplate   interface{}
-		HashTemplate interface{}
-	}{
-		NETemplate:   allOverloads[0],
-		HashTemplate: allOverloads[1],
-	})
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 
 func init() {

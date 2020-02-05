@@ -535,7 +535,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
 
-	input := colexec.NewRepeatableBatchSource(batch)
+	input := colexec.NewRepeatableBatchSource(testAllocator, batch)
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)

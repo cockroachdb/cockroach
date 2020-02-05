@@ -278,11 +278,8 @@ type HashRouter struct {
 	OneInputNode
 	// types are the input coltypes.
 	types []coltypes.T
-	// ht is not fully initialized to a hashTable, only the utility methods are
-	// used.
-	ht hashTable
 	// hashCols is a slice of indices of the columns used for hashing.
-	hashCols []int
+	hashCols []uint32
 
 	// One output for each stream.
 	outputs []routerOutput
@@ -298,20 +295,16 @@ type HashRouter struct {
 		bufferedMeta []execinfrapb.ProducerMetadata
 	}
 
-	scratch struct {
-		// buckets is scratch space for the computed hash value of a group of columns
-		// with the same index in the current coldata.Batch.
-		buckets []uint64
-		// selections is scratch space for selection vectors used by router outputs.
-		selections [][]uint16
-	}
+	// tupleDistributor is used to decide to which output a particular tuple
+	// should be routed.
+	tupleDistributor *tupleHashDistributor
 }
 
 // NewHashRouter creates a new hash router that consumes coldata.Batches from
 // input and hashes each row according to hashCols to one of numOutputs outputs.
 // These outputs are exposed as Operators.
 func NewHashRouter(
-	allocator *Allocator, input Operator, types []coltypes.T, hashCols []int, numOutputs int,
+	allocator *Allocator, input Operator, types []coltypes.T, hashCols []uint32, numOutputs int,
 ) (*HashRouter, []Operator) {
 	outputs := make([]routerOutput, numOutputs)
 	outputsAsOps := make([]Operator, numOutputs)
@@ -338,7 +331,7 @@ func NewHashRouter(
 func newHashRouterWithOutputs(
 	input Operator,
 	types []coltypes.T,
-	hashCols []int,
+	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
 ) *HashRouter {
@@ -348,11 +341,7 @@ func newHashRouterWithOutputs(
 		hashCols:            hashCols,
 		outputs:             outputs,
 		unblockedEventsChan: unblockEventsChan,
-	}
-	r.scratch.buckets = make([]uint64, coldata.BatchSize())
-	r.scratch.selections = make([][]uint16, len(outputs))
-	for i := range r.scratch.selections {
-		r.scratch.selections[i] = make([]uint16, 0, coldata.BatchSize())
+		tupleDistributor:    newTupleHashDistributor(defaultInitHashValue, len(outputs)),
 	}
 	return r
 }
@@ -424,9 +413,9 @@ func (r *HashRouter) Run(ctx context.Context) {
 // each column to its corresponding output, returning whether the input is
 // done.
 func (r *HashRouter) processNextBatch(ctx context.Context) bool {
-	r.ht.initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
 	b := r.input.Next(ctx)
-	if b.Length() == 0 {
+	n := b.Length()
+	if n == 0 {
 		// Done. Push an empty batch to outputs to tell them the data is done as
 		// well.
 		for _, o := range r.outputs {
@@ -435,34 +424,9 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		return true
 	}
 
-	for _, i := range r.hashCols {
-		r.ht.rehash(ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(b.Length()), b.Selection())
-	}
-
-	// Reset selections.
-	for i := 0; i < len(r.outputs); i++ {
-		r.scratch.selections[i] = r.scratch.selections[i][:0]
-	}
-
-	// finalizeHash has an assumption that bucketSize is a power of 2, so
-	// finalize the hash in our own way. While doing this, we will build a
-	// selection vector for each output.
-	selection := b.Selection()
-	if selection != nil {
-		selection = selection[:b.Length()]
-		for i, selIdx := range selection {
-			outputIdx := r.scratch.buckets[i] % uint64(len(r.outputs))
-			r.scratch.selections[outputIdx] = append(r.scratch.selections[outputIdx], selIdx)
-		}
-	} else {
-		for i, hash := range r.scratch.buckets[:b.Length()] {
-			outputIdx := hash % uint64(len(r.outputs))
-			r.scratch.selections[outputIdx] = append(r.scratch.selections[outputIdx], uint16(i))
-		}
-	}
-
+	selections := r.tupleDistributor.distribute(ctx, b, r.types, r.hashCols)
 	for i, o := range r.outputs {
-		if o.addBatch(b, r.scratch.selections[i]) {
+		if o.addBatch(b, selections[i]) {
 			// This batch blocked the output.
 			r.numBlockedOutputs++
 		}

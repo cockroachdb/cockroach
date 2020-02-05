@@ -27,20 +27,20 @@ import (
 type bufferingInMemoryOperator interface {
 	Operator
 
-	// ExportBuffered returns all the batches that have been buffered up and have
-	// not yet been processed by the operator. It needs to be called once the
-	// memory limit has been reached in order to "dump" the buffered tuples into
-	// a disk-backed operator. It will return a zero-length batch once the buffer
-	// has been emptied.
+	// ExportBuffered returns all the batches that have been buffered up from the
+	// input and have not yet been processed by the operator. It needs to be
+	// called once the memory limit has been reached in order to "dump" the
+	// buffered tuples into a disk-backed operator. It will return a zero-length
+	// batch once the buffer has been emptied.
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	ExportBuffered() coldata.Batch
+	ExportBuffered(input Operator) coldata.Batch
 }
 
-// oneInputDiskSpiller is an Operator that manages the fallback from an
-// in-memory buffering operator to a disk-backed one when the former hits the
-// memory limit.
+// oneInputDiskSpiller is an Operator that manages the fallback from a one
+// input in-memory buffering operator to a disk-backed one when the former hits
+// the memory limit.
 //
 // NOTE: if an out of memory error occurs during initialization, this operator
 // simply propagates the error further.
@@ -63,29 +63,15 @@ type bufferingInMemoryOperator interface {
 //                      output
 //
 // Here is the explanation:
-// - the main chain of Operators is input -> disk spiller -> output
-// - the dist spiller will first try running everything through the left side
+// - the main chain of Operators is input -> disk spiller -> output.
+// - the disk spiller will first try running everything through the left side
 //   chain of input -> inMemoryOp. If that succeeds, great! The disk spiller
 //   will simply propagate the batch to the output. If that fails with an OOM
 //   error, the disk spiller will then initialize the right side chain and will
-//   proceed to emit from there
+//   proceed to emit from there.
 // - the right side chain is bufferExportingOperator -> diskBackedOp. The
 //   former will first export all the buffered tuples from inMemoryOp and then
 //   will proceed on emitting from input.
-type oneInputDiskSpiller struct {
-	NonExplainable
-
-	initialized bool
-	spilled     bool
-
-	input                  Operator
-	inMemoryOp             bufferingInMemoryOperator
-	inMemoryMemMonitorName string
-	diskBackedOp           Operator
-	spillingCallbackFn     func()
-}
-
-var _ Operator = &oneInputDiskSpiller{}
 
 // newOneInputDiskSpiller returns a new oneInputDiskSpiller. It takes the
 // following arguments:
@@ -109,8 +95,8 @@ func newOneInputDiskSpiller(
 	spillingCallbackFn func(),
 ) Operator {
 	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
-	return &oneInputDiskSpiller{
-		input:                  input,
+	return &diskSpillerBase{
+		inputs:                 []Operator{input},
 		inMemoryOp:             inMemoryOp,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInput),
@@ -118,7 +104,90 @@ func newOneInputDiskSpiller(
 	}
 }
 
-func (d *oneInputDiskSpiller) Init() {
+// twoInputDiskSpiller is an Operator that manages the fallback from a two
+// input in-memory buffering operator to a disk-backed one when the former hits
+// the memory limit.
+//
+// NOTE: if an out of memory error occurs during initialization, this operator
+// simply propagates the error further.
+//
+// The diagram of the components involved is as follows:
+//
+//   ----- input1                                                  input2 ----------
+// ||     /   |       _____________________________________________|  |             ||
+// ||    /    ↓      /                                                |             ||
+// ||    |  inMemoryOp  ------------------------------                |             ||
+// ||    |  /  |                                      |               |             ||
+// ||    | /    ------------------                    |               |             ||
+// ||    |/       (2nd src)       ↓ (1st src)         ↓ (1st src)     ↓ (2nd src)   ||
+// ||    / ----------> bufferExportingOperator1   bufferExportingOperator2          ||
+// ||   /                         |                          |                      ||
+// ||   |                         |                          |                      ||
+// ||   |                          -----> diskBackedOp <-----                       ||
+// ||   |                                    |                                      ||
+// ||    ------------------------------      |                                      ||
+// ||                                  ↓     ↓                                      ||
+//   ---------------------------->   disk spiller   <-------------------------------
+//
+// Here is the explanation:
+// - the main chain of Operators is inputs -> disk spiller -> output.
+// - the disk spiller will first try running everything through the left side
+//   chain of inputs -> inMemoryOp. If that succeeds, great! The disk spiller
+//   will simply propagate the batch to the output. If that fails with an OOM
+//   error, the disk spiller will then initialize the right side chain and will
+//   proceed to emit from there.
+// - the right side chain is bufferExportingOperators -> diskBackedOp. The
+//   former will first export all the buffered tuples from inMemoryOp and then
+//   will proceed on emitting from input.
+
+// newTwoInputDiskSpiller returns a new twoInputDiskSpiller. It takes the
+// following arguments:
+// - inMemoryOp - the in-memory operator that will be consuming inputs and
+//   doing computations until it either successfully processes the whole inputs
+//   or reaches its memory limit.
+// - inMemoryMemMonitorName - the name of the memory monitor of the in-memory
+//   operator. diskSpiller will catch an OOM error only if this name is
+//   contained within the error message.
+// - diskBackedOpConstructor - the function to construct the disk-backed
+//   operator when given two input operators. We take in a constructor rather
+//   than an already created operator in order to hide the complexity of buffer
+//   exporting operators that serves as inputs to the disk-backed operator.
+// - spillingCallbackFn will be called when the spilling from in-memory to disk
+//   backed operator occurs. It should only be set in tests.
+func newTwoInputDiskSpiller(
+	inputOne, inputTwo Operator,
+	inMemoryOp bufferingInMemoryOperator,
+	inMemoryMemMonitorName string,
+	diskBackedOpConstructor func(inputOne, inputTwo Operator) Operator,
+	spillingCallbackFn func(),
+) Operator {
+	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne)
+	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo)
+	return &diskSpillerBase{
+		inputs:                 []Operator{inputOne, inputTwo},
+		inMemoryOp:             inMemoryOp,
+		inMemoryMemMonitorName: inMemoryMemMonitorName,
+		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo),
+		spillingCallbackFn:     spillingCallbackFn,
+	}
+}
+
+// diskSpillerBase is the common base for the one-input and two-input disk
+// spillers.
+type diskSpillerBase struct {
+	NonExplainable
+
+	inputs      []Operator
+	initialized bool
+	spilled     bool
+
+	inMemoryOp             bufferingInMemoryOperator
+	inMemoryMemMonitorName string
+	diskBackedOp           Operator
+	spillingCallbackFn     func()
+}
+
+func (d *diskSpillerBase) Init() {
 	if d.initialized {
 		return
 	}
@@ -131,7 +200,7 @@ func (d *oneInputDiskSpiller) Init() {
 	d.inMemoryOp.Init()
 }
 
-func (d *oneInputDiskSpiller) Next(ctx context.Context) coldata.Batch {
+func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 	if d.spilled {
 		return d.diskBackedOp.Next(ctx)
 	}
@@ -157,30 +226,26 @@ func (d *oneInputDiskSpiller) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (d *oneInputDiskSpiller) ChildCount(verbose bool) int {
+func (d *diskSpillerBase) ChildCount(verbose bool) int {
 	if verbose {
-		return 3
+		return len(d.inputs) + 2
 	}
 	return 1
 }
 
-func (d *oneInputDiskSpiller) Child(nth int, verbose bool) execinfra.OpNode {
-	// Note: although the main chain is d.input -> diskSpiller -> output (and the
-	// main chain should be under nth == 0), in order to make the output of
+func (d *diskSpillerBase) Child(nth int, verbose bool) execinfra.OpNode {
+	// Note: although the main chain is d.inputs -> diskSpiller -> output (and
+	// the main chain should be under nth == 0), in order to make the output of
 	// EXPLAIN (VEC) less confusing we return the in-memory operator as being on
 	// the main chain.
 	if verbose {
 		switch nth {
 		case 0:
 			return d.inMemoryOp
-		case 1:
-			return d.input
-		case 2:
+		case len(d.inputs) + 1:
 			return d.diskBackedOp
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
-			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return d.inputs[nth-1]
 		}
 	}
 	switch nth {
@@ -199,6 +264,7 @@ func (d *oneInputDiskSpiller) Child(nth int, verbose bool) execinfra.OpNode {
 //
 // NOTE: bufferExportingOperator assumes that both sources will have been
 // initialized when bufferExportingOperator.Init() is called.
+// NOTE: it is assumed that secondSource is the input to firstSource.
 type bufferExportingOperator struct {
 	ZeroInputNode
 	NonExplainable
@@ -228,7 +294,7 @@ func (b *bufferExportingOperator) Next(ctx context.Context) coldata.Batch {
 	if b.firstSourceDone {
 		return b.secondSource.Next(ctx)
 	}
-	batch := b.firstSource.ExportBuffered()
+	batch := b.firstSource.ExportBuffered(b.secondSource)
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
 		return b.Next(ctx)

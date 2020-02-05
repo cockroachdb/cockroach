@@ -99,7 +99,7 @@ func NewHashAggregator(
 
 	ht := newHashTable(
 		allocator,
-		hashTableBucketSize,
+		hashTableNumBuckets,
 		colTypes,
 		groupCols,
 		outCols,

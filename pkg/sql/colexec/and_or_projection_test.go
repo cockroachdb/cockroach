@@ -266,7 +266,7 @@ func benchmarkLogicalProjOp(
 			sel[i] = uint16(i)
 		}
 	}
-	input := NewRepeatableBatchSource(batch)
+	input := NewRepeatableBatchSource(testAllocator, batch)
 
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []types.T{*types.Bool, *types.Bool}}},
