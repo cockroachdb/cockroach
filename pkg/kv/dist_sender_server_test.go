@@ -1542,22 +1542,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		}
 	}
 
-	newRetryFilter := func(
-		key roachpb.Key, reason roachpb.TransactionRetryReason,
-	) func(storagebase.FilterArgs) *roachpb.Error {
-		var count int32
-		return func(fArgs storagebase.FilterArgs) *roachpb.Error {
-			if fArgs.Req.Header().Key.Equal(key) {
-				if atomic.AddInt32(&count, 1) > 1 {
-					return nil
-				}
-				err := roachpb.NewTransactionRetryError(reason, "filter err")
-				return roachpb.NewErrorWithTxn(err, fArgs.Hdr.Txn)
-			}
-			return nil
-		}
-	}
-
 	// Setup two userspace ranges: /Min-b, b-/Max.
 	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
@@ -1683,36 +1667,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retries, 1pc commit.
-		},
-		{
-			name: "require1PC commit with injected unknown serializable error",
-			retryable: func(ctx context.Context, txn *client.Txn) error {
-				b := txn.NewBatch()
-				b.Put("a", "put")
-				b.AddRawRequest(&roachpb.EndTxnRequest{
-					Commit:     true,
-					Require1PC: true,
-				})
-				return txn.Run(ctx, b)
-			},
-			filter: newRetryFilter(roachpb.Key([]byte("a")), roachpb.RETRY_REASON_UNKNOWN),
-			// Expect a client retry, which should succeed.
-			clientRetry: true,
-		},
-		{
-			name: "require1PC commit with injected serializable error",
-			retryable: func(ctx context.Context, txn *client.Txn) error {
-				b := txn.NewBatch()
-				b.Put("a", "put")
-				b.AddRawRequest(&roachpb.EndTxnRequest{
-					Commit:     true,
-					Require1PC: true,
-				})
-				return txn.Run(ctx, b)
-			},
-			filter: newRetryFilter(roachpb.Key([]byte("a")), roachpb.RETRY_SERIALIZABLE),
-			// Expect a transaction coord retry, which should succeed.
-			txnCoordRetry: true,
 		},
 		{
 			// If we've exhausted the limit for tracking refresh spans but we
