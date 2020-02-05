@@ -146,7 +146,8 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
+	'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
+	| 'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
