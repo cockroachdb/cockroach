@@ -107,7 +107,7 @@ type kvBatchSnapshotStrategy struct {
 	sstChunkSize int64
 	// Only used on the receiver side.
 	scratch *SSTSnapshotStorageScratch
-	// Used to restrict the span of the rangedel done in ClearRange when receiving a snapshot
+	// Used to restrict the span of the rangedel done in ClearRange when receiving a snapshot.
 	reader engine.Reader
 }
 
@@ -147,11 +147,16 @@ func newMultiSSTWriter(
 
 func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	span := roachpb.Span{Key: msstw.keyRanges[msstw.currRange].Start.Key, EndKey: msstw.keyRanges[msstw.currRange].End.Key}
-	span, empty := rditer.ConstrainToKeys(msstw.reader, span)
+	// Check if the span contains any kv data and only perform the rangedel if the range is non-empty.
+	span, empty, err := rditer.ConstrainToKeys(msstw.reader, span)
+	if err != nil {
+		return errors.Wrap(err, "failed to constrain span to keys in range")
+	}
 	if empty {
 		return nil
 	}
-	// Only create file if the range is non-empty to avoid ingesting an empty SST later on since range dels are skipped for empty ranges.
+	// Only create file if the range is non-empty to avoid ingesting an empty
+	// SST later on since range dels are skipped for empty ranges.
 	if err := msstw.maybeCreateNewFile(ctx); err != nil {
 		return err
 	}
@@ -199,11 +204,11 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key engine.MVCCKey, value 
 			return err
 		}
 	}
-	if err := msstw.maybeCreateNewFile(ctx); err != nil {
-		return err
-	}
 	if msstw.keyRanges[msstw.currRange].Start.Key.Compare(key.Key) > 0 {
 		return crdberrors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
+	}
+	if err := msstw.maybeCreateNewFile(ctx); err != nil {
+		return errors.Wrap(err, "failed to create SST file for Put")
 	}
 	if err := msstw.currSST.Put(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
@@ -291,8 +296,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key ranges, but
-			// we must still construct SSTs with range deletion tombstones to remove
-			// the data.
+			// we must still construct SSTs with range deletion tombstones for
+			// non-empty ranges in order to remove the data.
 			if err := msstw.Finish(ctx); err != nil {
 				return noSnap, err
 			}

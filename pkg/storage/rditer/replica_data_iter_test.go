@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func fakePrevKey(k []byte) roachpb.Key {
@@ -276,13 +277,10 @@ func TestConstrainToKeysEmptyRange(t *testing.T) {
 	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
-	span := roachpb.Span{
-		Key: roachpb.Key("a"),
-		EndKey:   roachpb.Key("z"),
-	}
-	if _, empty := ConstrainToKeys(eng, span); !empty {
-		t.Errorf("Expected empty range")
-	}
+	span, empty, err := ConstrainToKeys(eng, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")})
+	require.NoError(t, err)
+	require.True(t, empty)
+	require.Equal(t, roachpb.Span{}, span)
 }
 
 func TestConstrainToKeysNonEmptyRange(t *testing.T) {
@@ -303,16 +301,8 @@ func TestConstrainToKeysNonEmptyRange(t *testing.T) {
 		EndKey:   endKey,
 	}
 	createRangeData(t, eng, desc)
-	span, empty := ConstrainToKeys(eng, span)
-	if empty {
-		t.Errorf("Expected non-empty range")
-	}
 
-	key := keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.MakeV4())
-	ts := hlc.Timestamp{}
-	if err := engine.MVCCPut(context.Background(), eng, nil, key, ts, roachpb.MakeValueFromString("value"), nil); err != nil {
-		if !span.Key.Equal(key) || !span.EndKey.Equal(key){
-			t.Errorf("Expected span.Key and span.EndKey to equal %d. Instead Key: %d, EndKey: %d", key, span.Key, span.EndKey);
-		}
-	}
+	_, empty, err := ConstrainToKeys(eng, span)
+	require.NoError(t, err)
+	require.False(t, empty)
 }
