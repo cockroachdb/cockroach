@@ -39,8 +39,13 @@ func TestCleanupSchemaObjects(t *testing.T) {
 
 	_, err = conn.ExecContext(ctx, `
 SET experimental_enable_temp_tables=true;
-CREATE TEMP TABLE a (a int);
+SET experimental_serial_normalization='sql_sequence';
+CREATE TEMP TABLE a (a SERIAL, c INT);
+ALTER TABLE a ADD COLUMN b SERIAL;
+CREATE TEMP SEQUENCE a_sequence;
 CREATE TEMP VIEW a_view AS SELECT a FROM a;
+CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int);
+INSERT INTO perm_table VALUES (DEFAULT, 1);
 `)
 	require.NoError(t, err)
 
@@ -61,16 +66,24 @@ CREATE TEMP VIEW a_view AS SELECT a FROM a;
 		}
 	}
 
-	require.Contains(t, namesToID, "a")
-	require.Contains(t, namesToID, "a_view")
 	require.NotEqual(t, "", schemaName)
 
-	// Check tables are accessible.
-	_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.a", schemaName))
-	require.NoError(t, err)
-
-	_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.a_view", schemaName))
-	require.NoError(t, err)
+	tempNames := []string{
+		"a",
+		"a_view",
+		"a_sequence",
+		"a_a_seq",
+		"a_b_seq",
+	}
+	selectableTempNames := []string{"a", "a_view"}
+	for _, name := range append(tempNames, schemaName) {
+		require.Contains(t, namesToID, name)
+	}
+	for _, name := range selectableTempNames {
+		// Check tables are accessible.
+		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", schemaName, name))
+		require.NoError(t, err)
+	}
 
 	require.NoError(
 		t,
@@ -93,12 +106,13 @@ CREATE TEMP VIEW a_view AS SELECT a FROM a;
 		}),
 	)
 
-	// Ensure all the entries for the given temporary structures are gone.
-	_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.a", schemaName))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), fmt.Sprintf(`relation "%s.a" does not exist`, schemaName))
+	for _, name := range selectableTempNames {
+		// Ensure all the entries for the given temporary structures are gone.
+		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", schemaName, name))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), fmt.Sprintf(`relation "%s.%s" does not exist`, schemaName, name))
+	}
 
-	_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.a_view", schemaName))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), fmt.Sprintf(`relation "%s.a_view" does not exist`, schemaName))
+	_, err = conn.QueryContext(ctx, "SELECT * FROM perm_table")
+	require.NoError(t, err)
 }
