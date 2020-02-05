@@ -158,6 +158,15 @@ type dbCacheSubscriber interface {
 	waitForCacheState(cond func(*databaseCache) bool)
 }
 
+// isSupportedSchemaName returns whether this schema name is supported.
+// TODO(sqlexec): this should be deleted when we use custom schemas.
+// However, this introduces an extra lookup for cases where `<database>.<table>`
+// is looked up.
+// See #44733.
+func isSupportedSchemaName(n tree.Name) bool {
+	return n == tree.PublicSchemaName || strings.HasPrefix(string(n), "pg_temp")
+}
+
 // getMutableTableDescriptor returns a mutable table descriptor.
 //
 // If flags.required is false, getMutableTableDescriptor() will gracefully
@@ -168,6 +177,10 @@ func (tc *TableCollection) getMutableTableDescriptor(
 ) (*sqlbase.MutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
+	}
+
+	if !isSupportedSchemaName(tn.SchemaName) {
+		return nil, nil
 	}
 
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)
@@ -228,6 +241,10 @@ func (tc *TableCollection) getTableVersion(
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
+	}
+
+	if !isSupportedSchemaName(tn.SchemaName) {
+		return nil, nil
 	}
 
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)
