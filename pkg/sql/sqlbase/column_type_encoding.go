@@ -154,6 +154,7 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		}
 		return encoding.EncodeBitArrayDescending(b, t.BitArray), nil
 	case *tree.DArray:
+		b = append(b, byte(encoding.Array))
 		for _, datum := range t.Array {
 			var err error
 			b, err = EncodeTableKey(b, datum, dir)

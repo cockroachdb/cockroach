@@ -167,3 +167,14 @@ query I
 SELECT * FROM v0 WHERE v0.c0 IS NULL
 ----
 NULL
+
+# Regression test for #44079.
+statement ok
+CREATE TABLE t44079 (x INT[]);
+INSERT INTO t44079 VALUES (NULL), (ARRAY[NULL])
+
+query T rowsort
+SELECT DISTINCT * FROM t44079
+----
+NULL
+{NULL}
