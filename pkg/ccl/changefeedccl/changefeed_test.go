@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -1791,6 +1792,23 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 		}
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, foo.JobID)
+		// PAUSE JOB only requests the job to be paused. Block until it's paused.
+		opts := retry.Options{
+			InitialBackoff: 1 * time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+		}
+		ctx := context.Background()
+		if err := retry.WithMaxAttempts(ctx, opts, 10, func() error {
+			var status string
+			sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, foo.JobID).Scan(&status)
+			if jobs.Status(status) != jobs.StatusPaused {
+				return errors.New("could not pause job")
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
 		sqlDB.Exec(t, `RESUME JOB $1`, foo.JobID)
 		assertPayloads(t, foo, []string{
@@ -2118,6 +2136,23 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 
 		// Restart the changefeed without allowing the second row to be backfilled.
 		sqlDB.Exec(t, `PAUSE JOB $1`, foo.JobID)
+		// PAUSE JOB only requests the job to be paused. Block until it's paused.
+		opts := retry.Options{
+			InitialBackoff: 1 * time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+		}
+		ctx := context.Background()
+		if err := retry.WithMaxAttempts(ctx, opts, 10, func() error {
+			var status string
+			sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, foo.JobID).Scan(&status)
+			if jobs.Status(status) != jobs.StatusPaused {
+				return errors.New("could not pause job")
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 		// Make extra sure that the zombie changefeed can't write any more data.
 		beforeEmitRowCh <- MarkRetryableError(errors.New(`nope don't write it`))
 

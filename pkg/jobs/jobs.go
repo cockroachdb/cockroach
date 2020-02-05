@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,6 +85,11 @@ const (
 	// the user but may be still running Resume. The node that is running the job
 	// will change it to StatusReverting the next time it runs maybeAdoptJobs.
 	StatusCancelRequested Status = "cancel-requested"
+	// StatusPauseRequested is for jobs that were requested to be paused by the
+	// user but may be still resuming or reverting. The node that is running the
+	// job will change its state to StatusPaused the next time it runs
+	// maybeAdoptJobs and will stop running it.
+	StatusPauseRequested Status = "pause-requested"
 )
 
 // Terminal returns whether this status represents a "terminal" state: a state
@@ -285,39 +291,45 @@ func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterPro
 // Paused sets the status of the tracked job to paused. It does not directly
 // pause the job; instead, it expects the job to call job.Progressed soon,
 // observe a "job is paused" error, and abort further work.
-func (j *Job) paused(ctx context.Context) error {
+func (j *Job) Paused(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusPaused {
 			// Already paused - do nothing.
 			return nil
 		}
-		if md.Status != StatusRunning && md.Status != StatusPending {
-			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
+		if md.Status != StatusPauseRequested {
+			return fmt.Errorf("job with status %s cannot be set to paused", md.Status)
 		}
-		if md.Status.Terminal() {
-			return &InvalidStatusError{*j.ID(), md.Status, "pause", md.Payload.Error}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
 		}
 		ju.UpdateStatus(StatusPaused)
 		return nil
 	})
 }
 
-// Resumed sets the status of the tracked job to running iff the job is
-// currently paused. It does not directly resume the job; rather, it expires the
-// job's lease so that a Registry adoption loop detects it and resumes it.
+// Resumed sets the status of the tracked job to running or reverting iff the
+// job is currently paused. It does not directly resume the job; rather, it
+// expires the job's lease so that a Registry adoption loop detects it and
+// resumes it.
 func (j *Job) resumed(ctx context.Context) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusRunning {
+		if md.Status == StatusRunning || md.Status == StatusReverting {
 			// Already resumed - do nothing.
 			return nil
 		}
 		if md.Status != StatusPaused {
-			if md.Payload.Error != "" {
-				return fmt.Errorf("job with status %s %q cannot be resumed", md.Status, md.Payload.Error)
-			}
 			return fmt.Errorf("job with status %s cannot be resumed", md.Status)
 		}
-		ju.UpdateStatus(StatusRunning)
+		// We use the absence of error to determine what state we should
+		// resume into.
+		if md.Payload.Error == "" {
+			ju.UpdateStatus(StatusRunning)
+		} else {
+			ju.UpdateStatus(StatusReverting)
+		}
 		// NB: A nil lease indicates the job is not resumable, whereas an empty
 		// lease is always considered expired.
 		md.Payload.Lease = &jobspb.Lease{}
@@ -326,7 +338,7 @@ func (j *Job) resumed(ctx context.Context) error {
 	})
 }
 
-// CancelRequested sets the status of the tracked job to cancel-requested. It
+// cancelRequested sets the status of the tracked job to cancel-requested. It
 // does not directly cancel the job; like job.Paused, it expects the job to call
 // job.Progressed soon, observe a "job is cancel-requested" error, and abort.
 // Further the node the runs the job will actively cancel it when it notices
@@ -336,8 +348,11 @@ func (j *Job) cancelRequested(
 	ctx context.Context, fn func(context.Context, *client.Txn) error,
 ) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusCancelRequested {
+		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
 			return nil
+		}
+		if md.Payload.Error != "" {
+			return fmt.Errorf("job with %s cannot be requested to be canceled", md.Payload.Error)
 		}
 		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
 			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
@@ -348,6 +363,30 @@ func (j *Job) cancelRequested(
 			}
 		}
 		ju.UpdateStatus(StatusCancelRequested)
+		return nil
+	})
+}
+
+// pauseRequested sets the status of the tracked job to pause-requested. It does
+// not directly pause the job; it expects the node that runs the job will
+// actively cancel it when it notices that it is in state StatusPauseRequested
+// and will move it to state StatusPaused.
+func (j *Job) pauseRequested(
+	ctx context.Context, fn func(context.Context, *client.Txn) error,
+) error {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
+			return nil
+		}
+		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusReverting {
+			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		ju.UpdateStatus(StatusPauseRequested)
 		return nil
 	})
 }
@@ -512,7 +551,7 @@ func (j *Job) load(ctx context.Context) error {
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
-			ctx, "log-job", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt, *j.ID())
 		if err != nil {
 			return err
@@ -570,6 +609,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 }
 
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
+	log.Infof(ctx, "job %d: adopting", *j.ID())
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if !md.Payload.Lease.Equal(oldLease) {
 			return errors.Errorf("current lease %v did not match expected lease %v",
@@ -580,13 +620,6 @@ func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		}
 		ju.UpdatePayload(md.Payload)
-		// Jobs in states running or pending are adopted as running.
-		newStatus := StatusRunning
-		if md.Status == StatusCancelRequested {
-			// CancelRequested jobs are adopted as reverting.
-			newStatus = StatusReverting
-		}
-		ju.UpdateStatus(newStatus)
 		return nil
 	})
 }
