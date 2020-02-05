@@ -13,9 +13,11 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -59,6 +61,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	for _, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("index", "partition_by"))
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.extendedEvalCtx.Settings,
 				params.EvalContext(),

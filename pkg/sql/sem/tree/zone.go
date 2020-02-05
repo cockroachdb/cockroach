@@ -23,6 +23,26 @@ type ZoneSpecifier struct {
 	Partition Name
 }
 
+// TelemetryName returns a name fitting for telemetry purposes.
+func (node ZoneSpecifier) TelemetryName() string {
+	if node.NamedZone != "" {
+		return "range"
+	}
+	if node.Database != "" {
+		return "database"
+	}
+	str := ""
+	if node.Partition != "" {
+		str = "partition."
+	}
+	if node.TargetsIndex() {
+		str += "index"
+	} else {
+		str += "table"
+	}
+	return str
+}
+
 // TargetsTable returns whether the zone specifier targets a table or a subzone
 // within a table.
 func (node ZoneSpecifier) TargetsTable() bool {
