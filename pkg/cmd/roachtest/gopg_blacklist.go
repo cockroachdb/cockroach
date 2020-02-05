@@ -25,8 +25,8 @@ var gopgBlacklists = blacklistsForVersion{
 // in the test log.
 
 var gopgBlackList20_1 = blacklist{
-	"pg | CopyFrom/CopyTo | copies corrupted data to a table":         "5807",
-	"pg | CopyFrom/CopyTo | copies data from a table and to a table":  "5807",
+	"pg | CopyFrom/CopyTo | copies corrupted data to a table":         "41608",
+	"pg | CopyFrom/CopyTo | copies data from a table and to a table":  "41608",
 	"pg | CountEstimate | works":                                      "17511",
 	"pg | CountEstimate | works when there are no results":            "17511",
 	"pg | CountEstimate | works with GROUP":                           "17511",
@@ -36,11 +36,11 @@ var gopgBlackList20_1 = blacklist{
 	"pg | Listener | reconnects on receive error":                     "41522",
 	"pg | Listener | returns an error on timeout":                     "41522",
 	"pg | Listener | supports concurrent Listen and Receive":          "41522",
-	"v9.ExampleDB_Model_postgresArrayStructTag":                       "5807",
-	"v9.TestBigColumn":  "5807",
+	"v9.ExampleDB_Model_postgresArrayStructTag":                       "32552",
+	"v9.TestBigColumn":  "41608",
 	"v9.TestConversion": "32552",
-	"v9.TestGinkgo":     "5807",
-	"v9.TestGocheck":    "5807",
+	"v9.TestGinkgo":     "41522",
+	"v9.TestGocheck":    "17511",
 	"v9.TestUnixSocket": "31113",
 }
 
