@@ -305,3 +305,115 @@ t  CREATE TABLE t (
    UNIQUE INDEX t_rowid_key (rowid ASC),
    FAMILY fam_0_rowid_y (rowid, y)
 )
+
+subtest index_rewrites
+# Test that indexes that need to get rewritten indeed get rewritten.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT NOT NULL, -- will be new primary key.
+  z INT NOT NULL,
+  w INT,
+  v JSONB,
+  INDEX i1 (w), -- will get rewritten.
+  INDEX i2 (y), -- will get rewritten.
+  UNIQUE INDEX i3 (z) STORING (y), -- will not be rewritten.
+  UNIQUE INDEX i4 (z), -- will be rewritten.
+  UNIQUE INDEX i5 (w) STORING (y), -- will be rewritten.
+  INVERTED INDEX i6 (v) -- will be rewritten.
+);
+INSERT INTO t VALUES (1, 2, 3, 4, '{}');
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+# Test that the indexes we expect got rewritten. All but i3 should have been rewritten,
+# so all but i3's indexID should be larger than 7.
+
+query IT
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+----
+4 i3
+8 primary
+9 t_x_key
+10 i1
+11 i2
+12 i4
+13 i5
+14 i6
+
+# Make sure that each index can index join against the new primary key;
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
+----
+index-join  ·            ·
+ │          table        t@primary
+ │          key columns  y
+ └── scan   ·            ·
+·           table        t@i1
+·           spans        ALL
+
+query IIIIT
+SELECT * FROM t@i1
+----
+1 2 3 4 {}
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
+----
+index-join  ·            ·
+ │          table        t@primary
+ │          key columns  y
+ └── scan   ·            ·
+·           table        t@i2
+·           spans        ALL
+
+query IIIIT
+SELECT * FROM t@i2
+----
+1 2 3 4 {}
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
+----
+index-join  ·            ·
+ │          table        t@primary
+ │          key columns  y
+ └── scan   ·            ·
+·           table        t@i3
+·           spans        ALL
+
+query IIIIT
+SELECT * FROM t@i3
+----
+1 2 3 4 {}
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
+----
+index-join  ·            ·
+ │          table        t@primary
+ │          key columns  y
+ └── scan   ·            ·
+·           table        t@i4
+·           spans        ALL
+
+query IIIIT
+SELECT * FROM t@i4
+----
+1 2 3 4 {}
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
+----
+index-join  ·            ·
+ │          table        t@primary
+ │          key columns  y
+ └── scan   ·            ·
+·           table        t@i5
+·           spans        ALL
+
+query IIIIT
+SELECT * FROM t@i5
+----
+1 2 3 4 {}

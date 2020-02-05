@@ -418,22 +418,26 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// * depend on uniqueness from the old primary key (inverted, non-unique, or unique with nulls).
 			// * don't store or index all columns in the new primary key.
 			shouldRewriteIndex := func(idx *sqlbase.IndexDescriptor) bool {
-				result := false
+				shouldRewrite := false
 				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
 					if !idx.ContainsColumnID(colID) {
-						result = true
-						break
-					}
-					col, err := n.tableDesc.FindColumnByID(colID)
-					if err != nil {
-						panic(err)
-					}
-					if idx.Unique && col.Nullable {
-						result = true
+						shouldRewrite = true
 						break
 					}
 				}
-				return result || !idx.Unique || idx.Type == sqlbase.IndexDescriptor_INVERTED
+				if idx.Unique {
+					for _, colID := range idx.ColumnIDs {
+						col, err := n.tableDesc.FindColumnByID(colID)
+						if err != nil {
+							panic(err)
+						}
+						if col.Nullable {
+							shouldRewrite = true
+							break
+						}
+					}
+				}
+				return shouldRewrite || !idx.Unique || idx.Type == sqlbase.IndexDescriptor_INVERTED
 			}
 			var indexesToRewrite []*sqlbase.IndexDescriptor
 			for i := range n.tableDesc.Indexes {
