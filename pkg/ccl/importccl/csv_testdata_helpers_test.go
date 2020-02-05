@@ -100,8 +100,8 @@ func getTestFiles(numFiles int) csvTestFiles {
 		suffix = "-race"
 	}
 	for i := 0; i < numFiles; i++ {
-		testFiles.files = append(testFiles.files, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s", i, suffix)))
-		testFiles.gzipFiles = append(testFiles.gzipFiles, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s.gz", i, suffix)+"?param=value"))
+		testFiles.files = append(testFiles.files, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s", i, suffix)+"?nonsecret=nosecrets"))
+		testFiles.gzipFiles = append(testFiles.gzipFiles, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s.gz", i, suffix)+"?AWS_SESSION_TOKEN=secrets"))
 		testFiles.bzipFiles = append(testFiles.bzipFiles, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s.bz2", i, suffix)))
 		testFiles.filesWithOpts = append(testFiles.filesWithOpts, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d-opts%s", i, suffix)))
 		testFiles.filesWithDups = append(testFiles.filesWithDups, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d-dup%s", i, suffix)))

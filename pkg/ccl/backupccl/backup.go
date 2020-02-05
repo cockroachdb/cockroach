@@ -551,7 +551,7 @@ func backupJobDescription(
 	}
 
 	for _, t := range to {
-		sanitizedTo, err := cloud.SanitizeExternalStorageURI(t)
+		sanitizedTo, err := cloud.SanitizeExternalStorageURI(t, nil /* extraParams */)
 		if err != nil {
 			return "", err
 		}
@@ -559,7 +559,7 @@ func backupJobDescription(
 	}
 
 	for _, from := range incrementalFrom {
-		sanitizedFrom, err := cloud.SanitizeExternalStorageURI(from)
+		sanitizedFrom, err := cloud.SanitizeExternalStorageURI(from, nil /* extraParams */)
 		if err != nil {
 			return "", err
 		}
