@@ -105,6 +105,9 @@ type NewColOperatorArgs struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory to
 		// disk-backed operator occurs. It should only be set in tests.
 		SpillingCallbackFn func()
+		// DiskSpillingDisabled specifies whether only in-memory operators should
+		// be created.
+		DiskSpillingDisabled bool
 	}
 }
 
@@ -553,26 +556,76 @@ func NewColOperator(
 					}
 				}
 
-				hashJoinerMemAccount := streamingMemAccount
-				if !useStreamingMemAccountForBuffering {
-					hashJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-joiner")
+				hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
+				var hashJoinerMemAccount *mon.BoundAccount
+				if useStreamingMemAccountForBuffering {
+					hashJoinerMemAccount = streamingMemAccount
+				} else {
+					hashJoinerMemAccount = result.createBufferingMemAccount(
+						ctx, flowCtx, hashJoinerMemMonitorName,
+					)
 				}
 				// It is valid for empty set of equality columns to be considered as
 				// "key" (for example, the input has at most 1 row). However, hash
 				// joiner, in order to handle NULL values correctly, needs to think
 				// that an empty set of equality columns doesn't form a key.
 				rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
-				result.Op, err = NewEqHashJoinerOp(
-					NewAllocator(ctx, hashJoinerMemAccount),
-					inputs[0],
-					inputs[1],
+				hjSpec, err := makeHashJoinerSpec(
+					core.HashJoiner.Type,
 					core.HashJoiner.LeftEqColumns,
 					core.HashJoiner.RightEqColumns,
 					leftTypes,
 					rightTypes,
 					rightEqColsAreKey,
-					core.HashJoiner.Type,
 				)
+				if err != nil {
+					return onExpr, err
+				}
+				inMemoryHashJoiner := newHashJoiner(
+					NewAllocator(ctx, hashJoinerMemAccount), hjSpec, inputs[0], inputs[1],
+				)
+				if args.TestingKnobs.DiskSpillingDisabled {
+					// We will not be creating a disk-backed hash joiner because we're
+					// running a test that explicitly asked for only in-memory hash
+					// joiner.
+					result.Op = inMemoryHashJoiner
+				} else {
+					result.Op = newTwoInputDiskSpiller(
+						inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
+						hashJoinerMemMonitorName,
+						func(inputOne, inputTwo Operator) Operator {
+							monitorNamePrefix := "external-hash-joiner-"
+							// We need to create an allocator for external hash joiner to
+							// use, and the allocator needs to have some reasonable amount of
+							// memory to work with (because the external hash joiner creates
+							// several batches internally as well as uses an instance of
+							// in-memory hash joiner). We need to overwrite the testing
+							// memory limit before creating the memory account for the
+							// allocator because if we don't, the constructor below will
+							// result in an OOM panic or the internal in-memory hash joiner
+							// can hit the limit forcing us to do recursive partitioning
+							// (which is currently not supported).
+							defer func(oldLimit int64) {
+								flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = oldLimit
+							}(flowCtx.Cfg.TestingKnobs.MemoryLimitBytes)
+							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+							allocator := NewAllocator(
+								ctx, result.createBufferingMemAccount(
+									ctx, flowCtx, monitorNamePrefix,
+								))
+							diskQueuesUnlimitedAllocator := NewAllocator(
+								ctx, result.createBufferingUnlimitedMemAccount(
+									ctx, flowCtx, monitorNamePrefix+"disk-queues",
+								))
+							return newExternalHashJoiner(
+								allocator, hjSpec,
+								inputOne, inputTwo,
+								diskQueuesUnlimitedAllocator,
+							)
+						},
+						args.TestingKnobs.SpillingCallbackFn,
+					)
+				}
 				return onExpr, err
 			}
 

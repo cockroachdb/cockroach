@@ -159,7 +159,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				hashRouterMemAccount := testMemMonitor.MakeBoundAccount()
 				defer hashRouterMemAccount.Close(ctxRemote)
 				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
-					colexec.NewAllocator(ctxRemote, &hashRouterMemAccount), hashRouterInput, typs, []int{0}, numHashRouterOutputs,
+					colexec.NewAllocator(ctxRemote, &hashRouterMemAccount), hashRouterInput, typs, []uint32{0}, numHashRouterOutputs,
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -234,9 +234,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
-						batch := colexec.NewAllocator(ctxRemote, &sourceMemAccount).NewMemBatch(typs)
+						remoteAllocator := colexec.NewAllocator(ctxRemote, &sourceMemAccount)
+						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexec.NewRepeatableBatchSource(remoteAllocator, batch), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}
