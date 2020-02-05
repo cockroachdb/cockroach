@@ -262,14 +262,15 @@ func (r *Replica) evaluateWriteBatch(
 	// indications that the batch's txn will require retry, execute as normal.
 	if isOnePhaseCommit(ba) {
 		res := r.evaluate1PC(ctx, idKey, ba, spans)
-		if res.success == onePCSucceeded {
+		switch res.success {
+		case onePCSucceeded:
 			return res.batch, res.stats, res.br, res.res, nil
-		}
-		if res.success == onePCFailed {
+		case onePCFailed:
 			if res.pErr == nil {
 				log.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
 			}
 			return nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
+		case onePCFallbackToTransactionalExecution:
 		}
 	}
 
@@ -309,7 +310,7 @@ type onePCResult struct {
 
 func (r *Replica) evaluate1PC(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
-) (_res onePCResult) {
+) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
 	if ba.Timestamp != ba.Txn.WriteTimestamp {
 		log.Fatalf(ctx, "unexpected 1PC execution with diverged timestamp. %s != %s",
@@ -320,7 +321,7 @@ func (r *Replica) evaluate1PC(
 	defer func() {
 		// Close the batch unless it's passed to the caller (when the evaluation
 		// succeeds).
-		if _res.success != onePCSucceeded {
+		if onePCRes.success != onePCSucceeded {
 			batch.Close()
 		}
 	}()
