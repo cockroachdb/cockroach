@@ -142,21 +142,23 @@ func (ds *DistSender) partialRangeFeed(
 			var err error
 			rangeInfo.desc, rangeInfo.token, err = ds.getDescriptor(ctx, rangeInfo.rs.Key, nil, false)
 			if err != nil {
-				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
+				log.Infof(ctx, "range descriptor re-lookup failed: %s", err)
 				continue
 			}
 		}
 
 		// Establish a RangeFeed for a single Range.
+		log.Infof(ctx, "RangeFeed dial %s %s", span, ts)
 		maxTS, pErr := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.desc, eventCh)
+		log.Infof(ctx, "RangeFeed dial %s %s returned %s %v", span, ts, maxTS, pErr)
 
 		// Forward the timestamp in case we end up sending it again.
 		ts.Forward(maxTS)
 
 		if pErr != nil {
 			if log.V(1) {
-				log.Infof(ctx, "RangeFeed %s disconnected with last checkpoint %s ago: %v",
-					span, timeutil.Since(ts.GoTime()), pErr)
+				log.Infof(ctx, "RangeFeed %s disconnected with last checkpoint %s ago (%s): %v",
+					span, timeutil.Since(ts.GoTime()), ts, pErr)
 			}
 			switch t := pErr.GetDetail().(type) {
 			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
@@ -253,13 +255,13 @@ func (ds *DistSender) singleRangeFeed(
 		args.Replica = transport.NextReplica()
 		clientCtx, client, err := transport.NextInternalClient(ctx)
 		if err != nil {
-			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+			log.Infof(ctx, "RPC error: %s", err)
 			continue
 		}
 
 		stream, err := client.RangeFeed(clientCtx, &args)
 		if err != nil {
-			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+			log.Infof(ctx, "RPC error: %s", err)
 			continue
 		}
 		for {
@@ -272,11 +274,13 @@ func (ds *DistSender) singleRangeFeed(
 			}
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
+				log.Infof(ctx, "RangeFeedCheckpoint req=%s-%s event=%s-%s ts=%s",
+					args.Span.Key, args.Span.EndKey, t.Span.Key, t.Span.EndKey, t.ResolvedTS)
 				if t.Span.Contains(args.Span) {
 					args.Timestamp.Forward(t.ResolvedTS)
 				}
 			case *roachpb.RangeFeedError:
-				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
+				log.Infof(ctx, "RangeFeedError: %s", t.Error.GoError())
 				return args.Timestamp, &t.Error
 			}
 			select {

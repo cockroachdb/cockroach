@@ -501,6 +501,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
+		if ops != nil && len(ops.Ops) > 0 {
+			log.Infof(ctx, "handleLogicalOpLogRaftMuLocked no processor")
+			rangefeed.LogOps(ctx, ops.Ops...)
+		}
 		return
 	}
 	if ops == nil {
@@ -512,6 +516,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// registrations, we're forced to throw an error. The rangefeed clients
 		// can reconnect at a later time, at which point all new Raft commands
 		// should have logical op logs.
+		log.Infof(ctx, "handleLogicalOpLogRaftMuLocked no ops")
 		r.disconnectRangefeedWithReason(roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 		return
 	}
@@ -556,6 +561,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
 		val, _, err := engine.MVCCGet(ctx, reader, key, ts, engine.MVCCGetOptions{Tombstones: true})
+		log.Infof(context.TODO(), "WIP handleLogicalOpLogRaftMuLocked %s:%s -> %s %v", roachpb.Key(key), ts, val.PrettyPrint(), err)
 		if val == nil && err == nil {
 			err = errors.New("value missing in reader")
 		}

@@ -53,8 +53,8 @@ func TestKVNemesisSingleNode(t *testing.T) {
 
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	scope := log.Scope(t)
-	defer scope.Close(t)
+	// scope := log.Scope(t)
+	// defer scope.Close(t)
 
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	const numNodes = 4

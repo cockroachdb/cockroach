@@ -85,6 +85,7 @@ func applyOp(ctx context.Context, db *client.DB, op *Operation) {
 		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
 		txnErr := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			log.Infof(ctx, "Applier txn %s", txn.ID())
 			for i := range o.Ops {
 				op := &o.Ops[i]
 				applyClientOp(ctx, txn, op)

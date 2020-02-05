@@ -413,12 +413,35 @@ func (p *Processor) Filter() *Filter {
 	}
 }
 
+func LogOps(ctx context.Context, ops ...enginepb.MVCCLogicalOp) {
+	for _, op := range ops {
+		switch t := op.GetValue().(type) {
+		case *enginepb.MVCCWriteValueOp:
+			log.InfofDepth(ctx, 1, "WIP MVCCWriteValueOp  %s:%s -> %s", roachpb.Key(t.Key), t.Timestamp, roachpb.Value{RawBytes: t.Value}.PrettyPrint())
+		case *enginepb.MVCCCommitIntentOp:
+			log.InfofDepth(ctx, 1, "WIP MVCCCommitIntentOp %s:%s -> %s %s", roachpb.Key(t.Key), t.Timestamp, roachpb.Value{RawBytes: t.Value}.PrettyPrint(), t.TxnID)
+		case *enginepb.MVCCWriteIntentOp:
+			log.InfofDepth(ctx, 1, "WIP MVCCWriteIntentOp %s %s %s %s", roachpb.Key(t.TxnKey), t.Timestamp, t.TxnMinTimestamp, t.TxnID)
+		case *enginepb.MVCCUpdateIntentOp:
+			log.InfofDepth(ctx, 1, "WIP MVCCUpdateIntentOp %s %s", t.Timestamp, t.TxnID)
+		case *enginepb.MVCCAbortIntentOp:
+			log.InfofDepth(ctx, 1, "WIP MVCCAbortIntentOp %s", t.TxnID)
+		case *enginepb.MVCCAbortTxnOp:
+			log.InfofDepth(ctx, 1, "WIP MVCCAbortTxnOp %s", t.TxnID)
+		default:
+			log.InfofDepth(ctx, 1, "WIP ConsumeLogicalOps other %T %s", op, t)
+		}
+	}
+}
+
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
 // operations. It returns false if consuming the operations hit a timeout, as
 // specified by the EventChanTimeout configuration. If the method returns false,
 // the processor will have been stopped, so calling Stop is not necessary. Safe
 // to call on nil Processor.
 func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) bool {
+	LogOps(context.TODO(), ops...)
+
 	if p == nil {
 		return true
 	}
@@ -577,6 +600,7 @@ func (p *Processor) publishValue(
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
 		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
 	}
+	log.Infof(ctx, "publishValue %s:%s -> %s", key, timestamp, roachpb.Value{RawBytes: value}.PrettyPrint())
 
 	var prevVal roachpb.Value
 	if prevValue != nil {
