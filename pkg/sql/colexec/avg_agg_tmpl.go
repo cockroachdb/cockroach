@@ -99,7 +99,7 @@ func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 
 func (a *avg_TYPEAgg) Reset() {
 	a.scratch.curIdx = -1
-	a.scratch.curSum = zero_TYPEColumn[0]
+	a.scratch.curSum = zero_TYPEValue
 	a.scratch.curCount = 0
 	a.scratch.foundNonNullForCurrentGroup = false
 	a.scratch.nulls.UnsetNulls()
@@ -193,7 +193,7 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 		}
 		a.scratch.curIdx++
 		// {{with .Global}}
-		a.scratch.curSum = zero_TYPEColumn[0]
+		a.scratch.curSum = zero_TYPEValue
 		// {{end}}
 		a.scratch.curCount = 0
 
