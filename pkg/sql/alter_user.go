@@ -14,11 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
@@ -61,6 +63,8 @@ type alterUserSetPasswordRun struct {
 }
 
 func (n *alterUserSetPasswordNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeAlter("user"))
+
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err

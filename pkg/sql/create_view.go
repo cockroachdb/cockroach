@@ -14,8 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,6 +45,8 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreate("view"))
+
 	// TODO(arul): Allow temporary views once temp tables work for regular tables.
 	if n.temporary {
 		return unimplemented.NewWithIssuef(5807,

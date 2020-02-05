@@ -14,7 +14,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
@@ -73,6 +75,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 }
 
 func (n *createDatabaseNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreate("database"))
 	desc := makeDatabaseDesc(n.n)
 
 	created, err := params.p.createDatabase(params.ctx, &desc, n.n.IfNotExists)

@@ -30,6 +30,34 @@ func SchemaNewTypeCounter(t string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.new_column_type." + t)
 }
 
+// SchemaChangeCreate is to be incremented every time a CREATE
+// schema change was made.
+func SchemaChangeCreate(typ string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.create_" + typ)
+}
+
+// SchemaChangeCreate is to be incremented every time a DROP
+// schema change was made.
+func SchemaChangeDrop(typ string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.drop_" + typ)
+}
+
+// SchemaChangeAlter behaves the same as SchemaChangeAlterWithExtra
+// but with no extra metadata.
+func SchemaChangeAlter(typ string) telemetry.Counter {
+	return SchemaChangeAlterWithExtra(typ, "")
+}
+
+// SchemaChangeAlterWithExtra is to be incremented for ALTER schema changes.
+// `typ` is for declaring which type was altered, e.g. TABLE, DATABASE.
+// `extra` can be used for extra trailing useful metadata.
+func SchemaChangeAlterWithExtra(typ string, extra string) telemetry.Counter {
+	if extra != "" {
+		extra = "." + extra
+	}
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema.alter_%s%s", typ, extra))
+}
+
 // CreateTempTableCounter is to be incremented every time a TEMP TABLE
 // has been created.
 var CreateTempTableCounter = telemetry.GetCounterOnce("sql.schema.create_temp_table")

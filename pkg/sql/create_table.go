@@ -114,6 +114,7 @@ var storageParamExpectedTypes = map[string]storageParamType{
 func (n *createTableNode) ReadingOwnWrites() {}
 
 func (n *createTableNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreate("table"))
 	isTemporary := n.n.Temporary
 
 	// By default, all tables are created in the `public` schema.

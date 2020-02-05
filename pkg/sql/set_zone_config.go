@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -295,6 +296,26 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			fmt.Fprintf(&optionStr, "%s = %s", name, datum)
 
 		}
+	}
+
+	if n.zoneSpecifier.TableOrIndex.Table.TableName != "" {
+		if n.zoneSpecifier.Partition != "" {
+			if n.zoneSpecifier.TableOrIndex.Index != "" {
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("partition.index", "configure_zone"))
+			} else {
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("partition.table", "configure_zone"))
+			}
+		} else {
+			if n.zoneSpecifier.TableOrIndex.Index != "" {
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("index", "configure_zone"))
+			} else {
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "configure_zone"))
+			}
+		}
+	} else if n.zoneSpecifier.Database != "" {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("database", "configure_zone"))
+	} else if n.zoneSpecifier.NamedZone != "" {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("named_zone", "configure_zone"))
 	}
 
 	// If the specifier is for a table, partition or index, this will

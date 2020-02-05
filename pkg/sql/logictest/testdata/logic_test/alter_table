@@ -1058,3 +1058,20 @@ ALTER TABLE t43092 ALTER COLUMN x DROP NOT NULL
 
 statement ok
 DROP TABLE t43092
+
+subtest alter_table_telemetry
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name LIKE 'sql.schema.alter_table%'
+ORDER BY feature_name
+----
+sql.schema.alter_table
+sql.schema.alter_table.add_check_constraint
+sql.schema.alter_table.add_column
+sql.schema.alter_table.add_constraint
+sql.schema.alter_table.column_mutation
+sql.schema.alter_table.drop_column
+sql.schema.alter_table.drop_constraint
+sql.schema.alter_table.set_audit
+sql.schema.alter_table.validate_constraint

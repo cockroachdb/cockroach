@@ -98,6 +98,8 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 func (n *alterTableNode) ReadingOwnWrites() {}
 
 func (n *alterTableNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeAlter("table"))
+
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -109,6 +111,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	for i, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "add_column"))
 			d := t.ColumnDef
 			if d.HasFKConstraint() {
 				return unimplemented.NewWithIssue(32917,
@@ -191,6 +194,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAddConstraint:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "add_constraint"))
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
@@ -234,6 +238,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "add_check_constraint"))
 				ck, err := MakeCheckConstraint(params.ctx,
 					n.tableDesc, d, inuseNames, &params.p.semaCtx, *tn)
 				if err != nil {
@@ -312,6 +317,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAlterPrimaryKey:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "alter_primary_key"))
 			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
 			version := cluster.Version.ActiveVersionOrEmpty(params.ctx, params.p.ExecCfg().Settings)
 			if !version.IsActive(cluster.VersionPrimaryKeyChanges) {
@@ -324,7 +330,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
 			}
 
-			// Increment telemetry about uses of primary key changes.
+			// Increment telemetry about supported uses of primary key changes
+			// (in addition to the alter increment above).
 			telemetry.Inc(sqltelemetry.AlterPrimaryKeyCounter)
 
 			// Ensure that there is not another primary key change attempted within this transaction.
@@ -486,6 +493,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		case *tree.AlterTableDropColumn:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "drop_column"))
 			if params.SessionData().SafeUpdates {
 				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")
 			}
@@ -673,6 +681,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableDropConstraint:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "drop_constraint"))
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
@@ -700,6 +709,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableValidateConstraint:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "validate_constraint"))
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
@@ -765,6 +775,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		case tree.ColumnMutationCmd:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "column_mutation"))
 			// Column mutations
 			col, dropped, err := n.tableDesc.FindColumnByName(t.GetColumn())
 			if err != nil {
@@ -781,6 +792,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		case *tree.AlterTablePartitionBy:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "partition_by"))
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
@@ -803,6 +815,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			n.tableDesc.PrimaryIndex.Partitioning = partitioning
 
 		case *tree.AlterTableSetAudit:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "set_audit"))
 			var err error
 			descriptorChanged, err = params.p.setAuditMode(params.ctx, n.tableDesc.TableDesc(), t.Mode)
 			if err != nil {
@@ -810,6 +823,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableInjectStats:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "inject_stats"))
 			sd, ok := n.statsData[i]
 			if !ok {
 				return errors.AssertionFailedf("missing stats data")
@@ -819,6 +833,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableRenameColumn:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "rename_column"))
 			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, &t.Column, &t.NewName)
 			if err != nil {
 				return err
@@ -826,6 +841,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descChanged
 
 		case *tree.AlterTableRenameConstraint:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("table", "rename_constraint"))
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
