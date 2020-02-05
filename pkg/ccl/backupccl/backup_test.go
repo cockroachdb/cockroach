@@ -669,11 +669,11 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	conn := sqlDB.DB.(*gosql.DB)
 	defer cleanupFn()
 
-	sanitizedIncDir := localFoo + "/inc"
-	incDir := sanitizedIncDir + "?secretCredentialsHere"
+	sanitizedIncDir := localFoo + "/inc?AWS_SESSION_TOKEN="
+	incDir := sanitizedIncDir + "secretCredentialsHere"
 
-	sanitizedFullDir := localFoo + "/full"
-	fullDir := sanitizedFullDir + "?moarSecretsHere"
+	sanitizedFullDir := localFoo + "/full?AWS_SESSION_TOKEN="
+	fullDir := sanitizedFullDir + "moarSecretsHere"
 
 	backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
 	backupTableID := sqlutils.QueryTableID(t, conn, "data", "bank")
@@ -697,7 +697,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
-			sanitizedIncDir, sanitizedFullDir,
+			sanitizedIncDir+"redacted", sanitizedFullDir+"redacted",
 		),
 		DescriptorIDs: sqlbase.IDs{
 			sqlbase.ID(backupDatabaseID),
@@ -712,7 +712,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
-			sanitizedFullDir, sanitizedIncDir,
+			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
 		),
 		DescriptorIDs: sqlbase.IDs{
 			sqlbase.ID(restoreDatabaseID + 1),

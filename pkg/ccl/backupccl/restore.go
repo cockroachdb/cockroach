@@ -1234,7 +1234,7 @@ func restoreJobDescription(
 	for i, backup := range from {
 		r.From[i] = make(tree.PartitionedBackup, len(backup))
 		for j, uri := range backup {
-			sf, err := cloud.SanitizeExternalStorageURI(uri)
+			sf, err := cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
 			if err != nil {
 				return "", err
 			}
