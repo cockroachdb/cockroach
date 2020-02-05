@@ -2655,6 +2655,8 @@ func TestBackupEncrypted(t *testing.T) {
 
 	sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
 
+	sqlDB.Exec(t, `SHOW BACKUP $1 WITH encryption_passphrase='abcdefg'`, backupLoc1)
+
 	sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase='abcdefg'`,
 		backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
 
