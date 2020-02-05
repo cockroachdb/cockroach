@@ -10,6 +10,7 @@ package importccl
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"sort"
@@ -31,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -619,20 +623,54 @@ func importPlanHook(
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
 
-		_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
+		// Here we create the job and protected timestamp records in a side
+		// transaction and then kick off the job. This is awful. Rather we should be
+		// disallowing this statement in an explicit transaction and then we should
+		// create the job in the user's transaction here and then in a post-commit
+		// hook we should kick of the StartableJob which we attached to the
+		// connExecutor somehow.
+		protectedTimestampID := uuid.MakeV4()
+		jr := jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
 			Details: jobspb.ImportDetails{
-				URIs:       files,
-				Format:     format,
-				ParentID:   parentID,
-				Tables:     tableDetails,
-				SSTSize:    sstSize,
-				Oversample: oversample,
-				SkipFKs:    skipFKs,
+				URIs:                     files,
+				Format:                   format,
+				ParentID:                 parentID,
+				Tables:                   tableDetails,
+				SSTSize:                  sstSize,
+				Oversample:               oversample,
+				SkipFKs:                  skipFKs,
+				ProtectedTimestampRecord: protectedTimestampID,
 			},
 			Progress: jobspb.ImportProgress{},
-		})
+		}
+		var sj *jobs.StartableJob
+		// Prepare the protected timestamp record.
+		spans := make([]roachpb.Span, 0, len(tableDetails))
+		for i := range tableDetails {
+			spans = append(spans, tableDetails[i].Desc.TableSpan())
+		}
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+			if err != nil {
+				return err
+			}
+			// NB: We protect the timestamp preceding the import statement timestamp
+			// because that's the timestamp to which we want to revert.
+			tsToProtect := hlc.Timestamp{WallTime: walltime}.Prev()
+			return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, &ptpb.Record{
+				ID:        protectedTimestampID,
+				Timestamp: tsToProtect,
+				Mode:      ptpb.PROTECT_AFTER,
+				Spans:     spans,
+				MetaType:  "job",
+				Meta:      []byte(fmt.Sprint(*sj.ID())),
+			})
+		}); err != nil {
+			return err
+		}
+		errCh, err := sj.Start(ctx)
 		if err != nil {
 			return err
 		}
@@ -925,6 +963,9 @@ func (r *importResumer) Resume(
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
+	if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, details.ProtectedTimestampRecord); err != nil {
+		return err
+	}
 
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
@@ -984,7 +1025,16 @@ func (r *importResumer) Resume(
 	if err := r.publishTables(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
-
+	// TODO(ajwerner): Should this actually return the error? At this point we've
+	// successfully finished the import but failed to drop the protected
+	// timestamp. The reconciliation loop ought to pick it up. Ideally we'd do
+	// this in OnSuccess but we don't have access to the protectedts.Storage
+	// there.
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+	}); err != nil {
+		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
+	}
 	return nil
 }
 
@@ -1080,7 +1130,32 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
-	return phs.(sql.PlanHookState).ExecCfg().DB.Txn(ctx, r.dropTables)
+	cfg := phs.(sql.PlanHookState).ExecCfg()
+	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := r.dropTables(ctx, txn); err != nil {
+			return err
+		}
+		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+	})
+}
+
+func (r *importResumer) releaseProtectedTimestamp(
+	ctx context.Context, txn *client.Txn, pts protectedts.Storage,
+) error {
+	details := r.job.Details().(jobspb.ImportDetails)
+	// If this job was created prior to 20.1 it will not have a corresponding
+	// protected timestamp record.
+	if details.ProtectedTimestampRecord.Equal(uuid.UUID{}) {
+		return nil
+	}
+	err := pts.Release(ctx, txn, details.ProtectedTimestampRecord)
+	if errors.Is(err, protectedts.ErrNotExists) {
+		// No reason to return an error which might cause problems if it doesn't
+		// seem to exist.
+		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		err = nil
+	}
+	return err
 }
 
 // dropTables implements the OnFailOrCancel logic.
