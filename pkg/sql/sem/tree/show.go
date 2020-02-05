@@ -86,6 +86,7 @@ type ShowBackup struct {
 	Path                 Expr
 	Details              BackupDetails
 	ShouldIncludeSchemas bool
+	Options              KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -100,6 +101,10 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("SCHEMAS ")
 	}
 	ctx.FormatNode(node.Path)
+	if len(node.Options) > 0 {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
 }
 
 // ShowColumns represents a SHOW COLUMNS statement.
