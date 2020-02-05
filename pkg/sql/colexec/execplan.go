@@ -1241,9 +1241,16 @@ func planProjectionOperators(
 			// previous WHEN arm. Finally, after each WHEN arm runs, we copy the
 			// results of the WHEN into a single output vector, assembling the final
 			// result of the case projection.
+			whenTyped := when.Cond.(tree.TypedExpr)
+			whenResolvedType := whenTyped.ResolvedType()
+			// TODO(asubiotto): Can we just plan these as bools?
+			if whenTyped.ResolvedType() == types.Unknown {
+				return nil, resultIdx, ct, internalMemUsed, errors.Newf(
+					"unsupported type %s in CASE WHEN expression", whenTyped.ResolvedType().String())
+			}
 			var whenInternalMemUsed, thenInternalMemUsed int
 			caseOps[i], resultIdx, ct, whenInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
-				ctx, evalCtx, when.Cond.(tree.TypedExpr), t.ResolvedType(), ct, buffer, acc,
+				ctx, evalCtx, whenTyped, whenResolvedType, []types.T{*whenResolvedType}, buffer, acc,
 			)
 			if err != nil {
 				return nil, resultIdx, ct, internalMemUsed, err
