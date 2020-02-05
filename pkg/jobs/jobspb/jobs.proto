@@ -78,6 +78,9 @@ message RestoreDetails {
   bool prepare_completed = 8;
   bool stats_inserted = 9;
   bool tables_published = 10;
+  int32 descriptor_coverage = 11 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
+  ];
 }
 
 message RestoreProgress {
