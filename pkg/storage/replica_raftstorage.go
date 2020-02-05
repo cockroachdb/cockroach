@@ -1008,7 +1008,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		subsumedReplSST := engine.MakeIngestionSSTWriter(subsumedReplSSTFile)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
-		// RaftTombstoneKey. Since Clears and Puts need to be done in increasing
+		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
 		if err := sr.preDestroyRaftMuLocked(
 			ctx,

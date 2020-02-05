@@ -287,7 +287,7 @@ func createTestStoreWithConfig(
 	return store
 }
 
-// TestIterateIDPrefixKeys lays down a number of tombstones (at keys.RaftTombstoneKey) interspersed
+// TestIterateIDPrefixKeys lays down a number of tombstones (at keys.RangeTombstoneKey) interspersed
 // with other irrelevant keys (both chosen randomly). It then verifies that IterateIDPrefixKeys
 // correctly returns only the relevant keys and values.
 func TestIterateIDPrefixKeys(t *testing.T) {
@@ -347,7 +347,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 
 	type seenT struct {
 		rangeID   roachpb.RangeID
-		tombstone roachpb.RaftTombstone
+		tombstone roachpb.RangeTombstone
 	}
 
 	// Next, write the keys we're planning to see again.
@@ -361,7 +361,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 				continue
 			}
 
-			tombstone := roachpb.RaftTombstone{
+			tombstone := roachpb.RangeTombstone{
 				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
 			}
 
@@ -370,7 +370,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 
 			t.Logf("writing tombstone at rangeID=%d", rangeID)
 			if err := engine.MVCCPutProto(
-				ctx, eng, nil /* ms */, keys.RaftTombstoneKey(rangeID), hlc.Timestamp{}, nil /* txn */, &tombstone,
+				ctx, eng, nil /* ms */, keys.RangeTombstoneKey(rangeID), hlc.Timestamp{}, nil /* txn */, &tombstone,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -386,14 +386,14 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	})
 
 	var seen []seenT
-	var tombstone roachpb.RaftTombstone
+	var tombstone roachpb.RangeTombstone
 
 	handleTombstone := func(rangeID roachpb.RangeID) (more bool, _ error) {
 		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
 		return true, nil
 	}
 
-	if err := IterateIDPrefixKeys(ctx, eng, keys.RaftTombstoneKey, &tombstone, handleTombstone); err != nil {
+	if err := IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
 		t.Fatal(err)
 	}
 	placeholder := seenT{
@@ -3269,7 +3269,7 @@ func TestPreemptiveSnapshotsAreRemoved(t *testing.T) {
 	it = rditer.NewReplicaDataIterator(desc, snap, replicatedOnly, seekEnd)
 	defer it.Close()
 	// The only key for the range we should find is the tombstone.
-	tombstoneKey := keys.RaftTombstoneKey(rangeID)
+	tombstoneKey := keys.RangeTombstoneKey(rangeID)
 	var foundTombstoneKey bool
 	for ; ; it.Next() {
 		ok, err := it.Valid()

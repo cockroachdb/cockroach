@@ -2524,7 +2524,7 @@ func TestReplicaTombstone(t *testing.T) {
 			return nil
 		})
 		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, key))
-		var tombstone roachpb.RaftTombstone
+		var tombstone roachpb.RangeTombstone
 		testutils.SucceedsSoon(t, func() (err error) {
 			// One of the two other stores better be the raft leader eventually.
 			// We keep trying to send snapshots until one takes.
@@ -2538,7 +2538,7 @@ func TestReplicaTombstone(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			tombstoneKey := keys.RaftTombstoneKey(rhsDesc.RangeID)
+			tombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
 			ok, err := engine.MVCCGetProto(
 				context.TODO(), store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 			)

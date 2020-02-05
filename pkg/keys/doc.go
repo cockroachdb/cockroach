@@ -167,21 +167,20 @@ var _ = [...]interface{}{
 	//   range as a whole. Though they are replicated, they are unaddressable.
 	//   Typical examples are MVCC stats and the abort span. They all share
 	//   `LocalRangeIDPrefix` and `LocalRangeIDReplicatedInfix`.
-	AbortSpanKey,                    // "abc-"
-	RangeLastGCKey,                  // "lgc-"
-	RangeAppliedStateKey,            // "rask"
-	RaftAppliedIndexLegacyKey,       // "rfta"
-	RaftTombstoneIncorrectLegacyKey, // "rftb"
-	RaftTruncatedStateLegacyKey,     // "rftt"
-	RangeLeaseKey,                   // "rll-"
-	LeaseAppliedIndexLegacyKey,      // "rlla"
-	RangeStatsLegacyKey,             // "stat"
+	AbortSpanKey,                // "abc-"
+	RangeLastGCKey,              // "lgc-"
+	RangeAppliedStateKey,        // "rask"
+	RaftAppliedIndexLegacyKey,   // "rfta"
+	RaftTruncatedStateLegacyKey, // "rftt"
+	RangeLeaseKey,               // "rll-"
+	LeaseAppliedIndexLegacyKey,  // "rlla"
+	RangeStatsLegacyKey,         // "stat"
 
 	//   2. Unreplicated range-ID local keys: These contain metadata that
 	//   pertain to just one replica of a range. They are unreplicated and
 	//   unaddressable. The typical example is the Raft log. They all share
 	//   `LocalRangeIDPrefix` and `localRangeIDUnreplicatedInfix`.
-	RaftTombstoneKey,               // "rftb"
+	RangeTombstoneKey,              // "rftb"
 	RaftHardStateKey,               // "rfth"
 	RaftLogKey,                     // "rftl"
 	RaftTruncatedStateKey,          // "rftt"

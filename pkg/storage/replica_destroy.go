@@ -284,8 +284,8 @@ func writeTombstoneKey(
 	rangeID roachpb.RangeID,
 	nextReplicaID roachpb.ReplicaID,
 ) error {
-	tombstoneKey := keys.RaftTombstoneKey(rangeID)
-	tombstone := &roachpb.RaftTombstone{
+	tombstoneKey := keys.RangeTombstoneKey(rangeID)
+	tombstone := &roachpb.RangeTombstone{
 		NextReplicaID: nextReplicaID,
 	}
 	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
