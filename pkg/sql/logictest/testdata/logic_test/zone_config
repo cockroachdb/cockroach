@@ -78,6 +78,23 @@ ALTER TABLE a CONFIGURE ZONE USING
   constraints = '[+region=test]',
   lease_preferences = '[[+region=test]]'
 
+# This should reflect in the metrics.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.zone_config.table.range_min_bytes',
+  'sql.schema.zone_config.table.range_max_bytes',
+  'sql.schema.zone_config.table.gc.ttlseconds',
+  'sql.schema.zone_config.table.num_replicas',
+  'sql.schema.zone_config.table.constraints'
+) AND usage_count > 0 ORDER BY feature_name
+----
+sql.schema.zone_config.table.constraints
+sql.schema.zone_config.table.gc.ttlseconds
+sql.schema.zone_config.table.num_replicas
+sql.schema.zone_config.table.range_max_bytes
+sql.schema.zone_config.table.range_min_bytes
+
 query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
