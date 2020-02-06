@@ -419,3 +419,16 @@ query IIIIT
 SELECT * FROM t@i5
 ----
 1 2 3 4 {}
+
+# Regression test for #44782
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t44782 (x INT PRIMARY KEY, y INT NOT NULL)
+
+statement error pq: cannot create table and change it's primary key in the same transaction
+ALTER TABLE t44782 ALTER PRIMARY KEY USING COLUMNS (y)
+
+statement ok
+ROLLBACK

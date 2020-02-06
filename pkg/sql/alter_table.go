@@ -328,6 +328,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
 			}
 
+			if n.tableDesc.IsNewTable() {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"cannot create table and change it's primary key in the same transaction")
+			}
+
 			// Ensure that there is not another primary key change attempted within this transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
 			for i := range n.tableDesc.Mutations {
