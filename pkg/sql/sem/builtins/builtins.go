@@ -2343,7 +2343,7 @@ may increase either contention or retry errors, or both.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				tuple := args[0].(*tree.DTuple)
 				builder := json.NewObjectBuilder(len(tuple.D))
 				typ := tuple.ResolvedType()
@@ -2356,7 +2356,7 @@ may increase either contention or retry errors, or both.`,
 					if label == "" {
 						label = fmt.Sprintf("f%d", i+1)
 					}
-					val, err := tree.AsJSON(d)
+					val, err := tree.AsJSON(d, ctx.GetLocation())
 					if err != nil {
 						return nil, err
 					}
@@ -4264,12 +4264,12 @@ var jsonBuildObjectImpl = tree.Overload{
 					"argument %d cannot be null", i+1)
 			}
 
-			key, err := asJSONBuildObjectKey(args[i])
+			key, err := asJSONBuildObjectKey(args[i], ctx.GetLocation())
 			if err != nil {
 				return nil, err
 			}
 
-			val, err := tree.AsJSON(args[i+1])
+			val, err := tree.AsJSON(args[i+1], ctx.GetLocation())
 			if err != nil {
 				return nil, err
 			}
@@ -4285,8 +4285,8 @@ var jsonBuildObjectImpl = tree.Overload{
 var toJSONImpl = tree.Overload{
 	Types:      tree.ArgTypes{{"val", types.Any}},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
-	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		return toJSONObject(args[0])
+	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		return toJSONObject(args[0], ctx.GetLocation())
 	},
 	Info: "Returns the value as JSON or JSONB.",
 }
@@ -4303,12 +4303,12 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"array", types.AnyArray}, {"pretty_bool", types.Bool}},
 		ReturnType: tree.FixedReturnType(types.Jsonb),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			prettyPrint := bool(tree.MustBeDBool(args[1]))
 			if prettyPrint {
 				return nil, prettyPrintNotSupportedError
 			}
-			return toJSONObject(args[0])
+			return toJSONObject(args[0], ctx.GetLocation())
 		},
 		Info: "Returns the array as JSON or JSONB.",
 	},
@@ -4317,10 +4317,10 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 var jsonBuildArrayImpl = tree.Overload{
 	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
-	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
 		for _, arg := range args {
-			j, err := tree.AsJSON(arg)
+			j, err := tree.AsJSON(arg, ctx.GetLocation())
 			if err != nil {
 				return nil, err
 			}
@@ -4335,7 +4335,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"texts", types.StringArray}},
 		ReturnType: tree.FixedReturnType(types.Jsonb),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			arr := tree.MustBeDArray(args[0])
 			if arr.Len()%2 != 0 {
 				return nil, errJSONObjectNotEvenNumberOfElements
@@ -4349,7 +4349,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				if err != nil {
 					return nil, err
 				}
-				val, err := tree.AsJSON(arr.Array[i+1])
+				val, err := tree.AsJSON(arr.Array[i+1], ctx.GetLocation())
 				if err != nil {
 					return nil, err
 				}
@@ -4365,7 +4365,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 		Types: tree.ArgTypes{{"keys", types.StringArray},
 			{"values", types.StringArray}},
 		ReturnType: tree.FixedReturnType(types.Jsonb),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			keys := tree.MustBeDArray(args[0])
 			values := tree.MustBeDArray(args[1])
 			if keys.Len() != values.Len() {
@@ -4380,7 +4380,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				if err != nil {
 					return nil, err
 				}
-				val, err := tree.AsJSON(values.Array[i])
+				val, err := tree.AsJSON(values.Array[i], ctx.GetLocation())
 				if err != nil {
 					return nil, err
 				}
@@ -5458,7 +5458,7 @@ func truncateTimestamp(
 }
 
 // Converts a scalar Datum to its string representation
-func asJSONBuildObjectKey(d tree.Datum) (string, error) {
+func asJSONBuildObjectKey(d tree.Datum, loc *time.Location) (string, error) {
 	switch t := d.(type) {
 	case *tree.DJSON, *tree.DArray, *tree.DTuple:
 		return "", pgerror.New(pgcode.InvalidParameterValue,
@@ -5467,7 +5467,12 @@ func asJSONBuildObjectKey(d tree.Datum) (string, error) {
 		return string(*t), nil
 	case *tree.DCollatedString:
 		return t.Contents, nil
-	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp, *tree.DTimestampTZ,
+	case *tree.DTimestampTZ:
+		return tree.AsStringWithFlags(
+			tree.MakeDTimestampTZ(t.Time.In(loc), time.Microsecond),
+			tree.FmtBareStrings,
+		), nil
+	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp,
 		*tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid,
 		*tree.DTime, *tree.DTimeTZ, *tree.DBitArray:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
@@ -5485,8 +5490,8 @@ func asJSONObjectKey(d tree.Datum) (string, error) {
 	}
 }
 
-func toJSONObject(d tree.Datum) (tree.Datum, error) {
-	j, err := tree.AsJSON(d)
+func toJSONObject(d tree.Datum, loc *time.Location) (tree.Datum, error) {
+	j, err := tree.AsJSON(d, loc)
 	if err != nil {
 		return nil, err
 	}

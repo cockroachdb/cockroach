@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
@@ -2182,6 +2183,7 @@ func (a *intXorAggregate) Size() int64 {
 }
 
 type jsonAggregate struct {
+	loc        *time.Location
 	builder    *json.ArrayBuilderWithCounter
 	acc        mon.BoundAccount
 	sawNonNull bool
@@ -2189,6 +2191,7 @@ type jsonAggregate struct {
 
 func newJSONAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &jsonAggregate{
+		loc:        evalCtx.GetLocation(),
 		builder:    json.NewArrayBuilderWithCounter(),
 		acc:        evalCtx.Mon.MakeBoundAccount(),
 		sawNonNull: false,
@@ -2197,7 +2200,7 @@ func newJSONAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tr
 
 // Add accumulates the transformed json into the JSON array.
 func (a *jsonAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
-	j, err := tree.AsJSON(datum)
+	j, err := tree.AsJSON(datum, a.loc)
 	if err != nil {
 		return err
 	}

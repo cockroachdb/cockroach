@@ -327,3 +327,77 @@ SELECT a, b FROM regression_44774 ORDER BY a
 
 statement ok
 DROP TABLE regression_44774
+
+# Test for timestamptz math with interval involving DST.
+subtest regression-cockroachdb/django-cockroachdb_57
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query T
+WITH a(a) AS ( VALUES
+  ('2010-11-06 23:59:00'::timestamptz + '24 hours'::interval), -- no offset specified
+  ('2010-11-06 23:59:00'::timestamptz + '1 day'::interval),
+  ('2010-11-06 23:59:00'::timestamptz + '1 month'::interval),
+  ('2010-11-07 23:59:00'::timestamptz - '24 hours'::interval),
+  ('2010-11-07 23:59:00'::timestamptz - '1 day'::interval),
+  ('2010-11-07 23:59:00'::timestamptz - '1 month'::interval),
+  ('2010-11-06 23:59:00-05'::timestamptz + '24 hours'::interval), -- offset at time zone
+  ('2010-11-06 23:59:00-05'::timestamptz + '1 day'::interval),
+  ('2010-11-06 23:59:00-05'::timestamptz + '1 month'::interval),
+  ('2010-11-07 23:59:00-06'::timestamptz - '24 hours'::interval),
+  ('2010-11-07 23:59:00-06'::timestamptz - '1 day'::interval),
+  ('2010-11-07 23:59:00-06'::timestamptz - '1 month'::interval),
+  ('2010-11-06 23:59:00-04'::timestamptz + '24 hours'::interval), -- different offset
+  ('2010-11-06 23:59:00-04'::timestamptz + '1 day'::interval),
+  ('2010-11-06 23:59:00-04'::timestamptz + '1 month'::interval),
+  ('2010-11-07 23:59:00-04'::timestamptz - '24 hours'::interval),
+  ('2010-11-07 23:59:00-04'::timestamptz - '1 day'::interval),
+  ('2010-11-07 23:59:00-04'::timestamptz - '1 month'::interval)
+) select * from a;
+----
+2010-11-07 22:59:00 -0600 CST
+2010-11-07 23:59:00 -0600 CST
+2010-12-06 23:59:00 -0600 CST
+2010-11-07 00:59:00 -0500 CDT
+2010-11-06 23:59:00 -0500 CDT
+2010-10-07 23:59:00 -0500 CDT
+2010-11-07 22:59:00 -0600 CST
+2010-11-07 23:59:00 -0600 CST
+2010-12-06 23:59:00 -0600 CST
+2010-11-07 00:59:00 -0500 CDT
+2010-11-06 23:59:00 -0500 CDT
+2010-10-07 23:59:00 -0500 CDT
+2010-11-07 21:59:00 -0600 CST
+2010-11-07 22:59:00 -0600 CST
+2010-12-06 22:59:00 -0600 CST
+2010-11-06 22:59:00 -0500 CDT
+2010-11-06 21:59:00 -0500 CDT
+2010-10-07 21:59:00 -0500 CDT
+
+statement ok
+CREATE TABLE example (a timestamptz)
+
+statement ok
+INSERT INTO example VALUES
+  ('2010-11-06 23:59:00'),
+  ('2010-11-07 23:59:00')
+
+query TTTTTTTTT
+SELECT
+  a + '24 hours'::interval, a + '1 day'::interval, a + '1 month'::interval,
+  a - '24 hours'::interval, a - '1 day'::interval, a - '1 month'::interval,
+  a - '2010-11-06 23:59:00'::timestamptz,
+  a - '2010-11-07 23:59:00'::timestamptz,
+  a::string
+FROM example
+ORDER BY a
+----
+2010-11-07 22:59:00 -0600 CST  2010-11-07 23:59:00 -0600 CST  2010-12-06 23:59:00 -0600 CST  2010-11-05 23:59:00 -0500 CDT  2010-11-05 23:59:00 -0500 CDT  2010-10-06 23:59:00 -0500 CDT  00:00:00  -25:00:00  2010-11-06 23:59:00-05:00
+2010-11-08 23:59:00 -0600 CST  2010-11-08 23:59:00 -0600 CST  2010-12-07 23:59:00 -0600 CST  2010-11-07 00:59:00 -0500 CDT  2010-11-06 23:59:00 -0500 CDT  2010-10-07 23:59:00 -0500 CDT  25:00:00  00:00:00   2010-11-07 23:59:00-06:00
+
+statement ok
+DROP TABLE example
+
+statement ok
+SET TIME ZONE 0
