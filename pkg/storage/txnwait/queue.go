@@ -186,6 +186,7 @@ type TestingKnobs struct {
 // Queue is thread safe.
 type Queue struct {
 	store StoreInterface
+	repl  ReplicaInterface
 	mu    struct {
 		syncutil.Mutex
 		txns    map[uuid.UUID]*pendingTxn
@@ -194,9 +195,10 @@ type Queue struct {
 }
 
 // NewQueue instantiates a new Queue.
-func NewQueue(store StoreInterface) *Queue {
+func NewQueue(store StoreInterface, repl ReplicaInterface) *Queue {
 	return &Queue{
 		store: store,
+		repl:  repl,
 	}
 }
 
@@ -275,10 +277,10 @@ func (q *Queue) IsEnabled() bool {
 	return q.mu.txns != nil
 }
 
-// Enqueue creates a new pendingTxn for the target txn of a failed
+// EnqueueTxn creates a new pendingTxn for the target txn of a failed
 // PushTxn command. Subsequent PushTxn requests for the same txn
 // will be enqueued behind the pendingTxn via MaybeWait().
-func (q *Queue) Enqueue(txn *roachpb.Transaction) {
+func (q *Queue) EnqueueTxn(txn *roachpb.Transaction) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.mu.txns == nil {
@@ -329,7 +331,7 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	q.store.GetTxnWaitMetrics().PusherWaiting.Dec(int64(len(waitingPushes)))
 
 	if log.V(1) && len(waitingPushes) > 0 {
-		log.Infof(context.Background(), "updating %d push waiters for %s", len(waitingPushes), txn.ID.Short())
+		log.Infof(ctx, "updating %d push waiters for %s", len(waitingPushes), txn.ID.Short())
 	}
 	// Send on pending waiter channels outside of the mutex lock.
 	for _, w := range waitingPushes {
@@ -399,7 +401,7 @@ func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID
 // If the transaction is successfully pushed while this method is waiting,
 // the first return value is a non-nil PushTxnResponse object.
 func (q *Queue) MaybeWaitForPush(
-	ctx context.Context, repl ReplicaInterface, req *roachpb.PushTxnRequest,
+	ctx context.Context, req *roachpb.PushTxnRequest,
 ) (*roachpb.PushTxnResponse, *roachpb.Error) {
 	if ShouldPushImmediately(req) {
 		return nil, nil
@@ -411,7 +413,7 @@ func (q *Queue) MaybeWaitForPush(
 	// outside of the replica after a split or merge. Note that the
 	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
-	if q.mu.txns == nil || !repl.ContainsKey(req.Key) {
+	if q.mu.txns == nil || !q.repl.ContainsKey(req.Key) {
 		q.mu.Unlock()
 		return nil, nil
 	}
@@ -668,7 +670,7 @@ func (q *Queue) MaybeWaitForPush(
 // there is a queue, enqueue this request as a waiter and enter a
 // select loop waiting for any updates to the target transaction.
 func (q *Queue) MaybeWaitForQuery(
-	ctx context.Context, repl ReplicaInterface, req *roachpb.QueryTxnRequest,
+	ctx context.Context, req *roachpb.QueryTxnRequest,
 ) *roachpb.Error {
 	if !req.WaitForUpdate {
 		return nil
@@ -680,7 +682,7 @@ func (q *Queue) MaybeWaitForQuery(
 	// outside of the replica after a split or merge. Note that the
 	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
-	if q.mu.txns == nil || !repl.ContainsKey(req.Key) {
+	if q.mu.txns == nil || !q.repl.ContainsKey(req.Key) {
 		q.mu.Unlock()
 		return nil
 	}

@@ -28,6 +28,8 @@ func init() {
 func declareKeysResolveIntentCombined(
 	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
+	// TODO(nvanbenschoten): declare this span at the txn's MinTimestamp. See
+	// lockTable.UpdateLocks for more.
 	DefaultDeclareKeys(desc, header, req, spans)
 	var status roachpb.TransactionStatus
 	var txnID uuid.UUID
