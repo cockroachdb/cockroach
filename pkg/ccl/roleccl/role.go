@@ -24,7 +24,7 @@ import (
 func createRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	createRole, ok := stmt.(*tree.CreateRoleOrUser)
+	createRole, ok := stmt.(*tree.CreateUserOrRole)
 	if !ok {
 		return nil, nil
 	}
@@ -49,7 +49,7 @@ func createRolePlanHook(
 func dropRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	dropRole, ok := stmt.(*tree.DropRoleOrUser)
+	dropRole, ok := stmt.(*tree.DropUserOrRole)
 	if !ok {
 		return nil, nil
 	}

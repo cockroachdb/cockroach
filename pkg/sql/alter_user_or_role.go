@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// alterRoleOrUserNode represents an ALTER ROLE ... [WITH] OPTION... statement.
-type alterRoleOrUserNode struct {
+// alterUserOrRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
+type alterUserOrRoleNode struct {
 	userNameInfo
 	roleOptions roleoption.List
 
@@ -31,9 +31,9 @@ type alterRoleOrUserNode struct {
 }
 
 // AlterRoleOptions alters a user's permissios
-func (p *planner) AlterRoleOrUserOptions(
-	ctx context.Context, n *tree.AlterRoleOrUserOptions,
-) (*alterRoleOrUserNode, error) {
+func (p *planner) AlterUserOrRoleOptions(
+	ctx context.Context, n *tree.AlterUserOrRoleOptions,
+) (*alterUserOrRoleNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support superuser privilege right now.
 	// However we make it so the admin role cannot be edited (done in startExec).
@@ -54,19 +54,19 @@ func (p *planner) AlterRoleOrUserOptions(
 		return nil, err
 	}
 
-	return &alterRoleOrUserNode{
+	return &alterUserOrRoleNode{
 		userNameInfo: ua,
 		roleOptions:  roleOptions,
 	}, nil
 }
 
 // alterRoleOrUserRun is the run-time state of
-// alterRoleOrUserNode for local execution.
+// alterUserOrRoleNode for local execution.
 type alterRoleOrUserRun struct {
 	rowsAffected int
 }
 
-func (n *alterRoleOrUserNode) startExec(params runParams) error {
+func (n *alterUserOrRoleNode) startExec(params runParams) error {
 	name, err := n.name()
 	if err != nil {
 		return err
@@ -138,10 +138,10 @@ func (n *alterRoleOrUserNode) startExec(params runParams) error {
 	return nil
 }
 
-func (*alterRoleOrUserNode) Next(runParams) (bool, error) { return false, nil }
-func (*alterRoleOrUserNode) Values() tree.Datums          { return tree.Datums{} }
-func (*alterRoleOrUserNode) Close(context.Context)        {}
+func (*alterUserOrRoleNode) Next(runParams) (bool, error) { return false, nil }
+func (*alterUserOrRoleNode) Values() tree.Datums          { return tree.Datums{} }
+func (*alterUserOrRoleNode) Close(context.Context)        {}
 
-func (n *alterRoleOrUserNode) FastPathResults() (int, bool) {
+func (n *alterUserOrRoleNode) FastPathResults() (int, bool) {
 	return n.run.rowsAffected, true
 }

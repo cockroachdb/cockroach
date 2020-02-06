@@ -33,9 +33,9 @@ type DropUserNode struct {
 	run dropUserRun
 }
 
-// DropRoleOrUser drops a list of users.
+// DropUserOrRole drops a list of users.
 // Privileges: DELETE on system.users.
-func (p *planner) DropUser(ctx context.Context, n *tree.DropRoleOrUser) (planNode, error) {
+func (p *planner) DropUser(ctx context.Context, n *tree.DropUserOrRole) (planNode, error) {
 	return p.DropUserNode(ctx, n.Names, n.IfExists, n.IsRole /* isRole */, "DROP USER")
 }
 

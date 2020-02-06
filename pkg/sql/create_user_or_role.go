@@ -37,11 +37,13 @@ type CreateUserNode struct {
 
 var userTableName = tree.NewTableName("system", "users")
 
-// CreateUser creates a user.
+// CreateUserOrRole creates a user.
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUser(ctx context.Context, n *tree.CreateRoleOrUser) (planNode, error) {
+func (p *planner) CreateUserOrRole(
+	ctx context.Context, n *tree.CreateUserOrRole,
+) (planNode, error) {
 	roleOptions, err := n.RoleOptions.Convert(p.TypeAsString, "CREATE ROLE OR USER")
 	if err != nil {
 		return nil, err
@@ -49,7 +51,8 @@ func (p *planner) CreateUser(ctx context.Context, n *tree.CreateRoleOrUser) (pla
 	return p.CreateUserNode(ctx, n.Name, n.IfNotExists, n.IsRole /* isRole */, "CREATE ROLE OR USER", roleOptions)
 }
 
-// CreateUserNode creates a "create user" plan node. This can be called from CREATE USER or CREATE ROLE.
+// CreateUserNode creates a "create user" plan node.
+// This can be called from CREATE USER or CREATE ROLE.
 func (p *planner) CreateUserNode(
 	ctx context.Context,
 	nameE tree.Expr,

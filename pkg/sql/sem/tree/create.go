@@ -1236,8 +1236,8 @@ func (rol RoleOptionsWithValues) Convert(
 	return roleOptions, nil
 }
 
-// CreateRoleOrUser represents a CREATE USER or CREATE ROLE statement.
-type CreateRoleOrUser struct {
+// CreateUserOrRole represents a CREATE USER or CREATE ROLE statement.
+type CreateUserOrRole struct {
 	Name        Expr
 	IsRole      bool
 	IfNotExists bool
@@ -1246,7 +1246,7 @@ type CreateRoleOrUser struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
+func (node *CreateUserOrRole) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE")
 	if node.IsRole {
 		ctx.WriteString(" ROLE ")
@@ -1266,8 +1266,8 @@ func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
 	}
 }
 
-// AlterRoleOrUserOptions represents an ALTER ROLE or ALTER USER statement.
-type AlterRoleOrUserOptions struct {
+// AlterUserOrRoleOptions represents an ALTER ROLE or ALTER USER statement.
+type AlterUserOrRoleOptions struct {
 	Name        Expr
 	IsRole      bool
 	IfExists    bool
@@ -1276,7 +1276,7 @@ type AlterRoleOrUserOptions struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterRoleOrUserOptions) Format(ctx *FmtCtx) {
+func (node *AlterUserOrRoleOptions) Format(ctx *FmtCtx) {
 	// WIP: Need to fix this.
 	ctx.WriteString("ALTER")
 	if node.IsRole {

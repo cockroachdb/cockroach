@@ -139,15 +139,15 @@ func (node *DropSequence) Format(ctx *FmtCtx) {
 	}
 }
 
-// DropRoleOrUser represents a DROP USER statement
-type DropRoleOrUser struct {
+// DropUserOrRole represents a DROP USER statement
+type DropUserOrRole struct {
 	Names    Exprs
 	IfExists bool
 	IsRole   bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropRoleOrUser) Format(ctx *FmtCtx) {
+func (node *DropUserOrRole) Format(ctx *FmtCtx) {
 	ctx.WriteString("DROP")
 	if node.IsRole {
 		ctx.WriteString(" ROLE ")
