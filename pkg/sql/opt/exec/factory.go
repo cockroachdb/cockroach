@@ -663,6 +663,13 @@ type WindowInfo struct {
 
 	// Ordering is the set of input columns to order on.
 	Ordering sqlbase.ColumnOrdering
+
+	// RangeOffsetColumn is the column ID of a single column from ORDER BY clause
+	// when window frame has RANGE mode of framing and at least one 'offset'
+	// boundary. We store it separately because the ordering might be simplified
+	// (when that single column is in Partition), but the execution still needs
+	// to know the original ordering.
+	RangeOffsetColumn ColumnOrdinal
 }
 
 // ExplainEnvData represents the data that's going to be displayed in EXPLAIN (env).
