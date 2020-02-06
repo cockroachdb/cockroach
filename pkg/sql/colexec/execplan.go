@@ -17,6 +17,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -93,6 +94,7 @@ type NewColOperatorArgs struct {
 	Inputs               []Operator
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
+	DiskQueueCfg         colcontainer.DiskQueueCfg
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
@@ -613,15 +615,7 @@ func NewColOperator(
 								ctx, result.createBufferingMemAccount(
 									ctx, flowCtx, monitorNamePrefix,
 								))
-							diskQueuesUnlimitedAllocator := NewAllocator(
-								ctx, result.createBufferingUnlimitedMemAccount(
-									ctx, flowCtx, monitorNamePrefix+"disk-queues",
-								))
-							return newExternalHashJoiner(
-								allocator, hjSpec,
-								inputOne, inputTwo,
-								diskQueuesUnlimitedAllocator,
-							)
+							return newExternalHashJoiner(allocator, hjSpec, inputOne, inputTwo, args.DiskQueueCfg)
 						},
 						args.TestingKnobs.SpillingCallbackFn,
 					)
@@ -766,16 +760,7 @@ func NewColOperator(
 							ctx, result.createBufferingUnlimitedMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
-						diskQueuesUnlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
-							))
-						return newExternalSorter(
-							unlimitedAllocator,
-							input, inputTypes, core.Sorter.OutputOrdering,
-							execinfra.GetWorkMemLimit(flowCtx.Cfg),
-							diskQueuesUnlimitedAllocator,
-						)
+						return newExternalSorter(unlimitedAllocator, input, inputTypes, core.Sorter.OutputOrdering, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)

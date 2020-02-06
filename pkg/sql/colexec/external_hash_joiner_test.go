@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
@@ -38,6 +40,9 @@ func TestExternalHashJoiner(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 
 	var (
 		memAccounts []*mon.BoundAccount
@@ -57,9 +62,7 @@ func TestExternalHashJoiner(t *testing.T) {
 				for _, tc := range tcs {
 					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
 						spec := createSpecForHashJoiner(tc)
-						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(
-							ctx, flowCtx, spec, sources, func() {},
-						)
+						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(ctx, flowCtx, spec, sources, func() {}, queueCfg)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
 						return hjOp, err
@@ -117,6 +120,8 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 				vec.Nulls().UnsetNulls()
 			}
 		}
+		queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
+		defer cleanup()
 		leftSource := newFiniteBatchSource(batch, 0)
 		rightSource := newFiniteBatchSource(batch, 0)
 		for _, fullOuter := range []bool{false, true} {
@@ -148,9 +153,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							leftSource.reset(nBatches)
 							rightSource.reset(nBatches)
-							hj, accounts, monitors, err := createDiskBackedHashJoiner(
-								ctx, flowCtx, spec, []Operator{leftSource, rightSource}, func() {},
-							)
+							hj, accounts, monitors, err := createDiskBackedHashJoiner(ctx, flowCtx, spec, []Operator{leftSource, rightSource}, func() {}, queueCfg)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
 							require.NoError(b, err)
@@ -182,11 +185,13 @@ func createDiskBackedHashJoiner(
 	spec *execinfrapb.ProcessorSpec,
 	inputs []Operator,
 	spillingCallbackFn func(),
+	diskQueueCfg colcontainer.DiskQueueCfg,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	args := NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              inputs,
 		StreamingMemAccount: testMemAcc,
+		DiskQueueCfg:        diskQueueCfg,
 	}
 	// We will not use streaming memory account for the external hash join so
 	// that the in-memory hash join operator could hit the memory limit set on
