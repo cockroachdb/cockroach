@@ -815,12 +815,21 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, why string, toStoreID roachpb.StoreID)
 }
 
+// validatePositive is a function to validate that a settings value is positive.
+func validatePositive(v int64) error {
+	if v <= 0 {
+		return errors.Errorf("%d is not positive", v)
+	}
+	return nil
+}
+
 // rebalanceSnapshotRate is the rate at which preemptive snapshots can be sent.
 // This includes snapshots generated for upreplication or for rebalancing.
-var rebalanceSnapshotRate = settings.RegisterPublicByteSizeSetting(
+var rebalanceSnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 8<<20),
+	validatePositive,
 )
 
 // recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
@@ -829,10 +838,11 @@ var rebalanceSnapshotRate = settings.RegisterPublicByteSizeSetting(
 // completely get rid of them.
 // TODO(tbg): The existence of this rate, separate from rebalanceSnapshotRate,
 // does not make a whole lot of sense.
-var recoverySnapshotRate = settings.RegisterPublicByteSizeSetting(
+var recoverySnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20),
+	validatePositive,
 )
 
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.
