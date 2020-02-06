@@ -130,22 +130,6 @@ tail:
 	return uintptr(h)
 }
 
-func memhash16(p unsafe.Pointer, h uintptr) uintptr {
-	return memhash(p, h, 2)
-}
-
-func memhash32(p unsafe.Pointer, seed uintptr) uintptr {
-	h := uint64(seed + 4*hashKey[0])
-	v := uint64(readUnaligned32(p))
-	h ^= v
-	h ^= v << 32
-	h = rotl31(h*m1) * m2
-	h ^= h >> 29
-	h *= m3
-	h ^= h >> 32
-	return uintptr(h)
-}
-
 func memhash64(p unsafe.Pointer, seed uintptr) uintptr {
 	h := uint64(seed + 8*hashKey[0])
 	h ^= uint64(readUnaligned32(p)) | uint64(readUnaligned32(add(p, 4)))<<32

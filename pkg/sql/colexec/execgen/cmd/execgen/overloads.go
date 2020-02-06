@@ -742,7 +742,12 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 
 func (c intCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf("%[1]s = memhash%[3]d(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
+		return fmt.Sprintf(`
+				// In order for integers with different widths but of the same value to
+				// to hash to the same value, we upcast all of them to int64.
+				asInt64 := int64(%[2]s)
+				%[1]s = memhash64(noescape(unsafe.Pointer(&asInt64)), %[1]s)`,
+			target, v)
 	}
 }
 
