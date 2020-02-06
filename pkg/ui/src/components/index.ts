@@ -9,11 +9,13 @@
 // licenses/APL.txt.
 
 export * from "./badge";
+export * from "./button";
 export * from "./icon";
 export * from "./globalNavigation";
 export * from "./sideNavigation";
 export * from "./pageHeader";
 export * from "./text";
+export * from "./textInput";
 export * from "./table";
 export * from "./tooltip";
 export * from "./select";

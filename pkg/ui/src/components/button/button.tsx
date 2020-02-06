@@ -62,6 +62,7 @@ export function Button(props: ButtonProps) {
 }
 
 Button.defaultProps = {
+  onClick: () => {},
   type: "primary",
   disabled: false,
   size: "default",
