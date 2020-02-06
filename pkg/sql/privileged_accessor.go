@@ -22,14 +22,23 @@ import (
 )
 
 // LookupNamespaceID implements tree.PrivilegedAccessor.
+// TODO(sqlexec): make this work for any arbitrary schema.
+// This currently only works for public schemas and databases.
 func (p *planner) LookupNamespaceID(
 	ctx context.Context, parentID int64, name string,
 ) (tree.DInt, bool, error) {
 	var r tree.Datums
-	for _, tableName := range []string{"system.namespace", "system.namespace_deprecated"} {
+	for _, t := range []struct {
+		tableName   string
+		extraClause string
+	}{
+		{"system.namespace", `AND "parentSchemaID" IN (0, 29)`},
+		{"system.namespace_deprecated", ""},
+	} {
 		query := fmt.Sprintf(
-			`SELECT id FROM %s WHERE "parentID" = $1 AND name = $2`,
-			tableName,
+			`SELECT id FROM %s WHERE "parentID" = $1 AND name = $2 %s`,
+			t.tableName,
+			t.extraClause,
 		)
 		var err error
 		r, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(

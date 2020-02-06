@@ -676,7 +676,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	fullDir := sanitizedFullDir + "moarSecretsHere"
 
 	backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
-	backupTableID := sqlutils.QueryTableID(t, conn, "data", "bank")
+	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 	restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
@@ -775,7 +775,7 @@ func checkInProgressBackupRestore(
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 
-	backupTableID := sqlutils.QueryTableID(t, conn, "data", "bank")
+	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
 
 	do := func(query string, check inProgressChecker) {
 		jobDone := make(chan error)

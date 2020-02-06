@@ -54,12 +54,22 @@ func getDescriptorFromDB(
 	// Due to the namespace migration, the row may not exist in system.namespace
 	// so a fallback to system.namespace_deprecated is required.
 	// TODO(sqlexec): In 20.2, this logic can be removed.
-	for _, tableName := range []string{"system.namespace", "system.namespace_deprecated"} {
-		if err := db.QueryRow(fmt.Sprintf(`SELECT
+	for _, t := range []struct {
+		tableName   string
+		extraClause string
+	}{
+		{"system.namespace", `AND n."parentSchemaID" = 0`},
+		{"system.namespace_deprecated", ""},
+	} {
+		if err := db.QueryRow(
+			fmt.Sprintf(`SELECT
 			d.descriptor
 		FROM %s n INNER JOIN system.descriptor d ON n.id = d.id
-		WHERE n."parentID" = $1
-		AND n.name = $2`, tableName),
+		WHERE n."parentID" = $1 %s
+		AND n.name = $2`,
+				t.tableName,
+				t.extraClause,
+			),
 			keys.RootNamespaceID,
 			dbName,
 		).Scan(&dbDescBytes); err != nil {
