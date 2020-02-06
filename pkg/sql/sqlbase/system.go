@@ -241,6 +241,15 @@ CREATE TABLE system.protected_ts_records (
    verified  BOOL NOT NULL DEFAULT (false),
    FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified)
 );`
+
+	StatementBundleChunksTableSchema = `
+CREATE TABLE system.statement_bundle_chunks (
+   id          INT8 PRIMARY KEY DEFAULT unique_rowid(),
+	 description STRING,
+	 data        BYTES NOT NULL,
+
+   FAMILY "primary" (id, description, data)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -289,6 +298,9 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.ReportsMetaTableID:                   privilege.ReadWriteData,
 	keys.ProtectedTimestampsMetaTableID:       privilege.ReadData,
 	keys.ProtectedTimestampsRecordsTableID:    privilege.ReadData,
+	keys.StatementBundleChunksTableID:         privilege.ReadWriteData,
+	keys.StatementInfoRequestsTableID:         privilege.ReadWriteData,
+	keys.StatementInfoTableID:                 privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -1241,6 +1253,96 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	StatementBundleChunksTable = TableDescriptor{
+		Name:                    "statement_bundle_chunks",
+		ID:                      keys.StatementBundleChunksTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "description", ID: 2, Type: *types.String, Nullable: true},
+			{Name: "data", ID: 3, Type: *types.Bytes},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"id", "description", "data"},
+				ColumnIDs:   []ColumnID{1, 2, 3},
+			},
+		},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("id"),
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.StatementBundleChunksTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// TODO(andrei): Add a foreign key reference to the statement_info table when
+	// it no longer requires us to create an index on statement_info_id.
+	StatementInfoRequestsTable = TableDescriptor{
+		Name:                    "statement_info_requests",
+		ID:                      keys.StatementInfoRequestsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "type", ID: 2, Type: *types.String, Nullable: false},
+			{Name: "completed", ID: 3, Type: *types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
+			{Name: "statement_fingerprint", ID: 4, Type: *types.String, Nullable: false},
+			{Name: "statement_info_id", ID: 5, Type: *types.Int, Nullable: true},
+			{Name: "requested_at", ID: 6, Type: *types.TimestampTZ, Nullable: false},
+			{Name: "completed_at", ID: 7, Type: *types.TimestampTZ, Nullable: true},
+		},
+		NextColumnID: 8,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"id", "type", "completed", "statement_fingerprint", "statement_info_id", "requested_at", "completed_at"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5, 6, 7},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		// !!! index by completed storing id and type
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.StatementInfoRequestsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	StatementInfoTable = TableDescriptor{
+		Name:                    "statement_info",
+		ID:                      keys.StatementInfoTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "statement_fingerprint", ID: 2, Type: *types.String, Nullable: false},
+			{Name: "statement", ID: 3, Type: *types.String, Nullable: false},
+			{Name: "collected_at", ID: 4, Type: *types.TimestampTZ, Nullable: true},
+			{Name: "trace", ID: 5, Type: *types.Jsonb, Nullable: true},
+		},
+		NextColumnID: 6,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"id", "statement_fingerprint", "statement", "collected_at", "trace"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5},
+			},
+		},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("id"),
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.StatementInfoTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -1293,6 +1395,11 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationCriticalLocalitiesTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsMetaTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsRecordsTable)
+
+	// Tables introduced in 20.1.
+	target.AddDescriptor(keys.SystemDatabaseID, &StatementBundleChunksTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &StatementInfoRequestsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &StatementInfoTable)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the

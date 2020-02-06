@@ -360,6 +360,10 @@ const (
 
 	ProtectedTimestampsMetaTableID    = 31
 	ProtectedTimestampsRecordsTableID = 32
+	StatementBundleChunksTableID      = 33
+
+	StatementInfoRequestsTableID = 34
+	StatementInfoTableID         = 35
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

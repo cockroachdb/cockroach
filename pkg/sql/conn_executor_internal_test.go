@@ -281,8 +281,9 @@ func startConnExecutor(
 			dummyLivenessProvider{}, /* liveness */
 			nil,                     /* nodeDialer */
 		),
-		QueryCache:   querycache.New(0),
-		TestingKnobs: ExecutorTestingKnobs{},
+		QueryCache:              querycache.New(0),
+		TestingKnobs:            ExecutorTestingKnobs{},
+		stmtInfoRequestRegistry: newStmtInfoRequestRegistry(nil, nil),
 	}
 	pool := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,

@@ -318,6 +318,7 @@ func makeMetrics(internal bool) Metrics {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
+	s.cfg.stmtInfoRequestRegistry = newStmtInfoRequestRegistry(s.cfg.InternalExecutor, s.cfg.DB)
 	gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		for {
@@ -331,6 +332,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 		}
 	})
 	s.PeriodicallyClearSQLStats(ctx, stopper)
+	s.PeriodicallyPollForStatementInfoRequests(ctx, stopper)
 }
 
 // ResetSQLStats resets the executor's collected sql statistics.
@@ -568,6 +570,7 @@ func (s *Server) newConnExecutor(
 		ctxHolder:                 ctxHolder{connCtx: ctx},
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
+		stmtInfoRegistry:          s.cfg.stmtInfoRequestRegistry,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -731,6 +734,31 @@ func (s *Server) PeriodicallyClearSQLStats(ctx context.Context, stopper *stop.St
 				case <-timer.C:
 					timer.Read = true
 				}
+			}
+		}
+	})
+}
+
+// PeriodicallyPollForStatementInfoRequests runs a worker that periodically
+// polls system.statement_info_requests.
+func (s *Server) PeriodicallyPollForStatementInfoRequests(
+	ctx context.Context, stopper *stop.Stopper,
+) {
+	pollingInterval := 10 * time.Second
+	if knob := s.cfg.TestingKnobs.StmtInfoRequestPollingInterval; knob != 0 {
+		pollingInterval = knob
+	}
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+		var timer timeutil.Timer
+		for {
+			s.cfg.stmtInfoRequestRegistry.pollRequests(ctx)
+			timer.Reset(pollingInterval)
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-timer.C:
+				timer.Read = true
 			}
 		}
 	})
@@ -1028,6 +1056,10 @@ type connExecutor struct {
 	// hasCreatedTemporarySchema is set if the executor has created a
 	// temporary schema, which requires special cleanup on close.
 	hasCreatedTemporarySchema bool
+
+	// stmtInfoRequestRegistry is used to track which queries need to have
+	// information collected.
+	stmtInfoRegistry *stmtInfoRequestRegistry
 }
 
 // ctxHolder contains a connection's context and, while session tracing is

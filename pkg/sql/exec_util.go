@@ -562,6 +562,8 @@ type ExecutorConfig struct {
 
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
+
+	stmtInfoRequestRegistry *stmtInfoRequestRegistry
 }
 
 // Organization returns the value of cluster.organization.
@@ -615,6 +617,10 @@ type ExecutorTestingKnobs struct {
 	// optimization). This is only called when the Executor is the one doing the
 	// committing.
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
+
+	// StmtInfoRequestPollingInterval allows the default interval at which
+	// system.statement_info_requests is polled to be overridden.
+	StmtInfoRequestPollingInterval time.Duration
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1483,7 +1489,7 @@ func (st *SessionTracing) TraceExecEnd(ctx context.Context, err error, count int
 
 // extractMsgFromRecord extracts the message of the event, which is either in an
 // "event" or "error" field.
-func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
+func extractMsgFromRecord(rec tracing.LogRecord) string {
 	for _, f := range rec.Fields {
 		key := f.Key
 		if key == "event" {

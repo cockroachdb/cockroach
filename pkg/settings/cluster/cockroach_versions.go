@@ -52,6 +52,7 @@ const (
 	VersionPrimaryKeyColumnsOutOfFamilyZero
 	VersionRootPassword
 	VersionNoExplicitForeignKeyIndexIDs
+	VersionStatementInfoSystemTables
 
 	// Add new versions here (step one of two).
 )
@@ -397,6 +398,17 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// an appropriate index to uphold the foreign key relationship.
 		Key:     VersionNoExplicitForeignKeyIndexIDs,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
+	},
+
+	{
+		// VersionStatementInfoTables introduces the system tables for storing
+		// statement information (like traces, bundles).
+		//
+		// In this version and later the system.statement_info_requests,
+		// system.system_info and system.statement_bundle_chunks tables are part of
+		// the system bootstap schema.
+		Key:     VersionStatementInfoSystemTables,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
 	},
 
 	// Add new versions here (step two of two).
