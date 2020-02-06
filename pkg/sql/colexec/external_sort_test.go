@@ -17,11 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -40,6 +42,9 @@ func TestExternalSort(t *testing.T) {
 			Settings: st,
 		},
 	}
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 
 	var (
 		memAccounts []*mon.BoundAccount
@@ -61,9 +66,7 @@ func TestExternalSort(t *testing.T) {
 					tc.expected,
 					orderedVerifier,
 					func(input []Operator) (Operator, error) {
-						sorter, accounts, monitors, err := createDiskBackedSorter(
-							ctx, flowCtx, input, tc.logTypes, tc.ordCols, func() {},
-						)
+						sorter, accounts, monitors, err := createDiskBackedSorter(ctx, flowCtx, input, tc.logTypes, tc.ordCols, func() {}, queueCfg)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
 						return sorter, err
@@ -100,6 +103,9 @@ func TestExternalSortRandomized(t *testing.T) {
 		logTypes[i] = *types.Int
 	}
 
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
 	var (
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
@@ -123,9 +129,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						expected,
 						orderedVerifier,
 						func(input []Operator) (Operator, error) {
-							sorter, accounts, monitors, err := createDiskBackedSorter(
-								ctx, flowCtx, input, logTypes[:nCols], ordCols, func() {},
-							)
+							sorter, accounts, monitors, err := createDiskBackedSorter(ctx, flowCtx, input, logTypes[:nCols], ordCols, func() {}, queueCfg)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
 							return sorter, err
@@ -160,6 +164,9 @@ func BenchmarkExternalSort(b *testing.B) {
 		memMonitors []*mon.BytesMonitor
 	)
 
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
+	defer cleanup()
+
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
 			for _, memoryLimit := range []int64{0, 1} {
@@ -192,7 +199,7 @@ func BenchmarkExternalSort(b *testing.B) {
 						source := newFiniteBatchSource(batch, nBatches)
 						var spilled bool
 						sorter, accounts, monitors, err := createDiskBackedSorter(
-							ctx, flowCtx, []Operator{source}, logTypes, ordCols, func() { spilled = true },
+							ctx, flowCtx, []Operator{source}, logTypes, ordCols, func() { spilled = true }, queueCfg,
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -230,6 +237,7 @@ func createDiskBackedSorter(
 	logTypes []types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	spillingCallbackFn func(),
+	diskQueueCfg colcontainer.DiskQueueCfg,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	sorterSpec := &execinfrapb.SorterSpec{}
 	sorterSpec.OutputOrdering.Columns = ordCols
@@ -244,6 +252,7 @@ func createDiskBackedSorter(
 		Spec:                spec,
 		Inputs:              input,
 		StreamingMemAccount: testMemAcc,
+		DiskQueueCfg:        diskQueueCfg,
 	}
 	// External sorter relies on different memory accounts to
 	// understand when to start a new partition, so we will not use

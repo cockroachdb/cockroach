@@ -42,13 +42,13 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 		path = inMemDirName
 		cleanup = ngn.Close
 	} else {
-		ngn, err := engine.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{})
+		tempPath, dirCleanup := testutils.TempDir(t)
+		path = tempPath
+		ngn, err := engine.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{Dir: tempPath})
 		if err != nil {
 			t.Fatal(err)
 		}
 		testingFS = ngn.(fs.FS)
-		tempPath, dirCleanup := testutils.TempDir(t)
-		path = tempPath
 		cleanup = func() {
 			ngn.Close()
 			dirCleanup()

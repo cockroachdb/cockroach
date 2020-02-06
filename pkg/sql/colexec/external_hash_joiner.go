@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
@@ -89,8 +90,8 @@ type externalHashJoiner struct {
 	spec      hashJoinerSpec
 
 	// Partitioning phase variables.
-	leftPartitioner  Partitioner
-	rightPartitioner Partitioner
+	leftPartitioner  colcontainer.PartitionedQueue
+	rightPartitioner colcontainer.PartitionedQueue
 	tupleDistributor *tupleHashDistributor
 	// TODO(yuzefovich): use bitmap for this to reduce memory footprint.
 	nonEmptyPartition []bool
@@ -114,14 +115,13 @@ func newExternalHashJoiner(
 	allocator *Allocator,
 	spec hashJoinerSpec,
 	leftInput, rightInput Operator,
-	// TODO(yuzefovich): remove this once actual disk queues are in-place.
-	diskQueuesUnlimitedAllocator *Allocator,
+	diskQueueCfg colcontainer.DiskQueueCfg,
 ) Operator {
-	leftPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.left.sourceTypes)
+	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg)
 	leftInMemHashJoinerInput := newPartitionerToOperator(
 		allocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
 	)
-	rightPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.right.sourceTypes)
+	rightPartitioner := colcontainer.NewPartitionedDiskQueue(spec.right.sourceTypes, diskQueueCfg)
 	rightInMemHashJoinerInput := newPartitionerToOperator(
 		allocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
 	)
@@ -173,7 +173,7 @@ func (hj *externalHashJoiner) partitionBatch(
 	batch coldata.Batch,
 	scratchBatch coldata.Batch,
 	sourceSpec hashJoinerSourceSpec,
-	partitioner Partitioner,
+	partitioner colcontainer.PartitionedQueue,
 ) {
 	if batch.Length() == 0 {
 		return
