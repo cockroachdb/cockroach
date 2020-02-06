@@ -164,31 +164,31 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
-		// TODO(mberhault): bake into v2.2.
+		// TODO(mberhault): bake into v19.1.
 		name: "repeat: ensure admin role privileges in all descriptors",
 	},
 	{
 		// Introduced in v2.1.
-		// TODO(mberhault): bake into v2.2.
+		// TODO(mberhault): bake into v19.1.
 		name:   "disallow public user or role name",
 		workFn: disallowPublicUserOrRole,
 	},
 	{
 		// Introduced in v2.1.
-		// TODO(knz): bake this migration into v2.2.
+		// TODO(knz): bake this migration into v19.1.
 		name:             "create default databases",
 		workFn:           createDefaultDbs,
 		newDescriptorIDs: databaseIDs(sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName),
 	},
 	{
 		// Introduced in v2.1.
-		// TODO(dt): Bake into v2.2.
+		// TODO(dt): Bake into v19.1.
 		name:   "add progress to system.jobs",
 		workFn: addJobsProgress,
 	},
 	{
-		// Introduced in v2.2.
-		// TODO(knz): bake this migration into v2.3.
+		// Introduced in v19.1.
+		// TODO(knz): bake this migration into v19.2
 		name:   "create system.comment table",
 		workFn: createCommentTable,
 		// This migration has been introduced some time before 19.2.
@@ -295,6 +295,16 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              createRoleOptionsTable,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
 		newDescriptorIDs:    staticIDs(keys.RoleOptionsTableID),
+	},
+	{
+		// Introduced in v20.1.
+		// TODO(andrei): Bake this migration into v20.2.
+		name: "create statement_diagnostics_requests, statement_diagnostics and " +
+			"system.statement_bundle_chunks tables",
+		workFn:              createStatementInfoSystemTables,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionStatementDiagnosticsSystemTables),
+		newDescriptorIDs: staticIDs(keys.StatementBundleChunksTableID,
+			keys.StatementDiagnosticsRequestsTableID, keys.StatementDiagnosticsTableID),
 	},
 }
 
@@ -821,6 +831,19 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 
 func createReportsMetaTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.ReportsMetaTable)
+}
+
+func createStatementInfoSystemTables(ctx context.Context, r runner) error {
+	if err := createSystemTable(ctx, r, sqlbase.StatementBundleChunksTable); err != nil {
+		return errors.Wrap(err, "failed to create system.statement_bundle_chunks")
+	}
+	if err := createSystemTable(ctx, r, sqlbase.StatementDiagnosticsRequestsTable); err != nil {
+		return errors.Wrap(err, "failed to create system.statement_diagnostics_requests")
+	}
+	if err := createSystemTable(ctx, r, sqlbase.StatementDiagnosticsTable); err != nil {
+		return errors.Wrap(err, "failed to create system.statement_diagnostics")
+	}
+	return nil
 }
 
 // SettingsDefaultOverrides documents the effect of several migrations that add

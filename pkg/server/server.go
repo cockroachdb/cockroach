@@ -846,7 +846,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.internalExecutor = internalExecutor
 	execCfg.InternalExecutor = internalExecutor
-
+	s.status.stmtDiagnosticsRequester = execCfg.NewStmtDiagnosticsRequestRegistry()
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetInternalExecutor(execCfg.InternalExecutor)

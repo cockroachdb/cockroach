@@ -633,12 +633,12 @@ func (s *span) getRecording() RecordedSpan {
 			rs.Tags[k] = fmt.Sprint(v)
 		}
 	}
-	rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
+	rs.Logs = make([]LogRecord, len(s.mu.recordedLogs))
 	for i, r := range s.mu.recordedLogs {
 		rs.Logs[i].Time = r.Timestamp
-		rs.Logs[i].Fields = make([]RecordedSpan_LogRecord_Field, len(r.Fields))
+		rs.Logs[i].Fields = make([]LogRecord_Field, len(r.Fields))
 		for j, f := range r.Fields {
-			rs.Logs[i].Fields[j] = RecordedSpan_LogRecord_Field{
+			rs.Logs[i].Fields[j] = LogRecord_Field{
 				Key:   f.Key(),
 				Value: fmt.Sprint(f.Value()),
 			}
