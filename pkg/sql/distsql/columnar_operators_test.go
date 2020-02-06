@@ -439,10 +439,10 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 	}
 
 	// Interesting memory limits:
-	// - 0 - the default 64MiB memory limit will be used, and the sorter will not
-	//   spill to disk.
-	// - 1 - the in-memory sorter will hit the memory limit after spooling one
-	//   batch, so the external sort will take over.
+	// - 0 - the default 64MiB memory limit will be used, and the hash joiner
+	//   will not spill to disk.
+	// - 1 - the in-memory hash joiner will hit the memory limit after buffering
+	//   one batch, so the external hash joiner will take over.
 	for _, memoryLimit := range []int64{0, 1} {
 		for run := 0; run < nRuns; run++ {
 			for _, testSpec := range testSpecs {
@@ -462,15 +462,19 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								)
 								if rng.Float64() < randTypesProbability {
 									lInputTypes = generateRandomSupportedTypes(rng, nCols)
-									//rInputTypes = generateRandomComparableTypes(rng, lInputTypes)
-									// TODO(yuzefovich): use the commented out line instead.
-									rInputTypes = lInputTypes
+									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+									rEqCols = append(rEqCols[:0], lEqCols...)
+									rng.Shuffle(nEqCols, func(i, j int) {
+										rEqCols[i], rEqCols[j] = rEqCols[j], rEqCols[i]
+									})
+									shuffledInputTypes := make([]types.T, nCols)
+									copy(shuffledInputTypes, lInputTypes)
+									for i, colIdx := range rEqCols {
+										shuffledInputTypes[colIdx] = lInputTypes[lEqCols[i]]
+									}
+									rInputTypes = generateRandomComparableTypes(rng, shuffledInputTypes)
 									lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
 									rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
-									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-									// Since random types might not be comparable, we use the same
-									// equality columns for both inputs.
-									rEqCols = lEqCols
 									usingRandomTypes = true
 								} else {
 									lInputTypes = intTyps[:nCols]
@@ -646,6 +650,8 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 								// We use the same ordering columns in the same order because the
 								// columns can be not comparable in different order.
+								// TODO(yuzefovich): shuffle the equality columns on the right
+								// side.
 								rOrderingCols = lOrderingCols
 								usingRandomTypes = true
 							} else {
@@ -909,10 +915,6 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
 	}
 	return typs
 }
-
-// Remove unused warning.
-// TODO(yuzefovich): remove this.
-var _ = generateRandomComparableTypes
 
 // generateRandomComparableTypes generates random types that are supported by
 // the vectorized engine and are such that their physical (i.e. coltypes.T)
