@@ -258,6 +258,19 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 	}
 }
 
+// ensureSerializableTypes swaps out any types whose serialization that we don't
+// currently support in the vectorized engine with Ints.
+// TODO(asubiotto): Remove after we support interval serialization.
+//  Hmm, should we disallow sorts/joins with Intervals when we switch it to
+//  auto?
+func ensureSerializableTypes(inputTypes []types.T) {
+	for i, t := range inputTypes {
+		if t.Family() == types.IntervalFamily {
+			inputTypes[i] = *types.Int
+		}
+	}
+}
+
 func TestSorterAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
@@ -286,6 +299,9 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					)
 					if rng.Float64() < randTypesProbability {
 						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						if spillForced {
+							ensureSerializableTypes(inputTypes)
+						}
 						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
@@ -360,6 +376,14 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 					)
 					if rng.Float64() < randTypesProbability {
 						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						if spillForced {
+							ensureSerializableTypes(inputTypes)
+							for i, t := range inputTypes {
+								if t.Family() == types.IntervalFamily {
+									inputTypes[i] = *types.Int
+								}
+							}
+						}
 						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
@@ -469,6 +493,9 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								)
 								if rng.Float64() < randTypesProbability {
 									lInputTypes = generateRandomSupportedTypes(rng, nCols)
+									if spillForced {
+										ensureSerializableTypes(lInputTypes)
+									}
 									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 									rInputTypes = append(rInputTypes[:0], lInputTypes...)
 									rEqCols = append(rEqCols[:0], lEqCols...)
