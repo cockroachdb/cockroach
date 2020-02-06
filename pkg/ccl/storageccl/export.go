@@ -159,6 +159,13 @@ func evalExport(
 		}
 	}
 
+	if args.Encryption != nil {
+		data, err = EncryptFile(data, args.Encryption.Key)
+		if err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	exported := roachpb.ExportResponse_File{
 		Span:       args.Span(),
 		Exported:   summary,

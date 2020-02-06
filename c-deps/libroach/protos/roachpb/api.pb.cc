@@ -25,6 +25,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_LocalFilePath;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_S3;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_Workload;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_FileEncryptionOptions;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ImportRequest_TableRekey;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RequestHeader;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AddSSTableResponse;
@@ -124,12 +125,12 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<44> scc_info_RequestUnion;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_AdminChangeReplicasRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_BatchResponse_Header;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_ExportRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_PushTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_ResolveIntentRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_EndTxnRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_ImportRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_ExportRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_ExternalStorage;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_ImportRequest;
 }  // namespace protobuf_roachpb_2fapi_2eproto
 namespace protobuf_roachpb_2fdata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_SequencedWrite;
@@ -574,6 +575,11 @@ class WriteBatchResponseDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<WriteBatchResponse>
       _instance;
 } _WriteBatchResponse_default_instance_;
+class FileEncryptionOptionsDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<FileEncryptionOptions>
+      _instance;
+} _FileEncryptionOptions_default_instance_;
 class ExportRequest_StorageByLocalityKvEntry_DoNotUseDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<ExportRequest_StorageByLocalityKvEntry_DoNotUse>
@@ -2114,6 +2120,20 @@ static void InitDefaultsWriteBatchResponse() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsWriteBatchResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,}};
 
+static void InitDefaultsFileEncryptionOptions() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_FileEncryptionOptions_default_instance_;
+    new (ptr) ::cockroach::roachpb::FileEncryptionOptions();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::FileEncryptionOptions::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_FileEncryptionOptions =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsFileEncryptionOptions}, {}};
+
 static void InitDefaultsExportRequest_StorageByLocalityKvEntry_DoNotUse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -2139,12 +2159,13 @@ static void InitDefaultsExportRequest() {
   ::cockroach::roachpb::ExportRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<4> scc_info_ExportRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsExportRequest}, {
+::google::protobuf::internal::SCCInfo<5> scc_info_ExportRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsExportRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_ExternalStorage.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
-      &protobuf_roachpb_2fapi_2eproto::scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base,}};
+      &protobuf_roachpb_2fapi_2eproto::scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base,
+      &protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions.base,}};
 
 static void InitDefaultsBulkOpSummary() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2233,13 +2254,14 @@ static void InitDefaultsImportRequest() {
   ::cockroach::roachpb::ImportRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<5> scc_info_ImportRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsImportRequest}, {
+::google::protobuf::internal::SCCInfo<6> scc_info_ImportRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 6, InitDefaultsImportRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_ImportRequest_File.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
-      &protobuf_roachpb_2fapi_2eproto::scc_info_ImportRequest_TableRekey.base,}};
+      &protobuf_roachpb_2fapi_2eproto::scc_info_ImportRequest_TableRekey.base,
+      &protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions.base,}};
 
 static void InitDefaultsImportResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2836,6 +2858,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_ExternalStorage.base);
   ::google::protobuf::internal::InitSCC(&scc_info_WriteBatchRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_WriteBatchResponse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_FileEncryptionOptions.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_BulkOpSummary.base);
@@ -23786,6 +23809,192 @@ void WriteBatchResponse::InternalSwap(WriteBatchResponse* other) {
 
 // ===================================================================
 
+void FileEncryptionOptions::InitAsDefaultInstance() {
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int FileEncryptionOptions::kKeyFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+FileEncryptionOptions::FileEncryptionOptions()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.FileEncryptionOptions)
+}
+FileEncryptionOptions::FileEncryptionOptions(const FileEncryptionOptions& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.key().size() > 0) {
+    key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.FileEncryptionOptions)
+}
+
+void FileEncryptionOptions::SharedCtor() {
+  key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+FileEncryptionOptions::~FileEncryptionOptions() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.FileEncryptionOptions)
+  SharedDtor();
+}
+
+void FileEncryptionOptions::SharedDtor() {
+  key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+void FileEncryptionOptions::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const FileEncryptionOptions& FileEncryptionOptions::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions.base);
+  return *internal_default_instance();
+}
+
+
+void FileEncryptionOptions::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.FileEncryptionOptions)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  _internal_metadata_.Clear();
+}
+
+bool FileEncryptionOptions::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.FileEncryptionOptions)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // bytes key = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_key()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.FileEncryptionOptions)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.FileEncryptionOptions)
+  return false;
+#undef DO_
+}
+
+void FileEncryptionOptions::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.FileEncryptionOptions)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // bytes key = 1;
+  if (this->key().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      1, this->key(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.FileEncryptionOptions)
+}
+
+size_t FileEncryptionOptions::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.FileEncryptionOptions)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // bytes key = 1;
+  if (this->key().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::BytesSize(
+        this->key());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void FileEncryptionOptions::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const FileEncryptionOptions*>(&from));
+}
+
+void FileEncryptionOptions::MergeFrom(const FileEncryptionOptions& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.FileEncryptionOptions)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.key().size() > 0) {
+
+    key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
+  }
+}
+
+void FileEncryptionOptions::CopyFrom(const FileEncryptionOptions& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.FileEncryptionOptions)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool FileEncryptionOptions::IsInitialized() const {
+  return true;
+}
+
+void FileEncryptionOptions::Swap(FileEncryptionOptions* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void FileEncryptionOptions::InternalSwap(FileEncryptionOptions* other) {
+  using std::swap;
+  key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string FileEncryptionOptions::GetTypeName() const {
+  return "cockroach.roachpb.FileEncryptionOptions";
+}
+
+
+// ===================================================================
+
 ExportRequest_StorageByLocalityKvEntry_DoNotUse::ExportRequest_StorageByLocalityKvEntry_DoNotUse() {}
 ExportRequest_StorageByLocalityKvEntry_DoNotUse::ExportRequest_StorageByLocalityKvEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
 void ExportRequest_StorageByLocalityKvEntry_DoNotUse::MergeFrom(const ExportRequest_StorageByLocalityKvEntry_DoNotUse& other) {
@@ -23801,6 +24010,8 @@ void ExportRequest::InitAsDefaultInstance() {
       ::cockroach::roachpb::ExternalStorage::internal_default_instance());
   ::cockroach::roachpb::_ExportRequest_default_instance_._instance.get_mutable()->start_time_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::roachpb::_ExportRequest_default_instance_._instance.get_mutable()->encryption_ = const_cast< ::cockroach::roachpb::FileEncryptionOptions*>(
+      ::cockroach::roachpb::FileEncryptionOptions::internal_default_instance());
 }
 void ExportRequest::clear_start_time() {
   if (GetArenaNoVirtual() == NULL && start_time_ != NULL) {
@@ -23817,6 +24028,7 @@ const int ExportRequest::kReturnSstFieldNumber;
 const int ExportRequest::kOmitChecksumFieldNumber;
 const int ExportRequest::kEnableTimeBoundIteratorOptimizationFieldNumber;
 const int ExportRequest::kStorageByLocalityKvFieldNumber;
+const int ExportRequest::kEncryptionFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ExportRequest::ExportRequest()
@@ -23846,6 +24058,11 @@ ExportRequest::ExportRequest(const ExportRequest& from)
   } else {
     start_time_ = NULL;
   }
+  if (from.has_encryption()) {
+    encryption_ = new ::cockroach::roachpb::FileEncryptionOptions(*from.encryption_);
+  } else {
+    encryption_ = NULL;
+  }
   ::memcpy(&mvcc_filter_, &from.mvcc_filter_,
     static_cast<size_t>(reinterpret_cast<char*>(&enable_time_bound_iterator_optimization_) -
     reinterpret_cast<char*>(&mvcc_filter_)) + sizeof(enable_time_bound_iterator_optimization_));
@@ -23867,6 +24084,7 @@ void ExportRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
   if (this != internal_default_instance()) delete storage_;
   if (this != internal_default_instance()) delete start_time_;
+  if (this != internal_default_instance()) delete encryption_;
 }
 
 void ExportRequest::SetCachedSize(int size) const {
@@ -23897,6 +24115,10 @@ void ExportRequest::Clear() {
     delete start_time_;
   }
   start_time_ = NULL;
+  if (GetArenaNoVirtual() == NULL && encryption_ != NULL) {
+    delete encryption_;
+  }
+  encryption_ = NULL;
   ::memset(&mvcc_filter_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&enable_time_bound_iterator_optimization_) -
       reinterpret_cast<char*>(&mvcc_filter_)) + sizeof(enable_time_bound_iterator_optimization_));
@@ -24029,6 +24251,18 @@ bool ExportRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.FileEncryptionOptions encryption = 9;
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(74u /* 74 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_encryption()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -24137,6 +24371,12 @@ void ExportRequest::SerializeWithCachedSizes(
     }
   }
 
+  // .cockroach.roachpb.FileEncryptionOptions encryption = 9;
+  if (this->has_encryption()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      9, this->_internal_encryption(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ExportRequest)
@@ -24177,6 +24417,13 @@ size_t ExportRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *start_time_);
+  }
+
+  // .cockroach.roachpb.FileEncryptionOptions encryption = 9;
+  if (this->has_encryption()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *encryption_);
   }
 
   if (this->mvcc_filter() != 0) {
@@ -24225,6 +24472,9 @@ void ExportRequest::MergeFrom(const ExportRequest& from) {
   if (from.has_start_time()) {
     mutable_start_time()->::cockroach::util::hlc::Timestamp::MergeFrom(from.start_time());
   }
+  if (from.has_encryption()) {
+    mutable_encryption()->::cockroach::roachpb::FileEncryptionOptions::MergeFrom(from.encryption());
+  }
   if (from.mvcc_filter() != 0) {
     set_mvcc_filter(from.mvcc_filter());
   }
@@ -24260,6 +24510,7 @@ void ExportRequest::InternalSwap(ExportRequest* other) {
   swap(header_, other->header_);
   swap(storage_, other->storage_);
   swap(start_time_, other->start_time_);
+  swap(encryption_, other->encryption_);
   swap(mvcc_filter_, other->mvcc_filter_);
   swap(return_sst_, other->return_sst_);
   swap(omit_checksum_, other->omit_checksum_);
@@ -25719,6 +25970,8 @@ void ImportRequest::InitAsDefaultInstance() {
       ::cockroach::roachpb::Span::internal_default_instance());
   ::cockroach::roachpb::_ImportRequest_default_instance_._instance.get_mutable()->end_time_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::roachpb::_ImportRequest_default_instance_._instance.get_mutable()->encryption_ = const_cast< ::cockroach::roachpb::FileEncryptionOptions*>(
+      ::cockroach::roachpb::FileEncryptionOptions::internal_default_instance());
 }
 void ImportRequest::clear_data_span() {
   if (GetArenaNoVirtual() == NULL && data_span_ != NULL) {
@@ -25738,6 +25991,7 @@ const int ImportRequest::kFilesFieldNumber;
 const int ImportRequest::kDataSpanFieldNumber;
 const int ImportRequest::kEndTimeFieldNumber;
 const int ImportRequest::kRekeysFieldNumber;
+const int ImportRequest::kEncryptionFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ImportRequest::ImportRequest()
@@ -25768,13 +26022,18 @@ ImportRequest::ImportRequest(const ImportRequest& from)
   } else {
     end_time_ = NULL;
   }
+  if (from.has_encryption()) {
+    encryption_ = new ::cockroach::roachpb::FileEncryptionOptions(*from.encryption_);
+  } else {
+    encryption_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ImportRequest)
 }
 
 void ImportRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&end_time_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(end_time_));
+      reinterpret_cast<char*>(&encryption_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(encryption_));
 }
 
 ImportRequest::~ImportRequest() {
@@ -25786,6 +26045,7 @@ void ImportRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
   if (this != internal_default_instance()) delete data_span_;
   if (this != internal_default_instance()) delete end_time_;
+  if (this != internal_default_instance()) delete encryption_;
 }
 
 void ImportRequest::SetCachedSize(int size) const {
@@ -25817,6 +26077,10 @@ void ImportRequest::Clear() {
     delete end_time_;
   }
   end_time_ = NULL;
+  if (GetArenaNoVirtual() == NULL && encryption_ != NULL) {
+    delete encryption_;
+  }
+  encryption_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -25891,6 +26155,18 @@ bool ImportRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.FileEncryptionOptions encryption = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(58u /* 58 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_encryption()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -25948,6 +26224,12 @@ void ImportRequest::SerializeWithCachedSizes(
       6, this->_internal_end_time(), output);
   }
 
+  // .cockroach.roachpb.FileEncryptionOptions encryption = 7;
+  if (this->has_encryption()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      7, this->_internal_encryption(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ImportRequest)
@@ -25997,6 +26279,13 @@ size_t ImportRequest::ByteSizeLong() const {
         *end_time_);
   }
 
+  // .cockroach.roachpb.FileEncryptionOptions encryption = 7;
+  if (this->has_encryption()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *encryption_);
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -26025,6 +26314,9 @@ void ImportRequest::MergeFrom(const ImportRequest& from) {
   if (from.has_end_time()) {
     mutable_end_time()->::cockroach::util::hlc::Timestamp::MergeFrom(from.end_time());
   }
+  if (from.has_encryption()) {
+    mutable_encryption()->::cockroach::roachpb::FileEncryptionOptions::MergeFrom(from.encryption());
+  }
 }
 
 void ImportRequest::CopyFrom(const ImportRequest& from) {
@@ -26049,6 +26341,7 @@ void ImportRequest::InternalSwap(ImportRequest* other) {
   swap(header_, other->header_);
   swap(data_span_, other->data_span_);
   swap(end_time_, other->end_time_);
+  swap(encryption_, other->encryption_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -37656,6 +37949,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::WriteBatchRe
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::WriteBatchResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::WriteBatchResponse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::WriteBatchResponse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::FileEncryptionOptions* Arena::CreateMaybeMessage< ::cockroach::roachpb::FileEncryptionOptions >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::FileEncryptionOptions >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse >(arena);
