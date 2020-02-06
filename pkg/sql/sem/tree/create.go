@@ -1168,22 +1168,19 @@ const (
 	_ = SeqOptAs
 )
 
-type PasswordClause struct {
-	Password string
-	IsNull   bool
-}
-
+// RoleOptionWithValue contains a RoleOption and it's value as an Expr.
 type RoleOptionWithValue struct {
 	RoleOption roleoption.Option
 	Value      Expr
 }
 
+// RoleOptionsWithValues is a list of RoleOptionWithValue.
 type RoleOptionsWithValues []RoleOptionWithValue
 
 // Format prints out the list in a buffer.
 // This keeps the existing order and uses " " as separator.
-func (pl RoleOptionsWithValues) Format(ctx *FmtCtx) {
-	for _, p := range pl {
+func (rol RoleOptionsWithValues) Format(ctx *FmtCtx) {
+	for _, p := range rol {
 		ctx.WriteString(" ")
 		ctx.WriteString(p.RoleOption.String())
 
@@ -1195,26 +1192,28 @@ func (pl RoleOptionsWithValues) Format(ctx *FmtCtx) {
 			} else {
 				ctx.WriteString("*****")
 			}
-		} else if p.Value != nil {
+		} else if p.Value == DNull {
 			ctx.WriteString(" ")
 			ctx.FormatNode(p.Value)
 		}
 	}
 }
 
+// Convert converts RoleOptionsWithValues to a roleoption.List using
+// typeAsString to convert exprs to strings.
 func (rol RoleOptionsWithValues) Convert(
-	f func(e Expr, op string) (func() (string, error), error), op string,
-) (roleoption.RoleOptionList, error) {
-	roleOptions := make(roleoption.RoleOptionList, len(rol))
+	typeAsString func(e Expr, op string) (func() (string, error), error), op string,
+) (roleoption.List, error) {
+	roleOptions := make(roleoption.List, len(rol))
 
 	for i, ro := range rol {
-		var value roleoption.Value
-
 		if ro.Value != nil {
 			if ro.Value == DNull {
-				value = roleoption.Value{Value: "", IsNull: true}
+				roleOptions[i] = roleoption.RoleOption{
+					Option: ro.RoleOption, HasValue: true, IsNull: true,
+				}
 			} else {
-				strFn, err := f(ro.Value, op)
+				strFn, err := typeAsString(ro.Value, op)
 				if err != nil {
 					return nil, err
 				}
@@ -1223,14 +1222,13 @@ func (rol RoleOptionsWithValues) Convert(
 				if err != nil {
 					return nil, err
 				}
-				value = roleoption.Value{Value: str, IsNull: false}
-			}
-			roleOptions[i] = roleoption.RoleOption{
-				Option: ro.RoleOption, Value: value, HasValue: true,
+				roleOptions[i] = roleoption.RoleOption{
+					Option: ro.RoleOption, Value: str, HasValue: true, IsNull: false,
+				}
 			}
 		} else {
 			roleOptions[i] = roleoption.RoleOption{
-				Option: ro.RoleOption, Value: value, HasValue: false,
+				Option: ro.RoleOption, HasValue: false,
 			}
 		}
 	}
@@ -1260,7 +1258,7 @@ func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Name)
 	if node.HasWith {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH")
 	}
 
 	if len(node.RoleOptions) > 0 {
@@ -1291,7 +1289,7 @@ func (node *AlterRoleOrUserOptions) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Name)
 	if node.HasWith {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH")
 	}
 	if len(node.RoleOptions) > 0 {
 		node.RoleOptions.Format(ctx)

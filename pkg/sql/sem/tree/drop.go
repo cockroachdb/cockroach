@@ -148,7 +148,7 @@ type DropRoleOrUser struct {
 
 // Format implements the NodeFormatter interface.
 func (node *DropRoleOrUser) Format(ctx *FmtCtx) {
-	ctx.WriteString("DROP ")
+	ctx.WriteString("DROP")
 	if node.IsRole {
 		ctx.WriteString(" ROLE ")
 	} else {

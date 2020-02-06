@@ -337,13 +337,10 @@ func (u *sqlSymUnion) privilegeType() privilege.Kind {
 func (u *sqlSymUnion) privilegeList() privilege.List {
     return u.val.(privilege.List)
 }
-func (u *sqlSymUnion) roleOptionType() roleoption.Option {
-    return u.val.(roleoption.Option)
-}
-func (u *sqlSymUnion) roleOption() tree.RoleOptionWithValue {
+func (u *sqlSymUnion) roleOptionWithValue() tree.RoleOptionWithValue {
     return u.val.(tree.RoleOptionWithValue)
 }
-func (u *sqlSymUnion) roleOptionList() tree.RoleOptionsWithValues {
+func (u *sqlSymUnion) roleOptionWithValueList() tree.RoleOptionsWithValues {
     return u.val.(tree.RoleOptionsWithValues)
 }
 func (u *sqlSymUnion) isRole() bool {
@@ -2236,7 +2233,7 @@ comment_text:
 // CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
 // CREATE ROLE
 create_stmt:
-  create_role_or_user_stmt     // EXTEND WITH HELP: CREATE ROLE
+  create_role_or_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_unsupported   {}
@@ -2503,7 +2500,7 @@ discard_stmt:
 // DROP USER, DROP ROLE
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
-| drop_role_or_user_stmt     // EXTEND WITH HELP: DROP ROLE / USER
+| drop_role_or_user_stmt     // EXTEND WITH HELP: DROP USER
 | drop_unsupported   {}
 | DROP error         // SHOW HELP: DROP
 
@@ -5068,9 +5065,9 @@ password_clause:
 		$$.val = tree.RoleOptionWithValue{RoleOption: option, Value: tree.DNull}
 	}
 
-// %Help: CREATE ROLE - define a new role or user
+// %Help: CREATE USER - define a new role or user
 // %Category: Priv
-// %Text: CREATE ROLE [IF NOT EXISTS] <name> [WITH] <OPTIONS...>
+// %Text: CREATE USER [IF NOT EXISTS] <name> [WITH] <OPTIONS...>
 // %SeeAlso: ALTER ROLE, DROP ROLE, SHOW ROLES, ALTER USER, DROP USER, SHOW USER
 create_role_or_user_stmt:
   CREATE role_or_group_or_user string_or_placeholder
@@ -5083,36 +5080,36 @@ create_role_or_user_stmt:
   }
 | CREATE role_or_group_or_user string_or_placeholder role_options
   {
-    $$.val = &tree.CreateRoleOrUser{Name: $3.expr(), IsRole: $2.isRole(), RoleOptions: $4.roleOptionList()}
+    $$.val = &tree.CreateRoleOrUser{Name: $3.expr(), IsRole: $2.isRole(), RoleOptions: $4.roleOptionWithValueList()}
   }
 | CREATE role_or_group_or_user string_or_placeholder WITH role_options
   {
-    $$.val = &tree.CreateRoleOrUser{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, RoleOptions: $5.roleOptionList()}
+    $$.val = &tree.CreateRoleOrUser{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, RoleOptions: $5.roleOptionWithValueList()}
   }
 | CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder role_options
   {
-    $$.val = &tree.CreateRoleOrUser{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, RoleOptions: $7.roleOptionList()}
+    $$.val = &tree.CreateRoleOrUser{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, RoleOptions: $7.roleOptionWithValueList()}
   }
 | CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder WITH role_options
   {
-    $$.val = &tree.CreateRoleOrUser{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, HasWith: true, RoleOptions: $8.roleOptionList()}
+    $$.val = &tree.CreateRoleOrUser{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, HasWith: true, RoleOptions: $8.roleOptionWithValueList()}
   }
-| CREATE role_or_group_or_user error // SHOW HELP: CREATE ROLE
+| CREATE role_or_group_or_user error // SHOW HELP: CREATE USER
 
-// %Help: ALTER ROLE - alter a role
+// %Help: ALTER USER - alter a role
 // %Category: Priv
-// %Text: ALTER ROLE <name> [WITH] <options...>
+// %Text: ALTER USER <name> [WITH] <options...>
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
 alter_role_or_user_stmt:
 	ALTER role_or_group_or_user string_or_placeholder role_options
 {
-	$$.val = &tree.AlterRoleOrUserOptions{Name: $3.expr(), IsRole: $2.isRole(), RoleOptions: $4.roleOptionList()}
+	$$.val = &tree.AlterRoleOrUserOptions{Name: $3.expr(), IsRole: $2.isRole(), RoleOptions: $4.roleOptionWithValueList()}
 }
 | ALTER role_or_group_or_user string_or_placeholder WITH role_options
 {
-	$$.val = &tree.AlterRoleOrUserOptions{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, RoleOptions: $5.roleOptionList()}
+	$$.val = &tree.AlterRoleOrUserOptions{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, RoleOptions: $5.roleOptionWithValueList()}
 }
-| ALTER role_or_group_or_user error // SHOW HELP: ALTER ROLE
+| ALTER role_or_group_or_user error // SHOW HELP: ALTER USER
 
 // "CREATE GROUP is now an alias for CREATE ROLE"
 // https://www.postgresql.org/docs/10/static/sql-creategroup.html
@@ -5176,13 +5173,13 @@ role_option:
 role_options:
 	role_option
 	{
-		roleOptionList := make(tree.RoleOptionsWithValues, 1)
-		roleOptionList[0] = $1.roleOption()
-		$$.val = roleOptionList
+		roleOptionWithValueList := make(tree.RoleOptionsWithValues, 1)
+		roleOptionWithValueList[0] = $1.roleOptionWithValue()
+		$$.val = roleOptionWithValueList
 	}
 	| role_options role_option
 	{
-		$$.val = append($1.roleOptionList(), $2.roleOption())
+		$$.val = append($1.roleOptionWithValueList(), $2.roleOptionWithValue())
 	}
 
 opt_view_recursive:

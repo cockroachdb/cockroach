@@ -29,7 +29,7 @@ import (
 type CreateUserNode struct {
 	ifNotExists bool
 	isRole      bool
-	roleOptions roleoption.RoleOptionList
+	roleOptions roleoption.List
 	userNameInfo
 
 	run createUserRun
@@ -56,7 +56,7 @@ func (p *planner) CreateUserNode(
 	ifNotExists bool,
 	isRole bool,
 	opName string,
-	roleOptions roleoption.RoleOptionList,
+	roleOptions roleoption.List,
 ) (*CreateUserNode, error) {
 	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 
 	for _, ro := range n.roleOptions {
 		if ro.Option == roleoption.PASSWORD {
-			hashedPassword = ro.Value.Value
+			hashedPassword = ro.Value
 		}
 	}
 
@@ -130,12 +130,19 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		return errors.Wrapf(err, "error looking up user")
 	}
 	if row != nil {
-		if n.ifNotExists {
+		isRole := bool(*row[0].(*tree.DBool))
+		if isRole == n.isRole && n.ifNotExists {
+			// The username exists with the same role setting, and we asked to skip
+			// if it exists: no error.
 			return nil
 		}
-
+		msg := "a user"
+		if isRole {
+			msg = "a role"
+		}
 		return pgerror.Newf(pgcode.DuplicateObject,
-			"user named %s already exists", normalizedUsername)
+			"%s named %s already exists",
+			msg, normalizedUsername)
 	}
 
 	hasCreateRole := n.roleOptions.Contains(roleoption.CREATEROLE)

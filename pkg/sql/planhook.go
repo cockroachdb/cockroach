@@ -86,7 +86,7 @@ type PlanHookState interface {
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
 	CreateUserNode(
 		ctx context.Context, nameE tree.Expr, ifNotExists bool, isRole bool, opName string,
-		rolePrivileges roleoption.RoleOptionList,
+		rolePrivileges roleoption.List,
 	) (*CreateUserNode, error)
 	DropUserNode(
 		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,

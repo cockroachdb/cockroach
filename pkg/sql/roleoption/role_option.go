@@ -25,15 +25,13 @@ import (
 // Option defines a role option. This is output by the parser
 type Option uint32
 
-type Value struct {
-	Value  string
-	IsNull bool
-}
-
+// RoleOption represents an Option with a value.
 type RoleOption struct {
 	Option
+	// A RoleOption may have no value.
 	HasValue bool
-	Value
+	Value    string
+	IsNull   bool
 }
 
 // KindList of role options.
@@ -79,6 +77,7 @@ var toBool = map[Option]bool{
 	NOLOGIN:      false,
 }
 
+// ToOption takes a string and returns the corresponding Option.
 func ToOption(str string) (Option, error) {
 	ret := ByName[strings.ToUpper(str)]
 	if ret == 0 {
@@ -88,17 +87,18 @@ func ToOption(str string) (Option, error) {
 	return ret, nil
 }
 
-// RoleOptionList is a list of role options.
-type RoleOptionList []RoleOption
+// List is a list of role options.
+type List []RoleOption
 
-// CreateSetStmtFromRoleOptions returns a string of the form:
+// CreateSetStmt returns a string of the form:
 // "SET "optionA" = true, "optionB" = false".
-func (pl RoleOptionList) CreateSetStmt() (string, error) {
-	if len(pl) <= 0 {
+func (rol List) CreateSetStmt() (string, error) {
+	if len(rol) <= 0 {
 		return "", pgerror.Newf(pgcode.Syntax, "no role options found")
 	}
-	setStmt := ""
-	for i, roleOption := range pl {
+	var sb strings.Builder
+	sb.WriteString("SET ")
+	for i, roleOption := range rol {
 		option := roleOption.Option
 		format := ", \"%s\" = %s "
 		if i == 0 {
@@ -108,17 +108,17 @@ func (pl RoleOptionList) CreateSetStmt() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		setStmt += fmt.Sprintf(format, toSQLColumn[option], value)
+		sb.WriteString(fmt.Sprintf(format, toSQLColumn[option], value))
 	}
 
-	return setStmt, nil
+	return sb.String(), nil
 }
 
 // ToBitField returns the bitfield representation of
 // a list of role options.
-func (pl RoleOptionList) ToBitField() (uint32, error) {
+func (rol List) ToBitField() (uint32, error) {
 	var ret uint32
-	for _, p := range pl {
+	for _, p := range rol {
 		if ret&p.Option.Mask() != 0 {
 			return 0, pgerror.Newf(pgcode.Syntax, "redundant role options")
 		}
@@ -127,8 +127,9 @@ func (pl RoleOptionList) ToBitField() (uint32, error) {
 	return ret, nil
 }
 
-func (pl RoleOptionList) Contains(p Option) bool {
-	for _, ro := range pl {
+// Returns true if List contains option, false otherwise.
+func (rol List) Contains(p Option) bool {
+	for _, ro := range rol {
 		if ro.Option == p {
 			return true
 		}
@@ -138,8 +139,8 @@ func (pl RoleOptionList) Contains(p Option) bool {
 }
 
 // CheckRoleOptionConflicts returns an error if two or more options conflict with each other.
-func (pl RoleOptionList) CheckRoleOptionConflicts() error {
-	roleOptionBits, err := pl.ToBitField()
+func (rol List) CheckRoleOptionConflicts() error {
+	roleOptionBits, err := rol.ToBitField()
 
 	if err != nil {
 		return err
@@ -158,10 +159,10 @@ func (pl RoleOptionList) CheckRoleOptionConflicts() error {
 func (ro RoleOption) toSQLValue() (string, error) {
 	// Password is a special case.
 	if ro.Option == PASSWORD {
-		if ro.Value.IsNull {
+		if ro.IsNull {
 			return "NULL", nil
 		}
-		hashedPassword, err := security.HashPassword(ro.Value.Value)
+		hashedPassword, err := security.HashPassword(ro.Value)
 		if err != nil {
 			return "", err
 		}
@@ -169,11 +170,10 @@ func (ro RoleOption) toSQLValue() (string, error) {
 	}
 
 	if ro.HasValue {
-		if ro.Value.IsNull {
+		if ro.IsNull {
 			return "NULL", nil
-		} else {
-			return ro.Value.Value, nil
 		}
+		return ro.Value, nil
 	}
 
 	return strconv.FormatBool(toBool[ro.Option]), nil

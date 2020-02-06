@@ -25,7 +25,7 @@ import (
 // alterRoleOrUserNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleOrUserNode struct {
 	userNameInfo
-	roleOptions roleoption.RoleOptionList
+	roleOptions roleoption.List
 
 	run alterRoleOrUserRun
 }
@@ -88,7 +88,7 @@ func (n *alterRoleOrUserNode) startExec(params runParams) error {
 
 	for _, ro := range n.roleOptions {
 		if ro.Option == roleoption.PASSWORD {
-			hashedPassword = ro.Value.Value
+			hashedPassword = ro.Value
 
 			// TODO(knz): Remove in 20.2.
 			if normalizedUsername == security.RootUser && len(hashedPassword) > 0 &&
