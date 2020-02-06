@@ -649,6 +649,11 @@ func (ts *TestServer) DistSender() *kv.DistSender {
 	return ts.DistSenderI().(*kv.DistSender)
 }
 
+// SQLServer is part of TestServerInterface.
+func (ts *TestServer) SQLServer() interface{} {
+	return ts.PGServer().SQLServer
+}
+
 // DistSQLServer is part of TestServerInterface.
 func (ts *TestServer) DistSQLServer() interface{} {
 	return ts.distSQLServer

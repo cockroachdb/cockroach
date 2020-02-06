@@ -358,8 +358,11 @@ const (
 	// Ensures that NamespaceTable does not get gossiped again
 	NamespaceTableID = 30
 
-	ProtectedTimestampsMetaTableID    = 31
-	ProtectedTimestampsRecordsTableID = 32
+	ProtectedTimestampsMetaTableID      = 31
+	ProtectedTimestampsRecordsTableID   = 32
+	StatementBundleChunksTableID        = 33
+	StatementDiagnosticsRequestsTableID = 34
+	StatementDiagnosticsTableID         = 35
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

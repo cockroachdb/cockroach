@@ -53,6 +53,7 @@ const (
 	VersionRootPassword
 	VersionNoExplicitForeignKeyIndexIDs
 	VersionHashShardedIndexes
+	VersionStatementDiagnosticsSystemTables
 
 	// Add new versions here (step one of two).
 )
@@ -406,6 +407,16 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// shard column, computed from the set of index columns, and prefix the index's
 		// ranges with said shard column.
 		Key:     VersionHashShardedIndexes,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
+	},
+	{
+		// VersionStatementDiagnosticsSystemTables introduces the system tables for
+		// storing statement information (like traces, bundles).
+		//
+		// In this version and later the system.statement_diagnostics_requests,
+		// system.statement_diagnostics and system.statement_bundle_chunks tables
+		// are part of the system bootstap schema.
+		Key:     VersionStatementDiagnosticsSystemTables,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
 	},
 

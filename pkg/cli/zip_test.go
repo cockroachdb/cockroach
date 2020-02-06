@@ -169,6 +169,9 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/26.json
   debug/nodes/1/ranges/27.json
   debug/nodes/1/ranges/28.json
+  debug/nodes/1/ranges/29.json
+  debug/nodes/1/ranges/30.json
+  debug/nodes/1/ranges/31.json
   debug/schema/defaultdb@details.json
   debug/schema/postgres@details.json
   debug/schema/system@details.json
@@ -189,6 +192,9 @@ writing ` + os.DevNull + `
   debug/schema/system/reports_meta.json
   debug/schema/system/role_members.json
   debug/schema/system/settings.json
+  debug/schema/system/statement_bundle_chunks.json
+  debug/schema/system/statement_diagnostics.json
+  debug/schema/system/statement_diagnostics_requests.json
   debug/schema/system/table_statistics.json
   debug/schema/system/ui.json
   debug/schema/system/users.json

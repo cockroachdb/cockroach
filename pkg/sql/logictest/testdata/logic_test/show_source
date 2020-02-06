@@ -198,6 +198,9 @@ reports_meta
 namespace
 protected_ts_meta
 protected_ts_records
+statement_bundle_chunks
+statement_diagnostics_requests
+statement_diagnostics
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
@@ -225,6 +228,9 @@ reports_meta                     ·
 namespace                        ·
 protected_ts_meta                ·
 protected_ts_records             ·
+statement_bundle_chunks          ·
+statement_diagnostics_requests   ·
+statement_diagnostics            ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
