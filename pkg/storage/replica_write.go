@@ -291,7 +291,7 @@ const (
 	// returned to the client.
 	onePCFailed
 	// onePCFallbackToTransactionalEvaluation means that 1PC evaluation failed, but
-	// regulat transactional evaluation should be attempted.
+	// regular transactional evaluation should be attempted.
 	onePCFallbackToTransactionalEvaluation
 )
 
