@@ -97,8 +97,20 @@ func newMergeQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *mergeQue
 	mq.baseQueue = newBaseQueue(
 		"merge", mq, store, gossip,
 		queueConfig{
-			maxSize:              defaultQueueMaxSize,
-			maxConcurrency:       mergeQueueConcurrency,
+			maxSize:        defaultQueueMaxSize,
+			maxConcurrency: mergeQueueConcurrency,
+			// TODO(ajwerner): Sometimes the merge queue needs to send multiple
+			// snapshots, but the timeout function here is configured based on the
+			// duration required to send a single snapshot. That being said, this
+			// timeout provides leeway for snapshots to be 10x slower than the
+			// specified rate and still respects the queue processing minimum timeout.
+			// While using the below function is certainly better than just using the
+			// default timeout, it would be better to have a function which takes into
+			// account how many snapshots processing will need to send. That might be
+			// hard to determine ahead of time. An alternative would be to calculate
+			// the timeout with a function that additionally considers the replication
+			// factor.
+			processTimeoutFunc:   makeQueueSnapshotTimeoutFunc(rebalanceSnapshotRate),
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,

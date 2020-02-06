@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -887,6 +888,65 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	})
 }
 
+type mvccStatsReplicaInQueue struct {
+	replicaInQueue
+	size int64
+}
+
+func (r mvccStatsReplicaInQueue) GetMVCCStats() enginepb.MVCCStats {
+	return enginepb.MVCCStats{ValBytes: r.size}
+}
+
+func TestQueueSnapshotTimeoutFunc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	type testCase struct {
+		guaranteedProcessingTime time.Duration
+		snapshotRate             int64 // bytes/s
+		replicaSize              int64 // bytes
+		expectedTimeout          time.Duration
+	}
+	makeTest := func(tc testCase) (string, func(t *testing.T)) {
+		return fmt.Sprintf("%+v", tc), func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			queueGuaranteedProcessingTimeBudget.Override(&st.SV, tc.guaranteedProcessingTime)
+			recoverySnapshotRate.Override(&st.SV, tc.snapshotRate)
+			tf := makeQueueSnapshotTimeoutFunc(recoverySnapshotRate)
+			repl := mvccStatsReplicaInQueue{
+				size: tc.replicaSize,
+			}
+			require.Equal(t, tc.expectedTimeout, tf(st, repl))
+		}
+	}
+	for _, tc := range []testCase{
+		{
+			guaranteedProcessingTime: time.Minute,
+			snapshotRate:             1 << 30,
+			replicaSize:              1 << 20,
+			expectedTimeout:          time.Minute,
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			snapshotRate:             1 << 20,
+			replicaSize:              100 << 20,
+			expectedTimeout:          100 * time.Second * permittedSnapshotSlowdown,
+		},
+		{
+			guaranteedProcessingTime: time.Hour,
+			snapshotRate:             1 << 20,
+			replicaSize:              100 << 20,
+			expectedTimeout:          time.Hour,
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			snapshotRate:             1 << 10,
+			replicaSize:              100 << 20,
+			expectedTimeout:          100 * (1 << 10) * time.Second * permittedSnapshotSlowdown,
+		},
+	} {
+		t.Run(makeTest(tc))
+	}
+}
+
 // processTimeQueueImpl spends 5ms on each process request.
 type processTimeQueueImpl struct {
 	testQueueImpl
@@ -931,7 +991,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 		if v := bq.successes.Count(); v != 1 {
 			return errors.Errorf("expected 1 processed replicas; got %d", v)
 		}
-		if min, v := bq.queueConfig.processTimeoutFunc(nil), bq.processingNanos.Count(); v < min.Nanoseconds() {
+		if min, v := bq.queueConfig.processTimeoutFunc(nil, nil), bq.processingNanos.Count(); v < min.Nanoseconds() {
 			return errors.Errorf("expected >= %s in processing time; got %s", min, time.Duration(v))
 		}
 		return nil
