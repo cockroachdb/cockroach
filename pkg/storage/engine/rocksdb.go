@@ -2520,12 +2520,7 @@ func (r *rocksDBIterator) MVCCScan(
 		return MVCCScanResult{}, err
 	}
 	if !opts.Inconsistent && len(intents) > 0 {
-		// When encountering intents during a consistent scan we still need to
-		// return the resume key.
-		//
-		// TODO(tbg): this is a lie? See:
-		// https://github.com/cockroachdb/cockroach/pull/44542
-		return MVCCScanResult{ResumeSpan: resumeSpan}, &roachpb.WriteIntentError{Intents: intents}
+		return MVCCScanResult{}, &roachpb.WriteIntentError{Intents: intents}
 	}
 
 	return MVCCScanResult{

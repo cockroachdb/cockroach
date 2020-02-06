@@ -2363,9 +2363,7 @@ func mvccScanToBytes(
 	}
 
 	if !opts.Inconsistent && len(res.Intents) > 0 {
-		// TODO(tbg): don't return resume span. See:
-		// https://github.com/cockroachdb/cockroach/pull/44542
-		return MVCCScanResult{ResumeSpan: res.ResumeSpan}, &roachpb.WriteIntentError{Intents: res.Intents}
+		return MVCCScanResult{}, &roachpb.WriteIntentError{Intents: res.Intents}
 	}
 	return res, nil
 }
@@ -2512,9 +2510,7 @@ type MVCCScanResult struct {
 // When scanning inconsistently, any encountered intents will be placed in the
 // dedicated result parameter. By contrast, when scanning consistently, any
 // encountered intents will cause the scan to return a WriteIntentError with the
-// intents embedded within, and the intents result parameter will be nil. In
-// this case a resume span will be returned; this is the only case in which a
-// resume span is returned alongside a non-nil error.
+// intents embedded within.
 //
 // Note that transactional scans must be consistent. Put another way, only
 // non-transactional scans may be inconsistent.
@@ -2555,6 +2551,9 @@ func MVCCScanToBytes(
 // iteration, f() is invoked with the current key/value pair. If f returns
 // true (done) or an error, the iteration stops and the error is propagated.
 // If the reverse is flag set the iterator will be moved in reverse order.
+// If the scan options specify an inconsistent scan, all "ignored" intents
+// will be returned. In consistent mode, intents are only ever returned as
+// part of a WriteIntentError.
 func MVCCIterate(
 	ctx context.Context,
 	reader Reader,
@@ -2567,30 +2566,12 @@ func MVCCIterate(
 	defer iter.Close()
 
 	var intents []roachpb.Intent
-	var wiErr error
-
 	for {
 		const maxKeysPerScan = 1000
 		res, err := mvccScanToKvs(
 			ctx, iter, key, endKey, maxKeysPerScan, timestamp, opts)
 		if err != nil {
-			switch tErr := err.(type) {
-			case *roachpb.WriteIntentError:
-				// In the case of WriteIntentErrors, accumulate affected keys but continue scan.
-				//
-				// TODO(tbg): this code must have been written that way to use res.Intents even
-				// on this error, but this is already not populated any more by mvccScanToKvs.
-				// Explicitly zero out `res` here after:
-				// https://github.com/cockroachdb/cockroach/pull/44542.
-				if wiErr == nil {
-					wiErr = tErr
-				} else {
-					wiErr.(*roachpb.WriteIntentError).Intents = append(
-						wiErr.(*roachpb.WriteIntentError).Intents, tErr.Intents...)
-				}
-			default:
-				return nil, err
-			}
+			return nil, err
 		}
 
 		if len(res.Intents) > 0 {
@@ -2607,11 +2588,7 @@ func MVCCIterate(
 				return nil, err
 			}
 			if done {
-				// TODO(peter): This isn't quite the same semantics as mvccIterateOld
-				// as we can return intents for keys that are "past" what we've invoked
-				// the callback on. That's fine as none of the callers use the returned
-				// intents.
-				return intents, wiErr
+				return intents, nil
 			}
 		}
 
@@ -2625,7 +2602,7 @@ func MVCCIterate(
 		}
 	}
 
-	return intents, wiErr
+	return intents, nil
 }
 
 // MVCCResolveWriteIntent either commits or aborts (rolls back) an
