@@ -21,19 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
-// Partitioner is the abstraction for on-disk storage.
-type Partitioner interface {
-	// Enqueue adds the batch to the end of the partitionIdx'th partition.
-	Enqueue(partitionIdx int, batch coldata.Batch) error
-	// Dequeue removes and returns the batch from the front of the
-	// partitionIdx'th partition. If the partition is empty (either all batches
-	// from it have already been dequeued or no batches were ever enqueued), a
-	// zero-length batch is returned.
-	Dequeue(partitionIdx int, batch coldata.Batch) error
-	// Close closes the partitioner.
-	Close() error
-}
-
 // externalSorterState indicates the current state of the external sorter.
 type externalSorterState int
 
@@ -123,13 +110,12 @@ type externalSorter struct {
 	inputTypes         []coltypes.T
 	ordering           execinfrapb.Ordering
 	inMemSorter        resettableOperator
-	partitioner        Partitioner
+	partitioner        colcontainer.PartitionedQueue
 	// numPartitions is the current number of partitions.
 	numPartitions int
 	// firstPartitionIdx is the index of the first partition to merge next.
 	firstPartitionIdx   int
 	maxNumberPartitions int
-	cfg                 colcontainer.DiskQueueCfg
 
 	emitter Operator
 }
@@ -161,8 +147,6 @@ func newExternalSorter(
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
-	// TODO(yuzefovich): remove this once actual disk queues are in-place.
-	diskQueuesUnlimitedAllocator *Allocator,
 	cfg colcontainer.DiskQueueCfg,
 ) Operator {
 	inputPartitioner := newInputPartitioningOperator(standaloneAllocator, input, memoryLimit)
@@ -194,11 +178,10 @@ func newExternalSorter(
 		unlimitedAllocator:  unlimitedAllocator,
 		memoryLimit:         memoryLimit,
 		inMemSorter:         inMemSorter,
-		partitioner:         newDummyPartitioner(diskQueuesUnlimitedAllocator, inputTypes),
+		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, cfg),
 		inputTypes:          inputTypes,
 		ordering:            ordering,
 		maxNumberPartitions: maxNumberPartitions,
-		cfg:                 cfg,
 	}
 }
 
@@ -371,7 +354,10 @@ func (o *inputPartitioningOperator) reset() {
 }
 
 func newPartitionerToOperator(
-	allocator *Allocator, types []coltypes.T, partitioner Partitioner, partitionIdx int,
+	allocator *Allocator,
+	types []coltypes.T,
+	partitioner colcontainer.PartitionedQueue,
+	partitionIdx int,
 ) *partitionerToOperator {
 	return &partitionerToOperator{
 		partitioner:  partitioner,
@@ -384,12 +370,12 @@ func newPartitionerToOperator(
 
 // partitionerToOperator is an Operator that Dequeue's from the corresponding
 // partition on every call to Next. It is a converter from filled in
-// Partitioner to Operator.
+// PartitionedQueue to Operator.
 type partitionerToOperator struct {
 	ZeroInputNode
 	NonExplainable
 
-	partitioner  Partitioner
+	partitioner  colcontainer.PartitionedQueue
 	partitionIdx int
 	batch        coldata.Batch
 }
@@ -403,111 +389,4 @@ func (p *partitionerToOperator) Next(context.Context) coldata.Batch {
 		execerror.VectorizedInternalPanic(err)
 	}
 	return p.batch
-}
-
-func newDummyPartitioner(allocator *Allocator, types []coltypes.T) Partitioner {
-	return &dummyPartitioner{allocator: allocator, types: types}
-}
-
-// dummyPartitioner is a simple implementation of Partitioner interface that
-// uses dummy in-memory queues.
-type dummyPartitioner struct {
-	allocator  *Allocator
-	types      []coltypes.T
-	partitions []*dummyQueue
-}
-
-var _ Partitioner = &dummyPartitioner{}
-
-func (d *dummyPartitioner) Enqueue(partitionIdx int, batch coldata.Batch) error {
-	if len(d.partitions) <= partitionIdx {
-		d.partitions = append(d.partitions, make([]*dummyQueue, partitionIdx-len(d.partitions)+1)...)
-	}
-	if d.partitions[partitionIdx] == nil {
-		d.partitions[partitionIdx] = newDummyQueue(d.allocator, d.types)
-	}
-	return d.partitions[partitionIdx].Enqueue(batch)
-}
-
-func (d *dummyPartitioner) Dequeue(partitionIdx int, batch coldata.Batch) error {
-	var partition *dummyQueue
-	if partitionIdx < len(d.partitions) {
-		partition = d.partitions[partitionIdx]
-	}
-	if partition == nil {
-		batch.SetLength(0)
-		return nil
-	}
-	return partition.Dequeue(batch)
-}
-
-func (d *dummyPartitioner) Close() error {
-	for _, partition := range d.partitions {
-		if err := partition.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func newDummyQueue(allocator *Allocator, types []coltypes.T) *dummyQueue {
-	return &dummyQueue{allocator: allocator, types: types}
-}
-
-// dummyQueue is an in-memory queue that simply copies the passed in batches.
-type dummyQueue struct {
-	allocator *Allocator
-	queue     []coldata.Batch
-	types     []coltypes.T
-}
-
-func (d *dummyQueue) Enqueue(batch coldata.Batch) error {
-	if batch.Length() == 0 {
-		return nil
-	}
-	batchCopy := d.allocator.NewMemBatchWithSize(d.types, int(batch.Length()))
-	d.allocator.PerformOperation(batchCopy.ColVecs(), func() {
-		for i, vec := range batchCopy.ColVecs() {
-			vec.Append(
-				coldata.SliceArgs{
-					ColType:     d.types[i],
-					Src:         batch.ColVec(i),
-					Sel:         batch.Selection(),
-					DestIdx:     0,
-					SrcStartIdx: 0,
-					SrcEndIdx:   uint64(batch.Length()),
-				})
-		}
-	})
-	batchCopy.SetLength(batch.Length())
-	d.queue = append(d.queue, batchCopy)
-	return nil
-}
-
-func (d *dummyQueue) Dequeue(batch coldata.Batch) error {
-	if len(d.queue) == 0 {
-		batch.SetLength(0)
-		return nil
-	}
-	batch.ResetInternalBatch()
-	batchToCopy := d.queue[0]
-	d.queue = d.queue[1:]
-	d.allocator.PerformOperation(batch.ColVecs(), func() {
-		for i, colVecToCopy := range batchToCopy.ColVecs() {
-			batch.ColVec(i).Append(coldata.SliceArgs{
-				ColType:     d.types[i],
-				Src:         colVecToCopy,
-				Sel:         batchToCopy.Selection(),
-				DestIdx:     0,
-				SrcStartIdx: 0,
-				SrcEndIdx:   uint64(batchToCopy.Length()),
-			})
-		}
-	})
-	batch.SetLength(batchToCopy.Length())
-	return nil
-}
-
-func (d *dummyQueue) Close() error {
-	return nil
 }

@@ -1,4 +1,4 @@
-# LogicTest: local local-vec
+# LogicTest: local local-vec fakedist-vec-disk
 
 # Disable automatic stats.
 statement ok
