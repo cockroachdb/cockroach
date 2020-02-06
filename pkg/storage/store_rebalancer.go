@@ -244,7 +244,8 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		log.VEventf(ctx, 1, "transferring r%d (%.2f qps) to s%d to better balance load",
 			replWithStats.repl.RangeID, replWithStats.qps, target.StoreID)
-		if err := contextutil.RunWithTimeout(ctx, "transfer lease", sr.rq.processTimeoutFunc(replWithStats.repl), func(ctx context.Context) error {
+		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
+		if err := contextutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
 			return sr.rq.transferLease(ctx, replWithStats.repl, target, replWithStats.qps)
 		}); err != nil {
 			log.Errorf(ctx, "unable to transfer lease to s%d: %+v", target.StoreID, err)
@@ -303,7 +304,8 @@ func (sr *StoreRebalancer) rebalanceStore(
 		descBeforeRebalance := replWithStats.repl.Desc()
 		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
 			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas(), targets)
-		if err := contextutil.RunWithTimeout(ctx, "relocate range", sr.rq.processTimeoutFunc(replWithStats.repl), func(ctx context.Context) error {
+		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
+		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
 			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, targets)
 		}); err != nil {
 			log.Errorf(ctx, "unable to relocate range to %v: %+v", targets, err)
