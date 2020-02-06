@@ -169,3 +169,14 @@ SELECT * FROM t44207_0, t44207_1 WHERE t44207_0.c0 IS NULL
 ----
 NULL 0
 NULL 0
+
+# Regression test for the inputs that have comparable but different types.
+statement ok
+CREATE TABLE t44547_0(c0 INT4); CREATE TABLE t44547_1(c0 INT8)
+
+statement ok
+INSERT INTO t44547_0(c0) VALUES(0); INSERT INTO t44547_1(c0) VALUES(0)
+
+query I
+SELECT * FROM t44547_0 NATURAL JOIN t44547_1
+----
