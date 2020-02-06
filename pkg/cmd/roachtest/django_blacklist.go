@@ -191,15 +191,18 @@ var djangoBlacklist20_1 = blacklist{
 
 var djangoBlacklist19_2 = blacklist{
 	// Blacklist generated from running the tests above.
-	"app_loading.tests.GetModelsTest.test_get_models_only_returns_installed_models":    "unknown",
-	"apps.tests.AppsTests.test_models_not_loaded":                                      "unknown",
-	"backends.base.test_base.ExecuteWrapperTests.test_wrapper_connection_specific":     "unknown",
-	"backends.tests.DateQuotingTest.test_django_date_trunc":                            "unknown",
-	"backends.tests.FkConstraintsTests.test_check_constraints":                         "unknown",
-	"backends.tests.FkConstraintsTests.test_disable_constraint_checks_context_manager": "unknown",
-	"backends.tests.FkConstraintsTests.test_disable_constraint_checks_manually":        "unknown",
-	"backends.tests.ThreadTests.test_connections_thread_local":                         "unknown",
-	"update.tests.SimpleTest.test_nonempty_update_with_inheritance":                    "unknown",
+	"admin_custom_urls.tests.AdminCustomUrlsTest.test_post_url_continue":                           "unknown",
+	"admin_docs.test_views.TestFieldType.test_field_name":                                          "unknown",
+	"admin_filters.tests.ListFiltersTests.test_two_characters_long_field":                          "unknown",
+	"admin_inlines.tests.SeleniumTests.test_delete_stackeds":                                       "unknown",
+	"admin_ordering.tests.TestRelatedFieldsAdminOrdering.test_no_admin_fallback_to_model_ordering": "unknown",
+	"admin_utils.tests.UtilsTests.test_values_from_lookup_field":                                   "unknown",
+	"admin_views.tests.AdminViewBasicTest.test_date_hierarchy_timezone_dst":                        "unknown",
+	"app_loading.tests.GetModelsTest.test_get_models_only_returns_installed_models":                "unknown",
+	"conditional_processing.tests.ConditionalGet.test_without_conditions":                          "unknown",
+	"db_typecasts.tests.DBTypeCasts.test_typeCasts":                                                "unknown",
+	"field_subclassing.tests.TestDbType.test_db_parameters_respects_db_type":                       "unknown",
+	"model_meta.tests.GetFieldsTests.test_get_fields_is_immutable":                                 "unknown",
 	// TODO (rohany): The postgres_tests suite within Django is not in a automatically
 	//  runnable state right now.
 	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_and_empty_result":                                 "41334",
