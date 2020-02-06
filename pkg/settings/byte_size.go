@@ -62,3 +62,13 @@ func RegisterValidatedByteSizeSetting(
 	register(key, desc, setting)
 	return setting
 }
+
+// RegisterPublicValidatedByteSizeSetting defines a new setting with type
+// bytesize with a validation function and makes it public.
+func RegisterPublicValidatedByteSizeSetting(
+	key, desc string, defaultValue int64, validateFn func(int64) error,
+) *ByteSizeSetting {
+	s := RegisterValidatedByteSizeSetting(key, desc, defaultValue, validateFn)
+	s.SetVisibility(Public)
+	return s
+}
