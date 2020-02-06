@@ -248,7 +248,7 @@ type pebbleMapBatchWriter struct {
 	// to be written to the underlying store.
 	makeKey func(k []byte) []byte
 	batch   *pebble.Batch
-	store   *pebble.DB
+	e       *Pebble
 }
 
 // pebbleMapIterator iterates over the keys of a pebbleMap in sorted order.
@@ -266,7 +266,7 @@ type pebbleMapIterator struct {
 // underlying storage engine.
 type pebbleMap struct {
 	prefix          []byte
-	store           *pebble.DB
+	e               *Pebble
 	allowDuplicates bool
 	keyID           int64
 }
@@ -279,11 +279,11 @@ var _ diskmap.SortedDiskMap = &pebbleMap{}
 // underlying store. The pebbleMap instance will have a keyspace prefixed by a
 // unique prefix. The allowDuplicates parameter controls whether Puts with
 // identical keys will write multiple entries or overwrite previous entries.
-func newPebbleMap(e *pebble.DB, allowDuplicates bool) *pebbleMap {
+func newPebbleMap(e *Pebble, allowDuplicates bool) *pebbleMap {
 	prefix := generateTempStorageID()
 	return &pebbleMap{
 		prefix:          encoding.EncodeUvarintAscending([]byte(nil), prefix),
-		store:           e,
+		e:               e,
 		allowDuplicates: allowDuplicates,
 	}
 }
@@ -316,7 +316,7 @@ func (r *pebbleMap) makeKeyWithSequence(k []byte) []byte {
 func (r *pebbleMap) NewIterator() diskmap.SortedDiskMapIterator {
 	return &pebbleMapIterator{
 		allowDuplicates: r.allowDuplicates,
-		iter: r.store.NewIter(&pebble.IterOptions{
+		iter: r.e.db.NewIter(&pebble.IterOptions{
 			UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
 		}),
 		makeKey: r.makeKey,
@@ -338,14 +338,14 @@ func (r *pebbleMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDisk
 	return &pebbleMapBatchWriter{
 		capacity: capacityBytes,
 		makeKey:  makeKey,
-		batch:    r.store.NewBatch(),
-		store:    r.store,
+		batch:    r.e.db.NewBatch(),
+		e:        r.e,
 	}
 }
 
 // Clear implements the SortedDiskMap interface.
 func (r *pebbleMap) Clear() error {
-	if err := r.store.DeleteRange(
+	if err := r.e.db.DeleteRange(
 		r.prefix,
 		roachpb.Key(r.prefix).PrefixEnd(),
 		pebble.NoSync,
@@ -355,7 +355,7 @@ func (r *pebbleMap) Clear() error {
 	// NB: we manually flush after performing the clear range to ensure that the
 	// range tombstone is pushed to disk which will kick off compactions that
 	// will eventually free up the deleted space.
-	_, err := r.store.AsyncFlush()
+	_, err := r.e.db.AsyncFlush()
 	return err
 }
 
@@ -424,7 +424,7 @@ func (b *pebbleMapBatchWriter) Flush() error {
 	if err := b.batch.Commit(pebble.NoSync); err != nil {
 		return err
 	}
-	b.batch = b.store.NewBatch()
+	b.batch = b.e.db.NewBatch()
 	return nil
 }
 
