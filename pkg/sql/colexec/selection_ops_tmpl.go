@@ -141,9 +141,14 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 	} else {
 		batch.SetSelection(true)
 		sel := batch.Selection()
+		// {{if not (eq .LTyp.String "Bytes")}}
+		// {{/* Slice is a noop for Bytes type, so col1Len below might contain an
+		// incorrect value. In order to keep bounds check elimination for all other
+		// types, we simply omit this code snippet for Bytes. */}}
 		col1 = execgen.SLICE(col1, 0, int(n))
 		col1Len := execgen.LEN(col1)
 		col2 = _R_SLICE(col2, 0, col1Len)
+		// {{end}}
 		for execgen.RANGE(i, col1, 0, int(n)) {
 			var cmp bool
 			arg1 := execgen.UNSAFEGET(col1, i)

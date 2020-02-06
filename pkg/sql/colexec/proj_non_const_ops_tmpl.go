@@ -138,10 +138,15 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	} else {
+		// {{if not (eq .LTyp.String "Bytes")}}
+		// {{/* Slice is a noop for Bytes type, so colLen below might contain an
+		// incorrect value. In order to keep bounds check elimination for all other
+		// types, we simply omit this code snippet for Bytes. */}}
 		col1 = execgen.SLICE(col1, 0, int(n))
 		colLen := execgen.LEN(col1)
 		_ = _RET_UNSAFEGET(projCol, colLen-1)
 		_ = _R_UNSAFEGET(col2, colLen-1)
+		// {{end}}
 		for execgen.RANGE(i, col1, 0, int(n)) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
