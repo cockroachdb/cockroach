@@ -131,3 +131,13 @@ query I
 SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 0
+
+subtest alter_table_telemetry
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN ('sql.schema.alter_range.configure_zone', 'sql.schema.alter_table.configure_zone')
+ORDER BY feature_name
+----
+sql.schema.alter_range.configure_zone
+sql.schema.alter_table.configure_zone
