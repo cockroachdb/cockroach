@@ -311,6 +311,8 @@ func (t T) AppendVal(target, v string) string {
 }
 
 // Len is a function that should only be used in templates.
+// WARNING: combination of Slice and Len might not work correctly for Bytes
+// type.
 func (t T) Len(target string) string {
 	if t == Bytes {
 		return fmt.Sprintf("%s.Len()", target)
