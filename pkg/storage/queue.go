@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -44,8 +46,55 @@ const (
 	defaultQueueMaxSize = 10000
 )
 
-func defaultProcessTimeoutFunc(replicaInQueue) time.Duration {
-	return defaultProcessTimeout
+// queueMinimumTimeout is the minimum duration after which the processing of a
+// queue will time out.
+var queueMinimumTimeout = settings.RegisterDurationSetting(
+	// NB: this setting has a relatively awkward name because the linter does not
+	// permit `minimum_timeout` but rather asks for it to be `.minimum.timeout`.
+	"kv.queue.process.timeout_minimum",
+	"minimum duration after which the processing of a queue will "+
+		"time out; it is an escape hatch to raise the minimum timeout for queues "+
+		"such as when a raft snapshot is sent much more slowly than the allowable "+
+		"rate as specified by kv.snapshot_recovery.max_rate",
+	defaultProcessTimeout,
+)
+
+func init() {
+	queueMinimumTimeout.SetVisibility(settings.Reserved)
+}
+
+func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Duration {
+	return queueMinimumTimeout.Get(&cs.SV)
+}
+
+// The queues which send snapshots while processing should have a timeout which
+// is a function of the size of the range and the maximum allowed rate of data
+// transfer that adheres to a minimum timeout specified in a cluster setting.
+//
+// The parameter controls which rate to use.
+func makeQueueSnapshotTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProcessTimeoutFunc {
+	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
+		minimumTimeout := queueMinimumTimeout.Get(&cs.SV)
+		// NB: In production code this will type assertion will always succeed.
+		// Some tests set up a fake implementation of replicaInQueue in which
+		// case we fall back to the configured minimum timeout.
+		repl, ok := r.(*Replica)
+		if !ok {
+			return minimumTimeout
+		}
+		stats := repl.GetMVCCStats()
+		totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
+		snapshotRate := rateSetting.Get(&cs.SV)
+		estimatedDuration := time.Duration(totalBytes / snapshotRate)
+		// Set a timeout to 1/10th of the allowed throughput.
+		const permittedSlowdown = 10
+		timeout := estimatedDuration * permittedSlowdown
+
+		if timeout < minimumTimeout {
+			timeout = minimumTimeout
+		}
+		return timeout
+	}
 }
 
 // a purgatoryError indicates a replica processing failure which indicates
@@ -222,6 +271,10 @@ type queueImpl interface {
 	purgatoryChan() <-chan time.Time
 }
 
+// queueProcessTimeoutFunc controls the timeout for queue processing for a
+// replicaInQueue.
+type queueProcessTimeoutFunc func(*cluster.Settings, replicaInQueue) time.Duration
+
 type queueConfig struct {
 	// maxSize is the maximum number of replicas to queue.
 	maxSize int
@@ -258,7 +311,7 @@ type queueConfig struct {
 	// that have been destroyed but not GCed.
 	processDestroyedReplicas bool
 	// processTimeout returns the timeout for processing a replica.
-	processTimeoutFunc func(replicaInQueue) time.Duration
+	processTimeoutFunc queueProcessTimeoutFunc
 	// successes is a counter of replicas processed successfully.
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
@@ -855,7 +908,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
 	defer span.Finish()
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
-		bq.processTimeoutFunc(repl), func(ctx context.Context) error {
+		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
 
 			if !repl.IsInitialized() {

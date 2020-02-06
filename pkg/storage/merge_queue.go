@@ -97,8 +97,19 @@ func newMergeQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *mergeQue
 	mq.baseQueue = newBaseQueue(
 		"merge", mq, store, gossip,
 		queueConfig{
-			maxSize:              defaultQueueMaxSize,
-			maxConcurrency:       mergeQueueConcurrency,
+			maxSize:        defaultQueueMaxSize,
+			maxConcurrency: mergeQueueConcurrency,
+			// The processing of the merge queue sometimes needs to send snapshots
+			// so we use the raftSnapshotQueueTimeoutFunc. It is the case that
+			// sometimes the merge queue needs to send multiple snapshots so perhaps
+			// it would want even more time than the snapshot queue. That being said
+			// this timeout give leeway for snapshots to be 10x slower than the
+			// specified rate and still respects the queue processing minimum timeout.
+			// This choice is strictly better than the default.
+			//
+			// TODO(ajwerner): Consider using a function with even longer timeouts
+			// when replication factors are high, such as greater than 5.
+			processTimeoutFunc:   makeQueueSnapshotTimeoutFunc(rebalanceSnapshotRate),
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,
