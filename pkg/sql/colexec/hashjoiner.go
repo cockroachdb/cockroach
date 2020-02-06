@@ -175,6 +175,9 @@ type hashJoiner struct {
 
 	// probeState is used in hjProbing state.
 	probeState struct {
+		// keyTypes stores the types of the equality columns on the probe side.
+		keyTypes []coltypes.T
+
 		// buildIdx and probeIdx represents the matching row indices that are used to
 		// stitch together the join results. Since probing is done on a per-batch
 		// basis, the indices will always fit within uint16. However, the matching
@@ -374,7 +377,10 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 				// order to reuse the same "check" functions below.
 				//
 				// First, we compute the hash values for all tuples in the batch.
-				hj.ht.computeBuckets(ctx, hj.ht.buckets, hj.ht.keys, uint64(batchSize), sel)
+				hj.ht.computeBuckets(
+					ctx, hj.ht.buckets, hj.probeState.keyTypes,
+					hj.ht.keys, uint64(batchSize), sel,
+				)
 				// Then, we iterate over all tuples to see whether there is at least
 				// one tuple in the hash table that has the same hash value.
 				for i := uint16(0); i < batchSize; i++ {
@@ -397,7 +403,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 			default:
 				// Initialize groupID with the initial hash buckets and toCheck with all
 				// applicable indices.
-				hj.ht.lookupInitial(ctx, batchSize, sel)
+				hj.ht.lookupInitial(ctx, hj.probeState.keyTypes, batchSize, sel)
 				nToCheck = batchSize
 			}
 
@@ -408,7 +414,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 					// Continue searching along the hash table next chains for the corresponding
 					// buckets. If the key is found or end of next chain is reached, the key is
 					// removed from the toCheck array.
-					nToCheck = hj.ht.distinctCheck(nToCheck, sel)
+					nToCheck = hj.ht.distinctCheck(hj.probeState.keyTypes, nToCheck, sel)
 					hj.ht.findNext(nToCheck)
 				}
 
@@ -417,7 +423,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 				for nToCheck > 0 {
 					// Continue searching for the build table matching keys while the toCheck
 					// array is non-empty.
-					nToCheck = hj.ht.check(nToCheck, sel)
+					nToCheck = hj.ht.check(hj.probeState.keyTypes, nToCheck, sel)
 					hj.ht.findNext(nToCheck)
 				}
 
@@ -678,6 +684,10 @@ func newHashJoiner(
 	hj.probeState.probeIdx = make([]uint16, coldata.BatchSize())
 	if spec.left.outer {
 		hj.probeState.probeRowUnmatched = make([]bool, coldata.BatchSize())
+	}
+	hj.probeState.keyTypes = make([]coltypes.T, len(spec.left.eqCols))
+	for i, colIdx := range spec.left.eqCols {
+		hj.probeState.keyTypes[i] = spec.left.sourceTypes[colIdx]
 	}
 	return hj
 }

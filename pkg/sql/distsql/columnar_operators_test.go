@@ -455,32 +455,36 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 							}
 							for !triedWithoutOnExpr || !triedWithOnExpr {
 								var (
-									lRows, rRows     sqlbase.EncDatumRows
-									lEqCols, rEqCols []uint32
-									inputTypes       []types.T
-									usingRandomTypes bool
+									lRows, rRows             sqlbase.EncDatumRows
+									lEqCols, rEqCols         []uint32
+									lInputTypes, rInputTypes []types.T
+									usingRandomTypes         bool
 								)
 								if rng.Float64() < randTypesProbability {
-									inputTypes = generateRandomSupportedTypes(rng, nCols)
-									lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-									rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+									lInputTypes = generateRandomSupportedTypes(rng, nCols)
+									//rInputTypes = generateRandomComparableTypes(rng, lInputTypes)
+									// TODO(yuzefovich): use the commented out line instead.
+									rInputTypes = lInputTypes
+									lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+									rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 									// Since random types might not be comparable, we use the same
 									// equality columns for both inputs.
 									rEqCols = lEqCols
 									usingRandomTypes = true
 								} else {
-									inputTypes = intTyps[:nCols]
+									lInputTypes = intTyps[:nCols]
+									rInputTypes = lInputTypes
 									lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 									rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 									rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								}
 
-								outputTypes := append(inputTypes, inputTypes...)
+								outputTypes := append(lInputTypes, rInputTypes...)
 								if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
 									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
-									outputTypes = inputTypes
+									outputTypes = lInputTypes
 								}
 								outputColumns := make([]uint32, len(outputTypes))
 								for i := range outputColumns {
@@ -489,7 +493,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 
 								var filter, onExpr execinfrapb.Expression
 								if addFilter {
-									colTypes := append(inputTypes, inputTypes...)
+									colTypes := append(lInputTypes, rInputTypes...)
 									forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
 										testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 									filter = generateFilterExpr(
@@ -497,7 +501,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									)
 								}
 								if triedWithoutOnExpr {
-									colTypes := append(inputTypes, inputTypes...)
+									colTypes := append(lInputTypes, rInputTypes...)
 									onExpr = generateFilterExpr(
 										rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
 									)
@@ -510,8 +514,8 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								}
 								pspec := &execinfrapb.ProcessorSpec{
 									Input: []execinfrapb.InputSyncSpec{
-										{ColumnTypes: inputTypes},
-										{ColumnTypes: inputTypes},
+										{ColumnTypes: lInputTypes},
+										{ColumnTypes: rInputTypes},
 									},
 									Core: execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
 									Post: execinfrapb.PostProcessSpec{
@@ -522,7 +526,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								}
 								args := verifyColOperatorArgs{
 									anyOrder:    true,
-									inputTypes:  [][]types.T{inputTypes, inputTypes},
+									inputTypes:  [][]types.T{lInputTypes, rInputTypes},
 									inputs:      []sqlbase.EncDatumRows{lRows, rRows},
 									outputTypes: outputTypes,
 									pspec:       pspec,
@@ -533,10 +537,10 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 										" filter = %q seed = %d run = %d ---\n",
 										memoryLimit, testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
 									fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
-									prettyPrintTypes(inputTypes, "left" /* tableName */)
-									prettyPrintTypes(inputTypes, "right" /* tableName */)
-									prettyPrintInput(lRows, inputTypes, "left" /* tableName */)
-									prettyPrintInput(rRows, inputTypes, "right" /* tableName */)
+									prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
+									prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
+									prettyPrintInput(lRows, lInputTypes, "left_table" /* tableName */)
+									prettyPrintInput(rRows, rInputTypes, "right_table" /* tableName */)
 									t.Fatal(err)
 								}
 								if onExpr.Expr == "" {
@@ -628,21 +632,25 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 						for !triedWithoutOnExpr || !triedWithOnExpr {
 							var (
 								lRows, rRows                 sqlbase.EncDatumRows
-								inputTypes                   []types.T
+								lInputTypes, rInputTypes     []types.T
 								lOrderingCols, rOrderingCols []execinfrapb.Ordering_Column
 								usingRandomTypes             bool
 							)
 							if rng.Float64() < randTypesProbability {
-								inputTypes = generateRandomSupportedTypes(rng, nCols)
-								lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-								rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+								lInputTypes = generateRandomSupportedTypes(rng, nCols)
+								//rInputTypes = generateRandomComparableTypes(rng, lInputTypes)
+								// TODO(yuzefovich): use the commented out line instead.
+								rInputTypes = lInputTypes
+								lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+								rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 								// We use the same ordering columns in the same order because the
 								// columns can be not comparable in different order.
 								rOrderingCols = lOrderingCols
 								usingRandomTypes = true
 							} else {
-								inputTypes = intTyps[:nCols]
+								lInputTypes = intTyps[:nCols]
+								rInputTypes = lInputTypes
 								lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 								rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
@@ -656,23 +664,23 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							lMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: lOrderingCols})
 							rMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: rOrderingCols})
 							sort.Slice(lRows, func(i, j int) bool {
-								cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
+								cmp, err := lRows[i].Compare(lInputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
 								if err != nil {
 									t.Fatal(err)
 								}
 								return cmp < 0
 							})
 							sort.Slice(rRows, func(i, j int) bool {
-								cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
+								cmp, err := rRows[i].Compare(rInputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
 								if err != nil {
 									t.Fatal(err)
 								}
 								return cmp < 0
 							})
-							outputTypes := append(inputTypes, inputTypes...)
+							outputTypes := append(lInputTypes, rInputTypes...)
 							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
 								testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
-								outputTypes = inputTypes
+								outputTypes = lInputTypes
 							}
 							outputColumns := make([]uint32, len(outputTypes))
 							for i := range outputColumns {
@@ -681,7 +689,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 
 							var filter, onExpr execinfrapb.Expression
 							if addFilter {
-								colTypes := append(inputTypes, inputTypes...)
+								colTypes := append(lInputTypes, rInputTypes...)
 								forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
 									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 								filter = generateFilterExpr(
@@ -689,7 +697,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								)
 							}
 							if triedWithoutOnExpr {
-								colTypes := append(inputTypes, inputTypes...)
+								colTypes := append(lInputTypes, rInputTypes...)
 								onExpr = generateFilterExpr(
 									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
 								)
@@ -701,13 +709,13 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								Type:          testSpec.joinType,
 							}
 							pspec := &execinfrapb.ProcessorSpec{
-								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
 								Core:  execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 								Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
 							}
 							args := verifyColOperatorArgs{
 								anyOrder:    testSpec.anyOrder,
-								inputTypes:  [][]types.T{inputTypes, inputTypes},
+								inputTypes:  [][]types.T{lInputTypes, rInputTypes},
 								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
 								outputTypes: outputTypes,
 								pspec:       pspec,
@@ -715,10 +723,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							if err := verifyColOperator(args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
 									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
-								prettyPrintTypes(inputTypes, "left" /* tableName */)
-								prettyPrintTypes(inputTypes, "right" /* tableName */)
-								prettyPrintInput(lRows, inputTypes, "left" /* tableName */)
-								prettyPrintInput(rRows, inputTypes, "right" /* tableName */)
+								prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
+								prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
+								prettyPrintInput(lRows, lInputTypes, "left_table" /* tableName */)
+								prettyPrintInput(rRows, rInputTypes, "right_table" /* tableName */)
 								t.Fatal(err)
 							}
 							if onExpr.Expr == "" {
@@ -897,6 +905,45 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
 		typ := sqlbase.RandType(rng)
 		if isSupportedType(typ) {
 			typs = append(typs, *typ)
+		}
+	}
+	return typs
+}
+
+// Remove unused warning.
+// TODO(yuzefovich): remove this.
+var _ = generateRandomComparableTypes
+
+// generateRandomComparableTypes generates random types that are supported by
+// the vectorized engine and are such that their physical (i.e. coltypes.T)
+// equivalents are comparable to the physical equivalents of the corresponding
+// types in inputTypes.
+func generateRandomComparableTypes(rng *rand.Rand, inputTypes []types.T) []types.T {
+	typs := make([]types.T, len(inputTypes))
+	for i, inputType := range inputTypes {
+		switch inputType.Family() {
+		case types.DateFamily, types.OidFamily:
+			// Both dates and oids are mapped to coltypes.Int64 which has too many
+			// comparisons (and not all of them are valid). For now, we'll keep these
+			// two types unmodified.
+			typs[i] = inputType
+			continue
+		}
+		inputPhysType := typeconv.FromColumnType(&inputType)
+		for {
+			typ := sqlbase.RandType(rng)
+			physType := typeconv.FromColumnType(typ)
+			comparable := false
+			for _, comparableType := range coltypes.ComparableTypes[inputPhysType] {
+				if physType == comparableType {
+					comparable = true
+					break
+				}
+			}
+			if comparable {
+				typs[i] = *typ
+				break
+			}
 		}
 	}
 	return typs
