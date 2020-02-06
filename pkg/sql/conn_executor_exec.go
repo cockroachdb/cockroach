@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/opentracing/opentracing-go"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -178,6 +179,21 @@ func (ex *connExecutor) execStmtInOpenState(
 			queryDone(ctx, res)
 		}
 	}()
+
+	shouldCollectInfo, recordStmtInfoFn := ex.stmtInfoRegistry.shouldCollectDiagnostics(ctx, stmt.AST)
+	if shouldCollectInfo {
+		tr := ex.server.cfg.AmbientCtx.Tracer
+		origCtx := ctx
+		var sp opentracing.Span
+		ctx, sp = tracing.StartSnowballTrace(ctx, tr, "traced statement")
+		defer func() {
+			// Record the statement information that we've collected.
+			// Note that in case of implicit transactions, the trace contains the auto-commit too.
+			sp.Finish()
+			trace := tracing.GetRecording(sp)
+			recordStmtInfoFn(origCtx, trace)
+		}()
+	}
 
 	if ex.sessionData.StmtTimeout > 0 {
 		timeoutTicker = time.AfterFunc(
@@ -1146,6 +1162,7 @@ func (ex *connExecutor) handleAutoCommit(
 ) (fsm.Event, fsm.EventPayload) {
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
+		log.Event(ctx, "statement execution committed the txn")
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	}
 

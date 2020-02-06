@@ -28,6 +28,9 @@ SELECT * FROM system.namespace
 1   29  role_members                     23
 1   29  role_options                     33
 1   29  settings                         6
+1   29  statement_bundle_chunks          34
+1   29  statement_diagnostics            36
+1   29  statement_diagnostics_requests   35
 1   29  table_statistics                 20
 1   29  ui                               14
 1   29  users                            4

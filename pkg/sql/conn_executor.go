@@ -340,6 +340,8 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.PeriodicallyClearSQLStats(ctx, stopper, maxSQLStatReset, &s.reportedStats)
 	// Start a second loop to clear SQL stats at the requested interval.
 	s.PeriodicallyClearSQLStats(ctx, stopper, sqlStatReset, &s.sqlStats)
+
+	s.PeriodicallyPollForStatementInfoRequests(ctx, stopper)
 }
 
 // ResetSQLStats resets the executor's collected sql statistics.
@@ -599,6 +601,7 @@ func (s *Server) newConnExecutor(
 		ctxHolder:                 ctxHolder{connCtx: ctx},
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
+		stmtInfoRegistry:          s.cfg.stmtInfoRequestRegistry,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -770,6 +773,30 @@ func (s *Server) PeriodicallyClearSQLStats(
 				case <-timer.C:
 					timer.Read = true
 				}
+			}
+		}
+	})
+}
+
+// PeriodicallyPollForStatementInfoRequests runs a worker that periodically
+// polls system.statement_diagnostics_requests.
+func (s *Server) PeriodicallyPollForStatementInfoRequests(
+	ctx context.Context, stopper *stop.Stopper,
+) {
+	pollingInterval := 10 * time.Second
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+		var timer timeutil.Timer
+		for {
+			if err := s.cfg.stmtInfoRequestRegistry.pollRequests(ctx); err != nil {
+				log.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
+			}
+			timer.Reset(pollingInterval)
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-timer.C:
+				timer.Read = true
 			}
 		}
 	})
@@ -1067,6 +1094,10 @@ type connExecutor struct {
 	// hasCreatedTemporarySchema is set if the executor has created a
 	// temporary schema, which requires special cleanup on close.
 	hasCreatedTemporarySchema bool
+
+	// stmtInfoRequestRegistry is used to track which queries need to have
+	// information collected.
+	stmtInfoRegistry *stmtDiagnosticsRequestRegistry
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
