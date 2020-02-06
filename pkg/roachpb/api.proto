@@ -1283,6 +1283,12 @@ enum MVCCFilter {
   All = 1;
 }
 
+message FileEncryptionOptions {
+  option (gogoproto.equal) = true;
+  // Key specifies the key to use for encryption or decryption.
+  bytes key = 1;
+}
+
 // ExportRequest is the argument to the Export() method, to dump a keyrange into
 // files under a basepath.
 message ExportRequest {
@@ -1318,6 +1324,7 @@ message ExportRequest {
   // set, files will be written to the store that matches the most specific
   // locality KV in the map.
   map<string, ExternalStorage> storage_by_locality_kv = 8 [(gogoproto.customname) = "StorageByLocalityKV"];
+  FileEncryptionOptions encryption = 9;
 }
 
 message BulkOpSummary {
@@ -1387,6 +1394,8 @@ message ImportRequest {
   // `key_rewrites` and will supercede it once rekeying of interleaved tables is
   // fixed.
   repeated TableRekey rekeys = 5 [(gogoproto.nullable) = false];
+
+  FileEncryptionOptions encryption = 7;
 }
 
 // ImportResponse is the response to a Import() operation.
@@ -1448,7 +1457,7 @@ message AdminVerifyProtectedTimestampRequest {
 // AdminVerifyProtectedTimestamp method which ensures that the specified record
 // will be seen before data can be garbage collected at the timestamp.
 message AdminVerifyProtectedTimestampResponse {
-  
+
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool verified = 2;
 
