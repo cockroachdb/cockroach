@@ -536,6 +536,7 @@ type ExecutorConfig struct {
 	StatsRefresher    *stats.Refresher
 	ExecLogger        *log.SecondaryLogger
 	AuditLogger       *log.SecondaryLogger
+	SlowQueryLogger   *log.SecondaryLogger
 	InternalExecutor  *InternalExecutor
 	QueryCache        *querycache.C
 
