@@ -350,11 +350,11 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
-		// TODO(richardjcai) update this after alter role/user is done
 		name:   "alter_role_or_user_stmt",
 		inline: []string{"password_clause", "opt_with"},
 		replace: map[string]string{
-			"string_or_placeholder 'WITH'":      "name 'WITH'",
+			"string_or_placeholder":             "name'",
+			"role_options":                      "OPTIONS",
 			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
 			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
 		unlink: []string{"name", "password"},
@@ -588,11 +588,11 @@ var specs = []stmtSpec{
 		inline: []string{"opt_column_list"},
 	},
 	{
-		// TODO(richardjcai) update this
 		name:   "create_role_or_user_stmt",
 		inline: []string{"role_or_group_or_user"},
 		replace: map[string]string{
 			"string_or_placeholder": "name",
+			"role_options":          "OPTIONS",
 		},
 	},
 	{

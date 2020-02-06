@@ -13,12 +13,12 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -30,7 +30,7 @@ type CreateUserNode struct {
 	ifNotExists bool
 	isRole      bool
 	roleOptions roleoption.RoleOptionList
-	userAuthInfo
+	userNameInfo
 
 	run createUserRun
 }
@@ -66,13 +66,13 @@ func (p *planner) CreateUserNode(
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(nameE, nil, opName)
+	ua, err := p.getUserAuthInfo(nameE, opName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &CreateUserNode{
-		userAuthInfo: ua,
+		userNameInfo: ua,
 		ifNotExists:  ifNotExists,
 		isRole:       isRole,
 		roleOptions:  roleOptions,
@@ -80,12 +80,12 @@ func (p *planner) CreateUserNode(
 }
 
 func (n *CreateUserNode) startExec(params runParams) error {
-	normalizedUsername, _, err := n.userAuthInfo.resolve()
+	normalizedUsername, err := n.userNameInfo.resolveUsername()
 	if err != nil {
 		return err
 	}
 
-	var hashedPassword string
+	var hashedPassword = ""
 
 	for _, ro := range n.roleOptions {
 		if ro.Option == roleoption.PASSWORD {
@@ -117,7 +117,6 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		opName = "create-user"
 	}
 
-	// TODO(richardjcai): Handle role / user logic here?
 	// Check if the user/role exists.
 	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
@@ -131,19 +130,12 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		return errors.Wrapf(err, "error looking up user")
 	}
 	if row != nil {
-		isRole := bool(*row[0].(*tree.DBool))
-		if isRole == n.isRole && n.ifNotExists {
-			// The username exists with the same role setting, and we asked to skip
-			// if it exists: no error.
+		if n.ifNotExists {
 			return nil
 		}
-		msg := "a user"
-		if isRole {
-			msg = "a role"
-		}
+
 		return pgerror.Newf(pgcode.DuplicateObject,
-			"%s named %s already exists",
-			msg, normalizedUsername)
+			"user named %s already exists", normalizedUsername)
 	}
 
 	hasCreateRole := n.roleOptions.Contains(roleoption.CREATEROLE)
@@ -221,76 +213,32 @@ func NormalizeAndValidateUsernameNoBlacklist(username string) (string, error) {
 
 var errNoUserNameSpecified = errors.New("no username specified")
 
-type userAuthInfo struct {
-	name     func() (string, error)
-	password func() (bool, string, error)
+type userNameInfo struct {
+	name func() (string, error)
 }
 
-func (p *planner) getUserAuthInfo(nameE tree.Expr, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
+func (p *planner) getUserAuthInfo(nameE tree.Expr, ctx string) (userNameInfo, error) {
 	name, err := p.TypeAsString(nameE, ctx)
 	if err != nil {
-		return userAuthInfo{}, err
+		return userNameInfo{}, err
 	}
 
-	var password func() (bool, string, error)
-
-	// TODO(richardjcai) cleanup password stuff, confirm this works.
-	//var password func() (bool, string, error)
-	//
-	//if passwordValue != nil {
-	//	if (*passwordValue).IsNull {
-	//		password = func() (bool, string, error) {
-	//			return true, "", nil
-	//		}
-	//	} else {
-	//		password = func() (bool, string, error) {
-	//			return false, (*passwordValue).Value, nil
-	//		}
-	//	}
-	//}
-
-	return userAuthInfo{name: name, password: password}, nil
+	return userNameInfo{name: name}, nil
 }
 
-// resolve returns the actual user name and (hashed) password.  The
-// returned hashed password slice is nil iff the user was specified to
-// have no password (e.g. CREATE USER without a PASSWORD clause, or
-// using PASSWORD NULL). If the password was specified but empty
-// (e.g. PASSWORD ''), an error is reported instead.
-func (ua *userAuthInfo) resolve() (string, []byte, error) {
+// resolveUsername returns the actual user name.
+func (ua *userNameInfo) resolveUsername() (string, error) {
 	name, err := ua.name()
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 	if name == "" {
-		return "", nil, errNoUserNameSpecified
+		return "", errNoUserNameSpecified
 	}
 	normalizedUsername, err := NormalizeAndValidateUsername(name)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
-	var hashedPassword []byte
-	//if ua.password != nil {
-	//	resolvedPassword, err := ua.password()
-	//	if err != nil {
-	//		return "", nil, err
-	//	}
-	//
-	//	// This isNull check logic is moved into checking Role Options.
-	//	//if isNull {
-	//	//	return normalizedUsername, hashedPassword, nil
-	//	//}
-	//
-	//	if resolvedPassword == "" {
-	//		return "", nil, security.ErrEmptyPassword
-	//	}
-
-	//hashedPassword, err = security.HashPassword(resolvedPassword)
-	//if err != nil {
-	//	return "", nil, err
-	//}
-	//}
-
-	return normalizedUsername, hashedPassword, nil
+	return normalizedUsername, nil
 }

@@ -21,6 +21,7 @@ package tree
 
 import (
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1202,8 +1203,8 @@ func (pl RoleOptionsWithValues) Format(ctx *FmtCtx) {
 }
 
 func (rol RoleOptionsWithValues) Convert(
-	f func(e Expr, op string) (func() (string, error), error),
-	op string) (roleoption.RoleOptionList, error) {
+	f func(e Expr, op string) (func() (string, error), error), op string,
+) (roleoption.RoleOptionList, error) {
 	roleOptions := make(roleoption.RoleOptionList, len(rol))
 
 	for i, ro := range rol {

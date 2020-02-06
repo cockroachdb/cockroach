@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -22,7 +24,7 @@ import (
 
 // alterRoleOrUserNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleOrUserNode struct {
-	userAuthInfo
+	userNameInfo
 	roleOptions roleoption.RoleOptionList
 
 	run alterRoleOrUserRun
@@ -47,13 +49,13 @@ func (p *planner) AlterRoleOrUserOptions(
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(n.Name, nil, "ALTER ROLE OR USER")
+	ua, err := p.getUserAuthInfo(n.Name, "ALTER ROLE OR USER")
 	if err != nil {
 		return nil, err
 	}
 
 	return &alterRoleOrUserNode{
-		userAuthInfo: ua,
+		userNameInfo: ua,
 		roleOptions:  roleOptions,
 	}, nil
 }
@@ -77,9 +79,38 @@ func (n *alterRoleOrUserNode) startExec(params runParams) error {
 			"cannot edit admin role")
 	}
 
-	normalizedUsername, _, err := n.userAuthInfo.resolve()
+	normalizedUsername, err := n.userNameInfo.resolveUsername()
 	if err != nil {
 		return err
+	}
+
+	var hashedPassword string
+
+	for _, ro := range n.roleOptions {
+		if ro.Option == roleoption.PASSWORD {
+			hashedPassword = ro.Value.Value
+
+			// TODO(knz): Remove in 20.2.
+			if normalizedUsername == security.RootUser && len(hashedPassword) > 0 &&
+				!cluster.Version.IsActive(params.ctx, params.EvalContext().Settings, cluster.VersionRootPassword) {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					`setting a root password requires all nodes to be upgraded to %s`,
+					cluster.VersionByKey(cluster.VersionRootPassword),
+				)
+			}
+
+			if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+				// We disallow setting a non-empty password in insecure mode
+				// because insecure means an observer may have MITM'ed the change
+				// and learned the password.
+				//
+				// It's valid to clear the password (WITH PASSWORD NULL) however
+				// since that forces cert auth when moving back to secure mode,
+				// and certs can't be MITM'ed over the insecure SQL connection.
+				return pgerror.New(pgcode.InvalidPassword,
+					"setting or updating a password is not supported in insecure mode")
+			}
+		}
 	}
 
 	setStmt, err := n.roleOptions.CreateSetStmt()
