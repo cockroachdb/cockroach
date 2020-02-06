@@ -90,7 +90,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	q.Enqueue(txn)
+	q.EnqueueTxn(txn)
 	if _, ok := q.TrackedTxns()[txn.ID]; !ok {
 		t.Fatalf("expected pendingTxn to be in txns map after enqueue")
 	}
@@ -106,7 +106,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -146,7 +146,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Errorf("expected GetDependents to return nil as queue is disabled; got %+v", deps)
 	}
 
-	q.Enqueue(txn)
+	q.EnqueueTxn(txn)
 	if q.IsEnabled() {
 		t.Errorf("expected enqueue to silently fail since queue is disabled")
 	}
@@ -159,7 +159,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatalf("expected update to silently fail since queue is disabled")
 	}
 
-	if resp, pErr := q.MaybeWaitForPush(context.TODO(), tc.repl, &req); resp != nil || pErr != nil {
+	if resp, pErr := q.MaybeWaitForPush(context.TODO(), &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 	if err := checkAllGaugesZero(tc); err != nil {
@@ -190,7 +190,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	if err := checkAllGaugesZero(tc); err != nil {
 		t.Fatal(err.Error())
 	}
-	q.Enqueue(txn)
+	q.EnqueueTxn(txn)
 	m := tc.store.GetTxnWaitMetrics()
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
 	assert.EqualValues(tc, 0, m.PusherWaiting.Value())
@@ -198,7 +198,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(ctx, tc.repl, &req)
+		resp, pErr := q.MaybeWaitForPush(ctx, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -253,13 +253,13 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 
 	q := tc.repl.txnWaitQueue
 	q.Enable()
-	q.Enqueue(txn)
+	q.EnqueueTxn(txn)
 	m := tc.store.GetTxnWaitMetrics()
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req1)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -283,7 +283,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req2)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -371,11 +371,11 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 
 	q := tc.repl.txnWaitQueue
 	q.Enable()
-	q.Enqueue(txn)
+	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, req)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -446,11 +446,11 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 
 	q := tc.repl.txnWaitQueue
 	q.Enable()
-	q.Enqueue(txn)
+	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -521,11 +521,11 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 
 	q := tc.repl.txnWaitQueue
 	q.Enable()
-	q.Enqueue(txn)
+	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req1)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -537,7 +537,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req2)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -609,11 +609,11 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 
 		q := tc.repl.txnWaitQueue
 		q.Enable()
-		q.Enqueue(txn)
+		q.EnqueueTxn(txn)
 
 		retCh := make(chan RespWithErr, 1)
 		go func() {
-			resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
+			resp, pErr := q.MaybeWaitForPush(context.Background(), &req)
 			retCh <- RespWithErr{resp, pErr}
 		}()
 
@@ -724,7 +724,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	for _, txn := range []*roachpb.Transaction{txnA, txnB, txnC} {
-		q.Enqueue(txn)
+		q.EnqueueTxn(txn)
 	}
 	m := tc.store.GetTxnWaitMetrics()
 	assert.EqualValues(tc, 0, m.DeadlocksTotal.Count())
@@ -733,7 +733,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	retCh := make(chan ReqWithRespAndErr, len(reqs))
 	for _, req := range reqs {
 		go func(req *roachpb.PushTxnRequest) {
-			resp, pErr := q.MaybeWaitForPush(ctx, tc.repl, req)
+			resp, pErr := q.MaybeWaitForPush(ctx, req)
 			retCh <- ReqWithRespAndErr{req, resp, pErr}
 		}(req)
 	}
@@ -813,7 +813,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	q.Enable()
 
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
-		q.Enqueue(txn)
+		q.EnqueueTxn(txn)
 	}
 	m := tc.store.GetTxnWaitMetrics()
 	assert.EqualValues(tc, 0, m.DeadlocksTotal.Count())
@@ -822,7 +822,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	retCh := make(chan ReqWithRespAndErr, len(reqs))
 	for _, req := range reqs {
 		go func(req *roachpb.PushTxnRequest) {
-			resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, req)
+			resp, pErr := q.MaybeWaitForPush(context.Background(), req)
 			retCh <- ReqWithRespAndErr{req, resp, pErr}
 		}(req)
 	}

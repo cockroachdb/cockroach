@@ -28,8 +28,8 @@ import (
 )
 
 /*
-Test needs to handle caller constraints wrt latches being held. The datadriven test uses the
-following format:
+Test needs to handle caller constraints wrt latches being held. The datadriven
+test uses the following format:
 
 txn txn=<name> ts=<int>[,<int>] epoch=<int>
 ----
@@ -45,8 +45,8 @@ scan r=<name>
 ----
 <error string>|start-waiting: <bool>
 
- Calls lockTable.scanAndEnqueue. If the request has an existing guard, uses it. If a guard is
- returned, stores it for later use.
+ Calls lockTable.ScanAndEnqueue. If the request has an existing guard, uses it.
+ If a guard is returned, stores it for later use.
 
 acquire r=<name> k=<key> durability=r|u
 ----
@@ -76,19 +76,21 @@ done r=<name>
 ----
 <error string>
 
- Calls lockTable.done() for the named request. The request and guard are discarded after this.
+ Calls lockTable.Dequeue() for the named request. The request and guard are
+ discarded after this.
 
 guard-state r=<name>
 ----
 new|old: state=<state> [txn=<name> ts=<ts>]
 
-  Calls requestGuard.newState() in a non-blocking manner, followed by currentState().
+  Calls lockTableGuard.NewStateChan() in a non-blocking manner, followed by
+  CurState().
 
 guard-start-waiting r=<name>
 ----
 <bool>
 
- Calls requestGuard.startWaiting().
+ Calls lockTableGuard.ShouldWait().
 
 print
 ----
@@ -163,26 +165,14 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 	return spans
 }
 
-type testRequest struct {
-	tM *enginepb.TxnMeta
-	s  *spanset.SpanSet
-	t  hlc.Timestamp
-}
-
-var _ Request = &testRequest{}
-
-func (r *testRequest) txnMeta() *enginepb.TxnMeta { return r.tM }
-func (r *testRequest) spans() *spanset.SpanSet    { return r.s }
-func (r *testRequest) ts() hlc.Timestamp          { return r.t }
-
 func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	lt := newLockTable(1000)
 	txnsByName := make(map[string]*enginepb.TxnMeta)
 	txnCounter := uint128.FromInts(0, 0)
-	requestsByName := make(map[string]*testRequest)
-	guardsByReqName := make(map[string]requestGuard)
+	requestsByName := make(map[string]Request)
+	guardsByReqName := make(map[string]lockTableGuard)
 	datadriven.RunTest(t, "testdata/lock_table", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "txn":
@@ -227,10 +217,13 @@ func TestLockTableBasic(t *testing.T) {
 			}
 			ts := scanTimestamp(t, d)
 			spans := scanSpans(t, d, ts)
-			req := &testRequest{
-				tM: txnMeta,
-				s:  spans,
-				t:  ts,
+			// Update the transaction's timestamp, if necessary. The transaction
+			// may have needed to move its timestamp for any number of reasons.
+			txnMeta.WriteTimestamp = ts
+			req := Request{
+				Txn:       &roachpb.Transaction{TxnMeta: *txnMeta},
+				Timestamp: ts,
+				Spans:     spans,
 			}
 			requestsByName[reqName] = req
 			return ""
@@ -238,21 +231,21 @@ func TestLockTableBasic(t *testing.T) {
 		case "scan":
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
-			req := requestsByName[reqName]
-			if req == nil {
+			req, ok := requestsByName[reqName]
+			if !ok {
 				d.Fatalf(t, "unknown request: %s", reqName)
 			}
 			g := guardsByReqName[reqName]
-			g = lt.scanAndEnqueue(req, g)
+			g = lt.ScanAndEnqueue(req, g)
 			guardsByReqName[reqName] = g
-			return fmt.Sprintf("start-waiting: %t", g.startWaiting())
+			return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
 		case "acquire":
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
-			g := guardsByReqName[reqName]
-			if g == nil {
-				d.Fatalf(t, "unknown guard: %s", reqName)
+			req, ok := requestsByName[reqName]
+			if !ok {
+				d.Fatalf(t, "unknown request: %s", reqName)
 			}
 			var key string
 			d.ScanArgs(t, "k", &key)
@@ -265,7 +258,7 @@ func TestLockTableBasic(t *testing.T) {
 			if s[0] == 'r' {
 				durability = lock.Replicated
 			}
-			if err := lt.acquireLock(roachpb.Key(key), lock.Exclusive, durability, g); err != nil {
+			if err := lt.AcquireLock(&req.Txn.TxnMeta, roachpb.Key(key), lock.Exclusive, durability); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
@@ -282,7 +275,7 @@ func TestLockTableBasic(t *testing.T) {
 			span := getSpan(t, d, s)
 			// TODO(sbhola): also test ABORTED.
 			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
-			if err := lt.updateLocks(intent); err != nil {
+			if err := lt.UpdateLocks(intent); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
@@ -306,7 +299,7 @@ func TestLockTableBasic(t *testing.T) {
 			span := getSpan(t, d, s)
 			// TODO(sbhola): also test STAGING.
 			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
-			if err := lt.updateLocks(intent); err != nil {
+			if err := lt.UpdateLocks(intent); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
@@ -326,31 +319,35 @@ func TestLockTableBasic(t *testing.T) {
 			if !ok {
 				d.Fatalf(t, "unknown txn %s", txnName)
 			}
-			if err := lt.addDiscoveredLock(roachpb.Key(key), txnMeta, txnMeta.WriteTimestamp, g); err != nil {
+			span := roachpb.Span{Key: roachpb.Key(key)}
+			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
+			if err := lt.AddDiscoveredLock(intent, g); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
 
 		case "done":
+			// TODO(nvanbenschoten): rename this command to dequeue.
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
 			g := guardsByReqName[reqName]
 			if g == nil {
 				d.Fatalf(t, "unknown guard: %s", reqName)
 			}
-			lt.done(g)
+			lt.Dequeue(g)
 			delete(guardsByReqName, reqName)
 			delete(requestsByName, reqName)
 			return lt.(*lockTableImpl).String()
 
 		case "guard-start-waiting":
+			// TODO(nvanbenschoten): rename this command to should-wait.
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
 			g := guardsByReqName[reqName]
 			if g == nil {
 				d.Fatalf(t, "unknown guard: %s", reqName)
 			}
-			return fmt.Sprintf("%t", g.startWaiting())
+			return fmt.Sprintf("%t", g.ShouldWait())
 
 		case "guard-state":
 			var reqName string
@@ -361,12 +358,12 @@ func TestLockTableBasic(t *testing.T) {
 			}
 			var str string
 			select {
-			case <-g.newState():
+			case <-g.NewStateChan():
 				str = "new: "
 			default:
 				str = "old: "
 			}
-			state := g.currentState()
+			state := g.CurState()
 			var typeStr string
 			switch state.stateKind {
 			case waitForDistinguished:
