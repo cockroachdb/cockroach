@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -98,6 +99,9 @@ type Registry struct {
 	planFn   planHookMaker
 	metrics  Metrics
 
+	// if non-empty, indicates path to file that prevents any job adoptions.
+	preventAdoptionFile string
+
 	mu struct {
 		syncutil.Mutex
 		// epoch is present to support older nodes that are not using
@@ -132,6 +136,10 @@ type Registry struct {
 // back into the sql package. There's maybe a better way that I'm unaware of.
 type planHookMaker func(opName, user string) (interface{}, func())
 
+// PreventAdoptionFile is the name of the file which, if present in the first
+// on-disk store, will prevent the adoption of background jobs by that node.
+const PreventAdoptionFile = "DISABLE_STARTING_BACKGROUND_JOBS"
+
 // MakeRegistry creates a new Registry. planFn is a wrapper around
 // sql.newInternalPlanner. It returns a sql.PlanHookState, but must be
 // coerced into that in the Resumer functions.
@@ -145,16 +153,18 @@ func MakeRegistry(
 	settings *cluster.Settings,
 	histogramWindowInterval time.Duration,
 	planFn planHookMaker,
+	preventAdoptionFile string,
 ) *Registry {
 	r := &Registry{
-		ac:       ac,
-		stopper:  stopper,
-		clock:    clock,
-		db:       db,
-		ex:       ex,
-		nodeID:   nodeID,
-		settings: settings,
-		planFn:   planFn,
+		ac:                  ac,
+		stopper:             stopper,
+		clock:               clock,
+		db:                  db,
+		ex:                  ex,
+		nodeID:              nodeID,
+		settings:            settings,
+		planFn:              planFn,
+		preventAdoptionFile: preventAdoptionFile,
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
@@ -376,6 +386,10 @@ func (r *Registry) Start(
 			case <-stopper.ShouldStop():
 				return
 			case <-time.After(adoptInterval):
+				if r.adoptionDisabled(ctx) {
+					r.cancelAll(ctx)
+					continue
+				}
 				if err := r.maybeAdoptJob(ctx, nl); err != nil {
 					log.Errorf(ctx, "error while adopting jobs: %s", err)
 				}
@@ -782,6 +796,20 @@ func (r *Registry) resume(
 		return nil, err
 	}
 	return errCh, nil
+}
+
+func (r *Registry) adoptionDisabled(ctx context.Context) bool {
+	if r.preventAdoptionFile != "" {
+		if _, err := os.Stat(r.preventAdoptionFile); err != nil {
+			if !os.IsNotExist(err) {
+				log.Warning(ctx, "error checking if job adoption is currently disabled", err)
+			}
+			return false
+		}
+		log.Warningf(ctx, "job adoption is currently disabled by existence of %s", r.preventAdoptionFile)
+		return true
+	}
+	return false
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {

@@ -558,6 +558,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.ClusterSettings(), s.nodeLiveness, internalExecutor)
 
 	s.sessionRegistry = sql.NewSessionRegistry()
+	var jobAdoptionStopFile string
+	for _, spec := range s.cfg.Stores.Specs {
+		if !spec.InMemory && spec.Path != "" {
+			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
+			break
+		}
+	}
 	s.jobRegistry = jobs.MakeRegistry(
 		s.cfg.AmbientCtx,
 		s.stopper,
@@ -572,6 +579,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// in sql/jobs/registry.go on planHookMaker.
 			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, &execCfg)
 		},
+		jobAdoptionStopFile,
 	)
 	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
 
