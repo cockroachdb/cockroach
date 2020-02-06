@@ -381,6 +381,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				strength = "for-no-key-update"
 			case tree.ForUpdate:
 				strength = "for-update"
+			default:
+				panic(errors.AssertionFailedf("unexpected strength"))
 			}
 			wait := ""
 			switch t.Locking.WaitPolicy {
@@ -389,6 +391,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				wait = ",skip-locked"
 			case tree.LockWaitError:
 				wait = ",nowait"
+			default:
+				panic(errors.AssertionFailedf("unexpected wait policy"))
 			}
 			tp.Childf("locking: %s%s", strength, wait)
 		}
