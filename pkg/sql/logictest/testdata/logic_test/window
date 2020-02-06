@@ -3619,3 +3619,67 @@ ORDER BY
 2  1  2  2  2
 3  2  4  4  3
 4  2  4  4  4
+
+query IIIRRTBTTTTTTTTT
+SELECT
+  *,
+  array_agg(v) OVER (wv RANGE BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING),
+  array_agg(v) OVER (wv RANGE BETWEEN 0 PRECEDING AND 1 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN UNBOUNDED PRECEDING AND -0.0 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN 0.0 PRECEDING AND 1.0 PRECEDING),
+  array_agg(d) OVER (wd RANGE BETWEEN 0.0 FOLLOWING AND 0.0 FOLLOWING),
+  array_agg(d) OVER (wd RANGE BETWEEN 1.0 FOLLOWING AND UNBOUNDED FOLLOWING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL PRECEDING AND '0s'::INTERVAL PRECEDING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL FOLLOWING AND '1s'::INTERVAL FOLLOWING)
+FROM
+  kv
+WINDOW
+  wv AS (ORDER BY v DESC),
+  wf AS (ORDER BY f),
+  wd AS (ORDER BY d DESC),
+  wi AS (ORDER BY i)
+ORDER BY
+  k
+----
+1   2     3  1    1     a     true   00:01:00      {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0}                      NULL  {1}               {-321,NULL,NULL,NULL}          {00:01:00}             NULL
+3   4     5  2    8     a     true   00:00:02      {4,4,4}                    NULL         {0.1,0.2,0.3,1.0,2.0}                  NULL  {8}               {4.4,3,1,-321,NULL,NULL,NULL}  {00:00:02}             NULL
+5   NULL  5  9.9  -321  NULL  false  NULL          {4,4,4,2,2,2,2,NULL,NULL}  {NULL,NULL}  {0.1,0.2,0.3,1.0,2.0,3.0,4.4,6.0,9.9}  NULL  {-321}            {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+6   2     3  4.4  4.4   b     true   00:00:00.001  {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0,2.0,3.0,4.4}          NULL  {4.4}             {3,1,-321,NULL,NULL,NULL}      {00:00:00.001}         NULL
+7   2     2  6    7.9   b     true   4 days        {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0,2.0,3.0,4.4,6.0}      NULL  {7.9}             {4.4,3,1,-321,NULL,NULL,NULL}  {"4 days"}             NULL
+8   4     2  3    3     A     false  3 years       {4,4,4}                    NULL         {0.1,0.2,0.3,1.0,2.0,3.0}              NULL  {3}               {1,-321,NULL,NULL,NULL}        {"3 years"}            NULL
+9   2     9  0.1  NULL  NULL  NULL   NULL          {4,4,4,2,2,2,2}            NULL         {0.1}                                  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+10  4     9  0.2  NULL  NULL  NULL   NULL          {4,4,4}                    NULL         {0.1,0.2}                              NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+11  NULL  9  0.3  NULL  NULL  NULL   NULL          {4,4,4,2,2,2,2,NULL,NULL}  {NULL,NULL}  {0.1,0.2,0.3}                          NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+
+# Regression test for #43083 (CBO optimizing out the single column from ORDER
+# BY clause which led to a crash in the execution engine).
+query IIIRRTBTTTTTTTTT
+SELECT
+  *,
+  array_agg(v) OVER (wv RANGE BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING),
+  array_agg(v) OVER (wv RANGE BETWEEN 0 PRECEDING AND 1 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN UNBOUNDED PRECEDING AND -0.0 PRECEDING),
+  array_agg(f) OVER (wf RANGE BETWEEN 0.0 PRECEDING AND 1.0 PRECEDING),
+  array_agg(d) OVER (wd RANGE BETWEEN 0.0 FOLLOWING AND 0.0 FOLLOWING),
+  array_agg(d) OVER (wd RANGE BETWEEN 1.0 FOLLOWING AND UNBOUNDED FOLLOWING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL PRECEDING AND '0s'::INTERVAL PRECEDING),
+  array_agg(i) OVER (wi RANGE BETWEEN '1s'::INTERVAL FOLLOWING AND '1s'::INTERVAL FOLLOWING)
+FROM
+  kv
+WINDOW
+  wv AS (PARTITION BY v ORDER BY v),
+  wf AS (PARTITION BY f ORDER BY f DESC),
+  wd AS (PARTITION BY d ORDER BY d),
+  wi AS (PARTITION BY i ORDER BY i DESC)
+ORDER BY
+  k
+----
+1   2     3  1    1     a     true   00:01:00      {2,2,2,2}    NULL         {1.0}  NULL  {1}               NULL              {00:01:00}             NULL
+3   4     5  2    8     a     true   00:00:02      {4,4,4}      NULL         {2.0}  NULL  {8}               NULL              {00:00:02}             NULL
+5   NULL  5  9.9  -321  NULL  false  NULL          {NULL,NULL}  {NULL,NULL}  {9.9}  NULL  {-321}            NULL              {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+6   2     3  4.4  4.4   b     true   00:00:00.001  {2,2,2,2}    NULL         {4.4}  NULL  {4.4}             NULL              {00:00:00.001}         NULL
+7   2     2  6    7.9   b     true   4 days        {2,2,2,2}    NULL         {6.0}  NULL  {7.9}             NULL              {"4 days"}             NULL
+8   4     2  3    3     A     false  3 years       {4,4,4}      NULL         {3.0}  NULL  {3}               NULL              {"3 years"}            NULL
+9   2     9  0.1  NULL  NULL  NULL   NULL          {2,2,2,2}    NULL         {0.1}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+10  4     9  0.2  NULL  NULL  NULL   NULL          {4,4,4}      NULL         {0.2}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+11  NULL  9  0.3  NULL  NULL  NULL   NULL          {NULL,NULL}  {NULL,NULL}  {0.3}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
