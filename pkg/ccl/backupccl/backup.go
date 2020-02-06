@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -337,7 +336,7 @@ func getAllDescChanges(
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
 
-	allRevs, err := getAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
+	allRevs, err := storageccl.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
 	if err != nil {
 		return nil, err
 	}
@@ -1643,55 +1642,6 @@ func (b *backupResumer) OnTerminal(
 			tree.NewDInt(tree.DInt(b.res.DataSize)),
 		}
 	}
-}
-
-type versionedValues struct {
-	Key    roachpb.Key
-	Values []roachpb.Value
-}
-
-// getAllRevisions scans all keys between startKey and endKey getting all
-// revisions between startTime and endTime.
-// TODO(dt): if/when client gets a ScanRevisionsRequest or similar, use that.
-func getAllRevisions(
-	ctx context.Context,
-	db *client.DB,
-	startKey, endKey roachpb.Key,
-	startTime, endTime hlc.Timestamp,
-) ([]versionedValues, error) {
-	// TODO(dt): version check.
-	header := roachpb.Header{Timestamp: endTime}
-	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
-		StartTime:     startTime,
-		MVCCFilter:    roachpb.MVCCFilter_All,
-		ReturnSST:     true,
-		OmitChecksum:  true,
-	}
-	resp, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-	if pErr != nil {
-		return nil, pErr.GoError()
-	}
-
-	var res []versionedValues
-	for _, file := range resp.(*roachpb.ExportResponse).Files {
-		sst := engine.MakeRocksDBSstFileReader()
-		defer sst.Close()
-
-		if err := sst.IngestExternalFile(file.SST); err != nil {
-			return nil, err
-		}
-		if err := sst.Iterate(startKey, endKey, func(kv engine.MVCCKeyValue) (bool, error) {
-			if len(res) == 0 || !res[len(res)-1].Key.Equal(kv.Key.Key) {
-				res = append(res, versionedValues{Key: kv.Key.Key})
-			}
-			res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: kv.Key.Timestamp, RawBytes: kv.Value})
-			return false, nil
-		}); err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
 }
 
 var _ jobs.Resumer = &backupResumer{}
