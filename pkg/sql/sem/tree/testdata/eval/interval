@@ -1,8 +1,10 @@
 # Need two interval ops to verify the return type matches the return struct type.
+# The optimizer tries to no-op this if both are 0s, and will return the wrong
+# timezone. This is okay in "eval", as long as it shows correctly in pgwire.
 eval
-'2010-09-28 12:00:00.1-04:00'::timestamptz - '0s'::interval - '0s'::interval
+'2010-09-28 12:00:00.1-04:00'::timestamptz - '1s'::interval - '0s'::interval
 ----
-'2010-09-28 12:00:00.1-04:00'
+'2010-09-28 15:59:59.1+00:00'
 
 eval
 '12h2m1s23ms'::interval + '1h'::interval
