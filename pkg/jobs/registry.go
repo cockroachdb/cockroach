@@ -430,7 +430,9 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 			if err != nil {
 				return err
 			}
-			pendingMutations = len(td.GetMutations()) != 0
+			if len(td.GetMutations()) != 0 || len(td.GetGCMutations()) != 0 {
+				pendingMutations = true
+			}
 			return nil
 		}); err != nil {
 			return false, err
