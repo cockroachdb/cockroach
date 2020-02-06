@@ -758,6 +758,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
+		SlowQueryLogger: log.NewSecondaryLogger(
+			loggerCtx, nil, "sql-slow",
+			true /*enableGc*/, false /*forceSyncWrites*/, true, /* enableMsgCount */
+		),
+
 		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
 		ProtectedTimestampProvider: s.protectedtsProvider,
 	}
