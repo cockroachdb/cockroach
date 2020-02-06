@@ -70,8 +70,8 @@ func newUnloadedReplica(
 		RangeID:        desc.RangeID,
 		store:          store,
 		abortSpan:      abortspan.New(desc.RangeID),
-		txnWaitQueue:   txnwait.NewQueue(store),
 	}
+	r.txnWaitQueue = txnwait.NewQueue(store, r)
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
