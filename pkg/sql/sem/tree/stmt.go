@@ -324,8 +324,6 @@ func (*CreateRoleOrUser) StatementType() StatementType { return RowsAffected }
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateRoleOrUser) StatementTag() string { return "CREATE ROLE" }
 
-func (*CreateRoleOrUser) cclOnlyStatement() {}
-
 func (*CreateRoleOrUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
