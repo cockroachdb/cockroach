@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -27,9 +28,10 @@ func genHashTable(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_PROBE_TYPE", "coltypes.{{$lTyp}}", -1)
+	s = strings.Replace(s, "_BUILD_TYPE", "coltypes.{{$rTyp}}", -1)
+	s = strings.Replace(s, "_ProbeType", "{{$lTyp}}", -1)
+	s = strings.Replace(s, "_BuildType", "{{$rTyp}}", -1)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
 	s = assignNeRe.ReplaceAllString(s, `{{.Global.Assign "$1" "$2" "$3"}}`)
@@ -49,7 +51,18 @@ func genHashTable(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
+	lTypToRTypToOverload := make(map[coltypes.T]map[coltypes.T]*overload)
+	for _, ov := range anyTypeComparisonOpToOverloads[tree.NE] {
+		lTyp := ov.LTyp
+		rTyp := ov.RTyp
+		rTypToOverload := lTypToRTypToOverload[lTyp]
+		if rTypToOverload == nil {
+			rTypToOverload = make(map[coltypes.T]*overload)
+			lTypToRTypToOverload[lTyp] = rTypToOverload
+		}
+		rTypToOverload[rTyp] = ov
+	}
+	return tmpl.Execute(wr, lTypToRTypToOverload)
 }
 
 func init() {
