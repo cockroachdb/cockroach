@@ -43,8 +43,10 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
-	isTemporary := n.temporary
+	telemetry.Inc(sqltelemetry.SchemaChangeCreate("view"))
+
 	viewName := string(n.viewName)
+	isTemporary := n.temporary
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
 	// First check the backrefs and see if any of them are temporary.

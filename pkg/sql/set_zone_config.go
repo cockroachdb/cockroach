@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -296,6 +297,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		}
 	}
+
+	telemetry.Inc(
+		sqltelemetry.SchemaChangeAlterWithExtra(n.zoneSpecifier.TelemetryName(), "configure_zone"),
+	)
 
 	// If the specifier is for a table, partition or index, this will
 	// resolve the table descriptor. If the specifier is for a database

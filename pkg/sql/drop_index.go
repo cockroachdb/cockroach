@@ -16,12 +16,14 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -66,6 +68,8 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 func (n *dropIndexNode) ReadingOwnWrites() {}
 
 func (n *dropIndexNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeDrop("index"))
+
 	ctx := params.ctx
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in

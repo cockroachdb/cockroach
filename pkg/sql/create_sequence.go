@@ -15,9 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -50,6 +52,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 func (n *createSequenceNode) ReadingOwnWrites() {}
 
 func (n *createSequenceNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreate("sequence"))
 	// TODO(arul): Allow temporary sequences once temp tables work for regular tables.
 	if n.n.Temporary {
 		return unimplemented.NewWithIssuef(5807,
