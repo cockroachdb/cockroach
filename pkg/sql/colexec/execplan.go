@@ -559,14 +559,10 @@ func NewColOperator(
 							ctx, result.createBufferingMemAccountWithLimit(
 								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							))
-						diskQueuesUnlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
-							))
 						return newExternalHashJoiner(
 							allocator, hjSpec,
 							inputOne, inputTwo,
-							diskQueuesUnlimitedAllocator,
+							args.DiskQueueCfg,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -771,17 +767,12 @@ func NewColOperator(
 							ctx, result.createStandaloneMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
-						diskQueuesUnlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
-							))
 						return newExternalSorter(
 							unlimitedAllocator,
 							standaloneAllocator,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							args.TestingKnobs.MaxNumberPartitions,
-							diskQueuesUnlimitedAllocator,
 							args.DiskQueueCfg,
 						)
 					},

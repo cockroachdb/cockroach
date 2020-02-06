@@ -559,6 +559,7 @@ var (
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-vec",
+		"fakedist-vec-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
 	}
