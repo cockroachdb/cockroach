@@ -2109,7 +2109,7 @@ func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*
 	}
 	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
 	_, offset := t.Zone()
-	t = duration.Add(t, duration.FromInt64(int64(offset))).UTC()
+	t = t.Add(time.Duration(offset) * time.Second).UTC()
 	return MakeDTimestamp(t, precision), nil
 }
 
@@ -2324,7 +2324,8 @@ func ParseDTimestampTZ(
 	if err != nil {
 		return nil, err
 	}
-	return MakeDTimestampTZ(t, precision), nil
+	// Always normalize time to the current location.
+	return MakeDTimestampTZ(t.In(now.Location()), precision), nil
 }
 
 // AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
@@ -2438,8 +2439,8 @@ func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
 // location, returning a timestamp without a timezone.
 func (d *DTimestampTZ) EvalAtTimeZone(ctx *EvalContext, loc *time.Location) *DTimestamp {
 	_, locOffset := d.Time.In(loc).Zone()
-	newTime := duration.Add(d.Time.UTC(), duration.FromInt64(int64(locOffset)))
-	return MakeDTimestamp(newTime, time.Microsecond)
+	t := d.Time.UTC().Add(time.Duration(locOffset) * time.Second).UTC()
+	return MakeDTimestamp(t, time.Microsecond)
 }
 
 // DInterval is the interval Datum.
