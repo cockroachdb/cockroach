@@ -12,10 +12,12 @@ import { all, fork } from "redux-saga/effects";
 
 import { queryMetricsSaga } from "./metrics";
 import { localSettingsSaga } from "./localsettings";
+import { customAnalyticsSaga } from "./customAnalytics";
 
 export default function* rootSaga() {
   yield all([
     fork(queryMetricsSaga),
     fork(localSettingsSaga),
+    fork(customAnalyticsSaga),
   ]);
 }
