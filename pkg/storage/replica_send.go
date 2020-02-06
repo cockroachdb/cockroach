@@ -311,7 +311,7 @@ func (r *Replica) handleTransactionPushError(
 		return pErr
 	}
 	// Enqueue unsuccessfully pushed transaction on the txnWaitQueue and retry.
-	r.txnWaitQueue.Enqueue(&t.PusheeTxn)
+	r.txnWaitQueue.EnqueueTxn(&t.PusheeTxn)
 	return nil
 }
 

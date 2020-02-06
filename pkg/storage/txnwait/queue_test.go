@@ -205,14 +205,14 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ms := newMockStore(nil)
 	defer ms.Stopper().Stop(context.Background())
-	q := NewQueue(ms)
+	q := NewQueue(ms, mockRepl{})
 	q.Enable()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	waitingRes := make(chan *roachpb.Error)
 	go func() {
 		req := &roachpb.QueryTxnRequest{WaitForUpdate: true}
-		waitingRes <- q.MaybeWaitForQuery(ctx, mockRepl{}, req)
+		waitingRes <- q.MaybeWaitForQuery(ctx, req)
 	}()
 
 	cancel()
@@ -247,7 +247,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 		return mockSender(ctx, ba)
 	})
 	defer ms.Stopper().Stop(context.Background())
-	q := NewQueue(ms)
+	q := NewQueue(ms, mockRepl{})
 	q.Enable()
 
 	// Set an extremely high transaction liveness threshold so that the pushee
@@ -256,7 +256,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 
 	// Enqueue pushee transaction in the queue.
 	txn := roachpb.MakeTransaction("test", nil, 0, ms.Clock().Now(), 0)
-	q.Enqueue(&txn)
+	q.EnqueueTxn(&txn)
 
 	const numPushees = 3
 	var queryTxnCount int32
@@ -285,7 +285,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 			defer wg.Done()
 			ctx := context.Background()
 			req := roachpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: roachpb.PUSH_ABORT}
-			res, err := q.MaybeWaitForPush(ctx, mockRepl{}, &req)
+			res, err := q.MaybeWaitForPush(ctx, &req)
 			require.Nil(t, err)
 			require.NotNil(t, res)
 			require.Equal(t, roachpb.ABORTED, res.PusheeTxn.Status)
