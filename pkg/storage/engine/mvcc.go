@@ -1528,17 +1528,27 @@ func mvccPutInternal(
 			// that though - we must record the older value in the IntentHistory.
 
 			// But where to find the older value? There are 4 cases:
-			// - last write inside txn, same epoch, seqnum of last write is not ignored: value at key.
-			//   => read the value associated with the intent with consistent mvccGetInternal().
-			//   (This is the common case.)
-			// - last write inside txn, same epoch, seqnum of last write is ignored: cannot use value at key.
+			// - last write inside txn, same epoch, seqnum of last write is not
+			//   ignored: value at key.
+			//   => read the value associated with the intent with consistent
+			//   mvccGetInternal(). (This is the common case.)
+			// - last write inside txn, same epoch, seqnum of last write is ignored:
+			//   cannot use value at key.
 			//   => try reading from intent history.
-			//   => if all intent history entries are rolled back, fall back to last case below.
-			// - last write outside txn or at different epoch: use inconsistent mvccGetInternal,
-			//   which will find it outside.
+			//   => if all intent history entries are rolled back, fall back to last
+			//      case below.
+			// - last write outside txn or at different epoch: use inconsistent
+			//   mvccGetInternal, which will find it outside.
 			//
-			// (Note that _some_ value is guaranteed to be found, as indicated by ok == true above.)
+			// (Note that _some_ value is guaranteed to be found, as indicated by
+			// ok == true above. The one notable exception is when there are no past
+			// committed values, and all past writes by this transaction have been
+			// rolled back, either due to transaction retries or transaction savepoint
+			// rollbacks.)
 			var existingVal *roachpb.Value
+			// Set to true when the current provisional value is not ignored due to
+			// a txn restart or a savepoint rollback.
+			var curProvNotIgnored bool
 			if txn.Epoch == meta.Txn.Epoch /* last write inside txn */ {
 				if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, txn.IgnoredSeqNums) {
 					// Seqnum of last write is not ignored. Retrieve the value
@@ -1553,6 +1563,7 @@ func mvccPutInternal(
 					if err != nil {
 						return err
 					}
+					curProvNotIgnored = true
 				} else {
 					// Seqnum of last write was ignored. Try retrieving the value from the history.
 					prevIntent, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
@@ -1560,10 +1571,9 @@ func mvccPutInternal(
 						existingVal = &roachpb.Value{RawBytes: prevIntent.Value}
 					}
 				}
-
 			}
 			if existingVal == nil {
-				// "last write inside txn && seqnum of last write is not ignored"
+				// "last write inside txn && seqnum of all writes are ignored"
 				// OR
 				// "last write outside txn"
 				// => use inconsistent mvccGetInternal to retrieve the last committed value at key.
@@ -1589,16 +1599,6 @@ func mvccPutInternal(
 					return err
 				}
 			}
-
-			// It's possible that the existing value is nil if the intent on the key
-			// has a lower epoch. We don't have to deal with this as a special case
-			// because in this case, the value isn't written to the intent history.
-			// Instead, the intent history is blown away completely.
-			var prevIntentValBytes []byte
-			if existingVal != nil {
-				prevIntentValBytes = existingVal.RawBytes
-			}
-			prevIntentSequence := meta.Txn.Sequence
 
 			// We are replacing our own write intent. If we are writing at
 			// the same timestamp (see comments in else block) we can
@@ -1637,20 +1637,28 @@ func mvccPutInternal(
 			}
 			// Since an intent with a smaller sequence number exists for the
 			// same transaction, we must add the previous value and sequence
-			// to the intent history.
+			// to the intent history, if that previous value does not belong to an
+			// ignored sequence number.
 			//
 			// If the epoch of the transaction doesn't match the epoch of the
-			// intent, blow away the intent history.
-			if txn.Epoch == meta.Txn.Epoch {
-				if existingVal == nil {
-					// This case shouldn't pop up, but it is worth asserting
-					// that it doesn't. We shouldn't write invalid intents
-					// to the history.
-					return errors.Errorf(
-						"previous intent of the transaction with the same epoch not found for %s (%+v)",
-						metaKey, txn)
+			// intent, or if the existing value is nil due to all past writes being
+			// ignored and there are no other committed values, blow away the intent
+			// history.
+			//
+			// Note that the only case where txn.Epoch == meta.Txn.Epoch &&
+			// existingVal == nil will be true is when all past writes by this
+			// transaction are ignored, and there are no past committed values at this
+			// key. In that case, we can also blow up the intent history.
+			if txn.Epoch == meta.Txn.Epoch && existingVal != nil {
+				// Only add the current provisional value to the intent
+				// history if the current sequence number is not ignored. There's no
+				// reason to add past committed values or a value already in the intent
+				// history back into it.
+				if curProvNotIgnored {
+					prevIntentValBytes := existingVal.RawBytes
+					prevIntentSequence := meta.Txn.Sequence
+					buf.newMeta.AddToIntentHistory(prevIntentSequence, prevIntentValBytes)
 				}
-				buf.newMeta.AddToIntentHistory(prevIntentSequence, prevIntentValBytes)
 			} else {
 				buf.newMeta.IntentHistory = nil
 			}
