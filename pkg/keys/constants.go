@@ -262,6 +262,16 @@ var (
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 	// TimeseriesKeyMax is the maximum value for any timeseries data.
 	TimeseriesKeyMax = TimeseriesPrefix.PrefixEnd()
+	//
+	// ClusterVersionPrefix specifies the key prefix to store all cluster version details.
+	ClusterVersionPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("cluster-version/")))
+	// ClusterVersionCurrent WIP. It is not guaranteed that every node+store has
+	// this version saved locally. However, this is the verison handed to new
+	// nodes. To ensure that all nodes are at least a target version, use
+	// fflag.Server.ForwardCluster.
+	ClusterVersionCurrent = roachpb.Key(makeKey(ClusterVersionPrefix, roachpb.RKey("current")))
+	// ClusterVersionKeyMax is the maximum value for any everynode key.
+	ClusterVersionKeyMax = ClusterVersionPrefix.PrefixEnd()
 
 	// 3. SQL keys
 	//

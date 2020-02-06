@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -295,7 +296,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	delayable bool,
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
-	if !cluster.Version.IsActive(ctx, r.store.ClusterSettings(), cluster.VersionStickyBit) {
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionStickyBit) {
 		// If sticky bits aren't supported yet but we receive one anyway, ignore
 		// it. The callers are supposed to only pass hlc.Timestamp{} in that
 		// case, but this is violated in at least one case (and there are lots of
@@ -965,7 +966,7 @@ func (r *Replica) ChangeReplicas(
 	// We execute the change serially if we're not allowed to run atomic
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
-	unroll := !cluster.Version.IsActive(ctx, st, cluster.VersionAtomicChangeReplicas) ||
+	unroll := !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicas) ||
 		!UseAtomicReplicationChanges.Get(&st.SV)
 
 	if unroll {
@@ -1005,8 +1006,8 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	settings := r.ClusterSettings()
-	if useLearners := cluster.Version.IsActive(
-		ctx, settings, cluster.VersionLearnerReplicas,
+	if useLearners := settings.Version.IsActive(
+		ctx, clusterversion.VersionLearnerReplicas,
 	); !useLearners {
 		// NB: we will never use atomic replication changes while learners are not
 		// also active.
@@ -1330,7 +1331,7 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	canUseDemotion := cluster.Version.IsActive(ctx, r.store.ClusterSettings(), cluster.VersionChangeReplicasDemotion)
+	canUseDemotion := r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionChangeReplicasDemotion)
 	for _, target := range chgs.Removals() {
 		typ := internalChangeTypeRemove
 		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL && canUseDemotion {
@@ -1513,8 +1514,8 @@ func prepareChangeReplicasTrigger(
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
-	generationComparableEnabled := cluster.Version.IsActive(
-		ctx, store.ClusterSettings(), cluster.VersionGenerationComparable)
+	generationComparableEnabled := store.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.VersionGenerationComparable)
 	if generationComparableEnabled {
 		updatedDesc.IncrementGeneration()
 		updatedDesc.GenerationComparable = proto.Bool(true)
@@ -1618,8 +1619,8 @@ func prepareChangeReplicasTrigger(
 	}
 
 	var crt *roachpb.ChangeReplicasTrigger
-	if !cluster.Version.IsActive(
-		ctx, store.ClusterSettings(), cluster.VersionAtomicChangeReplicasTrigger,
+	if !store.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.VersionAtomicChangeReplicasTrigger,
 	) {
 		var deprecatedChangeType roachpb.ReplicaChangeType
 		var deprecatedRepDesc roachpb.ReplicaDescriptor
@@ -2130,8 +2131,8 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-	useAtomic := cluster.Version.IsActive(
-		ctx, s.ClusterSettings(), cluster.VersionAtomicChangeReplicas)
+	useAtomic := s.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.VersionAtomicChangeReplicas)
 	if useAtomic {
 		// AdminChangeReplicas will only allow atomic replication changes when
 		// this magic flag is set because we changed the corresponding request
@@ -2550,7 +2551,7 @@ func (r *Replica) adminVerifyProtectedTimestamp(
 func maybeMarkGenerationComparable(
 	ctx context.Context, st *cluster.Settings, desc *roachpb.RangeDescriptor,
 ) {
-	if cluster.Version.IsActive(ctx, st, cluster.VersionGenerationComparable) {
+	if st.Version.IsActive(ctx, clusterversion.VersionGenerationComparable) {
 		desc.GenerationComparable = proto.Bool(true)
 	}
 }

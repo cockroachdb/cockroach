@@ -21,23 +21,31 @@ import (
 	"github.com/pkg/errors"
 )
 
+type hookType string
+
+const (
+	noHook  hookType = ""
+	preHook hookType = "preHook"
+)
+
 // keyedVersion associates a key to a version.
 type keyedVersion struct {
 	Key VersionKey
 	roachpb.Version
+	Hook hookType
 }
 
 // keyedVersions is a container for managing the versions of CockroachDB.
 type keyedVersions []keyedVersion
 
 // MustByKey asserts that the version specified by this key exists, and returns it.
-func (kv keyedVersions) MustByKey(k VersionKey) roachpb.Version {
+func (kv keyedVersions) MustByKey(k VersionKey) keyedVersion {
 	key := int(k)
 	if key >= len(kv) || key < 0 {
 		log.Fatalf(context.Background(), "version with key %d does not exist, have:\n%s",
 			key, pretty.Sprint(kv))
 	}
-	return kv[key].Version
+	return kv[key]
 }
 
 // Validate makes sure that the keyedVersions are sorted chronologically, that

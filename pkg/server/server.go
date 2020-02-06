@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/migration"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -163,6 +165,7 @@ type Server struct {
 	clock      *hlc.Clock
 	startTime  time.Time
 	rpcContext *rpc.Context
+	migration  *migration.Server
 	// The gRPC server on which the different RPC handlers will be registered.
 	grpc             *grpcServer
 	gossip           *gossip.Gossip
@@ -211,6 +214,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	st := cfg.Settings
+	if st.Version != nil {
+		return nil, errors.New(`settings.Version was already set`)
+	}
+	st.Version = cluster.MakeLegacyVersionHandle(st)
 
 	if cfg.AmbientCtx.Tracer == nil {
 		panic(errors.New("no tracer set in AmbientCtx"))
@@ -883,7 +890,7 @@ func inspectEngines(
 ) (
 	bootstrappedEngines []engine.Engine,
 	emptyEngines []engine.Engine,
-	_ cluster.ClusterVersion,
+	_ clusterversion.ClusterVersion,
 	_ error,
 ) {
 	for _, engine := range engines {
@@ -892,14 +899,14 @@ func inspectEngines(
 			emptyEngines = append(emptyEngines, engine)
 			continue
 		} else if err != nil {
-			return nil, nil, cluster.ClusterVersion{}, err
+			return nil, nil, clusterversion.ClusterVersion{}, err
 		}
 		clusterID := clusterIDContainer.Get()
 		if storeIdent.ClusterID != uuid.Nil {
 			if clusterID == uuid.Nil {
 				clusterIDContainer.Set(ctx, storeIdent.ClusterID)
 			} else if storeIdent.ClusterID != clusterID {
-				return nil, nil, cluster.ClusterVersion{},
+				return nil, nil, clusterversion.ClusterVersion{},
 					errors.Errorf("conflicting store cluster IDs: %s, %s", storeIdent.ClusterID, clusterID)
 			}
 		}
@@ -908,7 +915,7 @@ func inspectEngines(
 
 	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, minVersion, serverVersion)
 	if err != nil {
-		return nil, nil, cluster.ClusterVersion{}, err
+		return nil, nil, clusterversion.ClusterVersion{}, err
 	}
 	return bootstrappedEngines, emptyEngines, cv, nil
 }
@@ -1340,8 +1347,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	bootstrappedEngines, _, _, err := inspectEngines(
 		ctx, s.engines,
-		cluster.Version.BinaryMinSupportedVersion(s.cfg.Settings),
-		cluster.Version.BinaryVersion(s.cfg.Settings),
+		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
+		s.cfg.Settings.Version.BinaryVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
@@ -1461,14 +1468,17 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
-	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(
+	bootstrappedEngines, emptyEngines, bootVersion, err := inspectEngines(
 		ctx, s.engines,
-		cluster.Version.BinaryMinSupportedVersion(s.cfg.Settings),
-		cluster.Version.BinaryVersion(s.cfg.Settings),
+		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
+		s.cfg.Settings.Version.BinaryVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
+
+	// WIP move this way earlier in the boot process
+	s.migration, s.cfg.Settings.Version = migration.NewServer(bootVersion, s.engines)
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current
 	// instance of the node can use. We do not use startTime because it is lower
@@ -1485,7 +1495,6 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.ClusterName,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
-		cv,
 		s.cfg.LocalityAddresses,
 		s.execCfg.DistSQLPlanner.SetNodeDesc,
 	); err != nil {
@@ -1967,7 +1976,7 @@ func (s *Server) startServeSQL(
 }
 
 func (s *Server) bootstrapVersion() roachpb.Version {
-	v := cluster.BinaryServerVersion
+	v := clusterversion.BinaryServerVersion
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
 		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
 			v = ov
@@ -1978,7 +1987,7 @@ func (s *Server) bootstrapVersion() roachpb.Version {
 
 func (s *Server) bootstrapCluster(ctx context.Context, bootstrapVersion roachpb.Version) error {
 	if err := s.node.bootstrapCluster(
-		ctx, s.engines, cluster.ClusterVersion{Version: bootstrapVersion},
+		ctx, s.engines, clusterversion.ClusterVersion{Version: bootstrapVersion},
 		&s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig,
 	); err != nil {
 		return err

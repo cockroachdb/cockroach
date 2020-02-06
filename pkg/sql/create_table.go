@@ -1162,7 +1162,7 @@ func MakeTableDesc(
 	// before the version has been initialized, leading to a panic. There are also
 	// cases where this function is called in tests where st is nil.
 	if st != nil {
-		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (clusterversion.ClusterVersion{}) &&
+		if version := st.Version.ActiveVersionOrEmpty(ctx); version != (clusterversion.ClusterVersion{}) &&
 			version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
 			indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
 		}
@@ -1332,7 +1332,7 @@ func MakeTableDesc(
 	// If any nodes are not at version VersionPrimaryKeyColumnsOutOfFamilyZero, then return an error
 	// if a primary key column is not in column family 0.
 	if st != nil {
-		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (clusterversion.ClusterVersion{}) &&
+		if version := st.Version.ActiveVersionOrEmpty(ctx); version != (clusterversion.ClusterVersion{}) &&
 			!version.IsActive(clusterversion.VersionPrimaryKeyColumnsOutOfFamilyZero) {
 			var colsInFamZero util.FastIntSet
 			for _, colID := range desc.Families[0].ColumnIDs {

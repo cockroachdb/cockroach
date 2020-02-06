@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -33,7 +34,7 @@ import (
 // parameters for CLI utilities (other than `cockroach start`, which
 // constructs a proper server.Config for the newly created server).
 var serverCfg = func() server.Config {
-	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	st := cluster.MakeClusterSettings(clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
 	settings.SetCanonicalValuesContainer(&st.SV)
 
 	s := server.MakeConfig(context.Background(), st)

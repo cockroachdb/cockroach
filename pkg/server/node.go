@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -214,7 +215,7 @@ func GetBootstrapSchema(
 func bootstrapCluster(
 	ctx context.Context,
 	engines []engine.Engine,
-	bootstrapVersion cluster.ClusterVersion,
+	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (uuid.UUID, error) {
@@ -282,8 +283,8 @@ func NewNode(
 		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores: storage.NewStores(
 			cfg.AmbientCtx, cfg.Clock,
-			cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
-			cluster.Version.BinaryVersion(cfg.Settings)),
+			cfg.Settings.Version.BinaryMinSupportedVersion(),
+			cfg.Settings.Version.BinaryVersion()),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -317,7 +318,7 @@ func (n *Node) AnnotateCtxWithSpan(
 func (n *Node) bootstrapCluster(
 	ctx context.Context,
 	engines []engine.Engine,
-	bootstrapVersion cluster.ClusterVersion,
+	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) error {
@@ -335,7 +336,7 @@ func (n *Node) bootstrapCluster(
 	return nil
 }
 
-func (n *Node) onClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) {
+func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.ClusterVersion) {
 	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
 		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
 	}
@@ -353,14 +354,9 @@ func (n *Node) start(
 	clusterName string,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
-	cv cluster.ClusterVersion,
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := cluster.Version.Initialize(ctx, cv.Version, n.storeCfg.Settings); err != nil {
-		return err
-	}
-
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
@@ -402,7 +398,7 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   cluster.Version.BinaryVersion(n.storeCfg.Settings),
+		ServerVersion:   n.storeCfg.Settings.Version.BinaryVersion(),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 	}
@@ -504,10 +500,10 @@ func (n *Node) start(
 	// It's important that we persist new versions to the engines before the node
 	// starts using it, otherwise the node might regress the version after a
 	// crash.
-	cluster.Version.SetBeforeChange(ctx, n.storeCfg.Settings, n.onClusterVersionChange)
+	cluster.SetBeforeChangeVersion(ctx, n.storeCfg.Settings, n.onClusterVersionChange)
 	// Invoke the callback manually once so that we persist the updated value that
 	// gossip might have already received.
-	clusterVersion := cluster.Version.ActiveVersion(ctx, n.storeCfg.Settings)
+	clusterVersion := n.storeCfg.Settings.Version.ActiveVersion(ctx)
 	n.onClusterVersionChange(ctx, clusterVersion)
 
 	// Be careful about moving this line above `startStores`; store migrations rely
@@ -557,7 +553,7 @@ func (n *Node) addStore(store *storage.Store) {
 	if err != nil {
 		log.Fatal(context.TODO(), err)
 	}
-	if cv == (cluster.ClusterVersion{}) {
+	if cv == (clusterversion.ClusterVersion{}) {
 		// The store should have had a version written to it during the store
 		// bootstrap process.
 		log.Fatal(context.TODO(), "attempting to add a store without a version")

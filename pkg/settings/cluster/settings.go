@@ -53,6 +53,7 @@ type Settings struct {
 	cpuProfiling int32 // atomic
 
 	// Versions describing the range supported by this binary.
+	Version                      clusterversion.Handle
 	binaryMinSupportedVersion    roachpb.Version
 	binaryServerVersion          roachpb.Version
 	beforeClusterVersionChangeMu struct {
@@ -91,7 +92,7 @@ var NoSettings *Settings // = nil
 // KeyVersionSetting is the "version" settings key.
 const KeyVersionSetting = "version"
 
-// Version represents the cluster's "active version". The active version is a
+// version represents the cluster's "active version". The active version is a
 // cluster setting, but a special one. It can only advance to higher and higher
 // versions. The setting can be used to see if migrations are to be considered
 // enabled or disabled through the IsActive() method.
@@ -118,7 +119,35 @@ const KeyVersionSetting = "version"
 // (typically a collection of `engine.Engine`s), which the caller will do by
 // registering itself via SetBeforeChange()`, which is invoked *before* exposing
 // the new version to callers of `IsActive()` and `Version()`.
-var Version = registerClusterVersionSetting()
+var version = registerClusterVersionSetting()
+
+type legacyVersionHandle struct {
+	settings *Settings
+}
+
+var _ clusterversion.Handle = (*legacyVersionHandle)(nil)
+
+// MakeLegacyVersionHandle adapts the legacy settings-based ClusterVersion
+// implementation into the new interface.
+func MakeLegacyVersionHandle(settings *Settings) clusterversion.Handle {
+	return &legacyVersionHandle{settings: settings}
+}
+
+func (h *legacyVersionHandle) ActiveVersion(ctx context.Context) clusterversion.ClusterVersion {
+	return version.ActiveVersion(ctx, h.settings)
+}
+func (h *legacyVersionHandle) ActiveVersionOrEmpty(ctx context.Context) clusterversion.ClusterVersion {
+	return version.ActiveVersionOrEmpty(ctx, h.settings)
+}
+func (h *legacyVersionHandle) IsActive(ctx context.Context, key clusterversion.VersionKey) bool {
+	return version.IsActive(ctx, h.settings, key)
+}
+func (h *legacyVersionHandle) BinaryVersion() roachpb.Version {
+	return h.settings.binaryServerVersion
+}
+func (h *legacyVersionHandle) BinaryMinSupportedVersion() roachpb.Version {
+	return h.settings.binaryMinSupportedVersion
+}
 
 // registerClusterVersionSetting creates a clusterVersionSetting and registers
 // it with the cluster settings registry.
@@ -144,7 +173,7 @@ var preserveDowngradeVersion = func() *settings.StringSetting {
 			}
 			opaque := sv.Opaque()
 			st := opaque.(*Settings)
-			clusterVersion := Version.ActiveVersion(context.TODO(), st).Version
+			clusterVersion := version.ActiveVersion(context.TODO(), st).Version
 			downgradeVersion, err := roachpb.ParseVersion(s)
 			if err != nil {
 				return err
@@ -175,7 +204,7 @@ func MakeTestingClusterSettings() *Settings {
 func MakeTestingClusterSettingsWithVersion(minVersion, serverVersion roachpb.Version) *Settings {
 	st := MakeClusterSettings(minVersion, serverVersion)
 	// Initialize with all features enabled.
-	if err := Version.Initialize(context.TODO(), serverVersion, st); err != nil {
+	if err := version.Initialize(context.TODO(), serverVersion, st); err != nil {
 		log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
 	}
 	return st
@@ -227,12 +256,11 @@ func makeClusterVersionSetting() clusterVersionSetting {
 	return s
 }
 
-func (cv clusterVersionSetting) BinaryVersion(st *Settings) roachpb.Version {
-	return st.binaryServerVersion
-}
-
-func (cv clusterVersionSetting) BinaryMinSupportedVersion(st *Settings) roachpb.Version {
-	return st.binaryMinSupportedVersion
+// InitializeVersion WIP
+func InitializeVersion(
+	ctx context.Context, v roachpb.Version, st *Settings,
+) error {
+	return version.Initialize(ctx, v, st)
 }
 
 // Initialize initializes cluster version. Before this method has been
@@ -340,6 +368,13 @@ func (cv clusterVersionSetting) BeforeChange(
 		cb(ctx, clusterVersion)
 	}
 	st.beforeClusterVersionChangeMu.Unlock()
+}
+
+// SetBeforeChangeVersion WIP
+func SetBeforeChangeVersion(
+	ctx context.Context, st *Settings, cb func(ctx context.Context, newVersion clusterversion.ClusterVersion),
+) {
+	version.SetBeforeChange(ctx, st, cb)
 }
 
 // SetBeforeChange registers a callback to be called before the cluster version

@@ -23,6 +23,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -104,7 +105,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
 	if params.Settings == nil {
-		st = cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+		st = cluster.MakeClusterSettings(clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
 	}
 	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +38,7 @@ type unsplitRun struct {
 
 func (n *unsplitNode) startExec(params runParams) error {
 	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, clusterversion.VersionStickyBit)
+	stickyBitEnabled := st.Version.IsActive(params.ctx, clusterversion.VersionStickyBit)
 	// TODO(jeffreyxiao): Remove this error in v20.1.
 	if !stickyBitEnabled {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -99,7 +98,7 @@ type unsplitAllRun struct {
 
 func (n *unsplitAllNode) startExec(params runParams) error {
 	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, clusterversion.VersionStickyBit)
+	stickyBitEnabled := st.Version.IsActive(params.ctx, clusterversion.VersionStickyBit)
 	// TODO(jeffreyxiao): Remove this error in v20.1.
 	if !stickyBitEnabled {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,

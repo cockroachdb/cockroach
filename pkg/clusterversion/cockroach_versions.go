@@ -10,7 +10,13 @@
 
 package clusterversion
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+)
 
 // VersionKey is a unique identifier for a version of CockroachDB.
 type VersionKey int
@@ -56,6 +62,7 @@ const (
 	VersionPrimaryKeyColumnsOutOfFamilyZero
 	VersionRootPassword
 	VersionNoExplicitForeignKeyIndexIDs
+	VersionFoo
 
 	// Add new versions here (step one of two).
 )
@@ -399,6 +406,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
 	},
 
+	{
+		Key:     VersionFoo,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
+		Hook:    preHook,
+	},
+
 	// Add new versions here (step two of two).
 
 })
@@ -425,5 +438,51 @@ var (
 // VersionByKey returns the roachpb.Version for a given key.
 // It is a fatal error to use an invalid key.
 func VersionByKey(key VersionKey) roachpb.Version {
-	return versionsSingleton.MustByKey(key)
+	v, _ := VersionAndHookByKey(key)
+	return v
+}
+
+// VersionAndHookByKey returns the roachpb.Version and (optional) Hook for a
+// given key. It is a fatal error to use an invalid key.
+func VersionAndHookByKey(key VersionKey) (roachpb.Version, HookFn) {
+	v := versionsSingleton.MustByKey(key)
+	hookRegistry.mu.Lock()
+	defer hookRegistry.mu.Unlock()
+	hook := hookRegistry.mu.hooks[key]
+	switch v.Hook {
+	case noHook:
+		if hook != nil {
+			panic(errors.AssertionFailedf(`unexpected hook for key: %s`, key))
+		}
+	case preHook:
+		if hook == nil {
+			panic(errors.AssertionFailedf(`missing hook or key: %s`, key))
+		}
+	}
+	return v.Version, hook
+}
+
+// HookArgs is a marker for WIP. This is a low level package that can't have the
+// deps of WIP.
+type HookArgs interface{}
+
+type HookFn func(context.Context, HookArgs) error
+
+var hookRegistry struct {
+	mu struct {
+		syncutil.Mutex
+		hooks map[VersionKey]HookFn
+	}
+}
+
+func RegisterHook(key VersionKey, hook HookFn) {
+	hookRegistry.mu.Lock()
+	defer hookRegistry.mu.Unlock()
+	if hookRegistry.mu.hooks == nil {
+		hookRegistry.mu.hooks = make(map[VersionKey]HookFn)
+	}
+	if _, ok := hookRegistry.mu.hooks[key]; ok {
+		panic(errors.AssertionFailedf(`multiple hooks registered for key: %s`, key))
+	}
+	hookRegistry.mu.hooks[key] = hook
 }
