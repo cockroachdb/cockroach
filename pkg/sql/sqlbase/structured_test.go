@@ -61,6 +61,11 @@ func TestAllocateIDs(t *testing.T) {
 		Indexes: []IndexDescriptor{
 			makeIndexDescriptor("d", []string{"b", "a"}),
 			makeIndexDescriptor("e", []string{"b"}),
+			func() IndexDescriptor {
+				idx := makeIndexDescriptor("f", []string{"c"})
+				idx.EncodingType = PrimaryIndexEncoding
+				return idx
+			}(),
 		},
 		Privileges:    NewDefaultPrivilegeDescriptor(),
 		FormatVersion: FamilyFormatVersion,
@@ -99,11 +104,14 @@ func TestAllocateIDs(t *testing.T) {
 			{ID: 3, Name: "e", ColumnIDs: []ColumnID{2}, ColumnNames: []string{"b"},
 				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 				ExtraColumnIDs:   []ColumnID{1}},
+			{ID: 4, Name: "f", ColumnIDs: []ColumnID{3}, ColumnNames: []string{"c"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				EncodingType:     PrimaryIndexEncoding},
 		},
 		Privileges:     NewDefaultPrivilegeDescriptor(),
 		NextColumnID:   4,
 		NextFamilyID:   1,
-		NextIndexID:    4,
+		NextIndexID:    5,
 		NextMutationID: 1,
 		FormatVersion:  FamilyFormatVersion,
 	})
