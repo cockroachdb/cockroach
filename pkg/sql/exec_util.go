@@ -570,11 +570,24 @@ type ExecutorConfig struct {
 
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
+
+	stmtInfoRequestRegistry *stmtDiagnosticsRequestRegistry
 }
 
 // Organization returns the value of cluster.organization.
-func (ec *ExecutorConfig) Organization() string {
-	return ClusterOrganization.Get(&ec.Settings.SV)
+func (cfg *ExecutorConfig) Organization() string {
+	return ClusterOrganization.Get(&cfg.Settings.SV)
+}
+
+// NewStmtDiagnosticsRequestRegistry initializes cfg.stmtInfoRequestRegistry and
+// returns it as the publicly-accessible StmtDiagnosticsRequester.
+func (cfg *ExecutorConfig) NewStmtDiagnosticsRequestRegistry() StmtDiagnosticsRequester {
+	if cfg.InternalExecutor == nil {
+		panic("cfg.InternalExecutor not initialized")
+	}
+	cfg.stmtInfoRequestRegistry = newStmtDiagnosticsRequestRegistry(
+		cfg.InternalExecutor, cfg.DB, cfg.Gossip, cfg.NodeID.Get())
+	return cfg.stmtInfoRequestRegistry
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
@@ -1491,7 +1504,7 @@ func (st *SessionTracing) TraceExecEnd(ctx context.Context, err error, count int
 
 // extractMsgFromRecord extracts the message of the event, which is either in an
 // "event" or "error" field.
-func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
+func extractMsgFromRecord(rec tracing.LogRecord) string {
 	for _, f := range rec.Fields {
 		key := f.Key
 		if key == "event" {

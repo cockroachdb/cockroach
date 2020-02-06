@@ -128,19 +128,20 @@ func propagateGatewayMetadata(ctx context.Context) context.Context {
 type statusServer struct {
 	log.AmbientContext
 
-	st              *cluster.Settings
-	cfg             *base.Config
-	admin           *adminServer
-	db              *client.DB
-	gossip          *gossip.Gossip
-	metricSource    metricMarshaler
-	nodeLiveness    *storage.NodeLiveness
-	storePool       *storage.StorePool
-	rpcCtx          *rpc.Context
-	stores          *storage.Stores
-	stopper         *stop.Stopper
-	sessionRegistry *sql.SessionRegistry
-	si              systemInfoOnce
+	st                       *cluster.Settings
+	cfg                      *base.Config
+	admin                    *adminServer
+	db                       *client.DB
+	gossip                   *gossip.Gossip
+	metricSource             metricMarshaler
+	nodeLiveness             *storage.NodeLiveness
+	storePool                *storage.StorePool
+	rpcCtx                   *rpc.Context
+	stores                   *storage.Stores
+	stopper                  *stop.Stopper
+	sessionRegistry          *sql.SessionRegistry
+	si                       systemInfoOnce
+	stmtDiagnosticsRequester sql.StmtDiagnosticsRequester
 }
 
 // newStatusServer allocates and returns a statusServer.
