@@ -1776,6 +1776,24 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 	}
 
+	// Ensure that after a primary key swap with a given mutation ID there are no following
+	// mutations with the same mutation ID. This protects against having schema changes
+	// after a primary key change within the same transaction.
+	var currentMutationID MutationID
+	foundAlterPK := false
+	for _, m := range desc.Mutations {
+		if currentMutationID != m.MutationID {
+			currentMutationID = m.MutationID
+			foundAlterPK = false
+		}
+		if m.GetPrimaryKeySwap() != nil {
+			foundAlterPK = true
+		} else if foundAlterPK {
+			return errors.New(
+				"cannot perform other schema changes within the same transaction as primary key change")
+		}
+	}
+
 	// TODO(dt): Validate each column only appears at-most-once in any FKs.
 
 	// Only validate column families and indexes if this is actually a table, not

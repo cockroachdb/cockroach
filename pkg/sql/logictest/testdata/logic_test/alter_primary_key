@@ -419,3 +419,33 @@ query IIIIT
 SELECT * FROM t@i5
 ----
 1 2 3 4 {}
+
+subtest schema_change_interaction
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE INDEX ON t (x)
+
+statement error pq: cannot perform other schema changes within the same transaction as primary key change
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+statement error pq: cannot perform other schema changes within the same transaction as primary key change
+CREATE INDEX ON t (x)
+
+statement ok
+ROLLBACK

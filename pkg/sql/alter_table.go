@@ -328,13 +328,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
 			}
 
-			// Ensure that there is not another primary key change attempted within this transaction.
+			// Ensure that there are not any other schema changes executed within this transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
 			for i := range n.tableDesc.Mutations {
-				if desc := n.tableDesc.Mutations[i].GetPrimaryKeySwap(); desc != nil &&
-					n.tableDesc.Mutations[i].MutationID == currentMutationID {
-					return unimplemented.NewWithIssue(
-						43376, "multiple primary key changes in the same transaction are unsupported")
+				if n.tableDesc.Mutations[i].MutationID == currentMutationID {
+					return errors.New(
+						"cannot perform other schema changes within the same transaction as primary key change")
 				}
 			}
 
