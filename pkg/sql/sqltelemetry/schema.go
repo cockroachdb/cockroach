@@ -52,6 +52,14 @@ func SchemaChangeDrop(typ string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.drop_" + typ)
 }
 
+// SchemaSetZoneConfig is to be incremented every time a ZoneConfig
+// argument is parsed.
+func SchemaSetZoneConfig(configName, keyChange string) telemetry.Counter {
+	return telemetry.GetCounter(
+		fmt.Sprintf("sql.schema.zone_config.%s.%s", configName, keyChange),
+	)
+}
+
 // SchemaChangeAlter behaves the same as SchemaChangeAlterWithExtra
 // but with no extra metadata.
 func SchemaChangeAlter(typ string) telemetry.Counter {
