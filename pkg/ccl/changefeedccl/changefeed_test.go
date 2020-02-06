@@ -804,7 +804,7 @@ func fetchDescVersionModificationTime(
 		Key:    tblKey,
 		EndKey: tblKey.PrefixEnd(),
 	}
-	dropColTblID := sqlutils.QueryTableID(t, db, `d`, tableName)
+	dropColTblID := sqlutils.QueryTableID(t, db, `d`, "public", tableName)
 	req := &roachpb.ExportRequest{
 		RequestHeader: header,
 		MVCCFilter:    roachpb.MVCCFilter_All,

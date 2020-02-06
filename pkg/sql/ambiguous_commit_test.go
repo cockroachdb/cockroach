@@ -155,7 +155,7 @@ func TestAmbiguousCommit(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "t")
+		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "t")
 		tableStartKey.Store(keys.MakeTablePrefix(tableID))
 
 		// Wait for new table to split & replication.
