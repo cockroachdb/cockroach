@@ -1307,7 +1307,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 			}
 		}
 
-		if index != &desc.PrimaryIndex {
+		if index != &desc.PrimaryIndex && index.EncodingType == SecondaryIndexEncoding {
 			indexHasOldStoredColumns := index.HasOldStoredColumns()
 			// Need to clear ExtraColumnIDs and StoreColumnIDs because they are used
 			// by ContainsColumnID.
