@@ -231,6 +231,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`1 = ANY ARRAY[2, 'a']`, `unsupported comparison operator: 1 = ANY ARRAY[2, 'a']: could not parse "a" as type int`},
 		{`1 = ALL current_schemas(true)`, `unsupported comparison operator: <int> = ALL <string[]>`},
 		{`1.0 BETWEEN 2 AND 'a'`, `unsupported comparison operator: <decimal> < <string>`},
+		{`NULL BETWEEN 2 AND 'a'`, `unsupported comparison operator: <int> < <string>`},
 		{`IF(1, 2, 3)`, `incompatible IF condition type: int`},
 		{`IF(true, 'a', 2)`, `incompatible IF expressions: could not parse "a" as type int`},
 		{`IF(true, 2, 'a')`, `incompatible IF expressions: could not parse "a" as type int`},

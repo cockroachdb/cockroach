@@ -1099,6 +1099,11 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 	if err != nil {
 		return nil, err
 	}
+	// Ensure that the boundaries of the comparison are well typed.
+	_, _, _, _, err = typeCheckComparisonOp(ctx, LT, expr.From, expr.To)
+	if err != nil {
+		return nil, err
+	}
 	expr.Left, expr.From = leftFromTyped, fromTyped
 	expr.leftTo, expr.To = leftToTyped, toTyped
 	expr.typ = types.Bool
