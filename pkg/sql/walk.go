@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 type observeVerbosity int
@@ -184,6 +185,34 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			}
 			if n.hardLimit > 0 && isFilterTrue(n.filter) {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
+			}
+			if n.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+				strength := ""
+				switch n.lockingStrength {
+				case sqlbase.ScanLockingStrength_FOR_KEY_SHARE:
+					strength = "for key share"
+				case sqlbase.ScanLockingStrength_FOR_SHARE:
+					strength = "for share"
+				case sqlbase.ScanLockingStrength_FOR_NO_KEY_UPDATE:
+					strength = "for no key update"
+				case sqlbase.ScanLockingStrength_FOR_UPDATE:
+					strength = "for update"
+				default:
+					panic(errors.AssertionFailedf("unexpected strength"))
+				}
+				v.observer.attr(name, "locking strength", strength)
+			}
+			if n.lockingWaitPolicy != sqlbase.ScanLockingWaitPolicy_BLOCK {
+				wait := ""
+				switch n.lockingWaitPolicy {
+				case sqlbase.ScanLockingWaitPolicy_SKIP:
+					wait = "skip locked"
+				case sqlbase.ScanLockingWaitPolicy_ERROR:
+					wait = "nowait"
+				default:
+					panic(errors.AssertionFailedf("unexpected wait policy"))
+				}
+				v.observer.attr(name, "locking wait policy", wait)
 			}
 		}
 		if v.observer.expr != nil {
