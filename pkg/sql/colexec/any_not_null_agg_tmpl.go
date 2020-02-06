@@ -201,7 +201,14 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be the
 		// output.
+		// {{ if eq .LTyp.String "Bytes" }}
+		// Bytes type is special - we actually need to copy the value that we're
+		// getting in an "unsafe" way because col might be reused (and the
+		// underlying memory overwritten) on the next batches.
+		a.curAgg = append(a.curAgg[:0], execgen.UNSAFEGET(col, int(i))...)
+		// {{ else }}
 		a.curAgg = execgen.UNSAFEGET(col, int(i))
+		// {{ end }}
 		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}
