@@ -190,6 +190,15 @@ func TestRegistryGC(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
+	type mutationOptions struct {
+		// Set if the desc should have any mutations of any sort.
+		hasMutation bool
+		// Set if the mutation being inserted is a GCMutation.
+		hasGCMutation bool
+		// Set if the desc should have a job that is dropping it.
+		hasDropJob bool
+	}
+
 	ts := timeutil.Now()
 	earlier := ts.Add(-1 * time.Hour)
 	muchEarlier := ts.Add(-2 * time.Hour)
@@ -207,17 +216,56 @@ func TestRegistryGC(t *testing.T) {
 		return desc.GetID()
 	}
 
-	writeJob := func(name string, created, finished time.Time, status Status) string {
+	setGCMutations := func(gcMutations []sqlbase.TableDescriptor_GCDescriptorMutation) sqlbase.ID {
+		desc := sqlbase.GetTableDescriptor(kvDB, "t", "to_be_mutated")
+		desc.GCMutations = gcMutations
+		if err := kvDB.Put(
+			context.TODO(),
+			sqlbase.MakeDescMetadataKey(desc.GetID()),
+			sqlbase.WrapDescriptor(desc),
+		); err != nil {
+			t.Fatal(err)
+		}
+		return desc.GetID()
+	}
+
+	setDropJob := func(shouldDrop bool) sqlbase.ID {
+		desc := sqlbase.GetTableDescriptor(kvDB, "t", "to_be_mutated")
+		if shouldDrop {
+			desc.DropJobID = 123
+		} else {
+			// Set it back to the default val.
+			desc.DropJobID = 0
+		}
+		if err := kvDB.Put(
+			context.TODO(),
+			sqlbase.MakeDescMetadataKey(desc.GetID()),
+			sqlbase.WrapDescriptor(desc),
+		); err != nil {
+			t.Fatal(err)
+		}
+		return desc.GetID()
+	}
+
+	writeJob := func(name string, created, finished time.Time, status Status, mutOptions mutationOptions) string {
 		if _, err := sqlDB.Exec(`
 CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS SELECT 1`); err != nil {
 			t.Fatal(err)
 		}
+		descriptorID := setDropJob(mutOptions.hasDropJob)
+		if mutOptions.hasMutation {
+			descriptorID = setMutations([]sqlbase.DescriptorMutation{{}})
+		}
+		if mutOptions.hasGCMutation {
+			descriptorID = setGCMutations([]sqlbase.TableDescriptor_GCDescriptorMutation{{}})
+		}
+
 		payload, err := protoutil.Marshal(&jobspb.Payload{
 			Description: name,
 			Lease:       &jobspb.Lease{NodeID: 1, Epoch: 1},
 			// register a mutation on the table so that jobs that reference
 			// the table are not considered orphaned
-			DescriptorIDs:  []sqlbase.ID{setMutations([]sqlbase.DescriptorMutation{{}})},
+			DescriptorIDs:  []sqlbase.ID{descriptorID},
 			Details:        jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
 			StartedMicros:  timeutil.ToUnixMicros(created),
 			FinishedMicros: timeutil.ToUnixMicros(finished),
@@ -239,37 +287,57 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 		return strconv.Itoa(int(id))
 	}
 
-	oldRunningJob := writeJob("old_running", muchEarlier, time.Time{}, StatusRunning)
-	oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded)
-	oldSucceededJob2 := writeJob("old_succeeded2", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded)
-	newRunningJob := writeJob("new_running", earlier, time.Time{}, StatusRunning)
-	newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StatusSucceeded)
+	// Test the descriptor when any of the following are set.
+	// 1. Mutations
+	// 2. GC Mutations
+	// 3. A drop job
+	for _, hasMutation := range []bool{true, false} {
+		for _, hasGCMutation := range []bool{true, false} {
+			for _, hasDropJob := range []bool{true, false} {
+				if !hasMutation && !hasGCMutation && !hasDropJob {
+					continue
+				}
+				mutOptions := mutationOptions{
+					hasMutation:   hasMutation,
+					hasGCMutation: hasGCMutation,
+					hasDropJob:    hasDropJob,
+				}
+				oldRunningJob := writeJob("old_running", muchEarlier, time.Time{}, StatusRunning, mutOptions)
+				oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded, mutOptions)
+				oldSucceededJob2 := writeJob("old_succeeded2", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded, mutOptions)
+				newRunningJob := writeJob("new_running", earlier, time.Time{}, StatusRunning, mutOptions)
+				newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StatusSucceeded, mutOptions)
 
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-		{oldRunningJob}, {oldSucceededJob}, {oldSucceededJob2}, {newRunningJob}, {newSucceededJob}})
+				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+					{oldRunningJob}, {oldSucceededJob}, {oldSucceededJob2}, {newRunningJob}, {newSucceededJob}})
 
-	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
-		t.Fatal(err)
+				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
+					t.Fatal(err)
+				}
+				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+					{oldRunningJob}, {newRunningJob}, {newSucceededJob}})
+
+				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
+					t.Fatal(err)
+				}
+				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+					{oldRunningJob}, {newRunningJob}, {newSucceededJob}})
+
+				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
+					t.Fatal(err)
+				}
+				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+					{oldRunningJob}, {newRunningJob}})
+
+				// force the running jobs to become orphaned
+				_ = setMutations(nil)
+				_ = setGCMutations(nil)
+				_ = setDropJob(false)
+				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
+					t.Fatal(err)
+				}
+				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{})
+			}
+		}
 	}
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-		{oldRunningJob}, {newRunningJob}, {newSucceededJob}})
-
-	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
-		t.Fatal(err)
-	}
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-		{oldRunningJob}, {newRunningJob}, {newSucceededJob}})
-
-	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
-		t.Fatal(err)
-	}
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-		{oldRunningJob}, {newRunningJob}})
-
-	// force the running jobs to become orphaned
-	_ = setMutations(nil)
-	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
-		t.Fatal(err)
-	}
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{})
 }
