@@ -438,7 +438,13 @@ func NewColOperator(
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					hashAggregatorMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator")
+					// Create an unlimited mem account explicitly even though there is no
+					// disk spilling because the memory usage of an aggregator is
+					// proportional to the number of groups, not the number of inputs.
+					// The row execution engine also gives an unlimited amount (that still
+					// needs to be approved by the upstream monitor, so not really
+					// "unlimited") amount of memory to the aggregator.
+					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
 				}
 				result.Op, err = NewHashAggregator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
@@ -559,14 +565,10 @@ func NewColOperator(
 							ctx, result.createBufferingMemAccountWithLimit(
 								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							))
-						diskQueuesUnlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
-							))
 						return newExternalHashJoiner(
 							allocator, hjSpec,
 							inputOne, inputTwo,
-							diskQueuesUnlimitedAllocator,
+							args.DiskQueueCfg,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -771,17 +773,12 @@ func NewColOperator(
 							ctx, result.createStandaloneMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
-						diskQueuesUnlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
-							))
 						return newExternalSorter(
 							unlimitedAllocator,
 							standaloneAllocator,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							args.TestingKnobs.MaxNumberPartitions,
-							diskQueuesUnlimitedAllocator,
 							args.DiskQueueCfg,
 						)
 					},
