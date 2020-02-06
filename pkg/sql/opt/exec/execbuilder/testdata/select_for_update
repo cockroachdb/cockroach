@@ -1,0 +1,1078 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+CREATE TABLE u (a INT PRIMARY KEY, c INT, FAMILY (a, c))
+
+statement ok
+CREATE VIEW v AS SELECT a FROM t AS t2
+
+# ------------------------------------------------------------------------------
+# Basic tests.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM t FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t FOR NO KEY UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for no key update
+
+query TTT
+EXPLAIN SELECT * FROM t FOR SHARE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for share
+
+query TTT
+EXPLAIN SELECT * FROM t FOR KEY SHARE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for key share
+
+query TTT
+EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for share
+
+query TTT
+EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for no key update
+
+query TTT
+EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t FOR UPDATE OF t
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t FOR UPDATE OF t2
+
+query TTT
+EXPLAIN SELECT 1 FROM t FOR UPDATE OF t
+----
+·          distributed       false
+·          vectorized        true
+render     ·                 ·
+ └── scan  ·                 ·
+·          table             t@primary
+·          spans             ALL
+·          locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for no key update
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR SHARE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for share
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for key share
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for share
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for no key update
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             /1-/1/#
+·     locking strength  for update
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2
+
+query TTT
+EXPLAIN SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
+----
+·          distributed       false
+·          vectorized        true
+render     ·                 ·
+ └── scan  ·                 ·
+·          table             t@primary
+·          spans             /1-/1/#
+·          locking strength  for update
+
+# ------------------------------------------------------------------------------
+# Tests with table aliases.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM t AS t2 FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t AS t2 FOR UPDATE OF t
+
+query TTT
+EXPLAIN SELECT * FROM t AS t2 FOR UPDATE OF t2
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+# ------------------------------------------------------------------------------
+# Tests with numeric table references.
+# Cockroach numeric references start after 53 for user tables.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE OF t
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE OF t2
+
+# ------------------------------------------------------------------------------
+# Tests with views.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM v FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM v FOR UPDATE OF v
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query error pgcode 42P01 relation "v2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM v FOR UPDATE OF v2
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM v FOR UPDATE OF t
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM v FOR UPDATE OF t2
+
+# ------------------------------------------------------------------------------
+# Tests with aliased views.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM v AS v2 FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query error pgcode 42P01 relation "v" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM v AS v2 FOR UPDATE OF v
+
+query TTT
+EXPLAIN SELECT * FROM v AS v2 FOR UPDATE OF v2
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+# ------------------------------------------------------------------------------
+# Tests with subqueries.
+# 
+# Row-level locking clauses only apply to subqueries in the FROM clause of a
+# SELECT statement. They don't apply to subqueries in the projection or in
+# the filter.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t) FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE)
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for no key update
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for no key update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
+
+query TTT
+EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+·     distributed       false
+·     vectorized        true
+scan  ·                 ·
+·     table             t@primary
+·     spans             ALL
+·     locking strength  for update
+
+query TTT
+EXPLAIN SELECT (SELECT a FROM t) FOR UPDATE
+----
+·                    distributed   false
+·                    vectorized    false
+root                 ·             ·
+ ├── values          ·             ·
+ │                   size          1 column, 1 row
+ └── subquery        ·             ·
+      │              id            @S1
+      │              original sql  (SELECT a FROM t)
+      │              exec mode     one row
+      └── max1row    ·             ·
+           └── scan  ·             ·
+·                    table         t@primary
+·                    spans         ALL
+
+query TTT
+EXPLAIN SELECT (SELECT a FROM t FOR UPDATE)
+----
+·                    distributed       false
+·                    vectorized        false
+root                 ·                 ·
+ ├── values          ·                 ·
+ │                   size              1 column, 1 row
+ └── subquery        ·                 ·
+      │              id                @S1
+      │              original sql      (SELECT a FROM t FOR UPDATE)
+      │              exec mode         one row
+      └── max1row    ·                 ·
+           └── scan  ·                 ·
+·                    table             t@primary
+·                    spans             ALL
+·                    locking strength  for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT (SELECT a FROM t) FOR UPDATE OF t
+
+query TTT
+EXPLAIN SELECT (SELECT a FROM t FOR UPDATE OF t)
+----
+·                    distributed       false
+·                    vectorized        false
+root                 ·                 ·
+ ├── values          ·                 ·
+ │                   size              1 column, 1 row
+ └── subquery        ·                 ·
+      │              id                @S1
+      │              original sql      (SELECT a FROM t FOR UPDATE OF t)
+      │              exec mode         one row
+      └── max1row    ·                 ·
+           └── scan  ·                 ·
+·                    table             t@primary
+·                    spans             ALL
+·                    locking strength  for update
+
+query TTT
+EXPLAIN SELECT (SELECT a FROM t) AS r FOR UPDATE
+----
+·                    distributed   false
+·                    vectorized    false
+root                 ·             ·
+ ├── values          ·             ·
+ │                   size          1 column, 1 row
+ └── subquery        ·             ·
+      │              id            @S1
+      │              original sql  (SELECT a FROM t)
+      │              exec mode     one row
+      └── max1row    ·             ·
+           └── scan  ·             ·
+·                    table         t@primary
+·                    spans         ALL
+
+query TTT
+EXPLAIN SELECT (SELECT a FROM t FOR UPDATE) AS r
+----
+·                    distributed       false
+·                    vectorized        false
+root                 ·                 ·
+ ├── values          ·                 ·
+ │                   size              1 column, 1 row
+ └── subquery        ·                 ·
+      │              id                @S1
+      │              original sql      (SELECT a FROM t FOR UPDATE)
+      │              exec mode         one row
+      └── max1row    ·                 ·
+           └── scan  ·                 ·
+·                    table             t@primary
+·                    spans             ALL
+·                    locking strength  for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
+
+query TTT
+EXPLAIN SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+·                    distributed       false
+·                    vectorized        false
+root                 ·                 ·
+ ├── values          ·                 ·
+ │                   size              1 column, 1 row
+ └── subquery        ·                 ·
+      │              id                @S1
+      │              original sql      (SELECT a FROM t FOR UPDATE OF t)
+      │              exec mode         one row
+      └── max1row    ·                 ·
+           └── scan  ·                 ·
+·                    table             t@primary
+·                    spans             ALL
+·                    locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
+----
+·           distributed         false
+·           vectorized          true
+merge-join  ·                   ·
+ │          type                semi
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          table               t@primary
+ │          spans               ALL
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           table               t@primary
+·           spans               ALL
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
+----
+·           distributed         false
+·           vectorized          true
+merge-join  ·                   ·
+ │          type                semi
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          table               t@primary
+ │          spans               ALL
+ └── scan   ·                   ·
+·           table               t@primary
+·           spans               ALL
+·           locking strength    for update
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
+----
+·           distributed         false
+·           vectorized          true
+merge-join  ·                   ·
+ │          type                semi
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          table               t@primary
+ │          spans               ALL
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           table               t@primary
+·           spans               ALL
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
+----
+·           distributed         false
+·           vectorized          true
+merge-join  ·                   ·
+ │          type                semi
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          table               t@primary
+ │          spans               ALL
+ └── scan   ·                   ·
+·           table               t@primary
+·           spans               ALL
+·           locking strength    for update
+
+# ------------------------------------------------------------------------------
+# Tests with common-table expressions.
+#
+# Unlike with FROM subqueries, row-level locking clauses do not apply to WITH
+# queries referenced by the primary query. To achieve row locking within a WITH
+# query, a locking clause should be specified within the WITH query.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM [SELECT a FROM t] FOR UPDATE
+----
+·          distributed  false
+·          vectorized   true
+render     ·            ·
+ └── scan  ·            ·
+·          table        t@primary
+·          spans        ALL
+
+query TTT
+EXPLAIN WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
+----
+·          distributed  false
+·          vectorized   true
+render     ·            ·
+ └── scan  ·            ·
+·          table        t@primary
+·          spans        ALL
+
+query TTT
+EXPLAIN SELECT * FROM [SELECT a FROM t FOR UPDATE]
+----
+·          distributed       false
+·          vectorized        true
+render     ·                 ·
+ └── scan  ·                 ·
+·          table             t@primary
+·          spans             ALL
+·          locking strength  for update
+
+query TTT
+EXPLAIN WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
+----
+·          distributed       false
+·          vectorized        true
+render     ·                 ·
+ └── scan  ·                 ·
+·          table             t@primary
+·          spans             ALL
+·          locking strength  for update
+
+# ------------------------------------------------------------------------------
+# Tests with joins.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for share
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
+
+query TTT
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for share
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for no key update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for key share
+
+query TTT
+EXPLAIN SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for no key update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+# ------------------------------------------------------------------------------
+# Tests with joins of aliased tables and aliased joins.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
+
+query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, u
+
+query TTT
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+
+query TTT
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+query TTT
+EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+# Postgres doesn't support applying locking clauses to joins. The following
+# queries all return the error: "FOR UPDATE cannot be applied to a join".
+# We could do the same, but it's not hard to support these, so we do.
+
+query TTT
+EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
+
+query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u
+
+query error pgcode 42P01 relation "u2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
+
+query TTT
+EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
+----
+·                distributed         false
+·                vectorized          true
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a) = (a)
+      │          left cols are key   ·
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)"
+      ├── scan   ·                   ·
+      │          table               t@primary
+      │          spans               ALL
+      │          locking strength    for update
+      └── scan   ·                   ·
+·                table               u@primary
+·                spans               ALL
+·                locking strength    for update
+
+# ------------------------------------------------------------------------------
+# Tests with lateral joins.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN SELECT * FROM t, u FOR UPDATE
+----
+·           distributed       false
+·           vectorized        false
+cross-join  ·                 ·
+ │          type              cross
+ ├── scan   ·                 ·
+ │          table             t@primary
+ │          spans             ALL
+ │          locking strength  for update
+ └── scan   ·                 ·
+·           table             u@primary
+·           spans             ALL
+·           locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t, u FOR UPDATE OF t
+----
+·           distributed       false
+·           vectorized        false
+cross-join  ·                 ·
+ │          type              cross
+ ├── scan   ·                 ·
+ │          table             t@primary
+ │          spans             ALL
+ │          locking strength  for update
+ └── scan   ·                 ·
+·           table             u@primary
+·           spans             ALL
+
+query TTT
+EXPLAIN SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
+----
+·           distributed       false
+·           vectorized        false
+cross-join  ·                 ·
+ │          type              cross
+ ├── scan   ·                 ·
+ │          table             t@primary
+ │          spans             ALL
+ │          locking strength  for share
+ └── scan   ·                 ·
+·           table             u@primary
+·           spans             ALL
+·           locking strength  for update
+
+query TTT
+EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
+----
+·           distributed       false
+·           vectorized        false
+cross-join  ·                 ·
+ │          type              cross
+ ├── scan   ·                 ·
+ │          table             t@primary
+ │          spans             ALL
+ │          locking strength  for update
+ └── scan   ·                 ·
+·           table             u@primary
+·           spans             ALL
+·           locking strength  for update
+
+query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
+EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
+
+query TTT
+EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
+----
+·           distributed       false
+·           vectorized        false
+cross-join  ·                 ·
+ │          type              cross
+ ├── scan   ·                 ·
+ │          table             t@primary
+ │          spans             ALL
+ └── scan   ·                 ·
+·           table             u@primary
+·           spans             ALL
+·           locking strength  for update
