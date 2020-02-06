@@ -53,7 +53,7 @@ func TestRegistryCancelation(t *testing.T) {
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	registry := MakeRegistry(
 		log.AmbientContext{}, stopper, clock, db, nil /* ex */, FakeNodeID, cluster.NoSettings,
-		histogramWindowInterval, FakePHS)
+		histogramWindowInterval, FakePHS, "")
 
 	const nodeCount = 1
 	nodeLiveness := NewFakeNodeLiveness(nodeCount)

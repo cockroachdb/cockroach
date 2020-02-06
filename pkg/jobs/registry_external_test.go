@@ -88,7 +88,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		nodeID.Reset(id)
 		r := jobs.MakeRegistry(
 			ac, s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor),
-			nodeID, s.ClusterSettings(), server.DefaultHistogramWindowInterval, jobs.FakePHS,
+			nodeID, s.ClusterSettings(), server.DefaultHistogramWindowInterval, jobs.FakePHS, "",
 		)
 		if err := r.Start(ctx, s.Stopper(), nodeLiveness, cancelInterval, adoptInterval); err != nil {
 			t.Fatal(err)
