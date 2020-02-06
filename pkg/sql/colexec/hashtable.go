@@ -71,6 +71,8 @@ type hashTable struct {
 	valTypes []coltypes.T
 	// valCols stores the union of the keyCols and outCols.
 	valCols []uint32
+	// keyCols stores the corresponding types of key columns.
+	keyTypes []coltypes.T
 	// keyCols stores the indices of vals which are key columns.
 	keyCols []uint32
 
@@ -176,6 +178,7 @@ func newHashTable(
 		vals:     newBufferedBatch(allocator, keepTypes, 0 /* initialSize */),
 		valTypes: keepTypes,
 		valCols:  keepCols,
+		keyTypes: keyTypes,
 		keyCols:  keys,
 		outCols:  outs,
 		outTypes: outTypes,
@@ -215,7 +218,7 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 
 	// ht.next is used to store the computed hash value of each key.
 	ht.next = make([]uint64, ht.vals.length+1)
-	ht.computeBuckets(ctx, ht.next[1:], keyCols, ht.vals.length, nil)
+	ht.computeBuckets(ctx, ht.next[1:], ht.keyTypes, keyCols, ht.vals.length, nil)
 	ht.buildNextChains(ctx)
 }
 
@@ -240,13 +243,13 @@ func (ht *hashTable) findSameTuples(ctx context.Context) {
 			ht.keys[i] = ht.vals.colVecs[ht.keyCols[i]].Window(ht.valTypes[ht.keyCols[i]], batchStart, batchEnd)
 		}
 
-		ht.lookupInitial(ctx, batchSize, nil)
+		ht.lookupInitial(ctx, ht.keyTypes, batchSize, nil)
 		nToCheck := batchSize
 
 		for nToCheck > 0 {
 			// Continue searching for the build table matching keys while the toCheck
 			// array is non-empty.
-			nToCheck = ht.check(nToCheck, nil)
+			nToCheck = ht.check(ht.keyTypes, nToCheck, nil)
 			ht.findNext(nToCheck)
 		}
 
@@ -285,7 +288,12 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 // computeBuckets computes the hash value of each key and stores the result in
 // buckets.
 func (ht *hashTable) computeBuckets(
-	ctx context.Context, buckets []uint64, keys []coldata.Vec, nKeys uint64, sel []uint16,
+	ctx context.Context,
+	buckets []uint64,
+	keyTypes []coltypes.T,
+	keys []coldata.Vec,
+	nKeys uint64,
+	sel []uint16,
 ) {
 	initHash(buckets, nKeys, defaultInitHashValue)
 
@@ -294,8 +302,8 @@ func (ht *hashTable) computeBuckets(
 		return
 	}
 
-	for i, k := range ht.keyCols {
-		rehash(ctx, buckets, ht.valTypes[k], keys[i], nKeys, sel, ht.cancelChecker)
+	for i := range ht.keyCols {
+		rehash(ctx, buckets, keyTypes[i], keys[i], nKeys, sel, ht.cancelChecker)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)
@@ -340,8 +348,10 @@ func (ht *hashTable) maybeAllocateSameAndVisited() {
 // lookupInitial finds the corresponding hash table buckets for the equality
 // column of the batch and stores the results in groupID. It also initializes
 // toCheck with all indices in the range [0, batchSize).
-func (ht *hashTable) lookupInitial(ctx context.Context, batchSize uint16, sel []uint16) {
-	ht.computeBuckets(ctx, ht.buckets, ht.keys, uint64(batchSize), sel)
+func (ht *hashTable) lookupInitial(
+	ctx context.Context, keyTypes []coltypes.T, batchSize uint16, sel []uint16,
+) {
+	ht.computeBuckets(ctx, ht.buckets, keyTypes, ht.keys, uint64(batchSize), sel)
 	for i := uint16(0); i < batchSize; i++ {
 		ht.groupID[i] = ht.first[ht.buckets[i]]
 		ht.toCheck[i] = i
@@ -357,9 +367,9 @@ func (ht *hashTable) findNext(nToCheck uint16) {
 }
 
 // checkCols performs a column by column checkCol on the key columns.
-func (ht *hashTable) checkCols(nToCheck uint16, sel []uint16) {
-	for i, k := range ht.keyCols {
-		ht.checkCol(ht.valTypes[k], i, nToCheck, sel)
+func (ht *hashTable) checkCols(probeKeyTypes []coltypes.T, nToCheck uint16, sel []uint16) {
+	for i := range ht.keyCols {
+		ht.checkCol(probeKeyTypes[i], ht.keyTypes[i], i, nToCheck, sel)
 	}
 }
 
@@ -370,8 +380,8 @@ func (ht *hashTable) checkCols(nToCheck uint16, sel []uint16) {
 // key is removed from toCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of toCheck is returned by this function.
-func (ht *hashTable) check(nToCheck uint16, sel []uint16) uint16 {
-	ht.checkCols(nToCheck, sel)
+func (ht *hashTable) check(probeKeyTypes []coltypes.T, nToCheck uint16, sel []uint16) uint16 {
+	ht.checkCols(probeKeyTypes, nToCheck, sel)
 	nDiffers := uint16(0)
 	for i := uint16(0); i < nToCheck; i++ {
 		if !ht.differs[ht.toCheck[i]] {
@@ -416,8 +426,10 @@ func (ht *hashTable) check(nToCheck uint16, sel []uint16) uint16 {
 // toCheck. If the bucket has reached the end, the key is rejected. The toCheck
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
-func (ht *hashTable) distinctCheck(nToCheck uint16, sel []uint16) uint16 {
-	ht.checkCols(nToCheck, sel)
+func (ht *hashTable) distinctCheck(
+	probeKeyTypes []coltypes.T, nToCheck uint16, sel []uint16,
+) uint16 {
+	ht.checkCols(probeKeyTypes, nToCheck, sel)
 
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint16(0)

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/apd"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	// */}}
@@ -46,20 +47,27 @@ var _ bytes.Buffer
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
+
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
 func _ASSIGN_NE(_, _, _ interface{}) uint64 {
 	execerror.VectorizedInternalPanic("")
 }
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _PROBE_TYPE is the template type variable for coltypes.T. It will be
+// replaced by coltypes.Foo for each type Foo in the coltypes.T type.
+const _PROBE_TYPE = coltypes.Unhandled
+
+// _BUILD_TYPE is the template type variable for coltypes.T. It will be
+// replaced by coltypes.Foo for each type Foo in the coltypes.T type.
+const _BUILD_TYPE = coltypes.Unhandled
 
 func _CHECK_COL_BODY(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
-	buildKeys, probeKeys []interface{},
+	probeKeys, buildKeys []interface{},
 	nToCheck uint16,
 	_PROBE_HAS_NULLS bool,
 	_BUILD_HAS_NULLS bool,
@@ -112,10 +120,10 @@ func _CHECK_COL_BODY(
 			} else if buildIsNull {
 				ht.differs[toCheck] = true
 			} else {
-				buildVal := execgen.UNSAFEGET(buildKeys, int(keyID-1))
 				probeVal := execgen.UNSAFEGET(probeKeys, int(selIdx))
+				buildVal := execgen.UNSAFEGET(buildKeys, int(keyID-1))
 				var unique bool
-				_ASSIGN_NE(unique, buildVal, probeVal)
+				_ASSIGN_NE(unique, probeVal, buildVal)
 
 				ht.differs[toCheck] = ht.differs[toCheck] || unique
 			}
@@ -128,7 +136,7 @@ func _CHECK_COL_BODY(
 func _CHECK_COL_WITH_NULLS(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
-	buildKeys, probeKeys []interface{},
+	probeKeys, buildKeys []interface{},
 	nToCheck uint16,
 	_USE_SEL bool,
 ) { // */}}
@@ -138,18 +146,18 @@ func _CHECK_COL_WITH_NULLS(
 			if ht.allowNullEquality {
 				// The allowNullEquality flag only matters if both vectors have nulls.
 				// This lets us avoid writing all 2^3 conditional branches.
-				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true, true)
+				_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, true)
 			} else {
-				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true, false)
+				_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, true, false)
 			}
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, true, false, false)
 		}
 	} else {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, true, false)
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, probeKeys, buildKeys, nToCheck, false, false, false)
 		}
 	}
 	// {{end}}
@@ -163,33 +171,41 @@ func _CHECK_COL_WITH_NULLS(
 // to differs. If the bucket has reached the end, the key is rejected. If the
 // hashTable disallows null equality, then if any element in the key is null,
 // there is no match.
-func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16) {
-	switch t {
-	// {{range $neType := .}}
-	case _TYPES_T:
-		buildVec := ht.vals.colVecs[ht.keyCols[keyColIdx]]
-		probeVec := ht.keys[keyColIdx]
+func (ht *hashTable) checkCol(
+	probeType, buildType coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16,
+) {
+	switch probeType {
+	// {{range $lTyp, $rTypToOverload := .}}
+	case _PROBE_TYPE:
+		switch buildType {
+		// {{range $rTyp, $overload := $rTypToOverload}}
+		case _BUILD_TYPE:
+			probeVec := ht.keys[keyColIdx]
+			buildVec := ht.vals.colVecs[ht.keyCols[keyColIdx]]
+			probeKeys := probeVec._ProbeType()
+			buildKeys := buildVec._BuildType()
 
-		buildKeys := buildVec._TemplateType()
-		probeKeys := probeVec._TemplateType()
-
-		if sel != nil {
-			_CHECK_COL_WITH_NULLS(
-				ht,
-				probeVec, buildVec,
-				buildKeys, probeKeys,
-				nToCheck,
-				true)
-		} else {
-			_CHECK_COL_WITH_NULLS(
-				ht,
-				probeVec, buildVec,
-				buildKeys, probeKeys,
-				nToCheck,
-				false)
+			if sel != nil {
+				_CHECK_COL_WITH_NULLS(
+					ht,
+					probeVec, buildVec,
+					probeKeys, buildKeys,
+					nToCheck,
+					true)
+			} else {
+				_CHECK_COL_WITH_NULLS(
+					ht,
+					probeVec, buildVec,
+					probeKeys, buildKeys,
+					nToCheck,
+					false)
+			}
+			// {{end}}
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", buildType))
 		}
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", probeType))
 	}
 }
