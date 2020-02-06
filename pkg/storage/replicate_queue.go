@@ -163,11 +163,16 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
-			successes:            store.metrics.ReplicateQueueSuccesses,
-			failures:             store.metrics.ReplicateQueueFailures,
-			pending:              store.metrics.ReplicateQueuePending,
-			processingNanos:      store.metrics.ReplicateQueueProcessingNanos,
-			purgatory:            store.metrics.ReplicateQueuePurgatory,
+			// The processing of the replicate queue often needs to send snapshots
+			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
+			// timeout based on the range size and the sending rate in addition
+			// to consulting the setting which controls the minimum timeout.
+			processTimeoutFunc: makeQueueSnapshotTimeoutFunc(rebalanceSnapshotRate),
+			successes:          store.metrics.ReplicateQueueSuccesses,
+			failures:           store.metrics.ReplicateQueueFailures,
+			pending:            store.metrics.ReplicateQueuePending,
+			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
+			purgatory:          store.metrics.ReplicateQueuePurgatory,
 		},
 	)
 
