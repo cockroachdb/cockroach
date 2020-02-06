@@ -846,6 +846,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			Inputs:               inputs,
 			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
 			ProcessorConstructor: rowexec.NewProcessor,
+			DiskQueueCfg:         s.diskQueueCfg,
 		}
 		result, err := colexec.NewColOperator(ctx, flowCtx, args)
 		// Even when err is non-nil, it is possible that the buffering memory
