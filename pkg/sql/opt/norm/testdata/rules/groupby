@@ -318,8 +318,8 @@ group-by
  │    ├── scan xy
  │    └── filters (true)
  └── aggregations
-      ├── sum [type=decimal, outer=(2)]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=decimal, outer=(2)]
+      │    └── sum [type=decimal]
       │         └── variable: i [type=int]
       ├── const-agg [type=float, outer=(3)]
       │    └── variable: f [type=float]
@@ -422,8 +422,8 @@ scalar-group-by
  └── aggregations
       ├── sum [type=decimal, outer=(1)]
       │    └── variable: k [type=int]
-      └── sum [type=decimal, outer=(2)]
-           └── agg-distinct [type=int]
+      └── agg-distinct [type=decimal, outer=(2)]
+           └── sum [type=decimal]
                 └── variable: i [type=int]
 
 norm expect=EliminateAggDistinctForKeys
@@ -481,8 +481,8 @@ project
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int!null)
       └── aggregations
-           └── sum [type=decimal, outer=(1)]
-                └── agg-distinct [type=int]
+           └── agg-distinct [type=decimal, outer=(1)]
+                └── sum [type=decimal]
                      └── variable: a [type=int]
 
 # GroupBy with composite key formed by argument plus grouping columns.
@@ -545,9 +545,224 @@ project
            │    └── variable: u [type=int]
            ├── std-dev [type=decimal, outer=(3)]
            │    └── variable: w [type=int]
-           └── avg [type=decimal, outer=(4)]
-                └── agg-distinct [type=int]
+           └── agg-distinct [type=decimal, outer=(4)]
+                └── avg [type=decimal]
                      └── variable: z [type=int]
+
+# --------------------------------------------------
+# EliminateAggFilteredDistinctForKeys
+# --------------------------------------------------
+
+# ScalarGroupBy with key argument. Only the first aggregation can be
+# simplified.
+norm expect=EliminateAggFilteredDistinctForKeys
+SELECT sum(DISTINCT k) FILTER (WHERE k > 0), sum(DISTINCT i) FILTER (WHERE i > 0) FROM a
+----
+scalar-group-by
+ ├── columns: sum:7(decimal) sum:9(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7,9)
+ ├── project
+ │    ├── columns: column6:6(bool!null) column8:8(bool!null) k:1(int!null) i:2(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,6), (2)-->(8)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int!null)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── projections
+ │         ├── k > 0 [type=bool, outer=(1)]
+ │         └── i > 0 [type=bool, outer=(2)]
+ └── aggregations
+      ├── agg-filter [type=decimal, outer=(1,6)]
+      │    ├── sum [type=decimal]
+      │    │    └── variable: k [type=int]
+      │    └── variable: column6 [type=bool]
+      └── agg-filter [type=decimal, outer=(2,8)]
+           ├── agg-distinct [type=decimal]
+           │    └── sum [type=decimal]
+           │         └── variable: i [type=int]
+           └── variable: column8 [type=bool]
+
+norm expect=EliminateAggFilteredDistinctForKeys
+SELECT string_agg(DISTINCT s, ',') FILTER (WHERE s > 'a') FROM s
+----
+scalar-group-by
+ ├── columns: string_agg:4(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ ├── project
+ │    ├── columns: column2:2(string!null) column3:3(bool!null) s:1(string!null)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    ├── scan s
+ │    │    ├── columns: s:1(string!null)
+ │    │    └── key: (1)
+ │    └── projections
+ │         ├── const: ',' [type=string]
+ │         └── s > 'a' [type=bool, outer=(1)]
+ └── aggregations
+      └── agg-filter [type=string, outer=(1,3)]
+           ├── string-agg [type=string]
+           │    ├── variable: s [type=string]
+           │    └── const: ',' [type=string]
+           └── variable: column3 [type=bool]
+
+# GroupBy with key argument.
+norm expect=EliminateAggFilteredDistinctForKeys
+SELECT sum(DISTINCT k) FILTER (WHERE f > 0) FROM a GROUP BY i
+----
+project
+ ├── columns: sum:7(decimal)
+ └── group-by
+      ├── columns: i:2(int!null) sum:7(decimal)
+      ├── grouping columns: i:2(int!null)
+      ├── key: (2)
+      ├── fd: (2)-->(7)
+      ├── project
+      │    ├── columns: column6:6(bool) k:1(int!null) i:2(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,6)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
+      │    └── projections
+      │         └── f > 0.0 [type=bool, outer=(3)]
+      └── aggregations
+           └── agg-filter [type=decimal, outer=(1,6)]
+                ├── sum [type=decimal]
+                │    └── variable: k [type=int]
+                └── variable: column6 [type=bool]
+
+# GroupBy with no key.
+norm expect-not=EliminateAggFilteredDistinctForKeys
+SELECT sum(DISTINCT a) FILTER (WHERE c > 0) FROM abc GROUP BY b
+----
+project
+ ├── columns: sum:5(decimal)
+ └── group-by
+      ├── columns: b:2(int!null) sum:5(decimal)
+      ├── grouping columns: b:2(int!null)
+      ├── key: (2)
+      ├── fd: (2)-->(5)
+      ├── project
+      │    ├── columns: column4:4(bool!null) a:1(int!null) b:2(int!null)
+      │    ├── scan abc
+      │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    │    └── key: (1-3)
+      │    └── projections
+      │         └── c > 0 [type=bool, outer=(3)]
+      └── aggregations
+           └── agg-filter [type=decimal, outer=(1,4)]
+                ├── agg-distinct [type=decimal]
+                │    └── sum [type=decimal]
+                │         └── variable: a [type=int]
+                └── variable: column4 [type=bool]
+
+# GroupBy with composite key formed by argument plus grouping columns.
+norm expect=EliminateAggFilteredDistinctForKeys
+SELECT sum(DISTINCT a) FILTER (WHERE c > 0) FROM abc GROUP BY b, c
+----
+project
+ ├── columns: sum:5(decimal)
+ └── group-by
+      ├── columns: b:2(int!null) c:3(int!null) sum:5(decimal)
+      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(5)
+      ├── project
+      │    ├── columns: column4:4(bool!null) a:1(int!null) b:2(int!null) c:3(int!null)
+      │    ├── key: (1-3)
+      │    ├── fd: (3)-->(4)
+      │    ├── scan abc
+      │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    │    └── key: (1-3)
+      │    └── projections
+      │         └── c > 0 [type=bool, outer=(3)]
+      └── aggregations
+           └── agg-filter [type=decimal, outer=(1,4)]
+                ├── sum [type=decimal]
+                │    └── variable: a [type=int]
+                └── variable: column4 [type=bool]
+
+# GroupBy with multiple aggregations simplified.
+norm expect=EliminateAggFilteredDistinctForKeys
+SELECT sum(DISTINCT i) FILTER (WHERE f > 0), avg(DISTINCT f) FILTER (WHERE i > 0) FROM a GROUP BY k
+----
+project
+ ├── columns: sum:7(decimal) avg:9(float)
+ └── group-by
+      ├── columns: k:1(int!null) sum:7(decimal) avg:9(float)
+      ├── grouping columns: k:1(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(7,9)
+      ├── project
+      │    ├── columns: column6:6(bool) column8:8(bool!null) k:1(int!null) i:2(int!null) f:3(float)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3,6), (2,3)~~>(1), (2)-->(8)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
+      │    └── projections
+      │         ├── f > 0.0 [type=bool, outer=(3)]
+      │         └── i > 0 [type=bool, outer=(2)]
+      └── aggregations
+           ├── agg-filter [type=decimal, outer=(2,6)]
+           │    ├── sum [type=decimal]
+           │    │    └── variable: i [type=int]
+           │    └── variable: column6 [type=bool]
+           └── agg-filter [type=float, outer=(3,8)]
+                ├── avg [type=float]
+                │    └── variable: f [type=float]
+                └── variable: column8 [type=bool]
+
+# GroupBy where only some aggregations are simplified (the table has
+# keys u,v and v,w).
+norm expect=EliminateAggFilteredDistinctForKeys
+SELECT
+    sum(DISTINCT u) FILTER (WHERE u > 0),
+    stddev(DISTINCT w) FILTER (WHERE w > 0),
+    avg(DISTINCT z) FILTER (WHERE z > 0)
+FROM uvwz
+GROUP BY v
+----
+project
+ ├── columns: sum:7(decimal) stddev:9(decimal) avg:11(decimal)
+ └── group-by
+      ├── columns: v:2(int!null) sum:7(decimal) stddev:9(decimal) avg:11(decimal)
+      ├── grouping columns: v:2(int!null)
+      ├── key: (2)
+      ├── fd: (2)-->(7,9,11)
+      ├── project
+      │    ├── columns: column6:6(bool!null) column8:8(bool!null) column10:10(bool!null) u:1(int!null) v:2(int!null) w:3(int!null) z:4(int!null)
+      │    ├── key: (2,3)
+      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(6), (3)-->(8), (4)-->(10)
+      │    ├── scan uvwz
+      │    │    ├── columns: u:1(int!null) v:2(int!null) w:3(int!null) z:4(int!null)
+      │    │    ├── key: (2,3)
+      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      │    └── projections
+      │         ├── u > 0 [type=bool, outer=(1)]
+      │         ├── w > 0 [type=bool, outer=(3)]
+      │         └── z > 0 [type=bool, outer=(4)]
+      └── aggregations
+           ├── agg-filter [type=decimal, outer=(1,6)]
+           │    ├── sum [type=decimal]
+           │    │    └── variable: u [type=int]
+           │    └── variable: column6 [type=bool]
+           ├── agg-filter [type=decimal, outer=(3,8)]
+           │    ├── std-dev [type=decimal]
+           │    │    └── variable: w [type=int]
+           │    └── variable: column8 [type=bool]
+           └── agg-filter [type=decimal, outer=(4,10)]
+                ├── agg-distinct [type=decimal]
+                │    └── avg [type=decimal]
+                │         └── variable: z [type=int]
+                └── variable: column10 [type=bool]
 
 # --------------------------------------------------
 # EliminateDistinctOnNoColumns

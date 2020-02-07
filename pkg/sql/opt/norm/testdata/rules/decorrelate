@@ -1702,8 +1702,8 @@ group-by
  │    │    │    │    └── filters (true)
  │    │    │    └── filters (true)
  │    │    └── aggregations
- │    │         ├── count [type=int, outer=(9)]
- │    │         │    └── agg-distinct [type=int]
+ │    │         ├── agg-distinct [type=int, outer=(9)]
+ │    │         │    └── count [type=int]
  │    │         │         └── variable: v [type=int]
  │    │         ├── const-agg [type=int, outer=(2)]
  │    │         │    └── variable: i [type=int]

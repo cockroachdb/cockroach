@@ -54,7 +54,7 @@ func (c *CustomFuncs) NullRejectAggVar(
 ) *memo.VariableExpr {
 	for i := range aggs {
 		if nullRejectCols.Contains(aggs[i].Col) {
-			return memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
+			return memo.ExtractAggFirstVar(aggs[i].Agg)
 		}
 	}
 	panic(errors.AssertionFailedf("expected aggregation not found"))
@@ -133,7 +133,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 	var rejectNullCols opt.ColSet
 	var savedInColID opt.ColumnID
 	for i := range aggs {
-		agg := aggs[i].Agg
+		agg := memo.ExtractAggFunc(aggs[i].Agg)
 		aggOp := agg.Op()
 
 		if aggOp == opt.ConstAggOp {
@@ -147,7 +147,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 
 		// Get column ID of aggregate's Variable operator input.
-		inColID := memo.ExtractAggSingleInputColumn(agg)
+		inColID := agg.Child(0).(*memo.VariableExpr).Col
 
 		// Criteria #3.
 		if savedInColID != 0 && savedInColID != inColID {

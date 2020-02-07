@@ -127,8 +127,8 @@ sort
       │    └── filters
       │         └── p_partkey = ps_partkey [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── aggregations
-           └── count [type=int, outer=(2)]
-                └── agg-distinct [type=int]
+           └── agg-distinct [type=int, outer=(2)]
+                └── count [type=int]
                      └── variable: ps_suppkey [type=int]
 
 stats table=q16_sort_1

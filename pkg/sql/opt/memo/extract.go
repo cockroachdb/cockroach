@@ -13,7 +13,6 @@ package memo
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -98,54 +97,62 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 	panic(errors.AssertionFailedf("non-const expression: %+v", e))
 }
 
-// ExtractAggSingleInputColumn returns the input ColumnID of an aggregate
-// operator that has a single input.
-func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
+// ExtractAggFunc digs down into the given aggregate expression and returns the
+// aggregate function, skipping past any AggFilter or AggDistinct operators.
+func ExtractAggFunc(e opt.ScalarExpr) opt.ScalarExpr {
+	if filter, ok := e.(*AggFilterExpr); ok {
+		e = filter.Input
+	}
+
+	if distinct, ok := e.(*AggDistinctExpr); ok {
+		e = distinct.Input
+	}
+
 	if !opt.IsAggregateOp(e) {
 		panic(errors.AssertionFailedf("not an Aggregate"))
 	}
-	return ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col
+
+	return e
 }
 
 // ExtractAggInputColumns returns the set of columns the aggregate depends on.
 func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
+	var res opt.ColSet
+	if filter, ok := e.(*AggFilterExpr); ok {
+		res.Add(filter.Filter.(*VariableExpr).Col)
+		e = filter.Input
+	}
+
+	if distinct, ok := e.(*AggDistinctExpr); ok {
+		e = distinct.Input
+	}
+
 	if !opt.IsAggregateOp(e) {
 		panic(errors.AssertionFailedf("not an Aggregate"))
 	}
 
-	if e.ChildCount() == 0 {
-		return opt.ColSet{}
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		if variable, ok := e.Child(i).(*VariableExpr); ok {
+			res.Add(variable.Col)
+		}
 	}
 
-	arg := e.Child(0)
-	var res opt.ColSet
-	if filter, ok := arg.(*AggFilterExpr); ok {
-		res.Add(filter.Filter.(*VariableExpr).Col)
-		arg = filter.Input
-	}
-	if distinct, ok := arg.(*AggDistinctExpr); ok {
-		arg = distinct.Input
-	}
-	if variable, ok := arg.(*VariableExpr); ok {
-		res.Add(variable.Col)
-		return res
-	}
-	panic(errors.AssertionFailedf("unhandled aggregate input %T", log.Safe(arg)))
+	return res
 }
 
-// ExtractVarFromAggInput is given an argument to an Aggregate and returns the
-// inner Variable expression, stripping out modifiers like AggDistinct.
-func ExtractVarFromAggInput(arg opt.ScalarExpr) *VariableExpr {
-	if filter, ok := arg.(*AggFilterExpr); ok {
-		arg = filter.Input
+// ExtractAggFirstVar is given an aggregate expression and returns the Variable
+// expression for the first argument, skipping past modifiers like AggDistinct.
+func ExtractAggFirstVar(e opt.ScalarExpr) *VariableExpr {
+	e = ExtractAggFunc(e)
+	if e.ChildCount() == 0 {
+		panic(errors.AssertionFailedf("aggregate does not have any arguments"))
 	}
-	if distinct, ok := arg.(*AggDistinctExpr); ok {
-		arg = distinct.Input
-	}
-	if variable, ok := arg.(*VariableExpr); ok {
+
+	if variable, ok := e.Child(0).(*VariableExpr); ok {
 		return variable
 	}
-	panic(errors.AssertionFailedf("aggregate input not a Variable"))
+
+	panic(errors.AssertionFailedf("first aggregate input is not a Variable"))
 }
 
 // ExtractJoinEqualityColumns returns pairs of columns (one from the left side,
