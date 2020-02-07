@@ -65,8 +65,15 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	var roleOptions roleoption.List
-	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsString, opName)
+	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsStringOrNull, opName)
+
+	// Using CREATE ROLE syntax enables NOLOGIN by default.
+	if isRole && !roleOptions.Contains(roleoption.LOGIN) &&
+		!roleOptions.Contains(roleoption.NOLOGIN) {
+		roleOptions = append(roleOptions,
+			roleoption.RoleOption{Option: roleoption.NOLOGIN, HasValue: false})
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -167,19 +174,37 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		)
 	}
 
+	// Get a map of statements to execute for role options and their values.
 	stmts, err := n.roleOptions.GetSQLStmts()
 	if err != nil {
 		return err
 	}
 
-	for _, stmt := range stmts {
+	for stmt, value := range stmts {
+		qargs := []interface{}{normalizedUsername}
+
+		if value != nil {
+			isNull, val, err := value()
+			if err != nil {
+				return err
+			}
+			if isNull {
+				// If the value of the role option is NULL, ensure that nil is passed
+				// into the statement placeholder, since val is string type "NULL"
+				// will not be interpreted as NULL by the InternalExecutor.
+				qargs = append(qargs, nil)
+			} else {
+				qargs = append(qargs, val)
+			}
+		}
+
 		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt,
-			normalizedUsername,
+			qargs...,
 		)
 		if err != nil {
 			return err

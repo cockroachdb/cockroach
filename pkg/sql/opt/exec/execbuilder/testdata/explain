@@ -362,9 +362,9 @@ EXPLAIN SHOW USERS
 ·          vectorized   true
 render     ·            ·
  └── scan  ·            ·
-·          table        users@primary
+·          table        role_options@primary
 ·          spans        ALL
-·          filter       "isRole" = false
+·          filter       option = 'LOGIN'
 
 # EXPLAIN selecting from a sequence.
 statement ok

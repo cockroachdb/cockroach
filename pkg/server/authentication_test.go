@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -173,8 +174,11 @@ func TestSSLEnforcement(t *testing.T) {
 
 func TestVerifyPassword(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
+
 	ts := s.(*TestServer)
 
 	if util.RaceEnabled {
@@ -184,15 +188,37 @@ func TestVerifyPassword(t *testing.T) {
 		security.BcryptCost = bcrypt.MinCost
 	}
 
+	//location is used for timezone testing.
+	shanghaiLoc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, user := range []struct {
-		username string
-		password string
+		username         string
+		password         string
+		loginFlag        string
+		validUntilClause string
+		qargs            []interface{}
 	}{
-		{"azure_diamond", "hunter2"},
-		{"druidia", "12345"},
+		{"azure_diamond", "hunter2", "", "", nil},
+		{"druidia", "12345", "", "", nil},
+
+		{"richardc", "12345", "NOLOGIN", "", nil},
+		{"epoch", "12345", "", "VALID UNTIL '1970-01-01'", nil},
+		{"cockroach", "12345", "", "VALID UNTIL '2100-01-01'", nil},
+		{"cthon98", "12345", "", "VALID UNTIL NULL", nil},
+
+		{"toolate", "12345", "", "VALID UNTIL $1",
+			[]interface{}{timeutil.Now().Add(-10 * time.Minute)}},
+		{"timelord", "12345", "", "VALID UNTIL $1",
+			[]interface{}{timeutil.Now().Add(59 * time.Minute).In(shanghaiLoc)}},
 	} {
-		cmd := fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", user.username, user.password)
-		if _, err := db.Exec(cmd); err != nil {
+		cmd := fmt.Sprintf(
+			"CREATE USER %s WITH PASSWORD '%s' %s %s",
+			user.username, user.password, user.loginFlag, user.validUntilClause)
+
+		if _, err := db.Exec(cmd, user.qargs...); err != nil {
 			t.Fatalf("failed to create user: %s", err)
 		}
 	}
@@ -216,9 +242,17 @@ func TestVerifyPassword(t *testing.T) {
 		{"root", "", false, "crypto/bcrypt"},
 		{"", "", false, "does not exist"},
 		{"doesntexist", "zxcvbn", false, "does not exist"},
+
+		{"richardc", "12345", false,
+			"richardc does not have login privilege"},
+		{"epoch", "12345", false, ""},
+		{"cockroach", "12345", true, ""},
+		{"toolate", "12345", false, ""},
+		{"timelord", "12345", true, ""},
+		{"cthon98", "12345", true, ""},
 	} {
 		t.Run("", func(t *testing.T) {
-			valid, err := ts.authentication.verifyPassword(context.TODO(), tc.username, tc.password)
+			valid, expired, err := ts.authentication.verifyPassword(context.TODO(), tc.username, tc.password)
 			if err != nil {
 				t.Errorf(
 					"credentials %s/%s failed with error %s, wanted no error",
@@ -227,7 +261,7 @@ func TestVerifyPassword(t *testing.T) {
 					err,
 				)
 			}
-			if valid != tc.shouldAuthenticate {
+			if valid && !expired != tc.shouldAuthenticate {
 				t.Errorf(
 					"credentials %s/%s valid = %t, wanted %t",
 					tc.username,
