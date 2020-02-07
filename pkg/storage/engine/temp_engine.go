@@ -26,13 +26,16 @@ import (
 // NewTempEngine creates a new engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.
 func NewTempEngine(
-	engine enginepb.EngineType, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+	ctx context.Context,
+	engine enginepb.EngineType,
+	tempStorage base.TempStorageConfig,
+	storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
 	switch engine {
 	case enginepb.EngineTypeTeePebbleRocksDB:
 		fallthrough
 	case enginepb.EngineTypePebble:
-		return NewPebbleTempEngine(tempStorage, storeSpec)
+		return NewPebbleTempEngine(ctx, tempStorage, storeSpec)
 	case enginepb.EngineTypeRocksDB:
 		return NewRocksDBTempEngine(tempStorage, storeSpec)
 	}
@@ -58,6 +61,21 @@ func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 	return newRocksDBMap(r.db, true /* allowDuplicates */)
 }
 
+// storageConfigFromTempStorageConfigAndStoreSpec creates a base.StorageConfig
+// used by both the RocksDB and Pebble temp engines from the given arguments.
+func storageConfigFromTempStorageConfigAndStoreSpec(
+	config base.TempStorageConfig, spec base.StoreSpec,
+) base.StorageConfig {
+	return base.StorageConfig{
+		Attrs: roachpb.Attributes{},
+		Dir:   config.Path,
+		// MaxSize doesn't matter for temp storage - it's not enforced in any way.
+		MaxSize:         0,
+		UseFileRegistry: spec.UseFileRegistry,
+		ExtraOptions:    spec.ExtraOptions,
+	}
+}
+
 // NewRocksDBTempEngine creates a new RocksDB engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.
 func NewRocksDBTempEngine(
@@ -71,16 +89,8 @@ func NewRocksDBTempEngine(
 	}
 
 	cfg := RocksDBConfig{
-		StorageConfig: base.StorageConfig{
-			Attrs: roachpb.Attributes{},
-			Dir:   tempStorage.Path,
-			// MaxSize doesn't matter for temp storage - it's not enforced in any
-			// way.
-			MaxSize:         0,
-			UseFileRegistry: storeSpec.UseFileRegistry,
-			ExtraOptions:    storeSpec.ExtraOptions,
-		},
-		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
+		StorageConfig: storageConfigFromTempStorageConfigAndStoreSpec(tempStorage, storeSpec),
+		MaxOpenFiles:  128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	defer rocksDBCache.Release()
@@ -117,7 +127,7 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 // NewPebbleTempEngine creates a new Pebble engine for DistSQL processors to use
 // when the working set is larger than can be stored in memory.
 func NewPebbleTempEngine(
-	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
 	// Default options as copied over from pebble/cmd/pebble/db.go
 	opts := DefaultPebbleOptions()
@@ -132,16 +142,22 @@ func NewPebbleTempEngine(
 	opts.DisableWAL = true
 	opts.TablePropertyCollectors = nil
 
-	path := tempStorage.Path
+	storageConfig := storageConfigFromTempStorageConfigAndStoreSpec(tempStorage, storeSpec)
 	if tempStorage.InMemory {
 		opts.FS = vfs.NewMem()
-		path = ""
+		storageConfig.Dir = ""
 	}
 
-	p, err := pebble.Open(path, opts)
+	p, err := NewPebble(
+		ctx,
+		PebbleConfig{
+			StorageConfig: storageConfig,
+			Opts:          opts,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pebbleTempEngine{db: p}, nil
+	return &pebbleTempEngine{db: p.db}, nil
 }

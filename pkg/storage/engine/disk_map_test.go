@@ -396,7 +396,7 @@ func TestPebbleMap(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	e, err := NewPebbleTempEngine(base.TempStorageConfig{Path: dir}, base.StoreSpec{})
+	e, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.StoreSpec{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +412,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	e, err := NewPebbleTempEngine(base.TempStorageConfig{Path: dir}, base.StoreSpec{})
+	e, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.StoreSpec{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +433,7 @@ func BenchmarkPebbleMapWrite(b *testing.B) {
 		}
 	}()
 	ctx := context.Background()
-	tempEngine, err := NewPebbleTempEngine(base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
+	tempEngine, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -480,17 +480,17 @@ func BenchmarkPebbleMapIteration(b *testing.B) {
 			b.Fatal(err)
 		}
 	}()
-	tempEngine, err := NewPebbleTempEngine(base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
+	ctx := context.Background()
+	tempEngine, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer tempEngine.Close()
 
 	diskMap := tempEngine.NewSortedDiskMap()
-	defer diskMap.Close(context.Background())
+	defer diskMap.Close(ctx)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	ctx := context.Background()
 
 	for _, inputSize := range []int{1 << 12, 1 << 14, 1 << 16, 1 << 18, 1 << 20} {
 		batchWriter := diskMap.NewBatchWriter()
