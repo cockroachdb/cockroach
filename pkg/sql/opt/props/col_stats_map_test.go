@@ -57,8 +57,14 @@ func TestColStatsMap(t *testing.T) {
 		{cols: []opt.ColumnID{3, 4}, expected: "(5)+(1)+(1,5)+(2)+(1,2)+(3,4)"},
 	}
 
-	var stats props.ColStatsMap
-	for _, tc := range testcases {
+	tcStats := make([]props.ColStatsMap, len(testcases))
+	// First calculate the stats for all steps, making copies every time. This
+	// also tests that the stats are copied correctly and there is no aliasing.
+	for tcIdx, tc := range testcases {
+		stats := &tcStats[tcIdx]
+		if tcIdx > 0 {
+			stats.CopyFrom(&tcStats[tcIdx-1])
+		}
 		cols := opt.MakeColSet(tc.cols...)
 		if !tc.remove {
 			if tc.clear {
@@ -69,7 +75,10 @@ func TestColStatsMap(t *testing.T) {
 		} else {
 			stats.RemoveIntersecting(cols)
 		}
+	}
 
+	for tcIdx, tc := range testcases {
+		stats := &tcStats[tcIdx]
 		var b strings.Builder
 		for i := 0; i < stats.Count(); i++ {
 			get := stats.Get(i)
