@@ -170,25 +170,29 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 // diverged and where bumping is possible. When possible, this allows the
 // transaction to commit without having to retry.
 //
+// Returns true if the timestamp was bumped.
+//
 // Note that this, like all the server-side bumping of the read timestamp, only
 // works for batches that exclusively contain writes; reads cannot be bumped
 // like this because they've already acquired timestamp-aware latches.
-func maybeBumpReadTimestampToWriteTimestamp(ctx context.Context, ba *roachpb.BatchRequest) {
+func maybeBumpReadTimestampToWriteTimestamp(ctx context.Context, ba *roachpb.BatchRequest) bool {
 	if ba.Txn == nil {
-		return
+		return false
 	}
 	if ba.Txn.ReadTimestamp.Equal(ba.Txn.WriteTimestamp) {
-		return
+		return false
 	}
 	arg, ok := ba.GetArg(roachpb.EndTxn)
 	if !ok {
-		return
+		return false
 	}
 	etArg := arg.(*roachpb.EndTxnRequest)
 	if batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg) &&
 		!batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, etArg) {
 		bumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp)
+		return true
 	}
+	return false
 }
 
 // bumpBatchTimestamp bumps ba's read and write timestamps to ts.

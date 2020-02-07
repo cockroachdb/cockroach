@@ -1667,6 +1667,8 @@ func heartbeatArgs(
 	}, roachpb.Header{Txn: txn}
 }
 
+// endTxnArgs creates a EndTxnRequest. By leaving the Sequence field 0, the
+// request will not qualify for 1PC.
 func endTxnArgs(txn *roachpb.Transaction, commit bool) (roachpb.EndTxnRequest, roachpb.Header) {
 	return roachpb.EndTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -4312,39 +4314,43 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 // enjoy protection from RPC replays.
 func TestRPCRetryProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	cfg := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	key := roachpb.Key("a")
-	txn := newTransaction("test", key, 1, tc.Clock())
+	testutils.RunTrueAndFalse(t, "CanCommitAtHigherTimestamp", func(t *testing.T, noPriorReads bool) {
+		key := roachpb.Key("a")
+		txn := newTransaction("test", key, 1, tc.Clock())
 
-	// Send a batch with put & end txn.
-	var ba roachpb.BatchRequest
-	put := putArgs(key, []byte("value"))
-	et, _ := endTxnArgs(txn, true)
-	et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}}
-	ba.Header = roachpb.Header{Txn: txn}
-	ba.Add(&put)
-	ba.Add(&et)
-	assignSeqNumsForReqs(txn, &put, &et)
-	_, pErr := tc.Sender().Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatalf("unexpected error: %s", pErr)
-	}
+		// Send a batch with put & end txn.
+		var ba roachpb.BatchRequest
+		put := putArgs(key, []byte("value"))
+		et, _ := endTxnArgs(txn, true)
+		et.CanCommitAtHigherTimestamp = noPriorReads
+		et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}}
+		ba.Header = roachpb.Header{Txn: txn}
+		ba.Add(&put)
+		ba.Add(&et)
+		assignSeqNumsForReqs(txn, &put, &et)
+		_, pErr := tc.Sender().Send(ctx, ba)
+		if pErr != nil {
+			t.Fatalf("unexpected error: %s", pErr)
+		}
 
-	// Replay the request. It initially tries to execute as a 1PC transaction,
-	// but will fail because of a WriteTooOldError that pushes the transaction.
-	// This forces the txn to execute normally, at which point it fails because
-	// the EndTxn is detected to be a duplicate.
-	_, pErr = tc.Sender().Send(context.Background(), ba)
-	if pErr == nil {
-		t.Fatalf("expected error, got nil")
-	}
-	require.Error(t, pErr.GetDetail(),
-		"TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)")
+		// Replay the request. It initially tries to execute as a 1PC transaction,
+		// but will fail because of a WriteTooOldError that pushes the transaction.
+		// This forces the txn to execute normally, at which point it fails because
+		// the EndTxn is detected to be a duplicate.
+		_, pErr = tc.Sender().Send(ctx, ba)
+		if pErr == nil {
+			t.Fatalf("expected error, got nil")
+		}
+		require.Error(t, pErr.GetDetail(),
+			"TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)")
+	})
 }
 
 // TestReplicaLaziness verifies that Raft Groups are brought up lazily.
@@ -9566,6 +9572,12 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
+	// Increment the clock so that all the transactions in the tests run at a
+	// different physical timestamp than the one used to initialize the replica's
+	// timestamp cache. This allows one of the tests to reset the logical part of
+	// the timestamp it's operating and not run into the timestamp cache.
+	tc.manualClock.Increment(1)
+
 	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
 		txn := roachpb.MakeTransaction(
 			"test", roachpb.Key(key), roachpb.NormalUserPriority, ts, 0,
@@ -11121,6 +11133,50 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			// The end transaction (commit) does not write a transaction record
 			// if it hits a serializable retry error.
 			expTxn: noTxnRecord,
+		},
+		{
+			name: "1PC end transaction after push transaction (timestamp)",
+			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et := roachpb.EndTxnRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key:      txn.Key,
+						Sequence: 1, // This will qualify for 1PC.
+					},
+					Commit: true,
+				}
+				etH := roachpb.Header{Txn: txn}
+				return sendWrappedWithErr(etH, &et)
+			},
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+			// The end transaction (commit) does not write a transaction record
+			// if it hits a serializable retry error.
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "1PC end transaction after push transaction (abort)",
+			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et := roachpb.EndTxnRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key:      txn.Key,
+						Sequence: 1, // This will qualify for 1PC.
+					},
+					Commit: true,
+				}
+				etH := roachpb.Header{Txn: txn}
+				return sendWrappedWithErr(etH, &et)
+			},
+			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+			expTxn:   noTxnRecord,
 		},
 		{
 			name: "heartbeat transaction after push transaction (abort)",
