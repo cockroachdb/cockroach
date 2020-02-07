@@ -57,7 +57,7 @@ be a deciding factor for potential customers.
 ## Data Format
 
 A backup segments the keyspace into non-overlapping ranges and stores the data
-in each in the [LevelDB sstable format]. A marshalled proto `BackupDescriptor`
+in each in the [LevelDB sstable format]. A marshalled proto `BackupManifest`
 is placed next to the data and contains the start and end hlc timestamps of the
 backup, mappings between each keyrange and the filepath with that data, and
 denormalized copies of the SQL descriptors. Support for common cloud storage
@@ -143,7 +143,7 @@ the restore's progress is written and used to continue if the coordinating node
 goes down.
 
 A new SQL descriptor ID is claimed for each table and used, along with the
-metadata in the `BackupDescriptor`, to split off new ranges in the keyspace. A
+metadata in the `BackupManifest`, to split off new ranges in the keyspace. A
 replica from each is sent an rpc via `DistSender` with the path(s) of the
 corresponding segment data. The replica streams in the data, merging full and
 incremental backups as appropriate, and rewrites keys with the new table ID.
@@ -349,7 +349,7 @@ storage, we can use this same remote storage to maintain progress information
 while the backup is in progress.
 
 While the backup is in progress, the coordinator will write all completed
-`ExportRequests` (i.e., `BackupDescriptor_File` messages) to a `PROGRESS` file
+`ExportRequests` (i.e., `BackupManifest_File` messages) to a `PROGRESS` file
 in the backup directory every few minutes. Streaming these messages or appending
 them to an existing blob would avoid rewriting several megabytes on every
 checkpoint and allow for more frequent checkpoints, but a) this would greatly

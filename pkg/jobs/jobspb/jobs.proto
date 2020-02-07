@@ -43,7 +43,7 @@ message BackupDetails {
   // URIsByLocalityKV is a map of locality KVs to store URIs, used for
   // partitioned backups.
   map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
-  bytes backup_descriptor = 4;
+  bytes backup_manifest = 4;
   roachpb.FileEncryptionOptions encryption = 6;
 }
 

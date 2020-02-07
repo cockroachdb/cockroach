@@ -381,23 +381,23 @@ func allocateTableRewrites(
 	return tableRewrites, nil
 }
 
-// maybeUpgradeTableDescsInBackupDescriptors updates the backup descriptors'
+// maybeUpgradeTableDescsInBackupManifests updates the backup descriptors'
 // table descriptors to use the newer 19.2-style foreign key representation,
 // if they are not already upgraded. This requires resolving cross-table FK
 // references, which is done by looking up all table descriptors across all
 // backup descriptors provided. if skipFKsWithNoMatchingTable is set, FKs whose
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
-func maybeUpgradeTableDescsInBackupDescriptors(
-	ctx context.Context, backupDescs []BackupDescriptor, skipFKsWithNoMatchingTable bool,
+func maybeUpgradeTableDescsInBackupManifests(
+	ctx context.Context, backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
 	protoGetter := sqlbase.MapProtoGetter{
 		Protos: make(map[interface{}]protoutil.Message),
 	}
 	// Populate the protoGetter with all table descriptors in all backup
 	// descriptors so that they can be looked up.
-	for _, backupDesc := range backupDescs {
-		for _, desc := range backupDesc.Descriptors {
+	for _, backupManifest := range backupManifests {
+		for _, desc := range backupManifest.Descriptors {
 			if table := desc.Table(hlc.Timestamp{}); table != nil {
 				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(table.ID))] =
 					sqlbase.WrapDescriptor(protoutil.Clone(table).(*sqlbase.TableDescriptor))
@@ -405,15 +405,15 @@ func maybeUpgradeTableDescsInBackupDescriptors(
 		}
 	}
 
-	for i := range backupDescs {
-		backupDesc := &backupDescs[i]
-		for j := range backupDesc.Descriptors {
-			if table := backupDesc.Descriptors[j].Table(hlc.Timestamp{}); table != nil {
+	for i := range backupManifests {
+		backupManifest := &backupManifests[i]
+		for j := range backupManifest.Descriptors {
+			if table := backupManifest.Descriptors[j].Table(hlc.Timestamp{}); table != nil {
 				if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, skipFKsWithNoMatchingTable); err != nil {
 					return err
 				}
 				// TODO(lucy): Is this necessary?
-				backupDesc.Descriptors[j] = *sqlbase.WrapDescriptor(table)
+				backupManifest.Descriptors[j] = *sqlbase.WrapDescriptor(table)
 			}
 		}
 	}
@@ -704,7 +704,7 @@ func doRestorePlan(
 		localityInfo[i] = info
 	}
 
-	mainBackupDescs, err := loadBackupDescs(
+	mainBackupManifests, err := loadBackupManifests(
 		ctx, defaultURIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
 	)
 	if err != nil {
@@ -714,7 +714,7 @@ func doRestorePlan(
 	// Validate that the table coverage of the backup matches that of the restore.
 	// This prevents FULL CLUSTER backups to be restored as anything but full
 	// cluster restores and vice-versa.
-	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && mainBackupDescs[0].DescriptorCoverage == tree.RequestedDescriptors {
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
 		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
 	}
 
@@ -732,13 +732,13 @@ func doRestorePlan(
 	}
 
 	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
-	if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, mainBackupDescs, skipMissingFKs); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, skipMissingFKs); err != nil {
 		return err
 	}
 
 	if !endTime.IsEmpty() {
 		ok := false
-		for _, b := range mainBackupDescs {
+		for _, b := range mainBackupManifests {
 			// Find the backup that covers the requested time.
 			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
 				ok = true
@@ -767,7 +767,7 @@ func doRestorePlan(
 		}
 	}
 
-	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupDescs, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
+	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
 		return err
 	}
