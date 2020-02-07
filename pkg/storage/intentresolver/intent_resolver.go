@@ -279,9 +279,9 @@ func (ir *IntentResolver) ProcessWriteIntentError(
 	//
 	// To do better here, we need per-intent information on whether we need to
 	// poison.
-	if err := ir.ResolveIntents(ctx, resolveIntents,
-		ResolveOptions{Wait: false, Poison: true}); err != nil {
-		return cleanup, roachpb.NewError(err)
+	opts := ResolveOptions{Wait: false, Poison: true}
+	if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
+		return cleanup, pErr
 	}
 
 	return cleanup, nil
@@ -580,10 +580,9 @@ func (ir *IntentResolver) CleanupIntents(
 		//   same situation as above.
 		//
 		// Thus, we must poison.
-		if err := ir.ResolveIntents(
-			ctx, resolveIntents, ResolveOptions{Wait: true, Poison: true},
-		); err != nil {
-			return 0, errors.Wrapf(err, "failed to resolve intents")
+		opts := ResolveOptions{Wait: true, Poison: true}
+		if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
+			return 0, errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 		}
 		resolved += len(resolveIntents)
 		unpushed = unpushed[i:]
@@ -803,8 +802,8 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	// Resolve intents.
 	min, _ := txn.InclusiveTimeBounds()
 	opts := ResolveOptions{Wait: true, Poison: poison, MinTimestamp: min}
-	if err := ir.ResolveIntents(ctx, intents, opts); err != nil {
-		return errors.Wrapf(err, "failed to resolve intents")
+	if pErr := ir.ResolveIntents(ctx, intents, opts); pErr != nil {
+		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
 	// Run transaction record GC outside of ir.sem.
 	return ir.stopper.RunAsyncTask(
@@ -862,17 +861,17 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 	return rDesc.RangeID
 }
 
-// ResolveIntents synchronously resolves intents accordings to opts.
+// ResolveIntents synchronously resolves intents according to opts.
 func (ir *IntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.Intent, opts ResolveOptions,
-) error {
+) *roachpb.Error {
 	if len(intents) == 0 {
 		return nil
 	}
 	// Avoid doing any work on behalf of expired contexts. See
 	// https://github.com/cockroachdb/cockroach/issues/15997.
 	if err := ctx.Err(); err != nil {
-		return errors.Wrap(err, "aborted resolving intents")
+		return roachpb.NewError(err)
 	}
 	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)
 	ctx, cancel := context.WithCancel(ctx)
@@ -911,18 +910,18 @@ func (ir *IntentResolver) ResolveIntents(
 	respChan := make(chan requestbatcher.Response, len(resolveReqs))
 	for _, req := range resolveReqs {
 		if err := ir.irBatcher.SendWithChan(ctx, respChan, req.rangeID, req.req); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 	}
 	for seen := 0; seen < len(resolveReqs); seen++ {
 		select {
 		case resp := <-respChan:
 			if resp.Err != nil {
-				return resp.Err
+				return roachpb.NewError(resp.Err)
 			}
 			_ = resp.Resp // ignore the response
 		case <-ctx.Done():
-			return ctx.Err()
+			return roachpb.NewError(ctx.Err())
 		}
 	}
 
@@ -935,7 +934,7 @@ func (ir *IntentResolver) ResolveIntents(
 			b.Header.MaxSpanRequestKeys = intentResolverBatchSize
 			b.AddRawRequest(req)
 			if err := ir.db.Run(ctx, b); err != nil {
-				return err
+				return b.MustPErr()
 			}
 			// Check response to see if it must be resumed.
 			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.ResolveIntentRangeResponse)
