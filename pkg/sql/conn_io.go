@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwireconn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -565,6 +566,8 @@ const (
 //
 // ClientComm is implemented by the pgwire connection.
 type ClientComm interface {
+	pgwireconn.ClientBuffer
+
 	// createStatementResult creates a StatementResult for stmt.
 	//
 	// descOpt specifies if result needs to inform the client about row schema. If

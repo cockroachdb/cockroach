@@ -13,12 +13,15 @@ package pgwirebase
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwireconn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Conn exposes some functionality of a pgwire network connection to be
 // used by the Copy-in subprotocol implemented in the sql package.
 type Conn interface {
+	pgwireconn.ClientBuffer
+
 	// Rd returns a reader to be used to consume bytes from the connection.
 	// This reader can be used with a pgwirebase.ReadBuffer for reading messages.
 	//

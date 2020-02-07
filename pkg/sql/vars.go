@@ -57,6 +57,10 @@ type sessionVar struct {
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext) string
 
+	// BufferClientConn is optionally set.
+	// It adds any updates to the client connection buffer.
+	BufferClientConn func(evalCtx *extendedEvalContext) error
+
 	// GetStringVal converts the provided Expr to a string suitable
 	// for Set() or RuntimeSet().
 	// If this method is not provided,
@@ -114,6 +118,12 @@ var varGen = map[string]sessionVar{
 		) error {
 			m.SetApplicationName(s)
 			return nil
+		},
+		BufferClientConn: func(evalCtx *extendedEvalContext) error {
+			return evalCtx.ClientBuffer.BufferParamStatus(
+				"application_name",
+				evalCtx.SessionData.ApplicationName,
+			)
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.SessionData.ApplicationName
@@ -731,6 +741,12 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return sessionDataTimeZoneFormat(evalCtx.SessionData.DataConversion.Location)
 		},
+		BufferClientConn: func(evalCtx *extendedEvalContext) error {
+			return evalCtx.ClientBuffer.BufferParamStatus(
+				"TimeZone",
+				sessionDataTimeZoneFormat(evalCtx.SessionData.DataConversion.Location),
+			)
+		},
 		GetStringVal:  timeZoneVarGetStringVal,
 		Set:           timeZoneVarSet,
 		GlobalDefault: func(_ *settings.Values) string { return "UTC" },
@@ -1052,8 +1068,6 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) err
 	if v.Set == nil && v.RuntimeSet == nil {
 		return newCannotChangeParameterError(name)
 	}
-	if v.RuntimeSet != nil {
-		return v.RuntimeSet(ctx, &p.extendedEvalCtx, newVal)
-	}
-	return v.Set(ctx, p.sessionDataMutator, newVal)
+
+	return runtimeSetVar(ctx, &p.extendedEvalCtx, v, newVal)
 }

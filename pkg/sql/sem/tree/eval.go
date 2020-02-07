@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwireconn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -2743,6 +2744,8 @@ type EvalContext struct {
 	// TxnReadOnly specifies if the current transaction is read-only.
 	TxnReadOnly bool
 	TxnImplicit bool
+
+	ClientBuffer pgwireconn.ClientBuffer
 
 	Settings    *cluster.Settings
 	ClusterID   uuid.UUID

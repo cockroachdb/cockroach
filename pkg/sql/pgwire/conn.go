@@ -604,12 +604,6 @@ func (c *conn) sendInitialConnData(
 		if err := c.sendStatusParam(param, value); err != nil {
 			return sql.ConnectionHandler{}, err
 		}
-		// `pgwire` also expects updates when these parameters change.
-		connHandler.RegisterOnSessionDataChange(param, func(val string) {
-			if err := c.bufferStatusParam(param, val); err != nil {
-				panic(fmt.Sprintf("unexpected error when trying to send status param update: %s", err.Error()))
-			}
-		})
 	}
 	// The two following status parameters have no equivalent session
 	// variable.
@@ -1002,6 +996,11 @@ func (c *conn) BeginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) 
 		c.msgBuilder.putInt16(int16(pgwirebase.FormatText))
 	}
 	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// BufferParamStatus is part of the pgwireconn.ClientBuffer interface.
+func (c *conn) BufferParamStatus(param, value string) error {
+	return c.bufferStatusParam(param, value)
 }
 
 // SendCommandComplete is part of the pgwirebase.Conn interface.

@@ -431,12 +431,6 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 	return defVal
 }
 
-// RegisterOnSessionDataChange adds a listener to execute when a change on the
-// given key is made using the mutator object.
-func (h ConnectionHandler) RegisterOnSessionDataChange(key string, f func(val string)) {
-	h.ex.dataMutator.RegisterOnSessionDataChange(key, f)
-}
-
 // ServeConn serves a client connection by reading commands from the stmtBuf
 // embedded in the ConnHandler.
 //
@@ -561,7 +555,7 @@ func (s *Server) newConnExecutor(
 			settings: s.cfg.Settings,
 		},
 		memMetrics: memMetrics,
-		planner:    planner{execCfg: s.cfg},
+		planner:    planner{execCfg: s.cfg, clientConnBuffer: clientComm},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
@@ -585,7 +579,8 @@ func (s *Server) newConnExecutor(
 	// Initialize the session data from provided defaults. We need to do this early
 	// because other initializations below use the configured values.
 	if resetOpt == resetSessionDataToDefaults {
-		if err := resetSessionVars(ctx, sdMutator); err != nil {
+		err := resetSessionVars(ctx, sdMutator)
+		if err != nil {
 			log.Errorf(ctx, "error setting up client session: %v", err)
 			return nil, err
 		}
@@ -1913,6 +1908,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionData:        ex.sessionData,
 			SessionAccessor:    p,
 			PrivilegedAccessor: p,
+			ClientBuffer:       p.clientConnBuffer,
 			Settings:           ex.server.cfg.Settings,
 			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,
 			ClusterID:          ex.server.cfg.ClusterID(),

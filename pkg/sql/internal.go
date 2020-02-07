@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwireconn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -568,6 +569,11 @@ func (icc *internalClientComm) CreateDescribeResult(pos CmdPos) DescribeResult {
 	return icc.createRes(pos, nil /* onClose */)
 }
 
+// BufferParamStatus is part of the pgwireconn.ClientBuffer interface.
+func (icc *internalClientComm) BufferParamStatus(param, value string) error {
+	return nil
+}
+
 // CreateDeleteResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateDeleteResult(pos CmdPos) DeleteResult {
 	panic("unimplemented")
@@ -622,4 +628,15 @@ func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
 		}
 	}
 	ncl.clientComm.results = ncl.clientComm.results[:i]
+}
+
+// silentClientBuffer is an implementation of pgwire.ClientBuffer
+// that does not do anything. This is intended for internal executors.
+type silentClientBuffer struct{}
+
+var _ pgwireconn.ClientBuffer = &silentClientBuffer{}
+
+// BufferParamStatus implements the pgwire.ClientBuffer interface.
+func (b *silentClientBuffer) BufferParamStatus(param, value string) error {
+	return nil
 }
