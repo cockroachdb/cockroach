@@ -280,3 +280,20 @@ func (m *ColStatsMap) rebuildIndex() {
 		m.addToIndex(m.Get(i).Cols, i)
 	}
 }
+
+// CopyFrom sets this map to a deep copy of another map, which can be modified
+// independently.
+func (m *ColStatsMap) CopyFrom(other *ColStatsMap) {
+	m.initial = other.initial
+	m.other = append([]ColumnStatistic(nil), other.other...)
+	m.count = other.count
+	m.unique = other.unique
+
+	m.index = nil
+	if other.index != nil {
+		m.index = make(map[colStatKey]colStatVal, len(other.index))
+		for k, v := range other.index {
+			m.index[k] = v
+		}
+	}
+}

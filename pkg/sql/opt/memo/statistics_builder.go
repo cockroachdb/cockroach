@@ -2122,9 +2122,14 @@ func (sb *statisticsBuilder) colStatWithScan(
 	withProps := withScan.BindingProps
 	inColSet := opt.TranslateColSet(colSet, withScan.OutCols, withScan.InCols)
 
+	// We cannot call colStatLeaf on &withProps.Stats directly because it can
+	// modify it.
+	var statsCopy props.Statistics
+	statsCopy.CopyFrom(&withProps.Stats)
+
 	// TODO(rytaft): This would be more accurate if we could access the WithExpr
 	// itself.
-	inColStat := sb.colStatLeaf(inColSet, &withProps.Stats, &withProps.FuncDeps, withProps.NotNullCols)
+	inColStat := sb.colStatLeaf(inColSet, &statsCopy, &withProps.FuncDeps, withProps.NotNullCols)
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount

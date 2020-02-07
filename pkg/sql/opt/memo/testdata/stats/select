@@ -1423,7 +1423,7 @@ with &1 (t)
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: x:5(bool)
- │    ├── stats: [rows=4e+20, distinct(5)=3, null(5)=4e+18]
+ │    ├── stats: [rows=4e+20]
  │    ├── left-join (cross)
  │    │    ├── columns: t1.x:1(bool) t2.x:3(bool)
  │    │    ├── stats: [rows=4e+20]

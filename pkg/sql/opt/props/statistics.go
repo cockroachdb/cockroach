@@ -78,6 +78,14 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// CopyFrom copies a Statistics object which can then be modified independently.
+func (s *Statistics) CopyFrom(other *Statistics) {
+	s.Available = other.Available
+	s.RowCount = other.RowCount
+	s.ColStats.CopyFrom(&other.ColStats)
+	s.Selectivity = other.Selectivity
+}
+
 // ApplySelectivity applies a given selectivity to the statistics. RowCount and
 // Selectivity are updated. Note that DistinctCounts and NullCounts are not
 // updated.
@@ -125,9 +133,11 @@ func (s *Statistics) String() string {
 // for every possible subset of columns. In practice, it is only worth
 // maintaining statistics on a few columns and column sets that are frequently
 // used in predicates, group by columns, etc.
+//
+// ColumnStatistiscs can be copied by value.
 type ColumnStatistic struct {
 	// Cols is the set of columns whose data are summarized by this
-	// ColumnStatistic struct.
+	// ColumnStatistic struct. The ColSet is never modified in-place.
 	Cols opt.ColSet
 
 	// DistinctCount is the estimated number of distinct values of this

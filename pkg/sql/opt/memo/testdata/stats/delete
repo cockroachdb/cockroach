@@ -48,7 +48,7 @@ with &1
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
  │    ├── fetch columns: xyz.x:4(string) xyz.y:5(int) xyz.z:6(float)
  │    ├── side-effects, mutations
- │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ │    ├── stats: [rows=10]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2)
  │    └── select
