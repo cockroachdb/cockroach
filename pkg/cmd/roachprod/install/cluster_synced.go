@@ -1295,8 +1295,12 @@ func (c *SyncedCluster) Get(src, dest string) {
 
 				var copy func(src, dest string, info os.FileInfo) error
 				copy = func(src, dest string, info os.FileInfo) error {
+					// Make sure the destination file is world readable.
+					// See:
+					// https://github.com/cockroachdb/cockroach/issues/44843
+					mode := info.Mode() | 0444
 					if info.IsDir() {
-						if err := os.MkdirAll(dest, info.Mode()); err != nil {
+						if err := os.MkdirAll(dest, mode); err != nil {
 							return err
 						}
 
@@ -1317,7 +1321,7 @@ func (c *SyncedCluster) Get(src, dest string) {
 						return nil
 					}
 
-					if !info.Mode().IsRegular() {
+					if !mode.IsRegular() {
 						return nil
 					}
 
@@ -1327,7 +1331,7 @@ func (c *SyncedCluster) Get(src, dest string) {
 					}
 					defer out.Close()
 
-					if err := os.Chmod(out.Name(), info.Mode()); err != nil {
+					if err := os.Chmod(out.Name(), mode); err != nil {
 						return err
 					}
 
