@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // showBackupPlanHook implements PlanHookFn.
@@ -48,6 +50,12 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	expected := map[string]sql.KVStringOptValidate{backupOptEncPassphrase: sql.KVStringOptRequireValue}
+	optsFn, err := p.TypeAsStringOpts(backup.Options, expected)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	var shower backupShower
 	switch backup.Details {
 	case tree.BackupRangeDetails:
@@ -67,8 +75,29 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
+
+		opts, err := optsFn()
+		if err != nil {
+			return err
+		}
+
+		var encryption *roachpb.FileEncryptionOptions
+		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
+			store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str)
+			if err != nil {
+				return errors.Wrapf(err, "make storage")
+			}
+			defer store.Close()
+			opts, err := readEncryptionOptions(ctx, store)
+			if err != nil {
+				return err
+			}
+			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
+			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
+		}
+
 		desc, err := ReadBackupDescriptorFromURI(
-			ctx, str, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, nil, /* encryption */
+			ctx, str, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
 		)
 		if err != nil {
 			return err

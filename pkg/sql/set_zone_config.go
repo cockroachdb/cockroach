@@ -145,6 +145,12 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
+			telemetry.Inc(
+				sqltelemetry.SchemaSetZoneConfig(
+					n.ZoneSpecifier.TelemetryName(),
+					string(opt.Key),
+				),
+			)
 			if opt.Value == nil {
 				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
 				continue

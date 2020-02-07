@@ -1054,7 +1054,7 @@ func readEncryptionOptions(
 ) (*EncryptionInfo, error) {
 	r, err := src.ReadFile(ctx, "encryption-info")
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
 	defer r.Close()
 	encInfoBytes, err := ioutil.ReadAll(r)

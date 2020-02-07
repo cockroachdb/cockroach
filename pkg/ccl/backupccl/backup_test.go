@@ -2625,6 +2625,11 @@ func TestBackupEncrypted(t *testing.T) {
 	backupLoc1inc := localFoo + "/inc1/x?COCKROACH_LOCALITY=default"
 	backupLoc2inc := localFoo + "/inc1/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
 
+	plainBackupLoc1 := localFoo + "/cleartext?COCKROACH_LOCALITY=default"
+	plainBackupLoc2 := localFoo + "/cleartext?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+	sqlDB.Exec(t, `BACKUP TO ($1, $2)`, plainBackupLoc1, plainBackupLoc2)
+
 	sqlDB.Exec(t, `BACKUP TO ($1, $2) WITH encryption_passphrase='abcdefg'`, backupLoc1, backupLoc2)
 	// Add the actual content with our sentinel too.
 	sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
@@ -2635,7 +2640,7 @@ func TestBackupEncrypted(t *testing.T) {
 
 	checkedFiles := 0
 	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() {
+		if !info.IsDir() && !strings.Contains(path, "foo/cleartext") {
 			data, err := ioutil.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
@@ -2654,6 +2659,11 @@ func TestBackupEncrypted(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
+
+	sqlDB.Exec(t, `SHOW BACKUP $1 WITH encryption_passphrase='abcdefg'`, backupLoc1)
+	sqlDB.ExpectErr(t, `cipher: message authentication failed`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, backupLoc1)
+	sqlDB.ExpectErr(t, `file appears encrypted -- try specifying "encryption_passphrase"`, `SHOW BACKUP $1`, backupLoc1)
+	sqlDB.ExpectErr(t, `could not find or read encryption information`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, plainBackupLoc1)
 
 	sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase='abcdefg'`,
 		backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)

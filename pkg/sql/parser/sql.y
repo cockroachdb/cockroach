@@ -3453,35 +3453,39 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUP string_or_placeholder
+  SHOW BACKUP string_or_placeholder opt_with_options
   {
     $$.val = &tree.ShowBackup{
       Details: tree.BackupDefaultDetails,
       Path:    $3.expr(),
+      Options: $4.kvOptions(),
     }
   }
-| SHOW BACKUP SCHEMAS string_or_placeholder
+| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_options
   {
     $$.val = &tree.ShowBackup{
       Details: tree.BackupDefaultDetails,
       ShouldIncludeSchemas: true,
       Path:    $4.expr(),
+      Options: $5.kvOptions(),
     }
   }
-| SHOW BACKUP RANGES string_or_placeholder
+| SHOW BACKUP RANGES string_or_placeholder opt_with_options
   {
     /* SKIP DOC */
     $$.val = &tree.ShowBackup{
       Details: tree.BackupRangeDetails,
       Path:    $4.expr(),
+      Options: $5.kvOptions(),
     }
   }
-| SHOW BACKUP FILES string_or_placeholder
+| SHOW BACKUP FILES string_or_placeholder opt_with_options
   {
     /* SKIP DOC */
     $$.val = &tree.ShowBackup{
       Details: tree.BackupFileDetails,
       Path:    $4.expr(),
+      Options: $5.kvOptions(),
     }
   }
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
@@ -5975,7 +5979,7 @@ select_no_parens:
   {
     $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy()}
   }
-| select_clause opt_sort_clause for_locking_clause opt_select_limit 
+| select_clause opt_sort_clause for_locking_clause opt_select_limit
   {
     $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $4.limit(), Locking: $3.lockingClause()}
   }
@@ -5991,7 +5995,7 @@ select_no_parens:
   {
     $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy()}
   }
-| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit 
+| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
   {
     $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $5.limit(), Locking: $4.lockingClause()}
   }
