@@ -240,6 +240,37 @@ and the following Raft status: %+v`,
 	}
 }
 
+// canAttempt1PCEvaluation looks at the batch and decides whether it can be
+// executed as 1PC.
+func (r *Replica) canAttempt1PCEvaluation(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (bool, *roachpb.Error) {
+	if !isOnePhaseCommit(ba) {
+		return false, nil
+	}
+
+	if ba.Timestamp != ba.Txn.WriteTimestamp {
+		log.Fatalf(ctx, "unexpected 1PC execution with diverged timestamp. %s != %s",
+			ba.Timestamp, ba.Txn.WriteTimestamp)
+	}
+
+	// The EndTxn checks whether the txn record can be created, but we're
+	// eliding the EndTxn. So, we'll do the check instead.
+	ok, minCommitTS, reason := r.CanCreateTxnRecord(ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
+	if !ok {
+		newTxn := ba.Txn.Clone()
+		newTxn.Status = roachpb.ABORTED
+		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(reason), newTxn)
+	}
+	if ba.Timestamp.Less(minCommitTS) {
+		ba.Txn.WriteTimestamp = minCommitTS
+		// We can only evaluate at the new timestamp if we manage to bump the read
+		// timestamp.
+		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba), nil
+	}
+	return true, nil
+}
+
 // evaluateWriteBatch evaluates the supplied batch.
 //
 // If the batch is transactional and has all the hallmarks of a 1PC commit (i.e.
@@ -260,7 +291,11 @@ func (r *Replica) evaluateWriteBatch(
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	if isOnePhaseCommit(ba) {
+	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba)
+	if pErr != nil {
+		return nil, enginepb.MVCCStats{}, nil, result.Result{}, pErr
+	}
+	if ok {
 		res := r.evaluate1PC(ctx, idKey, ba, spans)
 		switch res.success {
 		case onePCSucceeded:
@@ -318,10 +353,6 @@ func (r *Replica) evaluate1PC(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
-	if ba.Timestamp != ba.Txn.WriteTimestamp {
-		log.Fatalf(ctx, "unexpected 1PC execution with diverged timestamp. %s != %s",
-			ba.Timestamp.String(), ba.Txn.WriteTimestamp.String())
-	}
 
 	var batch engine.Batch
 	defer func() {
@@ -359,17 +390,6 @@ func (r *Replica) evaluate1PC(
 	}
 
 	if pErr != nil || (!canFwdTimestamp && ba.Timestamp != br.Timestamp) {
-		if etArg.Require1PC {
-			if pErr == nil {
-				pErr = roachpb.NewError(roachpb.NewTransactionRetryError(
-					roachpb.RETRY_SERIALIZABLE, "Require1PC batch pushed"))
-			}
-			return onePCResult{
-				success: onePCFailed,
-				pErr:    pErr,
-			}
-		}
-
 		if pErr != nil {
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution. pErr: %v", pErr.String())
