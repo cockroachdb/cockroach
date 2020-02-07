@@ -96,7 +96,7 @@ func showBackupPlanHook(
 			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
 		}
 
-		desc, err := ReadBackupDescriptorFromURI(
+		desc, err := ReadBackupManifestFromURI(
 			ctx, str, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
 		)
 		if err != nil {
@@ -106,7 +106,7 @@ func showBackupPlanHook(
 		// FKs for which we can't resolve the cross-table references. We can't
 		// display them anyway, because we don't have the referenced table names,
 		// etc.
-		if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, []BackupDescriptor{desc}, true /*skipFKsWithNoMatchingTable*/); err != nil {
+		if err := maybeUpgradeTableDescsInBackupManifests(ctx, []BackupManifest{desc}, true /*skipFKsWithNoMatchingTable*/); err != nil {
 			return err
 		}
 
@@ -125,7 +125,7 @@ func showBackupPlanHook(
 
 type backupShower struct {
 	header sqlbase.ResultColumns
-	fn     func(BackupDescriptor) []tree.Datums
+	fn     func(BackupManifest) []tree.Datums
 }
 
 func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
@@ -146,7 +146,7 @@ func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
 func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas bool) backupShower {
 	return backupShower{
 		header: backupShowerHeaders(showSchemas),
-		fn: func(desc BackupDescriptor) []tree.Datums {
+		fn: func(desc BackupManifest) []tree.Datums {
 			descs := make(map[sqlbase.ID]string)
 			for _, descriptor := range desc.Descriptors {
 				if database := descriptor.GetDatabase(); database != nil {
@@ -210,7 +210,7 @@ var backupShowerRanges = backupShower{
 		{Name: "end_key", Typ: types.Bytes},
 	},
 
-	fn: func(desc BackupDescriptor) (rows []tree.Datums) {
+	fn: func(desc BackupManifest) (rows []tree.Datums) {
 		for _, span := range desc.Spans {
 			rows = append(rows, tree.Datums{
 				tree.NewDString(span.Key.String()),
@@ -234,7 +234,7 @@ var backupShowerFiles = backupShower{
 		{Name: "rows", Typ: types.Int},
 	},
 
-	fn: func(desc BackupDescriptor) (rows []tree.Datums) {
+	fn: func(desc BackupManifest) (rows []tree.Datums) {
 		for _, file := range desc.Files {
 			rows = append(rows, tree.Datums{
 				tree.NewDString(file.Path),

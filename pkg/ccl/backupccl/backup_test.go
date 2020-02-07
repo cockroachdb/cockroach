@@ -511,12 +511,12 @@ func backupAndRestore(
 			t.Fatal("cannot unmarshal job payload from system.jobs")
 		}
 
-		backupDesc := &backupccl.BackupDescriptor{}
+		backupManifest := &backupccl.BackupManifest{}
 		backupDetails := payload.Details.(*jobspb.Payload_Backup).Backup
-		if err := protoutil.Unmarshal(backupDetails.BackupDescriptor, backupDesc); err != nil {
+		if err := protoutil.Unmarshal(backupDetails.BackupManifest, backupManifest); err != nil {
 			t.Fatal("cannot unmarshal backup descriptor from job payload from system.jobs")
 		}
-		if backupDesc.Statistics != nil {
+		if backupManifest.Statistics != nil {
 			t.Fatal("expected statistics field of backup descriptor payload to be nil")
 		}
 
@@ -859,12 +859,12 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	var checkpointPath string
 
 	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		checkpointPath = filepath.Join(ip.dir, ip.name, backupccl.BackupDescriptorCheckpointName)
+		checkpointPath = filepath.Join(ip.dir, ip.name, backupccl.BackupManifestCheckpointName)
 		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
 		if err != nil {
 			return errors.Errorf("%+v", err)
 		}
-		var checkpointDesc backupccl.BackupDescriptor
+		var checkpointDesc backupccl.BackupManifest
 		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
 			return errors.Errorf("%+v", err)
 		}
@@ -968,9 +968,9 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
-		backupDesc, err := protoutil.Marshal(&backupccl.BackupDescriptor{
+		mockManifest, err := protoutil.Marshal(&backupccl.BackupManifest{
 			ClusterID: tc.Servers[0].ClusterID(),
-			Files: []backupccl.BackupDescriptor_File{
+			Files: []backupccl.BackupManifest_File{
 				{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 			},
 		})
@@ -981,32 +981,32 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err := os.MkdirAll(backupDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		checkpointFile := filepath.Join(backupDir, backupccl.BackupDescriptorCheckpointName)
-		if err := ioutil.WriteFile(checkpointFile, backupDesc, 0644); err != nil {
+		checkpointFile := filepath.Join(backupDir, backupccl.BackupManifestCheckpointName)
+		if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
 			t.Fatal(err)
 		}
 		createAndWaitForJob(
 			t, sqlDB, []sqlbase.ID{backupTableDesc.ID},
 			jobspb.BackupDetails{
-				EndTime:          tc.Servers[0].Clock().Now(),
-				URI:              "nodelocal:///backup",
-				BackupDescriptor: backupDesc,
+				EndTime:        tc.Servers[0].Clock().Now(),
+				URI:            "nodelocal:///backup",
+				BackupManifest: mockManifest,
 			},
 			jobspb.BackupProgress{},
 		)
 
 		// If the backup properly took the (incorrect) checkpoint into account, it
 		// won't have tried to re-export any keys within backupCompletedSpan.
-		backupDescriptorFile := filepath.Join(backupDir, backupccl.BackupDescriptorName)
-		backupDescriptorBytes, err := ioutil.ReadFile(backupDescriptorFile)
+		backupManifestFile := filepath.Join(backupDir, backupccl.BackupManifestName)
+		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var backupDescriptor backupccl.BackupDescriptor
-		if err := protoutil.Unmarshal(backupDescriptorBytes, &backupDescriptor); err != nil {
+		var backupManifest backupccl.BackupManifest
+		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatal(err)
 		}
-		for _, file := range backupDescriptor.Files {
+		for _, file := range backupManifest.Files {
 			if file.Span.Overlaps(backupCompletedSpan) && file.Path != "garbage-checkpoint" {
 				t.Fatalf("backup re-exported checkpointed span %s", file.Span)
 			}
@@ -1289,7 +1289,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupccl.BackupDescriptorName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupccl.BackupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -1335,7 +1335,7 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupccl.BackupDescriptorName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupccl.BackupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -2437,19 +2437,19 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
 
-	var backupDesc backupccl.BackupDescriptor
+	var backupManifest backupccl.BackupManifest
 	{
-		backupDescBytes, err := ioutil.ReadFile(filepath.Join(dir, backupccl.BackupDescriptorName))
+		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupccl.BackupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := protoutil.Unmarshal(backupDescBytes, &backupDesc); err != nil {
+		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 			t.Fatalf("%+v", err)
 		}
 	}
 
 	// Corrupt one of the files in the backup.
-	f, err := os.OpenFile(filepath.Join(dir, backupDesc.Files[1].Path), os.O_WRONLY, 0)
+	f, err := os.OpenFile(filepath.Join(dir, backupManifest.Files[1].Path), os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

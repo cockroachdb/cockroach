@@ -79,7 +79,7 @@ type tableAndIndex struct {
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(
-	tables []*sqlbase.TableDescriptor, revs []BackupDescriptor_DescriptorRevision,
+	tables []*sqlbase.TableDescriptor, revs []BackupManifest_DescriptorRevision,
 ) []roachpb.Span {
 
 	added := make(map[tableAndIndex]bool, len(tables))
@@ -376,7 +376,7 @@ func backupPlanHook(
 		}
 
 		var encryption *roachpb.FileEncryptionOptions
-		var prevBackups []BackupDescriptor
+		var prevBackups []BackupManifest
 		if len(incrementalFrom) > 0 {
 			if encryptionPassphrase != nil {
 				exportStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incrementalFrom[0])
@@ -393,7 +393,7 @@ func backupPlanHook(
 				}
 			}
 			clusterID := p.ExecCfg().ClusterID()
-			prevBackups = make([]BackupDescriptor, len(incrementalFrom))
+			prevBackups = make([]BackupManifest, len(incrementalFrom))
 			for i, uri := range incrementalFrom {
 				// TODO(lucy): We may want to upgrade the table descs to the newer
 				// foreign key representation here, in case there are backups from an
@@ -401,7 +401,7 @@ func backupPlanHook(
 				// since all we need to do is get the past backups' table/index spans,
 				// but it will be safer for future code to avoid having older-style
 				// descriptors around.
-				desc, err := ReadBackupDescriptorFromURI(
+				desc, err := ReadBackupManifestFromURI(
 					ctx, uri, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
 				)
 				if err != nil {
@@ -425,7 +425,7 @@ func backupPlanHook(
 
 		var priorIDs map[sqlbase.ID]sqlbase.ID
 
-		var revs []BackupDescriptor_DescriptorRevision
+		var revs []BackupManifest_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
 			priorIDs = make(map[sqlbase.ID]sqlbase.ID)
 			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs)
@@ -514,7 +514,7 @@ func backupPlanHook(
 		// a 1.x node, meaning that if 1.1 nodes may resume a backup, the limitation
 		// of requiring full backups after schema changes remains.
 
-		backupDesc := BackupDescriptor{
+		backupManifest := BackupManifest{
 			StartTime:          startTime,
 			EndTime:            endTime,
 			MVCCFilter:         mvccFilter,
@@ -536,7 +536,7 @@ func backupPlanHook(
 		// backups does cover the interval expected.
 		if _, coveredEnd, err := makeImportSpans(
 			spans,
-			append(prevBackups, backupDesc),
+			append(prevBackups, backupManifest),
 			nil, /*backupLocalityInfo*/
 			keys.MinKey,
 			errOnMissingRange,
@@ -546,7 +546,7 @@ func backupPlanHook(
 			return errors.Errorf("expected backup (along with any previous backups) to cover to %v, not %v", endTime, coveredEnd)
 		}
 
-		descBytes, err := protoutil.Marshal(&backupDesc)
+		descBytes, err := protoutil.Marshal(&backupManifest)
 		if err != nil {
 			return err
 		}
@@ -586,7 +586,7 @@ func backupPlanHook(
 			Description: description,
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
-				for _, sqlDesc := range backupDesc.Descriptors {
+				for _, sqlDesc := range backupManifest.Descriptors {
 					sqlDescIDs = append(sqlDescIDs, sqlDesc.GetID())
 				}
 				return sqlDescIDs
@@ -596,7 +596,7 @@ func backupPlanHook(
 				EndTime:          endTime,
 				URI:              defaultURI,
 				URIsByLocalityKV: urisByLocalityKV,
-				BackupDescriptor: descBytes,
+				BackupManifest:   descBytes,
 				Encryption:       encryption,
 			},
 			Progress: jobspb.BackupProgress{},

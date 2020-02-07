@@ -149,8 +149,8 @@ func backup(
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*roachpb.ExternalStorage,
 	job *jobs.Job,
-	backupDesc *BackupDescriptor,
-	checkpointDesc *BackupDescriptor,
+	backupManifest *BackupManifest,
+	checkpointDesc *BackupManifest,
 	resultsCh chan<- tree.Datums,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *roachpb.FileEncryptionOptions,
@@ -160,7 +160,7 @@ func backup(
 
 	mu := struct {
 		syncutil.Mutex
-		files          []BackupDescriptor_File
+		files          []BackupManifest_File
 		exported       roachpb.BulkOpSummary
 		lastCheckpoint time.Time
 	}{}
@@ -198,15 +198,15 @@ func backup(
 	// Subtract out any completed spans and split the remaining spans into
 	// range-sized pieces so that we can use the number of completed requests as a
 	// rough measure of progress.
-	spans := splitAndFilterSpans(backupDesc.Spans, completedSpans, ranges)
-	introducedSpans := splitAndFilterSpans(backupDesc.IntroducedSpans, completedIntroducedSpans, ranges)
+	spans := splitAndFilterSpans(backupManifest.Spans, completedSpans, ranges)
+	introducedSpans := splitAndFilterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans, ranges)
 
 	allSpans := make([]spanAndTime, 0, len(spans)+len(introducedSpans))
 	for _, s := range introducedSpans {
-		allSpans = append(allSpans, spanAndTime{span: s, start: hlc.Timestamp{}, end: backupDesc.StartTime})
+		allSpans = append(allSpans, spanAndTime{span: s, start: hlc.Timestamp{}, end: backupManifest.StartTime})
 	}
 	for _, s := range spans {
-		allSpans = append(allSpans, spanAndTime{span: s, start: backupDesc.StartTime, end: backupDesc.EndTime})
+		allSpans = append(allSpans, spanAndTime{span: s, start: backupManifest.StartTime, end: backupManifest.EndTime})
 	}
 
 	// Sequential ranges may have clustered leaseholders, for example a
@@ -278,7 +278,7 @@ func backup(
 					StorageByLocalityKV:                 storageByLocalityKV,
 					StartTime:                           span.start,
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
-					MVCCFilter:                          roachpb.MVCCFilter(backupDesc.MVCCFilter),
+					MVCCFilter:                          roachpb.MVCCFilter(backupManifest.MVCCFilter),
 					Encryption:                          encryption,
 				}
 				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
@@ -288,18 +288,18 @@ func backup(
 				res := rawRes.(*roachpb.ExportResponse)
 
 				mu.Lock()
-				if backupDesc.RevisionStartTime.Less(res.StartTime) {
-					backupDesc.RevisionStartTime = res.StartTime
+				if backupManifest.RevisionStartTime.Less(res.StartTime) {
+					backupManifest.RevisionStartTime = res.StartTime
 				}
 				for _, file := range res.Files {
-					f := BackupDescriptor_File{
+					f := BackupManifest_File{
 						Span:        file.Span,
 						Path:        file.Path,
 						Sha512:      file.Sha512,
 						EntryCounts: file.Exported,
 						LocalityKV:  file.LocalityKV,
 					}
-					if span.start != backupDesc.StartTime {
+					if span.start != backupManifest.StartTime {
 						f.StartTime = span.start
 						f.EndTime = span.end
 					}
@@ -319,9 +319,9 @@ func backup(
 
 				if checkpointFiles != nil {
 					checkpointMu.Lock()
-					backupDesc.Files = checkpointFiles
-					err := writeBackupDescriptor(
-						ctx, settings, defaultStore, BackupDescriptorCheckpointName, encryption, backupDesc,
+					backupManifest.Files = checkpointFiles
+					err := writeBackupManifest(
+						ctx, settings, defaultStore, BackupManifestCheckpointName, encryption, backupManifest,
 					)
 					checkpointMu.Unlock()
 					if err != nil {
@@ -340,14 +340,14 @@ func backup(
 
 	// No more concurrency, so no need to acquire locks below.
 
-	backupDesc.Files = mu.files
-	backupDesc.EntryCounts = mu.exported
+	backupManifest.Files = mu.files
+	backupManifest.EntryCounts = mu.exported
 
 	backupID := uuid.MakeV4()
-	backupDesc.ID = backupID
+	backupManifest.ID = backupID
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
-		filesByLocalityKV := make(map[string][]BackupDescriptor_File)
+		filesByLocalityKV := make(map[string][]BackupManifest_File)
 		for i := range mu.files {
 			file := &mu.files[i]
 			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], *file)
@@ -355,14 +355,14 @@ func backup(
 
 		nextPartitionedDescFilenameID := 1
 		for kv, conf := range storageByLocalityKV {
-			backupDesc.LocalityKVs = append(backupDesc.LocalityKVs, kv)
+			backupManifest.LocalityKVs = append(backupManifest.LocalityKVs, kv)
 			// Set a unique filename for each partition backup descriptor. The ID
 			// ensures uniqueness, and the kv string appended to the end is for
 			// readability.
 			filename := fmt.Sprintf("%s_%d_%s",
 				BackupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
 			nextPartitionedDescFilenameID++
-			backupDesc.PartitionDescriptorFilenames = append(backupDesc.PartitionDescriptorFilenames, filename)
+			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
 			desc := BackupPartitionDescriptor{
 				LocalityKV: kv,
 				Files:      filesByLocalityKV[kv],
@@ -382,7 +382,7 @@ func backup(
 		}
 	}
 
-	if err := writeBackupDescriptor(ctx, settings, defaultStore, BackupDescriptorName, encryption, backupDesc); err != nil {
+	if err := writeBackupManifest(ctx, settings, defaultStore, BackupManifestName, encryption, backupManifest); err != nil {
 		return mu.exported, err
 	}
 
@@ -404,12 +404,12 @@ func (b *backupResumer) Resume(
 	p := phs.(sql.PlanHookState)
 	b.makeExternalStorage = p.ExecCfg().DistSQLSrv.ExternalStorage
 
-	if len(details.BackupDescriptor) == 0 {
+	if len(details.BackupManifest) == 0 {
 		return errors.Newf("missing backup descriptor; cannot resume a backup from an older version")
 	}
 
-	var backupDesc BackupDescriptor
-	if err := protoutil.Unmarshal(details.BackupDescriptor, &backupDesc); err != nil {
+	var backupManifest BackupManifest
+	if err := protoutil.Unmarshal(details.BackupManifest, &backupManifest); err != nil {
 		return pgerror.Wrapf(err, pgcode.DataCorrupted,
 			"unmarshal backup descriptor")
 	}
@@ -431,13 +431,13 @@ func (b *backupResumer) Resume(
 		}
 		storageByLocalityKV[kv] = &conf
 	}
-	var checkpointDesc *BackupDescriptor
+	var checkpointDesc *BackupManifest
 
 	// We don't read the table descriptors from the backup descriptor, but
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	if desc, err := readBackupDescriptor(ctx, defaultStore, BackupDescriptorCheckpointName, details.Encryption); err == nil {
+	if desc, err := readBackupManifest(ctx, defaultStore, BackupManifestCheckpointName, details.Encryption); err == nil {
 		// If the checkpoint is from a different cluster, it's meaningless to us.
 		// More likely though are dummy/lock-out checkpoints with no ClusterID.
 		if desc.ClusterID.Equal(p.ExecCfg().ClusterID()) {
@@ -459,7 +459,7 @@ func (b *backupResumer) Resume(
 		defaultStore,
 		storageByLocalityKV,
 		b.job,
-		&backupDesc,
+		&backupManifest,
 		checkpointDesc,
 		resultsCh,
 		b.makeExternalStorage,
@@ -479,16 +479,16 @@ func (b *backupResumer) Resume(
 
 func (b *backupResumer) clearStats(ctx context.Context, DB *client.DB) error {
 	details := b.job.Details().(jobspb.BackupDetails)
-	var backupDesc BackupDescriptor
-	if err := protoutil.Unmarshal(details.BackupDescriptor, &backupDesc); err != nil {
+	var backupManifest BackupManifest
+	if err := protoutil.Unmarshal(details.BackupManifest, &backupManifest); err != nil {
 		return err
 	}
-	backupDesc.Statistics = nil
-	descBytes, err := protoutil.Marshal(&backupDesc)
+	backupManifest.Statistics = nil
+	descBytes, err := protoutil.Marshal(&backupManifest)
 	if err != nil {
 		return err
 	}
-	details.BackupDescriptor = descBytes
+	details.BackupManifest = descBytes
 	err = DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return b.job.WithTxn(txn).SetDetails(ctx, details)
 	})
@@ -520,7 +520,7 @@ func (b *backupResumer) OnTerminal(
 		if err != nil {
 			return err
 		}
-		return exportStore.Delete(ctx, BackupDescriptorCheckpointName)
+		return exportStore.Delete(ctx, BackupManifestCheckpointName)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 	}

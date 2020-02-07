@@ -29,25 +29,25 @@ import (
 )
 
 const (
-	// BackupDescriptorName is the file name used for serialized
-	// BackupDescriptor protos.
-	BackupDescriptorName = "BACKUP"
-	// BackupManifestName is a future name for the serialized
-	// BackupDescriptor proto.
-	BackupManifestName = "BACKUP_MANIFEST"
+	// BackupManifestName is the file name used for serialized
+	// BackupManifest protos.
+	BackupManifestName = "BACKUP"
+	// BackupNewManifestName is a future name for the serialized
+	// BackupManifest proto.
+	BackupNewManifestName = "BACKUP_MANIFEST"
 
 	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	BackupPartitionDescriptorPrefix = "BACKUP_PART"
-	// BackupDescriptorCheckpointName is the file name used to store the
-	// serialized BackupDescriptor proto while the backup is in progress.
-	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
+	// BackupManifestCheckpointName is the file name used to store the
+	// serialized BackupManifest proto while the backup is in progress.
+	BackupManifestCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
-type BackupFileDescriptors []BackupDescriptor_File
+type BackupFileDescriptors []BackupManifest_File
 
 func (r BackupFileDescriptors) Len() int      { return len(r) }
 func (r BackupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
@@ -58,67 +58,67 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
 }
 
-// ReadBackupDescriptorFromURI creates an export store from the given URI, then
-// reads and unmarshals a BackupDescriptor at the standard location in the
+// ReadBackupManifestFromURI creates an export store from the given URI, then
+// reads and unmarshals a BackupManifest at the standard location in the
 // export storage.
-func ReadBackupDescriptorFromURI(
+func ReadBackupManifestFromURI(
 	ctx context.Context,
 	uri string,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *roachpb.FileEncryptionOptions,
-) (BackupDescriptor, error) {
+) (BackupManifest, error) {
 	exportStore, err := makeExternalStorageFromURI(ctx, uri)
 
 	if err != nil {
-		return BackupDescriptor{}, err
+		return BackupManifest{}, err
 	}
 	defer exportStore.Close()
-	backupDesc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorName, encryption)
+	backupManifest, err := readBackupManifest(ctx, exportStore, BackupManifestName, encryption)
 	if err != nil {
-		backupManifest, manifestErr := readBackupDescriptor(ctx, exportStore, BackupManifestName, encryption)
-		if manifestErr != nil {
-			return BackupDescriptor{}, err
+		newManifest, newErr := readBackupManifest(ctx, exportStore, BackupNewManifestName, encryption)
+		if newErr != nil {
+			return BackupManifest{}, err
 		}
-		backupDesc = backupManifest
+		backupManifest = newManifest
 	}
-	backupDesc.Dir = exportStore.Conf()
-	// TODO(dan): Sanity check this BackupDescriptor: non-empty EndTime,
+	backupManifest.Dir = exportStore.Conf()
+	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime,
 	// non-empty Paths, and non-overlapping Spans and keyranges in Files.
-	return backupDesc, nil
+	return backupManifest, nil
 }
 
-// readBackupDescriptor reads and unmarshals a BackupDescriptor from filename in
+// readBackupManifest reads and unmarshals a BackupManifest from filename in
 // the provided export store.
-func readBackupDescriptor(
+func readBackupManifest(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *roachpb.FileEncryptionOptions,
-) (BackupDescriptor, error) {
+) (BackupManifest, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
-		return BackupDescriptor{}, err
+		return BackupManifest{}, err
 	}
 	defer r.Close()
 	descBytes, err := ioutil.ReadAll(r)
 	if err != nil {
-		return BackupDescriptor{}, err
+		return BackupManifest{}, err
 	}
 	if encryption != nil {
 		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
 		if err != nil {
-			return BackupDescriptor{}, err
+			return BackupManifest{}, err
 		}
 	}
-	var backupDesc BackupDescriptor
-	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
+	var backupManifest BackupManifest
+	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
-			return BackupDescriptor{}, errors.Wrapf(
+			return BackupManifest{}, errors.Wrapf(
 				err, "file appears encrypted -- try specifying %q", backupOptEncPassphrase)
 		}
-		return BackupDescriptor{}, err
+		return BackupManifest{}, err
 	}
-	for _, d := range backupDesc.Descriptors {
+	for _, d := range backupManifest.Descriptors {
 		// Calls to GetTable are generally frowned upon.
 		// This specific call exists to provide backwards compatibility with
 		// backups created prior to version 19.1. Starting in v19.1 the
@@ -135,7 +135,7 @@ func readBackupDescriptor(
 			t.ModificationTime = hlc.Timestamp{WallTime: 1}
 		}
 	}
-	return backupDesc, err
+	return backupManifest, err
 }
 
 func readBackupPartitionDescriptor(
@@ -159,20 +159,20 @@ func readBackupPartitionDescriptor(
 			return BackupPartitionDescriptor{}, err
 		}
 	}
-	var backupDesc BackupPartitionDescriptor
-	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
+	var backupManifest BackupPartitionDescriptor
+	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		return BackupPartitionDescriptor{}, err
 	}
-	return backupDesc, err
+	return backupManifest, err
 }
 
-func writeBackupDescriptor(
+func writeBackupManifest(
 	ctx context.Context,
 	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *roachpb.FileEncryptionOptions,
-	desc *BackupDescriptor,
+	desc *BackupManifest,
 ) error {
 	sort.Sort(BackupFileDescriptors(desc.Files))
 
@@ -213,25 +213,25 @@ func writeBackupPartitionDescriptor(
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
 
-func loadBackupDescs(
+func loadBackupManifests(
 	ctx context.Context,
 	uris []string,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *roachpb.FileEncryptionOptions,
-) ([]BackupDescriptor, error) {
-	backupDescs := make([]BackupDescriptor, len(uris))
+) ([]BackupManifest, error) {
+	backupManifests := make([]BackupManifest, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri, makeExternalStorageFromURI, encryption)
+		desc, err := ReadBackupManifestFromURI(ctx, uri, makeExternalStorageFromURI, encryption)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}
-		backupDescs[i] = desc
+		backupManifests[i] = desc
 	}
-	if len(backupDescs) == 0 {
+	if len(backupManifests) == 0 {
 		return nil, errors.Newf("no backups found")
 	}
-	return backupDescs, nil
+	return backupManifests, nil
 }
 
 // getBackupLocalityInfo takes a list of store URIs that together contain a
@@ -266,26 +266,26 @@ func getBackupLocalityInfo(
 	// First read the main backup descriptor, which is required to be at the first
 	// URI in the list. We don't read the table descriptors, so there's no need to
 	// upgrade them.
-	mainBackupDesc, err := readBackupDescriptor(ctx, stores[0], BackupDescriptorName, encryption)
+	mainBackupManifest, err := readBackupManifest(ctx, stores[0], BackupManifestName, encryption)
 	if err != nil {
-		manifest, manifestErr := readBackupDescriptor(ctx, stores[0], BackupManifestName, encryption)
+		manifest, manifestErr := readBackupManifest(ctx, stores[0], BackupManifestName, encryption)
 		if manifestErr != nil {
 			return info, err
 		}
-		mainBackupDesc = manifest
+		mainBackupManifest = manifest
 	}
 
 	// Now get the list of expected partial per-store backup manifest filenames
 	// and attempt to find them.
 	urisByOrigLocality := make(map[string]string)
-	for _, filename := range mainBackupDesc.PartitionDescriptorFilenames {
+	for _, filename := range mainBackupManifest.PartitionDescriptorFilenames {
 		found := false
 		for i, store := range stores {
 			if desc, err := readBackupPartitionDescriptor(ctx, store, filename, encryption); err == nil {
-				if desc.BackupID != mainBackupDesc.ID {
+				if desc.BackupID != mainBackupManifest.ID {
 					return info, errors.Errorf(
 						"expected backup part to have backup ID %s, found %s",
-						mainBackupDesc.ID, desc.BackupID,
+						mainBackupManifest.ID, desc.BackupID,
 					)
 				}
 				origLocalityKV := desc.LocalityKV
@@ -310,26 +310,26 @@ func getBackupLocalityInfo(
 }
 
 func loadSQLDescsFromBackupsAtTime(
-	backupDescs []BackupDescriptor, asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, BackupDescriptor) {
-	lastBackupDesc := backupDescs[len(backupDescs)-1]
+	backupManifests []BackupManifest, asOf hlc.Timestamp,
+) ([]sqlbase.Descriptor, BackupManifest) {
+	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
 	if asOf.IsEmpty() {
-		return lastBackupDesc.Descriptors, lastBackupDesc
+		return lastBackupManifest.Descriptors, lastBackupManifest
 	}
 
-	for _, b := range backupDescs {
+	for _, b := range backupManifests {
 		if asOf.Less(b.StartTime) {
 			break
 		}
-		lastBackupDesc = b
+		lastBackupManifest = b
 	}
-	if len(lastBackupDesc.DescriptorChanges) == 0 {
-		return lastBackupDesc.Descriptors, lastBackupDesc
+	if len(lastBackupManifest.DescriptorChanges) == 0 {
+		return lastBackupManifest.Descriptors, lastBackupManifest
 	}
 
-	byID := make(map[sqlbase.ID]*sqlbase.Descriptor, len(lastBackupDesc.Descriptors))
-	for _, rev := range lastBackupDesc.DescriptorChanges {
+	byID := make(map[sqlbase.ID]*sqlbase.Descriptor, len(lastBackupManifest.Descriptors))
+	for _, rev := range lastBackupManifest.DescriptorChanges {
 		if asOf.Less(rev.Time) {
 			break
 		}
@@ -351,7 +351,7 @@ func loadSQLDescsFromBackupsAtTime(
 		}
 		allDescs = append(allDescs, *desc)
 	}
-	return allDescs, lastBackupDesc
+	return allDescs, lastBackupManifest
 }
 
 // sanitizeLocalityKV returns a sanitized version of the input string where all
@@ -406,8 +406,8 @@ func writeEncryptionOptions(
 // contain a BACKUP or checkpoint and writes an empty checkpoint, both verifying
 // that the location is writable and locking out accidental concurrent
 // operations on that location if subsequently try this check. Callers must
-// clean up the written checkpoint file (BackupDescriptorCheckpointName) only
-// after writing to the backup file location (BackupDescriptorName).
+// clean up the written checkpoint file (BackupManifestCheckpointName) only
+// after writing to the backup file location (BackupManifestName).
 func VerifyUsableExportTarget(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -415,13 +415,13 @@ func VerifyUsableExportTarget(
 	readable string,
 	encryption *roachpb.FileEncryptionOptions,
 ) error {
-	if r, err := exportStore.ReadFile(ctx, BackupDescriptorName); err == nil {
+	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
 		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			readable, BackupDescriptorName)
+			readable, BackupManifestName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
 		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
@@ -431,14 +431,14 @@ func VerifyUsableExportTarget(
 			"%s already contains a %s file",
 			readable, BackupManifestName)
 	}
-	if r, err := exportStore.ReadFile(ctx, BackupDescriptorCheckpointName); err == nil {
+	if r, err := exportStore.ReadFile(ctx, BackupManifestCheckpointName); err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
-			readable, BackupDescriptorCheckpointName)
+			readable, BackupManifestCheckpointName)
 	}
-	if err := writeBackupDescriptor(
-		ctx, settings, exportStore, BackupDescriptorCheckpointName, encryption, &BackupDescriptor{},
+	if err := writeBackupManifest(
+		ctx, settings, exportStore, BackupManifestCheckpointName, encryption, &BackupManifest{},
 	); err != nil {
 		return errors.Wrapf(err, "cannot write to %s", readable)
 	}

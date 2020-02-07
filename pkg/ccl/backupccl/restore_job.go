@@ -75,7 +75,7 @@ type importEntry struct {
 
 	// Only set if entryType is backupFile
 	dir  roachpb.ExternalStorage
-	file BackupDescriptor_File
+	file BackupManifest_File
 
 	// Only set if entryType is request
 	files []roachpb.ImportRequest_File
@@ -116,7 +116,7 @@ type importEntry struct {
 // time missing to determine what error, if any, should be returned.
 func makeImportSpans(
 	tableSpans []roachpb.Span,
-	backups []BackupDescriptor,
+	backups []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	lowWaterMark roachpb.Key,
 	onMissing func(span covering.Range, start, end hlc.Timestamp) error,
@@ -560,7 +560,7 @@ func restore(
 	db *client.DB,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
-	backupDescs []BackupDescriptor,
+	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	tables []*sqlbase.TableDescriptor,
@@ -604,9 +604,9 @@ func restore(
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-	importSpans, _, err := makeImportSpans(spans, backupDescs, backupLocalityInfo, highWaterMark, errOnMissingRange)
+	importSpans, _, err := makeImportSpans(spans, backupManifests, backupLocalityInfo, highWaterMark, errOnMissingRange)
 	if err != nil {
-		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}
 
 	for i := range importSpans {
@@ -756,21 +756,21 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *roachpb.FileEncryptionOptions,
-) ([]BackupDescriptor, BackupDescriptor, []sqlbase.Descriptor, error) {
-	backupDescs, err := loadBackupDescs(ctx, details.URIs, makeExternalStorageFromURI, encryption)
+) ([]BackupManifest, BackupManifest, []sqlbase.Descriptor, error) {
+	backupManifests, err := loadBackupManifests(ctx, details.URIs, makeExternalStorageFromURI, encryption)
 	if err != nil {
-		return nil, BackupDescriptor{}, nil, err
+		return nil, BackupManifest{}, nil, err
 	}
 
 	// Upgrade the table descriptors to use the new FK representation.
 	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
 	// writing old-style descs in RestoreDetails (unless a job persists across
 	// an upgrade?).
-	if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, backupDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
-		return nil, BackupDescriptor{}, nil, err
+	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, true /* skipFKsWithNoMatchingTable */); err != nil {
+		return nil, BackupManifest{}, nil, err
 	}
 
-	allDescs, latestBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, details.EndTime)
+	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
 
 	var sqlDescs []sqlbase.Descriptor
 	for _, desc := range allDescs {
@@ -778,7 +778,7 @@ func loadBackupSQLDescs(
 			sqlDescs = append(sqlDescs, desc)
 		}
 	}
-	return backupDescs, latestBackupDesc, sqlDescs, nil
+	return backupManifests, latestBackupManifest, sqlDescs, nil
 }
 
 type restoreResumer struct {
@@ -799,7 +799,7 @@ type restoreResumer struct {
 // being restored. If the tableRewrites can re-write the table ID, then that
 // table is being restored.
 func remapRelevantStatistics(
-	backup BackupDescriptor, tableRewrites TableRewriteMap,
+	backup BackupManifest, tableRewrites TableRewriteMap,
 ) []*stats.TableStatisticProto {
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
 
@@ -947,7 +947,7 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
-	backupDescs, latestBackupDesc, sqlDescs, err := loadBackupSQLDescs(
+	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, details, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, details.Encryption,
 	)
 	if err != nil {
@@ -962,7 +962,7 @@ func (r *restoreResumer) Resume(
 	r.descriptorCoverage = details.DescriptorCoverage
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
-	r.latestStats = remapRelevantStatistics(latestBackupDesc, details.TableRewrites)
+	r.latestStats = remapRelevantStatistics(latestBackupManifest, details.TableRewrites)
 
 	if len(r.tables) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
@@ -977,7 +977,7 @@ func (r *restoreResumer) Resume(
 		p.ExecCfg().DB,
 		p.ExecCfg().Gossip,
 		p.ExecCfg().Settings,
-		backupDescs,
+		backupManifests,
 		details.BackupLocalityInfo,
 		details.EndTime,
 		tables,

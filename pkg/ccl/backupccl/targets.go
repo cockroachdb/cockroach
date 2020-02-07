@@ -302,7 +302,7 @@ func getRelevantDescChanges(
 	descs []sqlbase.Descriptor,
 	expanded []sqlbase.ID,
 	priorIDs map[sqlbase.ID]sqlbase.ID,
-) ([]BackupDescriptor_DescriptorRevision, error) {
+) ([]BackupManifest_DescriptorRevision, error) {
 
 	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
 	if err != nil {
@@ -316,7 +316,7 @@ func getRelevantDescChanges(
 	}
 
 	// interestingChanges will be every descriptor change relevant to the backup.
-	var interestingChanges []BackupDescriptor_DescriptorRevision
+	var interestingChanges []BackupManifest_DescriptorRevision
 
 	// interestingIDs are the descriptor for which we're interested in capturing
 	// changes. This is initially the descriptors matched (as of endTime) by our
@@ -366,7 +366,7 @@ func getRelevantDescChanges(
 				// version in the previous BACKUP descriptor, but avoids adding more
 				// complicated special-cases in RESTORE, so it only needs to look in a
 				// single BACKUP to restore to a particular time.
-				initial := BackupDescriptor_DescriptorRevision{Time: startTime, ID: i.GetID(), Desc: &desc}
+				initial := BackupManifest_DescriptorRevision{Time: startTime, ID: i.GetID(), Desc: &desc}
 				interestingChanges = append(interestingChanges, initial)
 			}
 		}
@@ -405,7 +405,7 @@ func getAllDescChanges(
 	db *client.DB,
 	startTime, endTime hlc.Timestamp,
 	priorIDs map[sqlbase.ID]sqlbase.ID,
-) ([]BackupDescriptor_DescriptorRevision, error) {
+) ([]BackupManifest_DescriptorRevision, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
 
@@ -414,7 +414,7 @@ func getAllDescChanges(
 		return nil, err
 	}
 
-	var res []BackupDescriptor_DescriptorRevision
+	var res []BackupManifest_DescriptorRevision
 
 	for _, revs := range allRevs {
 		id, err := keys.DecodeDescMetadataID(revs.Key)
@@ -422,7 +422,7 @@ func getAllDescChanges(
 			return nil, err
 		}
 		for _, rev := range revs.Values {
-			r := BackupDescriptor_DescriptorRevision{ID: sqlbase.ID(id), Time: rev.Timestamp}
+			r := BackupManifest_DescriptorRevision{ID: sqlbase.ID(id), Time: rev.Timestamp}
 			if len(rev.RawBytes) != 0 {
 				var desc sqlbase.Descriptor
 				if err := rev.GetProto(&desc); err != nil {
@@ -644,12 +644,12 @@ func fullClusterTargetsRestore(
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
-	backupDescs []BackupDescriptor,
+	backupManifests []BackupManifest,
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
-	allDescs, lastBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, asOf)
+	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
 		return fullClusterTargetsRestore(allDescs)
@@ -665,8 +665,8 @@ func selectTargets(
 		return nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
-	if lastBackupDesc.FormatVersion >= BackupFormatDescriptorTrackingVersion {
-		if err := matched.checkExpansions(lastBackupDesc.CompleteDbs); err != nil {
+	if lastBackupManifest.FormatVersion >= BackupFormatDescriptorTrackingVersion {
+		if err := matched.checkExpansions(lastBackupManifest.CompleteDbs); err != nil {
 			return nil, nil, err
 		}
 	}
