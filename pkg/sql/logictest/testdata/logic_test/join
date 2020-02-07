@@ -1082,3 +1082,14 @@ SELECT * FROM (VALUES (1, 2)) a(a1,a2) FULL JOIN (VALUES (3, 4)) b(b1,b2) ON a1=
 ----
 NULL  NULL  3     4
 1     2     NULL  NULL
+
+# Regression test for #44746 (internal error for particular condition).
+statement ok
+CREATE TABLE t44746_0(c0 INT)
+
+statement ok
+CREATE TABLE t44746_1(c1 INT)
+
+# Note: an "error parsing regexp" would also be acceptable here.
+statement ok
+SELECT * FROM t44746_0 FULL JOIN t44746_1 ON (SUBSTRING('', ')') = '') = (c1 > 0)
