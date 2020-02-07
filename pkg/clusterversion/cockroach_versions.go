@@ -427,6 +427,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionStatementDiagnosticsSystemTables,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 14},
 	},
+
 	// Add new versions here (step two of two).
 
 })

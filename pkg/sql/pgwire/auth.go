@@ -82,13 +82,14 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, pwRetrievalFn, err := sql.GetUserHashedPassword(
+	exists, canLogin, pwRetrievalFn, validUntilFn, err := sql.GetUserHashedPassword(
 		ctx, authOpt.ie, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)
 	}
-	if !exists {
+
+	if !exists || !canLogin {
 		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
 	}
 
@@ -99,7 +100,9 @@ func (c *conn) handleAuthentication(
 	}
 
 	// Ask the method to authenticate.
-	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn, execCfg, hbaEntry)
+	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn,
+		validUntilFn, execCfg, hbaEntry)
+
 	if err != nil {
 		return sendError(err)
 	}

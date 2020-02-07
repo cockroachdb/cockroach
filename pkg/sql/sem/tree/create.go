@@ -1236,7 +1236,7 @@ const (
 // ToRoleOptions converts KVOptions to a roleoption.List using
 // typeAsString to convert exprs to strings.
 func (o KVOptions) ToRoleOptions(
-	typeAsString func(e Expr, op string) (func() (string, error), error), op string,
+	typeAsStringOrNull func(e Expr, op string) (func() (bool, string, error), error), op string,
 ) (roleoption.List, error) {
 	roleOptions := make(roleoption.List, len(o))
 
@@ -1249,10 +1249,12 @@ func (o KVOptions) ToRoleOptions(
 		if ro.Value != nil {
 			if ro.Value == DNull {
 				roleOptions[i] = roleoption.RoleOption{
-					Option: option, HasValue: true, IsNull: true,
+					Option: option, HasValue: true, Value: func() (bool, string, error) {
+						return true, "", nil
+					},
 				}
 			} else {
-				strFn, err := typeAsString(ro.Value, op)
+				strFn, err := typeAsStringOrNull(ro.Value, op)
 				if err != nil {
 					return nil, err
 				}
@@ -1261,7 +1263,7 @@ func (o KVOptions) ToRoleOptions(
 					return nil, err
 				}
 				roleOptions[i] = roleoption.RoleOption{
-					Option: option, Value: strFn, HasValue: true, IsNull: false,
+					Option: option, Value: strFn, HasValue: true,
 				}
 			}
 		} else {
@@ -1277,7 +1279,11 @@ func (o KVOptions) ToRoleOptions(
 func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 	for _, option := range *o {
 		ctx.WriteString(" ")
-		ctx.WriteString(strings.ToUpper(option.Key.String()))
+		ctx.WriteString(
+			// "_" replaces space (" ") in YACC for handling tree.Name formatting.
+			strings.ReplaceAll(
+				strings.ToUpper(option.Key.String()), "_", " "),
+		)
 
 		// Password is a special case.
 		if strings.ToUpper(option.Key.String()) == "PASSWORD" {
@@ -1288,6 +1294,9 @@ func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 				ctx.WriteString("*****")
 			}
 		} else if option.Value == DNull {
+			ctx.WriteString(" ")
+			ctx.FormatNode(option.Value)
+		} else if option.Value != nil {
 			ctx.WriteString(" ")
 			ctx.FormatNode(option.Value)
 		}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -255,20 +256,32 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
 ) (bool, error) {
-	exists, pwRetrieveFn, err := sql.GetUserHashedPassword(
+	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
 		ctx, s.server.execCfg.InternalExecutor, username,
 	)
 	if err != nil {
 		return false, err
 	}
-	if !exists {
+	if !exists || !canLogin {
 		return false, nil
 	}
 	hashedPassword, err := pwRetrieveFn(ctx)
 	if err != nil {
 		return false, err
 	}
-	return (security.CompareHashAndPassword(hashedPassword, password) == nil), nil
+
+	validUntil, err := validUntilFn(ctx)
+	if err != nil {
+		return false, err
+	}
+	if validUntil != nil {
+		log.Warningf(ctx, "valid until %s", validUntil.Time)
+		if validUntil.Time.Sub(timeutil.Now()) < 0 {
+			return false, nil
+		}
+	}
+
+	return security.CompareHashAndPassword(hashedPassword, password) == nil, nil
 }
 
 // CreateAuthSecret creates a secret, hash pair to populate a session auth token.

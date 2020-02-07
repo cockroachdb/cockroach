@@ -312,6 +312,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add CREATEROLE privilege to admin/root",
 		workFn: addCreateRoleToAdminAndRoot,
 	},
+	{
+		// Introduced in v20.1.
+		name:   "Add login flag to root.",
+		workFn: addLoginToRootUser,
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -1083,6 +1088,15 @@ ON CONFLICT (name) DO NOTHING`,
 	}
 
 	return nil
+}
+
+func addLoginToRootUser(ctx context.Context, r runner) error {
+	// Upsert the Login flag to root user.
+	const upsertRootLogin = `
+          UPSERT INTO system.role_options ("username", "option", "value") VALUES ($1, 'LOGIN', NULL)
+          `
+	return r.execAsRootWithRetry(
+		ctx, "addLoginToRootUser", upsertRootLogin, security.RootUser)
 }
 
 func updateSystemLocationData(ctx context.Context, r runner) error {

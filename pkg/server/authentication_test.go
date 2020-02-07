@@ -173,8 +173,11 @@ func TestSSLEnforcement(t *testing.T) {
 
 func TestVerifyPassword(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
+
 	ts := s.(*TestServer)
 
 	if util.RaceEnabled {
@@ -185,13 +188,23 @@ func TestVerifyPassword(t *testing.T) {
 	}
 
 	for _, user := range []struct {
-		username string
-		password string
+		username         string
+		password         string
+		loginFlag        string
+		validUntilClause string
 	}{
-		{"azure_diamond", "hunter2"},
-		{"druidia", "12345"},
+		{"azure_diamond", "hunter2", "", ""},
+		{"druidia", "12345", "", ""},
+
+		{"richardc", "12345", "NOLOGIN", ""},
+		{"epoch", "12345", "", "VALID UNTIL '1970-01-01'"},
+		{"cockroach", "12345", "", "VALID UNTIL '2100-01-01'"},
+		{"cthon98", "12345", "", "VALID UNTIL NULL"},
 	} {
-		cmd := fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", user.username, user.password)
+		cmd := fmt.Sprintf(
+			"CREATE USER %s WITH PASSWORD '%s' %s %s",
+			user.username, user.password, user.loginFlag, user.validUntilClause)
+
 		if _, err := db.Exec(cmd); err != nil {
 			t.Fatalf("failed to create user: %s", err)
 		}
@@ -216,6 +229,13 @@ func TestVerifyPassword(t *testing.T) {
 		{"root", "", false, "crypto/bcrypt"},
 		{"", "", false, "does not exist"},
 		{"doesntexist", "zxcvbn", false, "does not exist"},
+
+		{"richardc", "12345", false,
+			"richardc does not have login permission"},
+		{"epoch", "12345", false,
+			"valid until 1970-01-01 00:00:00 +0000 +000000"},
+		{"cockroach", "12345", true, ""},
+		{"cthon98", "12345", true, ""},
 	} {
 		t.Run("", func(t *testing.T) {
 			valid, err := ts.authentication.verifyPassword(context.TODO(), tc.username, tc.password)

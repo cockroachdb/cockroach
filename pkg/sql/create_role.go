@@ -65,8 +65,15 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	var roleOptions roleoption.List
-	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsString, opName)
+	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsStringOrNull, opName)
+
+	// Using CREATE USER syntax enables LOGIN by default.
+	if !isRole && !roleOptions.Contains(roleoption.LOGIN) &&
+		!roleOptions.Contains(roleoption.NOLOGIN) {
+		roleOptions = append(roleOptions,
+			roleoption.RoleOption{Option: roleoption.LOGIN, HasValue: false})
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -172,14 +179,28 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	for _, stmt := range stmts {
+	for stmt, value := range stmts {
+		qargs := []interface{}{normalizedUsername}
+
+		if value != nil {
+			isNull, val, err := value()
+			if err != nil {
+				return err
+			}
+			if isNull {
+				qargs = append(qargs, nil)
+			} else {
+				qargs = append(qargs, val)
+			}
+		}
+
 		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt,
-			normalizedUsername,
+			qargs...,
 		)
 		if err != nil {
 			return err
