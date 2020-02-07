@@ -244,6 +244,29 @@ export const disconnectedAlertSelector = createSelector(
   },
 );
 
+export const emailSubscriptionAlertLocalSetting = new LocalSetting(
+  "email_subscription_alert", localSettingsSelector, false,
+);
+
+export const emailSubscriptionAlertSelector = createSelector(
+  emailSubscriptionAlertLocalSetting.selector,
+  ( emailSubscriptionAlert): Alert => {
+    if (!emailSubscriptionAlert) {
+      return undefined;
+    }
+    return {
+      level: AlertLevel.SUCCESS,
+      title: "You successfully signed up for CockroachDB release notes",
+      text: "You will receive emails about CockroachDB releases and best practices. You can unsubscribe from these emails anytime.",
+      showAsAlert: true,
+      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+        dispatch(emailSubscriptionAlertLocalSetting.set(false));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed in the alerts panel, which is embedded within the cluster overview
@@ -265,6 +288,7 @@ export const panelAlertsSelector = createSelector(
  */
 export const bannerAlertsSelector = createSelector(
   disconnectedAlertSelector,
+  emailSubscriptionAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
