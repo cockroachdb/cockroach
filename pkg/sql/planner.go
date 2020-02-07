@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwireconn"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -46,6 +47,9 @@ type extendedEvalContext struct {
 
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
+
+	// ClientBuffer is used for communication between possible pgwire clients.
+	ClientBuffer pgwireconn.ClientBuffer
 
 	// Tracing provides access to the session's tracing interface. Changes to the
 	// tracing state should be done through the sessionDataMutator.
@@ -115,6 +119,8 @@ type schemaInterface struct {
 // If one needs to be created outside of a Session, use makeInternalPlanner().
 type planner struct {
 	txn *client.Txn
+
+	clientConnBuffer pgwireconn.ClientBuffer
 
 	// Reference to the corresponding sql Statement for this query.
 	stmt *Statement
@@ -225,6 +231,7 @@ func newInternalPlanner(
 	// separate interfaces for planning and running plans, which could take
 	// suitable contexts.
 	ctx := logtags.AddTag(context.Background(), opName, "")
+	clientConnBuffer := &silentClientBuffer{}
 
 	sd := &sessiondata.SessionData{
 		SearchPath:    sqlbase.DefaultSearchPath,
@@ -250,6 +257,7 @@ func newInternalPlanner(
 		}),
 		settings:          execCfg.Settings,
 		setCurTxnReadOnly: func(bool) {},
+		clientConnBuffer:  clientConnBuffer,
 	}
 
 	var ts time.Time
@@ -261,7 +269,7 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg}
+	p := &planner{execCfg: execCfg, clientConnBuffer: clientConnBuffer}
 
 	p.txn = txn
 	p.stmt = nil

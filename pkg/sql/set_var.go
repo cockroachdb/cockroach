@@ -126,11 +126,28 @@ func (n *setVarNode) startExec(params runParams) error {
 		// Statement is RESET and we already know we have a default. Find it.
 		_, strVal = getSessionVarDefaultString(n.name, n.v, params.p.sessionDataMutator)
 	}
+	return runtimeSetVar(params.ctx, params.extendedEvalCtx, n.v, strVal)
+}
 
-	if n.v.RuntimeSet != nil {
-		return n.v.RuntimeSet(params.ctx, params.extendedEvalCtx, strVal)
+func runtimeSetVar(
+	ctx context.Context, extendedEvalCtx *extendedEvalContext, v sessionVar, strVal string,
+) error {
+	if v.RuntimeSet != nil {
+		if err := v.RuntimeSet(ctx, extendedEvalCtx, strVal); err != nil {
+			return err
+		}
+	} else {
+		if err := v.Set(ctx, extendedEvalCtx.SessionMutator, strVal); err != nil {
+			return err
+		}
 	}
-	return n.v.Set(params.ctx, params.p.sessionDataMutator, strVal)
+
+	if v.BufferClientConn != nil {
+		if err := v.BufferClientConn(extendedEvalCtx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a
