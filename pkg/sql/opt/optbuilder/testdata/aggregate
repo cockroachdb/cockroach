@@ -802,11 +802,11 @@ scalar-group-by
  │    └── scan kv
  │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  └── aggregations
-      ├── count [type=int]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=int]
+      │    └── count [type=int]
       │         └── variable: k [type=int]
-      └── count [type=int]
-           └── agg-distinct [type=int]
+      └── agg-distinct [type=int]
+           └── count [type=int]
                 └── variable: v [type=int]
 
 build
@@ -823,11 +823,11 @@ group-by
  │         └── function: upper [type=string]
  │              └── variable: s [type=string]
  └── aggregations
-      ├── count [type=int]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=int]
+      │    └── count [type=int]
       │         └── variable: k [type=int]
-      └── count [type=int]
-           └── agg-distinct [type=int]
+      └── agg-distinct [type=int]
+           └── count [type=int]
                 └── variable: v [type=int]
 
 build
@@ -861,8 +861,8 @@ scalar-group-by
  │              ├── variable: k [type=int]
  │              └── variable: v [type=int]
  └── aggregations
-      └── count [type=int]
-           └── agg-distinct [type=tuple{int, int}]
+      └── agg-distinct [type=int]
+           └── count [type=int]
                 └── variable: column5 [type=tuple{int, int}]
 
 build
@@ -879,8 +879,8 @@ scalar-group-by
  │              ├── variable: k [type=int]
  │              └── variable: v [type=int]
  └── aggregations
-      └── count [type=int]
-           └── agg-distinct [type=tuple{int, int}]
+      └── agg-distinct [type=int]
+           └── count [type=int]
                 └── variable: column5 [type=tuple{int, int}]
 
 build
@@ -1172,17 +1172,17 @@ scalar-group-by
  │    └── scan kv
  │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  └── aggregations
-      ├── avg [type=decimal]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=decimal]
+      │    └── avg [type=decimal]
       │         └── variable: k [type=int]
-      ├── avg [type=decimal]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=decimal]
+      │    └── avg [type=decimal]
       │         └── variable: v [type=int]
-      ├── sum [type=decimal]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=decimal]
+      │    └── sum [type=decimal]
       │         └── variable: k [type=int]
-      └── sum [type=decimal]
-           └── agg-distinct [type=int]
+      └── agg-distinct [type=decimal]
+           └── sum [type=decimal]
                 └── variable: v [type=int]
 
 build
@@ -2565,8 +2565,8 @@ scalar-group-by
  │    └── scan abc
  │         └── columns: a:1(char!null) b:2(float) c:3(bool) d:4(decimal)
  └── aggregations
-      └── sum [type=decimal]
-           └── agg-distinct [type=decimal]
+      └── agg-distinct [type=decimal]
+           └── sum [type=decimal]
                 └── variable: d [type=decimal]
 
 # FILTER.
@@ -2585,11 +2585,10 @@ scalar-group-by
  │              ├── variable: d [type=decimal]
  │              └── const: 0 [type=decimal]
  └── aggregations
-      └── sum [type=decimal]
-           └── agg-filter [type=decimal]
-                ├── variable: d [type=decimal]
-                └── filter
-                     └── variable: column5 [type=bool]
+      └── agg-filter [type=decimal]
+           ├── sum [type=decimal]
+           │    └── variable: d [type=decimal]
+           └── variable: column5 [type=bool]
 
 # Ensure aggregates with FILTER coexist properly with non-FILTER aggregates.
 build
@@ -2610,20 +2609,18 @@ scalar-group-by
  │              ├── variable: y [type=int]
  │              └── const: 0 [type=int]
  └── aggregations
-      ├── sum [type=decimal]
-      │    └── agg-filter [type=int]
-      │         ├── variable: x [type=int]
-      │         └── filter
-      │              └── variable: column4 [type=bool]
-      ├── avg [type=float]
-      │    └── agg-distinct [type=float]
+      ├── agg-filter [type=decimal]
+      │    ├── sum [type=decimal]
+      │    │    └── variable: x [type=int]
+      │    └── variable: column4 [type=bool]
+      ├── agg-distinct [type=float]
+      │    └── avg [type=float]
       │         └── variable: z [type=float]
-      └── avg [type=float]
-           └── agg-filter [type=float]
-                ├── agg-distinct [type=float]
-                │    └── variable: z [type=float]
-                └── filter
-                     └── variable: column4 [type=bool]
+      └── agg-filter [type=float]
+           ├── agg-distinct [type=float]
+           │    └── avg [type=float]
+           │         └── variable: z [type=float]
+           └── variable: column4 [type=bool]
 
 # Ensure aggregates involving FILTER are deduplicated.
 build
@@ -2645,15 +2642,14 @@ scalar-group-by
  │              ├── variable: y [type=int]
  │              └── const: 0 [type=int]
  └── aggregations
-      ├── avg [type=decimal]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=decimal]
+      │    └── avg [type=decimal]
       │         └── variable: x [type=int]
-      └── avg [type=decimal]
-           └── agg-filter [type=int]
-                ├── agg-distinct [type=int]
-                │    └── variable: x [type=int]
-                └── filter
-                     └── variable: column5 [type=bool]
+      └── agg-filter [type=decimal]
+           ├── agg-distinct [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: x [type=int]
+           └── variable: column5 [type=bool]
 
 build
 SELECT
@@ -2674,12 +2670,11 @@ scalar-group-by
  │              ├── variable: y [type=int]
  │              └── const: 0 [type=int]
  └── aggregations
-      └── string-agg [type=string]
-           ├── agg-filter [type=string]
+      └── agg-filter [type=string]
+           ├── string-agg [type=string]
            │    ├── variable: column4 [type=string]
-           │    └── filter
-           │         └── variable: column6 [type=bool]
-           └── const: 'foo' [type=string]
+           │    └── const: 'foo' [type=string]
+           └── variable: column6 [type=bool]
 
 build
 SELECT y, count(*) FILTER (WHERE x > 5) FROM xyz GROUP BY y
@@ -2697,11 +2692,10 @@ group-by
  │              ├── variable: x [type=int]
  │              └── const: 5 [type=int]
  └── aggregations
-      └── count [type=int]
-           └── agg-filter [type=bool]
-                ├── variable: column4 [type=bool]
-                └── filter
-                     └── variable: column5 [type=bool]
+      └── agg-filter [type=int]
+           ├── count [type=int]
+           │    └── variable: column4 [type=bool]
+           └── variable: column5 [type=bool]
 
 build
 SELECT y, count(*) FILTER (WHERE count(*) > 5) FROM xyz GROUP BY y
@@ -2920,10 +2914,10 @@ scalar-group-by
  │    └── projections
  │         └── const: 'separator' [type=string]
  └── aggregations
-      └── string-agg [type=string]
-           ├── agg-distinct [type=string]
-           │    └── variable: s [type=string]
-           └── const: 'separator' [type=string]
+      └── agg-distinct [type=string]
+           └── string-agg [type=string]
+                ├── variable: s [type=string]
+                └── const: 'separator' [type=string]
 
 build
 SELECT max(s), string_agg(s, 'sep1'), string_agg(s, 'sep2'), min(s) FROM kv
@@ -2984,7 +2978,7 @@ scalar-group-by
            └── null [type=unknown]
 
 build
-SELECT string_agg('foo', s) FROM kv
+SELECT string_agg(s, s) FROM kv
 ----
 error (0A000): unimplemented: aggregate functions with multiple non-constant expressions are not supported
 
