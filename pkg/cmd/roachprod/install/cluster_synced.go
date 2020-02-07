@@ -1363,6 +1363,29 @@ func (c *SyncedCluster) Get(src, dest string) {
 			}
 
 			err := c.scp(fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[0]), c.host(c.Nodes[i]), src), dest)
+			if err == nil {
+				// Make sure all created files and directories are world readable.
+				// The CRDB process intentionally sets a 0007 umask (resulting in
+				// non-world-readable files). This creates annoyances during CI
+				// that we circumvent wholesale by adding o+r back here.
+				// See:
+				//
+				// https://github.com/cockroachdb/cockroach/issues/44843
+				chmod := func(path string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					const oRead = 0004
+					if mode := info.Mode(); mode&oRead == 0 {
+						if err := os.Chmod(path, mode|oRead); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+				err = filepath.Walk(dest, chmod)
+			}
+
 			results <- result{i, err}
 		}(i)
 	}
