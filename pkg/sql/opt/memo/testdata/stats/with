@@ -41,7 +41,7 @@ with &1 (foo)
  ├── fd: (4)-->(5,6)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=500, null(2)=50, distinct(3)=500, null(3)=50]
+ │    ├── stats: [rows=5000]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── with-scan &1 (foo)
@@ -79,7 +79,7 @@ with &1 (t0)
  │    ├── left columns: column1:1(int) column2:2(oid) column3:13(date) column4:4(string)
  │    ├── right columns: column1:5(int) column2:6(oid) column3:7(date) column4:8(string)
  │    ├── cardinality: [1 - 2]
- │    ├── stats: [rows=2, distinct(10)=0.2, null(10)=0, distinct(9-12)=2, null(9-12)=2]
+ │    ├── stats: [rows=2, distinct(9-12)=2, null(9-12)=2]
  │    ├── key: (9-12)
  │    ├── values
  │    │    ├── columns: column1:1(int!null) column2:2(oid!null) column4:4(string!null) column3:13(date)
