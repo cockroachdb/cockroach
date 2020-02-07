@@ -1324,7 +1324,16 @@ message ExportRequest {
   // set, files will be written to the store that matches the most specific
   // locality KV in the map.
   map<string, ExternalStorage> storage_by_locality_kv = 8 [(gogoproto.customname) = "StorageByLocalityKV"];
+
   FileEncryptionOptions encryption = 9;
+
+  // TargetFileSize is the byte size target for individual files in the
+  // response. If the MVCCFilter is Latest, the returned files will only be
+  // larger than this value if an individual KV pair is larger than this value.
+  // If the MVCCFilter is All then the file may exceed this value by at most the
+  // size of all versions of a single key. If TargetFileSize is non-positive
+  // then there is no limit.
+  int64 target_file_size = 10;
 }
 
 message BulkOpSummary {

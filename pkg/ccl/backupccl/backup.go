@@ -882,6 +882,7 @@ func backup(
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
 	maxConcurrentExports := clusterNodeCount(gossip) * int(storage.ExportRequestsLimit.Get(&settings.SV)) * 10
+	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&settings.SV)
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
 	g := ctxgroup.WithContext(ctx)
@@ -922,6 +923,7 @@ func backup(
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
 					MVCCFilter:                          roachpb.MVCCFilter(backupDesc.MVCCFilter),
 					Encryption:                          encryption,
+					TargetFileSize:                      targetFileSize,
 				}
 				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {
