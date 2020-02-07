@@ -1626,6 +1626,19 @@
   version = "v0.18.0"
 
 [[projects]]
+  digest = "1:c3999fd8bb523555918d9d6d81da4d0f8e4ae24c6faa2c5d46ffb4bd4cdcd4bc"
+  name = "go.uber.org/automaxprocs"
+  packages = [
+    ".",
+    "internal/cgroups",
+    "internal/runtime",
+    "maxprocs",
+  ]
+  pruneopts = "UT"
+  revision = "e393bb0ea0644204c502247d647e428742196ebe"
+  version = "v1.3.0"
+
+[[projects]]
   branch = "master"
   digest = "1:1a9011794066a02df25f6487bfcb745bd653b543ecec32aac1cb1216cadae1a5"
   name = "golang.org/x/crypto"
@@ -2147,6 +2160,7 @@
     "go.etcd.io/etcd/raft/quorum",
     "go.etcd.io/etcd/raft/raftpb",
     "go.etcd.io/etcd/raft/tracker",
+    "go.uber.org/automaxprocs",
     "golang.org/x/crypto/bcrypt",
     "golang.org/x/crypto/pbkdf2",
     "golang.org/x/crypto/ssh",

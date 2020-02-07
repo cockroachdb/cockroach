@@ -91,6 +91,9 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	// Import automaxproces to set GOMAXPROCS appropriately on linux when
+	// constrained by cgroups.
+	_ "go.uber.org/automaxprocs"
 	"google.golang.org/grpc"
 )
 
