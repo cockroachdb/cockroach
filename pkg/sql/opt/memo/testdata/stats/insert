@@ -50,7 +50,7 @@ with &1
  │    │    ├──  a:4 => xyz.y:2
  │    │    └──  c:6 => xyz.z:3
  │    ├── side-effects, mutations
- │    ├── stats: [rows=200, distinct(1)=20, null(1)=0, distinct(2)=20, null(2)=0, distinct(3)=20, null(3)=2]
+ │    ├── stats: [rows=200]
  │    ├── fd: ()-->(1)
  │    └── project
  │         ├── columns: a:4(int!null) b:5(string!null) c:6(float)

@@ -197,7 +197,7 @@ insert "order"
  ├── values
  │    ├── columns: column1:9(int!null) column2:10(int!null) column3:11(int!null) column4:12(int!null) column5:13(timestamp!null) column6:14(int!null) column7:15(int!null) column16:16(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0]
+ │    ├── stats: [rows=1]
  │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(9-16)
@@ -253,7 +253,7 @@ insert new_order
  ├── values
  │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0]
+ │    ├── stats: [rows=1]
  │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(4-6)
@@ -735,7 +735,7 @@ insert order_line
  ├── project
  │    ├── columns: ol_amount:21(decimal) column20:20(timestamp) column1:11(int!null) column2:12(int!null) column3:13(int!null) column4:14(int!null) column5:15(int!null) column6:16(int!null) column7:17(int!null) column9:19(string!null)
  │    ├── cardinality: [6 - 6]
- │    ├── stats: [rows=6, distinct(11)=0.6, null(11)=0, distinct(12)=0.6, null(12)=0, distinct(13)=0.6, null(13)=0, distinct(15)=0.6, null(15)=0, distinct(16)=0.6, null(16)=0]
+ │    ├── stats: [rows=6]
  │    ├── cost: 0.26
  │    ├── fd: ()-->(20)
  │    ├── prune: (11-17,19-21)
@@ -1140,7 +1140,7 @@ insert history
  │    ├── columns: column1:10(int!null) column2:11(int!null) column3:12(int!null) column4:13(int!null) column5:14(int!null) column7:16(timestamp!null) column8:17(string!null) column18:18(uuid) h_amount:19(decimal)
  │    ├── cardinality: [1 - 1]
  │    ├── side-effects
- │    ├── stats: [rows=1, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0]
+ │    ├── stats: [rows=1]
  │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(10-14,16-19)

@@ -50,7 +50,7 @@ with &1
  │    ├── update-mapping:
  │    │    └──  column7:7 => xyz.y:2
  │    ├── side-effects, mutations
- │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ │    ├── stats: [rows=10]
  │    ├── key: (1)
  │    ├── fd: ()-->(2,3)
  │    └── project

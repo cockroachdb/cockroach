@@ -468,35 +468,35 @@ GROUP BY q.b
 project
  ├── columns: "?column?":6(int!null)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=0.27]
+ ├── stats: [rows=0.292893219]
  ├── fd: ()-->(6)
  ├── select
  │    ├── columns: b:4(int) bool_or:5(bool!null)
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=0.27, distinct(5)=0.27, null(5)=0]
+ │    ├── stats: [rows=0.292893219, distinct(5)=0.292893219, null(5)=0]
  │    ├── key: (4)
  │    ├── fd: ()-->(5)
  │    ├── group-by
  │    │    ├── columns: b:4(int) bool_or:5(bool)
  │    │    ├── grouping columns: b:4(int)
  │    │    ├── cardinality: [0 - 3]
- │    │    ├── stats: [rows=0.3, distinct(4)=0.3, null(4)=0.03, distinct(5)=0.3, null(5)=0.03]
+ │    │    ├── stats: [rows=1.29289322, distinct(4)=1.29289322, null(4)=1, distinct(5)=1.29289322, null(5)=1]
  │    │    ├── key: (4)
  │    │    ├── fd: (4)-->(5)
  │    │    ├── project
  │    │    │    ├── columns: a:3(bool!null) b:4(int)
  │    │    │    ├── cardinality: [0 - 3]
- │    │    │    ├── stats: [rows=3, distinct(4)=0.3, null(4)=0.03]
+ │    │    │    ├── stats: [rows=1.5, distinct(4)=1.29289322, null(4)=1]
  │    │    │    ├── fd: ()-->(3)
  │    │    │    ├── select
  │    │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
  │    │    │    │    ├── cardinality: [0 - 3]
- │    │    │    │    ├── stats: [rows=3, distinct(1)=0.3, null(1)=0, distinct(2)=0.3, null(2)=0.03]
+ │    │    │    │    ├── stats: [rows=1.5, distinct(1)=1, null(1)=0, distinct(2)=1.29289322, null(2)=1]
  │    │    │    │    ├── fd: ()-->(1)
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
  │    │    │    │    │    ├── cardinality: [3 - 3]
- │    │    │    │    │    ├── stats: [rows=3, distinct(1)=0.3, null(1)=0, distinct(2)=0.3, null(2)=0.03]
+ │    │    │    │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=2]
  │    │    │    │    │    ├── (true, NULL) [type=tuple{bool, int}]
  │    │    │    │    │    ├── (false, NULL) [type=tuple{bool, int}]
  │    │    │    │    │    └── (true, 5) [type=tuple{bool, int}]

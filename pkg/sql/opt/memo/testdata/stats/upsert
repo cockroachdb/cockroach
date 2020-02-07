@@ -64,7 +64,7 @@ with &1
  │    │    ├──  upsert_y:14 => xyz.y:2
  │    │    └──  upsert_z:15 => xyz.z:3
  │    ├── side-effects, mutations
- │    ├── stats: [rows=200, distinct(1)=20, null(1)=0, distinct(2)=20, null(2)=0]
+ │    ├── stats: [rows=200]
  │    └── project
  │         ├── columns: upsert_x:13(string) upsert_y:14(int!null) upsert_z:15(float) a:4(int!null) b:5(string!null) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float) column12:12(int!null)
  │         ├── stats: [rows=200]
