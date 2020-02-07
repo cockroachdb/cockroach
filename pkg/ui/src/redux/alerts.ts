@@ -33,6 +33,7 @@ export enum AlertLevel {
   NOTIFICATION,
   WARNING,
   CRITICAL,
+  SUCCESS,
 }
 
 export interface AlertInfo {
@@ -50,6 +51,9 @@ export interface Alert extends AlertInfo {
   // ThunkAction which will result in this alert being dismissed. This
   // function will be dispatched to the redux store when the alert is dismissed.
   dismiss: ThunkAction<Promise<void>, AdminUIState, void>;
+  // Makes alert to be positioned in the top right corner of the screen instead of
+  // stretching to full width.
+  showAsAlert?: boolean;
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
