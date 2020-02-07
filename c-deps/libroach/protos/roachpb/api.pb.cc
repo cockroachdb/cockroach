@@ -24029,6 +24029,7 @@ const int ExportRequest::kOmitChecksumFieldNumber;
 const int ExportRequest::kEnableTimeBoundIteratorOptimizationFieldNumber;
 const int ExportRequest::kStorageByLocalityKvFieldNumber;
 const int ExportRequest::kEncryptionFieldNumber;
+const int ExportRequest::kTargetFileSizeFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ExportRequest::ExportRequest()
@@ -24064,15 +24065,15 @@ ExportRequest::ExportRequest(const ExportRequest& from)
     encryption_ = NULL;
   }
   ::memcpy(&mvcc_filter_, &from.mvcc_filter_,
-    static_cast<size_t>(reinterpret_cast<char*>(&enable_time_bound_iterator_optimization_) -
-    reinterpret_cast<char*>(&mvcc_filter_)) + sizeof(enable_time_bound_iterator_optimization_));
+    static_cast<size_t>(reinterpret_cast<char*>(&target_file_size_) -
+    reinterpret_cast<char*>(&mvcc_filter_)) + sizeof(target_file_size_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ExportRequest)
 }
 
 void ExportRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&enable_time_bound_iterator_optimization_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(enable_time_bound_iterator_optimization_));
+      reinterpret_cast<char*>(&target_file_size_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(target_file_size_));
 }
 
 ExportRequest::~ExportRequest() {
@@ -24120,8 +24121,8 @@ void ExportRequest::Clear() {
   }
   encryption_ = NULL;
   ::memset(&mvcc_filter_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&enable_time_bound_iterator_optimization_) -
-      reinterpret_cast<char*>(&mvcc_filter_)) + sizeof(enable_time_bound_iterator_optimization_));
+      reinterpret_cast<char*>(&target_file_size_) -
+      reinterpret_cast<char*>(&mvcc_filter_)) + sizeof(target_file_size_));
   _internal_metadata_.Clear();
 }
 
@@ -24263,6 +24264,20 @@ bool ExportRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // int64 target_file_size = 10;
+      case 10: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(80u /* 80 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &target_file_size_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -24377,6 +24392,11 @@ void ExportRequest::SerializeWithCachedSizes(
       9, this->_internal_encryption(), output);
   }
 
+  // int64 target_file_size = 10;
+  if (this->target_file_size() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(10, this->target_file_size(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ExportRequest)
@@ -24445,6 +24465,13 @@ size_t ExportRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // int64 target_file_size = 10;
+  if (this->target_file_size() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->target_file_size());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -24487,6 +24514,9 @@ void ExportRequest::MergeFrom(const ExportRequest& from) {
   if (from.enable_time_bound_iterator_optimization() != 0) {
     set_enable_time_bound_iterator_optimization(from.enable_time_bound_iterator_optimization());
   }
+  if (from.target_file_size() != 0) {
+    set_target_file_size(from.target_file_size());
+  }
 }
 
 void ExportRequest::CopyFrom(const ExportRequest& from) {
@@ -24515,6 +24545,7 @@ void ExportRequest::InternalSwap(ExportRequest* other) {
   swap(return_sst_, other->return_sst_);
   swap(omit_checksum_, other->omit_checksum_);
   swap(enable_time_bound_iterator_optimization_, other->enable_time_bound_iterator_optimization_);
+  swap(target_file_size_, other->target_file_size_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
