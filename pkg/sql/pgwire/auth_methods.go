@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -69,6 +70,7 @@ type AuthMethod func(
 	c AuthConn,
 	tlsState tls.ConnectionState,
 	pwRetrieveFn PasswordRetrievalFn,
+	pwValidUntilFn PasswordValidUntilFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error)
@@ -77,13 +79,18 @@ type AuthMethod func(
 // password for the user logging in.
 type PasswordRetrievalFn = func(context.Context) ([]byte, error)
 
+// PasswordValidUntilFn defines a method to retrieve the expiration time
+// of the user's password.
+type PasswordValidUntilFn = func(context.Context) (*tree.DTimestamp, error)
+
 func authPassword(
 	ctx context.Context,
 	c AuthConn,
-	tlsState tls.ConnectionState,
+	_ tls.ConnectionState,
 	pwRetrieveFn PasswordRetrievalFn,
-	execCfg *sql.ExecutorConfig,
-	entry *hba.Entry,
+	pwValidUntilFn PasswordValidUntilFn,
+	_ *sql.ExecutorConfig,
+	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
 		return nil, err
@@ -104,6 +111,17 @@ func authPassword(
 		c.Logf(ctx, "user has no password defined")
 	}
 
+	validUntil, err := pwValidUntilFn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if validUntil != nil {
+		if validUntil.Sub(timeutil.Now()) < 0 {
+			c.Logf(ctx, "password is expired")
+			return nil, errors.New("password is expired")
+		}
+	}
+
 	return security.UserAuthPasswordHook(
 		false /*insecure*/, password, hashedPassword,
 	), nil
@@ -121,9 +139,10 @@ func authCert(
 	_ context.Context,
 	_ AuthConn,
 	tlsState tls.ConnectionState,
-	pwRetrieveFn PasswordRetrievalFn,
-	execCfg *sql.ExecutorConfig,
-	entry *hba.Entry,
+	_ PasswordRetrievalFn,
+	_ PasswordValidUntilFn,
+	_ *sql.ExecutorConfig,
+	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	if len(tlsState.PeerCertificates) == 0 {
 		return nil, errors.New("no TLS peer certificates, but required for auth")
@@ -140,6 +159,7 @@ func authCertPassword(
 	c AuthConn,
 	tlsState tls.ConnectionState,
 	pwRetrieveFn PasswordRetrievalFn,
+	pwValidUntilFn PasswordValidUntilFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
@@ -151,7 +171,7 @@ func authCertPassword(
 		c.Logf(ctx, "client presented certificate, proceeding with certificate validation")
 		fn = authCert
 	}
-	return fn(ctx, c, tlsState, pwRetrieveFn, execCfg, entry)
+	return fn(ctx, c, tlsState, pwRetrieveFn, pwValidUntilFn, execCfg, entry)
 }
 
 func authTrust(
@@ -159,6 +179,7 @@ func authTrust(
 	_ AuthConn,
 	_ tls.ConnectionState,
 	_ PasswordRetrievalFn,
+	_ PasswordValidUntilFn,
 	_ *sql.ExecutorConfig,
 	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
@@ -170,6 +191,7 @@ func authReject(
 	_ AuthConn,
 	_ tls.ConnectionState,
 	_ PasswordRetrievalFn,
+	_ PasswordValidUntilFn,
 	_ *sql.ExecutorConfig,
 	_ *hba.Entry,
 ) (security.UserAuthHook, error) {

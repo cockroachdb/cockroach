@@ -57,7 +57,7 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsString, opName)
+	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsStringOrNull, opName)
 	if err != nil {
 		return nil, err
 	}
@@ -128,11 +128,6 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return errors.Newf("role/user %s does not exist", normalizedUsername)
 	}
 
-	stmts, err := n.roleOptions.GetSQLStmts()
-	if err != nil {
-		return err
-	}
-
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
 		hashedPassword, err := n.roleOptions.GetHashedPassword()
 		if err != nil {
@@ -175,21 +170,44 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	for _, stmt := range stmts {
+	// Get a map of statements to execute for role options and their values.
+	stmts, err := n.roleOptions.GetSQLStmts()
+	if err != nil {
+		return err
+	}
+
+	for stmt, value := range stmts {
+		qargs := []interface{}{normalizedUsername}
+
+		if value != nil {
+			isNull, val, err := value()
+			if err != nil {
+				return err
+			}
+			if isNull {
+				// If the value of the role option is NULL, ensure that nil is passed
+				// into the statement placeholder, since val is string type "NULL"
+				// will not be interpreted as NULL by the InternalExecutor.
+				qargs = append(qargs, nil)
+			} else {
+				qargs = append(qargs, val)
+			}
+		}
+
 		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt,
-			normalizedUsername,
+			qargs...,
 		)
 		if err != nil {
 			return err
 		}
-
 		n.run.rowsAffected += rowsAffected
 	}
+
 	return nil
 }
 

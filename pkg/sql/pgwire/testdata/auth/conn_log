@@ -5,7 +5,10 @@ sql
 CREATE USER userpw WITH PASSWORD 'pass';
 CREATE USER usernopw;
 ALTER USER root WITH PASSWORD 'secureabc';
-CREATE USER trusted
+CREATE USER trusted;
+CREATE USER usernologin WITH NOLOGIN PASSWORD '123';
+CREATE USER userexpired WITH PASSWORD '123' VALID UNTIL '2000-01-01'
+
 ----
 ok
 
@@ -233,4 +236,35 @@ I: [n1,client=XXX,local] 71 disconnected; duration: XXX
 
 subtest end
 
+subtest conn_unix/nologin_expired_password
+
+connect_unix user=usernologin password=123
+----
+ERROR: usernologin does not have login privilege
+
+authlog 4
+.*disconnected
+----
+I: [n1,client=XXX] 72 received connection
+I: [n1,client=XXX,local,user=usernologin] 73 "usernologin" does not have login privilege
+I: [n1,client=XXX,local,user=usernologin] 74 session terminated; duration: XXX
+I: [n1,client=XXX,local] 75 disconnected; duration: XXX
+
+connect_unix user=userexpired password=123
+----
+ERROR: password is expired
+
+authlog 6
+.*disconnected
+----
+I: [n1,client=XXX] 76 received connection
+I: [n1,client=XXX,local,user=userexpired] 77 connection matches HBA rule: local all all         password      # built-in CockroachDB default
+I: [n1,client=XXX,local,user=userexpired] 78 password is expired
+I: [n1,client=XXX,local,user=userexpired] 79 authentication pre-hook failed: password is expired
+I: [n1,client=XXX,local,user=userexpired] 80 session terminated; duration: XXX
+I: [n1,client=XXX,local] 81 disconnected; duration: XXX
+
 subtest end
+
+subtest end
+
