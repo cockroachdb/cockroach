@@ -327,8 +327,8 @@ func (b *Builder) buildAggregation(having opt.ScalarExpr, fromScope *scope) (out
 		groupingColSet.Add(groupingCols[i].id)
 	}
 
-	// If there are any aggregates that are ordering sensitive, build the aggregations
-	// as window functions over each group.
+	// If there are any aggregates that are ordering sensitive, build the
+	// aggregations as window functions over each group.
 	if g.hasNonCommutativeAggregates() {
 		return b.buildAggregationAsWindow(groupingColSet, having, fromScope)
 	}
@@ -345,33 +345,54 @@ func (b *Builder) buildAggregation(having opt.ScalarExpr, fromScope *scope) (out
 		fromCols = fromScope.colSet()
 	}
 	for i, agg := range aggInfos {
+		// First accumulate the arguments to the aggregate function. These are
+		// always variables referencing columns in the GroupBy input expression,
+		// except in the case of string_agg, where the second argument must be
+		// a constant expression.
 		args := make([]opt.ScalarExpr, 0, 2)
-		if len(agg.args) > 0 {
-			colID := argCols[0].id
-			argCols = argCols[1:]
-			args = append(args, b.factory.ConstructVariable(colID))
-			if agg.distinct {
-				// Wrap the argument with AggDistinct.
-				args[0] = b.factory.ConstructAggDistinct(args[0].(opt.ScalarExpr))
-			}
-
-			// Append any constant arguments without further processing.
-			constArgs := agg.args[1:]
-			args = append(args, constArgs...)
-			argCols = argCols[len(constArgs):]
-
-			// If the aggregate had a filter, there's an extra column in argCols
-			// corresponding to the filter.
-			// TODO(justin): add a norm rule to push these filters below group bys where appropriate.
-			if agg.filter != nil {
+		for i, arg := range agg.args {
+			// TODO(andyk): Once we have true support for multiple aggregate
+			// arguments, expect all arguments to be variable and get rid of this
+			// condition.
+			if i == 0 {
 				colID := argCols[0].id
-				argCols = argCols[1:]
-				// Wrap the argument with AggFilter.
-				args[0] = b.factory.ConstructAggFilter(args[0], b.factory.ConstructVariable(colID))
+				args = append(args, b.factory.ConstructVariable(colID))
+			} else {
+				// Only case of this is string_agg.
+				if !memo.CanExtractConstDatum(arg) {
+					panic(unimplementedWithIssueDetailf(28417, "string_agg",
+						"aggregate functions with multiple non-constant expressions are not supported"))
+				}
+				args = append(args, arg)
 			}
+
+			// Skip past argCols that have been handled. There may be variable
+			// number of them, so need to set up for next aggregate function.
+			argCols = argCols[1:]
 		}
 
-		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args).(opt.ScalarExpr)
+		// Construct the aggregate function from its name and arguments and store
+		// it in the corresponding scope column.
+		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args)
+
+		// Wrap the aggregate function with an AggDistinct operator if DISTINCT
+		// was specified in the query.
+		if agg.distinct {
+			aggCols[i].scalar = b.factory.ConstructAggDistinct(aggCols[i].scalar)
+		}
+
+		// Wrap the aggregate function or the AggDistinct in an AggFilter operator
+		// if FILTER (WHERE ...) was specified in the query.
+		// TODO(justin): add a norm rule to push these filters below GroupBy where
+		// possible.
+		if agg.filter != nil {
+			// Column containing filter expression is always after the argument
+			// columns (which have already been processed).
+			colID := argCols[0].id
+			argCols = argCols[1:]
+			variable := b.factory.ConstructVariable(colID)
+			aggCols[i].scalar = b.factory.ConstructAggFilter(aggCols[i].scalar, variable)
+		}
 
 		if agg.isOrderingSensitive() {
 			haveOrderingSensitiveAgg = true
@@ -726,10 +747,6 @@ func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.Scal
 		return b.factory.ConstructLastValue(args[0])
 	case "nth_value":
 		return b.factory.ConstructNthValue(args[0], args[1])
-	case "string_agg":
-		// We can handle non-constant second arguments for string_agg in window
-		// fns (but not aggregates).
-		return b.factory.ConstructStringAgg(args[0], args[1])
 	default:
 		return b.constructAggregate(name, args)
 	}
@@ -776,10 +793,6 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 	case "jsonb_agg":
 		return b.factory.ConstructJsonbAgg(args[0])
 	case "string_agg":
-		if !memo.CanExtractConstDatum(args[1]) {
-			panic(unimplementedWithIssueDetailf(28417, "string_agg",
-				"aggregate functions with multiple non-constant expressions are not supported"))
-		}
 		return b.factory.ConstructStringAgg(args[0], args[1])
 	}
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))

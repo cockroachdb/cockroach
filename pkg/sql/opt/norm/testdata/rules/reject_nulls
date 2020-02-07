@@ -275,8 +275,8 @@ project
       │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters (true)
       │    └── aggregations
-      │         └── sum [type=decimal, outer=(6)]
-      │              └── agg-distinct [type=int]
+      │         └── agg-distinct [type=decimal, outer=(6)]
+      │              └── sum [type=decimal]
       │                   └── variable: y [type=int]
       └── filters
            └── sum = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
@@ -385,8 +385,8 @@ project
       │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters (true)
       │    └── aggregations
-      │         ├── sum [type=decimal, outer=(6)]
-      │         │    └── agg-distinct [type=int]
+      │         ├── agg-distinct [type=decimal, outer=(6)]
+      │         │    └── sum [type=decimal]
       │         │         └── variable: y [type=int]
       │         └── max [type=int, outer=(6)]
       │              └── variable: y [type=int]

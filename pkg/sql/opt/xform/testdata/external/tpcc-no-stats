@@ -1731,8 +1731,8 @@ scalar-group-by
  │              ├── variable: s_quantity [type=int]
  │              └── const: 15 [type=int]
  └── aggregations
-      └── count [type=int, outer=(11)]
-           └── agg-distinct [type=int]
+      └── agg-distinct [type=int, outer=(11)]
+           └── count [type=int]
                 └── variable: s_i_id [type=int]
 
 # --------------------------------------------------

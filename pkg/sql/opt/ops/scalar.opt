@@ -826,7 +826,7 @@ define StringAgg {
 
     # Sep is the constant expression which separates the input strings.
     # Note that it must always be a constant expression.
-    Sep   ScalarExpr
+    Sep ScalarExpr
 }
 
 # ConstAgg is used in the special case when the value of a column is known to be
@@ -872,18 +872,17 @@ define FirstAgg {
     Input ScalarExpr
 }
 
-# AggDistinct is used as a modifier that wraps the input of an aggregate
-# function. It causes the respective aggregation to only process each distinct
-# value once.
+# AggDistinct is used as a modifier that wraps an aggregate function. It causes
+# the respective aggregation to only process each distinct value once.
 [Scalar]
 define AggDistinct {
     Input ScalarExpr
 }
 
-# AggFilter is used as a modifier that wraps the input of an aggregate
-# function. It causes only rows for which the filter expression is true
-# to be processed. AggFilter should always occur on top of AggDistinct
-# if they are both present.
+# AggFilter is used as a modifier that wraps an aggregate function (or an
+# AggDistinct operator that wraps an aggregate function). It causes only rows
+# for which the filter expression is true to be processed. AggFilter should
+# always occur on top of AggDistinct if they are both present.
 [Scalar]
 define AggFilter {
     Input  ScalarExpr
@@ -994,8 +993,9 @@ define Lag {
 define Lead {
     Value  ScalarExpr
     Offset ScalarExpr
+
     # Def is the default value.
-    Def    ScalarExpr
+    Def ScalarExpr
 }
 
 # FirstValue returns Value evaluated at the first row in the row's frame.

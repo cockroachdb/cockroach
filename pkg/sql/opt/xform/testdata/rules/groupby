@@ -33,7 +33,7 @@ CREATE TABLE kuvw (
 ----
 
 # --------------------------------------------------
-# ReplaceScalarMinWithLimit
+# ReplaceScalarMinMaxWithLimit (Min variations)
 # --------------------------------------------------
 
 opt
@@ -70,6 +70,30 @@ scalar-group-by
  └── aggregations
       └── const-agg [type=char, outer=(1)]
            └── variable: a [type=char]
+
+# Verify the rule does not fire when FILTER is used.
+opt
+SELECT min(a) FILTER (WHERE a > 'a') FROM abc
+----
+scalar-group-by
+ ├── columns: min:6(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── project
+ │    ├── columns: column5:5(bool!null) a:1(char!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(5)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(char!null)
+ │    │    └── key: (1)
+ │    └── projections
+ │         └── a > 'a' [type=bool, outer=(1)]
+ └── aggregations
+      └── agg-filter [type=char, outer=(1,5)]
+           ├── min [type=char]
+           │    └── variable: a [type=char]
+           └── variable: column5 [type=bool]
 
 opt
 SELECT min(b) FROM abc
@@ -591,7 +615,7 @@ memo (optimized, ~6KB, required=[presentation: max:5])
  └── G13: (null)
 
 # --------------------------------------------------
-# ReplaceScalarMaxWithLimit
+# ReplaceScalarMinMaxWithLimit (Max variations)
 # --------------------------------------------------
 
 opt
@@ -628,6 +652,30 @@ scalar-group-by
  └── aggregations
       └── const-agg [type=char, outer=(1)]
            └── variable: a [type=char]
+
+# Verify the rule does not fire when FILTER is used.
+opt
+SELECT max(a) FILTER (WHERE a > 'a') FROM abc
+----
+scalar-group-by
+ ├── columns: max:6(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── project
+ │    ├── columns: column5:5(bool!null) a:1(char!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(5)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(char!null)
+ │    │    └── key: (1)
+ │    └── projections
+ │         └── a > 'a' [type=bool, outer=(1)]
+ └── aggregations
+      └── agg-filter [type=char, outer=(1,5)]
+           ├── max [type=char]
+           │    └── variable: a [type=char]
+           └── variable: column5 [type=bool]
 
 opt
 SELECT max(b) FROM abc

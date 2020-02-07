@@ -269,9 +269,7 @@ func (b *Builder) buildAggregationAsWindow(
 	// so that we can group functions over the same partition and ordering.
 	frames := make([]memo.WindowExpr, 0, len(g.aggs))
 	for i, agg := range g.aggs {
-		// Using this instead of constructAggregate so we can have non-constant second
-		// arguments for string_agg.
-		fn := b.constructWindowFn(agg.def.Name, argLists[i])
+		fn := b.constructAggregate(agg.def.Name, argLists[i])
 		if filterCols[i] != 0 {
 			fn = b.factory.ConstructAggFilter(
 				fn,
@@ -338,7 +336,7 @@ func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
 	return argExprs
 }
 
-// buildWindowArgs builds the argExprs into a memo.ScalarListExpr.
+// buildWindowArgs builds the argExprs into a slice of memo.ScalarListExpr.
 func (b *Builder) buildWindowArgs(
 	argExprs []tree.TypedExpr, windowIndex int, funcName string, inScope, outScope *scope,
 ) memo.ScalarListExpr {
