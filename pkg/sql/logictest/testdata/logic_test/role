@@ -5,6 +5,8 @@ SHOW ROLES
 ----
 role_name
 admin
+root
+testuser
 
 query TTB colnames
 SHOW GRANTS ON ROLE

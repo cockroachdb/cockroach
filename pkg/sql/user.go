@@ -53,7 +53,9 @@ func GetUserHashedPassword(
 	ctx context.Context, ie *InternalExecutor, username string,
 ) (
 	exists bool,
+	canLogin bool,
 	pwRetrieveFn func(ctx context.Context) (hashedPassword []byte, err error),
+	validUntilFn func(ctx context.Context) (timestamp *tree.DTimestampTZ, err error),
 	err error,
 ) {
 	normalizedUsername := tree.Name(username).Normalize()
@@ -64,21 +66,28 @@ func GetUserHashedPassword(
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
 		rootFn := func(ctx context.Context) ([]byte, error) {
-			_, hashedPassword, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+			_, _, hashedPassword, _, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
 			return hashedPassword, err
 		}
-		return true, rootFn, nil
+		// Root user cannot have password expiry and must have login.
+		validUntilFn := func(ctx context.Context) (*tree.DTimestampTZ, error) {
+			return nil, nil
+		}
+		return true, true, rootFn, validUntilFn, nil
 	}
 
 	// Other users must reach for system.users no matter what, because
 	// only that contains the truth about whether the user exists.
-	exists, hashedPassword, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
-	return exists, func(ctx context.Context) ([]byte, error) { return hashedPassword, nil }, err
+	exists, canLogin, hashedPassword, validUntil, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+	return exists, canLogin,
+		func(ctx context.Context) ([]byte, error) { return hashedPassword, nil },
+		func(ctx context.Context) (*tree.DTimestampTZ, error) { return validUntil, nil },
+		err
 }
 
 func retrieveUserAndPassword(
 	ctx context.Context, ie *InternalExecutor, isRoot bool, normalizedUsername string,
-) (exists bool, hashedPassword []byte, err error) {
+) (exists bool, canLogin bool, hashedPassword []byte, validUntil *tree.DTimestampTZ, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
@@ -94,10 +103,10 @@ func retrieveUserAndPassword(
 			return contextutil.RunWithTimeout(ctx, "get-user-timeout", timeout, fn)
 		}
 	}
-
+	var isRole bool
 	// Perform the lookup with a timeout.
 	err = runFn(func(ctx context.Context) error {
-		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
+		const getHashedPassword = `SELECT "hashedPassword", "isRole" FROM system.users ` +
 			`WHERE username=$1`
 		values, err := ie.QueryRowEx(
 			ctx, "get-hashed-pwd", nil, /* txn */
@@ -109,7 +118,69 @@ func retrieveUserAndPassword(
 		if values != nil {
 			exists = true
 			hashedPassword = []byte(*(values[0].(*tree.DBytes)))
+			isRole = bool(*(values[1].(*tree.DBool)))
 		}
+
+		if !exists {
+			return nil
+		}
+
+		getNoLoginOption := `SELECT 1 FROM system.role_options ` +
+			`WHERE username=$1 AND option='NOLOGIN'`
+
+		noLoginRow, err := ie.QueryRowEx(
+			ctx, "get-no-login-option", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			getNoLoginOption,
+			normalizedUsername,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		}
+
+		canLogin = noLoginRow == nil
+
+		// This is for handling migration, USERS may not have LOGIN if created
+		// before 20.1 but ROLES explicitly need LOGIN privilege to login.
+		getLoginOption := `SELECT 1 FROM system.role_options ` +
+			`WHERE username=$1 AND option='LOGIN'`
+
+		loginRow, err := ie.QueryRowEx(
+			ctx, "get-login-option", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			getLoginOption,
+			normalizedUsername,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		}
+
+		if loginRow == nil && isRole {
+			return errors.New("role does not have login privilege")
+		}
+
+		getValidUntilOption := `SELECT value::TimestampTZ FROM system.role_options ` +
+			`WHERE username=$1 AND option='VALID UNTIL'`
+
+		validUntilRow, err := ie.QueryRowEx(
+			ctx, "get-valid-until", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			getValidUntilOption,
+			normalizedUsername,
+		)
+
+		if err != nil {
+			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		}
+
+		if validUntilRow != nil && tree.DNull.Compare(nil, validUntilRow[0]) != 0 {
+			ts := tree.MustBeDTimestampTZ(validUntilRow[0])
+			validUntil = &ts
+			if err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 
@@ -118,7 +189,7 @@ func retrieveUserAndPassword(
 		log.Warningf(ctx, "user lookup for %q failed: %v", normalizedUsername, err)
 		err = errors.HandledWithMessage(err, "internal error while retrieving user account")
 	}
-	return exists, hashedPassword, err
+	return exists, canLogin, hashedPassword, validUntil, err
 }
 
 var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
@@ -129,7 +200,7 @@ var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
 func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
-	query := `SELECT username,"isRole"  FROM system.users`
+	query := `SELECT username FROM system.users`
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx, "read-users", p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
@@ -152,17 +223,6 @@ var roleMembersTableName = tree.MakeTableName("system", "role_members")
 // role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, ResolveAnyDescType)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
-}
-
-// BumpRoleOptionsTableVersion increases the table version for the
-// role options table.
-func (p *planner) BumpRoleOptionsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, RoleOptionsTableName, true, ResolveAnyDescType)
 	if err != nil {
 		return err
 	}

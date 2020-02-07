@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -82,14 +83,20 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, pwRetrievalFn, err := sql.GetUserHashedPassword(
+	exists, canLogin, pwRetrievalFn, validUntilFn, err := sql.GetUserHashedPassword(
 		ctx, authOpt.ie, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)
 	}
+
 	if !exists {
 		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
+	}
+
+	if !canLogin {
+		return sendError(errors.Errorf(
+			fmt.Sprintf("%s does not have login privilege", c.sessionArgs.User)))
 	}
 
 	// Retrieve the authentication method.
@@ -99,7 +106,9 @@ func (c *conn) handleAuthentication(
 	}
 
 	// Ask the method to authenticate.
-	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn, execCfg, hbaEntry)
+	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn,
+		validUntilFn, execCfg, hbaEntry)
+
 	if err != nil {
 		return sendError(err)
 	}

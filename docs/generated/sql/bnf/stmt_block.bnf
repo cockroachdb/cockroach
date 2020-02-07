@@ -732,6 +732,7 @@ unreserved_keyword ::=
 	| 'LIST'
 	| 'LOCAL'
 	| 'LOCKED'
+	| 'LOGIN'
 	| 'LOOKUP'
 	| 'LOW'
 	| 'MATCH'
@@ -749,6 +750,7 @@ unreserved_keyword ::=
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
 	| 'NOCREATEROLE'
+	| 'NOLOGIN'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -865,6 +867,7 @@ unreserved_keyword ::=
 	| 'UNKNOWN'
 	| 'UNLOGGED'
 	| 'UNSPLIT'
+	| 'UNTIL'
 	| 'UPDATE'
 	| 'UPSERT'
 	| 'UUID'
@@ -1769,7 +1772,10 @@ sequence_option_list ::=
 role_option ::=
 	'CREATEROLE'
 	| 'NOCREATEROLE'
+	| 'LOGIN'
+	| 'NOLOGIN'
 	| password_clause
+	| valid_until_clause
 
 single_table_pattern_list ::=
 	( table_name ) ( ( ',' table_name ) )*
@@ -2053,6 +2059,10 @@ sequence_option_elem ::=
 password_clause ::=
 	'PASSWORD' string_or_placeholder
 	| 'PASSWORD' 'NULL'
+
+valid_until_clause ::=
+	'VALID' 'UNTIL' string_or_placeholder
+	| 'VALID' 'UNTIL' 'NULL'
 
 opt_asc_desc ::=
 	'ASC'
