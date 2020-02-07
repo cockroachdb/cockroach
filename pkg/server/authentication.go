@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -103,9 +104,16 @@ func (s *authenticationServer) UserLogin(
 	}
 
 	// Verify the provided username/password pair.
-	verified, err := s.verifyPassword(ctx, username, req.Password)
+	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
+	}
+	if expired {
+		return nil, status.Errorf(
+			codes.Unauthenticated,
+			"the password for %s has expired",
+			username,
+		)
 	}
 	if !verified {
 		return nil, status.Errorf(
@@ -254,21 +262,32 @@ WHERE id = $1`
 // not be completed.
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
-) (bool, error) {
-	exists, pwRetrieveFn, err := sql.GetUserHashedPassword(
+) (valid bool, expired bool, err error) {
+	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
 		ctx, s.server.execCfg.InternalExecutor, username,
 	)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	if !exists {
-		return false, nil
+	if !exists || !canLogin {
+		return false, false, nil
 	}
 	hashedPassword, err := pwRetrieveFn(ctx)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return (security.CompareHashAndPassword(hashedPassword, password) == nil), nil
+
+	validUntil, err := validUntilFn(ctx)
+	if err != nil {
+		return false, false, err
+	}
+	if validUntil != nil {
+		if validUntil.Time.Sub(timeutil.Now()) < 0 {
+			return false, true, nil
+		}
+	}
+
+	return security.CompareHashAndPassword(hashedPassword, password) == nil, false, nil
 }
 
 // CreateAuthSecret creates a secret, hash pair to populate a session auth token.

@@ -961,3 +961,66 @@ user testuser
 
 statement ok
 CREATE ROLE rolej
+
+# Testing LOGIN and VALID UNTIL role privilege
+user root
+
+statement ok
+DELETE FROM system.role_options WHERE NOT username in ('root', 'admin')
+
+statement ok
+CREATE ROLE rolewithlogin LOGIN
+
+query TTT
+SELECT * FROM system.role_options
+----
+admin  CREATEROLE  NULL
+root   CREATEROLE  NULL
+
+statement ok
+CREATE ROLE rolewithnologin NOLOGIN
+
+query TTT
+SELECT * FROM system.role_options
+----
+admin            CREATEROLE  NULL
+rolewithnologin  NOLOGIN     NULL
+root             CREATEROLE  NULL
+
+statement ok
+ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
+
+query TTT
+SELECT * FROM system.role_options
+----
+admin            CREATEROLE   NULL
+rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
+rolewithnologin  NOLOGIN      NULL
+root             CREATEROLE   NULL
+
+statement ok
+ALTER ROLE rolewithlogin VALID UNTIL NULL
+
+query TTT
+SELECT * FROM system.role_options
+----
+admin            CREATEROLE   NULL
+rolewithlogin    VALID UNTIL  NULL
+rolewithnologin  NOLOGIN      NULL
+root             CREATEROLE   NULL
+
+statement ok
+DROP ROLE rolewithlogin
+
+query TTT
+SELECT * FROM system.role_options
+----
+admin            CREATEROLE  NULL
+rolewithnologin  NOLOGIN     NULL
+root             CREATEROLE  NULL
+
+statement error pq: conflicting role options
+CREATE ROLE thisshouldntwork LOGIN NOLOGIN
+
+statement error pq: redundant role options
+CREATE ROLE thisshouldntwork LOGIN LOGIN
