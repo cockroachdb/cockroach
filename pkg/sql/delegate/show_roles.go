@@ -15,5 +15,5 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // delegateShowRoles implements SHOW ROLES which returns all the roles.
 // Privileges: SELECT on system.users.
 func (d *delegator) delegateShowRoles(n *tree.ShowRoles) (tree.Statement, error) {
-	return parse(`SELECT username AS role_name FROM system.users WHERE "isRole" = true ORDER BY 1`)
+	return parse(`SELECT username AS role_name FROM system.users ORDER BY 1`)
 }
