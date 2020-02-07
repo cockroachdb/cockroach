@@ -162,7 +162,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
 		et := rArgs.(*roachpb.EndTxnRequest)
 		if !sr.refreshInvalid && len(sr.refreshSpans) == 0 {
-			et.NoRefreshSpans = true
+			et.CanCommitAtHigherTimestamp = true
 		}
 	}
 
@@ -178,6 +178,19 @@ func (sr *txnSpanRefresher) SendLocked(
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr, largestRefreshTS := sr.sendLockedWithRefreshAttempts(ctx, ba, maxAttempts)
 	if pErr != nil {
+		// The server sometimes "performs refreshes" - it updates the transaction's
+		// ReadTimestamp when the client said that there's nothing to refresh. In
+		// these cases, we need to update our refreshedTimestamp too. This is pretty
+		// inconsequential: the server only does this on an EndTxn. If the
+		// respective batch succeeds, then there won't be any more requests and so
+		// sr.refreshedTimestamp doesn't matter (that's why we don't handle the
+		// success case). However, the server can "refresh" and then return an
+		// error. In this case, the client will rollback and, if we don't update
+		// sr.refreshedTimestamp, then an assertion will fire about the rollback's
+		// timestamp being inconsistent.
+		if pErr.GetTxn() != nil {
+			sr.refreshedTimestamp.Forward(pErr.GetTxn().ReadTimestamp)
+		}
 		return nil, pErr
 	}
 
