@@ -95,7 +95,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		noIntentSpans  bool
 		inFlightWrites []roachpb.SequencedWrite
 		deadline       *hlc.Timestamp
-		noRefreshSpans bool
 		// Expected result.
 		expError string
 		expTxn   *roachpb.TransactionRecord
@@ -291,43 +290,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// The transaction's commit timestamp was increased during its
-			// lifetime and it has never read anything. The stage will succeed.
-			name: "record missing, can create, try stage at pushed timestamp, can forward timestamp",
-			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
-			// Request state.
-			headerTxn:      pushedHeaderTxn,
-			commit:         true,
-			inFlightWrites: writes,
-			noRefreshSpans: true,
-			// Expected result.
-			expTxn: func() *roachpb.TransactionRecord {
-				record := *stagingRecord
-				record.WriteTimestamp.Forward(ts2)
-				return &record
-			}(),
-		},
-		{
-			// The transaction's commit timestamp was increased during its
-			// lifetime and it has never read anything. The commit will succeed.
-			name: "record missing, can create, try commit at pushed timestamp, can forward timestamp",
-			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
-			// Request state.
-			headerTxn:      pushedHeaderTxn,
-			commit:         true,
-			noRefreshSpans: true,
-			// Expected result.
-			expTxn: func() *roachpb.TransactionRecord {
-				record := *committedRecord
-				record.WriteTimestamp.Forward(ts2)
-				return &record
-			}(),
-		},
-		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
 			// transaction can be created with. This will trigger a retry error.
 			name: "record missing, can create with min timestamp, try stage",
@@ -384,43 +346,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Request state.
 			headerTxn: refreshedHeaderTxn,
 			commit:    true,
-			// Expected result.
-			expTxn: func() *roachpb.TransactionRecord {
-				record := *committedRecord
-				record.WriteTimestamp.Forward(ts2)
-				return &record
-			}(),
-		},
-		{
-			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
-			// transaction can be created with. This will trigger a retry error.
-			name: "record missing, can create with min timestamp, try stage, can forward timestamp",
-			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, ts2 },
-			// Request state.
-			headerTxn:      headerTxn,
-			commit:         true,
-			inFlightWrites: writes,
-			noRefreshSpans: true,
-			// Expected result.
-			expTxn: func() *roachpb.TransactionRecord {
-				record := *stagingRecord
-				record.WriteTimestamp.Forward(ts2)
-				return &record
-			}(),
-		},
-		{
-			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
-			// transaction can be created with. This will trigger a retry error.
-			name: "record missing, can create with min timestamp, try commit, can forward timestamp",
-			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, ts2 },
-			// Request state.
-			headerTxn:      headerTxn,
-			commit:         true,
-			noRefreshSpans: true,
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
@@ -528,41 +453,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:    true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
-		},
-		{
-			// The transaction's commit timestamp was increased during its
-			// lifetime and it has never read anything. The stage will succeed.
-			name: "record pending, try stage at pushed timestamp, can forward timestamp",
-			// Replica state.
-			existingTxn: pendingRecord,
-			// Request state.
-			headerTxn:      pushedHeaderTxn,
-			commit:         true,
-			inFlightWrites: writes,
-			noRefreshSpans: true,
-			// Expected result.
-			expTxn: func() *roachpb.TransactionRecord {
-				record := *stagingRecord
-				record.WriteTimestamp.Forward(ts2)
-				return &record
-			}(),
-		},
-		{
-			// The transaction's commit timestamp was increased during its
-			// lifetime and it has never read anything. The commit will succeed.
-			name: "record pending, try commit at pushed timestamp, can forward timestamp",
-			// Replica state.
-			existingTxn: pendingRecord,
-			// Request state.
-			headerTxn:      pushedHeaderTxn,
-			commit:         true,
-			noRefreshSpans: true,
-			// Expected result.
-			expTxn: func() *roachpb.TransactionRecord {
-				record := *committedRecord
-				record.WriteTimestamp.Forward(ts2)
-				return &record
-			}(),
 		},
 		{
 			// The transaction's commit timestamp was increased during its
@@ -997,7 +887,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			if !c.commit {
 				require.Nil(t, c.inFlightWrites)
 				require.Nil(t, c.deadline)
-				require.False(t, c.noRefreshSpans)
 			}
 
 			// Issue an EndTxn request.
@@ -1007,7 +896,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 				InFlightWrites: c.inFlightWrites,
 				Deadline:       c.deadline,
-				NoRefreshSpans: c.noRefreshSpans,
 			}
 			if !c.noIntentSpans {
 				req.IntentSpans = intents
@@ -1119,10 +1007,10 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// Issue the end txn command.
 		req := roachpb.EndTxnRequest{
-			RequestHeader:  roachpb.RequestHeader{Key: txn.Key},
-			Commit:         true,
-			NoRefreshSpans: true,
-			IntentSpans:    intents,
+			RequestHeader:              roachpb.RequestHeader{Key: txn.Key},
+			Commit:                     true,
+			CanCommitAtHigherTimestamp: true,
+			IntentSpans:                intents,
 		}
 		var resp roachpb.EndTxnResponse
 		if _, err := EndTxn(ctx, batch, CommandArgs{

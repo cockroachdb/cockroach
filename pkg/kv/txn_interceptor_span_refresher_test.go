@@ -374,9 +374,10 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
 }
 
-// TestTxnSpanRefresherAssignsNoRefreshSpans tests that the txnSpanRefresher
-// assigns the NoRefreshSpans flag on EndTxn requests.
-func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
+// TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp tests that the
+// txnSpanRefresher assigns the CanCommitAtHigherTimestamp flag on EndTxn
+// requests.
+func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tsr, mockSender := makeMockTxnSpanRefresher()
@@ -388,7 +389,7 @@ func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	// Set MaxTxnRefreshSpansBytes limit to 3 bytes.
 	MaxTxnRefreshSpansBytes.Override(&tsr.st.SV, 3)
 
-	// Send an EndTxn request. Should set NoRefreshSpans flag.
+	// Send an EndTxn request. Should set CanCommitAtHigherTimestamp flag.
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
 	ba.Add(&roachpb.EndTxnRequest{})
@@ -396,7 +397,7 @@ func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.True(t, ba.Requests[0].GetEndTxn().NoRefreshSpans)
+		require.True(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -419,14 +420,14 @@ func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshSpans)
 	require.False(t, tsr.refreshInvalid)
 
-	// Send another EndTxn request. Should NOT set NoRefreshSpans flag.
+	// Send another EndTxn request. Should NOT set CanCommitAtHigherTimestamp flag.
 	ba.Requests = nil
 	ba.Add(&roachpb.EndTxnRequest{})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().NoRefreshSpans)
+		require.False(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -449,14 +450,14 @@ func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshSpans)
 	require.True(t, tsr.refreshInvalid)
 
-	// Send another EndTxn request. Still should NOT set NoRefreshSpans flag.
+	// Send another EndTxn request. Still should NOT set CanCommitAtHigherTimestamp flag.
 	ba.Requests = nil
 	ba.Add(&roachpb.EndTxnRequest{})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().NoRefreshSpans)
+		require.False(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn

@@ -708,7 +708,9 @@ func (r *Replica) evaluateProposal(
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
 	// benefit.
-	defer batch.Close()
+	if batch != nil {
+		defer batch.Close()
+	}
 
 	if pErr != nil {
 		pErr = r.maybeSetCorrupt(ctx, pErr)

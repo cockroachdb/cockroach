@@ -64,14 +64,15 @@ type SyncedCluster struct {
 	Localities []string
 	VPCs       []string
 	// all other fields are populated in newCluster.
-	Nodes       []int
-	Secure      bool
-	Env         string
-	Args        []string
-	Tag         string
-	Impl        ClusterImpl
-	UseTreeDist bool
-	Quiet       bool
+	Nodes          []int
+	Secure         bool
+	Env            string
+	Args           []string
+	Tag            string
+	Impl           ClusterImpl
+	UseTreeDist    bool
+	Quiet          bool
+	MaxConcurrency int // used in Parallel
 	// AuthorizedKeys is used by SetupSSH to add additional authorized keys.
 	AuthorizedKeys []byte
 
@@ -1539,7 +1540,9 @@ func (c *SyncedCluster) Parallel(
 	if concurrency == 0 || concurrency > count {
 		concurrency = count
 	}
-
+	if c.MaxConcurrency > 0 && concurrency > c.MaxConcurrency {
+		concurrency = c.MaxConcurrency
+	}
 	type result struct {
 		index int
 		out   []byte

@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -480,6 +480,12 @@ func (ba *BatchRequest) Methods() []Method {
 // special-cased: If false, an EndTxn request will never be split into a new
 // chunk (otherwise, it is treated according to its flags). This allows sending
 // a whole transaction in a single Batch when addressing a single range.
+//
+// NOTE: One reason for splitting reads from writes is that write-only batches
+// can sometimes have their read timestamp bumped on the server, which doesn't
+// work for read requests due to how the timestamp-aware latching works (i.e. a
+// read that acquired a latch @ ts10 can't simply be bumped to ts 20 because
+// there might have been overlapping writes in the 10..20 window).
 func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 	compatible := func(exFlags, newFlags int) bool {
 		// isAlone requests are never compatible.
@@ -576,7 +582,8 @@ func (ba BatchRequest) String() string {
 		req := arg.GetInner()
 		if et, ok := req.(*EndTxnRequest); ok {
 			h := req.Header()
-			str = append(str, fmt.Sprintf("%s(commit:%t) [%s]", req.Method(), et.Commit, h.Key))
+			str = append(str, fmt.Sprintf("%s(commit:%t tsflex:%t) [%s] ",
+				req.Method(), et.Commit, et.CanCommitAtHigherTimestamp, h.Key))
 		} else {
 			h := req.Header()
 			var s string
@@ -590,4 +597,27 @@ func (ba BatchRequest) String() string {
 		}
 	}
 	return strings.Join(str, ", ")
+}
+
+// ValidateForEvaluation performs sanity checks on the batch when it's received
+// by the "server" for evaluation.
+func (ba BatchRequest) ValidateForEvaluation() error {
+	if ba.RangeID == 0 {
+		return errors.AssertionFailedf("batch request missing range ID")
+	} else if ba.Replica.StoreID == 0 {
+		return errors.AssertionFailedf("batch request missing store ID")
+	}
+	if ba.Header.DeferWriteTooOldError && ba.Txn == nil {
+		return errors.AssertionFailedf(
+			"DeferWriteTooOldError can't be set on non-transactional requests")
+	}
+	if _, ok := ba.GetArg(EndTxn); ok && ba.Txn == nil {
+		return errors.AssertionFailedf("EndTxn request without transaction")
+	}
+	if ba.Txn != nil {
+		if ba.Txn.WriteTooOld && (ba.Txn.ReadTimestamp.Equal(ba.Txn.WriteTimestamp)) {
+			return errors.AssertionFailedf("WriteTooOld set but no offset in timestamps. txn: %s", ba.Txn)
+		}
+	}
+	return nil
 }

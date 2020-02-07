@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 )
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in
@@ -191,7 +191,7 @@ func evaluateBatch(
 		}
 	}
 
-	var result result.Result
+	var mergedResult result.Result
 
 	// WriteTooOldErrors are unique: When one is returned, we also lay
 	// down an intent at our new proposed timestamp. We have the option
@@ -200,8 +200,9 @@ func evaluateBatch(
 	// a RefreshSpan and possibly a client-side retry).
 	//
 	// Within a batch, there's no downside to continuing past the
-	// WriteTooOldError, so we at least defer returning the error to the
-	// end of the batch.
+	// WriteTooOldError, so we at least defer returning the error to the end of
+	// the batch so that we lay down more intents and we find out the final
+	// timestamp for the batch.
 	//
 	// Across batches, it's more complicated. We want to avoid
 	// client-side retries whenever possible. However, if a client-side
@@ -234,12 +235,16 @@ func evaluateBatch(
 	// WriteTooOldError even if the SQL CanAutoRetry is false. As of
 	// this writing, nearly all writes issued by SQL are preceded by
 	// reads of the same key.
-	var writeTooOldErr *roachpb.Error
-	mustReturnWriteTooOldErr := false
+	var writeTooOldState struct {
+		err *roachpb.WriteTooOldError
+		// cantDeferWTOE is set when a WriteTooOldError cannot be deferred.
+		cantDeferWTOE bool
+	}
 
 	for index, union := range baReqs {
 		// Execute the command.
 		args := union.GetInner()
+
 		if baHeader.Txn != nil {
 			// Set the Request's sequence number on the TxnMeta for this
 			// request. The MVCC layer (currently) uses TxnMeta to
@@ -247,18 +252,34 @@ func evaluateBatch(
 			// request operates.
 			baHeader.Txn.Sequence = args.Header().Sequence
 		}
+
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
-		curResult, pErr := evaluateCommand(ctx, idKey, index, readWriter, rec, ms, baHeader, maxKeys, args, reply)
 
-		if err := result.MergeAndDestroy(curResult); err != nil {
+		var curResult result.Result
+		var pErr *roachpb.Error
+		curResult, pErr = evaluateCommand(
+			ctx, idKey, index, readWriter, rec, ms, baHeader, maxKeys, args, reply)
+
+		// If an EndTxn wants to restart because of a write too old, we
+		// might have a better error to return to the client.
+		retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError)
+		if ok && retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
+			args.Method() == roachpb.EndTxn && writeTooOldState.err != nil {
+			pErr.SetDetail(writeTooOldState.err)
+			// Remember not to defer this error. Since it came from an EndTransaction,
+			// there's nowhere to defer it to.
+			writeTooOldState.cantDeferWTOE = true
+		}
+
+		if err := mergedResult.MergeAndDestroy(curResult); err != nil {
 			// TODO(tschottdorf): see whether we really need to pass nontrivial
 			// Result up on error and if so, formalize that.
 			log.Fatalf(
 				ctx,
 				"unable to absorb Result: %s\ndiff(new, old): %s",
-				err, pretty.Diff(curResult, result),
+				err, pretty.Diff(curResult, mergedResult),
 			)
 		}
 
@@ -275,10 +296,11 @@ func evaluateBatch(
 				// other concurrent overlapping transactions are forced
 				// through intent resolution and the chances of this batch
 				// succeeding when it will be retried are increased.
-				if writeTooOldErr != nil {
-					writeTooOldErr.GetDetail().(*roachpb.WriteTooOldError).ActualTimestamp.Forward(tErr.ActualTimestamp)
+				if writeTooOldState.err != nil {
+					writeTooOldState.err.ActualTimestamp.Forward(
+						tErr.ActualTimestamp)
 				} else {
-					writeTooOldErr = pErr
+					writeTooOldState.err = tErr
 				}
 
 				// Requests which are both read and write are not currently
@@ -287,7 +309,7 @@ func evaluateBatch(
 				// TODO(bdarnell): add read+write requests to the read refresh spans
 				// in TxnCoordSender, and then I think this can go away.
 				if roachpb.IsReadAndWrite(args) {
-					mustReturnWriteTooOldErr = true
+					writeTooOldState.cantDeferWTOE = true
 				}
 
 				if baHeader.Txn != nil {
@@ -303,7 +325,7 @@ func evaluateBatch(
 				// transaction.
 				pErr = nil
 			default:
-				return nil, result, pErr
+				return nil, mergedResult, pErr
 			}
 		}
 
@@ -329,20 +351,16 @@ func evaluateBatch(
 		}
 	}
 
-	// If there was an EndTxn in the batch that finalized the transaction,
-	// the WriteTooOld status has been fully processed and we can discard the error.
-	if baHeader.Txn != nil && baHeader.Txn.Status.IsFinalized() {
-		writeTooOldErr = nil
-	} else if baHeader.Txn == nil {
-		// Non-transactional requests are unable to defer WriteTooOldErrors
-		// because there is no where to defer them to.
-		mustReturnWriteTooOldErr = true
+	if writeTooOldState.err != nil {
+		if baHeader.Txn != nil && baHeader.Txn.Status.IsCommittedOrStaging() {
+			log.Fatalf(ctx, "committed txn with writeTooOld err: %s", writeTooOldState.err)
+		}
 	}
 
-	// If there's a write too old error, return now that we've found
-	// the high water timestamp for retries.
-	if writeTooOldErr != nil && (mustReturnWriteTooOldErr || !baHeader.DeferWriteTooOldError) {
-		return nil, result, writeTooOldErr
+	// If there's a write too old error that we don't want to defer, return.
+	if writeTooOldState.err != nil &&
+		(!baHeader.DeferWriteTooOldError || writeTooOldState.cantDeferWTOE) {
+		return nil, mergedResult, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
 	}
 
 	// Update the batch response timestamp field to the timestamp at which the
@@ -362,7 +380,7 @@ func evaluateBatch(
 		br.Timestamp = baHeader.Timestamp
 	}
 
-	return br, result, nil
+	return br, mergedResult, nil
 }
 
 // evaluateCommand delegates to the eval method for the given
@@ -392,6 +410,9 @@ func evaluateCommand(
 			Hdr:   h,
 		}
 		if pErr := filter(filterArgs); pErr != nil {
+			if pErr.GetTxn() == nil {
+				pErr.SetTxn(h.Txn)
+			}
 			log.Infof(ctx, "test injecting error: %s", pErr)
 			return result.Result{}, pErr
 		}
@@ -408,6 +429,7 @@ func evaluateCommand(
 			MaxKeys: maxKeys,
 			Stats:   ms,
 		}
+
 		if cmd.EvalRW != nil {
 			pd, err = cmd.EvalRW(ctx, readWriter, cArgs, reply)
 		} else {
