@@ -730,6 +730,12 @@ func (c *CustomFuncs) CanExtractJoinEquality(
 		return false
 	}
 
+	if leftProps.OuterCols.Empty() || rightProps.OuterCols.Empty() {
+		// It's possible for one side to have no outer cols and still not be a
+		// ConstValue (see #44746).
+		return false
+	}
+
 	if (leftProps.OuterCols.SubsetOf(leftCols) && rightProps.OuterCols.SubsetOf(rightCols)) ||
 		(leftProps.OuterCols.SubsetOf(rightCols) && rightProps.OuterCols.SubsetOf(leftCols)) {
 		// The equality is of the form:
