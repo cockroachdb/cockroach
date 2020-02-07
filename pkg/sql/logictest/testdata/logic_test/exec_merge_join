@@ -64,3 +64,18 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzMkk9r20AQxe_9FMOcErp1tP
 
 statement ok
 RESET vectorize; RESET vectorize_row_count_threshold
+
+# Regression test for the inputs that have comparable but different types (see
+# issue #44798).
+statement ok
+CREATE TABLE t44798_0(c0 INT4 PRIMARY KEY); CREATE TABLE t44798_1(c0 INT8 PRIMARY KEY)
+
+statement ok
+INSERT INTO t44798_0(c0) VALUES(0), (1), (2); INSERT INTO t44798_1(c0) VALUES(0), (2), (4)
+
+# Note that integers of different width are still considered equal.
+query I
+SELECT * FROM t44798_0 NATURAL JOIN t44798_1
+----
+0
+2
