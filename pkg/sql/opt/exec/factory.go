@@ -481,6 +481,7 @@ type Factory interface {
 	ConstructCreateView(
 		schema cat.Schema,
 		viewName string,
+		ifNotExists bool,
 		temporary bool,
 		viewQuery string,
 		columns sqlbase.ResultColumns,

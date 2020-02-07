@@ -1238,6 +1238,7 @@ type CreateView struct {
 	Name        TableName
 	ColumnNames NameList
 	AsSource    *Select
+	IfNotExists bool
 	Temporary   bool
 }
 
@@ -1250,6 +1251,10 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 	}
 
 	ctx.WriteString("VIEW ")
+
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
 	ctx.FormatNode(&node.Name)
 
 	if len(node.ColumnNames) > 0 {

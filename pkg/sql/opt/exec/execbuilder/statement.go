@@ -62,6 +62,7 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 	root, err := b.factory.ConstructCreateView(
 		schema,
 		cv.ViewName,
+		cv.IfNotExists,
 		cv.Temporary,
 		cv.ViewQuery,
 		cols,
