@@ -29,8 +29,7 @@ type RoleOption struct {
 	Option
 	HasValue bool
 	// Need to resolve value in Exec for the case of placeholders.
-	Value  func() (string, error)
-	IsNull bool
+	Value func() (bool, string, error)
 }
 
 // KindList of role options.
@@ -39,13 +38,19 @@ const (
 	CREATEROLE
 	NOCREATEROLE
 	PASSWORD
+	LOGIN
+	NOLOGIN
+	VALIDUNTIL
 )
 
-// toSQLStmt is a map of Kind -> SQL statement string for applying the
+// toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
-var toSQLStmt = map[Option]string{
+var toSQLStmts = map[Option]string{
 	CREATEROLE:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
 	NOCREATEROLE: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
+	LOGIN:        `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
+	NOLOGIN:      `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
+	VALIDUNTIL:   `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -58,6 +63,9 @@ var ByName = map[string]Option{
 	"CREATEROLE":   CREATEROLE,
 	"NOCREATEROLE": NOCREATEROLE,
 	"PASSWORD":     PASSWORD,
+	"LOGIN":        LOGIN,
+	"NOLOGIN":      NOLOGIN,
+	"VALID_UNTIL":  VALIDUNTIL,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -73,13 +81,16 @@ func ToOption(str string) (Option, error) {
 // List is a list of role options.
 type List []RoleOption
 
-// GetSQLStmts returns a list of SQL stmts to apply each role option.
-func (rol List) GetSQLStmts() (stmts []string, err error) {
+// GetSQLStmts returns a map of SQL stmts to apply each role option.
+// Maps stmts to values (value of the role option).
+func (rol List) GetSQLStmts() (map[string]func() (bool, string, error), error) {
 	if len(rol) <= 0 {
-		return stmts, nil
+		return nil, nil
 	}
 
-	err = rol.CheckRoleOptionConflicts()
+	stmts := make(map[string]func() (bool, string, error), len(rol))
+
+	err := rol.CheckRoleOptionConflicts()
 	if err != nil {
 		return stmts, err
 	}
@@ -92,7 +103,13 @@ func (rol List) GetSQLStmts() (stmts []string, err error) {
 		if ro.Option == PASSWORD {
 			continue
 		}
-		stmts = append(stmts, toSQLStmt[ro.Option])
+
+		stmt := toSQLStmts[ro.Option]
+		if ro.HasValue {
+			stmts[stmt] = ro.Value
+		} else {
+			stmts[stmt] = nil
+		}
 	}
 
 	return stmts, nil
@@ -130,8 +147,10 @@ func (rol List) CheckRoleOptionConflicts() error {
 		return err
 	}
 
-	if roleOptionBits&CREATEROLE.Mask() != 0 &&
-		roleOptionBits&NOCREATEROLE.Mask() != 0 {
+	if (roleOptionBits&CREATEROLE.Mask() != 0 &&
+		roleOptionBits&NOCREATEROLE.Mask() != 0) ||
+		(roleOptionBits&LOGIN.Mask() != 0 &&
+			roleOptionBits&NOLOGIN.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil
@@ -143,11 +162,11 @@ func (rol List) GetHashedPassword() ([]byte, error) {
 	var hashedPassword []byte
 	for _, ro := range rol {
 		if ro.Option == PASSWORD {
-			if ro.IsNull {
+			isNull, password, err := ro.Value()
+			if isNull {
 				// Use empty byte array for hashedPassword.
 				return hashedPassword, nil
 			}
-			password, err := ro.Value()
 			if err != nil {
 				return hashedPassword, err
 			}
