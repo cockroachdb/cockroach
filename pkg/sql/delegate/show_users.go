@@ -15,5 +15,6 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
 func (d *delegator) delegateShowUsers(n *tree.ShowUsers) (tree.Statement, error) {
-	return parse(`SELECT username AS user_name FROM system.users WHERE "isRole" = false ORDER BY 1`)
+	return parse(`SELECT username AS user_name FROM ` +
+		`system.role_options WHERE option = 'LOGIN' ORDER BY 1`)
 }

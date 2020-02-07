@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -83,16 +84,23 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, pwRetrievalFn, err := sql.GetUserHashedPassword(
+	exists, canLogin, pwRetrievalFn, validUntilFn, err := sql.GetUserHashedPassword(
 		ctx, authOpt.ie, c.sessionArgs.User,
 	)
 	if err != nil {
 		ac.Logf(ctx, "user retrieval failed for user=%q: %v", c.sessionArgs.User, err)
 		return sendError(err)
 	}
+
 	if !exists {
 		ac.Logf(ctx, "user does not exist: %q", c.sessionArgs.User)
 		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
+	}
+
+	if !canLogin {
+		ac.Logf(ctx, "%q does not have login privilege", c.sessionArgs.User)
+		return sendError(errors.Errorf(
+			fmt.Sprintf("%s does not have login privilege", c.sessionArgs.User)))
 	}
 
 	// Retrieve the authentication method.
@@ -104,7 +112,9 @@ func (c *conn) handleAuthentication(
 	ac.Logf(ctx, "connection matches HBA rule: %s", hbaEntry.Input)
 
 	// Ask the method to authenticate.
-	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn, execCfg, hbaEntry)
+	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn,
+		validUntilFn, execCfg, hbaEntry)
+
 	if err != nil {
 		ac.Logf(ctx, "authentication pre-hook failed: %v", err)
 		return sendError(err)
