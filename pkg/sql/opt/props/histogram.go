@@ -28,6 +28,7 @@ import (
 
 // Histogram captures the distribution of values for a particular column within
 // a relational expression.
+// Histograms are immutable.
 type Histogram struct {
 	evalCtx *tree.EvalContext
 	col     opt.ColumnID
@@ -51,8 +52,8 @@ func (h *Histogram) Init(
 	h.buckets = buckets
 }
 
-// Copy returns a deep copy of the histogram.
-func (h *Histogram) Copy() *Histogram {
+// copy returns a deep copy of the histogram.
+func (h *Histogram) copy() *Histogram {
 	buckets := make([]cat.HistogramBucket, len(h.buckets))
 	copy(buckets, h.buckets)
 	return &Histogram{
@@ -327,7 +328,7 @@ func (h *Histogram) addBucket(bucket *cat.HistogramBucket) {
 // ApplySelectivity reduces the size of each histogram bucket according to
 // the given selectivity, and returns a new histogram with the results.
 func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
-	res := h.Copy()
+	res := h.copy()
 	for i := range res.buckets {
 		b := &res.buckets[i]
 

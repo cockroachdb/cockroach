@@ -210,9 +210,14 @@ func TestQueryCache(t *testing.T) {
 				group.Go(func() error {
 					ctx := context.Background()
 					for j := 0; j < 10; j++ {
-						if _, err := c.ExecContext(
-							ctx, fmt.Sprintf("PREPARE a%d AS SELECT a + $1, b + $2 FROM t", j),
-						); err != nil {
+						// Query with a multi-use CTE (as a regression test for #44867). The
+						// left join condition never passes so this is really equivalent to:
+						//   SELECT a+$1,b+$2 FROM t
+						query := fmt.Sprintf(`PREPARE a%d AS
+WITH cte(x,y) AS (SELECT a+$1, b+$2 FROM t)
+SELECT cte.x, cte.y FROM cte LEFT JOIN cte as cte2 on cte.y = cte2.x`, j)
+
+						if _, err := c.ExecContext(ctx, query); err != nil {
 							return err
 						}
 						rows, err := c.QueryContext(ctx, fmt.Sprintf("EXECUTE a%d (10, 100)", j))

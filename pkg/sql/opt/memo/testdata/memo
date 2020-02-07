@@ -349,7 +349,7 @@ memo (optimized, ~9KB, required=[presentation: field:6])
  ├── G1: (distinct-on G2 G3 cols=(6))
  │    └── [presentation: field:6]
  │         ├── best: (distinct-on G2 G3 cols=(6))
- │         └── cost: 0.47
+ │         └── cost: 0.56
  ├── G2: (project G4 G5)
  │    └── []
  │         ├── best: (project G4 G5)
@@ -377,7 +377,7 @@ memo (optimized, ~6KB, required=[presentation: tag:11])
  ├── G1: (distinct-on G2 G3 cols=(11))
  │    └── [presentation: tag:11]
  │         ├── best: (distinct-on G2 G3 cols=(11))
- │         └── cost: 0.45
+ │         └── cost: 0.54
  ├── G2: (project G4 G5)
  │    └── []
  │         ├── best: (project G4 G5)
