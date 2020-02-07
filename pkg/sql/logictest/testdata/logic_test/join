@@ -1078,3 +1078,14 @@ SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
 
 query error aggregate functions are not allowed in ON
 SELECT * FROM foo JOIN bar ON max(foo.c) < 2
+
+# Regression test for #44746 (internal error for particular condition).
+statement ok
+CREATE TABLE t44746_0(c0 INT)
+
+statement ok
+CREATE TABLE t44746_1(c1 INT)
+
+# Note: an "error parsing regexp" would also be acceptable here.
+statement ok
+SELECT * FROM t44746_0 FULL JOIN t44746_1 ON (SUBSTRING('', ')') = '') = (c1 > 0)

@@ -453,13 +453,15 @@ func (c *CustomFuncs) CanExtractJoinEquality(
 		if c.HasCorrelatedSubquery(a) || c.HasCorrelatedSubquery(b) {
 			return false
 		}
+		// Disallow cases where one side is constant. It's possible for an
+		// expression to have no outer cols and still not be a ConstValue (see
+		// #44746).
+		if c.OuterCols(a).Empty() || c.OuterCols(b).Empty() {
+			return false
+		}
 		aExpr := c.mem.NormExpr(a)
 		bExpr := c.mem.NormExpr(b)
 
-		// Disallow cases where one side is constant.
-		if aExpr.IsConstValue() || bExpr.IsConstValue() {
-			return false
-		}
 		// Disallow simple equality between variables.
 		if aExpr.Operator() == opt.VariableOp && bExpr.Operator() == opt.VariableOp {
 			return false
