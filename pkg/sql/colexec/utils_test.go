@@ -1100,7 +1100,7 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
 		batch := f.repeatableBatch.Next(ctx)
-		if f.adjustment[0] == 0 {
+		if f.matchLen > 0 && f.adjustment[0] == 0 {
 			// We need to calculate the difference between the first and the last
 			// tuples in batch in first matchLen columns so that in the following
 			// calls to Next() the batch is adjusted such that tuples in consecutive
@@ -1116,6 +1116,12 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 				for j := range int64Vec {
 					int64Vec[j] += f.adjustment[i]
 				}
+				// We need to update the adjustments because RepeatableBatchSource
+				// returns the original batch that it was instantiated with, and we
+				// want to have constantly non-decreasing vectors.
+				firstValue := batch.ColVec(i).Int64()[0]
+				lastValue := batch.ColVec(i).Int64()[batch.Length()-1]
+				f.adjustment[i] += lastValue - firstValue + 1
 			}
 		}
 		return batch

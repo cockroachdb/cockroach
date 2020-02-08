@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -23,11 +24,13 @@ import (
 
 func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	rng, _ := randutil.NewPseudoRand()
 	tcs := []struct {
-		distinctCols []uint32
-		colTypes     []coltypes.T
-		tuples       []tuple
-		expected     []tuple
+		distinctCols            []uint32
+		colTypes                []coltypes.T
+		tuples                  []tuple
+		expected                []tuple
+		isOrderedOnDistinctCols bool
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
@@ -51,6 +54,7 @@ func TestDistinct(t *testing.T) {
 				{2.0, 3, "30", 4},
 				{2.0, 3, "40", 4},
 			},
+			isOrderedOnDistinctCols: true,
 		},
 		{
 			distinctCols: []uint32{1, 0, 2},
@@ -74,6 +78,7 @@ func TestDistinct(t *testing.T) {
 				{2.0, 3, "30", 4},
 				{2.0, 3, "40", 4},
 			},
+			isOrderedOnDistinctCols: true,
 		},
 		{
 			distinctCols: []uint32{0, 1, 2},
@@ -101,100 +106,108 @@ func TestDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		t.Run("ordered", func(t *testing.T) {
-			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-				func(input []Operator) (Operator, error) {
-					return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
-				})
-		})
 		t.Run("unordered", func(t *testing.T) {
 			runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
 				func(input []Operator) (Operator, error) {
-					return NewUnorderedDistinct(testAllocator, input[0], tc.distinctCols, tc.colTypes), nil
+					return NewUnorderedDistinct(
+						testAllocator, input[0], tc.distinctCols, tc.colTypes,
+						hashTableNumBuckets), nil
 				})
 		})
+		if tc.isOrderedOnDistinctCols {
+			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
+				t.Run(fmt.Sprintf("partiallyOrdered/ordCols=%d", numOrderedCols), func(t *testing.T) {
+					orderedCols := make([]uint32, numOrderedCols)
+					for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
+						orderedCols[i] = tc.distinctCols[j]
+					}
+					runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
+						func(input []Operator) (Operator, error) {
+							return newPartiallyOrderedDistinct(
+								testAllocator, input[0], tc.distinctCols,
+								orderedCols, tc.colTypes,
+							)
+						})
+				})
+			}
+			t.Run("ordered", func(t *testing.T) {
+				runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
+					func(input []Operator) (Operator, error) {
+						return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
+					})
+			})
+		}
 	}
 }
 
-func BenchmarkSortedDistinct(b *testing.B) {
+func BenchmarkDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
-	aCol := batch.ColVec(1).Int64()
-	bCol := batch.ColVec(2).Int64()
-	lastA := int64(0)
-	lastB := int64(0)
-	for i := 0; i < coldata.BatchSize(); i++ {
-		// 1/4 chance of changing each distinct coldata.
-		if rng.Float64() > 0.75 {
-			lastA++
-		}
-		if rng.Float64() > 0.75 {
-			lastB++
-		}
-		aCol[i] = lastA
-		bCol[i] = lastB
+	distinctConstructors := []func(*Allocator, Operator, []uint32, int, []coltypes.T) (Operator, error){
+		func(allocator *Allocator, input Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (Operator, error) {
+			return NewUnorderedDistinct(allocator, input, distinctCols, typs, hashTableNumBuckets), nil
+		},
+		func(allocator *Allocator, input Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (Operator, error) {
+			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
+		},
+		func(allocator *Allocator, input Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (Operator, error) {
+			return NewOrderedDistinct(input, distinctCols, typs)
+		},
 	}
-	batch.SetLength(coldata.BatchSize())
-	source := NewRepeatableBatchSource(testAllocator, batch)
-	source.Init()
-
-	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	// don't count the artificial zeroOp'd column in the throughput
-	for _, nulls := range []bool{false, true} {
-		b.Run(fmt.Sprintf("nulls=%t", nulls), func(b *testing.B) {
-			if nulls {
-				n := coldata.NewNulls(coldata.BatchSize())
-				// Setting one value to null is enough to trigger the null handling
-				// logic for the entire batch.
-				n.SetNull(0)
-				batch.ColVec(1).SetNulls(&n)
-				batch.ColVec(2).SetNulls(&n)
-			}
-			b.SetBytes(int64(8 * coldata.BatchSize() * 3))
-			for i := 0; i < b.N; i++ {
-				distinct.Next(ctx)
-			}
-		})
-	}
-}
-
-func BenchmarkUnorderedDistinct(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
-	ctx := context.Background()
-	for _, numCols := range []int{1, 2} {
-		for _, nulls := range []bool{false, true} {
-			for _, numBatches := range []int{1, 1 << 4, 1 << 8} {
-				b.Run(
-					fmt.Sprintf(
-						"numCols=%d/nulls=%t/numBatches=%d", numCols, nulls, numBatches,
-					), func(b *testing.B) {
-						var typs []coltypes.T
-						var distinctCols []uint32
-						for i := 0; i < numCols; i++ {
-							typs = append(typs, coltypes.Int64)
-							distinctCols = append(distinctCols, uint32(i))
+	distinctNames := []string{"Unordered", "PartiallyOrdered", "Ordered"}
+	orderedColsFraction := []float64{0, 0.5, 1.0}
+	for _, newTupleProbability := range []float64{0.001, 0.01, 0.1} {
+		for _, nBatches := range []int{1 << 2, 1 << 6} {
+			for _, nCols := range []int{2, 4} {
+				typs := make([]coltypes.T, nCols)
+				for i := range typs {
+					typs[i] = coltypes.Int64
+				}
+				batch := testAllocator.NewMemBatch(typs)
+				batch.SetLength(coldata.BatchSize())
+				distinctCols := []uint32{0, 1, 2, 3}[:nCols]
+				// We have the following equation:
+				//   newTupleProbability = 1 - (1 - newValueProbability) ^ nCols,
+				// so applying some manipulations we get:
+				//   newValueProbability = 1 - (1 - newTupleProbability) ^ (1 / nCols).
+				newValueProbability := 1.0 - math.Pow(1-newTupleProbability, 1.0/float64(nCols))
+				for i := range distinctCols {
+					col := batch.ColVec(i).Int64()
+					col[0] = 0
+					for j := 1; j < coldata.BatchSize(); j++ {
+						col[j] = col[j-1]
+						if rng.Float64() < newValueProbability {
+							col[j]++
 						}
-						b.SetBytes(int64(8 * coldata.BatchSize() * numCols * numBatches))
-						b.ResetTimer()
-						for i := 0; i < b.N; i++ {
-							source := NewRandomDataOp(testAllocator, rng, RandomDataOpArgs{
-								DeterministicTyps: typs,
-								Nulls:             nulls,
-								NumBatches:        numBatches,
-							})
-							distinct := NewUnorderedDistinct(testAllocator, source, distinctCols, typs)
-							b.StartTimer()
-							for b := distinct.Next(ctx); b.Length() != 0; b = distinct.Next(ctx) {
+					}
+				}
+				for distinctIdx, distinctConstructor := range distinctConstructors {
+					numOrderedCols := int(float64(nCols) * orderedColsFraction[distinctIdx])
+					b.Run(
+						fmt.Sprintf("%s/newTupleProbability=%.3f/rows=%d/cols=%d/ordCols=%d",
+							distinctNames[distinctIdx], newTupleProbability,
+							nBatches*coldata.BatchSize(), nCols, numOrderedCols,
+						),
+						func(b *testing.B) {
+							b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+							b.ResetTimer()
+							for n := 0; n < b.N; n++ {
+								// Note that the source will be ordered on all nCols so that the
+								// number of distinct tuples doesn't vary between different
+								// distinct operator variations.
+								source := newFiniteChunksSource(batch, nBatches, nCols)
+								distinct, err := distinctConstructor(testAllocator, source, distinctCols, numOrderedCols, typs)
+								if err != nil {
+									b.Fatal(err)
+								}
+								distinct.Init()
+								for b := distinct.Next(ctx); b.Length() > 0; b = distinct.Next(ctx) {
+								}
 							}
 							b.StopTimer()
-						}
-					})
+						})
+				}
 			}
 		}
 	}
