@@ -17,6 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
 
+// contextDecl stores the Go code that accesses the expression that is currently
+// being matched against. It also contains the type of that expression. See the
+// genMatch comment header for an example.
+type contextDecl struct {
+	code string
+	typ  *typeDef
+}
+
 // ruleGen generates implementation code for normalization and exploration
 // rules. The code is very similar for both kinds of rules, but with some
 // important differences. The biggest difference is that exploration rules
@@ -128,7 +136,10 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 		// to the factory method, so use those parameters directly.
 		for index, matchArg := range rule.Match.Args {
 			field := define.Fields[index]
-			context := unTitle(g.md.fieldName(field))
+			context := &contextDecl{
+				code: unTitle(g.md.fieldName(field)),
+				typ:  g.md.typeOf(field),
+			}
 			g.genMatch(matchArg, context, false /* noMatch */)
 		}
 
@@ -147,7 +158,8 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 			g.w.writeIndent("_partlyExplored := _rootOrd < _rootState.start\n")
 		}
 
-		g.genConstantMatchArgs(rule.Match, define, "_root")
+		context := &contextDecl{code: "_root", typ: g.md.typeOf(define)}
+		g.genConstantMatchArgs(rule.Match, define, context)
 		g.genExploreReplace(define, rule)
 	}
 
@@ -163,9 +175,10 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 // within one another, the matchWriter helper class allows the if nesting to be
 // independent of recursive genMatch calls.
 //
-// The context parameter is the name of the Go variable or the Go field
-// expression that is bound to the expression that is currently being matched
-// against. For example:
+// The context parameter contains the Go code (variable name, field accessor
+// expression, slice accessor expression, etc.) that accesses the expression
+// that is currently being matched against. It also contains the type of that
+// expression. For example:
 //
 //   for i := range elems {
 //     _item := &elems[i]
@@ -178,11 +191,11 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 //     }
 //   }
 //
-// In that example, the context starts out as "elems", which is the name of the
-// top-level Tuple operator field that's being list matched. Then, the context
-// recursively becomes _item, which is bound to one of the expressions in the
-// list. And finally, it becomes _eq.Left, which returns the left operand of the
-// Eq operator, and which is matched against in the innermost if statement.
+// In that example, the context starts out as "elems", which is the top-level
+// Tuple operator field that's being list matched. Then, the context recursively
+// becomes _item, which is bound to one of the expressions in the list. And
+// finally, it becomes _eq.Left, which returns the left operand of the Eq
+// operator, and which is matched against in the innermost if statement.
 //
 // Matchers test whether the context expression "matches" according to the
 // semantics of that matcher. For example, the child matcher will generate code
@@ -194,7 +207,7 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 // generate code that tests whether the context expression *does not* match
 // according to the semantics of the matcher. Some matchers do not currently
 // support generating code when noMatch is true.
-func (g *newRuleGen) genMatch(match lang.Expr, context string, noMatch bool) {
+func (g *newRuleGen) genMatch(match lang.Expr, context *contextDecl, noMatch bool) {
 	switch t := match.(type) {
 	case *lang.FuncExpr:
 		g.genMatchNameAndChildren(t, context, noMatch)
@@ -216,25 +229,27 @@ func (g *newRuleGen) genMatch(match lang.Expr, context string, noMatch bool) {
 		g.genMatch(t.Input, context, !noMatch)
 
 	case *lang.BindExpr:
-		if string(t.Label) != context {
-			g.w.writeIndent("%s := %s\n", t.Label, context)
+		// Alias the context variable.
+		if string(t.Label) != context.code {
+			g.w.writeIndent("%s := %s\n", t.Label, context.code)
 		}
-		g.genMatch(t.Target, string(t.Label), noMatch)
+		newContext := &contextDecl{code: string(t.Label), typ: context.typ}
+		g.genMatch(t.Target, newContext, noMatch)
 
 	case *lang.StringExpr:
 		// Delegate to custom function that matches String values.
 		if noMatch {
-			g.w.nestIndent("if !%s.funcs.EqualsString(%s, %s) {\n", g.factoryVar, context, t)
+			g.w.nestIndent("if !%s.funcs.EqualsString(%s, %s) {\n", g.factoryVar, context.code, t)
 		} else {
-			g.w.nestIndent("if %s.funcs.EqualsString(%s, %s) {\n", g.factoryVar, context, t)
+			g.w.nestIndent("if %s.funcs.EqualsString(%s, %s) {\n", g.factoryVar, context.code, t)
 		}
 
 	case *lang.NumberExpr:
 		// Delegate to custom function that matches Int, Float, and Decimal types.
 		if noMatch {
-			g.w.nestIndent("if !%s.funcs.EqualsNumber(%s, %s) {\n", g.factoryVar, context, t)
+			g.w.nestIndent("if !%s.funcs.EqualsNumber(%s, %s) {\n", g.factoryVar, context.code, t)
 		} else {
-			g.w.nestIndent("if %s.funcs.EqualsNumber(%s, %s) {\n", g.factoryVar, context, t)
+			g.w.nestIndent("if %s.funcs.EqualsNumber(%s, %s) {\n", g.factoryVar, context.code, t)
 		}
 
 	case *lang.AnyExpr:
@@ -262,7 +277,7 @@ func (g *newRuleGen) genMatch(match lang.Expr, context string, noMatch bool) {
 //   match empty list             : [ ]
 //   match any  list              : [ ... ]
 //
-func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch bool) {
+func (g *newRuleGen) genMatchList(match *lang.ListExpr, context *contextDecl, noMatch bool) {
 	// The list's type should already have been set by the Optgen compiler, and
 	// should be the name of a list type.
 	listTyp := g.md.lookupType(match.Typ.(*lang.ExternalDataType).Name)
@@ -291,15 +306,15 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch 
 	if matchItem == nil {
 		if len(match.Items) == 0 {
 			if noMatch {
-				g.w.nestIndent("if len(%s) != 0 {\n", context)
+				g.w.nestIndent("if len(%s) != 0 {\n", context.code)
 			} else {
-				g.w.nestIndent("if len(%s) == 0 {\n", context)
+				g.w.nestIndent("if len(%s) == 0 {\n", context.code)
 			}
 		}
 		return
 	}
 
-	var item string
+	var contextName string
 	switch {
 	case isFirst && isLast:
 		// Match single item.
@@ -307,51 +322,54 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context string, noMatch 
 			if matchItem.Op() != lang.AnyOp {
 				panic("noMatch is not yet fully supported by the list match single op")
 			}
-			g.w.nestIndent("if len(%s) != 1 {\n", context)
+			g.w.nestIndent("if len(%s) != 1 {\n", context.code)
 			return
 		}
 
-		g.w.nestIndent("if len(%s) == 1 {\n", context)
-		item = g.makeListItemRef(context+"[0]", listItemTyp)
+		g.w.nestIndent("if len(%s) == 1 {\n", context.code)
+		contextName = context.code + "[0]"
 
 	case isFirst && !isLast:
 		// Match first item in list.
 		if noMatch {
 			panic("noMatch is not yet supported by the list match first op")
 		}
-		g.w.nestIndent("if len(%s) > 0 {\n", context)
-		item = g.makeListItemRef(context+"[0]", listItemTyp)
+		g.w.nestIndent("if len(%s) > 0 {\n", context.code)
+		contextName = context.code + "[0]"
 
 	case !isFirst && isLast:
 		// Match last item in list.
 		if noMatch {
 			panic("noMatch is not yet supported by the list match last op")
 		}
-		g.w.nestIndent("if len(%s) > 0 {\n", context)
-		item = g.makeListItemRef(fmt.Sprintf("%s[len(%s)-1]", context, context), listItemTyp)
+		g.w.nestIndent("if len(%s) > 0 {\n", context.code)
+		contextName = fmt.Sprintf("%s[len(%s)-1]", context.code, context.code)
 
 	case !isFirst && !isLast:
 		// Match any item in list.
 		if noMatch {
 			panic("noMatch is not yet supported by the list match any op")
 		}
-		g.w.nestIndent("for i := range %s {\n", context)
-		item = g.makeListItemRef(context+"[i]", listItemTyp)
+		g.w.nestIndent("for i := range %s {\n", context.code)
+		contextName = context.code + "[i]"
 	}
+	contextName = g.makeListItemRef(contextName, listItemTyp)
+	newContext := &contextDecl{code: contextName, typ: listItemTyp}
 
 	// Store the expression in a variable, since it may be expensive to evaluate
 	// multiple times. If already binding the item, use that variable, else use
 	// a temporary _item variable.
 	switch matchItem.(type) {
 	case *lang.BindExpr:
-		g.genMatch(matchItem, item, noMatch)
+		g.genMatch(matchItem, newContext, noMatch)
 
 	case *lang.AnyExpr:
 		// Don't need to bind item in case of matching [ * ], [ ... * ... ], etc.
 
 	default:
-		g.w.writeIndent("_item := %s\n", item)
-		g.genMatch(matchItem, "_item", noMatch)
+		newContext = &contextDecl{code: "_item", typ: newContext.typ}
+		g.w.writeIndent("_item := %s\n", contextName)
+		g.genMatch(matchItem, newContext, noMatch)
 	}
 }
 
@@ -374,7 +392,9 @@ func (g *newRuleGen) makeListItemRef(item string, typ *typeDef) string {
 
 // genMatchNameAndChildren generates code to match the opname and children of
 // the context expression.
-func (g *newRuleGen) genMatchNameAndChildren(match *lang.FuncExpr, context string, noMatch bool) {
+func (g *newRuleGen) genMatchNameAndChildren(
+	match *lang.FuncExpr, context *contextDecl, noMatch bool,
+) {
 	// The name/child matcher can match multiple parts of the context expression,
 	// including its name and zero or more of its children. If noMatch is false,
 	// then all of these parts must match in order for the whole to match. If
@@ -446,14 +466,14 @@ func (g *newRuleGen) genMatchNameAndChildren(match *lang.FuncExpr, context strin
 			// If the child group is not yet fully explored, then neither is the
 			// root group, since new members in any descendant group make
 			// additional matches possible.
-			g.w.writeIndent("_state := _e.lookupExploreState(%s)\n", context)
+			g.w.writeIndent("_state := _e.lookupExploreState(%s)\n", context.code)
 			g.w.nestIndent("if !_state.fullyExplored {\n")
 			g.w.writeIndent("_fullyExplored = false\n")
 			g.w.unnest("}\n")
 			g.w.writeIndent("var _member memo.RelExpr\n")
 			g.w.nestIndent("for _ord := 0; _ord < _state.end; _ord++ {\n")
 			g.w.nestIndent("if _member == nil {\n")
-			g.w.writeIndent("_member = %s.FirstExpr()\n", context)
+			g.w.writeIndent("_member = %s.FirstExpr()\n", context.code)
 			g.w.unnest("}")
 			g.w.nest("else {\n")
 			g.w.writeIndent("_member = _member.NextExpr()\n")
@@ -474,7 +494,7 @@ func (g *newRuleGen) genMatchNameAndChildren(match *lang.FuncExpr, context strin
 				g.w.writeIndent("_partlyExplored := _partlyExplored && _ord < _state.start\n")
 			}
 
-			context = "_member"
+			context = &contextDecl{code: "_member", typ: g.md.lookupType("RelExpr")}
 		}
 	}
 
@@ -531,25 +551,26 @@ func (g *newRuleGen) onlyScalarMatchNames(match *lang.FuncExpr) bool {
 // is statically known, and so the generated code can directly manipulate
 // strongly-typed expression structs (e.g. SelectExpr, InnerJoinExpr, etc).
 func (g *newRuleGen) genConstantMatch(
-	match *lang.FuncExpr, opDef *lang.DefineExpr, context string, noMatch bool,
+	match *lang.FuncExpr, opDef *lang.DefineExpr, context *contextDecl, noMatch bool,
 ) {
 	// If the match type is a list item type, then no need to check for a match,
 	// since it's already assumed to match (because lists are strongly-typed).
-	if !opDef.Tags.Contains("ListItem") {
-		// Match op type.
+	if !opDef.Tags.Contains("ListItem") && context.typ.isInterface {
+		// Cast context to concrete type of op to match.
 		opTyp := g.md.typeOf(opDef)
-		newContext := g.uniquifier.makeUnique(fmt.Sprintf("_%s", unTitle(string(opDef.Name))))
-		g.w.writeIndent("%s, _ := %s.(*%s)\n", newContext, context, opTyp.name)
+		contextName := g.uniquifier.makeUnique(fmt.Sprintf("_%s", unTitle(string(opDef.Name))))
+		newContext := &contextDecl{code: contextName, typ: opTyp}
+		g.w.writeIndent("%s, _ := %s.(*%s)\n", newContext.code, context.code, opTyp.name)
 
 		if noMatch {
-			g.w.nestIndent("if %s == nil {\n", newContext)
+			g.w.nestIndent("if %s == nil {\n", newContext.code)
 			if len(match.Args) > 0 {
 				panic("noMatch=true only supported without args")
 			}
 			return
 		}
 
-		g.w.nestIndent("if %s != nil {\n", newContext)
+		g.w.nestIndent("if %s != nil {\n", newContext.code)
 		context = newContext
 	}
 
@@ -557,7 +578,7 @@ func (g *newRuleGen) genConstantMatch(
 }
 
 func (g *newRuleGen) genConstantMatchArgs(
-	match *lang.FuncExpr, opDef *lang.DefineExpr, context string,
+	match *lang.FuncExpr, opDef *lang.DefineExpr, context *contextDecl,
 ) {
 	// Match expression children in the same order as arguments to the match
 	// operator. If there are fewer arguments than there are children, then
@@ -565,8 +586,13 @@ func (g *newRuleGen) genConstantMatchArgs(
 	for i, matchArg := range match.Args {
 		field := opDef.Fields[i]
 		fieldName := g.md.fieldName(field)
-		subContext := fmt.Sprintf("%s%s.%s", g.md.fieldLoadPrefix(field), context, fieldName)
-		g.genMatch(matchArg, subContext, false /* noMatch */)
+		fieldTyp := g.md.typeOf(field)
+
+		// Use fieldLoadPrefix, since an operator field is being treated as a
+		// parameter.
+		contextName := fmt.Sprintf("%s%s.%s", fieldLoadPrefix(fieldTyp), context.code, fieldName)
+		newContext := &contextDecl{code: contextName, typ: g.md.typeOf(field)}
+		g.genMatch(matchArg, newContext, false /* noMatch */)
 	}
 }
 
@@ -574,7 +600,7 @@ func (g *newRuleGen) genConstantMatchArgs(
 // matching multiple names. It matches expression children by dynamically
 // getting children by index, without knowing the specific type of operator.
 func (g *newRuleGen) genDynamicMatch(
-	match *lang.FuncExpr, defines lang.DefineSetExpr, context string, noMatch bool,
+	match *lang.FuncExpr, defines lang.DefineSetExpr, context *contextDecl, noMatch bool,
 ) {
 	var buf bytes.Buffer
 	for i, name := range match.NameChoice() {
@@ -585,10 +611,10 @@ func (g *newRuleGen) genDynamicMatch(
 		// The name is a tag if there is no operator define with that name.
 		if g.compiled.LookupDefine(string(name)) != nil {
 			// Match operator name.
-			fmt.Fprintf(&buf, "%s.Op() == opt.%sOp", context, name)
+			fmt.Fprintf(&buf, "%s.Op() == opt.%sOp", context.code, name)
 		} else {
 			// Match tag name.
-			fmt.Fprintf(&buf, "opt.Is%sOp(%s)", name, context)
+			fmt.Fprintf(&buf, "opt.Is%sOp(%s)", name, context.code)
 		}
 	}
 
@@ -612,23 +638,17 @@ func (g *newRuleGen) genDynamicMatch(
 			field := defines[0].Fields[i]
 			fieldTyp := g.md.typeOf(field)
 
-			var subContext string
+			// Convert dynamic expression child or private to parameter type.
+			var contextName string
 			if fieldTyp.isExpr {
-				subContext = fmt.Sprintf("%s.Child(%d)", context, i)
+				contextName = fmt.Sprintf("%s.Child(%d)", context.code, i)
 			} else {
-				subContext = fmt.Sprintf("%s.Private()", context)
+				contextName = fmt.Sprintf("%s.Private()", context.code)
 			}
+			contextName = castFromDynamicParam(contextName, fieldTyp)
 
-			// Convert result to inferred type of the field.
-			if fieldTyp.isPointer {
-				subContext = fmt.Sprintf("%s.(%s)", subContext, fieldTyp.name)
-			} else if fieldTyp.passByVal {
-				subContext = fmt.Sprintf("*%s.(*%s)", subContext, fieldTyp.name)
-			} else {
-				subContext = fmt.Sprintf("%s.(*%s)", subContext, fieldTyp.name)
-			}
-
-			g.genMatch(matchArg, subContext, false /* noMatch */)
+			newContext := &contextDecl{code: contextName, typ: fieldTyp}
+			g.genMatch(matchArg, newContext, false /* noMatch */)
 		}
 	}
 }
@@ -692,7 +712,9 @@ func (g *newRuleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleE
 		g.w.nestIndent("_expr := &%s{\n", opTyp.name)
 		for i, arg := range t.Args {
 			field := opDef.Fields[i]
-			g.w.writeIndent("%s: %s", g.md.fieldName(field), g.md.fieldStorePrefix(field))
+
+			// Use fieldStorePrefix, since parameter is being stored into a field.
+			g.w.writeIndent("%s: %s", g.md.fieldName(field), fieldStorePrefix(g.md.typeOf(field)))
 			g.genNestedExpr(arg)
 			g.w.write(",\n")
 		}
@@ -892,6 +914,10 @@ func (g *newRuleGen) genConstruct(construct *lang.FuncExpr) {
 			field := opDef.Fields[i]
 			fieldTyp := g.md.typeOf(field)
 
+			// Need to take address of any non-pointer values that would normally
+			// be passed by value. When these values are typed dynamically as
+			// opt.Expr, they are passed by reference (see comment for
+			// castFromDynamicParam for more details).
 			g.w.writeIndent("")
 			if fieldTyp.passByVal && !fieldTyp.isPointer {
 				g.w.write("&")
@@ -937,8 +963,8 @@ func (g *newRuleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
 // genConstructList generates code to construct an interned list of items:
 //
 //   ProjectionsList{
-//     {Element: elem, Col: 1},
-//     {Element: elem2, Col: 2},
+//     _f.ConstructProjectionsItem(elem, 1),
+//     _f.ConstructProjectionsItem(elem2, 2),
 //   }
 //
 func (g *newRuleGen) genConstructList(list *lang.ListExpr) {
@@ -962,10 +988,7 @@ func (g *newRuleGen) genConstructList(list *lang.ListExpr) {
 			listItemDef := g.compiled.LookupDefine(listItemTyp.friendlyName)
 
 			g.w.nestIndent("%s.Construct%s(\n", g.factoryVar, listItemDef.Name)
-			for i, subItem := range item.(*lang.FuncExpr).Args {
-				field := listItemDef.Fields[i]
-
-				g.w.writeIndent("%s", g.md.fieldStorePrefix(field))
+			for _, subItem := range item.(*lang.FuncExpr).Args {
 				g.genNestedExpr(subItem)
 				g.w.write(",\n")
 			}

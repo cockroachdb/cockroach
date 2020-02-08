@@ -154,9 +154,9 @@ func (g *exprsGen) genPrivateStruct(define *lang.DefineExpr) {
 
 		// If field's name is "_", then use Go embedding syntax.
 		if isEmbeddedField(field) {
-			fmt.Fprintf(g.w, "  %s\n", g.md.typeOf(field).name)
+			fmt.Fprintf(g.w, "  %s\n", g.md.typeOf(field).asField())
 		} else {
-			fmt.Fprintf(g.w, "  %s %s\n", field.Name, g.md.typeOf(field).name)
+			fmt.Fprintf(g.w, "  %s %s\n", field.Name, g.md.typeOf(field).asField())
 		}
 	}
 	fmt.Fprintf(g.w, "}\n\n")
@@ -189,10 +189,10 @@ func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
 
 		// If field's name is "_", then use Go embedding syntax.
 		if isEmbeddedField(field) {
-			fmt.Fprintf(g.w, "  %s\n", g.md.typeOf(field).name)
+			fmt.Fprintf(g.w, "  %s\n", g.md.typeOf(field).asField())
 		} else {
 			fieldName := g.md.fieldName(field)
-			fmt.Fprintf(g.w, "  %s %s\n", fieldName, g.md.typeOf(field).name)
+			fmt.Fprintf(g.w, "  %s %s\n", fieldName, g.md.typeOf(field).asField())
 		}
 	}
 
@@ -259,13 +259,12 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		n := 0
 		for _, field := range childFields {
 			fieldName := g.md.fieldName(field)
+			fieldType := g.md.typeOf(field)
 
+			// Use dynamicFieldLoadPrefix, since we're loading from field and
+			// returning as dynamic opt.Expr type.
 			fmt.Fprintf(g.w, "  case %d:\n", n)
-			if g.md.typeOf(field).isPointer {
-				fmt.Fprintf(g.w, "    return e.%s\n", fieldName)
-			} else {
-				fmt.Fprintf(g.w, "    return &e.%s\n", fieldName)
-			}
+			fmt.Fprintf(g.w, "    return %se.%s\n", dynamicFieldLoadPrefix(fieldType), fieldName)
 			n++
 		}
 		fmt.Fprintf(g.w, "  }\n")
@@ -277,12 +276,11 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "func (e *%s) Private() interface{} {\n", opTyp.name)
 	if privateField != nil {
 		fieldName := g.md.fieldName(privateField)
+		fieldType := g.md.typeOf(privateField)
 
-		if g.md.typeOf(privateField).isPointer {
-			fmt.Fprintf(g.w, "  return e.%s\n", fieldName)
-		} else {
-			fmt.Fprintf(g.w, "  return &e.%s\n", fieldName)
-		}
+		// Use dynamicFieldLoadPrefix, since we're loading from field and returning
+		// as dynamic interface{} type.
+		fmt.Fprintf(g.w, "  return %se.%s\n", dynamicFieldLoadPrefix(fieldType), fieldName)
 	} else {
 		fmt.Fprintf(g.w, "  return nil\n")
 	}
@@ -308,12 +306,12 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 			fieldTyp := g.md.typeOf(field)
 			fieldName := g.md.fieldName(field)
 
+			// Use castFromDynamicParam and then fieldStorePrefix, in order to first
+			// cast from the dynamic param type (opt.Expr) to the static param type,
+			// and then to store that into the field.
 			fmt.Fprintf(g.w, "  case %d:\n", n)
-			if fieldTyp.isPointer {
-				fmt.Fprintf(g.w, "    e.%s = child.(%s)\n", fieldName, fieldTyp.name)
-			} else {
-				fmt.Fprintf(g.w, "    e.%s = *child.(*%s)\n", fieldName, fieldTyp.name)
-			}
+			fmt.Fprintf(g.w, "    %se.%s = %s\n", fieldStorePrefix(fieldTyp), fieldName,
+				castFromDynamicParam("child", fieldTyp))
 			fmt.Fprintf(g.w, "    return\n")
 			n++
 		}
@@ -534,12 +532,10 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Child method.
+	// Use dynamicFieldLoadPrefix, since the field is being passed as the dynamic
+	// opt.Expr type.
 	fmt.Fprintf(g.w, "func (e *%s) Child(nth int) opt.Expr {\n", opTyp.name)
-	if opTyp.listItemType.isPointer {
-		fmt.Fprintf(g.w, "  return (*e)[nth]\n")
-	} else {
-		fmt.Fprintf(g.w, "  return &(*e)[nth]\n")
-	}
+	fmt.Fprintf(g.w, "    return %s(*e)[nth]\n", dynamicFieldLoadPrefix(opTyp.listItemType))
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Private method.
@@ -555,12 +551,12 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the SetChild method.
+	// Use castFromDynamicParam and then fieldStorePrefix, in order to first cast
+	// from the dynamic param type (opt.Expr) to the static param type, and then
+	// to store that into the field.
 	fmt.Fprintf(g.w, "func (e *%s) SetChild(nth int, child opt.Expr) {\n", opTyp.name)
-	if opTyp.listItemType.isPointer {
-		fmt.Fprintf(g.w, "  (*e)[nth] = child.(%s)\n", opTyp.listItemType.name)
-	} else {
-		fmt.Fprintf(g.w, "  (*e)[nth] = *child.(*%s)\n", opTyp.listItemType.name)
-	}
+	fmt.Fprintf(g.w, "    (*e)[nth] = %s%s\n", fieldStorePrefix(opTyp.listItemType),
+		castFromDynamicParam("child", opTyp.listItemType))
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the DataType method.
@@ -615,11 +611,9 @@ func (g *exprsGen) genMemoizeFuncs() {
 			fieldTyp := g.md.typeOf(field)
 			fieldName := g.md.fieldName(field)
 
-			if fieldTyp.passByVal {
-				fmt.Fprintf(g.w, "   %s: %s,\n", fieldName, unTitle(fieldName))
-			} else {
-				fmt.Fprintf(g.w, "   %s: *%s,\n", fieldName, unTitle(fieldName))
-			}
+			// Use fieldStorePrefix since a value with a static param type is being
+			// stored as a field type.
+			fmt.Fprintf(g.w, "   %s: %s%s,\n", fieldName, fieldStorePrefix(fieldTyp), unTitle(fieldName))
 		}
 
 		if define.Tags.Contains("Scalar") {
