@@ -47,9 +47,12 @@ type waitingState struct {
 
 	// Populated for waitFor* and waitElsewhere type, and represents who the
 	// request is waiting for.
-	txn    *enginepb.TxnMeta  // always non-nil
-	ts     hlc.Timestamp      // the timestamp of the transaction that is causing the wait
-	access spanset.SpanAccess // Currently only SpanReadWrite.
+	txn         *enginepb.TxnMeta  // always non-nil
+	ts          hlc.Timestamp      // the timestamp of the transaction that is causing the wait
+	key         roachpb.Key        // the key of the lock that is causing the wait
+	held        bool               // is the lock currently held?
+	access      spanset.SpanAccess // currently only SpanReadWrite
+	guardAccess spanset.SpanAccess // the access method of the guard
 }
 
 // Implementation
@@ -58,6 +61,8 @@ type waitingState struct {
 // - proper error strings and give better explanation to all panics.
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
+// - update waitingState.held on each waiter when locks are acquired and
+//   released.
 
 // The btree for a particular SpanScope.
 type treeMu struct {
@@ -543,11 +548,15 @@ func (l *lockState) informActiveWaiters() {
 		stateKind: waitFor,
 		txn:       waitForTxn,
 		ts:        waitForTs,
+		key:       l.key,
+		held:      l.holder.locked,
 		access:    spanset.SpanReadWrite,
 	}
 	waitSelfState := waitingState{stateKind: waitSelf}
 
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
+		state := waitForState
+		state.guardAccess = spanset.SpanReadOnly
 		// Since there are waiting readers we could not have transitioned out of
 		// or into a state with a reservation, since readers do not wait for
 		// reservations.
@@ -557,7 +566,7 @@ func (l *lockState) informActiveWaiters() {
 			findDistinguished = false
 		}
 		g.mu.Lock()
-		g.mu.state = waitForState
+		g.mu.state = state
 		if l.distinguishedWaiter == g {
 			g.mu.state.stateKind = waitForDistinguished
 		}
@@ -575,6 +584,7 @@ func (l *lockState) informActiveWaiters() {
 			state = waitSelfState
 		} else {
 			state = waitForState
+			state.guardAccess = spanset.SpanReadWrite
 			if findDistinguished {
 				l.distinguishedWaiter = g
 				findDistinguished = false
@@ -779,10 +789,13 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 			stateType = waitForDistinguished
 		}
 		g.mu.state = waitingState{
-			stateKind: stateType,
-			txn:       waitForTxn,
-			ts:        waitForTs,
-			access:    spanset.SpanReadWrite,
+			stateKind:   stateType,
+			txn:         waitForTxn,
+			ts:          waitForTs,
+			key:         l.key,
+			held:        l.holder.locked,
+			access:      spanset.SpanReadWrite,
+			guardAccess: sa,
 		}
 	}
 	if notify {
@@ -960,7 +973,7 @@ func (l *lockState) discoveredLock(
 	}
 
 	if !hadReservation && sa == spanset.SpanReadWrite {
-		// Put self in queue as inactive waiter. Since did not have the
+		// Put self in queue as inactive waiter. Since we did not have the
 		// reservation the lock must not have been known to be held so the queue
 		// must be empty.
 		if l.queuedWriters.Len() > 0 {
@@ -1275,10 +1288,12 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 	// Need to tell the remaining active waiting writers who they are waiting
 	// for.
 	waitForState := waitingState{
-		stateKind: waitFor,
-		txn:       g.txn,
-		ts:        g.ts,
-		access:    spanset.SpanReadWrite,
+		stateKind:   waitFor,
+		txn:         g.txn,
+		ts:          g.ts,
+		key:         l.key,
+		access:      spanset.SpanReadWrite,
+		guardAccess: spanset.SpanReadWrite,
 	}
 	waitSelfState := waitingState{stateKind: waitSelf}
 	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
