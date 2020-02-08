@@ -333,8 +333,9 @@ func (ir *IntentResolver) maybePushIntents(
 	skipIfInFlight bool,
 ) ([]roachpb.Intent, *roachpb.Error) {
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
-	pushTxns := make(map[uuid.UUID]enginepb.TxnMeta)
-	for _, intent := range intents {
+	pushTxns := make(map[uuid.UUID]*enginepb.TxnMeta)
+	for i := range intents {
+		intent := &intents[i]
 		if intent.Status != roachpb.PENDING {
 			// The current intent does not need conflict resolution
 			// because the transaction is already finalized.
@@ -342,7 +343,7 @@ func (ir *IntentResolver) maybePushIntents(
 			// the PENDING status.
 			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
 		}
-		pushTxns[intent.Txn.ID] = intent.Txn
+		pushTxns[intent.Txn.ID] = &intent.Txn
 	}
 
 	pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
@@ -380,13 +381,32 @@ func updateIntentTxnStatus(
 	return results
 }
 
+// PushTransaction takes a transaction and pushes its record using the specified
+// push type and request header. It returns the transaction proto corresponding
+// to the pushed transaction.
+func (ir *IntentResolver) PushTransaction(
+	ctx context.Context, pushTxn *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
+) (roachpb.Transaction, *roachpb.Error) {
+	pushTxns := make(map[uuid.UUID]*enginepb.TxnMeta, 1)
+	pushTxns[pushTxn.ID] = pushTxn
+	pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, false /* skipIfInFlight */)
+	if pErr != nil {
+		return roachpb.Transaction{}, pErr
+	}
+	pushedTxn, ok := pushedTxns[pushTxn.ID]
+	if !ok {
+		log.Fatalf(ctx, "missing PushTxn responses for %s", pushTxn)
+	}
+	return pushedTxn, nil
+}
+
 // MaybePushTransactions is like maybePushIntents except it takes a set of
 // transactions to push instead of a set of intents. This set of provided
 // transactions may be modified by the method. It returns a set of transaction
 // protos corresponding to the pushed transactions.
 func (ir *IntentResolver) MaybePushTransactions(
 	ctx context.Context,
-	pushTxns map[uuid.UUID]enginepb.TxnMeta,
+	pushTxns map[uuid.UUID]*enginepb.TxnMeta,
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
 	skipIfInFlight bool,
@@ -436,7 +456,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 				Key: pushTxn.Key,
 			},
 			PusherTxn: pusherTxn,
-			PusheeTxn: pushTxn,
+			PusheeTxn: *pushTxn,
 			PushTo:    h.Timestamp.Next(),
 			PushType:  pushType,
 		})
@@ -538,7 +558,7 @@ func (ir *IntentResolver) CleanupIntents(
 	sort.Sort(intentsByTxn(intents))
 	resolved := 0
 	const skipIfInFlight = true
-	pushTxns := make(map[uuid.UUID]enginepb.TxnMeta)
+	pushTxns := make(map[uuid.UUID]*enginepb.TxnMeta)
 	for unpushed := intents; len(unpushed) > 0; {
 		for k := range pushTxns { // clear the pushTxns map
 			delete(pushTxns, k)
@@ -546,7 +566,7 @@ func (ir *IntentResolver) CleanupIntents(
 		var prevTxnID uuid.UUID
 		var i int
 		for i = 0; i < len(unpushed); i++ {
-			if curTxn := unpushed[i].Txn; curTxn.ID != prevTxnID {
+			if curTxn := &unpushed[i].Txn; curTxn.ID != prevTxnID {
 				if len(pushTxns) == cleanupIntentsTxnsPerBatch {
 					break
 				}
@@ -859,6 +879,13 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 		return 0
 	}
 	return rDesc.RangeID
+}
+
+// ResolveIntent synchronously resolves an intent according to opts.
+func (ir *IntentResolver) ResolveIntent(
+	ctx context.Context, intent roachpb.Intent, opts ResolveOptions,
+) *roachpb.Error {
+	return ir.ResolveIntents(ctx, []roachpb.Intent{intent}, opts)
 }
 
 // ResolveIntents synchronously resolves intents according to opts.
