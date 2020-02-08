@@ -99,9 +99,13 @@ func (b *Builder) findIndexByName(table cat.Table, name tree.UnrestrictedName) (
 func (b *Builder) addExtraColumn(
 	inScope, projectionsScope, extraColsScope *scope, extraCol *scopeColumn,
 ) {
-	// Use an existing projection if possible. Otherwise, build a new
+	// Use an existing projection if possible (even if it has side-effects; see
+	// the SQL99 rules described in aalyzeExtraArgument). Otherwise, build a new
 	// projection.
-	if col := projectionsScope.findExistingCol(extraCol.getExpr()); col != nil {
+	if col := projectionsScope.findExistingCol(
+		extraCol.getExpr(),
+		true, /* allowSideEffects */
+	); col != nil {
 		extraCol.id = col.id
 	} else {
 		b.buildScalar(extraCol.getExpr(), inScope, extraColsScope, extraCol, nil)
