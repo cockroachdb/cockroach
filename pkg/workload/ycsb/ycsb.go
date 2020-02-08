@@ -254,7 +254,13 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 	readFieldStmts := make([]*gosql.Stmt, numTableFields)
 	for i := 0; i < numTableFields; i++ {
-		q := fmt.Sprintf(`SELECT field%d FROM usertable WHERE ycsb_key = $1`, i)
+		var q string
+		if g.json {
+			q = fmt.Sprintf(`SELECT field->>'field%d' FROM usertable WHERE ycsb_key = $1`, i)
+		} else {
+			q = fmt.Sprintf(`SELECT field%d FROM usertable WHERE ycsb_key = $1`, i)
+		}
+
 		stmt, err := db.Prepare(q)
 		if err != nil {
 			return workload.QueryLoad{}, err
