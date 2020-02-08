@@ -344,7 +344,7 @@ func (b *Builder) buildWindowArgs(
 ) memo.ScalarListExpr {
 	argList := make(memo.ScalarListExpr, len(argExprs))
 	for j, a := range argExprs {
-		col := outScope.findExistingCol(a)
+		col := outScope.findExistingCol(a, false /* allowSideEffects */)
 		if col == nil {
 			col = b.synthesizeColumn(
 				outScope,
@@ -372,7 +372,7 @@ func (b *Builder) buildWindowPartition(
 	var windowPartition opt.ColSet
 	cols := flattenTuples(partition)
 	for j, e := range cols {
-		col := outScope.findExistingCol(e)
+		col := outScope.findExistingCol(e, false /* allowSideEffects */)
 		if col == nil {
 			col = b.synthesizeColumn(
 				outScope,
@@ -398,7 +398,7 @@ func (b *Builder) buildWindowOrdering(
 		cols := flattenTuples([]tree.TypedExpr{te})
 
 		for _, e := range cols {
-			col := outScope.findExistingCol(e)
+			col := outScope.findExistingCol(e, false /* allowSideEffects */)
 			if col == nil {
 				col = b.synthesizeColumn(
 					outScope,
@@ -423,7 +423,7 @@ func (b *Builder) buildFilterCol(
 
 	te := inScope.resolveAndRequireType(filter, types.Bool)
 
-	col := outScope.findExistingCol(te)
+	col := outScope.findExistingCol(te, false /* allowSideEffects */)
 	if col == nil {
 		col = b.synthesizeColumn(
 			outScope,

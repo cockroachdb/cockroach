@@ -186,7 +186,9 @@ func (b *Builder) buildDistinctOnArgs(inScope, projectionsScope, distinctOnScope
 	}
 
 	for i := range distinctOnScope.cols {
-		b.addExtraColumn(inScope, projectionsScope, distinctOnScope, &distinctOnScope.cols[i])
+		b.addOrderByOrDistinctOnColumn(
+			inScope, projectionsScope, distinctOnScope, &distinctOnScope.cols[i],
+		)
 	}
 	projectionsScope.addExtraColumns(distinctOnScope.cols)
 	projectionsScope.distinctOnCols = distinctOnScope.colSet()
