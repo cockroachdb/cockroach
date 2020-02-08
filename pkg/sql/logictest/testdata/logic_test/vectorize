@@ -631,6 +631,13 @@ Th
 statement error negative substring length -1 not allowed
 SELECT substring(x, 0, -1) FROM builtin_test
 
+# Regression test for #44881 (non-Int64 argument types).
+query T
+SELECT substring(x, -1::INT2, 3::INT4) FROM builtin_test
+----
+H
+T
+
 query I
 SELECT abs(y) FROM builtin_test
 ----
