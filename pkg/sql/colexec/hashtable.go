@@ -236,7 +236,7 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 	}
 
 	// ht.next is used to store the computed hash value of each key.
-	ht.next = make([]uint64, ht.vals.Length()+1)
+	ht.next = maybeAllocateUint64Array(ht.next, ht.vals.Length()+1)
 	ht.computeBuckets(ctx, ht.next[1:], ht.keyTypes, keyCols, ht.vals.Length(), nil)
 	ht.buildNextChains(ctx)
 }
@@ -246,7 +246,7 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 // mode findTupleGroups also populates the ht.same array.
 // NOTE: the hashTable *must* have been already built.
 func (ht *hashTable) findTupleGroups(ctx context.Context) {
-	ht.head = make([]bool, ht.vals.Length()+1)
+	ht.head = maybeAllocateBoolArray(ht.head, ht.vals.Length()+1)
 	ht.maybeAllocateSameAndVisited()
 
 	nKeyCols := len(ht.keyCols)
@@ -342,25 +342,31 @@ func (ht *hashTable) buildNextChains(ctx context.Context) {
 	}
 }
 
-// maybeAllocateSameAndVisited makes sure that same and visited arrays of the
-// hashTable are allocated and of the correct size. If the hashTable is reused,
-// the allocation will occur only if the previous arrays' capacity is not
-// sufficient.
-func (ht *hashTable) maybeAllocateSameAndVisited() {
-	if ht.same == nil || cap(ht.same) < ht.vals.Length()+1 {
-		ht.same = make([]uint64, ht.vals.Length()+1)
-		ht.visited = make([]bool, ht.vals.Length()+1)
-	} else {
-		// We don't need to allocate new arrays, but we'll need to slice them up
-		// and reset.
-		ht.same = ht.same[:ht.vals.Length()+1]
-		ht.visited = ht.visited[:ht.vals.Length()+1]
-		for n := 0; n < len(ht.same); n += copy(ht.same[n:], zeroUint64Column) {
-		}
-		for n := 0; n < len(ht.visited); n += copy(ht.visited[n:], zeroBoolColumn) {
-		}
+// maybeAllocate* methods make sure that the passed in array is allocated and
+// of the desired length.
+func maybeAllocateUint64Array(array []uint64, length int) []uint64 {
+	if array == nil || cap(array) < length {
+		return make([]uint64, length)
 	}
+	array = array[:length]
+	for n := 0; n < length; n += copy(array[n:], zeroUint64Column) {
+	}
+	return array
+}
 
+func maybeAllocateBoolArray(array []bool, length int) []bool {
+	if array == nil || cap(array) < length {
+		return make([]bool, length)
+	}
+	array = array[:length]
+	for n := 0; n < length; n += copy(array[n:], zeroBoolColumn) {
+	}
+	return array
+}
+
+func (ht *hashTable) maybeAllocateSameAndVisited() {
+	ht.same = maybeAllocateUint64Array(ht.same, ht.vals.Length()+1)
+	ht.visited = maybeAllocateBoolArray(ht.visited, ht.vals.Length()+1)
 	// Since keyID = 0 is reserved for end of list, it can be marked as visited
 	// at the beginning.
 	ht.visited[0] = true
@@ -423,15 +429,12 @@ func (ht *hashTable) distinctCheck(probeKeyTypes []coltypes.T, nToCheck uint64, 
 // allocation is needed, and at that time the allocator will update the memory
 // account accordingly.
 func (ht *hashTable) reset() {
-	// TODO(yuzefovich): support resetting with a different numBuckets.
 	for n := 0; n < len(ht.first); n += copy(ht.first[n:], zeroUint64Column) {
-	}
-	for n := 0; n < len(ht.next); n += copy(ht.next[n:], zeroUint64Column) {
-	}
-	for n := 0; n < len(ht.head); n += copy(ht.head[n:], zeroBoolColumn) {
 	}
 	ht.vals.ResetInternalBatch()
 	ht.vals.SetLength(0)
+	// ht.next, ht.same, ht.visited, and ht.head are reset separately before
+	// they are used (these slices are not used in all of the code paths).
 	// ht.buckets doesn't need to be reset because buckets are always initialized
 	// when computing the hash.
 	copy(ht.groupID[:coldata.BatchSize()], zeroUint64Column)

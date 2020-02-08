@@ -633,39 +633,32 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err
 			}
-
-			var distinctCols, orderedCols util.FastIntSet
-			allSorted := true
-
-			for _, col := range core.Distinct.OrderedColumns {
-				orderedCols.Add(int(col))
-			}
-			for _, col := range core.Distinct.DistinctColumns {
-				distinctCols.Add(int(col))
-				if !orderedCols.Contains(int(col)) {
-					allSorted = false
-				}
-			}
-			if !orderedCols.SubsetOf(distinctCols) {
-				return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
-			}
-
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			var typs []coltypes.T
 			typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
 			if err != nil {
 				return result, err
 			}
-			// TODO(yuzefovich): implement the distinct on partially ordered columns.
-			if allSorted {
+			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
 				result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
 				result.IsStreaming = true
 			} else {
+				distinctMemAccount := streamingMemAccount
+				if !useStreamingMemAccountForBuffering {
+					distinctMemAccount = result.createBufferingMemAccount(
+						ctx, flowCtx, "distinct",
+					)
+				}
+				// TODO(yuzefovich): we have an implementation of partially ordered
+				// distinct, and we should plan it when we have non-empty ordered
+				// columns and we think that the probability of distinct tuples in the
+				// input is about 0.01 or less.
 				result.Op = NewUnorderedDistinct(
-					NewAllocator(ctx, streamingMemAccount), inputs[0],
-					core.Distinct.DistinctColumns, typs,
+					NewAllocator(ctx, distinctMemAccount), inputs[0],
+					core.Distinct.DistinctColumns, typs, hashTableNumBuckets,
 				)
 			}
+
 		case core.Ordinality != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err

@@ -19,8 +19,14 @@ import (
 
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
 // columns.
+// numHashBuckets determines the number of buckets that the hash table is
+// created with.
 func NewUnorderedDistinct(
-	allocator *Allocator, input Operator, distinctCols []uint32, colTypes []coltypes.T,
+	allocator *Allocator,
+	input Operator,
+	distinctCols []uint32,
+	colTypes []coltypes.T,
+	numHashBuckets uint64,
 ) Operator {
 	outCols := make([]uint32, len(colTypes))
 	for i := range outCols {
@@ -28,7 +34,7 @@ func NewUnorderedDistinct(
 	}
 	ht := newHashTable(
 		allocator,
-		hashTableNumBuckets,
+		numHashBuckets,
 		colTypes,
 		distinctCols,
 		outCols,
@@ -74,16 +80,13 @@ func (op *unorderedDistinct) Init() {
 
 func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	op.output.ResetInternalBatch()
-	// First, build the hash table.
+	// First, build the hash table and populate the selection vector that
+	// includes only distinct tuples.
 	if !op.buildFinished {
 		op.buildFinished = true
 		op.ht.build(ctx, op.input)
 		op.ht.findTupleGroups(ctx)
-	}
 
-	// The selection vector needs to be populated before any batching can be
-	// done.
-	if op.sel == nil {
 		// Since next is no longer useful and pre-allocated to the appropriate
 		// size, we can use it as the selection vector. This way we don't have to
 		// reallocate a huge array.
@@ -137,11 +140,15 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	return op.output
 }
 
-// Reset resets the unorderedDistinct for another run. Primarily used for
-// benchmarks.
+// reset resets the unorderedDistinct.
 func (op *unorderedDistinct) reset() {
-	op.outputBatchStart = 0
+	if r, ok := op.input.(resetter); ok {
+		r.reset()
+	}
 	op.ht.vals.ResetInternalBatch()
 	op.ht.vals.SetLength(0)
 	op.buildFinished = false
+	op.ht.reset()
+	op.distinctCount = 0
+	op.outputBatchStart = 0
 }
