@@ -95,7 +95,7 @@ func (f *formattedError) Error() string {
 	}
 	fmt.Fprintln(&buf, message)
 
-	if code != "" {
+	if severity != "NOTICE" && code != "" {
 		// In contrast to `psql` we print the code even when printing
 		// non-verbosely, because we want to promote users reporting codes
 		// when interacting with support.

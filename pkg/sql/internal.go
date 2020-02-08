@@ -574,6 +574,11 @@ func (icc *internalClientComm) BufferParamStatus(param, value string) error {
 	return nil
 }
 
+// BufferNotice is part of the pgwireconn.ClientBuffer interface.
+func (icc *internalClientComm) BufferNotice(notice string) error {
+	return nil
+}
+
 // CreateDeleteResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateDeleteResult(pos CmdPos) DeleteResult {
 	panic("unimplemented")
@@ -638,5 +643,10 @@ var _ pgwireconn.ClientBuffer = &silentClientBuffer{}
 
 // BufferParamStatus implements the pgwire.ClientBuffer interface.
 func (b *silentClientBuffer) BufferParamStatus(param, value string) error {
+	return nil
+}
+
+// BufferNotice implements the pgwire.ClientBuffer interface.
+func (b *silentClientBuffer) BufferNotice(notice string) error {
 	return nil
 }

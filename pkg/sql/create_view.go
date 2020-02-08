@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,6 +67,14 @@ func (n *createViewNode) startExec(params runParams) error {
 				updated.desc.Name,
 			)
 			isTemporary = true
+		}
+		if err := params.extendedEvalCtx.ClientBuffer.BufferNotice(
+			fmt.Sprintf(
+				`view "%s" will be a temporary view`,
+				viewName,
+			),
+		); err != nil {
+			return err
 		}
 		backRefMutables[id] = backRefMutable
 	}

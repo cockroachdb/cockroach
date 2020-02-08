@@ -14,4 +14,7 @@ package pgwireconn
 type ClientBuffer interface {
 	// BufferParamStatus buffers a ParameterStatus message.
 	BufferParamStatus(param, value string) error
+
+	// BufferParamStatus buffers a Notice message.
+	BufferNotice(notice string) error
 }
