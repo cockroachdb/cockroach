@@ -1009,7 +1009,7 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
             └ *colexec.castOpNullAny
               └ *colexec.constNullOp
                 └ *colexec.selectInOpBytes
-                  └ *colexec.substringFunctionOperator
+                  └ *colexec.substringInt64Int64Operator
                     └ *colexec.constInt64Op
                       └ *colexec.constInt64Op
                         └ *colexec.colBatchScan
