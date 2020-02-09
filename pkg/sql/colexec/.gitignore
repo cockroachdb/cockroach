@@ -30,6 +30,7 @@ rowstovec.eg.go
 selection_ops.eg.go
 select_in.eg.go
 sort.eg.go
+substring.eg.go
 sum_agg.eg.go
 tuples_differ.eg.go
 vec_comparators.eg.go
