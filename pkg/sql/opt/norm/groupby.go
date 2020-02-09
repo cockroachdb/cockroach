@@ -13,7 +13,6 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -131,97 +130,39 @@ func (c *CustomFuncs) makeAggCols(
 	}
 }
 
-// CanRemoveAggDistinctForKeys returns true if the given aggregations contain an
-// aggregation with AggDistinct where the input column together with the
-// grouping columns form a key. In this case, the respective AggDistinct can be
-// removed.
+// CanRemoveAggDistinctForKeys returns true if the given aggregate function
+// where its input column, together with the grouping columns, form a key. In
+// this case, the wrapper AggDistinct can be removed.
 func (c *CustomFuncs) CanRemoveAggDistinctForKeys(
-	aggs memo.AggregationsExpr, private *memo.GroupingPrivate, input memo.RelExpr,
+	input memo.RelExpr, private *memo.GroupingPrivate, agg opt.ScalarExpr,
 ) bool {
-	inputFDs := &input.Relational().FuncDeps
-	if _, hasKey := inputFDs.StrictKey(); !hasKey {
-		// Fast-path for the case when the input has no keys.
+	if agg.ChildCount() == 0 {
 		return false
 	}
-
-	for i := range aggs {
-		if ok, _ := c.hasRemovableAggDistinct(aggs[i].Agg, private.GroupingCols, inputFDs); ok {
-			return true
-		}
-	}
-	return false
-}
-
-// RemoveAggDistinctForKeys rewrites aggregations to remove AggDistinct when
-// the input column together with the grouping columns form a key. Returns the
-// new Aggregation expression.
-func (c *CustomFuncs) RemoveAggDistinctForKeys(
-	aggs memo.AggregationsExpr, private *memo.GroupingPrivate, input memo.RelExpr,
-) memo.AggregationsExpr {
 	inputFDs := &input.Relational().FuncDeps
+	variable := agg.Child(0).(*memo.VariableExpr)
+	cols := c.AddColToSet(private.GroupingCols, variable.Col)
+	return inputFDs.ColsAreStrictKey(cols)
+}
 
-	newAggs := make(memo.AggregationsExpr, len(aggs))
+// ReplaceAggregationsItem returns a new list that is a copy of the given list,
+// except that the given search item has been replaced by the given replace
+// item. If the list contains the search item multiple times, then only the
+// first instance is replaced. If the list does not contain the item, then the
+// method panics.
+func (c *CustomFuncs) ReplaceAggregationsItem(
+	aggs memo.AggregationsExpr, search *memo.AggregationsItem, replace opt.ScalarExpr,
+) memo.AggregationsExpr {
+	newAggs := make([]memo.AggregationsItem, len(aggs))
 	for i := range aggs {
-		item := &aggs[i]
-		if ok, v := c.hasRemovableAggDistinct(item.Agg, private.GroupingCols, inputFDs); ok {
-			// Remove AggDistinct. We rely on the fact that AggDistinct must be
-			// directly "under" the Aggregate.
-			// TODO(radu): this will need to be revisited when we add more modifiers.
-			newAggs[i] = c.f.ConstructAggregationsItem(
-				c.replaceAggInputVar(item.Agg, v),
-				aggs[i].Col,
-			)
-		} else {
-			newAggs[i] = *item
+		if search == &aggs[i] {
+			copy(newAggs, aggs[:i])
+			newAggs[i] = c.f.ConstructAggregationsItem(replace, search.Col)
+			copy(newAggs[i+1:], aggs[i+1:])
+			return newAggs
 		}
 	}
-
-	return newAggs
-}
-
-// replaceAggInputVar swaps out the aggregated variable in an aggregate with v. In
-// the case of aggregates with multiple arguments (like string_agg) the other arguments
-// are kept the same.
-func (c *CustomFuncs) replaceAggInputVar(agg opt.ScalarExpr, v opt.ScalarExpr) opt.ScalarExpr {
-	switch agg.ChildCount() {
-	case 1:
-		return c.f.DynamicConstruct(agg.Op(), v).(opt.ScalarExpr)
-	case 2:
-		return c.f.DynamicConstruct(agg.Op(), v, agg.Child(1)).(opt.ScalarExpr)
-	default:
-		panic(errors.AssertionFailedf("unhandled number of aggregate children"))
-	}
-}
-
-// hasRemovableAggDistinct is called with an aggregation element and returns
-// true if the aggregation has AggDistinct and the grouping columns along with
-// the aggregation input column form a key in the input (in which case
-// AggDistinct can be elided).
-// On success, the input expression to AggDistinct is also returned.
-func (c *CustomFuncs) hasRemovableAggDistinct(
-	agg opt.ScalarExpr, groupingCols opt.ColSet, inputFDs *props.FuncDepSet,
-) (ok bool, aggDistinctVar *memo.VariableExpr) {
-	if agg.ChildCount() == 0 {
-		return false, nil
-	}
-
-	distinct, ok := agg.Child(0).(*memo.AggDistinctExpr)
-	if !ok {
-		return false, nil
-	}
-
-	v, ok := distinct.Input.(*memo.VariableExpr)
-	if !ok {
-		return false, nil
-	}
-
-	cols := groupingCols.Copy()
-	cols.Add(v.Col)
-	if !inputFDs.ColsAreStrictKey(cols) {
-		return false, nil
-	}
-
-	return true, v
+	panic(errors.AssertionFailedf("item to replace is not in the list: %v", search))
 }
 
 // HasNoGroupingCols returns true if the GroupingCols in the private are empty.
@@ -243,7 +184,7 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 	var passthrough opt.ColSet
 	var projections memo.ProjectionsExpr
 	for i := range aggs {
-		varExpr := memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
+		varExpr := memo.ExtractAggFirstVar(aggs[i].Agg)
 		inputCol := varExpr.Col
 		outputCol := aggs[i].Col
 		if inputCol == outputCol {

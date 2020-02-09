@@ -290,12 +290,21 @@ func (c *CustomFuncs) CanHaveZeroRows(input memo.RelExpr) bool {
 	return input.Relational().Cardinality.CanBeZero()
 }
 
-// ColsAreKey returns true if the given columns form a strict key for the given
-// input expression. A strict key means that any two rows will have unique key
-// column values. Nulls are treated as equal to one another (i.e. no duplicate
-// nulls allowed). Having a strict key means that the set of key column values
-// uniquely determine the values of all other columns in the relation.
-func (c *CustomFuncs) ColsAreKey(cols opt.ColSet, input memo.RelExpr) bool {
+// HasStrictKey returns true if the input expression has one or more columns
+// that form a strict key (see comment for ColsAreStrictKey for definition).
+func (c *CustomFuncs) HasStrictKey(input memo.RelExpr) bool {
+	inputFDs := &input.Relational().FuncDeps
+	_, hasKey := inputFDs.StrictKey()
+	return hasKey
+}
+
+// ColsAreStrictKey returns true if the given columns form a strict key for the
+// given input expression. A strict key means that any two rows will have unique
+// key column values. Nulls are treated as equal to one another (i.e. no
+// duplicate nulls allowed). Having a strict key means that the set of key
+// column values uniquely determine the values of all other columns in the
+// relation.
+func (c *CustomFuncs) ColsAreStrictKey(cols opt.ColSet, input memo.RelExpr) bool {
 	return input.Relational().FuncDeps.ColsAreStrictKey(cols)
 }
 
@@ -355,6 +364,16 @@ func (c *CustomFuncs) UnionCols4(cols1, cols2, cols3, cols4 opt.ColSet) opt.ColS
 // DifferenceCols returns the difference of the left and right column sets.
 func (c *CustomFuncs) DifferenceCols(left, right opt.ColSet) opt.ColSet {
 	return left.Difference(right)
+}
+
+// AddColToSet returns a set containing both the given set and the given column.
+func (c *CustomFuncs) AddColToSet(set opt.ColSet, col opt.ColumnID) opt.ColSet {
+	if set.Contains(col) {
+		return set
+	}
+	newSet := set.Copy()
+	newSet.Add(col)
+	return newSet
 }
 
 // sharedProps returns the shared logical properties for the given expression.
