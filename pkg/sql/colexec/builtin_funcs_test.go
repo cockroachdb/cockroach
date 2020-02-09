@@ -187,7 +187,6 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	}
 	batch.SetLength(coldata.BatchSize())
 	source := NewRepeatableBatchSource(batch)
-	source.Init()
 
 	// Set up the default operator.
 	expr, err := parser.ParseExpr("substring(@1, @2, @3)")
@@ -216,11 +215,9 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	defaultOp.Init()
 
 	// Set up the specialized substring operator.
-	specOp := &substringFunctionOperator{
-		OneInputNode: NewOneInputNode(source),
-		argumentCols: inputCols,
-		outputIdx:    3,
-	}
+	specOp := newSubstringOperator(
+		typs, inputCols, 3 /* outputIdx */, source,
+	)
 	specOp.Init()
 
 	b.Run("DefaultBuiltinOperator", func(b *testing.B) {

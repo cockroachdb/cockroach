@@ -95,83 +95,6 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-type substringFunctionOperator struct {
-	OneInputNode
-	argumentCols []int
-	outputIdx    int
-}
-
-var _ Operator = &substringFunctionOperator{}
-
-func (s *substringFunctionOperator) Init() {
-	s.input.Init()
-}
-
-func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
-	batch := s.input.Next(ctx)
-	if s.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bytes)
-	}
-
-	n := batch.Length()
-	if n == 0 {
-		return batch
-	}
-
-	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int64()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
-	outputVec := batch.ColVec(s.outputIdx).Bytes()
-	for i := uint16(0); i < n; i++ {
-		rowIdx := i
-		if sel != nil {
-			rowIdx = sel[i]
-		}
-
-		// The substring operator does not support nulls. If any of the arguments
-		// are NULL, we output NULL.
-		isNull := false
-		for _, col := range s.argumentCols {
-			if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-				isNull = true
-				break
-			}
-		}
-		if isNull {
-			batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-			continue
-		}
-
-		runes := runeVec.Get(int(rowIdx))
-		// Substring start is 1 indexed.
-		start := int(startVec[rowIdx]) - 1
-		length := int(lengthVec[rowIdx])
-		if length < 0 {
-			execerror.NonVectorizedPanic(errors.Errorf("negative substring length %d not allowed", length))
-		}
-
-		end := start + length
-		// Check for integer overflow.
-		if end < start {
-			end = len(runes)
-		} else if end < 0 {
-			end = 0
-		} else if end > len(runes) {
-			end = len(runes)
-		}
-
-		if start < 0 {
-			start = 0
-		} else if start > len(runes) {
-			start = len(runes)
-		}
-		outputVec.Set(int(rowIdx), runes[start:end])
-	}
-
-	return batch
-}
-
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	evalCtx *tree.EvalContext,
@@ -184,11 +107,9 @@ func NewBuiltinFunctionOperator(
 
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		return &substringFunctionOperator{
-			OneInputNode: NewOneInputNode(input),
-			argumentCols: argumentCols,
-			outputIdx:    outputIdx,
-		}, nil
+		return newSubstringOperator(
+			columnTypes, argumentCols, outputIdx, input,
+		), nil
 	default:
 		outputType := funcExpr.ResolvedType()
 		outputPhysType := typeconv.FromColumnType(outputType)
