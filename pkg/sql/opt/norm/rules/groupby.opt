@@ -25,7 +25,7 @@
 (DistinctOn
     $input:*
     $aggs:*
-    $groupingPrivate:* & (ColsAreKey (GroupingCols $groupingPrivate) $input)
+    $groupingPrivate:* & (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
 )
 =>
 (Project
@@ -74,14 +74,39 @@
 # it is known that the aggregation argument is unique within each group.
 [EliminateAggDistinctForKeys, Normalize]
 (GroupBy | ScalarGroupBy
-    $input:*
-    $aggregations:*
-    $groupingPrivate:* & (CanRemoveAggDistinctForKeys $aggregations $groupingPrivate $input)
+    $input:* & (HasStrictKey $input)
+    $aggregations:
+    [
+        ...
+        $item:(AggregationsItem (AggDistinct $agg:*))
+        ...
+    ]
+    $groupingPrivate:* & (CanRemoveAggDistinctForKeys $input $groupingPrivate $agg)
 )
 =>
 ((OpName)
     $input
-    (RemoveAggDistinctForKeys $aggregations $groupingPrivate $input)
+    (ReplaceAggregationsItem $aggregations $item $agg)
+    $groupingPrivate
+)
+
+# EliminateAggFilteredDistinctForKeys is similar to EliminateAggDistinctForKeys,
+# except that it works when an AggFilter operator is also present.
+[EliminateAggFilteredDistinctForKeys, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:* & (HasStrictKey $input)
+    $aggregations:
+    [
+        ...
+        $item:(AggregationsItem (AggFilter (AggDistinct $agg:*) $filter:*))
+        ...
+    ]
+    $groupingPrivate:* & (CanRemoveAggDistinctForKeys $input $groupingPrivate $agg)
+)
+=>
+((OpName)
+    $input
+    (ReplaceAggregationsItem $aggregations $item (AggFilter $agg $filter))
     $groupingPrivate
 )
 

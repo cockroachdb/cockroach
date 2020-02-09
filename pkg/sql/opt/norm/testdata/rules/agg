@@ -30,11 +30,53 @@ scalar-group-by
       └── bool-or [type=bool, outer=(9)]
            └── variable: column9 [type=bool]
 
+# The rule should still work when FILTER is present.
+norm expect=EliminateAggDistinct
+SELECT
+    min(DISTINCT i) FILTER (WHERE i > 5),
+    max(DISTINCT i) FILTER (WHERE i > 5),
+    bool_and(DISTINCT i>f) FILTER (WHERE f > 0.0),
+    bool_or(DISTINCT i>f) FILTER (WHERE f > 1.0)
+FROM a
+----
+scalar-group-by
+ ├── columns: min:8(int) max:9(int) bool_and:12(bool) bool_or:14(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8,9,12,14)
+ ├── project
+ │    ├── columns: column7:7(bool) column10:10(bool) column11:11(bool) column13:13(bool) i:2(int)
+ │    ├── fd: (2)-->(7)
+ │    ├── scan a
+ │    │    └── columns: i:2(int) f:3(float)
+ │    └── projections
+ │         ├── i > 5 [type=bool, outer=(2)]
+ │         ├── i > f [type=bool, outer=(2,3)]
+ │         ├── f > 0.0 [type=bool, outer=(3)]
+ │         └── f > 1.0 [type=bool, outer=(3)]
+ └── aggregations
+      ├── agg-filter [type=int, outer=(2,7)]
+      │    ├── min [type=int]
+      │    │    └── variable: i [type=int]
+      │    └── variable: column7 [type=bool]
+      ├── agg-filter [type=int, outer=(2,7)]
+      │    ├── max [type=int]
+      │    │    └── variable: i [type=int]
+      │    └── variable: column7 [type=bool]
+      ├── agg-filter [type=bool, outer=(10,11)]
+      │    ├── bool-and [type=bool]
+      │    │    └── variable: column10 [type=bool]
+      │    └── variable: column11 [type=bool]
+      └── agg-filter [type=bool, outer=(10,13)]
+           ├── bool-or [type=bool]
+           │    └── variable: column10 [type=bool]
+           └── variable: column13 [type=bool]
+
 # The rule should not apply to these aggregations.
 norm expect-not=EliminateAggDistinct
 SELECT
     count(DISTINCT i),
-    sum(DISTINCT i),
+    sum(DISTINCT i) FILTER (WHERE i > 5),
     sum_int(DISTINCT i),
     avg(DISTINCT i),
     stddev(DISTINCT f),
@@ -45,41 +87,45 @@ SELECT
 FROM a
 ----
 scalar-group-by
- ├── columns: count:7(int) sum:8(decimal) sum_int:9(int) avg:10(decimal) stddev:11(float) variance:12(float) xor_agg:14(bytes) array_agg:15(int[]) json_agg:16(jsonb)
+ ├── columns: count:7(int) sum:9(decimal) sum_int:10(int) avg:11(decimal) stddev:12(float) variance:13(float) xor_agg:15(bytes) array_agg:16(int[]) json_agg:17(jsonb)
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(7-12,14-16)
+ ├── fd: ()-->(7,9-13,15-17)
  ├── project
- │    ├── columns: column13:13(bytes) i:2(int) f:3(float) j:5(jsonb)
+ │    ├── columns: column8:8(bool) column14:14(bytes) i:2(int) f:3(float) j:5(jsonb)
+ │    ├── fd: (2)-->(8)
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── projections
+ │         ├── i > 5 [type=bool, outer=(2)]
  │         └── s::BYTES [type=bytes, outer=(4)]
  └── aggregations
-      ├── count [type=int, outer=(2)]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=int, outer=(2)]
+      │    └── count [type=int]
       │         └── variable: i [type=int]
-      ├── sum [type=decimal, outer=(2)]
-      │    └── agg-distinct [type=int]
+      ├── agg-filter [type=decimal, outer=(2,8)]
+      │    ├── agg-distinct [type=decimal]
+      │    │    └── sum [type=decimal]
+      │    │         └── variable: i [type=int]
+      │    └── variable: column8 [type=bool]
+      ├── agg-distinct [type=int, outer=(2)]
+      │    └── sum-int [type=int]
       │         └── variable: i [type=int]
-      ├── sum-int [type=int, outer=(2)]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=decimal, outer=(2)]
+      │    └── avg [type=decimal]
       │         └── variable: i [type=int]
-      ├── avg [type=decimal, outer=(2)]
-      │    └── agg-distinct [type=int]
-      │         └── variable: i [type=int]
-      ├── std-dev [type=float, outer=(3)]
-      │    └── agg-distinct [type=float]
+      ├── agg-distinct [type=float, outer=(3)]
+      │    └── std-dev [type=float]
       │         └── variable: f [type=float]
-      ├── variance [type=float, outer=(3)]
-      │    └── agg-distinct [type=float]
+      ├── agg-distinct [type=float, outer=(3)]
+      │    └── variance [type=float]
       │         └── variable: f [type=float]
-      ├── xor-agg [type=bytes, outer=(13)]
-      │    └── agg-distinct [type=bytes]
-      │         └── variable: column13 [type=bytes]
-      ├── array-agg [type=int[], outer=(2)]
-      │    └── agg-distinct [type=int]
+      ├── agg-distinct [type=bytes, outer=(14)]
+      │    └── xor-agg [type=bytes]
+      │         └── variable: column14 [type=bytes]
+      ├── agg-distinct [type=int[], outer=(2)]
+      │    └── array-agg [type=int[]]
       │         └── variable: i [type=int]
-      └── json-agg [type=jsonb, outer=(5)]
-           └── agg-distinct [type=jsonb]
+      └── agg-distinct [type=jsonb, outer=(5)]
+           └── json-agg [type=jsonb]
                 └── variable: j [type=jsonb]

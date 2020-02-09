@@ -913,43 +913,51 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	aggInfos := make([]exec.AggInfo, len(aggregations))
 	for i := range aggregations {
 		item := &aggregations[i]
-		name, overload := memo.FindAggregateOverload(item.Agg)
+		agg := item.Agg
 
-		distinct := false
-		var argIdx []exec.ColumnOrdinal
 		var filterOrd exec.ColumnOrdinal = -1
-
-		if item.Agg.ChildCount() > 0 {
-			child := item.Agg.Child(0)
-
-			if aggFilter, ok := child.(*memo.AggFilterExpr); ok {
-				filter, ok := aggFilter.Filter.(*memo.VariableExpr)
-				if !ok {
-					return execPlan{}, errors.Errorf("only VariableOp args supported")
-				}
-				filterOrd = input.getColumnOrdinal(filter.Col)
-				child = aggFilter.Input
-			}
-
-			if aggDistinct, ok := child.(*memo.AggDistinctExpr); ok {
-				distinct = true
-				child = aggDistinct.Input
-			}
-			v, ok := child.(*memo.VariableExpr)
+		if aggFilter, ok := agg.(*memo.AggFilterExpr); ok {
+			filter, ok := aggFilter.Filter.(*memo.VariableExpr)
 			if !ok {
-				return execPlan{}, errors.Errorf("only VariableOp args supported")
+				return execPlan{}, errors.AssertionFailedf("only VariableOp args supported")
 			}
-			argIdx = []exec.ColumnOrdinal{input.getColumnOrdinal(v.Col)}
+			filterOrd = input.getColumnOrdinal(filter.Col)
+			agg = aggFilter.Input
 		}
 
-		constArgs := b.extractAggregateConstArgs(item.Agg)
+		distinct := false
+		if aggDistinct, ok := agg.(*memo.AggDistinctExpr); ok {
+			distinct = true
+			agg = aggDistinct.Input
+		}
+
+		name, overload := memo.FindAggregateOverload(agg)
+
+		// Accumulate variable arguments in argCols and constant arguments in
+		// constArgs. Constant arguments must follow variable arguments.
+		var argCols []exec.ColumnOrdinal
+		var constArgs tree.Datums
+		for j, n := 0, agg.ChildCount(); j < n; j++ {
+			child := agg.Child(j)
+			if variable, ok := child.(*memo.VariableExpr); ok {
+				if len(constArgs) != 0 {
+					return execPlan{}, errors.Errorf("constant args must come after variable args")
+				}
+				argCols = append(argCols, input.getColumnOrdinal(variable.Col))
+			} else {
+				if len(argCols) == 0 {
+					return execPlan{}, errors.Errorf("a constant arg requires at least one variable arg")
+				}
+				constArgs = append(constArgs, memo.ExtractConstDatum(child))
+			}
+		}
 
 		aggInfos[i] = exec.AggInfo{
 			FuncName:   name,
 			Builtin:    overload,
 			Distinct:   distinct,
 			ResultType: item.Agg.DataType(),
-			ArgCols:    argIdx,
+			ArgCols:    argCols,
 			ConstArgs:  constArgs,
 			Filter:     filterOrd,
 		}
@@ -972,17 +980,6 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return ep, nil
-}
-
-// extractAggregateConstArgs returns the list of constant arguments associated with a given aggregate
-// expression.
-func (b *Builder) extractAggregateConstArgs(agg opt.ScalarExpr) tree.Datums {
-	switch agg.Op() {
-	case opt.StringAggOp:
-		return tree.Datums{memo.ExtractConstDatum(agg.Child(1))}
-	default:
-		return nil
-	}
 }
 
 func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error) {
