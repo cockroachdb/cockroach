@@ -125,6 +125,27 @@ type ExternalStorage interface {
 	Size(ctx context.Context, basename string) (int64, error)
 }
 
+// URISchemaToProvider returns roachpb.ExternalStorageProvider corresponding
+// to the 'schema'.
+func URISchemaToProvider(schema string) roachpb.ExternalStorageProvider {
+	switch strings.TrimSpace(strings.ToLower(schema)) {
+	case "s3":
+		return roachpb.ExternalStorageProvider_S3
+	case "gs":
+		return roachpb.ExternalStorageProvider_GoogleCloud
+	case "azure":
+		return roachpb.ExternalStorageProvider_Azure
+	case "http", "https":
+		return roachpb.ExternalStorageProvider_Http
+	case "nodelocal":
+		return roachpb.ExternalStorageProvider_LocalFile
+	case "experimental-workload", "workload":
+		return roachpb.ExternalStorageProvider_Workload
+	default:
+		return roachpb.ExternalStorageProvider_Unknown
+	}
+}
+
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
 func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
@@ -205,6 +226,7 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 func ExternalStorageFromURI(
 	ctx context.Context,
 	uri string,
+	externalConfig base.ExternalStorageConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
@@ -212,7 +234,7 @@ func ExternalStorageFromURI(
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, settings, blobClientFactory)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -253,28 +275,47 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 func MakeExternalStorage(
 	ctx context.Context,
 	dest roachpb.ExternalStorage,
+	conf base.ExternalStorageConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExternalStorageProvider_LocalFile:
-		telemetry.Count("external-io.nodelocal")
-		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory)
+		if conf.LocalEnabled {
+			telemetry.Count("external-io.nodelocal")
+			return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory)
+		}
+		return nil, errors.New("nodelocal access disabled")
 	case roachpb.ExternalStorageProvider_Http:
-		telemetry.Count("external-io.http")
-		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
+		if conf.HTTPEnabled {
+			telemetry.Count("external-io.http")
+			return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
+		}
+		return nil, errors.New("external http access disabled")
 	case roachpb.ExternalStorageProvider_S3:
-		telemetry.Count("external-io.s3")
-		return makeS3Storage(ctx, dest.S3Config, settings)
+		if conf.S3Enabled {
+			telemetry.Count("external-io.s3")
+			return makeS3Storage(ctx, dest.S3Config, settings)
+		}
+		return nil, errors.New("s3 access disabled")
 	case roachpb.ExternalStorageProvider_GoogleCloud:
-		telemetry.Count("external-io.google_cloud")
-		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
+		if conf.GSEnabled {
+			telemetry.Count("external-io.google_cloud")
+			return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
+		}
+		return nil, errors.New("gs access disabled")
 	case roachpb.ExternalStorageProvider_Azure:
-		telemetry.Count("external-io.azure")
-		return makeAzureStorage(dest.AzureConfig, settings)
+		if conf.AzureEnabled {
+			telemetry.Count("external-io.azure")
+			return makeAzureStorage(dest.AzureConfig, settings)
+		}
+		return nil, errors.New("azure access disabled")
 	case roachpb.ExternalStorageProvider_Workload:
-		telemetry.Count("external-io.workload")
-		return makeWorkloadStorage(dest.WorkloadConfig)
+		if conf.WorkloadEnabled {
+			telemetry.Count("external-io.workload")
+			return makeWorkloadStorage(dest.WorkloadConfig)
+		}
+		return nil, errors.New("workload access disabled")
 	}
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }

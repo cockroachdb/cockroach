@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func TestPutS3(t *testing.T) {
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		_, err := ExternalStorageFromURI(
 			ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"),
-			testSettings, blobs.TestEmptyBlobClientFactory,
+			base.EnableAllExternalStorage(), testSettings, blobs.TestEmptyBlobClientFactory,
 		)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,

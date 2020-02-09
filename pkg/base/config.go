@@ -699,6 +699,36 @@ type TempStorageConfig struct {
 	SpecIdx int
 }
 
+// ExternalStorageConfig describes various configuration options pertaining
+// to external storage implementations.
+type ExternalStorageConfig struct {
+	HTTPEnabled     bool
+	S3Enabled       bool
+	GSEnabled       bool
+	AzureEnabled    bool
+	LocalEnabled    bool
+	WorkloadEnabled bool
+}
+
+// EnableAllExternalStorage returns ExternalStorageConfig with all
+// implementations enabled.
+func EnableAllExternalStorage() ExternalStorageConfig {
+	return ExternalStorageConfig{
+		HTTPEnabled:     true,
+		S3Enabled:       true,
+		GSEnabled:       true,
+		AzureEnabled:    true,
+		LocalEnabled:    true,
+		WorkloadEnabled: true,
+	}
+}
+
+// DisableAllExternalStorage returns ExternalStorageConfig with all
+// implementations disabled.
+func DisableAllExternalStorage() ExternalStorageConfig {
+	return ExternalStorageConfig{}
+}
+
 // TempStorageConfigFromEnv creates a TempStorageConfig.
 // If parentDir is not specified and the specified store is in-memory,
 // then the temp storage will also be in-memory.

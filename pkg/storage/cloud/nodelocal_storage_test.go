@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,7 +44,8 @@ func TestLocalIOLimits(t *testing.T) {
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
 		u := fmt.Sprintf("nodelocal://%s", dest)
-		e, err := ExternalStorageFromURI(ctx, u, testSettings, clientFactory)
+		e, err := ExternalStorageFromURI(
+			ctx, u, base.EnableAllExternalStorage(), testSettings, clientFactory)
 		if err != nil {
 			t.Fatal(err)
 		}

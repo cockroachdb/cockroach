@@ -579,6 +579,13 @@ strongly discouraged for production usage and should never be used on
 a public network without combining it with --listen-addr.`,
 	}
 
+	ExternalStorageEnabledSchemas = FlagInfo{
+		Name: "external-storage-enabled-schemas",
+		Description: `
+Coma separated list of allowed URI schemas for access during various
+operations (such as BACKUP, RESTORE, IMPORT).`,
+	}
+
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
 	// certificate generation functions.
 	KeySize = FlagInfo{

@@ -73,6 +73,10 @@ func makeTestConfig(st *cluster.Settings) Config {
 	// otherwise configured.
 	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
 
+	// Configure the default external storage to allow access to
+	// all types of external storage end points.
+	cfg.ExternalStorageConfig = base.EnableAllExternalStorage()
+
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
 	// in their init to mock out the file system calls for calls to AssetFS,

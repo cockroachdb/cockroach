@@ -12,6 +12,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -19,7 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -208,6 +211,46 @@ func (a clusterNameSetter) Set(v string) error {
 	return nil
 }
 
+type externalStorageConfigSetter struct {
+	cfg *base.ExternalStorageConfig
+}
+
+func (e externalStorageConfigSetter) String() string { return fmt.Sprintf("%v", e.cfg) }
+
+// Type implements the pflag.Value interface.
+func (e externalStorageConfigSetter) Type() string { return "<list>" }
+
+// Set implements the pflag.Value interface.
+func (e externalStorageConfigSetter) Set(v string) error {
+	// Disable all external storage, and enable only the ones specified
+	// via command line.
+	*e.cfg = base.DisableAllExternalStorage()
+
+	// Allow schemas the user specified.
+	schemas := strings.Split(v, ",")
+	for _, schema := range schemas {
+		switch cloud.URISchemaToProvider(schema) {
+		case roachpb.ExternalStorageProvider_S3:
+			e.cfg.S3Enabled = true
+		case roachpb.ExternalStorageProvider_GoogleCloud:
+			e.cfg.GSEnabled = true
+		case roachpb.ExternalStorageProvider_Azure:
+			e.cfg.AzureEnabled = true
+		case roachpb.ExternalStorageProvider_Http:
+			e.cfg.HTTPEnabled = true
+		case roachpb.ExternalStorageProvider_LocalFile:
+			e.cfg.LocalEnabled = true
+		case roachpb.ExternalStorageProvider_Workload:
+			e.cfg.WorkloadEnabled = true
+		default:
+			return errors.Errorf(
+				"unknown external storage provider uri schema '%s';"+
+					" valid schemas are: s3, gs, azure, http(s), nodelocal, and workload", schema)
+		}
+	}
+	return nil
+}
+
 var errClusterNameInvalidFormat = errors.New(`cluster name must contain only letters, numbers or the "-" and "." characters`)
 
 // clusterNameRe matches valid cluster names.
@@ -359,6 +402,14 @@ func init() {
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
 		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, startCtx.serverInsecure)
+
+		// Enable/disable various external storage endpoints.
+		// TODO(yevgeniy): currently we enable all schemas by default, but we should probably
+		// disable all (possibly with exception of nodelocal).
+		// TODO(yevgeniy): Add ability to support whitelisting
+		serverCfg.ExternalStorageConfig = base.EnableAllExternalStorage()
+		VarFlag(f, externalStorageConfigSetter{&serverCfg.ExternalStorageConfig},
+			cliflags.ExternalStorageEnabledSchemas)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.

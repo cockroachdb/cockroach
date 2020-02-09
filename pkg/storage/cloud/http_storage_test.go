@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -147,7 +148,8 @@ func TestPutHttp(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExternalStorage(ctx, conf, testSettings, blobs.TestEmptyBlobClientFactory)
+		s, err := MakeExternalStorage(ctx, conf, base.EnableAllExternalStorage(),
+			testSettings, blobs.TestEmptyBlobClientFactory)
 		if err != nil {
 			t.Fatal(err)
 		}
