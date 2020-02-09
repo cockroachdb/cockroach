@@ -105,89 +105,6 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-type substringFunctionOperator struct {
-	OneInputNode
-	allocator    *Allocator
-	argumentCols []int
-	outputIdx    int
-}
-
-var _ Operator = &substringFunctionOperator{}
-
-func (s *substringFunctionOperator) Init() {
-	s.input.Init()
-}
-
-func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
-	batch := s.input.Next(ctx)
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	s.allocator.MaybeAddColumn(batch, coltypes.Bytes, s.outputIdx)
-
-	sel := batch.Selection()
-	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int64()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
-	outputVec := batch.ColVec(s.outputIdx)
-	outputCol := outputVec.Bytes()
-	s.allocator.PerformOperation(
-		[]coldata.Vec{outputVec},
-		func() {
-			for i := uint16(0); i < n; i++ {
-				rowIdx := i
-				if sel != nil {
-					rowIdx = sel[i]
-				}
-
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
-					}
-				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
-
-				runes := runeVec.Get(int(rowIdx))
-				// Substring start is 1 indexed.
-				start := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
-				if length < 0 {
-					execerror.NonVectorizedPanic(errors.Errorf("negative substring length %d not allowed", length))
-				}
-
-				end := start + length
-				// Check for integer overflow.
-				if end < start {
-					end = len(runes)
-				} else if end < 0 {
-					end = 0
-				} else if end > len(runes) {
-					end = len(runes)
-				}
-
-				if start < 0 {
-					start = 0
-				} else if start > len(runes) {
-					start = len(runes)
-				}
-				outputCol.Set(int(rowIdx), runes[start:end])
-			}
-		},
-	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
-	return batch
-}
-
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	allocator *Allocator,
@@ -201,12 +118,9 @@ func NewBuiltinFunctionOperator(
 
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		return &substringFunctionOperator{
-			OneInputNode: NewOneInputNode(input),
-			allocator:    allocator,
-			argumentCols: argumentCols,
-			outputIdx:    outputIdx,
-		}, nil
+		return newSubstringOperator(
+			allocator, columnTypes, argumentCols, outputIdx, input,
+		), nil
 	default:
 		outputType := funcExpr.ResolvedType()
 		outputPhysType := typeconv.FromColumnType(outputType)
