@@ -63,6 +63,7 @@ func TestExternalSort(t *testing.T) {
 					func(input []Operator) (Operator, error) {
 						sorter, accounts, monitors, err := createDiskBackedSorter(
 							ctx, flowCtx, input, tc.logTypes, tc.ordCols, func() {},
+							2, /* numberActivePartitions */
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -125,6 +126,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						func(input []Operator) (Operator, error) {
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols, func() {},
+								2, /* numberActivePartitions */
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -162,7 +164,11 @@ func BenchmarkExternalSort(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			for _, memoryLimit := range []int64{0, 1} {
+			// External sorter will be using the memory limit to decide how many
+			// partitions can be merged at once. If we pass in 1 as the memory limit,
+			// then always only 2 partitions will be merging which skews the
+			// benchmark because this wouldn't be a realistic scenario.
+			for _, memoryLimit := range []int64{0, 1 + mon.DefaultPoolAllocationSize*int64(nBatches/4)} {
 				flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 				shouldSpill := memoryLimit > 0
 				name := fmt.Sprintf("rows=%d/cols=%d/spilled=%t", nBatches*int(coldata.BatchSize()), nCols, shouldSpill)
@@ -190,25 +196,21 @@ func BenchmarkExternalSort(b *testing.B) {
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						source := newFiniteBatchSource(batch, nBatches)
-						var (
-							resultBatches int
-							spilled       bool
-						)
+						var spilled bool
+						// TODO(yuzefovich): do not specify numberActivePartitions (let the
+						// external sorter figure out that number itself) once we pass in
+						// filled-in disk queue config.
 						sorter, accounts, monitors, err := createDiskBackedSorter(
-							ctx, flowCtx, []Operator{source}, logTypes, ordCols, func() { spilled = true },
+							ctx, flowCtx, []Operator{source}, logTypes, ordCols,
+							func() { spilled = true }, 64, /* numberActivePartitions */
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
 						if err != nil {
 							b.Fatal(err)
 						}
-						resultBatches = nBatches
 						sorter.Init()
-						for i := 0; i < resultBatches; i++ {
-							out := sorter.Next(ctx)
-							if out.Length() == 0 {
-								b.Fail()
-							}
+						for b := sorter.Next(ctx); b.Length() > 0; b = sorter.Next(ctx) {
 						}
 						require.Equal(b, shouldSpill, spilled, fmt.Sprintf(
 							"expected: spilled=%t\tactual: spilled=%t", shouldSpill, spilled,
@@ -238,6 +240,7 @@ func createDiskBackedSorter(
 	logTypes []types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	spillingCallbackFn func(),
+	numberActivePartitions int,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	sorterSpec := &execinfrapb.SorterSpec{}
 	sorterSpec.OutputOrdering.Columns = ordCols
@@ -257,6 +260,7 @@ func createDiskBackedSorter(
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
+	args.TestingKnobs.MaxNumberActivePartitions = numberActivePartitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }

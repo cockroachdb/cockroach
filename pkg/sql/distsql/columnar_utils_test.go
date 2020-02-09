@@ -42,7 +42,8 @@ type verifyColOperatorArgs struct {
 	pspec          *execinfrapb.ProcessorSpec
 	// memoryLimit specifies the desired memory limit on the testing knob (in
 	// bytes). If it is 0, then the default limit of 64MiB will be used.
-	memoryLimit int64
+	memoryLimit            int64
+	numberActivePartitions int
 }
 
 // verifyColOperator passes inputs through both the processor defined by pspec
@@ -118,6 +119,9 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	var spilled bool
 	if args.memoryLimit > 0 {
 		constructorArgs.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
+	}
+	if args.numberActivePartitions > 0 {
+		constructorArgs.TestingKnobs.MaxNumberActivePartitions = args.numberActivePartitions
 	}
 	result, err := colexec.NewColOperator(ctx, flowCtx, constructorArgs)
 	if err != nil {
