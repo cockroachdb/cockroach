@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package changefeedccl
+package kvfeed
 
 import (
 	"context"
@@ -25,51 +25,125 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-type bufferEntry struct {
-	kv roachpb.KeyValue
-	// prevVal is set if the key had a non-tombstone value before the change
-	// and the before value of each change was requested (optDiff).
-	prevVal  roachpb.Value
-	resolved *jobspb.ResolvedSpan
-	// backfillTimestamp overrides the timestamp of the schema that should be
-	// used to interpret this KV. If set and prevVal is provided, the previous
-	// timestamp will be used to interpret the previous value.
-	//
-	// If unset (zero-valued), the KV's timestamp will be used to interpret both
-	// of the current and previous values instead.
-	backfillTimestamp hlc.Timestamp
-	// bufferGetTimestamp is the time this entry came out of the buffer.
+// EventBuffer is an interface for communicating kvfeed entries between processors.
+type EventBuffer interface {
+	EventBufferReader
+	EventBufferWriter
+}
+
+// EventBufferReader is the read portion of the EventBuffer interface.
+type EventBufferReader interface {
+	// Get retrieves an entry from the buffer.
+	Get(ctx context.Context) (Event, error)
+}
+
+// EventBufferWriter is the write portion of the EventBuffer interface.
+type EventBufferWriter interface {
+	AddKV(ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp) error
+	AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error
+	Close(ctx context.Context)
+}
+
+// Event represents an event emitted by a kvfeed. It is either a KV
+// or a resolved timestamp.
+type Event struct {
+	kv                 roachpb.KeyValue
+	prevVal            roachpb.Value
+	resolved           *jobspb.ResolvedSpan
+	backfillTimestamp  hlc.Timestamp
 	bufferGetTimestamp time.Time
 }
 
-// buffer mediates between the changed data poller and the rest of the
+// IsKV returns true if this corresponds to a KV event. If it returns
+// false, this entry corresponds to a resolved event.
+func (b *Event) IsKV() bool {
+	return b.kv.Key != nil
+}
+
+// KV is populated if this event returns true for IsKV().
+func (b *Event) KV() roachpb.KeyValue {
+	return b.kv
+}
+
+// PrevValue returns the previous values for this event. PrevValue is non-zero
+// if this is a KV event and the key had a non-tombstone value before the change
+// and the before value of each change was requested (optDiff).
+func (b *Event) PrevValue() roachpb.Value {
+	return b.prevVal
+}
+
+// Resolved will be non-nil if this is a resolved timestamp event (i.e. IsKV()
+// returns false).
+func (b *Event) Resolved() *jobspb.ResolvedSpan {
+	return b.resolved
+}
+
+// BackfillTimestamp overrides the timestamp of the schema that should be
+// used to interpret this KV. If set and prevVal is provided, the previous
+// timestamp will be used to interpret the previous value.
+//
+// If unset (zero-valued), the KV's timestamp will be used to interpret both
+// of the current and previous values instead.
+func (b *Event) BackfillTimestamp() hlc.Timestamp {
+	return b.backfillTimestamp
+}
+
+// BufferGetTimestamp is the time this event came out of the buffer.
+func (b *Event) BufferGetTimestamp() time.Time {
+	return b.bufferGetTimestamp
+}
+
+// Timestamp returns the timestamp of the write if this is a KV event.
+// If there is a non-zero BackfillTimestamp, that is returned.
+// If this is a resolved timestamp event, the timestamp is the resolved
+// timestamp.
+func (b *Event) Timestamp() hlc.Timestamp {
+	if !b.IsKV() {
+		return b.resolved.Timestamp
+	}
+	if b.backfillTimestamp != (hlc.Timestamp{}) {
+		return b.backfillTimestamp
+	}
+	return b.kv.Value.Timestamp
+}
+
+// buffer mediates between the changed data KVFeed and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
-type buffer struct {
-	entriesCh chan bufferEntry
+type chanBuffer struct {
+	entriesCh chan Event
 }
 
-func makeBuffer() *buffer {
-	return &buffer{entriesCh: make(chan bufferEntry)}
+// MakeChanBuffer returns an EventBuffer backed by an unbuffered channel.
+//
+// TODO(ajwerner): Consider adding a buffer here. We know performance of the
+// backfill is terrible. Probably some of that is due to every KV being sent
+// on a channel. This should all get benchmarked and tuned.
+func MakeChanBuffer() EventBuffer {
+	return &chanBuffer{entriesCh: make(chan Event)}
 }
 
-// AddKV inserts a changed kv into the buffer. Individual keys must be added in
+// AddKV inserts a changed KV into the buffer. Individual keys must be added in
 // increasing mvcc order.
-func (b *buffer) AddKV(
+func (b *chanBuffer) AddKV(
 	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
 ) error {
-	return b.addEntry(ctx, bufferEntry{
+	return b.addEvent(ctx, Event{
 		kv:                kv,
 		prevVal:           prevVal,
 		backfillTimestamp: backfillTimestamp,
 	})
 }
 
-// AddResolved inserts a resolved timestamp notification in the buffer.
-func (b *buffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
-	return b.addEntry(ctx, bufferEntry{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts}})
+// AddResolved inserts a Resolved timestamp notification in the buffer.
+func (b *chanBuffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
+	return b.addEvent(ctx, Event{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts}})
 }
 
-func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
+func (b *chanBuffer) Close(_ context.Context) {
+	close(b.entriesCh)
+}
+
+func (b *chanBuffer) addEvent(ctx context.Context, e Event) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -80,35 +154,35 @@ func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
 
 // Get returns an entry from the buffer. They are handed out in an order that
 // (if it is maintained all the way to the sink) meets our external guarantees.
-func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
+func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 	select {
 	case <-ctx.Done():
-		return bufferEntry{}, ctx.Err()
+		return Event{}, ctx.Err()
 	case e := <-b.entriesCh:
 		e.bufferGetTimestamp = timeutil.Now()
 		return e, nil
 	}
 }
 
-// memBufferDefaultCapacity is the default capacity for a memBuffer for a single
+// MemBufferDefaultCapacity is the default capacity for a memBuffer for a single
 // changefeed.
 //
 // TODO(dan): It would be better if all changefeeds shared a single capacity
 // that was given by the operater at startup, like we do for RocksDB and SQL.
-var memBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
+var MemBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
 	"COCKROACH_CHANGEFEED_BUFFER_CAPACITY", 1<<30) // 1GB
 
 var memBufferColTypes = []types.T{
-	*types.Bytes, // kv.Key
-	*types.Bytes, // kv.Value
-	*types.Bytes, // kv.PrevValue
+	*types.Bytes, // KV.Key
+	*types.Bytes, // KV.Value
+	*types.Bytes, // KV.PrevValue
 	*types.Bytes, // span.Key
 	*types.Bytes, // span.EndKey
 	*types.Int,   // ts.WallTime
 	*types.Int,   // ts.Logical
 }
 
-// memBuffer is an in-memory buffer for changed KV and resolved timestamp
+// memBuffer is an in-memory buffer for changed KV and Resolved timestamp
 // events. It's size is limited only by the BoundAccount passed to the
 // constructor. memBuffer is only for use with single-producer single-consumer.
 type memBuffer struct {
@@ -143,9 +217,11 @@ func (b *memBuffer) Close(ctx context.Context) {
 	b.mu.Unlock()
 }
 
-// AddKV inserts a changed kv into the buffer. Individual keys must be added in
+// AddKV inserts a changed KV into the buffer. Individual keys must be added in
 // increasing mvcc order.
-func (b *memBuffer) AddKV(ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value) error {
+func (b *memBuffer) AddKV(
+	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
+) error {
 	b.allocMu.Lock()
 	prevValDatum := tree.DNull
 	if prevVal.IsPresent() {
@@ -164,7 +240,7 @@ func (b *memBuffer) AddKV(ctx context.Context, kv roachpb.KeyValue, prevVal roac
 	return b.addRow(ctx, row)
 }
 
-// AddResolved inserts a resolved timestamp notification in the buffer.
+// AddResolved inserts a Resolved timestamp notification in the buffer.
 func (b *memBuffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
 	b.allocMu.Lock()
 	row := tree.Datums{
@@ -182,12 +258,12 @@ func (b *memBuffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.T
 
 // Get returns an entry from the buffer. They are handed out in an order that
 // (if it is maintained all the way to the sink) meets our external guarantees.
-func (b *memBuffer) Get(ctx context.Context) (bufferEntry, error) {
+func (b *memBuffer) Get(ctx context.Context) (Event, error) {
 	row, err := b.getRow(ctx)
 	if err != nil {
-		return bufferEntry{}, err
+		return Event{}, err
 	}
-	e := bufferEntry{bufferGetTimestamp: timeutil.Now()}
+	e := Event{bufferGetTimestamp: timeutil.Now()}
 	ts := hlc.Timestamp{
 		WallTime: int64(*row[5].(*tree.DInt)),
 		Logical:  int32(*row[6].(*tree.DInt)),

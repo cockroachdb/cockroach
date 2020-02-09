@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -44,54 +45,6 @@ func init() {
 			return &changefeedResumer{job: job}
 		},
 	)
-}
-
-type envelopeType string
-type formatType string
-
-const (
-	optConfluentSchemaRegistry = `confluent_schema_registry`
-	optCursor                  = `cursor`
-	optEnvelope                = `envelope`
-	optFormat                  = `format`
-	optKeyInValue              = `key_in_value`
-	optResolvedTimestamps      = `resolved`
-	optUpdatedTimestamps       = `updated`
-	optDiff                    = `diff`
-
-	optEnvelopeKeyOnly       envelopeType = `key_only`
-	optEnvelopeRow           envelopeType = `row`
-	optEnvelopeDeprecatedRow envelopeType = `deprecated_row`
-	optEnvelopeWrapped       envelopeType = `wrapped`
-
-	optFormatJSON formatType = `json`
-	optFormatAvro formatType = `experimental_avro`
-
-	sinkParamCACert           = `ca_cert`
-	sinkParamClientCert       = `client_cert`
-	sinkParamClientKey        = `client_key`
-	sinkParamFileSize         = `file_size`
-	sinkParamSchemaTopic      = `schema_topic`
-	sinkParamTLSEnabled       = `tls_enabled`
-	sinkParamTopicPrefix      = `topic_prefix`
-	sinkSchemeBuffer          = ``
-	sinkSchemeExperimentalSQL = `experimental-sql`
-	sinkSchemeKafka           = `kafka`
-	sinkParamSASLEnabled      = `sasl_enabled`
-	sinkParamSASLHandshake    = `sasl_handshake`
-	sinkParamSASLUser         = `sasl_user`
-	sinkParamSASLPassword     = `sasl_password`
-)
-
-var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
-	optConfluentSchemaRegistry: sql.KVStringOptRequireValue,
-	optCursor:                  sql.KVStringOptRequireValue,
-	optEnvelope:                sql.KVStringOptRequireValue,
-	optFormat:                  sql.KVStringOptRequireValue,
-	optKeyInValue:              sql.KVStringOptRequireNoValue,
-	optResolvedTimestamps:      sql.KVStringOptAny,
-	optUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
-	optDiff:                    sql.KVStringOptRequireNoValue,
 }
 
 // changefeedPlanHook implements sql.PlanHookFn.
@@ -133,7 +86,7 @@ func changefeedPlanHook(
 		}
 	}
 
-	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedOptionExpectValues)
+	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -170,7 +123,7 @@ func changefeedPlanHook(
 			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
 		}
 		var initialHighWater hlc.Timestamp
-		if cursor, ok := opts[optCursor]; ok {
+		if cursor, ok := opts[changefeedbase.OptCursor]; ok {
 			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
 			if initialHighWater, err = p.EvalAsOfTimestamp(asOf); err != nil {
@@ -234,7 +187,7 @@ func changefeedPlanHook(
 		// - `validateDetails` has to run first to fill in defaults for `envelope`
 		//   and `format` if the user didn't specify them.
 		// - Then `getEncoder` is run to return any configuration errors.
-		// - Then the changefeed is opted in to `optKeyInValue` for any cloud
+		// - Then the changefeed is opted in to `OptKeyInValue` for any cloud
 		//   storage sink. Kafka etc have a key and value field in each message but
 		//   cloud storage sinks don't have anywhere to put the key. So if the key
 		//   is not in the value, then for DELETEs there is no way to recover which
@@ -264,7 +217,7 @@ func changefeedPlanHook(
 			return err
 		}
 		if isCloudStorageSink(parsedSink) {
-			details.Opts[optKeyInValue] = ``
+			details.Opts[changefeedbase.OptKeyInValue] = ``
 		}
 
 		// Feature telemetry
@@ -273,7 +226,7 @@ func changefeedPlanHook(
 			telemetrySink = `sinkless`
 		}
 		telemetry.Count(`changefeed.create.sink.` + telemetrySink)
-		telemetry.Count(`changefeed.create.format.` + details.Opts[optFormat])
+		telemetry.Count(`changefeed.create.format.` + details.Opts[changefeedbase.OptFormat])
 		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
 
 		if details.SinkURI == `` {
@@ -347,7 +300,7 @@ func changefeedPlanHook(
 func changefeedJobDescription(
 	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
 ) (string, error) {
-	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{sinkParamSASLPassword})
+	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{changefeedbase.SinkParamSASLPassword})
 	if err != nil {
 		return "", err
 	}
@@ -375,36 +328,36 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		details.Opts = map[string]string{}
 	}
 
-	if r, ok := details.Opts[optResolvedTimestamps]; ok && r != `` {
+	if r, ok := details.Opts[changefeedbase.OptResolvedTimestamps]; ok && r != `` {
 		if d, err := time.ParseDuration(r); err != nil {
 			return jobspb.ChangefeedDetails{}, err
 		} else if d < 0 {
 			return jobspb.ChangefeedDetails{}, errors.Errorf(
 				`negative durations are not accepted: %s='%s'`,
-				optResolvedTimestamps, details.Opts[optResolvedTimestamps])
+				changefeedbase.OptResolvedTimestamps, details.Opts[changefeedbase.OptResolvedTimestamps])
 		}
 	}
 
-	switch envelopeType(details.Opts[optEnvelope]) {
-	case optEnvelopeRow, optEnvelopeDeprecatedRow:
-		details.Opts[optEnvelope] = string(optEnvelopeRow)
-	case optEnvelopeKeyOnly:
-		details.Opts[optEnvelope] = string(optEnvelopeKeyOnly)
-	case ``, optEnvelopeWrapped:
-		details.Opts[optEnvelope] = string(optEnvelopeWrapped)
+	switch changefeedbase.EnvelopeType(details.Opts[changefeedbase.OptEnvelope]) {
+	case changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow:
+		details.Opts[changefeedbase.OptEnvelope] = string(changefeedbase.OptEnvelopeRow)
+	case changefeedbase.OptEnvelopeKeyOnly:
+		details.Opts[changefeedbase.OptEnvelope] = string(changefeedbase.OptEnvelopeKeyOnly)
+	case ``, changefeedbase.OptEnvelopeWrapped:
+		details.Opts[changefeedbase.OptEnvelope] = string(changefeedbase.OptEnvelopeWrapped)
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
-			`unknown %s: %s`, optEnvelope, details.Opts[optEnvelope])
+			`unknown %s: %s`, changefeedbase.OptEnvelope, details.Opts[changefeedbase.OptEnvelope])
 	}
 
-	switch formatType(details.Opts[optFormat]) {
-	case ``, optFormatJSON:
-		details.Opts[optFormat] = string(optFormatJSON)
-	case optFormatAvro:
+	switch changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]) {
+	case ``, changefeedbase.OptFormatJSON:
+		details.Opts[changefeedbase.OptFormat] = string(changefeedbase.OptFormatJSON)
+	case changefeedbase.OptFormatAvro:
 		// No-op.
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
-			`unknown %s: %s`, optFormat, details.Opts[optFormat])
+			`unknown %s: %s`, changefeedbase.OptFormat, details.Opts[changefeedbase.OptFormat])
 	}
 
 	return details, nil
@@ -502,7 +455,7 @@ func (b *changefeedResumer) Resume(
 	// progress high-water when creating a job (currently only the progress
 	// details can be set). I didn't want to pick off the refactor to get this
 	// fix in, but it'd be nice to remove this hack.
-	if _, ok := details.Opts[optCursor]; ok {
+	if _, ok := details.Opts[changefeedbase.OptCursor]; ok {
 		if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
 			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
 		}
