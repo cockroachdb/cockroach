@@ -59,11 +59,11 @@ func (e *EnumSetting) ParseEnum(raw string) (int64, bool) {
 	return v, ok
 }
 
-func (e *EnumSetting) set(sv *Values, k int64) error {
+func (e *EnumSetting) override(sv *Values, k int64) error {
 	if _, ok := e.enumValues[k]; !ok {
 		return errors.Errorf("unrecognized value %d", k)
 	}
-	return e.IntSetting.set(sv, k)
+	return e.IntSetting.override(sv, k)
 }
 
 func enumValuesToDesc(enumValues map[int64]string) string {

@@ -320,7 +320,7 @@ func (i *common) SetOnChange(sv *Values, fn func()) {
 type numericSetting interface {
 	Setting
 	Validate(i int64) error
-	set(sv *Values, i int64) error
+	override(sv *Values, i int64) error
 }
 
 // TestingIsReportable is used in testing for reportability.

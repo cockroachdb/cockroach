@@ -56,7 +56,7 @@ func (*FloatSetting) Typ() string {
 //
 // For testing usage only.
 func (f *FloatSetting) Override(sv *Values, v float64) {
-	if err := f.set(sv, v); err != nil {
+	if err := f.override(sv, v); err != nil {
 		panic(err)
 	}
 	sv.setDefaultOverrideInt64(f.slotIdx, int64(math.Float64bits(v)))
@@ -72,10 +72,7 @@ func (f *FloatSetting) Validate(v float64) error {
 	return nil
 }
 
-func (f *FloatSetting) set(sv *Values, v float64) error {
-	if err := f.Validate(v); err != nil {
-		return err
-	}
+func (f *FloatSetting) override(sv *Values, v float64) error {
 	sv.setInt64(f.slotIdx, int64(math.Float64bits(v)))
 	return nil
 }
@@ -86,10 +83,10 @@ func (f *FloatSetting) setToDefault(sv *Values) {
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = f.set(sv, math.Float64frombits(uint64((val))))
+		_ = f.override(sv, math.Float64frombits(uint64((val))))
 		return
 	}
-	if err := f.set(sv, f.defaultValue); err != nil {
+	if err := f.override(sv, f.defaultValue); err != nil {
 		panic(err)
 	}
 }

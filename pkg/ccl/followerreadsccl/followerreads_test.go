@@ -129,17 +129,6 @@ func TestCanSendToFollower(t *testing.T) {
 	}
 }
 
-func TestFollowerReadMultipleValidation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatalf("expected panic from setting followerReadMultiple to .1")
-		}
-	}()
-	st := cluster.MakeTestingClusterSettings()
-	followerReadMultiple.Override(&st.SV, .1)
-}
-
 // TestOracle tests the OracleFactory exposed by this package.
 // This test ends up being rather indirect but works by checking if the type
 // of the oracle returned from the factory differs between requests we'd

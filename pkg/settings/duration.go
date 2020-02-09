@@ -70,10 +70,7 @@ func (d *DurationSetting) Override(sv *Values, v time.Duration) {
 	sv.setDefaultOverrideInt64(d.slotIdx, int64(v))
 }
 
-func (d *DurationSetting) set(sv *Values, v time.Duration) error {
-	if err := d.Validate(v); err != nil {
-		return err
-	}
+func (d *DurationSetting) override(sv *Values, v time.Duration) error {
 	sv.setInt64(d.slotIdx, int64(v))
 	return nil
 }
@@ -84,10 +81,10 @@ func (d *DurationSetting) setToDefault(sv *Values) {
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = d.set(sv, time.Duration(val))
+		_ = d.override(sv, time.Duration(val))
 		return
 	}
-	if err := d.set(sv, d.defaultValue); err != nil {
+	if err := d.override(sv, d.defaultValue); err != nil {
 		panic(err)
 	}
 }
