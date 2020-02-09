@@ -17,6 +17,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -93,6 +94,7 @@ type NewColOperatorArgs struct {
 	Inputs               []Operator
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
+	DiskQueueCfg         colcontainer.DiskQueueCfg
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
@@ -108,6 +110,9 @@ type NewColOperatorArgs struct {
 		// DiskSpillingDisabled specifies whether only in-memory operators should
 		// be created.
 		DiskSpillingDisabled bool
+		// MaxNumberPartitions determines the maximum number of "active"
+		// partitions for Partitioner interface.
+		MaxNumberPartitions int
 	}
 }
 
@@ -770,7 +775,9 @@ func NewColOperator(
 							unlimitedAllocator,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
+							args.TestingKnobs.MaxNumberPartitions,
 							diskQueuesUnlimitedAllocator,
+							args.DiskQueueCfg,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
