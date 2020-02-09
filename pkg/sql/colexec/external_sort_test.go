@@ -63,6 +63,7 @@ func TestExternalSort(t *testing.T) {
 					func(input []Operator) (Operator, error) {
 						sorter, accounts, monitors, err := createDiskBackedSorter(
 							ctx, flowCtx, input, tc.logTypes, tc.ordCols, func() {},
+							2, /* numberActivePartitions */
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -125,6 +126,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						func(input []Operator) (Operator, error) {
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols, func() {},
+								2, /* numberActivePartitions */
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -195,7 +197,8 @@ func BenchmarkExternalSort(b *testing.B) {
 							spilled       bool
 						)
 						sorter, accounts, monitors, err := createDiskBackedSorter(
-							ctx, flowCtx, []Operator{source}, logTypes, ordCols, func() { spilled = true },
+							ctx, flowCtx, []Operator{source}, logTypes, ordCols,
+							func() { spilled = true }, maxNumberActivePartitions,
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -238,6 +241,7 @@ func createDiskBackedSorter(
 	logTypes []types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	spillingCallbackFn func(),
+	numberActivePartitions int,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	sorterSpec := &execinfrapb.SorterSpec{}
 	sorterSpec.OutputOrdering.Columns = ordCols
@@ -257,6 +261,7 @@ func createDiskBackedSorter(
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
+	args.TestingKnobs.MaxNumberActivePartitions = numberActivePartitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }

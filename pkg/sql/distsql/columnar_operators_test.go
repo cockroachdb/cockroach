@@ -267,7 +267,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	seed := rand.Int()
 	rng := rand.New(rand.NewSource(int64(seed)))
 	nRuns := 5
-	nRows := int(4 * coldata.BatchSize())
+	nRows := 8 * int(coldata.BatchSize())
 	maxCols := 5
 	maxNum := 10
 	intTyps := make([]types.T, maxCols)
@@ -312,6 +312,9 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					outputTypes: inputTypes,
 					pspec:       pspec,
 					memoryLimit: memoryLimit,
+				}
+				if memoryLimit > 0 {
+					args.numberActivePartitions = 2 + rng.Intn(3)
 				}
 				if err := verifyColOperator(args); err != nil {
 					fmt.Printf("--- seed = %d memoryLimit = %d nCols = %d ---\n", seed, memoryLimit, nCols)

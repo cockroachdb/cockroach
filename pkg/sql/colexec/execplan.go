@@ -108,6 +108,9 @@ type NewColOperatorArgs struct {
 		// DiskSpillingDisabled specifies whether only in-memory operators should
 		// be created.
 		DiskSpillingDisabled bool
+		// MaxNumberActivePartitions determines the maximum number of "active"
+		// partitions for Partitioner interface.
+		MaxNumberActivePartitions int
 	}
 }
 
@@ -770,10 +773,15 @@ func NewColOperator(
 							ctx, result.createBufferingUnlimitedMemAccount(
 								ctx, flowCtx, monitorNamePrefix+"disk-queues",
 							))
+						numberActivePartitions := args.TestingKnobs.MaxNumberActivePartitions
+						if numberActivePartitions == 0 {
+							numberActivePartitions = maxNumberActivePartitions
+						}
 						return newExternalSorter(
 							unlimitedAllocator,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
+							numberActivePartitions,
 							diskQueuesUnlimitedAllocator,
 						)
 					},
