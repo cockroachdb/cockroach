@@ -272,7 +272,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20190122a",
+	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
 		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create on GCE instance.")
