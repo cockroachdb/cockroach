@@ -108,19 +108,3 @@ func TestGetLicenseTypeAbsent(t *testing.T) {
 		t.Fatalf("expected license type %s, got %s", expected, actual)
 	}
 }
-
-func TestSettingBadLicenseStrings(t *testing.T) {
-	for _, tc := range []struct{ lic, err string }{
-		{"blah", "invalid license string"},
-		{"cl-0-blah", "invalid license string"},
-	} {
-		st := cluster.MakeTestingClusterSettings()
-		u := st.MakeUpdater()
-
-		if err := u.Set("enterprise.license", tc.lic, "s"); !testutils.IsError(
-			err, tc.err,
-		) {
-			t.Fatalf("%q: expected err %q, got %v", tc.lic, tc.err, err)
-		}
-	}
-}

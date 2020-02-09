@@ -49,7 +49,7 @@ func (*BoolSetting) Typ() string {
 //
 // For testing usage only.
 func (b *BoolSetting) Override(sv *Values, v bool) {
-	b.set(sv, v)
+	b.override(sv, v)
 
 	vInt := int64(0)
 	if v {
@@ -58,7 +58,7 @@ func (b *BoolSetting) Override(sv *Values, v bool) {
 	sv.setDefaultOverrideInt64(b.slotIdx, vInt)
 }
 
-func (b *BoolSetting) set(sv *Values, v bool) {
+func (b *BoolSetting) override(sv *Values, v bool) {
 	vInt := int64(0)
 	if v {
 		vInt = 1
@@ -70,10 +70,10 @@ func (b *BoolSetting) setToDefault(sv *Values) {
 	// See if the default value was overridden.
 	ok, val, _ := sv.getDefaultOverride(b.slotIdx)
 	if ok {
-		b.set(sv, val > 0)
+		b.override(sv, val > 0)
 		return
 	}
-	b.set(sv, b.defaultValue)
+	b.override(sv, b.defaultValue)
 }
 
 // RegisterBoolSetting defines a new setting with type bool.

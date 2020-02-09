@@ -149,32 +149,6 @@ func TestSettingsRefresh(t *testing.T) {
 		return nil
 	})
 
-	// An invalid value doesn't revert a previous set or block other changes.
-	prevStrA := strA.Get(&st.SV)
-	prevIntA := intA.Get(&st.SV)
-	prevDurationA := durationA.Get(&st.SV)
-	prevByteSizeA := byteSizeA.Get(&st.SV)
-	db.Exec(t, insertQ, strKey, "this is too big for this setting", "s")
-	db.Exec(t, insertQ, intKey, settings.EncodeInt(-1), "i")
-	db.Exec(t, insertQ, durationKey, settings.EncodeDuration(-time.Minute), "d")
-	db.Exec(t, insertQ, byteSizeKey, settings.EncodeInt(-1), "z")
-
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := prevStrA, strA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := prevIntA, intA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := prevDurationA, durationA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := prevByteSizeA, byteSizeA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
-
 	// Deleting a value reverts to default.
 	db.Exec(t, deleteQ, strKey)
 	testutils.SucceedsSoon(t, func() error {

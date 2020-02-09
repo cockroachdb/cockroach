@@ -61,10 +61,7 @@ func (s *StringSetting) Validate(sv *Values, v string) error {
 	return nil
 }
 
-func (s *StringSetting) set(sv *Values, v string) error {
-	if err := s.Validate(sv, v); err != nil {
-		return err
-	}
+func (s *StringSetting) override(sv *Values, v string) error {
 	if s.Get(sv) != v {
 		sv.setGeneric(s.slotIdx, v)
 	}
@@ -72,7 +69,7 @@ func (s *StringSetting) set(sv *Values, v string) error {
 }
 
 func (s *StringSetting) setToDefault(sv *Values) {
-	if err := s.set(sv, s.defaultValue); err != nil {
+	if err := s.override(sv, s.defaultValue); err != nil {
 		panic(err)
 	}
 }
