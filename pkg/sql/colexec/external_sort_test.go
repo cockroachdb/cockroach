@@ -46,6 +46,7 @@ func TestExternalSort(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
+	const maxNumberActivePartitions = 2
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
@@ -60,6 +61,7 @@ func TestExternalSort(t *testing.T) {
 					func(input []Operator) (Operator, error) {
 						sorter, accounts, monitors, err := createDiskBackedSorter(
 							ctx, flowCtx, input, tc.logTypes, tc.ordCols, func() {},
+							maxNumberActivePartitions,
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -101,6 +103,7 @@ func TestExternalSortRandomized(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
+	const maxNumberActivePartitions = 2
 	// Interesting disk spilling scenarios:
 	// 1) The sorter is forced to spill to disk as soon as possible.
 	// 2) The memory limit is set to mon.DefaultPoolAllocationSize, this will
@@ -108,7 +111,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	//    memory limit.
 	for _, tk := range []execinfra.TestingKnobs{{ForceDiskSpill: true}, {MemoryLimitBytes: mon.DefaultPoolAllocationSize}} {
 		flowCtx.Cfg.TestingKnobs = tk
-		for nCols := 1; nCols < maxCols; nCols++ {
+		for nCols := 1; nCols <= maxCols; nCols++ {
 			for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 				namePrefix := "MemoryLimit=" + humanizeutil.IBytes(tk.MemoryLimitBytes)
 				if tk.ForceDiskSpill {
@@ -125,6 +128,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						func(input []Operator) (Operator, error) {
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols, func() {},
+								maxNumberActivePartitions,
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -190,8 +194,12 @@ func BenchmarkExternalSort(b *testing.B) {
 					for n := 0; n < b.N; n++ {
 						source := newFiniteBatchSource(batch, nBatches)
 						var spilled bool
+						// TODO(yuzefovich): do not specify numberActivePartitions (let the
+						// external sorter figure out that number itself) once we pass in
+						// filled-in disk queue config.
 						sorter, accounts, monitors, err := createDiskBackedSorter(
-							ctx, flowCtx, []Operator{source}, logTypes, ordCols, func() { spilled = true },
+							ctx, flowCtx, []Operator{source}, logTypes, ordCols,
+							func() { spilled = true }, 64, /* numberActivePartitions */
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -229,6 +237,7 @@ func createDiskBackedSorter(
 	logTypes []types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	spillingCallbackFn func(),
+	numberActivePartitions int,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	sorterSpec := &execinfrapb.SorterSpec{}
 	sorterSpec.OutputOrdering.Columns = ordCols
@@ -248,6 +257,7 @@ func createDiskBackedSorter(
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
+	args.TestingKnobs.MaxNumberActivePartitions = numberActivePartitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }
