@@ -488,3 +488,34 @@ ORDER BY id ASC
 ----
 1
 2
+
+# Check default types and expressions get truncated on insert / update.
+subtest regression_44774
+
+statement ok
+CREATE TABLE regression_44774 (
+  a time(3) DEFAULT '12:13:14.123456'
+)
+
+statement ok
+INSERT INTO regression_44774 VALUES (default), ('19:21:57.261286')
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+0000-01-01 12:13:14.123 +0000 UTC
+0000-01-01 19:21:57.261 +0000 UTC
+
+statement ok
+UPDATE regression_44774
+SET a = '13:14:15.123456'::time + '1 sec'::interval
+WHERE 1 = 1
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+0000-01-01 13:14:16.123 +0000 UTC
+0000-01-01 13:14:16.123 +0000 UTC
+
+statement ok
+DROP TABLE regression_44774

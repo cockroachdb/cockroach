@@ -23,12 +23,13 @@ import (
 )
 
 // LimitValueWidth checks that the width (for strings, byte arrays, and bit
-// strings) and scale (for decimals) of the value fits the specified column
-// type. In case of decimals, it can truncate fractional digits in the input
+// strings), precision (time) and scale (for decimals) of the value fits the
+// specified column type.
+// In case of decimals, it can truncate fractional digits in the input
 // value in order to fit the target column. If the input value fits the target
 // column, it is returned unchanged. If the input value can be truncated to fit,
-// then a truncated copy is returned. Otherwise, an error is returned. This
-// method is used by INSERT and UPDATE.
+// then a truncated copy is returned. Otherwise, an error is returned.
+// This method is used by INSERT and UPDATE.
 func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.Datum, err error) {
 	switch typ.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
@@ -121,6 +122,30 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 			if outArr != nil {
 				return outArr, nil
 			}
+		}
+	case types.TimeFamily:
+		if in, ok := inVal.(*tree.DTime); ok {
+			return in.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.TimestampFamily:
+		if in, ok := inVal.(*tree.DTimestamp); ok {
+			return in.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.TimestampTZFamily:
+		if in, ok := inVal.(*tree.DTimestampTZ); ok {
+			return in.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.TimeTZFamily:
+		if in, ok := inVal.(*tree.DTimeTZ); ok {
+			return in.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())), nil
+		}
+	case types.IntervalFamily:
+		if in, ok := inVal.(*tree.DInterval); ok {
+			itm, err := typ.IntervalTypeMetadata()
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDInterval(in.Duration, itm), nil
 		}
 	}
 	return inVal, nil

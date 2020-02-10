@@ -330,3 +330,34 @@ query T
 SELECT interval ' 5  ' year
 ----
 5 years
+
+# Check default types and expressions get truncated on insert / update.
+subtest regression_44774
+
+statement ok
+CREATE TABLE regression_44774 (
+  a interval(3) DEFAULT '1:2:3.123456'
+)
+
+statement ok
+INSERT INTO regression_44774 VALUES (default), ('4:5:6.123456')
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+01:02:03.123
+04:05:06.123
+
+statement ok
+UPDATE regression_44774
+SET a = '13:14:15.123456'::interval + '1 sec'::interval
+WHERE 1 = 1
+
+query T
+SELECT a FROM regression_44774 ORDER BY a
+----
+13:14:16.123
+13:14:16.123
+
+statement ok
+DROP TABLE regression_44774
