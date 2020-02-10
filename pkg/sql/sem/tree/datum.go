@@ -2109,7 +2109,7 @@ func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*
 	}
 	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
 	_, offset := t.Zone()
-	t = duration.Add(t, duration.FromInt64(int64(offset))).UTC()
+	t = t.Add(time.Duration(offset) * time.Second).UTC()
 	return MakeDTimestamp(t, precision), nil
 }
 
@@ -2324,6 +2324,7 @@ func ParseDTimestampTZ(
 	if err != nil {
 		return nil, err
 	}
+	// Always normalize time to the current location.
 	return MakeDTimestampTZ(t, precision), nil
 }
 
@@ -2438,8 +2439,8 @@ func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
 // location, returning a timestamp without a timezone.
 func (d *DTimestampTZ) EvalAtTimeZone(ctx *EvalContext, loc *time.Location) *DTimestamp {
 	_, locOffset := d.Time.In(loc).Zone()
-	newTime := duration.Add(d.Time.UTC(), duration.FromInt64(int64(locOffset)))
-	return MakeDTimestamp(newTime, time.Microsecond)
+	t := d.Time.UTC().Add(time.Duration(locOffset) * time.Second).UTC()
+	return MakeDTimestamp(t, time.Microsecond)
 }
 
 // DInterval is the interval Datum.
@@ -2675,7 +2676,7 @@ func MustBeDJSON(e Expr) DJSON {
 }
 
 // AsJSON converts a datum into our standard json representation.
-func AsJSON(d Datum) (json.JSON, error) {
+func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 	switch t := d.(type) {
 	case *DBool:
 		return json.FromBool(bool(*t)), nil
@@ -2694,7 +2695,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 	case *DArray:
 		builder := json.NewArrayBuilder(t.Len())
 		for _, e := range t.Array {
-			j, err := AsJSON(e)
+			j, err := AsJSON(e, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -2709,7 +2710,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 		t.maybePopulateType()
 		labels := t.typ.TupleLabels()
 		for i, e := range t.D {
-			j, err := AsJSON(e)
+			j, err := AsJSON(e, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -2727,7 +2728,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 		// without the T separator. This causes some compatibility problems
 		// with certain JSON consumers, so we'll use an alternate formatting
 		// path here to maintain consistency with PostgreSQL.
-		return json.FromString(t.Time.Format(time.RFC3339Nano)), nil
+		return json.FromString(t.Time.In(loc).Format(time.RFC3339Nano)), nil
 	case *DTimestamp:
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil

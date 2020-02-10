@@ -858,7 +858,7 @@ func TestAllTypesAsJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, typ := range types.Scalar {
 		d := tree.SampleDatum(typ)
-		_, err := tree.AsJSON(d)
+		_, err := tree.AsJSON(d, time.UTC)
 		if err != nil {
 			t.Errorf("couldn't convert %s to JSON: %s", d, err)
 		}

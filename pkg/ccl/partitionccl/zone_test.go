@@ -53,7 +53,7 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	partialZoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
 
 	dbID := sqlutils.QueryDatabaseID(t, db, "d")
-	tableID := sqlutils.QueryTableID(t, db, "d", "t")
+	tableID := sqlutils.QueryTableID(t, db, "d", "public", "t")
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,

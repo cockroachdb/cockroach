@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -147,7 +148,7 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 			return nil, err
 		}
 		var err error
-		jsonEntries[i], err = tree.AsJSON(datum.Datum)
+		jsonEntries[i], err = tree.AsJSON(datum.Datum, time.UTC)
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +173,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 				return nil, err
 			}
 			var err error
-			after[col.Name], err = tree.AsJSON(datum.Datum)
+			after[col.Name], err = tree.AsJSON(datum.Datum, time.UTC)
 			if err != nil {
 				return nil, err
 			}
@@ -190,7 +191,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 				return nil, err
 			}
 			var err error
-			before[col.Name], err = tree.AsJSON(datum.Datum)
+			before[col.Name], err = tree.AsJSON(datum.Datum, time.UTC)
 			if err != nil {
 				return nil, err
 			}

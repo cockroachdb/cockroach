@@ -66,7 +66,7 @@ func TestValidSetShowZones(t *testing.T) {
 	}
 
 	dbID := sqlutils.QueryDatabaseID(t, db, "d")
-	tableID := sqlutils.QueryTableID(t, db, "d", "t")
+	tableID := sqlutils.QueryTableID(t, db, "d", "public", "t")
 
 	dbRow := sqlutils.ZoneRow{
 		ID:     dbID,
@@ -246,7 +246,7 @@ func TestZoneInheritField(t *testing.T) {
 	}
 
 	newReplicationFactor := 10
-	tableID := sqlutils.QueryTableID(t, db, "d", "t")
+	tableID := sqlutils.QueryTableID(t, db, "d", "public", "t")
 	newDefCfg := s.(*server.TestServer).Cfg.DefaultZoneConfig
 	newDefCfg.NumReplicas = proto.Int32(int32(newReplicationFactor))
 
