@@ -10,13 +10,18 @@ package backupccl
 
 import (
 	"context"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type descriptorsMatched struct {
@@ -282,4 +287,389 @@ func descriptorsMatchingTargets(
 	}
 
 	return ret, nil
+}
+
+// getRelevantDescChanges finds the changes between start and end time to the
+// SQL descriptors matching `descs` or `expandedDBs`, ordered by time. A
+// descriptor revision matches if it is an earlier revision of a descriptor in
+// descs (same ID) or has parentID in `expanded`. Deleted descriptors are
+// represented as nil. Fills in the `priorIDs` map in the process, which maps
+// a descriptor the the ID by which it was previously known (e.g pre-TRUNCATE).
+func getRelevantDescChanges(
+	ctx context.Context,
+	db *client.DB,
+	startTime, endTime hlc.Timestamp,
+	descs []sqlbase.Descriptor,
+	expanded []sqlbase.ID,
+	priorIDs map[sqlbase.ID]sqlbase.ID,
+) ([]BackupManifest_DescriptorRevision, error) {
+
+	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// If no descriptors changed, we can just stop now and have RESTORE use the
+	// normal list of descs (i.e. as of endTime).
+	if len(allChanges) == 0 {
+		return nil, nil
+	}
+
+	// interestingChanges will be every descriptor change relevant to the backup.
+	var interestingChanges []BackupManifest_DescriptorRevision
+
+	// interestingIDs are the descriptor for which we're interested in capturing
+	// changes. This is initially the descriptors matched (as of endTime) by our
+	// target spec, plus those that belonged to a DB that our spec expanded at any
+	// point in the interval.
+	interestingIDs := make(map[sqlbase.ID]struct{}, len(descs))
+
+	// The descriptors that currently (endTime) match the target spec (desc) are
+	// obviously interesting to our backup.
+	for _, i := range descs {
+		interestingIDs[i.GetID()] = struct{}{}
+		if t := i.Table(hlc.Timestamp{}); t != nil {
+			for j := t.ReplacementOf.ID; j != sqlbase.InvalidID; j = priorIDs[j] {
+				interestingIDs[j] = struct{}{}
+			}
+		}
+	}
+
+	// We're also interested in any desc that belonged to a DB we're backing up.
+	// We'll start by looking at all descriptors as of the beginning of the
+	// interval and add to the set of IDs that we are interested any descriptor that
+	// belongs to one of the parents we care about.
+	interestingParents := make(map[sqlbase.ID]struct{}, len(expanded))
+	for _, i := range expanded {
+		interestingParents[i] = struct{}{}
+	}
+
+	if !startTime.IsEmpty() {
+		starting, err := loadAllDescs(ctx, db, startTime)
+		if err != nil {
+			return nil, err
+		}
+		for _, i := range starting {
+			if table := i.Table(hlc.Timestamp{}); table != nil {
+				// We need to add to interestingIDs so that if we later see a delete for
+				// this ID we still know it is interesting to us, even though we will not
+				// have a parentID at that point (since the delete is a nil desc).
+				if _, ok := interestingParents[table.ParentID]; ok {
+					interestingIDs[table.ID] = struct{}{}
+				}
+			}
+			if _, ok := interestingIDs[i.GetID()]; ok {
+				desc := i
+				// We inject a fake "revision" that captures the starting state for
+				// matched descriptor, to allow restoring to times before its first rev
+				// actually inside the window. This likely ends up duplicating the last
+				// version in the previous BACKUP descriptor, but avoids adding more
+				// complicated special-cases in RESTORE, so it only needs to look in a
+				// single BACKUP to restore to a particular time.
+				initial := BackupManifest_DescriptorRevision{Time: startTime, ID: i.GetID(), Desc: &desc}
+				interestingChanges = append(interestingChanges, initial)
+			}
+		}
+	}
+
+	for _, change := range allChanges {
+		// A change to an ID that we are interested in is obviously interesting --
+		// a change is also interesting if it is to a table that has a parent that
+		// we are interested and thereafter it also becomes an ID in which we are
+		// interested in changes (since, as mentioned above, to decide if deletes
+		// are interesting).
+		if _, ok := interestingIDs[change.ID]; ok {
+			interestingChanges = append(interestingChanges, change)
+		} else if change.Desc != nil {
+			if table := change.Desc.Table(hlc.Timestamp{}); table != nil {
+				if _, ok := interestingParents[table.ParentID]; ok {
+					interestingIDs[table.ID] = struct{}{}
+					interestingChanges = append(interestingChanges, change)
+				}
+			}
+		}
+	}
+
+	sort.Slice(interestingChanges, func(i, j int) bool {
+		return interestingChanges[i].Time.Less(interestingChanges[j].Time)
+	})
+
+	return interestingChanges, nil
+}
+
+// getAllDescChanges gets every sql descriptor change between start and end time
+// returning its ID, content and the change time (with deletions represented as
+// nil content).
+func getAllDescChanges(
+	ctx context.Context,
+	db *client.DB,
+	startTime, endTime hlc.Timestamp,
+	priorIDs map[sqlbase.ID]sqlbase.ID,
+) ([]BackupManifest_DescriptorRevision, error) {
+	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	endKey := startKey.PrefixEnd()
+
+	allRevs, err := storageccl.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []BackupManifest_DescriptorRevision
+
+	for _, revs := range allRevs {
+		id, err := keys.DecodeDescMetadataID(revs.Key)
+		if err != nil {
+			return nil, err
+		}
+		for _, rev := range revs.Values {
+			r := BackupManifest_DescriptorRevision{ID: sqlbase.ID(id), Time: rev.Timestamp}
+			if len(rev.RawBytes) != 0 {
+				var desc sqlbase.Descriptor
+				if err := rev.GetProto(&desc); err != nil {
+					return nil, err
+				}
+				r.Desc = &desc
+				t := desc.Table(rev.Timestamp)
+				if t != nil && t.ReplacementOf.ID != sqlbase.InvalidID {
+					priorIDs[t.ID] = t.ReplacementOf.ID
+				}
+			}
+			res = append(res, r)
+		}
+	}
+	return res, nil
+}
+
+func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
+	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	endKey := startKey.PrefixEnd()
+	rows, err := txn.Scan(ctx, startKey, endKey, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDescs := make([]sqlbase.Descriptor, len(rows))
+	for i, row := range rows {
+		if err := row.ValueProto(&sqlDescs[i]); err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				"%s: unable to unmarshal SQL descriptor", row.Key)
+		}
+		if row.Value != nil {
+			sqlDescs[i].Table(row.Value.Timestamp)
+		}
+	}
+	return sqlDescs, nil
+}
+
+func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
+	inBackup := make(map[sqlbase.ID]bool, len(tables))
+	for _, t := range tables {
+		inBackup[t.ID] = true
+	}
+
+	for _, table := range tables {
+		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+			for _, a := range index.Interleave.Ancestors {
+				if !inBackup[a.TableID] {
+					return errors.Errorf(
+						"cannot backup table %q without interleave parent (ID %d)", table.Name, a.TableID,
+					)
+				}
+			}
+			for _, c := range index.InterleavedBy {
+				if !inBackup[c.Table] {
+					return errors.Errorf(
+						"cannot backup table %q without interleave child table (ID %d)", table.Name, c.Table,
+					)
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadAllDescs(
+	ctx context.Context, db *client.DB, asOf hlc.Timestamp,
+) ([]sqlbase.Descriptor, error) {
+	var allDescs []sqlbase.Descriptor
+	if err := db.Txn(
+		ctx,
+		func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			txn.SetFixedTimestamp(ctx, asOf)
+			allDescs, err = allSQLDescriptors(ctx, txn)
+			return err
+		}); err != nil {
+		return nil, err
+	}
+	return allDescs, nil
+}
+
+// ResolveTargetsToDescriptors performs name resolution on a set of targets and
+// returns the resulting descriptors.
+func ResolveTargetsToDescriptors(
+	ctx context.Context,
+	p sql.PlanHookState,
+	endTime hlc.Timestamp,
+	targets tree.TargetList,
+	descriptorCoverage tree.DescriptorCoverage,
+) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
+	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if descriptorCoverage == tree.AllDescriptors {
+		return fullClusterTargetsBackup(allDescs)
+	}
+
+	var matched descriptorsMatched
+	if matched, err = descriptorsMatchingTargets(ctx,
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets); err != nil {
+		return nil, nil, err
+	}
+
+	// Ensure interleaved tables appear after their parent. Since parents must be
+	// created before their children, simply sorting by ID accomplishes this.
+	sort.Slice(matched.descs, func(i, j int) bool { return matched.descs[i].GetID() < matched.descs[j].GetID() })
+	return matched.descs, matched.expandedDB, nil
+}
+
+// fullClusterTargetsBackup returns the same descriptors referenced in
+// fullClusterTargets, but rather than returning the entire database
+// descriptor as the second argument, it only returns their IDs.
+func fullClusterTargetsBackup(
+	allDescs []sqlbase.Descriptor,
+) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	fullClusterDBIDs := make([]sqlbase.ID, 0)
+	for _, desc := range fullClusterDBs {
+		fullClusterDBIDs = append(fullClusterDBIDs, desc.GetID())
+	}
+	return fullClusterDescs, fullClusterDBIDs, nil
+}
+
+// fullClusterTargets returns all of the tableDescriptors to be included in a
+// full cluster backup, and all the user databases.
+func fullClusterTargets(
+	allDescs []sqlbase.Descriptor,
+) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+	fullClusterDescs := make([]sqlbase.Descriptor, 0, len(allDescs))
+	fullClusterDBs := make([]*sqlbase.DatabaseDescriptor, 0)
+
+	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
+	for _, tableName := range fullClusterSystemTables {
+		systemTablesToBackup[tableName] = struct{}{}
+	}
+
+	for _, desc := range allDescs {
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			fullClusterDescs = append(fullClusterDescs, desc)
+			fullClusterDBs = append(fullClusterDBs, dbDesc)
+		}
+		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+			if tableDesc.ParentID == sqlbase.SystemDB.ID {
+				// Add only the system tables that we plan to include in a full cluster
+				// backup.
+				if _, ok := systemTablesToBackup[tableDesc.Name]; ok {
+					fullClusterDescs = append(fullClusterDescs, desc)
+				}
+			} else {
+				// Add all user tables that are not in a DROP state.
+				if tableDesc.State != sqlbase.TableDescriptor_DROP {
+					fullClusterDescs = append(fullClusterDescs, desc)
+				}
+			}
+		}
+	}
+	return fullClusterDescs, fullClusterDBs, nil
+}
+
+func lookupDatabaseID(ctx context.Context, txn *client.Txn, name string) (sqlbase.ID, error) {
+	found, id, err := sqlbase.LookupDatabaseID(ctx, txn, name)
+	if err != nil {
+		return sqlbase.InvalidID, err
+	}
+	if !found {
+		return sqlbase.InvalidID, errors.Errorf("could not find ID for database %s", name)
+	}
+	return id, nil
+}
+
+// CheckTableExists returns an error if a table already exists with given
+// parent and name.
+func CheckTableExists(
+	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
+) error {
+	found, _, err := sqlbase.LookupPublicTableID(ctx, txn, parentID, name)
+	if err != nil {
+		return err
+	}
+	if found {
+		return sqlbase.NewRelationAlreadyExistsError(name)
+	}
+	return nil
+}
+
+func fullClusterTargetsRestore(
+	allDescs []sqlbase.Descriptor,
+) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	if err != nil {
+		return nil, nil, err
+	}
+	filteredDescs := make([]sqlbase.Descriptor, 0, len(fullClusterDescs))
+	for _, desc := range fullClusterDescs {
+		if _, isDefaultDB := sql.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != sqlbase.SystemDB.ID {
+			filteredDescs = append(filteredDescs, desc)
+		}
+	}
+	filteredDBs := make([]*sqlbase.DatabaseDescriptor, 0, len(fullClusterDBs))
+	for _, db := range fullClusterDBs {
+		if _, isDefaultDB := sql.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != sqlbase.SystemDB.ID {
+			filteredDBs = append(filteredDBs, db)
+		}
+	}
+
+	return filteredDescs, filteredDBs, nil
+}
+
+func selectTargets(
+	ctx context.Context,
+	p sql.PlanHookState,
+	backupManifests []BackupManifest,
+	targets tree.TargetList,
+	descriptorCoverage tree.DescriptorCoverage,
+	asOf hlc.Timestamp,
+) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+
+	if descriptorCoverage == tree.AllDescriptors {
+		return fullClusterTargetsRestore(allDescs)
+	}
+
+	matched, err := descriptorsMatchingTargets(ctx,
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(matched.descs) == 0 {
+		return nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
+	}
+
+	if lastBackupManifest.FormatVersion >= BackupFormatDescriptorTrackingVersion {
+		if err := matched.checkExpansions(lastBackupManifest.CompleteDbs); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return matched.descs, matched.requestedDBs, nil
 }

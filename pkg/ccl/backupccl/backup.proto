@@ -23,14 +23,14 @@ enum MVCCFilter {
   All = 1;
 }
 
-// BackupDescriptor represents a consistent snapshot of ranges.
+// BackupManifest represents a consistent snapshot of ranges.
 //
 // Each range snapshot includes a path to data that is a diff of the data in
 // that key range between a start and end timestamp. The end timestamp of all
 // ranges in a backup is the same, but the start may vary (to allow individual
 // tables to be backed up on different schedules).
-message BackupDescriptor {
-  // BackupDescriptor_File represents a file that contains the diff for a key
+message BackupManifest {
+  // BackupManifest_File represents a file that contains the diff for a key
   // range between two timestamps.
   message File {
     roachpb.Span span = 1 [(gogoproto.nullable) = false];
@@ -108,7 +108,7 @@ message BackupDescriptor {
 
 message BackupPartitionDescriptor{
   string locality_kv = 1 [(gogoproto.customname) = "LocalityKV"];
-  repeated BackupDescriptor.File files = 2 [(gogoproto.nullable) = false];
+  repeated BackupManifest.File files = 2 [(gogoproto.nullable) = false];
   bytes backup_id = 3 [(gogoproto.nullable) = false,
                       (gogoproto.customname) = "BackupID",
                       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
