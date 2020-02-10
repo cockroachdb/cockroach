@@ -195,6 +195,20 @@ func intToFloat(floatSize int) func(string, string) string {
 	}
 }
 
+func intToInt32(to, from string) string {
+	convStr := `
+    %[1]s = int32(%[2]s)
+  `
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func intToInt64(to, from string) string {
+	convStr := `
+    %[1]s = int64(%[2]s)
+  `
+	return fmt.Sprintf(convStr, to, from)
+}
+
 func floatToInt(intSize int, floatSize int) func(string, string) string {
 	return func(to, from string) string {
 		convStr := `
@@ -395,6 +409,10 @@ func init() {
 					ov.AssignFunc = intToDecimal
 				case coltypes.Int16:
 					ov.AssignFunc = castIdentity
+				case coltypes.Int32:
+					ov.AssignFunc = intToInt32
+				case coltypes.Int64:
+					ov.AssignFunc = intToInt64
 				case coltypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
@@ -410,6 +428,8 @@ func init() {
 					ov.AssignFunc = intToDecimal
 				case coltypes.Int32:
 					ov.AssignFunc = castIdentity
+				case coltypes.Int64:
+					ov.AssignFunc = intToInt64
 				case coltypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}

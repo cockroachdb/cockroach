@@ -38,10 +38,9 @@ import (
 // {{/*
 
 type _ALLTYPES interface{}
-type _OVERLOADTYPES interface{}
+type _FROMTYPE interface{}
 type _TOTYPE interface{}
 type _GOTYPE interface{}
-type _FROMTYPE interface{}
 
 var _ apd.Decimal
 var _ = math.MaxInt8
@@ -71,6 +70,74 @@ func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
 // Use execgen package to remove unused import warning.
 var _ interface{} = execgen.UNSAFEGET
 
+func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n uint16, sel []uint16) {
+	switch fromType {
+	// {{ range $typ, $overloads := . }}
+	case coltypes._ALLTYPES:
+		switch toType {
+		// {{ range $overloads }}
+		// {{ if isCastFuncSet . }}
+		case coltypes._TOTYPE:
+			inputCol := inputVec._FROMTYPE()
+			outputCol := outputVec._TOTYPE()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+							var r _GOTYPE
+							_ASSIGN_CAST(r, v)
+							_TO_TYPE_SET(outputCol, int(i), r)
+						}
+					}
+				} else {
+					inputCol = _FROM_TYPE_SLICE(inputCol, 0, int(n))
+					for execgen.RANGE(i, inputCol) {
+						if inputNulls.NullAt(uint16(i)) {
+							outputNulls.SetNull(uint16(i))
+						} else {
+							v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+							var r _GOTYPE
+							_ASSIGN_CAST(r, v)
+							_TO_TYPE_SET(outputCol, int(i), r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+						var r _GOTYPE
+						_ASSIGN_CAST(r, v)
+						_TO_TYPE_SET(outputCol, int(i), r)
+					}
+				} else {
+					inputCol = _FROM_TYPE_SLICE(inputCol, 0, int(n))
+					for execgen.RANGE(i, inputCol) {
+						v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+						var r _GOTYPE
+						_ASSIGN_CAST(r, v)
+						_TO_TYPE_SET(outputCol, int(i), r)
+					}
+				}
+			}
+			// {{end}}
+			// {{end}}
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled cast FROM -> TO type: %s -> %s", fromType, toType))
+		}
+		// {{end}}
+	default:
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled FROM type: %s", fromType))
+	}
+}
+
 func GetCastOperator(
 	input Operator, colIdx int, resultIdx int, fromType *semtypes.T, toType *semtypes.T,
 ) (Operator, error) {
@@ -88,8 +155,8 @@ func GetCastOperator(
 		switch to := typeconv.FromColumnType(toType); to {
 		// {{ range $overloads }}
 		// {{ if isCastFuncSet . }}
-		case coltypes._OVERLOADTYPES:
-			return &castOp_FROMTYPE_TOTYPE{
+		case coltypes._TOTYPE:
+			return &castOp{
 				OneInputNode: NewOneInputNode(input),
 				colIdx:       colIdx,
 				outputIdx:    resultIdx,
@@ -158,11 +225,7 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-// {{ range $typ, $overloads := . }}
-// {{ range $overloads }}
-// {{ if isCastFuncSet . }}
-
-type castOp_FROMTYPE_TOTYPE struct {
+type castOp struct {
 	OneInputNode
 	colIdx    int
 	outputIdx int
@@ -170,79 +233,27 @@ type castOp_FROMTYPE_TOTYPE struct {
 	toType    coltypes.T
 }
 
-var _ StaticMemoryOperator = &castOp_FROMTYPE_TOTYPE{}
+var _ StaticMemoryOperator = &castOp{}
 
-func (c *castOp_FROMTYPE_TOTYPE) EstimateStaticMemoryUsage() int {
+func (c *castOp) EstimateStaticMemoryUsage() int {
 	return EstimateBatchSizeBytes([]coltypes.T{c.toType}, int(coldata.BatchSize()))
 }
 
-func (c *castOp_FROMTYPE_TOTYPE) Init() {
+func (c *castOp) Init() {
 	c.input.Init()
 }
 
-func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
+func (c *castOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	if c.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes._TOTYPE)
+		batch.AppendCol(c.toType)
 	}
 	n := batch.Length()
 	if n == 0 {
 		return batch
 	}
 	vec := batch.ColVec(c.colIdx)
-	col := vec._FROMTYPE()
 	projVec := batch.ColVec(c.outputIdx)
-	projCol := projVec._TOTYPE()
-	if vec.MaybeHasNulls() {
-		vecNulls := vec.Nulls()
-		projNulls := projVec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if vecNulls.NullAt(i) {
-					projNulls.SetNull(i)
-				} else {
-					v := _FROM_TYPE_UNSAFEGET(col, int(i))
-					var r _GOTYPE
-					_ASSIGN_CAST(r, v)
-					_TO_TYPE_SET(projCol, int(i), r)
-				}
-			}
-		} else {
-			col = _FROM_TYPE_SLICE(col, 0, int(n))
-			for execgen.RANGE(i, col) {
-				if vecNulls.NullAt(uint16(i)) {
-					projNulls.SetNull(uint16(i))
-				} else {
-					v := _FROM_TYPE_UNSAFEGET(col, int(i))
-					var r _GOTYPE
-					_ASSIGN_CAST(r, v)
-					_TO_TYPE_SET(projCol, int(i), r)
-				}
-			}
-		}
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				v := _FROM_TYPE_UNSAFEGET(col, int(i))
-				var r _GOTYPE
-				_ASSIGN_CAST(r, v)
-				_TO_TYPE_SET(projCol, int(i), r)
-			}
-		} else {
-			col = _FROM_TYPE_SLICE(col, 0, int(n))
-			for execgen.RANGE(i, col) {
-				v := _FROM_TYPE_UNSAFEGET(col, int(i))
-				var r _GOTYPE
-				_ASSIGN_CAST(r, v)
-				_TO_TYPE_SET(projCol, int(i), r)
-			}
-		}
-	}
+	cast(c.fromType, c.toType, vec, projVec, n, batch.Selection())
 	return batch
 }
-
-// {{end}}
-// {{end}}
-// {{end}}
