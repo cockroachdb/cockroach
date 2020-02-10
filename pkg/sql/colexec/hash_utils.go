@@ -108,6 +108,7 @@ type tupleHashDistributor struct {
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
 	cancelChecker CancelChecker
+	scratch       overloadScratch
 }
 
 func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {
@@ -129,7 +130,7 @@ func (d *tupleHashDistributor) distribute(
 	initHash(d.buckets, n, d.initHashValue)
 
 	for _, i := range hashCols {
-		rehash(ctx, d.buckets, types[i], b.ColVec(int(i)), n, b.Selection(), d.cancelChecker)
+		rehash(ctx, d.buckets, types[i], b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, d.scratch)
 	}
 
 	finalizeHash(d.buckets, n, uint64(len(d.selections)))

@@ -89,6 +89,8 @@ type _OP_CONST_NAME struct {
 }
 
 func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
+	scratch := p.scratch
+	_ = scratch
 	batch := p.input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {

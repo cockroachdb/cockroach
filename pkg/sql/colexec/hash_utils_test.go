@@ -37,12 +37,13 @@ func TestHashFunctionFamily(t *testing.T) {
 	}
 	numBuckets := uint64(16)
 	var cancelChecker CancelChecker
+	var scratch overloadScratch
 
 	for initHashValue, buckets := range [][]uint64{bucketsA, bucketsB} {
 		// We need +1 here because 0 is not a valid initial hash value.
 		initHash(buckets, nKeys, uint64(initHashValue+1))
 		for i, typ := range keyTypes {
-			rehash(ctx, buckets, typ, keys[i], nKeys, nil /* sel */, cancelChecker)
+			rehash(ctx, buckets, typ, keys[i], nKeys, nil /* sel */, cancelChecker, scratch)
 		}
 		finalizeHash(buckets, nKeys, numBuckets)
 	}
