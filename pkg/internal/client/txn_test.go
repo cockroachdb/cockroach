@@ -42,10 +42,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 	tracer := tracing.NewTracer()
-	ctx, sp, err := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		log.Event(ctx, "inside txn")

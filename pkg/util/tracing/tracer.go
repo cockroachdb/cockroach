@@ -725,7 +725,7 @@ func EnsureChildSpan(
 // TODO(andrei): remove this method once EXPLAIN(TRACE) is gone.
 func StartSnowballTrace(
 	ctx context.Context, tracer opentracing.Tracer, opName string,
-) (context.Context, opentracing.Span, error) {
+) (context.Context, opentracing.Span) {
 	var span opentracing.Span
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		span = parentSpan.Tracer().StartSpan(
@@ -735,7 +735,7 @@ func StartSnowballTrace(
 		span = tracer.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
 	}
 	StartRecording(span, SnowballRecording)
-	return opentracing.ContextWithSpan(ctx, span), span, nil
+	return opentracing.ContextWithSpan(ctx, span), span
 }
 
 // TestingCheckRecordedSpans checks whether a recording looks like an expected

@@ -212,6 +212,65 @@ func BenchmarkSort(b *testing.B) {
 	})
 }
 
+// BenchmarkTableResolution benchmarks table name resolution
+// for a variety of different naming schemes.
+func BenchmarkTableResolution(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
+
+	for _, createTempTables := range []bool{false, true} {
+		b.Run(fmt.Sprintf("temp_schema_exists:%t", createTempTables), func(b *testing.B) {
+			benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+				defer func() {
+					db.Exec(b, `DROP TABLE IF EXISTS bench.tbl`)
+					if createTempTables {
+						db.Exec(b, `DROP TABLE IF EXISTS bench.pg_temp.temp_tbl`)
+					}
+				}()
+
+				db.Exec(b, `
+			USE bench;
+			CREATE TABLE tbl (k INT PRIMARY KEY, v INT);
+		`)
+
+				type benchCase struct {
+					desc    string
+					tblName string
+				}
+				cases := []benchCase{
+					{"table", "tbl"},
+					{"database.table", "bench.tbl"},
+					{"database.public.table", "bench.public.tbl"},
+					{"public.table", "public.tbl"},
+				}
+				if createTempTables {
+					db.Exec(b, `
+						SET experimental_enable_temp_tables=true;
+						CREATE TEMP TABLE temp_tbl (k INT PRIMARY KEY);
+					`)
+					cases = append(cases, []benchCase{
+						{"temp_table", "temp_tbl"},
+						{"database.pg_temp.table", "bench.pg_temp.temp_tbl"},
+						{"pg_temp.table", "pg_temp.temp_tbl"},
+					}...)
+				}
+				for _, c := range cases {
+					b.Run(c.desc, func(b *testing.B) {
+						query := "SELECT * FROM " + c.tblName
+						b.ResetTimer()
+						for i := 0; i < b.N; i++ {
+							db.Exec(b, query)
+						}
+						b.StopTimer()
+					})
+				}
+			})
+		})
+	}
+}
+
 // runBenchmarkInsert benchmarks inserting count rows into a table.
 func runBenchmarkInsert(b *testing.B, db *sqlutils.SQLRunner, count int) {
 	defer func() {
@@ -1103,33 +1162,6 @@ func BenchmarkNameResolution(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, "SELECT * FROM namespace")
-		}
-		b.StopTimer()
-	})
-}
-
-// When temporary tables are present in the system, the PG search path semantics
-// dictate that we try searching for tables under the temporary schema before
-// the public physical schema. This test is used to microbenchmark the effects
-// of this scenario.
-func BenchmarkNameResolutionTempTablesExist(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
-	defer log.Scope(b).Close(b)
-	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		db.Exec(b, `CREATE TABLE namespace (k INT PRIMARY KEY, v INT)`)
-		db.Exec(b, `INSERT INTO namespace VALUES(1, 2)`)
-
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			b.StopTimer()
-			// Setup
-			db.Exec(b, `SET experimental_enable_temp_tables = true`)
-			db.Exec(b, `CREATE TEMP TABLE IF NOT EXISTS temp_table(k INT PRIMARY KEY, v INT)`)
-			b.StartTimer()
 			db.Exec(b, "SELECT * FROM namespace")
 		}
 		b.StopTimer()

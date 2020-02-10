@@ -147,6 +147,12 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	},
 )
 
+var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.require_explicit_primary_keys.enabled",
+	"default value for requiring explicit primary keys in CREATE TABLE statements",
+	false,
+)
+
 var primaryKeyChangesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_primary_key_changes.enabled",
 	"default value for experimental_enable_primary_key_changes session setting; allows use of primary key changes by default",
@@ -1853,6 +1859,10 @@ func (m *sessionDataMutator) SetPrimaryKeyChangesEnabled(val bool) {
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
+}
+
+func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {
+	m.data.RequireExplicitPrimaryKeys = val
 }
 
 func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {

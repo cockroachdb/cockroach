@@ -601,10 +601,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	// Run the flow in a snowball trace so that we can test for tracing info.
 	tracer := tracing.NewTracer()
-	ctx, sp, err := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
 	defer sp.Finish()
 
 	evalCtx := tree.MakeTestingEvalContext(st)
