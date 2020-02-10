@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
+	"github.com/cockroachdb/pebble"
 )
 
 // Validate checks for violations of our kv api guarantees. The Steps must all
@@ -44,14 +44,17 @@ import (
 // to reflect this ordering.
 //
 // TODO(dan): Consider changing all of this validation to be based on the commit
-// timestamp as given back by client.Txn. This doesn't currently work for
+// timestamp as given back by kv.Txn. This doesn't currently work for
 // nontransactional read-only ops (i.e. single read or batch of only reads) but
 // that could be fixed by altering the API to communicating the timestamp back.
 //
 // Splits and merges are not verified for anything other than that they did not
 // return an error.
 func Validate(steps []Step, kvs *Engine) []error {
-	v := makeValidator(kvs)
+	v, err := makeValidator(kvs)
+	if err != nil {
+		return []error{err}
+	}
 
 	// The validator works via AOST-style queries over the kvs emitted by
 	// RangeFeed. This means it can process steps in any order *except* that it
@@ -69,50 +72,132 @@ func Validate(steps []Step, kvs *Engine) []error {
 		v.processOp(nil /* txnID */, s.Op)
 	}
 
-	var extraKVs []storage.MVCCKeyValue
+	var extraKVs []observedOp
 	for _, kv := range v.kvByValue {
+		kv := &observedWrite{
+			Key:          kv.Key.Key,
+			Value:        roachpb.Value{RawBytes: kv.Value},
+			Timestamp:    kv.Key.Timestamp,
+			Materialized: true,
+		}
 		extraKVs = append(extraKVs, kv)
 	}
 	if len(extraKVs) > 0 {
-		err := errors.Errorf(`extra writes: %s`, errors.Safe(printKVs(extraKVs...)))
+		err := errors.Errorf(`extra writes: %s`, printObserved(extraKVs...))
 		v.failures = append(v.failures, err)
 	}
 
 	return v.failures
 }
 
+// timeSpan represents a range of time with an inclusive start and an exclusive
+// end.
+type timeSpan struct {
+	Start, End hlc.Timestamp
+}
+
+func (ts timeSpan) Intersect(o timeSpan) timeSpan {
+	i := ts
+	if i.Start.Less(o.Start) {
+		i.Start = o.Start
+	}
+	if o.End.Less(i.End) {
+		i.End = o.End
+	}
+	return i
+}
+
+func (ts timeSpan) IsEmpty() bool {
+	return !ts.Start.Less(ts.End)
+}
+
+// observedOp is the unification of an externally observed KV read or write.
+// Validator collects these grouped by txn, then computes the time window that
+// it would have been valid to observe this read or write, then asserts that all
+// operations in a transaction have time at which they all overlap. (For any
+// transaction containing a write, this will be a single time, but for read-only
+// transactions it will usually be a range of times.)
+type observedOp interface {
+	observedMarker()
+}
+
+type observedWrite struct {
+	Key   roachpb.Key
+	Value roachpb.Value
+	// Timestamp will only be filled if Materialized is true.
+	Timestamp    hlc.Timestamp
+	Materialized bool
+}
+
+func (*observedWrite) observedMarker() {}
+
+type observedRead struct {
+	Key   roachpb.Key
+	Value roachpb.Value
+	Valid timeSpan
+}
+
+func (*observedRead) observedMarker() {}
+
 type validator struct {
+	kvs              *Engine
+	observedOpsByTxn map[string][]observedOp
+
+	// NB: The Generator carefully ensures that each value written is unique
+	// globally over a run, so there's a 1:1 relationship between a value that was
+	// written and the operation that wrote it.
 	kvByValue map[string]storage.MVCCKeyValue
-	kvsByTxn  map[string][]storage.MVCCKeyValue
 
 	failures []error
 }
 
-func makeValidator(kvs *Engine) *validator {
+func makeValidator(kvs *Engine) (*validator, error) {
 	kvByValue := make(map[string]storage.MVCCKeyValue)
-	kvs.kvs.Ascend(func(item btree.Item) bool {
-		kv := item.(btreeItem)
-		value := mustGetStringValue(kv.Value)
-		if existing, ok := kvByValue[value]; ok {
-			// TODO(dan): This may be too strict. Some operations (db.Run on a Batch)
-			// seem to be double-committing.
-			panic(errors.AssertionFailedf(`invariant violation: value %s was written by two operations %s and %s`,
-				value, existing.Key, kv.Key))
+	var err error
+	kvs.Iterate(func(key storage.MVCCKey, value []byte, iterErr error) {
+		if iterErr != nil {
+			err = errors.CombineErrors(err, iterErr)
+			return
 		}
-		kvByValue[value] = storage.MVCCKeyValue(kv)
-		return true
+		v := roachpb.Value{RawBytes: value}
+		if v.GetTag() != roachpb.ValueType_UNKNOWN {
+			valueStr := mustGetStringValue(value)
+			if existing, ok := kvByValue[valueStr]; ok {
+				// TODO(dan): This may be too strict. Some operations (db.Run on a
+				// Batch) seem to be double-committing. See #46374.
+				panic(errors.AssertionFailedf(
+					`invariant violation: value %s was written by two operations %s and %s`,
+					valueStr, existing.Key, key))
+			}
+			// NB: The Generator carefully ensures that each value written is unique
+			// globally over a run, so there's a 1:1 relationship between a value that
+			// was written and the operation that wrote it.
+			kvByValue[valueStr] = storage.MVCCKeyValue{Key: key, Value: value}
+		}
 	})
-	return &validator{
-		kvByValue: kvByValue,
-		kvsByTxn:  make(map[string][]storage.MVCCKeyValue),
+	if err != nil {
+		return nil, err
 	}
+
+	return &validator{
+		kvs:              kvs,
+		kvByValue:        kvByValue,
+		observedOpsByTxn: make(map[string][]observedOp),
+	}, nil
 }
 
 func (v *validator) processOp(txnID *string, op Operation) {
 	switch t := op.GetValue().(type) {
 	case *GetOperation:
-		if !resultIsRetryable(t.Result) {
-			v.failIfError(op, t.Result)
+		v.failIfError(op, t.Result)
+		if txnID == nil {
+			v.checkAtomic(`get`, t.Result, op)
+		} else {
+			read := &observedRead{
+				Key:   t.Key,
+				Value: roachpb.Value{RawBytes: t.Result.Value},
+			}
+			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], read)
 		}
 	case *PutOperation:
 		if txnID == nil {
@@ -121,11 +206,15 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// Accumulate all the writes for this transaction.
 			kv, ok := v.kvByValue[string(t.Value)]
 			delete(v.kvByValue, string(t.Value))
-			if !ok {
-				kv.Key.Key = t.Key
-				kv.Value = roachpb.MakeValueFromBytes(t.Value).RawBytes
+			write := &observedWrite{
+				Key:          t.Key,
+				Value:        roachpb.MakeValueFromBytes(t.Value),
+				Materialized: ok,
 			}
-			v.kvsByTxn[*txnID] = append(v.kvsByTxn[*txnID], kv)
+			if write.Materialized {
+				write.Timestamp = kv.Key.Timestamp
+			}
+			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
 		}
 	case *SplitOperation:
 		v.failIfError(op, t.Result)
@@ -160,6 +249,10 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		} else if resultIsError(t.Result, `merge failed: waiting for all left-hand replicas to initialize`) {
 			// Probably should be transparently retried.
 		} else if resultIsError(t.Result, `merge failed: waiting for all right-hand replicas to catch up`) {
+			// Probably should be transparently retried.
+		} else if resultIsError(t.Result, `merge failed: non-deletion intent on local range descriptor`) {
+			// Probably should be transparently retried.
+		} else if resultIsError(t.Result, `merge failed: range missing intent on its local descriptor`) {
 			// Probably should be transparently retried.
 		} else {
 			v.failIfError(op, t.Result)
@@ -225,81 +318,206 @@ func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operati
 	for _, op := range ops {
 		v.processOp(&fakeTxnID, op)
 	}
-	txnKVs := v.kvsByTxn[fakeTxnID]
-	delete(v.kvsByTxn, fakeTxnID)
+	txnObservations := v.observedOpsByTxn[fakeTxnID]
+	delete(v.observedOpsByTxn, fakeTxnID)
 	if result.Type == ResultType_NoError {
-		v.checkCommittedTxn(`committed `+atomicType, txnKVs)
+		v.checkCommittedTxn(`committed `+atomicType, txnObservations)
 	} else if resultIsAmbiguous(result) {
-		v.checkAmbiguousTxn(`ambiguous `+atomicType, txnKVs)
+		v.checkAmbiguousTxn(`ambiguous `+atomicType, txnObservations)
 	} else {
-		v.checkUncommittedTxn(`uncommitted `+atomicType, txnKVs)
+		v.checkUncommittedTxn(`uncommitted `+atomicType, txnObservations)
 	}
 }
 
-func (v *validator) checkCommittedTxn(atomicType string, txnKVs []storage.MVCCKeyValue) {
+func (v *validator) checkCommittedTxn(atomicType string, txnObservations []observedOp) {
+	// The following works by verifying that there is at least one time at which
+	// it was valid to see all the reads and writes that we saw in this
+	// transaction.
+	//
+	// Concretely a transaction:
+	// - Write k1@t2 -> v1
+	// - Read k2 -> v2
+	//
+	// And what was present in KV after this and some other transactions:
+	// - k1@t2, v1
+	// - k1@t3, v3
+	// - k2@t1, v2
+	// - k2@t3, v4
+	//
+	// Each of the operations in the transaction, if taken individually, has some
+	// window at which it was valid. The Write was only valid for a commit exactly
+	// at t2: [t2,t2). This is because each Write's mvcc timestamp is the
+	// timestamp of the txn commit. The Read would have been valid for [t1,t3)
+	// because v2 was written at t1 and overwritten at t3.
+	//
+	// As long as these time spans overlap, we're good. However, if another write
+	// had a timestamp of t3, then there is no timestamp at which the transaction
+	// could have committed, which is a violation of our consistency guarantees.
+	// Similarly if there was some read that was only valid from [t1,t2).
+	//
+	// Listen up, this is where it gets tricky. Within a transaction, if the same
+	// key is written more than once, only the last one will ever be materialized
+	// in KV (and be sent out over the RangeFeed). However, any reads in between
+	// will see the overwritten values. This means that each transaction needs its
+	// own view of KV when determining what is and is not valid.
+	//
+	// Concretely:
+	// - Read k -> <nil>
+	// - Write k -> v1
+	// - Read k -> v1
+	// - Write k -> v2
+	// - Read k -> v2
+	//
+	// This is okay, but if we only use the writes that come out of RangeFeed to
+	// compute our read validities, then there would be no time at which v1 could
+	// have been read. So, we have to "layer" the k -> v1 write on top of our
+	// RangeFeed output. At the same time, it would not have been valid for the
+	// first or second read to see v2 because when they ran that value hadn't
+	// been written yet.
+	//
+	// So, what we do to compute the read validity time windows is first hide all
+	// the writes the transaction eventually did in some "view". Then step through
+	// it, un-hiding each of them as we encounter each write, and using the
+	// current state of the view as we encounter each read. Luckily this is easy
+	// to do by with a pebble.Batch "view".
+	batch := v.kvs.kvs.NewIndexedBatch()
+	defer func() { _ = batch.Close() }()
+
 	// If the same key is written multiple times in a transaction, only the last
 	// one makes it to kv.
-	lastWriteIdxByKey := make(map[string]int, len(txnKVs))
-	for idx := range txnKVs {
-		lastWriteIdxByKey[string(txnKVs[idx].Key.Key)] = idx
+	lastWriteIdxByKey := make(map[string]int, len(txnObservations))
+	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
+		observation := txnObservations[idx]
+		switch o := observation.(type) {
+		case *observedWrite:
+			if _, ok := lastWriteIdxByKey[string(o.Key)]; !ok {
+				lastWriteIdxByKey[string(o.Key)] = idx
+			}
+			mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
+			if err := batch.Delete(storage.EncodeKey(mvccKey), nil); err != nil {
+				panic(err)
+			}
+		}
 	}
 
-	var ts hlc.Timestamp
+	// Check if any key that was written twice in the txn had the overwritten
+	// writes materialize in kv. Also fill in all the read timestamps first so
+	// they show up in the failure message.
 	var failure string
-	for idx, kv := range txnKVs {
+	for idx, observation := range txnObservations {
+		switch o := observation.(type) {
+		case *observedWrite:
+			if lastWriteIdx := lastWriteIdxByKey[string(o.Key)]; idx == lastWriteIdx {
+				// The last write of a given key in the txn wins and should have made it
+				// to kv.
+				mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
+				if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
+					panic(err)
+				}
+			} else {
+				if o.Materialized {
+					failure = `committed txn overwritten key had write`
+				}
+				// This write was never materialized in KV because the key got
+				// overwritten later in the txn. But reads in the txn could have seen
+				// it, so we put in the batch being maintained for validReadTime using
+				// the timestamp of the write for this key that eventually "won".
+				mvccKey := storage.MVCCKey{
+					Key:       o.Key,
+					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
+				}
+				if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
+					panic(err)
+				}
+			}
+		case *observedRead:
+			o.Valid = validReadTime(batch, o.Key, o.Value.RawBytes)
+		default:
+			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observation, observation))
+		}
+	}
+
+	valid := timeSpan{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}
+	for idx, observation := range txnObservations {
 		if failure != `` {
 			break
 		}
-
-		isLastWriteForKey := idx == lastWriteIdxByKey[string(kv.Key.Key)]
-		if !isLastWriteForKey {
-			if !kv.Key.Timestamp.IsEmpty() {
-				failure = `committed txn overwritten key had write`
+		var opValid timeSpan
+		switch o := observation.(type) {
+		case *observedWrite:
+			isLastWriteForKey := idx == lastWriteIdxByKey[string(o.Key)]
+			if !isLastWriteForKey {
+				continue
 			}
-			continue
+			if !o.Materialized {
+				failure = atomicType + ` missing write`
+				continue
+			}
+			opValid = timeSpan{Start: o.Timestamp, End: o.Timestamp.Next()}
+		case *observedRead:
+			opValid = o.Valid
+		default:
+			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observation, observation))
 		}
-		if ts.IsEmpty() {
-			ts = kv.Key.Timestamp
+		intersection := valid.Intersect(opValid)
+		if intersection.IsEmpty() {
+			failure = atomicType + ` non-atomic timestamps`
 		}
-		if kv.Key.Timestamp.IsEmpty() {
-			failure = atomicType + ` missing write`
-		} else if !ts.Equal(kv.Key.Timestamp) {
-			failure = atomicType + ` different timestamps`
-		}
+		valid = intersection
 	}
 
 	if failure != `` {
-		err := errors.Errorf("%s: %s", failure, errors.Safe(printKVs(txnKVs...)))
+		err := errors.Errorf("%s: %s", failure, printObserved(txnObservations...))
 		v.failures = append(v.failures, err)
 	}
 }
 
-func (v *validator) checkAmbiguousTxn(atomicType string, txnKVs []storage.MVCCKeyValue) {
+func (v *validator) checkAmbiguousTxn(atomicType string, txnObservations []observedOp) {
 	var somethingCommitted bool
-	for _, kv := range txnKVs {
-		if !kv.Key.Timestamp.IsEmpty() {
-			somethingCommitted = true
-			break
+	var hadWrite bool
+	for _, observation := range txnObservations {
+		switch o := observation.(type) {
+		case *observedWrite:
+			hadWrite = true
+			if o.Materialized {
+				somethingCommitted = true
+				break
+			}
 		}
 	}
-	if somethingCommitted {
-		v.checkCommittedTxn(atomicType, txnKVs)
+	if !hadWrite {
+		// TODO(dan): Is it possible to receive an ambiguous read-only txn? Assume
+		// committed for now because the committed case has assertions about reads
+		// but the uncommitted case doesn't and this seems to work.
+		v.checkCommittedTxn(atomicType, txnObservations)
+	} else if somethingCommitted {
+		v.checkCommittedTxn(atomicType, txnObservations)
 	} else {
-		v.checkUncommittedTxn(atomicType, txnKVs)
+		v.checkUncommittedTxn(atomicType, txnObservations)
 	}
 }
 
-func (v *validator) checkUncommittedTxn(atomicType string, txnKVs []storage.MVCCKeyValue) {
+func (v *validator) checkUncommittedTxn(atomicType string, txnObservations []observedOp) {
 	var failure string
-	for _, kv := range txnKVs {
-		if kv.Key.Timestamp.IsEmpty() {
-			continue
+	for _, observed := range txnObservations {
+		if failure != `` {
+			break
 		}
-		failure = atomicType + ` had writes`
-		break
+		switch o := observed.(type) {
+		case *observedWrite:
+			if o.Materialized {
+				failure = atomicType + ` had writes`
+			}
+		case *observedRead:
+			// TODO(dan): Figure out what we can assert about reads in an uncommitted
+			// transaction.
+		default:
+			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observed, observed))
+		}
 	}
+
 	if failure != `` {
-		err := errors.Errorf("%s: %s", failure, errors.Safe(printKVs(txnKVs...)))
+		err := errors.Errorf("%s: %s", failure, printObserved(txnObservations...))
 		v.failures = append(v.failures, err)
 	}
 }
@@ -356,25 +574,81 @@ func mustGetStringValue(value []byte) string {
 	if len(value) == 0 {
 		return `<nil>`
 	}
-	value, err := roachpb.Value{RawBytes: value}.GetBytes()
+	v, err := roachpb.Value{RawBytes: value}.GetBytes()
 	if err != nil {
 		panic(errors.Wrapf(err, "decoding %x", value))
 	}
-	return string(value)
+	return string(v)
 }
 
-func printKVs(kvs ...storage.MVCCKeyValue) string {
-	sort.Slice(kvs, func(i, j int) bool { return kvs[i].Key.Less(kvs[j].Key) })
+func validReadTime(b *pebble.Batch, key roachpb.Key, value []byte) timeSpan {
+	var validTime []timeSpan
+	end := hlc.MaxTimestamp
 
+	iter := b.NewIter(nil)
+	defer func() { _ = iter.Close() }()
+	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: key}))
+	for ; iter.Valid(); iter.Next() {
+		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
+		if err != nil {
+			panic(err)
+		}
+		if !mvccKey.Key.Equal(key) {
+			break
+		}
+		if mustGetStringValue(iter.Value()) == mustGetStringValue(value) {
+			validTime = append(validTime, timeSpan{Start: mvccKey.Timestamp, End: end})
+		}
+		end = mvccKey.Timestamp
+	}
+	if len(value) == 0 {
+		validTime = append(validTime, timeSpan{Start: hlc.MinTimestamp, End: end})
+	}
+
+	if len(validTime) == 0 {
+		return timeSpan{}
+	} else if len(validTime) == 1 {
+		return validTime[0]
+	} else {
+		// TODO(dan): Until we add deletes, the "only write each value once"
+		// property of the generator means that we have a 1:1 mapping between some
+		// `(key, possibly-nil-value)` observation and a time span in which it was
+		// valid. Once we add deletes, there will be multiple disjoint spans for the
+		// `(key, nil)` case.
+		panic(`unreachable`)
+	}
+}
+
+func printObserved(observedOps ...observedOp) string {
 	var buf strings.Builder
-	for _, kv := range kvs {
+	for _, observed := range observedOps {
 		if buf.Len() > 0 {
 			buf.WriteString(" ")
 		}
-		if kv.Key.Timestamp.IsEmpty() {
-			fmt.Fprintf(&buf, "%s:missing->%s", kv.Key.Key, mustGetStringValue(kv.Value))
-		} else {
-			fmt.Fprintf(&buf, "%s:%s->%s", kv.Key.Key, kv.Key.Timestamp, mustGetStringValue(kv.Value))
+		switch o := observed.(type) {
+		case *observedWrite:
+			ts := `missing`
+			if o.Materialized {
+				ts = o.Timestamp.String()
+			}
+			fmt.Fprintf(&buf, "[w]%s:%s->%s", o.Key, ts, mustGetStringValue(o.Value.RawBytes))
+		case *observedRead:
+			var start string
+			if o.Valid.Start == hlc.MinTimestamp {
+				start = `<min>`
+			} else {
+				start = o.Valid.Start.String()
+			}
+			var end string
+			if o.Valid.End == hlc.MaxTimestamp {
+				end = `<max>`
+			} else {
+				end = o.Valid.End.String()
+			}
+			fmt.Fprintf(&buf, "[r]%s:[%s,%s)->%s",
+				o.Key, start, end, mustGetStringValue(o.Value.RawBytes))
+		default:
+			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observed, observed))
 		}
 	}
 	return buf.String()
