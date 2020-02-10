@@ -174,6 +174,10 @@ func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 // keyspan. Timestamps associated with the spans in the spanset are not
 // considered, only the span boundaries are checked.
 //
+// If the provided span contains only an (exclusive) EndKey and has a nil
+// (inclusive) Key then Key is considered to be the key previous to EndKey,
+// i.e. [,b) will be considered [b.Prev(),b).
+//
 // TODO(irfansharif): This does not currently work for spans that straddle
 // across multiple added spans. Specifically a spanset with spans [a-c) and
 // [b-d) added under read only and read write access modes respectively would
@@ -181,22 +185,52 @@ func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 // is also a problem if the added spans were read only and the spanset wasn't
 // already SortAndDedup-ed.
 func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
-	return s.checkAllowed(access, span, false /* spanKeyExclusive */)
+	return s.checkAllowed(access, span, func(_ SpanAccess, _ Span) bool {
+		return true
+	})
 }
 
-// See CheckAllowed(). The reversed arguments makes the lower bound exclusive
-// and the upper bound inclusive, i.e. [a,b) will be considered (a,b].
-func (s *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span, reversed bool) error {
+// CheckAllowedAt is like CheckAllowed, except it returns an error if the access
+// is not allowed at over the given keyspan at the given timestamp.
+func (s *SpanSet) CheckAllowedAt(
+	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
+) error {
+	return s.checkAllowed(access, span, func(declAccess SpanAccess, declSpan Span) bool {
+		declTimestamp := declSpan.Timestamp
+		if declTimestamp.IsEmpty() {
+			// When the span is declared as non-MVCC (i.e. with an empty
+			// timestamp), it's equivalent to a read/write mutex where we
+			// don't consider access timestamps.
+			return true
+		}
+
+		switch access {
+		case SpanReadOnly:
+			// Read spans acquired at a specific timestamp only allow reads
+			// at that timestamp and below. Non-MVCC access is not allowed.
+			return !timestamp.IsEmpty() && timestamp.LessEq(declTimestamp)
+		case SpanReadWrite:
+			// Writes under a write span with an associated timestamp at that
+			// specific timestamp.
+			return timestamp.Equal(declTimestamp)
+		default:
+			panic("unexpected span access")
+		}
+	})
+}
+
+func (s *SpanSet) checkAllowed(
+	access SpanAccess, span roachpb.Span, check func(SpanAccess, Span) bool,
+) error {
 	scope := SpanGlobal
-	if keys.IsLocal(span.Key) {
+	if (span.Key != nil && keys.IsLocal(span.Key)) ||
+		(span.EndKey != nil && keys.IsLocal(span.EndKey)) {
 		scope = SpanLocal
 	}
 
 	for ac := access; ac < NumSpanAccess; ac++ {
 		for _, cur := range s.spans[ac][scope] {
-			if cur.Contains(span) &&
-				(!reversed || cur.EndKey != nil && !cur.Key.Equal(span.Key)) ||
-				reversed && cur.EndKey.Equal(span.Key) {
+			if contains(cur.Span, span) && check(ac, cur) {
 				return nil
 			}
 		}
@@ -205,55 +239,24 @@ func (s *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span, reversed bo
 	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, s)
 }
 
-// CheckAllowedAt returns an error if the access is not allowed at over the given keyspan
-// at the given timestamp.
-func (s *SpanSet) CheckAllowedAt(
-	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
-) error {
-	return s.checkAllowedAt(access, span, timestamp, false /* inclusiveEnd */)
-}
-
-// See CheckAllowedAt. The reversed arguments makes the lower bound exclusive
-// and the upper bound inclusive, i.e. [a,b) will be considered (a,b].
-func (s *SpanSet) checkAllowedAt(
-	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp, reversed bool,
-) error {
-	scope := SpanGlobal
-	if keys.IsLocal(span.Key) {
-		scope = SpanLocal
+// contains returns whether s1 contains s2. Unlike Span.Contains, this function
+// supports spans with a nil start key and a non-nil end key (e.g. "[nil, c)").
+// In this form, s2.Key (inclusive) is considered to be the previous key to
+// s2.EndKey (exclusive).
+func contains(s1, s2 roachpb.Span) bool {
+	if s2.Key != nil {
+		// The common case.
+		return s1.Contains(s2)
 	}
 
-	for ac := access; ac < NumSpanAccess; ac++ {
-		for _, cur := range s.spans[ac][scope] {
-			if (cur.Contains(span) &&
-				(!reversed || (cur.EndKey != nil && !cur.Key.Equal(span.Key)))) ||
-				(reversed && cur.EndKey.Equal(span.Key)) {
-				if cur.Timestamp.IsEmpty() {
-					// When the span is acquired as non-MVCC (i.e. with an empty
-					// timestamp), it's equivalent to a read/write mutex where we don't
-					// consider access timestamps.
-					return nil
-				}
+	// The following is equivalent to:
+	//   s1.Contains(roachpb.Span{Key: s2.EndKey.Prev()})
 
-				if access == SpanReadWrite {
-					// Writes under a write span with an associated timestamp at that
-					// specific timestamp.
-					if timestamp == cur.Timestamp {
-						return nil
-					}
-				} else {
-					// Read spans acquired at a specific timestamp only allow reads at
-					// that timestamp and below. Non-MVCC access is not allowed.
-					if !timestamp.IsEmpty() && (timestamp.Less(cur.Timestamp) || timestamp == cur.Timestamp) {
-						return nil
-					}
-				}
-			}
-		}
+	if s1.EndKey == nil {
+		return s1.Key.IsPrev(s2.EndKey)
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s at %s\ndeclared:\n%s",
-		access, span, timestamp.String(), s)
+	return s1.Key.Compare(s2.EndKey) < 0 && s1.EndKey.Compare(s2.EndKey) >= 0
 }
 
 // Validate returns an error if any spans that have been added to the set
