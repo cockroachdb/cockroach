@@ -36,6 +36,12 @@ import (
 
 func {{template "opName" .}}(a {{.LTyp.GoTypeName}}, b {{.RTyp.GoTypeName}}) {{.RetTyp.GoTypeName}} {
 	var r {{.RetTyp.GoTypeName}}
+	// In order to inline the templated code of overloads, we need to have a
+	// "decimalScratch" local variable of type "decimalOverloadScratch".
+	var decimalScratch decimalOverloadScratch
+	// However, the scratch is not used in all of the functions, so we add this
+	// to go around "unused" error.
+	_ = decimalScratch
 	{{(.Assign "r" "a" "b")}}
 	return r
 }
