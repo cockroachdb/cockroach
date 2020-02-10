@@ -34,6 +34,7 @@ func registerGossip(r *testRegistry) {
 	runGossipChaos := func(ctx context.Context, t *test, c *cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
+		waitForFullReplication(t, c.Conn(ctx, 1))
 
 		gossipNetwork := func(node int) string {
 			const query = `
@@ -88,7 +89,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 					return false
 				}
 			}
-			fmt.Printf("gossip ok: %s (%0.0fs)\n", expected, timeutil.Since(start).Seconds())
+			c.l.Printf("gossip ok: %s (%0.0fs)\n", expected, timeutil.Since(start).Seconds())
 			return true
 		}
 
