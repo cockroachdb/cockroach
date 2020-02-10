@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
@@ -139,7 +140,7 @@ func (s *SSTSnapshotStorageScratch) Clear() error {
 type SSTSnapshotStorageFile struct {
 	scratch   *SSTSnapshotStorageScratch
 	created   bool
-	file      engine.File
+	file      fs.File
 	filename  string
 	ctx       context.Context
 	chunkSize int64

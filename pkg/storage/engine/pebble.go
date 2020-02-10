@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -857,10 +858,10 @@ func (p *Pebble) LinkFile(oldname, newname string) error {
 	return p.fs.Link(oldname, newname)
 }
 
-var _ FS = &Pebble{}
+var _ fs.FS = &Pebble{}
 
 // CreateFile implements the FS interface.
-func (p *Pebble) CreateFile(name string) (File, error) {
+func (p *Pebble) CreateFile(name string) (fs.File, error) {
 	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
 	// directory does not exist. Various tests in the storage package depend on
 	// this because they are accidentally creating the required directory on the
@@ -873,7 +874,7 @@ func (p *Pebble) CreateFile(name string) (File, error) {
 }
 
 // CreateFileWithSync implements the FS interface.
-func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (File, error) {
+func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (fs.File, error) {
 	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
 	// directory does not exist. Various tests in the storage package depend on
 	// this because they are accidentally creating the required directory on the
@@ -890,12 +891,12 @@ func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (File, error)
 }
 
 // OpenFile implements the FS interface.
-func (p *Pebble) OpenFile(name string) (File, error) {
+func (p *Pebble) OpenFile(name string) (fs.File, error) {
 	return p.fs.Open(name)
 }
 
 // OpenDir implements the FS interface.
-func (p *Pebble) OpenDir(name string) (File, error) {
+func (p *Pebble) OpenDir(name string) (fs.File, error) {
 	return p.fs.OpenDir(name)
 }
 
