@@ -34,26 +34,10 @@ import "gogoproto/gogo.proto";
 message Error {
   option (gogoproto.goproto_stringer) = false;
 
-  // detail is deprecated after 19.1.
-  // Will be populated with a flattened copy of full_error for 19.1
-  // nodes until the next version.
-  // TODO(knz): remove in 19.3.
-  oneof detail {
-    pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
-    roachpb.UnhandledRetryableError retryableTxnError = 2;
-    // TODO(andrei): Add AmbiguousResultError here once DistSQL starts executing
-    // writes.
-  }
+  reserved 1,2;
 
   // full_error contains a structured errors with possibly multiple
   // wrapping layers implementing the errors.Cause() interface.
-  // For simple errors, the value here is duplicated in `detail` above.
-  // Complex errors with a UnhandledRetryableError are stripped of all decoration
-  // in `detail` above to reveal the retry error within.
-  // Other complex errors are flattened in `detail` above as per
-  // Flatten() to produce a simple pgerror.Error object in `detail`.
-  // 19.1 nodes and further are expected to use full_error directly where
-  // all error decorations are preserved.
   optional errorspb.EncodedError full_error = 3;
 }
 
