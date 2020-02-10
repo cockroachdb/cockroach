@@ -270,8 +270,6 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	log.VEventf(ctx, 2, "retry successful @%s", ba.Txn.WriteTimestamp)
 	sr.autoRetryCounter.Inc(1)
 	retryTxn.ReadTimestamp.Forward(retryLargestRefreshTS)
-
-	// On success, combine responses if applicable and set error to nil.
 	return retryBr, nil, retryTxn.ReadTimestamp
 }
 
