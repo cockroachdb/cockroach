@@ -111,3 +111,17 @@ SELECT id FROM unsupported_type LIMIT 1 OFFSET 1100
 
 statement ok
 RESET vectorize
+
+# Regression test for #44904 (mismatched physical types between materializer's
+# input and output, root of the problem is outside of the vectorized engine).
+# We should fallback to the row-by-row engine.
+statement ok
+SET default_int_size = 4; CREATE TABLE t44904(c0 INT); INSERT INTO t44904 VALUES(0)
+
+query I
+SELECT CAST(0 BETWEEN(CASE NULL WHEN c0 = 0 THEN NULL END) AND 0 IS TRUE AS INT) FROM t44904
+----
+0
+
+statement ok
+RESET default_int_size
