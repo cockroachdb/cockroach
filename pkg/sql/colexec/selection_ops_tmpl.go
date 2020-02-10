@@ -177,6 +177,12 @@ type _OP_CONST_NAME struct {
 }
 
 func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `decimalScratch` local variable of type `decimalOverloadScratch`.
+	decimalScratch := p.decimalScratch
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = decimalScratch
 	for {
 		batch := p.input.Next(ctx)
 		if batch.Length() == 0 {
@@ -212,6 +218,12 @@ type _OP_NAME struct {
 }
 
 func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `decimalScratch` local variable of type `decimalOverloadScratch`.
+	decimalScratch := p.decimalScratch
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = decimalScratch
 	for {
 		batch := p.input.Next(ctx)
 		if batch.Length() == 0 {
