@@ -239,7 +239,7 @@ func (p *planner) populateExplain(
 				if nodeID == thisNodeID && !isDistSQL {
 					fuseOpt = flowinfra.FuseAggressively
 				}
-				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, fuseOpt)
+				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, fuseOpt, nil /* output */)
 				isVec = isVec && (err == nil)
 			}
 		}
