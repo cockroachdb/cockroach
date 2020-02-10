@@ -74,7 +74,7 @@ type Backup struct {
 	// BaseDir can be used for a RESTORE. All paths in the descriptor are
 	// relative to this.
 	BaseDir string
-	Desc    backupccl.BackupDescriptor
+	Desc    backupccl.BackupManifest
 
 	fileIdx int
 	iterIdx int
