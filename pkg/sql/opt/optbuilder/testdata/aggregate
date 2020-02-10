@@ -2844,12 +2844,12 @@ build
 SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
 ----
 project
- ├── columns: r:6(decimal) s:8(int)
+ ├── columns: r:6(decimal) s:9(int)
  └── group-by
-      ├── columns: column5:5(decimal) max:6(decimal) column7:7(int) column8:8(int)
-      ├── grouping columns: column5:5(decimal) column7:7(int) column8:8(int)
+      ├── columns: max:6(decimal) column7:7(int) column8:8(decimal) column9:9(int)
+      ├── grouping columns: column7:7(int) column8:8(decimal) column9:9(int)
       ├── project
-      │    ├── columns: column5:5(decimal) column7:7(int) column8:8(int)
+      │    ├── columns: column5:5(decimal) column7:7(int) column8:8(decimal) column9:9(int)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │    └── projections
@@ -2863,6 +2863,13 @@ project
       │         ├── plus [type=int]
       │         │    ├── variable: k [type=int]
       │         │    └── variable: v [type=int]
+      │         ├── div [type=decimal]
+      │         │    ├── plus [type=int]
+      │         │    │    ├── variable: k [type=int]
+      │         │    │    └── variable: v [type=int]
+      │         │    └── minus [type=int]
+      │         │         ├── variable: k [type=int]
+      │         │         └── variable: v [type=int]
       │         └── mult [type=int]
       │              ├── plus [type=int]
       │              │    ├── variable: k [type=int]
