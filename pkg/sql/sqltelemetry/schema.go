@@ -35,6 +35,10 @@ var (
 	// has been created.
 	CreateTempTableCounter = telemetry.GetCounterOnce("sql.schema.create_temp_table")
 
+	// CreateTempSequenceCounter is to be incremented every time a TEMP SEQUENCE
+	// has been created.
+	CreateTempSequenceCounter = telemetry.GetCounterOnce("sql.schema.create_temp_sequence")
+
 	// CreateTempViewCounter is to be incremented every time a TEMP VIEW
 	// has been created.
 	CreateTempViewCounter = telemetry.GetCounterOnce("sql.schema.create_temp_view")

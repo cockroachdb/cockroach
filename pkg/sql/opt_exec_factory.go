@@ -1774,6 +1774,7 @@ func (ef *execFactory) ConstructCreateTable(
 func (ef *execFactory) ConstructCreateView(
 	schema cat.Schema,
 	viewName string,
+	ifNotExists bool,
 	temporary bool,
 	viewQuery string,
 	columns sqlbase.ResultColumns,
@@ -1804,12 +1805,13 @@ func (ef *execFactory) ConstructCreateView(
 	}
 
 	return &createViewNode{
-		viewName:  tree.Name(viewName),
-		temporary: temporary,
-		viewQuery: viewQuery,
-		dbDesc:    schema.(*optSchema).desc,
-		columns:   columns,
-		planDeps:  planDeps,
+		viewName:    tree.Name(viewName),
+		ifNotExists: ifNotExists,
+		temporary:   temporary,
+		viewQuery:   viewQuery,
+		dbDesc:      schema.(*optSchema).desc,
+		columns:     columns,
+		planDeps:    planDeps,
 	}, nil
 }
 

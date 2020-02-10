@@ -1034,6 +1034,7 @@ create_table_as_stmt ::=
 
 create_view_stmt ::=
 	'CREATE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
+	| 'CREATE' opt_temp 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list 'AS' select_stmt
 
 create_sequence_stmt ::=
 	'CREATE' opt_temp 'SEQUENCE' sequence_name opt_sequence_option_list

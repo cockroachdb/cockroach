@@ -26,10 +26,11 @@ type createViewNode struct {
 	viewName tree.Name
 	// viewQuery contains the view definition, with all table names fully
 	// qualified.
-	viewQuery string
-	temporary bool
-	dbDesc    *sqlbase.DatabaseDescriptor
-	columns   sqlbase.ResultColumns
+	viewQuery   string
+	ifNotExists bool
+	temporary   bool
+	dbDesc      *sqlbase.DatabaseDescriptor
+	columns     sqlbase.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
@@ -72,7 +73,9 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, viewName)
 	if err != nil {
-		// TODO(a-robinson): Support CREATE OR REPLACE commands.
+		if sqlbase.IsRelationAlreadyExistsError(err) && n.ifNotExists {
+			return nil
+		}
 		return err
 	}
 

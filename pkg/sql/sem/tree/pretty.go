@@ -1233,6 +1233,9 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 		title = pretty.ConcatSpace(title, pretty.Keyword("TEMPORARY"))
 	}
 	title = pretty.ConcatSpace(title, pretty.Keyword("VIEW"))
+	if node.IfNotExists {
+		title = pretty.ConcatSpace(title, pretty.Keyword("IF NOT EXISTS"))
+	}
 	d := pretty.ConcatSpace(
 		title,
 		p.Doc(&node.Name),

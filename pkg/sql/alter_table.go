@@ -124,7 +124,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			if seqName != nil {
-				if err := doCreateSequence(params, n.n.String(), seqDbDesc, seqName, seqOpts); err != nil {
+				if err := doCreateSequence(
+					params,
+					n.n.String(),
+					seqDbDesc,
+					n.tableDesc.GetParentSchemaID(),
+					seqName,
+					n.tableDesc.Temporary,
+					seqOpts,
+				); err != nil {
 					return err
 				}
 			}

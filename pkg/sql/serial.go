@@ -141,7 +141,7 @@ func (p *planner) processSerialInColumnDef(
 		seqType = "virtual "
 		seqOpts = virtualSequenceOpts
 	}
-	log.VEventf(ctx, 2, "new column %q of %q will have %ssequence name %q and default %q",
+	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",
 		d, tableName, seqType, seqName, defaultExpr)
 
 	newSpec.DefaultExpr.Expr = defaultExpr
