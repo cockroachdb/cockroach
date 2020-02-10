@@ -80,7 +80,7 @@ func registerPgjdbc(r *testRegistry) {
 			c,
 			"https://github.com/pgjdbc/pgjdbc.git",
 			"/mnt/data1/pgjdbc",
-			latestTag,
+			"REL42.2.9",
 			node,
 		); err != nil {
 			t.Fatal(err)
