@@ -59,7 +59,10 @@ func Watch(
 	w := &Watcher{
 		ct: ct,
 	}
-	w.mu.kvs = MakeEngine()
+	var err error
+	if w.mu.kvs, err = MakeEngine(); err != nil {
+		return nil, err
+	}
 	w.mu.frontier = span.MakeFrontier(dataSpan)
 	w.mu.frontierWaiters = make(map[hlc.Timestamp][]chan error)
 	ctx, w.cancel = context.WithCancel(ctx)
