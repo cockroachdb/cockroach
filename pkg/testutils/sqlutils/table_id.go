@@ -18,7 +18,10 @@ import (
 // QueryDatabaseID returns the database ID of the specified database using the
 // system.namespace table.
 func QueryDatabaseID(t testing.TB, sqlDB DBHandle, dbName string) uint32 {
-	dbIDQuery := `SELECT id FROM system.namespace WHERE name = $1 AND "parentID" = 0`
+	dbIDQuery := `
+		SELECT id FROM system.namespace
+		WHERE name = $1 AND "parentSchemaID" = 0 AND "parentID" = 0
+	`
 	var dbID uint32
 	result := sqlDB.QueryRowContext(context.Background(), dbIDQuery, dbName)
 	if err := result.Scan(&dbID); err != nil {
@@ -29,14 +32,22 @@ func QueryDatabaseID(t testing.TB, sqlDB DBHandle, dbName string) uint32 {
 
 // QueryTableID returns the table ID of the specified database.table
 // using the system.namespace table.
-func QueryTableID(t testing.TB, sqlDB DBHandle, dbName, tableName string) uint32 {
+func QueryTableID(
+	t testing.TB, sqlDB DBHandle, dbName, schemaName string, tableName string,
+) uint32 {
 	tableIDQuery := `
  SELECT tables.id FROM system.namespace tables
    JOIN system.namespace dbs ON dbs.id = tables."parentID"
-   WHERE dbs.name = $1 AND tables.name = $2
+	 JOIN system.namespace schemas ON schemas.id = tables."parentSchemaID"
+   WHERE dbs.name = $1 AND schemas.name = $2 AND tables.name = $3
  `
 	var tableID uint32
-	result := sqlDB.QueryRowContext(context.Background(), tableIDQuery, dbName, tableName)
+	result := sqlDB.QueryRowContext(
+		context.Background(),
+		tableIDQuery, dbName,
+		schemaName,
+		tableName,
+	)
 	if err := result.Scan(&tableID); err != nil {
 		t.Fatal(err)
 	}
