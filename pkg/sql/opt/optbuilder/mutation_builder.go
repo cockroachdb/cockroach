@@ -947,6 +947,103 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 	}
 }
 
+func (mb *mutationBuilder) addUpdateDeletionCheck(
+	fkOrdinal int, newRowCols []scopeOrdinal, updatedOrdinals util.FastIntSet,
+) (ok bool) {
+	fk := mb.tab.InboundForeignKey(fkOrdinal)
+
+	// Build a semi join, with the referenced FK columns on the left and the
+	// origin columns on the right.
+
+	numCols := fk.ColumnCount()
+	oldRowCols := mb.fetchOrds
+
+	oldRowFKColOrdinals := make([]scopeOrdinal, numCols)
+	newRowFKColOrdinals := make([]scopeOrdinal, numCols)
+	var fkOrdinals util.FastIntSet
+	for j := 0; j < numCols; j++ {
+		ord := fk.ReferencedColumnOrdinal(mb.tab, j)
+		fkOrdinals.Add(ord)
+		oldRowFKColOrdinals[j] = oldRowCols[ord]
+		newRowFKColOrdinals[j] = newRowCols[ord]
+	}
+
+	if !fkOrdinals.Intersects(updatedOrdinals) {
+		return true
+	}
+
+	fkOrds := make([]scopeOrdinal, numCols)
+	for i := range fkOrds {
+		fkOrds[i] = mb.updateOrds[fk.ReferencedColumnOrdinal(mb.tab, i)]
+	}
+
+	// removedRows is the set of rows this update or upsert "removes" from the
+	// table, and which must be checked to ensure are not referenced.  However,
+	// note that the sum of operations performed by this upsert or update might
+	// not result in these rows not existing in the table any more.
+	removedRows, removedRowCols := mb.projectInput(oldRowFKColOrdinals, checkAllRows)
+
+	// addedRows is the set of rows that get added to the table as a result of
+	// this mutation. It includes both rows that get directly inserted by an
+	// upsert along with rows that are implicitly inserted by an update to a row
+	// (which can occur via either an update or an upsert).
+
+	// This complexity is needed because we might "delete" a referenced row via
+	// an upsert or update by changing the value that is referenced, which would
+	// be an invalid mutation.  However, this can be made valid if that same
+	// mutation also *introduces* a row that replaces the one removed, so when
+	// checking *deleted* rows, we must not include any rows that were *added*.
+	var addedRows memo.RelExpr
+	var addedRowCols opt.ColList
+
+	isUpsert := mb.canaryColID != 0
+
+	if isUpsert {
+		// An upsert has two "kinds" of rows added to the table: "Insertions,"
+		// which are rows that do not trigger the ON CONFLICT clause of the upsert,
+		// and "updates," which are the rows resulting from performing an update to
+		// a row that conflicted. We must union these two sets of rows to get the
+		// full set of "rows that we are adding to the table."
+		insertions, insertionCols := mb.projectInput(fkOrds, checkInsertedRows)
+		updates, updatedCols := mb.projectInput(newRowFKColOrdinals, checkUpdatedRows)
+
+		addedRowCols = make(opt.ColList, len(insertionCols))
+
+		for i := range addedRowCols {
+			c := mb.b.factory.Metadata().ColumnMeta(insertionCols[i])
+			addedRowCols[i] = mb.b.factory.Metadata().AddColumn(c.Alias, c.Type)
+		}
+
+		addedRows = mb.b.factory.ConstructUnionAll(
+			insertions,
+			updates,
+			&memo.SetPrivate{
+				LeftCols:  insertionCols,
+				RightCols: updatedCols,
+				OutCols:   addedRowCols,
+			},
+		)
+	} else {
+		// If we're not an upsert, we're an update, and we just check all the rows.
+		addedRows, addedRowCols = mb.projectInput(newRowFKColOrdinals, checkAllRows)
+	}
+
+	// The rows that no longer exist are the ones that were "deleted" by virtue
+	// of being updated _from_, minus the ones that were "added" by virtue of
+	// being updated _to_. Note that this could equivalently be ExceptAll.
+	deletions := mb.b.factory.ConstructExcept(
+		removedRows,
+		addedRows,
+		&memo.SetPrivate{
+			LeftCols:  removedRowCols,
+			RightCols: addedRowCols,
+			OutCols:   removedRowCols,
+		},
+	)
+
+	return mb.addDeletionCheck(fkOrdinal, deletions, removedRowCols, fk.UpdateReferenceAction())
+}
+
 // buildFKChecks* methods populate mb.checks with queries that check the
 // integrity of foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecksForUpdate() {
@@ -967,29 +1064,6 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	// new value for each updated column. From this we can construct the effective
 	// insertion and deletion.
 
-	// oldRowCols is an array mapping column ordinals in mb.tab to their
-	// corresponding ordinal in the input to the update.
-	oldRowCols := mb.fetchOrds
-
-	// newRowCols is an array mapping column ordinals in each of the effective new
-	// rows being "inserted" with their corresponding ordinal in the input to the
-	// update.
-	newRowCols := make([]scopeOrdinal, len(mb.fetchOrds))
-	newRowColIDs := make(opt.ColList, len(mb.fetchOrds))
-	// updatedOrdinals tracks which ordinals participate in the update, since we
-	// only need to emit foreign key checks for FKs which intersect the set of
-	// updated columns.
-	var updatedOrdinals util.FastIntSet
-	for i := range newRowCols {
-		if mb.updateOrds[i] != -1 {
-			newRowCols[i] = mb.updateOrds[i]
-			updatedOrdinals.Add(i)
-		} else {
-			newRowCols[i] = mb.fetchOrds[i]
-		}
-		newRowColIDs[i] = mb.outScope.cols[newRowCols[i]].id
-	}
-
 	// Say the table being updated by an update is:
 	//
 	//   x | y | z
@@ -1003,9 +1077,9 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	//   --+---+---+------
 	//   1 | 3 | 5 |  10
 	//
-	// Then oldRowCols will be [0, 1, 2] (corresponding to the old row of
-	// [1 3 5]), and newRowCols will be [0, 3, 2] (corresponding to the new row of
+	// Then newRowCols will be [0, 3, 2] (corresponding to the new row of
 	// [1 10 5]).
+	newRowCols, updatedOrdinals := mb.updateMeta()
 
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
 		fk := mb.tab.OutboundForeignKey(i)
@@ -1025,70 +1099,34 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	// The "deletion" incurred by an update is the rows deleted for a given
 	// inbound FK minus the rows inserted.
 	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
-		fk := mb.tab.InboundForeignKey(i)
-
-		// Build a semi join, with the referenced FK columns on the left and the
-		// origin columns on the right.
-
-		numCols := fk.ColumnCount()
-
-		oldRowFKColOrdinals := make([]scopeOrdinal, numCols)
-		newRowFKColOrdinals := make([]scopeOrdinal, numCols)
-		var fkOrdinals util.FastIntSet
-		for j := 0; j < numCols; j++ {
-			ord := fk.ReferencedColumnOrdinal(mb.tab, j)
-			fkOrdinals.Add(ord)
-			oldRowFKColOrdinals[j] = oldRowCols[ord]
-			newRowFKColOrdinals[j] = newRowCols[ord]
-		}
-
-		if !fkOrdinals.Intersects(updatedOrdinals) {
-			continue
-		}
-
-		oldRows, colsForOldRow, _ := mb.projectInput(oldRowFKColOrdinals, false /* includeCanary */)
-		newRows, colsForNewRow, _ := mb.projectInput(newRowFKColOrdinals, false /* includeCanary */)
-
-		// The rows that no longer exist are the ones that were "deleted" by virtue
-		// of being updated _from_, minus the ones that were "added" by virtue of
-		// being updated _to_. Note that this could equivalently be ExceptAll.
-		deletions := mb.b.factory.ConstructExcept(
-			oldRows,
-			newRows,
-			&memo.SetPrivate{
-				LeftCols:  colsForOldRow,
-				RightCols: colsForNewRow,
-				OutCols:   colsForOldRow,
-			},
-		)
-
-		// deletedFKCols is the list of columns partaking in the FK for the deletion.
-		deletedFKCols := make(opt.ColList, fk.ColumnCount())
-		for j := 0; j < fk.ColumnCount(); j++ {
-			colID := colsForOldRow[j]
-			deletedFKCols[j] = colID
-		}
-
-		outCols := make(opt.ColList, len(deletedFKCols))
-		proj := memo.ProjectionsExpr{}
-		for j := 0; j < len(deletedFKCols); j++ {
-			c := mb.b.factory.Metadata().ColumnMeta(deletedFKCols[j])
-			outCols[j] = mb.md.AddColumn(c.Alias, c.Type)
-			proj = append(proj, mb.b.factory.ConstructProjectionsItem(
-				mb.b.factory.ConstructVariable(deletedFKCols[j]),
-				outCols[j],
-			))
-		}
-		// TODO(justin): add rules to allow this to get pushed down.
-		input := mb.b.factory.ConstructProject(deletions, proj, opt.ColSet{})
-
-		ok := mb.addDeletionCheck(i, input, outCols, fk.UpdateReferenceAction())
-		if !ok {
+		if ok := mb.addUpdateDeletionCheck(i, newRowCols, updatedOrdinals); !ok {
 			mb.checks = nil
 			mb.fkFallback = true
 			return
 		}
 	}
+}
+
+func (mb *mutationBuilder) updateMeta() (
+	newRowCols []scopeOrdinal,
+	updatedOrdinals util.FastIntSet,
+) {
+	// newRowCols is an array mapping column ordinals in each of the effective new
+	// rows being "inserted" with their corresponding ordinal in the input to the
+	// update.
+	newRowCols = make([]scopeOrdinal, len(mb.fetchOrds))
+	// updatedOrdinals tracks which ordinals participate in the update, since we
+	// only need to emit foreign key checks for FKs which intersect the set of
+	// updated columns.
+	for i := range newRowCols {
+		if mb.updateOrds[i] != -1 {
+			newRowCols[i] = mb.updateOrds[i]
+			updatedOrdinals.Add(i)
+		} else {
+			newRowCols[i] = mb.fetchOrds[i]
+		}
+	}
+	return newRowCols, updatedOrdinals
 }
 
 func (mb *mutationBuilder) buildFKChecksForUpsert() {
@@ -1107,7 +1145,21 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		mb.addInsertionCheck(i, mb.insertOrds, checkInsertedRows)
 	}
 
-	// TODO(justin): include checks for the set of updated rows.
+	newRowCols, updatedOrdinals := mb.updateMeta()
+
+	// Add the check for the new row insertion portion of the the upsert.
+	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
+		mb.addInsertionCheck(i, newRowCols, checkUpdatedRows)
+	}
+
+	// Add the check for the update portion of the the upsert.
+	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
+		if ok := mb.addUpdateDeletionCheck(i, newRowCols, updatedOrdinals); !ok {
+			mb.checks = nil
+			mb.fkFallback = true
+			return
+		}
+	}
 }
 
 // rowInclusion determines the mode in which an insertion check should be
@@ -1117,6 +1169,7 @@ type rowInclusion int
 const (
 	checkAllRows rowInclusion = iota
 	checkInsertedRows
+	checkUpdatedRows
 )
 
 // addInsertionCheck adds a FK check for rows which are added to a table.
@@ -1129,46 +1182,30 @@ const (
 func (mb *mutationBuilder) addInsertionCheck(
 	fkOrdinal int, insertOrds []scopeOrdinal, rows rowInclusion,
 ) {
-	inputExpr, insertCols, canaryID := mb.projectInput(insertOrds, rows == checkInsertedRows)
-
-	// If we were an upsert, then we have to filter out the rows that were the ones actually inserted.
-	if rows == checkInsertedRows {
-		// We need to add a project on top of this so that the we remove the canary column.
-		inputExpr = mb.b.factory.ConstructProject(
-			mb.b.factory.ConstructSelect(
-				inputExpr,
-				memo.FiltersExpr{
-					mb.b.factory.ConstructFiltersItem(
-						mb.b.factory.ConstructIs(
-							mb.b.factory.ConstructVariable(canaryID),
-							memo.NullSingleton,
-						),
-					),
-				},
-			),
-			memo.ProjectionsExpr{},
-			insertCols.ToSet(),
-		)
-	}
-
 	fk := mb.tab.OutboundForeignKey(fkOrdinal)
 	numCols := fk.ColumnCount()
+
+	fkOrds := make([]scopeOrdinal, numCols)
+	for i := range fkOrds {
+		fkOrds[i] = insertOrds[fk.OriginColumnOrdinal(mb.tab, i)]
+	}
+	inputExpr, insertCols := mb.projectInput(fkOrds, rows)
+
 	var notNullInputCols opt.ColSet
 	insertedFKCols := make(opt.ColList, numCols)
 	for i := 0; i < numCols; i++ {
-		ord := fk.OriginColumnOrdinal(mb.tab, i)
-		inputColID := insertCols[ord]
+		inputColID := insertCols[i]
 		if inputColID == 0 {
 			// There shouldn't be any FK relations involving delete-only mutation
 			// columns.
-			panic(errors.AssertionFailedf("no value for FK column %d", ord))
+			panic(errors.AssertionFailedf("no value for FK column %d", insertCols[i]))
 		}
 		insertedFKCols[i] = inputColID
 
 		// If a table column is not nullable, NULLs cannot be inserted (the
 		// mutation will fail). So for the purposes of FK checks, we can treat
 		// these columns as not null.
-		if inputExpr.Relational().NotNullCols.Contains(inputColID) || !mb.tab.Column(ord).IsNullable() {
+		if inputExpr.Relational().NotNullCols.Contains(inputColID) || !mb.tab.Column(fk.OriginColumnOrdinal(mb.tab, i)).IsNullable() {
 			notNullInputCols.Add(inputColID)
 		}
 	}
@@ -1386,11 +1423,14 @@ func (mb *mutationBuilder) addDeletionCheck(
 // mutation operator, projecting only the column ordinals provided, mapping them
 // to new column ids. Returns the new expression along with the column ids
 // they've been mapped to.
-// If includeCanary is set, the resulting expression will also render the canary
-// column and its id will be returned. Should only be set if this is an UPSERT.
+// The results respect the rowInclusion mode:
+// * If rows is checkAllRows, then the results are returned as-is.
+// * If rows is checkInsertedRows or checkUpdatedRows, then this
+//   must be an UPSERT, and only the rows either inserted or updated
+//   will be returned.
 func (mb *mutationBuilder) projectInput(
-	ords []scopeOrdinal, includeCanary bool,
-) (_ memo.RelExpr, outCols opt.ColList, canaryOutID opt.ColumnID) {
+	ords []scopeOrdinal, rows rowInclusion,
+) (_ memo.RelExpr, outCols opt.ColList) {
 	outCols = make(opt.ColList, len(ords), len(ords)+1)
 	inCols := make(opt.ColList, len(ords), len(ords)+1)
 	for i := 0; i < len(ords); i++ {
@@ -1398,20 +1438,61 @@ func (mb *mutationBuilder) projectInput(
 		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
 		inCols[i] = mb.outScope.cols[ords[i]].id
 	}
-	if includeCanary {
+	projectedCols := outCols
+	var canaryOutID opt.ColumnID
+	if rows != checkAllRows {
+		if mb.canaryColID == 0 {
+			panic(errors.AssertionFailedf("row inclusion must be checkAllRows for non-upsert"))
+		}
 		c := mb.md.ColumnMeta(mb.canaryColID)
 		canaryOutID = mb.md.AddColumn(c.Alias, c.Type)
-		outCols = append(outCols, canaryOutID)
+		projectedCols = append(projectedCols, canaryOutID)
 		inCols = append(inCols, mb.canaryColID)
 	}
 	out := mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
 		With:         mb.withID,
 		InCols:       inCols,
-		OutCols:      outCols,
+		OutCols:      projectedCols,
 		BindingProps: mb.outScope.expr.Relational(),
 		ID:           mb.b.factory.Metadata().NextUniqueID(),
 	})
-	return out, outCols, canaryOutID
+
+	switch rows {
+	case checkUpdatedRows:
+		out = mb.b.factory.ConstructProject(
+			mb.b.factory.ConstructSelect(
+				out,
+				memo.FiltersExpr{
+					mb.b.factory.ConstructFiltersItem(
+						mb.b.factory.ConstructIsNot(
+							mb.b.factory.ConstructVariable(canaryOutID),
+							memo.NullSingleton,
+						),
+					),
+				},
+			),
+			memo.ProjectionsExpr{},
+			outCols.ToSet(),
+		)
+	case checkInsertedRows:
+		out = mb.b.factory.ConstructProject(
+			mb.b.factory.ConstructSelect(
+				out,
+				memo.FiltersExpr{
+					mb.b.factory.ConstructFiltersItem(
+						mb.b.factory.ConstructIs(
+							mb.b.factory.ConstructVariable(canaryOutID),
+							memo.NullSingleton,
+						),
+					),
+				},
+			),
+			memo.ProjectionsExpr{},
+			outCols.ToSet(),
+		)
+	}
+
+	return out, outCols
 }
 
 // makeFKInputScan constructs a WithScan that iterates over the input to the

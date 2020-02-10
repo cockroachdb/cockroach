@@ -180,7 +180,7 @@ func (tu *optTableUpserter) init(
 		tu.updateCols,
 		tu.fetchCols,
 		row.UpdaterDefault,
-		row.CheckFKs,
+		tu.fkTables != nil,
 		evalCtx,
 		tu.alloc,
 	)

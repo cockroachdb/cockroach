@@ -54,28 +54,50 @@ upsert child
  │              │    └── variable: column1 [type=int]
  │              └── variable: child.c [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: column2:11(int!null)
+      │         ├── project
+      │         │    ├── columns: column2:11(int!null)
+      │         │    └── project
+      │         │         ├── columns: column2:11(int!null)
+      │         │         └── select
+      │         │              ├── columns: column2:11(int!null) c:12(int)
+      │         │              ├── with-scan &1
+      │         │              │    ├── columns: column2:11(int!null) c:12(int)
+      │         │              │    └── mapping:
+      │         │              │         ├──  column2:5(int) => column2:11(int)
+      │         │              │         └──  child.c:7(int) => c:12(int)
+      │         │              └── filters
+      │         │                   └── is [type=bool]
+      │         │                        ├── variable: c [type=int]
+      │         │                        └── null [type=unknown]
+      │         ├── scan parent
+      │         │    └── columns: parent.p:13(int!null)
+      │         └── filters
+      │              └── eq [type=bool]
+      │                   ├── variable: column2 [type=int]
+      │                   └── variable: parent.p [type=int]
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:12(int!null)
+                ├── columns: column2:15(int!null)
                 ├── project
-                │    ├── columns: column2:12(int!null)
+                │    ├── columns: column2:15(int!null)
                 │    └── project
-                │         ├── columns: column1:11(int!null) column2:12(int!null) column6:13(int) c:14(int)
+                │         ├── columns: column2:15(int!null)
                 │         └── select
-                │              ├── columns: column1:11(int!null) column2:12(int!null) column6:13(int) c:14(int)
+                │              ├── columns: column2:15(int!null) c:16(int!null)
                 │              ├── with-scan &1
-                │              │    ├── columns: column1:11(int!null) column2:12(int!null) column6:13(int) c:14(int)
+                │              │    ├── columns: column2:15(int!null) c:16(int)
                 │              │    └── mapping:
-                │              │         ├──  column1:4(int) => column1:11(int)
-                │              │         ├──  column2:5(int) => column2:12(int)
-                │              │         ├──  column6:6(int) => column6:13(int)
-                │              │         └──  child.c:7(int) => c:14(int)
+                │              │         ├──  column2:5(int) => column2:15(int)
+                │              │         └──  child.c:7(int) => c:16(int)
                 │              └── filters
-                │                   └── is [type=bool]
+                │                   └── is-not [type=bool]
                 │                        ├── variable: c [type=int]
                 │                        └── null [type=unknown]
                 ├── scan parent
-                │    └── columns: parent.p:15(int!null)
+                │    └── columns: parent.p:17(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
@@ -94,7 +116,7 @@ upsert child
  ├── canary column: 8
  ├── fetch columns: child.c:8(int) child.p:9(int) i:10(int)
  ├── insert-mapping:
- │    ├──  xy.x:4 => child.c:1
+ │    ├──  x:4 => child.c:1
  │    ├──  xy.y:5 => child.p:2
  │    └──  column7:7 => i:3
  ├── update-mapping:
@@ -102,15 +124,15 @@ upsert child
  │    └──  column7:7 => i:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:11(int) xy.x:4(int) xy.y:5(int) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
+ │    ├── columns: upsert_c:11(int) x:4(int) xy.y:5(int) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
  │    ├── left-join (hash)
- │    │    ├── columns: xy.x:4(int) xy.y:5(int) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
+ │    │    ├── columns: x:4(int) xy.y:5(int) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
  │    │    ├── project
- │    │    │    ├── columns: column7:7(int) xy.x:4(int) xy.y:5(int)
+ │    │    │    ├── columns: column7:7(int) x:4(int) xy.y:5(int)
  │    │    │    ├── project
- │    │    │    │    ├── columns: xy.x:4(int) xy.y:5(int)
+ │    │    │    │    ├── columns: x:4(int) xy.y:5(int)
  │    │    │    │    └── scan xy
- │    │    │    │         └── columns: xy.x:4(int) xy.y:5(int) rowid:6(int!null)
+ │    │    │    │         └── columns: x:4(int) xy.y:5(int) rowid:6(int!null)
  │    │    │    └── projections
  │    │    │         └── cast: INT8 [type=int]
  │    │    │              └── null [type=unknown]
@@ -118,7 +140,7 @@ upsert child
  │    │    │    └── columns: child.c:8(int!null) child.p:9(int!null) i:10(int)
  │    │    └── filters
  │    │         └── eq [type=bool]
- │    │              ├── variable: xy.x [type=int]
+ │    │              ├── variable: x [type=int]
  │    │              └── variable: child.c [type=int]
  │    └── projections
  │         └── case [type=int]
@@ -127,31 +149,53 @@ upsert child
  │              │    ├── is [type=bool]
  │              │    │    ├── variable: child.c [type=int]
  │              │    │    └── null [type=unknown]
- │              │    └── variable: xy.x [type=int]
+ │              │    └── variable: x [type=int]
  │              └── variable: child.c [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: y:12(int)
+      │         ├── project
+      │         │    ├── columns: y:12(int)
+      │         │    └── project
+      │         │         ├── columns: y:12(int)
+      │         │         └── select
+      │         │              ├── columns: y:12(int) c:13(int)
+      │         │              ├── with-scan &1
+      │         │              │    ├── columns: y:12(int) c:13(int)
+      │         │              │    └── mapping:
+      │         │              │         ├──  xy.y:5(int) => y:12(int)
+      │         │              │         └──  child.c:8(int) => c:13(int)
+      │         │              └── filters
+      │         │                   └── is [type=bool]
+      │         │                        ├── variable: c [type=int]
+      │         │                        └── null [type=unknown]
+      │         ├── scan parent
+      │         │    └── columns: parent.p:14(int!null)
+      │         └── filters
+      │              └── eq [type=bool]
+      │                   ├── variable: y [type=int]
+      │                   └── variable: parent.p [type=int]
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: y:13(int)
+                ├── columns: y:16(int)
                 ├── project
-                │    ├── columns: y:13(int)
+                │    ├── columns: y:16(int)
                 │    └── project
-                │         ├── columns: x:12(int) y:13(int) column7:14(int) c:15(int)
+                │         ├── columns: y:16(int)
                 │         └── select
-                │              ├── columns: x:12(int) y:13(int) column7:14(int) c:15(int)
+                │              ├── columns: y:16(int) c:17(int!null)
                 │              ├── with-scan &1
-                │              │    ├── columns: x:12(int) y:13(int) column7:14(int) c:15(int)
+                │              │    ├── columns: y:16(int) c:17(int)
                 │              │    └── mapping:
-                │              │         ├──  xy.x:4(int) => x:12(int)
-                │              │         ├──  xy.y:5(int) => y:13(int)
-                │              │         ├──  column7:7(int) => column7:14(int)
-                │              │         └──  child.c:8(int) => c:15(int)
+                │              │         ├──  xy.y:5(int) => y:16(int)
+                │              │         └──  child.c:8(int) => c:17(int)
                 │              └── filters
-                │                   └── is [type=bool]
+                │                   └── is-not [type=bool]
                 │                        ├── variable: c [type=int]
                 │                        └── null [type=unknown]
                 ├── scan parent
-                │    └── columns: parent.p:16(int!null)
+                │    └── columns: parent.p:18(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: y [type=int]
@@ -170,24 +214,24 @@ upsert child
  ├── canary column: 8
  ├── fetch columns: child.c:8(int) child.p:9(int) i:10(int)
  ├── insert-mapping:
- │    ├──  uv.u:4 => child.c:1
+ │    ├──  u:4 => child.c:1
  │    ├──  uv.v:5 => child.p:2
  │    └──  column7:7 => i:3
  ├── update-mapping:
  │    └──  upsert_i:14 => i:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:12(int) upsert_p:13(int) upsert_i:14(int) uv.u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int) column11:11(int)
+ │    ├── columns: upsert_c:12(int) upsert_p:13(int) upsert_i:14(int) u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int) column11:11(int)
  │    ├── project
- │    │    ├── columns: column11:11(int) uv.u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
+ │    │    ├── columns: column11:11(int) u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
  │    │    ├── left-join (hash)
- │    │    │    ├── columns: uv.u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
+ │    │    │    ├── columns: u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
  │    │    │    ├── project
- │    │    │    │    ├── columns: column7:7(int) uv.u:4(int!null) uv.v:5(int!null)
+ │    │    │    │    ├── columns: column7:7(int) u:4(int!null) uv.v:5(int!null)
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: uv.u:4(int!null) uv.v:5(int!null)
+ │    │    │    │    │    ├── columns: u:4(int!null) uv.v:5(int!null)
  │    │    │    │    │    └── scan uv
- │    │    │    │    │         └── columns: uv.u:4(int!null) uv.v:5(int!null) rowid:6(int!null)
+ │    │    │    │    │         └── columns: u:4(int!null) uv.v:5(int!null) rowid:6(int!null)
  │    │    │    │    └── projections
  │    │    │    │         └── cast: INT8 [type=int]
  │    │    │    │              └── null [type=unknown]
@@ -195,7 +239,7 @@ upsert child
  │    │    │    │    └── columns: child.c:8(int!null) child.p:9(int!null) i:10(int)
  │    │    │    └── filters
  │    │    │         └── eq [type=bool]
- │    │    │              ├── variable: uv.u [type=int]
+ │    │    │              ├── variable: u [type=int]
  │    │    │              └── variable: child.c [type=int]
  │    │    └── projections
  │    │         └── plus [type=int]
@@ -208,7 +252,7 @@ upsert child
  │         │    │    ├── is [type=bool]
  │         │    │    │    ├── variable: child.c [type=int]
  │         │    │    │    └── null [type=unknown]
- │         │    │    └── variable: uv.u [type=int]
+ │         │    │    └── variable: u [type=int]
  │         │    └── variable: child.c [type=int]
  │         ├── case [type=int]
  │         │    ├── true [type=bool]
@@ -227,31 +271,53 @@ upsert child
  │              │    └── variable: column7 [type=int]
  │              └── variable: column11 [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: v:15(int!null)
+      │         ├── project
+      │         │    ├── columns: v:15(int!null)
+      │         │    └── project
+      │         │         ├── columns: v:15(int!null)
+      │         │         └── select
+      │         │              ├── columns: v:15(int!null) c:16(int)
+      │         │              ├── with-scan &1
+      │         │              │    ├── columns: v:15(int!null) c:16(int)
+      │         │              │    └── mapping:
+      │         │              │         ├──  uv.v:5(int) => v:15(int)
+      │         │              │         └──  child.c:8(int) => c:16(int)
+      │         │              └── filters
+      │         │                   └── is [type=bool]
+      │         │                        ├── variable: c [type=int]
+      │         │                        └── null [type=unknown]
+      │         ├── scan parent
+      │         │    └── columns: parent.p:17(int!null)
+      │         └── filters
+      │              └── eq [type=bool]
+      │                   ├── variable: v [type=int]
+      │                   └── variable: parent.p [type=int]
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: v:16(int!null)
+                ├── columns: p:19(int)
                 ├── project
-                │    ├── columns: v:16(int!null)
+                │    ├── columns: p:19(int)
                 │    └── project
-                │         ├── columns: u:15(int!null) v:16(int!null) column7:17(int) c:18(int)
+                │         ├── columns: p:19(int)
                 │         └── select
-                │              ├── columns: u:15(int!null) v:16(int!null) column7:17(int) c:18(int)
+                │              ├── columns: p:19(int) c:20(int!null)
                 │              ├── with-scan &1
-                │              │    ├── columns: u:15(int!null) v:16(int!null) column7:17(int) c:18(int)
+                │              │    ├── columns: p:19(int) c:20(int)
                 │              │    └── mapping:
-                │              │         ├──  uv.u:4(int) => u:15(int)
-                │              │         ├──  uv.v:5(int) => v:16(int)
-                │              │         ├──  column7:7(int) => column7:17(int)
-                │              │         └──  child.c:8(int) => c:18(int)
+                │              │         ├──  child.p:9(int) => p:19(int)
+                │              │         └──  child.c:8(int) => c:20(int)
                 │              └── filters
-                │                   └── is [type=bool]
+                │                   └── is-not [type=bool]
                 │                        ├── variable: c [type=int]
                 │                        └── null [type=unknown]
                 ├── scan parent
-                │    └── columns: parent.p:19(int!null)
+                │    └── columns: parent.p:21(int!null)
                 └── filters
                      └── eq [type=bool]
-                          ├── variable: v [type=int]
+                          ├── variable: p [type=int]
                           └── variable: parent.p [type=int]
 
 exec-ddl
@@ -304,29 +370,53 @@ upsert child2
  │              │    └── variable: column1 [type=int]
  │              └── variable: column4 [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: child2(c) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: column1:6(int!null)
+      │         ├── project
+      │         │    ├── columns: column1:6(int!null)
+      │         │    └── project
+      │         │         ├── columns: column1:6(int!null)
+      │         │         └── select
+      │         │              ├── columns: column1:6(int!null) c:7(int)
+      │         │              ├── with-scan &1
+      │         │              │    ├── columns: column1:6(int!null) c:7(int)
+      │         │              │    └── mapping:
+      │         │              │         ├──  column1:2(int) => column1:6(int)
+      │         │              │         └──  child2.c:3(int) => c:7(int)
+      │         │              └── filters
+      │         │                   └── is [type=bool]
+      │         │                        ├── variable: c [type=int]
+      │         │                        └── null [type=unknown]
+      │         ├── scan parent
+      │         │    └── columns: p:8(int!null)
+      │         └── filters
+      │              └── eq [type=bool]
+      │                   ├── variable: column1 [type=int]
+      │                   └── variable: p [type=int]
       └── f-k-checks-item: child2(c) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column1:6(int!null)
+                ├── columns: upsert_c:10(int!null)
                 ├── project
-                │    ├── columns: column1:6(int!null)
+                │    ├── columns: upsert_c:10(int!null)
                 │    └── project
-                │         ├── columns: column1:6(int!null) c:7(int)
+                │         ├── columns: upsert_c:10(int!null)
                 │         └── select
-                │              ├── columns: column1:6(int!null) c:7(int)
+                │              ├── columns: upsert_c:10(int!null) c:11(int!null)
                 │              ├── with-scan &1
-                │              │    ├── columns: column1:6(int!null) c:7(int)
+                │              │    ├── columns: upsert_c:10(int!null) c:11(int)
                 │              │    └── mapping:
-                │              │         ├──  column1:2(int) => column1:6(int)
-                │              │         └──  child2.c:3(int) => c:7(int)
+                │              │         ├──  upsert_c:5(int) => upsert_c:10(int)
+                │              │         └──  child2.c:3(int) => c:11(int)
                 │              └── filters
-                │                   └── is [type=bool]
+                │                   └── is-not [type=bool]
                 │                        ├── variable: c [type=int]
                 │                        └── null [type=unknown]
                 ├── scan parent
-                │    └── columns: p:8(int!null)
+                │    └── columns: p:12(int!null)
                 └── filters
                      └── eq [type=bool]
-                          ├── variable: column1 [type=int]
+                          ├── variable: upsert_c [type=int]
                           └── variable: p [type=int]
 
 exec-ddl
@@ -365,27 +455,52 @@ upsert child_nullable
  │              ├── variable: column1 [type=int]
  │              └── variable: child_nullable.c [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: child_nullable(p) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: column2:8(int!null)
+      │         ├── project
+      │         │    ├── columns: column2:8(int!null)
+      │         │    └── select
+      │         │         ├── columns: column2:8(int!null) c:9(int)
+      │         │         ├── with-scan &1
+      │         │         │    ├── columns: column2:8(int) c:9(int)
+      │         │         │    └── mapping:
+      │         │         │         ├──  column2:4(int) => column2:8(int)
+      │         │         │         └──  child_nullable.c:5(int) => c:9(int)
+      │         │         └── filters
+      │         │              ├── is [type=bool]
+      │         │              │    ├── variable: c [type=int]
+      │         │              │    └── null [type=unknown]
+      │         │              └── is-not [type=bool]
+      │         │                   ├── variable: column2 [type=int]
+      │         │                   └── null [type=unknown]
+      │         ├── scan parent
+      │         │    └── columns: parent.p:10(int!null)
+      │         └── filters
+      │              └── eq [type=bool]
+      │                   ├── variable: column2 [type=int]
+      │                   └── variable: parent.p [type=int]
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:9(int!null)
+                ├── columns: column2:12(int!null)
                 ├── project
-                │    ├── columns: column2:9(int!null)
+                │    ├── columns: column2:12(int!null)
                 │    └── select
-                │         ├── columns: column2:9(int!null) c:10(int)
+                │         ├── columns: column2:12(int!null) c:13(int!null)
                 │         ├── with-scan &1
-                │         │    ├── columns: column2:9(int) c:10(int)
+                │         │    ├── columns: column2:12(int) c:13(int)
                 │         │    └── mapping:
-                │         │         ├──  column2:4(int) => column2:9(int)
-                │         │         └──  child_nullable.c:5(int) => c:10(int)
+                │         │         ├──  column2:4(int) => column2:12(int)
+                │         │         └──  child_nullable.c:5(int) => c:13(int)
                 │         └── filters
-                │              ├── is [type=bool]
+                │              ├── is-not [type=bool]
                 │              │    ├── variable: c [type=int]
                 │              │    └── null [type=unknown]
                 │              └── is-not [type=bool]
                 │                   ├── variable: column2 [type=int]
                 │                   └── null [type=unknown]
                 ├── scan parent
-                │    └── columns: parent.p:11(int!null)
+                │    └── columns: parent.p:14(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
@@ -452,27 +567,70 @@ upsert multi_col_child
  │              │    └── variable: column1 [type=int]
  │              └── variable: multi_col_child.c [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
+      │    └── anti-join (hash)
+      │         ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null)
+      │         ├── select
+      │         │    ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null)
+      │         │    ├── project
+      │         │    │    ├── columns: column2:14(int) column3:15(int) column4:16(int)
+      │         │    │    └── project
+      │         │    │         ├── columns: column2:14(int) column3:15(int) column4:16(int)
+      │         │    │         └── select
+      │         │    │              ├── columns: column2:14(int) column3:15(int) column4:16(int) c:17(int)
+      │         │    │              ├── with-scan &1
+      │         │    │              │    ├── columns: column2:14(int) column3:15(int) column4:16(int) c:17(int)
+      │         │    │              │    └── mapping:
+      │         │    │              │         ├──  column2:6(int) => column2:14(int)
+      │         │    │              │         ├──  column3:7(int) => column3:15(int)
+      │         │    │              │         ├──  column4:8(int) => column4:16(int)
+      │         │    │              │         └──  multi_col_child.c:9(int) => c:17(int)
+      │         │    │              └── filters
+      │         │    │                   └── is [type=bool]
+      │         │    │                        ├── variable: c [type=int]
+      │         │    │                        └── null [type=unknown]
+      │         │    └── filters
+      │         │         ├── is-not [type=bool]
+      │         │         │    ├── variable: column2 [type=int]
+      │         │         │    └── null [type=unknown]
+      │         │         ├── is-not [type=bool]
+      │         │         │    ├── variable: column3 [type=int]
+      │         │         │    └── null [type=unknown]
+      │         │         └── is-not [type=bool]
+      │         │              ├── variable: column4 [type=int]
+      │         │              └── null [type=unknown]
+      │         ├── scan multi_col_parent
+      │         │    └── columns: multi_col_parent.p:18(int!null) multi_col_parent.q:19(int!null) multi_col_parent.r:20(int!null)
+      │         └── filters
+      │              ├── eq [type=bool]
+      │              │    ├── variable: column2 [type=int]
+      │              │    └── variable: multi_col_parent.p [type=int]
+      │              ├── eq [type=bool]
+      │              │    ├── variable: column3 [type=int]
+      │              │    └── variable: multi_col_parent.q [type=int]
+      │              └── eq [type=bool]
+      │                   ├── variable: column4 [type=int]
+      │                   └── variable: multi_col_parent.r [type=int]
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:15(int!null) column3:16(int!null) column4:17(int!null)
+                ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null)
                 ├── select
-                │    ├── columns: column2:15(int!null) column3:16(int!null) column4:17(int!null)
+                │    ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null)
                 │    ├── project
-                │    │    ├── columns: column2:15(int) column3:16(int) column4:17(int)
+                │    │    ├── columns: column2:22(int) column3:23(int) column4:24(int)
                 │    │    └── project
-                │    │         ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int) c:18(int)
+                │    │         ├── columns: column2:22(int) column3:23(int) column4:24(int)
                 │    │         └── select
-                │    │              ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int) c:18(int)
+                │    │              ├── columns: column2:22(int) column3:23(int) column4:24(int) c:25(int!null)
                 │    │              ├── with-scan &1
-                │    │              │    ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int) c:18(int)
+                │    │              │    ├── columns: column2:22(int) column3:23(int) column4:24(int) c:25(int)
                 │    │              │    └── mapping:
-                │    │              │         ├──  column1:5(int) => column1:14(int)
-                │    │              │         ├──  column2:6(int) => column2:15(int)
-                │    │              │         ├──  column3:7(int) => column3:16(int)
-                │    │              │         ├──  column4:8(int) => column4:17(int)
-                │    │              │         └──  multi_col_child.c:9(int) => c:18(int)
+                │    │              │         ├──  column2:6(int) => column2:22(int)
+                │    │              │         ├──  column3:7(int) => column3:23(int)
+                │    │              │         ├──  column4:8(int) => column4:24(int)
+                │    │              │         └──  multi_col_child.c:9(int) => c:25(int)
                 │    │              └── filters
-                │    │                   └── is [type=bool]
+                │    │                   └── is-not [type=bool]
                 │    │                        ├── variable: c [type=int]
                 │    │                        └── null [type=unknown]
                 │    └── filters
@@ -486,7 +644,7 @@ upsert multi_col_child
                 │              ├── variable: column4 [type=int]
                 │              └── null [type=unknown]
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:19(int!null) multi_col_parent.q:20(int!null) multi_col_parent.r:21(int!null)
+                │    └── columns: multi_col_parent.p:26(int!null) multi_col_parent.q:27(int!null) multi_col_parent.r:28(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
@@ -550,27 +708,67 @@ upsert multi_col_child
  │              │    └── variable: column1 [type=int]
  │              └── variable: multi_col_child.c [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
+      │    └── anti-join (hash)
+      │         ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null)
+      │         ├── select
+      │         │    ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null)
+      │         │    ├── project
+      │         │    │    ├── columns: column2:14(int) column3:15(int) column4:16(int!null)
+      │         │    │    └── project
+      │         │    │         ├── columns: column2:14(int) column3:15(int) column4:16(int!null)
+      │         │    │         └── select
+      │         │    │              ├── columns: column2:14(int) column3:15(int) column4:16(int!null) c:17(int)
+      │         │    │              ├── with-scan &1
+      │         │    │              │    ├── columns: column2:14(int) column3:15(int) column4:16(int!null) c:17(int)
+      │         │    │              │    └── mapping:
+      │         │    │              │         ├──  column2:6(int) => column2:14(int)
+      │         │    │              │         ├──  column3:7(int) => column3:15(int)
+      │         │    │              │         ├──  column4:8(int) => column4:16(int)
+      │         │    │              │         └──  multi_col_child.c:9(int) => c:17(int)
+      │         │    │              └── filters
+      │         │    │                   └── is [type=bool]
+      │         │    │                        ├── variable: c [type=int]
+      │         │    │                        └── null [type=unknown]
+      │         │    └── filters
+      │         │         ├── is-not [type=bool]
+      │         │         │    ├── variable: column2 [type=int]
+      │         │         │    └── null [type=unknown]
+      │         │         └── is-not [type=bool]
+      │         │              ├── variable: column3 [type=int]
+      │         │              └── null [type=unknown]
+      │         ├── scan multi_col_parent
+      │         │    └── columns: multi_col_parent.p:18(int!null) multi_col_parent.q:19(int!null) multi_col_parent.r:20(int!null)
+      │         └── filters
+      │              ├── eq [type=bool]
+      │              │    ├── variable: column2 [type=int]
+      │              │    └── variable: multi_col_parent.p [type=int]
+      │              ├── eq [type=bool]
+      │              │    ├── variable: column3 [type=int]
+      │              │    └── variable: multi_col_parent.q [type=int]
+      │              └── eq [type=bool]
+      │                   ├── variable: column4 [type=int]
+      │                   └── variable: multi_col_parent.r [type=int]
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:15(int!null) column3:16(int!null) column4:17(int!null)
+                ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null)
                 ├── select
-                │    ├── columns: column2:15(int!null) column3:16(int!null) column4:17(int!null)
+                │    ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null)
                 │    ├── project
-                │    │    ├── columns: column2:15(int) column3:16(int) column4:17(int!null)
+                │    │    ├── columns: column2:22(int) column3:23(int) column4:24(int!null)
                 │    │    └── project
-                │    │         ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int!null) c:18(int)
+                │    │         ├── columns: column2:22(int) column3:23(int) column4:24(int!null)
                 │    │         └── select
-                │    │              ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int!null) c:18(int)
+                │    │              ├── columns: column2:22(int) column3:23(int) column4:24(int!null) c:25(int!null)
                 │    │              ├── with-scan &1
-                │    │              │    ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int!null) c:18(int)
+                │    │              │    ├── columns: column2:22(int) column3:23(int) column4:24(int!null) c:25(int)
                 │    │              │    └── mapping:
-                │    │              │         ├──  column1:5(int) => column1:14(int)
-                │    │              │         ├──  column2:6(int) => column2:15(int)
-                │    │              │         ├──  column3:7(int) => column3:16(int)
-                │    │              │         ├──  column4:8(int) => column4:17(int)
-                │    │              │         └──  multi_col_child.c:9(int) => c:18(int)
+                │    │              │         ├──  column2:6(int) => column2:22(int)
+                │    │              │         ├──  column3:7(int) => column3:23(int)
+                │    │              │         ├──  column4:8(int) => column4:24(int)
+                │    │              │         └──  multi_col_child.c:9(int) => c:25(int)
                 │    │              └── filters
-                │    │                   └── is [type=bool]
+                │    │                   └── is-not [type=bool]
                 │    │                        ├── variable: c [type=int]
                 │    │                        └── null [type=unknown]
                 │    └── filters
@@ -581,7 +779,7 @@ upsert multi_col_child
                 │              ├── variable: column3 [type=int]
                 │              └── null [type=unknown]
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:19(int!null) multi_col_parent.q:20(int!null) multi_col_parent.r:21(int!null)
+                │    └── columns: multi_col_parent.p:26(int!null) multi_col_parent.q:27(int!null) multi_col_parent.r:28(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
@@ -638,29 +836,60 @@ upsert multi_col_child
  │              │    └── variable: column1 [type=int]
  │              └── variable: multi_col_child.c [type=int]
  └── f-k-checks
+      ├── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
+      │    └── anti-join (hash)
+      │         ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null)
+      │         ├── project
+      │         │    ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null)
+      │         │    └── project
+      │         │         ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null)
+      │         │         └── select
+      │         │              ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null) c:17(int)
+      │         │              ├── with-scan &1
+      │         │              │    ├── columns: column2:14(int!null) column3:15(int!null) column4:16(int!null) c:17(int)
+      │         │              │    └── mapping:
+      │         │              │         ├──  column2:6(int) => column2:14(int)
+      │         │              │         ├──  column3:7(int) => column3:15(int)
+      │         │              │         ├──  column4:8(int) => column4:16(int)
+      │         │              │         └──  multi_col_child.c:9(int) => c:17(int)
+      │         │              └── filters
+      │         │                   └── is [type=bool]
+      │         │                        ├── variable: c [type=int]
+      │         │                        └── null [type=unknown]
+      │         ├── scan multi_col_parent
+      │         │    └── columns: multi_col_parent.p:18(int!null) multi_col_parent.q:19(int!null) multi_col_parent.r:20(int!null)
+      │         └── filters
+      │              ├── eq [type=bool]
+      │              │    ├── variable: column2 [type=int]
+      │              │    └── variable: multi_col_parent.p [type=int]
+      │              ├── eq [type=bool]
+      │              │    ├── variable: column3 [type=int]
+      │              │    └── variable: multi_col_parent.q [type=int]
+      │              └── eq [type=bool]
+      │                   ├── variable: column4 [type=int]
+      │                   └── variable: multi_col_parent.r [type=int]
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:15(int!null) column3:16(int!null) column4:17(int!null)
+                ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null)
                 ├── project
-                │    ├── columns: column2:15(int!null) column3:16(int!null) column4:17(int!null)
+                │    ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null)
                 │    └── project
-                │         ├── columns: column1:14(int!null) column2:15(int!null) column3:16(int!null) column4:17(int!null) c:18(int)
+                │         ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null)
                 │         └── select
-                │              ├── columns: column1:14(int!null) column2:15(int!null) column3:16(int!null) column4:17(int!null) c:18(int)
+                │              ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null) c:25(int!null)
                 │              ├── with-scan &1
-                │              │    ├── columns: column1:14(int!null) column2:15(int!null) column3:16(int!null) column4:17(int!null) c:18(int)
+                │              │    ├── columns: column2:22(int!null) column3:23(int!null) column4:24(int!null) c:25(int)
                 │              │    └── mapping:
-                │              │         ├──  column1:5(int) => column1:14(int)
-                │              │         ├──  column2:6(int) => column2:15(int)
-                │              │         ├──  column3:7(int) => column3:16(int)
-                │              │         ├──  column4:8(int) => column4:17(int)
-                │              │         └──  multi_col_child.c:9(int) => c:18(int)
+                │              │         ├──  column2:6(int) => column2:22(int)
+                │              │         ├──  column3:7(int) => column3:23(int)
+                │              │         ├──  column4:8(int) => column4:24(int)
+                │              │         └──  multi_col_child.c:9(int) => c:25(int)
                 │              └── filters
-                │                   └── is [type=bool]
+                │                   └── is-not [type=bool]
                 │                        ├── variable: c [type=int]
                 │                        └── null [type=unknown]
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:19(int!null) multi_col_parent.q:20(int!null) multi_col_parent.r:21(int!null)
+                │    └── columns: multi_col_parent.p:26(int!null) multi_col_parent.q:27(int!null) multi_col_parent.r:28(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
@@ -740,23 +969,20 @@ upsert multi_ref_child
  └── f-k-checks
       ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
       │    └── anti-join (hash)
-      │         ├── columns: column2:15(int!null)
+      │         ├── columns: column2:14(int!null)
       │         ├── select
-      │         │    ├── columns: column2:15(int!null)
+      │         │    ├── columns: column2:14(int!null)
       │         │    ├── project
-      │         │    │    ├── columns: column2:15(int)
+      │         │    │    ├── columns: column2:14(int)
       │         │    │    └── project
-      │         │    │         ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int) k:18(int)
+      │         │    │         ├── columns: column2:14(int)
       │         │    │         └── select
-      │         │    │              ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int) k:18(int)
+      │         │    │              ├── columns: column2:14(int) k:15(int)
       │         │    │              ├── with-scan &1
-      │         │    │              │    ├── columns: column1:14(int!null) column2:15(int) column3:16(int) column4:17(int) k:18(int)
+      │         │    │              │    ├── columns: column2:14(int) k:15(int)
       │         │    │              │    └── mapping:
-      │         │    │              │         ├──  column1:5(int) => column1:14(int)
-      │         │    │              │         ├──  column2:6(int) => column2:15(int)
-      │         │    │              │         ├──  column3:7(int) => column3:16(int)
-      │         │    │              │         ├──  column4:8(int) => column4:17(int)
-      │         │    │              │         └──  multi_ref_child.k:9(int) => k:18(int)
+      │         │    │              │         ├──  column2:6(int) => column2:14(int)
+      │         │    │              │         └──  multi_ref_child.k:9(int) => k:15(int)
       │         │    │              └── filters
       │         │    │                   └── is [type=bool]
       │         │    │                        ├── variable: k [type=int]
@@ -766,32 +992,97 @@ upsert multi_ref_child
       │         │              ├── variable: column2 [type=int]
       │         │              └── null [type=unknown]
       │         ├── scan multi_ref_parent_a
-      │         │    └── columns: multi_ref_parent_a.a:19(int!null)
+      │         │    └── columns: multi_ref_parent_a.a:16(int!null)
+      │         └── filters
+      │              └── eq [type=bool]
+      │                   ├── variable: column2 [type=int]
+      │                   └── variable: multi_ref_parent_a.a [type=int]
+      ├── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
+      │    └── anti-join (hash)
+      │         ├── columns: column3:18(int!null) column4:19(int!null)
+      │         ├── select
+      │         │    ├── columns: column3:18(int!null) column4:19(int!null)
+      │         │    ├── project
+      │         │    │    ├── columns: column3:18(int) column4:19(int)
+      │         │    │    └── project
+      │         │    │         ├── columns: column3:18(int) column4:19(int)
+      │         │    │         └── select
+      │         │    │              ├── columns: column3:18(int) column4:19(int) k:20(int)
+      │         │    │              ├── with-scan &1
+      │         │    │              │    ├── columns: column3:18(int) column4:19(int) k:20(int)
+      │         │    │              │    └── mapping:
+      │         │    │              │         ├──  column3:7(int) => column3:18(int)
+      │         │    │              │         ├──  column4:8(int) => column4:19(int)
+      │         │    │              │         └──  multi_ref_child.k:9(int) => k:20(int)
+      │         │    │              └── filters
+      │         │    │                   └── is [type=bool]
+      │         │    │                        ├── variable: k [type=int]
+      │         │    │                        └── null [type=unknown]
+      │         │    └── filters
+      │         │         ├── is-not [type=bool]
+      │         │         │    ├── variable: column3 [type=int]
+      │         │         │    └── null [type=unknown]
+      │         │         └── is-not [type=bool]
+      │         │              ├── variable: column4 [type=int]
+      │         │              └── null [type=unknown]
+      │         ├── scan multi_ref_parent_bc
+      │         │    └── columns: multi_ref_parent_bc.b:21(int!null) multi_ref_parent_bc.c:22(int!null)
+      │         └── filters
+      │              ├── eq [type=bool]
+      │              │    ├── variable: column3 [type=int]
+      │              │    └── variable: multi_ref_parent_bc.b [type=int]
+      │              └── eq [type=bool]
+      │                   ├── variable: column4 [type=int]
+      │                   └── variable: multi_ref_parent_bc.c [type=int]
+      ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
+      │    └── anti-join (hash)
+      │         ├── columns: column2:24(int!null)
+      │         ├── select
+      │         │    ├── columns: column2:24(int!null)
+      │         │    ├── project
+      │         │    │    ├── columns: column2:24(int)
+      │         │    │    └── project
+      │         │    │         ├── columns: column2:24(int)
+      │         │    │         └── select
+      │         │    │              ├── columns: column2:24(int) k:25(int!null)
+      │         │    │              ├── with-scan &1
+      │         │    │              │    ├── columns: column2:24(int) k:25(int)
+      │         │    │              │    └── mapping:
+      │         │    │              │         ├──  column2:6(int) => column2:24(int)
+      │         │    │              │         └──  multi_ref_child.k:9(int) => k:25(int)
+      │         │    │              └── filters
+      │         │    │                   └── is-not [type=bool]
+      │         │    │                        ├── variable: k [type=int]
+      │         │    │                        └── null [type=unknown]
+      │         │    └── filters
+      │         │         └── is-not [type=bool]
+      │         │              ├── variable: column2 [type=int]
+      │         │              └── null [type=unknown]
+      │         ├── scan multi_ref_parent_a
+      │         │    └── columns: multi_ref_parent_a.a:26(int!null)
       │         └── filters
       │              └── eq [type=bool]
       │                   ├── variable: column2 [type=int]
       │                   └── variable: multi_ref_parent_a.a [type=int]
       └── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
            └── anti-join (hash)
-                ├── columns: column3:23(int!null) column4:24(int!null)
+                ├── columns: column3:28(int!null) column4:29(int!null)
                 ├── select
-                │    ├── columns: column3:23(int!null) column4:24(int!null)
+                │    ├── columns: column3:28(int!null) column4:29(int!null)
                 │    ├── project
-                │    │    ├── columns: column3:23(int) column4:24(int)
+                │    │    ├── columns: column3:28(int) column4:29(int)
                 │    │    └── project
-                │    │         ├── columns: column1:21(int!null) column2:22(int) column3:23(int) column4:24(int) k:25(int)
+                │    │         ├── columns: column3:28(int) column4:29(int)
                 │    │         └── select
-                │    │              ├── columns: column1:21(int!null) column2:22(int) column3:23(int) column4:24(int) k:25(int)
+                │    │              ├── columns: column3:28(int) column4:29(int) k:30(int!null)
                 │    │              ├── with-scan &1
-                │    │              │    ├── columns: column1:21(int!null) column2:22(int) column3:23(int) column4:24(int) k:25(int)
+                │    │              │    ├── columns: column3:28(int) column4:29(int) k:30(int)
                 │    │              │    └── mapping:
-                │    │              │         ├──  column1:5(int) => column1:21(int)
-                │    │              │         ├──  column2:6(int) => column2:22(int)
-                │    │              │         ├──  column3:7(int) => column3:23(int)
-                │    │              │         ├──  column4:8(int) => column4:24(int)
-                │    │              │         └──  multi_ref_child.k:9(int) => k:25(int)
+                │    │              │         ├──  column3:7(int) => column3:28(int)
+                │    │              │         ├──  column4:8(int) => column4:29(int)
+                │    │              │         └──  multi_ref_child.k:9(int) => k:30(int)
                 │    │              └── filters
-                │    │                   └── is [type=bool]
+                │    │                   └── is-not [type=bool]
                 │    │                        ├── variable: k [type=int]
                 │    │                        └── null [type=unknown]
                 │    └── filters
@@ -802,7 +1093,7 @@ upsert multi_ref_child
                 │              ├── variable: column4 [type=int]
                 │              └── null [type=unknown]
                 ├── scan multi_ref_parent_bc
-                │    └── columns: multi_ref_parent_bc.b:26(int!null) multi_ref_parent_bc.c:27(int!null)
+                │    └── columns: multi_ref_parent_bc.b:31(int!null) multi_ref_parent_bc.c:32(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
@@ -810,3 +1101,195 @@ upsert multi_ref_child
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
                           └── variable: multi_ref_parent_bc.c [type=int]
+
+exec-ddl
+CREATE TABLE parent_d (a int primary key, b int, unique (b))
+----
+
+exec-ddl
+CREATE TABLE child_d (a int primary key, b int references parent_d(b))
+----
+
+build
+INSERT INTO parent_d VALUES (1, 3) ON CONFLICT (a) DO UPDATE SET b = 3
+----
+upsert parent_d
+ ├── columns: <none>
+ ├── canary column: 5
+ ├── fetch columns: parent_d.a:5(int) parent_d.b:6(int)
+ ├── insert-mapping:
+ │    ├──  column1:3 => parent_d.a:1
+ │    └──  column2:4 => parent_d.b:2
+ ├── update-mapping:
+ │    └──  upsert_b:9 => parent_d.b:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_a:8(int) upsert_b:9(int!null) column1:3(int!null) column2:4(int!null) parent_d.a:5(int) parent_d.b:6(int) column7:7(int!null)
+ │    ├── project
+ │    │    ├── columns: column7:7(int!null) column1:3(int!null) column2:4(int!null) parent_d.a:5(int) parent_d.b:6(int)
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:3(int!null) column2:4(int!null) parent_d.a:5(int) parent_d.b:6(int)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:3(int!null) column2:4(int!null)
+ │    │    │    │    └── tuple [type=tuple{int, int}]
+ │    │    │    │         ├── const: 1 [type=int]
+ │    │    │    │         └── const: 3 [type=int]
+ │    │    │    ├── scan parent_d
+ │    │    │    │    └── columns: parent_d.a:5(int!null) parent_d.b:6(int)
+ │    │    │    └── filters
+ │    │    │         └── eq [type=bool]
+ │    │    │              ├── variable: column1 [type=int]
+ │    │    │              └── variable: parent_d.a [type=int]
+ │    │    └── projections
+ │    │         └── const: 3 [type=int]
+ │    └── projections
+ │         ├── case [type=int]
+ │         │    ├── true [type=bool]
+ │         │    ├── when [type=int]
+ │         │    │    ├── is [type=bool]
+ │         │    │    │    ├── variable: parent_d.a [type=int]
+ │         │    │    │    └── null [type=unknown]
+ │         │    │    └── variable: column1 [type=int]
+ │         │    └── variable: parent_d.a [type=int]
+ │         └── case [type=int]
+ │              ├── true [type=bool]
+ │              ├── when [type=int]
+ │              │    ├── is [type=bool]
+ │              │    │    ├── variable: parent_d.a [type=int]
+ │              │    │    └── null [type=unknown]
+ │              │    └── variable: column2 [type=int]
+ │              └── variable: column7 [type=int]
+ └── f-k-checks
+      └── f-k-checks-item: child_d(b) -> parent_d(b)
+           └── semi-join (hash)
+                ├── columns: b:10(int)
+                ├── except
+                │    ├── columns: b:10(int)
+                │    ├── left columns: b:10(int)
+                │    ├── right columns: upsert_b:15(int)
+                │    ├── with-scan &1
+                │    │    ├── columns: b:10(int)
+                │    │    └── mapping:
+                │    │         └──  parent_d.b:6(int) => b:10(int)
+                │    └── union-all
+                │         ├── columns: upsert_b:15(int!null)
+                │         ├── left columns: upsert_b:11(int)
+                │         ├── right columns: upsert_b:13(int)
+                │         ├── project
+                │         │    ├── columns: upsert_b:11(int!null)
+                │         │    └── select
+                │         │         ├── columns: upsert_b:11(int!null) a:12(int)
+                │         │         ├── with-scan &1
+                │         │         │    ├── columns: upsert_b:11(int!null) a:12(int)
+                │         │         │    └── mapping:
+                │         │         │         ├──  upsert_b:9(int) => upsert_b:11(int)
+                │         │         │         └──  parent_d.a:5(int) => a:12(int)
+                │         │         └── filters
+                │         │              └── is [type=bool]
+                │         │                   ├── variable: a [type=int]
+                │         │                   └── null [type=unknown]
+                │         └── project
+                │              ├── columns: upsert_b:13(int!null)
+                │              └── select
+                │                   ├── columns: upsert_b:13(int!null) a:14(int!null)
+                │                   ├── with-scan &1
+                │                   │    ├── columns: upsert_b:13(int!null) a:14(int)
+                │                   │    └── mapping:
+                │                   │         ├──  upsert_b:9(int) => upsert_b:13(int)
+                │                   │         └──  parent_d.a:5(int) => a:14(int)
+                │                   └── filters
+                │                        └── is-not [type=bool]
+                │                             ├── variable: a [type=int]
+                │                             └── null [type=unknown]
+                ├── scan child_d
+                │    └── columns: child_d.b:17(int)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: b [type=int]
+                          └── variable: child_d.b [type=int]
+
+build
+UPSERT INTO parent_d VALUES (1, 3)
+----
+upsert parent_d
+ ├── columns: <none>
+ ├── canary column: 5
+ ├── fetch columns: parent_d.a:5(int) parent_d.b:6(int)
+ ├── insert-mapping:
+ │    ├──  column1:3 => parent_d.a:1
+ │    └──  column2:4 => parent_d.b:2
+ ├── update-mapping:
+ │    └──  column2:4 => parent_d.b:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_a:7(int) column1:3(int!null) column2:4(int!null) parent_d.a:5(int) parent_d.b:6(int)
+ │    ├── left-join (hash)
+ │    │    ├── columns: column1:3(int!null) column2:4(int!null) parent_d.a:5(int) parent_d.b:6(int)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:3(int!null) column2:4(int!null)
+ │    │    │    └── tuple [type=tuple{int, int}]
+ │    │    │         ├── const: 1 [type=int]
+ │    │    │         └── const: 3 [type=int]
+ │    │    ├── scan parent_d
+ │    │    │    └── columns: parent_d.a:5(int!null) parent_d.b:6(int)
+ │    │    └── filters
+ │    │         └── eq [type=bool]
+ │    │              ├── variable: column1 [type=int]
+ │    │              └── variable: parent_d.a [type=int]
+ │    └── projections
+ │         └── case [type=int]
+ │              ├── true [type=bool]
+ │              ├── when [type=int]
+ │              │    ├── is [type=bool]
+ │              │    │    ├── variable: parent_d.a [type=int]
+ │              │    │    └── null [type=unknown]
+ │              │    └── variable: column1 [type=int]
+ │              └── variable: parent_d.a [type=int]
+ └── f-k-checks
+      └── f-k-checks-item: child_d(b) -> parent_d(b)
+           └── semi-join (hash)
+                ├── columns: b:8(int)
+                ├── except
+                │    ├── columns: b:8(int)
+                │    ├── left columns: b:8(int)
+                │    ├── right columns: column2:13(int)
+                │    ├── with-scan &1
+                │    │    ├── columns: b:8(int)
+                │    │    └── mapping:
+                │    │         └──  parent_d.b:6(int) => b:8(int)
+                │    └── union-all
+                │         ├── columns: column2:13(int!null)
+                │         ├── left columns: column2:9(int)
+                │         ├── right columns: column2:11(int)
+                │         ├── project
+                │         │    ├── columns: column2:9(int!null)
+                │         │    └── select
+                │         │         ├── columns: column2:9(int!null) a:10(int)
+                │         │         ├── with-scan &1
+                │         │         │    ├── columns: column2:9(int!null) a:10(int)
+                │         │         │    └── mapping:
+                │         │         │         ├──  column2:4(int) => column2:9(int)
+                │         │         │         └──  parent_d.a:5(int) => a:10(int)
+                │         │         └── filters
+                │         │              └── is [type=bool]
+                │         │                   ├── variable: a [type=int]
+                │         │                   └── null [type=unknown]
+                │         └── project
+                │              ├── columns: column2:11(int!null)
+                │              └── select
+                │                   ├── columns: column2:11(int!null) a:12(int!null)
+                │                   ├── with-scan &1
+                │                   │    ├── columns: column2:11(int!null) a:12(int)
+                │                   │    └── mapping:
+                │                   │         ├──  column2:4(int) => column2:11(int)
+                │                   │         └──  parent_d.a:5(int) => a:12(int)
+                │                   └── filters
+                │                        └── is-not [type=bool]
+                │                             ├── variable: a [type=int]
+                │                             └── null [type=unknown]
+                ├── scan child_d
+                │    └── columns: child_d.b:15(int)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: b [type=int]
+                          └── variable: child_d.b [type=int]
