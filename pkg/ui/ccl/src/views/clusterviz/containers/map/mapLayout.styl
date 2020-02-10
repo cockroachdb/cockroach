@@ -9,6 +9,8 @@
 @require "~styl/base/palette.styl"
 @require "~src/components/core/index.styl"
 
+$node-switcher-height = 48px
+
 .geopath
   fill white
   stroke $table-border-color
@@ -28,9 +30,13 @@
     flex-direction row
     justify-content space-between
     background-color $colors--white
-    box-shadow 0 0 4px 0 rgba(0, 0, 0, 0.2)
+    height $node-switcher-height
     z-index 5
     padding $spacing-xx-small $spacing-smaller $spacing-xx-small $spacing-small
+    border 1px solid rgb(237, 237, 237)
+    border-bottom none
+    box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+    border-radius 3px
   &__content-item
     align-self center
   &__content-item--show-license
