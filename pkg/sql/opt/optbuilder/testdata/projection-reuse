@@ -1,0 +1,228 @@
+# Tests around deduplication of projection expressions.
+
+exec-ddl
+CREATE TABLE ab (a FLOAT, b FLOAT)
+----
+
+# Non-side effecting expressions should be deduplicated.
+build
+SELECT a+b, a+b FROM ab
+----
+project
+ ├── columns: "?column?":4(float) "?column?":4(float)
+ ├── scan ab
+ │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ └── projections
+      └── plus [type=float]
+           ├── variable: a [type=float]
+           └── variable: b [type=float]
+
+# Ensure whitespace differences don't prevent deduplication.
+build
+SELECT a+b, a + b FROM ab
+----
+project
+ ├── columns: "?column?":4(float) "?column?":4(float)
+ ├── scan ab
+ │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ └── projections
+      └── plus [type=float]
+           ├── variable: a [type=float]
+           └── variable: b [type=float]
+
+# Side-effecting expressions are not deduplicated.
+build
+SELECT a/b, a/b FROM ab
+----
+project
+ ├── columns: "?column?":4(float) "?column?":5(float)
+ ├── scan ab
+ │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ └── projections
+      ├── div [type=float]
+      │    ├── variable: a [type=float]
+      │    └── variable: b [type=float]
+      └── div [type=float]
+           ├── variable: a [type=float]
+           └── variable: b [type=float]
+
+build
+SELECT random(), random() FROM ab
+----
+project
+ ├── columns: random:4(float) random:5(float)
+ ├── scan ab
+ │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ └── projections
+      ├── function: random [type=float]
+      └── function: random [type=float]
+
+# ORDER BY does not add a new projection if the same expression is projected
+# already, regardless of side-effects.
+build
+SELECT a, b, random(), random() FROM ab ORDER BY random()
+----
+sort
+ ├── columns: a:1(float) b:2(float) random:4(float) random:5(float)
+ ├── ordering: +4
+ └── project
+      ├── columns: random:4(float) random:5(float) a:1(float) b:2(float)
+      ├── scan ab
+      │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+      └── projections
+           ├── function: random [type=float]
+           └── function: random [type=float]
+
+# With GROUP BY, expressions identical to a grouping column are always
+# collapsed into a single value.
+build
+SELECT random(), random() FROM ab GROUP BY random()
+----
+group-by
+ ├── columns: random:4(float) random:4(float)
+ ├── grouping columns: column4:4(float)
+ └── project
+      ├── columns: column4:4(float)
+      ├── scan ab
+      │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+      └── projections
+           └── function: random [type=float]
+
+build
+INSERT INTO ab VALUES (random(), random())
+----
+insert ab
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:4 => a:1
+ │    ├──  column2:5 => b:2
+ │    └──  column6:6 => rowid:3
+ └── project
+      ├── columns: column6:6(int) column1:4(float) column2:5(float)
+      ├── values
+      │    ├── columns: column1:4(float) column2:5(float)
+      │    └── tuple [type=tuple{float, float}]
+      │         ├── function: random [type=float]
+      │         └── function: random [type=float]
+      └── projections
+           └── function: unique_rowid [type=int]
+
+# Make sure impure default expressions are not deduplicated.
+exec-ddl
+CREATE TABLE abcd (a FLOAT, b FLOAT, c FLOAT DEFAULT random(), d FLOAT DEFAULT random())
+----
+
+build
+INSERT INTO abcd VALUES (1, 1)
+----
+insert abcd
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:6 => a:1
+ │    ├──  column2:7 => b:2
+ │    ├──  column8:8 => c:3
+ │    ├──  column9:9 => d:4
+ │    └──  column10:10 => rowid:5
+ └── project
+      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float!null) column2:7(float!null)
+      ├── values
+      │    ├── columns: column1:6(float!null) column2:7(float!null)
+      │    └── tuple [type=tuple{float, float}]
+      │         ├── const: 1.0 [type=float]
+      │         └── const: 1.0 [type=float]
+      └── projections
+           ├── function: random [type=float]
+           ├── function: random [type=float]
+           └── function: unique_rowid [type=int]
+
+build
+INSERT INTO abcd VALUES (random(), random())
+----
+insert abcd
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:6 => a:1
+ │    ├──  column2:7 => b:2
+ │    ├──  column8:8 => c:3
+ │    ├──  column9:9 => d:4
+ │    └──  column10:10 => rowid:5
+ └── project
+      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float) column2:7(float)
+      ├── values
+      │    ├── columns: column1:6(float) column2:7(float)
+      │    └── tuple [type=tuple{float, float}]
+      │         ├── function: random [type=float]
+      │         └── function: random [type=float]
+      └── projections
+           ├── function: random [type=float]
+           ├── function: random [type=float]
+           └── function: unique_rowid [type=int]
+
+build
+UPSERT INTO abcd VALUES (1, 1)
+----
+upsert abcd
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├──  column1:6 => a:1
+ │    ├──  column2:7 => b:2
+ │    ├──  column8:8 => c:3
+ │    ├──  column9:9 => d:4
+ │    └──  column10:10 => rowid:5
+ └── project
+      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float!null) column2:7(float!null)
+      ├── values
+      │    ├── columns: column1:6(float!null) column2:7(float!null)
+      │    └── tuple [type=tuple{float, float}]
+      │         ├── const: 1.0 [type=float]
+      │         └── const: 1.0 [type=float]
+      └── projections
+           ├── function: random [type=float]
+           ├── function: random [type=float]
+           └── function: unique_rowid [type=int]
+
+build
+UPSERT INTO abcd VALUES (random(), random())
+----
+upsert abcd
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├──  column1:6 => a:1
+ │    ├──  column2:7 => b:2
+ │    ├──  column8:8 => c:3
+ │    ├──  column9:9 => d:4
+ │    └──  column10:10 => rowid:5
+ └── project
+      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float) column2:7(float)
+      ├── values
+      │    ├── columns: column1:6(float) column2:7(float)
+      │    └── tuple [type=tuple{float, float}]
+      │         ├── function: random [type=float]
+      │         └── function: random [type=float]
+      └── projections
+           ├── function: random [type=float]
+           ├── function: random [type=float]
+           └── function: unique_rowid [type=int]
+
+build
+UPDATE abcd SET a = random(), b = random() WHERE a=1
+----
+update abcd
+ ├── columns: <none>
+ ├── fetch columns: a:6(float) b:7(float) c:8(float) d:9(float) rowid:10(int)
+ ├── update-mapping:
+ │    ├──  column11:11 => a:1
+ │    └──  column12:12 => b:2
+ └── project
+      ├── columns: column11:11(float) column12:12(float) a:6(float!null) b:7(float) c:8(float) d:9(float) rowid:10(int!null)
+      ├── select
+      │    ├── columns: a:6(float!null) b:7(float) c:8(float) d:9(float) rowid:10(int!null)
+      │    ├── scan abcd
+      │    │    └── columns: a:6(float) b:7(float) c:8(float) d:9(float) rowid:10(int!null)
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: a [type=float]
+      │              └── const: 1.0 [type=float]
+      └── projections
+           ├── function: random [type=float]
+           └── function: random [type=float]

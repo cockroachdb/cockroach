@@ -496,21 +496,35 @@ func (s *scope) setTableAlias(alias tree.Name) {
 	}
 }
 
-func (s *scope) findExistingColInList(expr tree.TypedExpr, cols []scopeColumn) *scopeColumn {
+// See (*scope).findExistingCol.
+func findExistingColInList(
+	expr tree.TypedExpr, cols []scopeColumn, allowSideEffects bool,
+) *scopeColumn {
 	exprStr := symbolicExprStr(expr)
 	for i := range cols {
 		col := &cols[i]
-		if expr == col || exprStr == col.getExprStr() {
+		if expr == col {
 			return col
+		}
+		if exprStr == col.getExprStr() {
+			if allowSideEffects || col.scalar == nil {
+				return col
+			}
+			var p props.Shared
+			memo.BuildSharedProps(col.scalar, &p)
+			if !p.CanHaveSideEffects {
+				return col
+			}
 		}
 	}
 	return nil
 }
 
-// findExistingCol finds the given expression among the bound variables
-// in this scope. Returns nil if the expression is not found.
-func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
-	return s.findExistingColInList(expr, s.cols)
+// findExistingCol finds the given expression among the bound variables in this
+// scope. Returns nil if the expression is not found (or an expression is found
+// but it has side-effects and allowSideEffects is false).
+func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *scopeColumn {
+	return findExistingColInList(expr, s.cols, allowSideEffects)
 }
 
 // startAggFunc is called when the builder starts building an aggregate
@@ -1088,7 +1102,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 		},
 	}
 
-	if col := s.findExistingColInList(&info, s.windows); col != nil {
+	if col := findExistingColInList(&info, s.windows, false /* allowSideEffects */); col != nil {
 		return col.expr
 	}
 
