@@ -250,7 +250,7 @@ func (r *Replica) maybeWaitForPushee(
 			return nil, nil
 		}
 		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-		pushResp, pErr := r.txnWaitQueue.MaybeWaitForPush(ctx, r, pushReq)
+		pushResp, pErr := r.txnWaitQueue.MaybeWaitForPush(ctx, pushReq)
 		if pErr != nil {
 			return nil, pErr
 		} else if pushResp != nil {
@@ -262,7 +262,7 @@ func (r *Replica) maybeWaitForPushee(
 		// For query txn requests, wait in the txn wait queue either for
 		// transaction update or for dependent transactions to change.
 		queryReq := ba.Requests[0].GetInner().(*roachpb.QueryTxnRequest)
-		pErr := r.txnWaitQueue.MaybeWaitForQuery(ctx, r, queryReq)
+		pErr := r.txnWaitQueue.MaybeWaitForQuery(ctx, queryReq)
 		if pErr != nil {
 			return nil, pErr
 		}
