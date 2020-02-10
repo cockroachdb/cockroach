@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -44,9 +47,55 @@ const (
 	defaultQueueMaxSize = 10000
 )
 
-func defaultProcessTimeoutFunc(replicaInQueue) time.Duration {
-	return defaultProcessTimeout
+// queueGuaranteedProcessingTimeBudget is the smallest amount of time before
+// which the processing of a queue may time out. It is an escape hatch to raise
+// the timeout for queues.
+var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
+	"kv.queue.process.guaranteed_time_budget",
+	"the guaranteed duration before which the processing of a queue may "+
+		"time out",
+	defaultProcessTimeout,
+)
+
+func init() {
+	queueGuaranteedProcessingTimeBudget.SetVisibility(settings.Reserved)
 }
+
+func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Duration {
+	return queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
+}
+
+// The queues which send snapshots while processing should have a timeout which
+// is a function of the size of the range and the maximum allowed rate of data
+// transfer that adheres to a minimum timeout specified in a cluster setting.
+//
+// The parameter controls which rate to use.
+func makeQueueSnapshotTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProcessTimeoutFunc {
+	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
+		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
+		// NB: In production code this will type assertion will always succeed.
+		// Some tests set up a fake implementation of replicaInQueue in which
+		// case we fall back to the configured minimum timeout.
+		repl, ok := r.(interface{ GetMVCCStats() enginepb.MVCCStats })
+		if !ok {
+			return minimumTimeout
+		}
+		snapshotRate := rateSetting.Get(&cs.SV)
+		stats := repl.GetMVCCStats()
+		totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
+		estimatedDuration := time.Duration(totalBytes/snapshotRate) * time.Second
+		timeout := estimatedDuration * permittedSnapshotSlowdown
+		if timeout < minimumTimeout {
+			timeout = minimumTimeout
+		}
+		return timeout
+	}
+}
+
+// permittedSnapshotSlowdown is the factor of the above the estimated duration
+// for a snapshot given the configured snapshot rate which we use to configure
+// the snapshot's timeout.
+const permittedSnapshotSlowdown = 10
 
 // a purgatoryError indicates a replica processing failure which indicates
 // the replica can be placed into purgatory for faster retries when the
@@ -222,6 +271,10 @@ type queueImpl interface {
 	purgatoryChan() <-chan time.Time
 }
 
+// queueProcessTimeoutFunc controls the timeout for queue processing for a
+// replicaInQueue.
+type queueProcessTimeoutFunc func(*cluster.Settings, replicaInQueue) time.Duration
+
 type queueConfig struct {
 	// maxSize is the maximum number of replicas to queue.
 	maxSize int
@@ -258,7 +311,7 @@ type queueConfig struct {
 	// that have been destroyed but not GCed.
 	processDestroyedReplicas bool
 	// processTimeout returns the timeout for processing a replica.
-	processTimeoutFunc func(replicaInQueue) time.Duration
+	processTimeoutFunc queueProcessTimeoutFunc
 	// successes is a counter of replicas processed successfully.
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
@@ -855,7 +908,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
 	defer span.Finish()
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
-		bq.processTimeoutFunc(repl), func(ctx context.Context) error {
+		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
 
 			if !repl.IsInitialized() {
