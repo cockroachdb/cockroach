@@ -30,4 +30,3 @@ c           CREATE TABLE c (
 COMMENT ON TABLE c IS 'table';
 COMMENT ON COLUMN c.a IS 'column';
 COMMENT ON INDEX c_a_b_idx IS 'index'
-
