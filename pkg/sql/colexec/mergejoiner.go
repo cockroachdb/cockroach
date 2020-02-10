@@ -330,6 +330,7 @@ func newMergeJoinBase(
 	if err != nil {
 		return base, err
 	}
+	base.scratch.tempVecByType = make(map[coltypes.T]coldata.Vec)
 	if filterConstructor != nil {
 		base.filter, err = newJoinerFilter(
 			base.allocator,
@@ -363,6 +364,12 @@ type mergeJoinBase struct {
 	state        mjState
 	proberState  mjProberState
 	builderState mjBuilderState
+	scratch      struct {
+		// tempVecByType is a map from the type to a temporary vector that can be
+		// used during a cast operation in the probing phase. These vectors should
+		// *not* be exposed outside of the merge joiner.
+		tempVecByType map[coltypes.T]coldata.Vec
+	}
 
 	filter *joinerFilter
 }
