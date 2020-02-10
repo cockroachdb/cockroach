@@ -295,3 +295,35 @@ true
 
 statement ok
 SET TIME ZONE 0
+
+# Check default types and expressions get truncated on insert / update.
+subtest regression_44774
+
+statement ok
+CREATE TABLE regression_44774 (
+  a timestamp(3) DEFAULT '1970-02-03 12:13:14.123456',
+  b timestamptz(3) DEFAULT '1970-02-03 12:13:14.123456'
+)
+
+statement ok
+INSERT INTO regression_44774 VALUES (default, default), ('2020-02-05 19:21:57.261286', '2020-02-05 19:21:57.261286')
+
+query TT
+SELECT a, b FROM regression_44774 ORDER BY a
+----
+1970-02-03 12:13:14.123 +0000 +0000  1970-02-03 12:13:14.123 +0000 +0000
+2020-02-05 19:21:57.261 +0000 +0000  2020-02-05 19:21:57.261 +0000 +0000
+
+statement ok
+UPDATE regression_44774
+SET a = '1970-03-04 13:14:15.123456'::timestamp + '1 sec'::interval, b = '1970-03-04 13:14:15.123456'::timestamptz + '1 sec'::interval
+WHERE 1 = 1
+
+query TT
+SELECT a, b FROM regression_44774 ORDER BY a
+----
+1970-03-04 13:14:16.123 +0000 +0000  1970-03-04 13:14:16.123 +0000 +0000
+1970-03-04 13:14:16.123 +0000 +0000  1970-03-04 13:14:16.123 +0000 +0000
+
+statement ok
+DROP TABLE regression_44774
