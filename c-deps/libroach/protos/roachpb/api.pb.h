@@ -1031,6 +1031,12 @@ class ResponseHeader : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::ResponseHeader_ResumeReason resume_reason() const;
   void set_resume_reason(::cockroach::roachpb::ResponseHeader_ResumeReason value);
 
+  // int64 num_bytes = 8;
+  void clear_num_bytes();
+  static const int kNumBytesFieldNumber = 8;
+  ::google::protobuf::int64 num_bytes() const;
+  void set_num_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResponseHeader)
  private:
 
@@ -1040,6 +1046,7 @@ class ResponseHeader : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Span* resume_span_;
   ::google::protobuf::int64 num_keys_;
   int resume_reason_;
+  ::google::protobuf::int64 num_bytes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -15718,6 +15725,12 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   bool defer_write_too_old_error() const;
   void set_defer_write_too_old_error(bool value);
 
+  // int64 target_bytes = 15;
+  void clear_target_bytes();
+  static const int kTargetBytesFieldNumber = 15;
+  ::google::protobuf::int64 target_bytes() const;
+  void set_target_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Header)
  private:
 
@@ -15734,6 +15747,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   bool return_range_info_;
   bool async_consensus_;
   bool defer_write_too_old_error_;
+  ::google::protobuf::int64 target_bytes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -17097,6 +17111,20 @@ inline void ResponseHeader::set_num_keys(::google::protobuf::int64 value) {
   
   num_keys_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ResponseHeader.num_keys)
+}
+
+// int64 num_bytes = 8;
+inline void ResponseHeader::clear_num_bytes() {
+  num_bytes_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 ResponseHeader::num_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseHeader.num_bytes)
+  return num_bytes_;
+}
+inline void ResponseHeader::set_num_bytes(::google::protobuf::int64 value) {
+  
+  num_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResponseHeader.num_bytes)
 }
 
 inline int ResponseHeader::range_infos_size() const {
@@ -33280,6 +33308,20 @@ inline void Header::set_max_span_request_keys(::google::protobuf::int64 value) {
   
   max_span_request_keys_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.max_span_request_keys)
+}
+
+// int64 target_bytes = 15;
+inline void Header::clear_target_bytes() {
+  target_bytes_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 Header::target_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.target_bytes)
+  return target_bytes_;
+}
+inline void Header::set_target_bytes(::google::protobuf::int64 value) {
+  
+  target_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.target_bytes)
 }
 
 // bool distinct_spans = 9;
