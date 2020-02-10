@@ -29,153 +29,6 @@ import (
 	"github.com/google/btree"
 )
 
-// TODO(sbhola): handle non-transactional requests that do writes, but
-// never acquire locks. See discussion at
-// https://github.com/cockroachdb/cockroach/pull/44791#pullrequestreview-354840101
-
-// The database is read and written using "requests". Transactions are
-// composed of one or more requests. Isolation is needed across requests.
-// Additionally, since transactions represent a group of requests, isolation
-// is needed across such groups. Part of this isolation is accomplished by
-// maintaining multiple versions and part by allowing requests to acquire
-// locks. Even the isolation based on multiple versions requires some form of
-// mutual exclusion to ensure that a read and a conflicting lock acquisition
-// do not happen concurrently. The lock table provides both locking and
-// sequencing of requests (in concert with the use of latches, as specified
-// below).
-//
-// Locks outlive the requests themselves and thereby extend the duration of the
-// isolation provided over specific keys to the lifetime of the lock-holder
-// transaction itself. They are (typically) only released when the transaction
-// commits or aborts. Other requests that find these locks while being sequenced
-// wait on them to be released in a queue before proceeding. Because locks are
-// checked during sequencing, requests are guaranteed access to all declared
-// keys after they have been sequenced. In other words, locks don't need to be
-// checked again during evaluation.
-//
-// However, at the time of writing, not all locks are stored directly under lock
-// table control, so not all locks are discoverable during sequencing.
-// Specifically, write intents (replicated, exclusive locks) are stored inline
-// in the MVCC keyspace, so they are often not detectable until request
-// evaluation time. To accommodate this form of lock storage, the lock table
-// exposes an addDiscoveredLock method. In the future, we intend to pull all
-// locks, including those associated with write intents, into the lock table
-// directly.
-//
-// The lock table also provides fairness between requests. If two requests
-// conflict then the request that arrived first will typically be sequenced
-// first. There are some exceptions:
-//
-// - a request that is part of a transaction which has already acquired a lock
-//   does not need to wait on that lock during sequencing, and can therefore
-//   ignore any queue that has formed on the lock.
-//
-// - contending requests that encounter different levels of contention may be
-//   sequenced in non-FIFO order. This is to allow for more concurrency. e.g. if
-//   request R1 and R2 contend on key K2, but R1 is also waiting at key K1, R2
-//   could slip past R1 and evaluate.
-
-// Request encapsulates a request that needs to be evaluated on the state
-// machine.
-type Request interface {
-	// nil when not a transactional request -- such requests can only have
-	// SpanReadOnly spans and not acquire any locks, but are sequenced through
-	// lockTable.
-	txnMeta() *enginepb.TxnMeta
-
-	// A SpanAccess of SpanReadWrite allows the requester to acquire an Exclusive
-	// lock for a key contained in the corresponding Span (when evaluating).
-	// SpanReadOnly spans do not permit any lock acquisition for their contained
-	// keys but are sequenced by the lockTable. A key must not appear in more than
-	// one span, i.e., it must be either SpanReadOnly or SpanReadWrite but not
-	// both.
-	spans() *spanset.SpanSet
-
-	// The timestamp of the request. This must be equal to the Span.Timestamp in
-	// all of the spans in the SpanSet.
-	ts() hlc.Timestamp
-}
-
-// A guard that is returned to the request the first time it calls
-// lockTable.scanAndEnqueue() and used in later calls to scanAndEnqueue() and
-// done(). After a call to scanAndEnqueue() (which is made while holding
-// latches), the caller must first call requestGuard.startWaiting() and if it
-// returns true release the latches and continue interacting with the
-// requestGuard. If startWaiting() returns false, the request can proceed to
-// evaluation.
-//
-// Waiting logic: The interface hides the queues that the request is waiting on,
-// and the request's position in the queue. One of the reasons for this hiding
-// is that queues are not FIFO since a request that did not wait on a queue for
-// key k in a preceding call to scanAndEnqueue() (because k was not locked and
-// there was no queue) may need to wait on the queue in a later call to
-// scanAndEnqueue(). So sequencing of requests arriving at the lockTable is
-// partially decided by a sequence number assigned to a request when it first
-// called scanAndEnqueue() and queues are ordered by this sequence number.
-// However the sequencing is not fully described by the sequence numbers -- a
-// request R1 encountering contention over some keys in its span does not
-// prevent a request R2 that has a higher sequence number and overlapping span
-// to proceed if R2 does not encounter contention. This concurrency (that is not
-// completely fair) is deemed desirable.
-//
-// The interface exposes an abstracted version of the waiting logic in a way
-// that the request that starts waiting is considered waiting for at most one
-// other request or transaction. This is exposed as a series of state
-// transitions where the transitions are notified via newState() and the current
-// state can be read using currentState().
-//
-// - The waitFor* states provide information on who the request is waiting for.
-//   The waitForDistinguished state is a sub-case -- a distinguished waiter is
-//   responsible for taking extra actions e.g. immediately pushing the transaction
-//   it is waiting for. The implementation ensures that if there are multiple
-//   requests in waitFor state waiting on the same transaction at least one will
-//   be a distinguished waiter.
-//
-//   TODO(sbhola): investigate removing the waitForDistinguished state which
-//   will simplify the code here. All waitFor requests would wait (currently
-//   50ms) before pushing the transaction (for deadlock detection) they are
-//   waiting on, say T. Typically T will be done before 50ms which is considered
-//   ok: the one exception we will need to make is if T has the min priority or
-//   the waiting transaction has max priority -- in both cases it will push
-//   immediately. The bad case is if T is ABORTED: the push will succeed after,
-//   and if T left N intents, each push would wait for 50ms, incurring a latency
-//   of 50*N ms. A cache of recently encountered ABORTED transactions on each
-//   Store should mitigate this latency increase. Whenever a transaction sees a
-//   waitFor state, it will consult this cache and if T is found, push
-//   immediately (if there isn't already a push in-flight) -- even if T is not
-//   initially in the cache, the first push will place it in the cache, so the
-//   maximum latency increase is 50ms.
-//
-// - The waitElsewhere state is a rare state that is used when the lockTable is
-//   under memory pressure and is clearing its internal queue state. Like the
-//   waitFor* states, it informs the request who it is waiting for so that
-//   deadlock detection works. However, sequencing information inside the
-//   lockTable is mostly discarded.
-//
-// - The waitSelf state is a rare state when a different request from the same
-//   transaction has a reservation. See the comment about "Reservations" in
-//   lockState.
-//
-// - The doneWaiting state is used to indicate that the request should make
-//   another call to scanAndEnqueue() (that next call is more likely to return a
-//   requestGuard that returns false from startWaiting()).
-type requestGuard interface {
-	// startWaiting must be called after each scanAndEnqueue(). The request should
-	// proceed to evaluation if it returns false, else it releases latches and
-	// listens to the channel returned by newState().
-	startWaiting() bool
-
-	// newState returns the channel to listen on for notification that the state
-	// may have changed. If startWaiting() returns true, this channel will have an
-	// initial notification. Note that notifications are collapsed if not
-	// retrieved, since it is not necessary for the waiter to see every state
-	// transition.
-	newState() <-chan struct{}
-
-	// currentState returns the latest waiting state.
-	currentState() (waitingState, error)
-}
-
 // The kind of waiting that the request is subject to. See the detailed comment
 // above for the meaning of each kind.
 type stateKind int
@@ -199,189 +52,10 @@ type waitingState struct {
 	access spanset.SpanAccess // Currently only SpanReadWrite.
 }
 
-// Concurrency: in addition to holding latches, we require for a particular
-// request scanAndEnqueue() and currentState() must be called by the same
-// thread.
-//
-// Recommended usage:
-//
-// Request evaluation:
-//
-// g = nil
-// // Outer for loop that repeatedly calls scanAndEnqueue() until request can
-// // "evaluate".
-// for {
-//   acquire all latches for req.spans()
-//   // Discovers "all" locks and queues in req.spans() and queues itself
-//   // where necessary.
-//   g, err := lockTable.scanAndEnqueue(..., g)
-//   if !g.startWaiting() {
-//     // "Evaluate" request while holding latches
-//     ...
-//     if found an exclusive-replicated lock {
-//        lockTable.addDiscoveredLock(...)
-//        release latches
-//        continue
-//     }
-//     // May call lockTable.acquireLock() if wants to lock something for
-//     // later requests in this transaction, or if placed a write intent
-//     // and it has been applied to the state machine.
-//     ...
-//
-//     lockTable.done(handle)  // Does not release locks.
-//     break
-//   }
-//   // Either there is a lock held by some other txn for which this
-//   // request has queued, or there isn't a lock but this request is not
-//   // at the front of the queue so needs to wait its turn.
-//
-//   release all span latches
-//   var timer *time.Timer
-//   // Inner for loop that repeats until it is time to call scanAndEnqueue()
-//   // again, or to return without "evaluation".
-//   for {
-//     select {
-//     case c <- g.newState():
-//       state := g.currentState();
-//       // Act on state: deadlock detection, pushing other txns etc.
-//       if event.eventType == doneWaiting {
-//         break
-//       }
-//       if event.eventType == waitFor {
-//          if timer == nil {
-//            // Create timer for placing oneself in txn wait queue.
-//            timer = NewTimer(...)
-//          }
-//          continue
-//       }
-//       if event.eventType == waitForDistinguished {
-//          Do blocking push
-//          // When returns will be doneWaiting if there are no more lock
-//          // queues where it needs to wait.
-//          continue
-//       }
-//       if event.eventType == waitElsewhere {
-//         Do blocking call to put oneself in txn wait queue
-//         break
-//       }
-//       if event.eventType == waitSelf {
-//         continue
-//       }
-//     case <- timer.C:
-//       // Need to put oneself in txn wait queue.
-//       timer = nil
-//       Do blocking call to put oneself in txn wait queue
-//       // When return, continue waiting on this handle.
-//       continue
-//     case deadline or cancellation:
-//       lockTable.done(g)
-//       return
-//     }
-//   }  // end inner for loop
-// }  // end outer for loop
-//
-// Transaction is done:
-//   call lockTable.releaseLocks()
-//
-// Transaction is pushed and holds some locks:
-//   call lockTable.updateLocks()
-type lockTable interface {
-	// scanAndEnqueue is used to find locks and queues to add the request to. The
-	// first call to scanAndEnqueue for a request uses a nil requestGuard and the
-	// subsequent calls reuse the previously returned one. The latches needed by
-	// the request must be held when calling this function.
-	scanAndEnqueue(req Request, guard requestGuard) (requestGuard, error)
-
-	// done is called when the request is finished, whether it evaluated or not.
-	// This causes it to be removed from any queues. This method does not release
-	// any locks. This method must be called on the last guard returned from
-	// scanAndEnqueue() for the request even if one of the (a) lockTable calls
-	// that use a requestGuard parameter, or (b) a requestGuard call, returned an
-	// error. The lockTable does not require latches to be held.
-	done(guard requestGuard) error
-
-	// acquireLock is used to acquire a lock in the lockTable. It is only
-	// permitted for requests that have a non-nil TxnMeta. It must only be called
-	// in the evaluation phase before calling done(), which means all the latches
-	// needed by the request are held. The key must be in the request's SpanSet
-	// with the appropriate SpanAccess: currently the strength is always
-	// Exclusive, so the span containing this key must be SpanReadWrite. This
-	// contract ensures that the lock is not held in a conflicting manner by a
-	// different transaction. Acquiring a lock that is already held by this
-	// transaction is a noop.
-	//
-	// For replicated locks, this must be called after the intent has been applied
-	// to the replicated state machine.
-	acquireLock(key roachpb.Key, strength lock.Strength, durability lock.Durability, guard requestGuard) error
-
-	// Called when intent resolution or other adjustments (e.g. pushing a
-	// transaction with no intents) occur on transaction.
-	//
-	// For spans containing Replicated locks, this must be called after intent
-	// resolution has been applied to the replicated state machine.
-	//
-	// A latch with SpanReadWrite must be held on span with the lowest timestamp
-	// at which any of the locks could be held. This is explained below.
-	//
-	// Note that spans can be wider than the actual keys on which locks were
-	// acquired, and it is ok if no locks are found or locks held by other
-	// transactions are found (for those lock this call is a noop).
-	//
-	// For COMMITTED or ABORTED transactions, all locks are released.
-	//
-	// For PENDING or STAGING transactions, the behavior is:
-	//
-	// - All replicated locks known to the lockTable are dropped. This is not
-	//   because those intents are necessarily deleted, but because in the
-	//   current code where intents are not managed by the lockTable (this will
-	//   change when we have a segregated lock table), we do not want to risk
-	//   code divergence between lockTable and mvccResolveWriteIntent: the
-	//   danger is that the latter removes or changes an intent while the
-	//   lockTable retains it, and a waiter is stuck forever.
-	//
-	//   Note that even the conservative behavior of dropping locks requires
-	//   that intent resolution acquire latches using the oldest timestamp at
-	//   which the intent could have been written: if the intent was at ts=5 and
-	//   the intent resolution is using ts=10 (since the transaction has been
-	//   pushed), there is a race where a reader at ts=8 can be concurrently
-	//   holding latches and the following bad sequence occurs (both thread1 and
-	//   thread2 are concurrent since their latches do not conflict):
-	//
-	//   - [thread1-txn1] reader sees intent at ts=5
-	//   - [thread2-txn2] intent resolution changes that intent to ts=10
-	//   - [thread2-txn2] updateLocks is called and lock is removed since it is a
-	//     replicated lock.
-	//   - [thread1-txn1] reader calls addDiscoveredLock() for ts=5.
-	//
-	//   Now the lockTable thinks there is a lock and subsequent pushes of txn2
-	//   by txn1 will do nothing since the txn2 is already at timestamp 10. Txn1
-	//   will unnecessarily block until txn2 is done.
-	//
-	// - Unreplicated locks:
-	//   - for epochs older than txn.Epoch, locks are dropped.
-	//   - locks in the current epoch that are at a TxnMeta.Sequence contained
-	//     in ignoredSeqNums are dropped.
-	//   - the remaining locks are changed to timestamp equal to
-	//     txn.WriteTimestamp.
-	updateLocks(intent *roachpb.Intent) error
-
-	// addDiscoveredLock is called when an exclusive replicated lock held by a
-	// different transaction is discovered when reading the MVCC keys during
-	// evaluation of this request. It adds the lock and enqueues this requester.
-	// It is required that request evaluation discover such locks before
-	// acquiring its own locks, since the request needs to repeat
-	// scanAndEnqueue().
-	//
-	// A latch consistent with the access desired by guard and guard.ts() must
-	// be held on the span containing key.
-	addDiscoveredLock(
-		key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp, guard requestGuard) error
-}
-
 // Implementation
 // TODO(sbhola):
 // - use the cow btree.
-// - proper error strings and replace all bug errors with panics.
+// - proper error strings and give better explanation to all panics.
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
 
@@ -401,6 +75,13 @@ type treeMu struct {
 	numLocks int64
 }
 
+// lockTableImpl is an implementation of lockTable.
+//
+// Concurrency: in addition to holding latches, we require for a particular
+// request ScanAndEnqueue() and CurState() must be called by the same
+// thread.
+//
+// Mutex ordering: treeMu.mu > lockState.mu > lockTableGuardImpl.mu
 type lockTableImpl struct {
 	// A sequence number is assigned to each request seen by the lockTable. This
 	// is to preserve fairness despite the design choice of allowing
@@ -458,14 +139,72 @@ func newLockTable(maxLocks int64) lockTable {
 
 var _ lockTable = &lockTableImpl{}
 
-// Synchronization:
+// lockTableGuardImpl is an implementation of lockTableGuard.
 //
-// mutex ordering: treeMu.mu > lockState.mu > requestGuardImpl.mu
+// The struct is a guard that is returned to the request the first time it calls
+// lockTable.ScanAndEnqueue() and used in later calls to ScanAndEnqueue() and
+// done(). After a call to ScanAndEnqueue() (which is made while holding
+// latches), the caller must first call lockTableGuard.StartWaiting() and if it
+// returns true release the latches and continue interacting with the
+// lockTableGuard. If StartWaiting() returns false, the request can proceed to
+// evaluation.
 //
-// queuedGuard.active is protected by lockState.mu
-
-// Implementation of requestGuard.
-type requestGuardImpl struct {
+// Waiting logic: The interface hides the queues that the request is waiting on,
+// and the request's position in the queue. One of the reasons for this hiding
+// is that queues are not FIFO since a request that did not wait on a queue for
+// key k in a preceding call to ScanAndEnqueue() (because k was not locked and
+// there was no queue) may need to wait on the queue in a later call to
+// ScanAndEnqueue(). So sequencing of requests arriving at the lockTable is
+// partially decided by a sequence number assigned to a request when it first
+// called ScanAndEnqueue() and queues are ordered by this sequence number.
+// However the sequencing is not fully described by the sequence numbers -- a
+// request R1 encountering contention over some keys in its span does not
+// prevent a request R2 that has a higher sequence number and overlapping span
+// to proceed if R2 does not encounter contention. This concurrency (that is not
+// completely fair) is deemed desirable.
+//
+// The interface exposes an abstracted version of the waiting logic in a way
+// that the request that starts waiting is considered waiting for at most one
+// other request or transaction. This is exposed as a series of state
+// transitions where the transitions are notified via newState() and the current
+// state can be read using CurState().
+//
+// - The waitFor* states provide information on who the request is waiting for.
+//   The waitForDistinguished state is a sub-case -- a distinguished waiter is
+//   responsible for taking extra actions e.g. immediately pushing the transaction
+//   it is waiting for. The implementation ensures that if there are multiple
+//   requests in waitFor state waiting on the same transaction at least one will
+//   be a distinguished waiter.
+//
+//   TODO(sbhola): investigate removing the waitForDistinguished state which
+//   will simplify the code here. All waitFor requests would wait (currently
+//   50ms) before pushing the transaction (for deadlock detection) they are
+//   waiting on, say T. Typically T will be done before 50ms which is considered
+//   ok: the one exception we will need to make is if T has the min priority or
+//   the waiting transaction has max priority -- in both cases it will push
+//   immediately. The bad case is if T is ABORTED: the push will succeed after,
+//   and if T left N intents, each push would wait for 50ms, incurring a latency
+//   of 50*N ms. A cache of recently encountered ABORTED transactions on each
+//   Store should mitigate this latency increase. Whenever a transaction sees a
+//   waitFor state, it will consult this cache and if T is found, push
+//   immediately (if there isn't already a push in-flight) -- even if T is not
+//   initially in the cache, the first push will place it in the cache, so the
+//   maximum latency increase is 50ms.
+//
+// - The waitElsewhere state is a rare state that is used when the lockTable is
+//   under memory pressure and is clearing its internal queue state. Like the
+//   waitFor* states, it informs the request who it is waiting for so that
+//   deadlock detection works. However, sequencing information inside the
+//   lockTable is mostly discarded.
+//
+// - The waitSelf state is a rare state when a different request from the same
+//   transaction has a reservation. See the comment about "Reservations" in
+//   lockState.
+//
+// - The doneWaiting state is used to indicate that the request should make
+//   another call to ScanAndEnqueue() (that next call is more likely to return a
+//   lockTableGuard that returns false from StartWaiting()).
+type lockTableGuardImpl struct {
 	seqNum uint64
 	table  *lockTableImpl
 
@@ -474,7 +213,7 @@ type requestGuardImpl struct {
 	spans *spanset.SpanSet
 	ts    hlc.Timestamp
 
-	// A request whose startWait is set to true in scanAndEnqueue is actively
+	// A request whose startWait is set to true in ScanAndEnqueue is actively
 	// waiting at a particular key. This is the first key encountered when
 	// iterating through spans that it needs to wait at. A future event (lock
 	// release etc.) may cause the request to no longer need to wait at this
@@ -518,7 +257,7 @@ type requestGuardImpl struct {
 
 		// If this is true, the state has changed and the channel has been
 		// signaled, but what the state should be has not been computed. The call
-		// to currentState() needs to compute that current state. Deferring the
+		// to CurState() needs to compute that current state. Deferring the
 		// computation makes the waiters do this work themselves instead of making
 		// the call to release/update locks or release reservations do this work
 		// (proportional to number of waiters).
@@ -526,39 +265,36 @@ type requestGuardImpl struct {
 	}
 }
 
-var _ requestGuard = &requestGuardImpl{}
+var _ lockTableGuard = &lockTableGuardImpl{}
 
-func (g *requestGuardImpl) startWaiting() bool {
+func (g *lockTableGuardImpl) ShouldWait() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.mu.startWait
 }
 
-func (g *requestGuardImpl) newState() <-chan struct{} {
+func (g *lockTableGuardImpl) NewStateChan() <-chan struct{} {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.mu.signal
 }
 
-func (g *requestGuardImpl) currentState() (waitingState, error) {
+func (g *lockTableGuardImpl) CurState() waitingState {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if !g.mu.mustFindNextLockAfter {
-		return g.mu.state, nil
+		return g.mu.state
 	}
 	// Not actively waiting anywhere so no one else can set
 	// mustFindNextLockAfter to true while this method executes.
 	g.mu.mustFindNextLockAfter = false
 	g.mu.Unlock()
-	err := g.table.findNextLockAfter(g, false /* notify */)
-	g.mu.Lock()
-	if err != nil {
-		return waitingState{}, err
-	}
-	return g.mu.state, nil
+	g.table.findNextLockAfter(g, false /* notify */)
+	g.mu.Lock() // Unlock deferred
+	return g.mu.state
 }
 
-func (g *requestGuardImpl) notify() {
+func (g *lockTableGuardImpl) notify() {
 	select {
 	case g.mu.signal <- struct{}{}:
 	default:
@@ -567,12 +303,12 @@ func (g *requestGuardImpl) notify() {
 
 // Waiting writers in a lockState are wrapped in a queuedGuard. A waiting
 // writer is typically waiting in an active state, i.e., the
-// requestGuardImpl.key refers to this lockState. However, breaking of
+// lockTableGuardImpl.key refers to this lockState. However, breaking of
 // reservations (see the comment on reservations below, in lockState) can
 // cause a writer to be an inactive waiter.
 type queuedGuard struct {
-	guard  *requestGuardImpl
-	active bool
+	guard  *lockTableGuardImpl
+	active bool // protected by lockState.mu
 }
 
 // Information about a lock holder.
@@ -605,7 +341,7 @@ type lockState struct {
 	mu syncutil.Mutex // Protects everything below.
 
 	// Invariant summary (see detailed comments below):
-	// - both holder.locked and reservation != nil cannot be true.
+	// - both holder.locked and waitQ.reservation != nil cannot be true.
 	// - if holder.locked and multiple holderInfos have txn != nil: all the
 	//   txns must have the same txn.ID.
 	// - !holder.locked => waitingReaders.Len() == 0. That is, readers wait
@@ -622,6 +358,11 @@ type lockState struct {
 		holder [lock.MaxDurability + 1]lockHolderInfo
 	}
 
+	// Information about the requests waiting on the lock.
+	lockWaitQueue
+}
+
+type lockWaitQueue struct {
 	// Reservations:
 	//
 	// A not-held lock can be "reserved". A reservation is just a claim that
@@ -724,12 +465,12 @@ type lockState struct {
 	//   first waiter since that waiter must be desiring a lock that is
 	//   incompatible with a shared lock.
 
-	reservation *requestGuardImpl
+	reservation *lockTableGuardImpl
 
 	// TODO(sbhola): There are a number of places where we iterate over these
 	// lists looking for something, as described below. If some of these turn
 	// out to be inefficient, consider better data-structures. One idea is that
-	// for cases that find a particular guard the requestGuardImpl.locks can be
+	// for cases that find a particular guard the lockTableGuardImpl.locks can be
 	// a map instead of a set to point directly to the *list.Element.
 	//
 	// queuedWriters:
@@ -750,14 +491,14 @@ type lockState struct {
 	// non-empty, either the lock is held or there is a reservation.
 	queuedWriters list.List
 
-	// List of *requestGuardImpl. All of these are actively waiting. If
+	// List of *lockTableGuardImpl. All of these are actively waiting. If
 	// non-empty, the lock must be held. By definition these cannot be in
 	// waitSelf state since that state is only used when there is a reservation.
 	waitingReaders list.List
 
 	// If there is a non-empty set of active waiters that are not waitSelf, then
 	// at least one must be distinguished.
-	distinguishedWaiter *requestGuardImpl
+	distinguishedWaiter *lockTableGuardImpl
 }
 
 // Less implements the btree.Item interface.
@@ -810,7 +551,7 @@ func (l *lockState) informActiveWaiters() {
 		// Since there are waiting readers we could not have transitioned out of
 		// or into a state with a reservation, since readers do not wait for
 		// reservations.
-		g := e.Value.(*requestGuardImpl)
+		g := e.Value.(*lockTableGuardImpl)
 		if findDistinguished {
 			l.distinguishedWaiter = g
 			findDistinguished = false
@@ -854,9 +595,9 @@ func (l *lockState) informActiveWaiters() {
 // waiter.
 // REQUIRES: l.mu is locked.
 func (l *lockState) tryMakeNewDistinguished() {
-	var g *requestGuardImpl
+	var g *lockTableGuardImpl
 	if l.waitingReaders.Len() > 0 {
-		g = l.waitingReaders.Front().Value.(*requestGuardImpl)
+		g = l.waitingReaders.Front().Value.(*lockTableGuardImpl)
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
@@ -923,36 +664,30 @@ func (l *lockState) getLockerInfo() (*enginepb.TxnMeta, hlc.Timestamp) {
 // it is set to false when the call to tryActiveWait is happening due to an
 // event for a different request or transaction (like a lock release) since in
 // that case the channel is notified first and the call to tryActiveWait()
-// happens later in requestGuard.currentState(). The return value is true iff
+// happens later in lockTableGuard.CurState(). The return value is true iff
 // it is actively waiting.
 // Acquires l.mu, g.mu.
-func (l *lockState) tryActiveWait(
-	g *requestGuardImpl, sa spanset.SpanAccess, notify bool,
-) (bool, error) {
+func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, notify bool) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	// It is possible that this lock is empty and has not yet been deleted.
-	empty, err := l.isEmptyLock()
-	if err != nil {
-		return false, err
-	}
-	if empty {
-		return false, nil
+	if l.isEmptyLock() {
+		return false
 	}
 
 	// Lock is not empty.
 	waitForTxn, waitForTs := l.getLockerInfo()
 	if waitForTxn != nil && g.txn != nil && g.txn.ID == waitForTxn.ID {
 		// Already locked by this txn.
-		return false, nil
+		return false
 	}
 
 	var reservedBySelfTxn bool
 	if waitForTxn == nil {
 		if l.reservation == g {
 			// Already reserved by this request.
-			return false, nil
+			return false
 		}
 		waitForTxn = l.reservation.txn
 		waitForTs = l.reservation.ts
@@ -962,11 +697,11 @@ func (l *lockState) tryActiveWait(
 	if sa == spanset.SpanReadOnly {
 		if !l.holder.locked {
 			// Reads only care about locker, not a reservation.
-			return false, nil
+			return false
 		}
 		// Locked by some other txn.
 		if g.ts.Less(waitForTs) {
-			return false, nil
+			return false
 		}
 	}
 
@@ -981,7 +716,7 @@ func (l *lockState) tryActiveWait(
 		// reservations. And the set of active queuedWriters has not changed, but
 		// they do need to be told about the change in who they are waiting for.
 		l.informActiveWaiters()
-		return false, nil
+		return false
 	}
 
 	// Need to wait.
@@ -1001,7 +736,7 @@ func (l *lockState) tryActiveWait(
 				}
 			}
 			if qg == nil {
-				return false, errors.Errorf("lockTable bug")
+				panic("lockTable bug")
 			}
 			qg.active = true
 		} else {
@@ -1053,7 +788,7 @@ func (l *lockState) tryActiveWait(
 	if notify {
 		g.notify()
 	}
-	return true, nil
+	return true
 }
 
 // TODO(sbhola): the deferred call to tryActiveWait() removes the need to
@@ -1067,7 +802,7 @@ func (l *lockState) tryActiveWait(
 // Acquires l.mu.
 func (l *lockState) acquireLock(
 	_ lock.Strength, durability lock.Durability, txn *enginepb.TxnMeta, ts hlc.Timestamp,
-) (doneWaiting []*requestGuardImpl, err error) {
+) (doneWaiting []*lockTableGuardImpl, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.holder.locked {
@@ -1135,11 +870,11 @@ func (l *lockState) acquireLock(
 			l.reservation.mu.Unlock()
 		}
 		if l.waitingReaders.Len() > 0 {
-			return nil, errors.Errorf("lockTable bug")
+			panic("lockTable bug")
 		}
 	} else {
 		if l.queuedWriters.Len() > 0 || l.waitingReaders.Len() > 0 {
-			return nil, errors.Errorf("lockTable bug")
+			panic("lockTable bug")
 		}
 	}
 	l.reservation = nil
@@ -1148,21 +883,20 @@ func (l *lockState) acquireLock(
 	l.holder.holder[durability].ts = ts
 	l.holder.holder[durability].seqs = append([]enginepb.TxnSeq(nil), txn.Sequence)
 
-	txnID := txn.ID
 	// If there are waiting requests from the same txn, they no longer need to wait.
 	for e := l.queuedWriters.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
 		curr := e
 		e = e.Next()
 		g := qg.guard
-		if g.txn.ID == txnID {
+		if g.txn.ID == txn.ID {
 			if qg.active {
 				doneWaiting = append(doneWaiting, g)
 				if g == l.distinguishedWaiter {
 					if brokeReservation {
 						l.distinguishedWaiter = nil
 					} else {
-						return nil, errors.Errorf("lockTable bug")
+						panic("lockTable bug")
 					}
 				}
 			}
@@ -1182,7 +916,7 @@ func (l *lockState) acquireLock(
 // where g is trying to access this key with access sa.
 // Acquires l.mu.
 func (l *lockState) discoveredLock(
-	txn *enginepb.TxnMeta, ts hlc.Timestamp, g *requestGuardImpl, sa spanset.SpanAccess,
+	txn *enginepb.TxnMeta, ts hlc.Timestamp, g *lockTableGuardImpl, sa spanset.SpanAccess,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1190,7 +924,7 @@ func (l *lockState) discoveredLock(
 	informWaiters := true
 	if l.holder.locked {
 		if !l.isLockedBy(txn.ID) {
-			return errors.Errorf("bug in caller or lockTable")
+			panic("bug in caller or lockTable")
 		}
 		if l.holder.holder[lock.Replicated].txn == nil {
 			l.holder.holder[lock.Replicated].txn = txn
@@ -1230,7 +964,7 @@ func (l *lockState) discoveredLock(
 		// reservation the lock must not have been known to be held so the queue
 		// must be empty.
 		if l.queuedWriters.Len() > 0 {
-			return errors.Errorf("lockTable bug")
+			panic("lockTable bug")
 		}
 		qg := &queuedGuard{
 			guard:  g,
@@ -1267,7 +1001,7 @@ func (l *lockState) tryClearLock() bool {
 		l.reservation = nil
 	}
 	for e := l.waitingReaders.Front(); e != nil; {
-		g := e.Value.(*requestGuardImpl)
+		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
 		l.waitingReaders.Remove(curr)
@@ -1305,14 +1039,14 @@ func (l *lockState) tryClearLock() bool {
 // Returns true iff the lockState is empty, i.e., there is no lock holder or
 // reservation.
 // REQUIRES: l.mu is locked.
-func (l *lockState) isEmptyLock() (bool, error) {
+func (l *lockState) isEmptyLock() bool {
 	if !l.holder.locked && l.reservation == nil {
 		if l.waitingReaders.Len() > 0 || l.queuedWriters.Len() > 0 {
-			return false, errors.Errorf("lockTable bug")
+			panic("lockTable bug")
 		}
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 // Removes the TxnSeqs in heldSeqNums that are contained in ignoredSeqNums.
@@ -1341,7 +1075,7 @@ func removeIgnored(
 // Acquires l.mu.
 func (l *lockState) tryUpdateLock(
 	intent *roachpb.Intent,
-) (doneWaiting []*requestGuardImpl, gc bool, err error) {
+) (doneWaiting []*lockTableGuardImpl, gc bool, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.isLockedBy(intent.Txn.ID) {
@@ -1354,7 +1088,8 @@ func (l *lockState) tryUpdateLock(
 			l.holder.holder[i].ts = hlc.Timestamp{}
 			l.holder.holder[i].seqs = nil
 		}
-		return l.lockIsFree()
+		doneWaiting, gc = l.lockIsFree()
+		return doneWaiting, gc, nil
 	}
 
 	ts := intent.Txn.WriteTimestamp
@@ -1384,7 +1119,8 @@ func (l *lockState) tryUpdateLock(
 
 	if !isLocked {
 		l.holder.locked = false
-		return l.lockIsFree()
+		doneWaiting, gc = l.lockIsFree()
+		return doneWaiting, gc, nil
 	}
 
 	if ts.Less(beforeTs) {
@@ -1399,11 +1135,11 @@ func (l *lockState) tryUpdateLock(
 // The lock holder timestamp has increased. Returns the list of guards that
 // are done actively waiting at this key.
 // REQUIRES: l.mu is locked.
-func (l *lockState) increasedLockTs(newTs hlc.Timestamp) []*requestGuardImpl {
-	var doneWaiting []*requestGuardImpl
+func (l *lockState) increasedLockTs(newTs hlc.Timestamp) []*lockTableGuardImpl {
+	var doneWaiting []*lockTableGuardImpl
 	distinguishedRemoved := false
 	for e := l.waitingReaders.Front(); e != nil; {
-		g := e.Value.(*requestGuardImpl)
+		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
 		if !g.ts.LessEq(newTs) {
@@ -1435,15 +1171,15 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) []*requestGuardImpl {
 // lockState can be garbage collected.
 // Acquires l.mu.
 func (l *lockState) requestDone(
-	g *requestGuardImpl,
-) (doneWaiting []*requestGuardImpl, gc bool, err error) {
+	g *lockTableGuardImpl,
+) (doneWaiting []*lockTableGuardImpl, gc bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	g.mu.Lock()
 	if _, present := g.mu.locks[l]; !present {
 		g.mu.Unlock()
-		return nil, false, nil
+		return nil, false
 	}
 	delete(g.mu.locks, l)
 	g.mu.Unlock()
@@ -1469,7 +1205,7 @@ func (l *lockState) requestDone(
 	}
 	if !doneRemoval {
 		for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
-			gg := e.Value.(*requestGuardImpl)
+			gg := e.Value.(*lockTableGuardImpl)
 			if gg == g {
 				l.waitingReaders.Remove(e)
 				if g == l.distinguishedWaiter {
@@ -1482,27 +1218,27 @@ func (l *lockState) requestDone(
 		}
 	}
 	if !doneRemoval {
-		return nil, false, errors.Errorf("lockTable bug")
+		panic("lockTable bug")
 	}
 	if distinguishedRemoved {
 		l.tryMakeNewDistinguished()
 	}
-	return nil, false, nil
+	return nil, false
 }
 
 // The lock has transitioned from locked/reserved to unlocked. There could be
 // waiters, but there cannot be a reservation.
 // REQUIRES: l.mu is locked.
-func (l *lockState) lockIsFree() (doneWaiting []*requestGuardImpl, gc bool, err error) {
+func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 	if l.reservation != nil {
-		return nil, false, errors.Errorf("lockTable bug")
+		panic("lockTable bug")
 	}
 	// There may not be a distinguished waiter currently because of who had the
 	// previous reservation but we may be able to find one.
 	findDistinguished := l.distinguishedWaiter == nil
 	// All waiting readers don't need to wait here anymore.
 	for e := l.waitingReaders.Front(); e != nil; {
-		g := e.Value.(*requestGuardImpl)
+		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
 		l.waitingReaders.Remove(curr)
@@ -1516,7 +1252,7 @@ func (l *lockState) lockIsFree() (doneWaiting []*requestGuardImpl, gc bool, err 
 		doneWaiting = append(doneWaiting, g)
 	}
 	if l.queuedWriters.Len() == 0 {
-		return doneWaiting, true, nil
+		return doneWaiting, true
 	}
 	// First waiting writer gets the reservation.
 	e := l.queuedWriters.Front()
@@ -1568,26 +1304,28 @@ func (l *lockState) lockIsFree() (doneWaiting []*requestGuardImpl, gc bool, err 
 			g.mu.Unlock()
 		}
 	}
-	return doneWaiting, false, nil
+	return doneWaiting, false
 }
 
-// scanAndEnqueue implements the lockTable interface.
-func (t *lockTableImpl) scanAndEnqueue(req Request, guard requestGuard) (requestGuard, error) {
-	var g *requestGuardImpl
+// ScanAndEnqueue implements the lockTable interface.
+func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTableGuard {
+	var g *lockTableGuardImpl
 	if guard == nil {
 		seqNum := atomic.AddUint64(&t.seqNum, 1)
-		g = &requestGuardImpl{
+		g = &lockTableGuardImpl{
 			seqNum: seqNum,
 			table:  t,
-			txn:    req.txnMeta(),
-			spans:  req.spans(),
-			ts:     req.ts(),
+			spans:  req.Spans,
+			ts:     req.Timestamp,
 			index:  -1,
+		}
+		if req.Txn != nil {
+			g.txn = &req.Txn.TxnMeta
 		}
 		g.mu.signal = make(chan struct{}, 1)
 		g.mu.locks = make(map[*lockState]struct{})
 	} else {
-		g = guard.(*requestGuardImpl)
+		g = guard.(*lockTableGuardImpl)
 		g.mu.Lock()
 		g.key = nil
 		g.sa = spanset.SpanAccess(0)
@@ -1597,15 +1335,11 @@ func (t *lockTableImpl) scanAndEnqueue(req Request, guard requestGuard) (request
 		g.mu.mustFindNextLockAfter = false
 		g.mu.Unlock()
 	}
-	err := t.findNextLockAfter(g, true /* notify */)
-	if err != nil {
-		_ = t.done(g)
-		return nil, err
-	}
-	return g, nil
+	t.findNextLockAfter(g, true /* notify */)
+	return g
 }
 
-func processDoneWaiting(doneWaiting []*requestGuardImpl) {
+func processDoneWaiting(doneWaiting []*lockTableGuardImpl) {
 	for _, g := range doneWaiting {
 		g.mu.Lock()
 		g.mu.mustFindNextLockAfter = true
@@ -1614,22 +1348,20 @@ func processDoneWaiting(doneWaiting []*requestGuardImpl) {
 	}
 }
 
-// done implements the lockTable interface.
-func (t *lockTableImpl) done(guard requestGuard) error {
-	g := guard.(*requestGuardImpl)
+// Dequeue implements the lockTable interface.
+func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
+	g := guard.(*lockTableGuardImpl)
 	var candidateLocks []*lockState
 	g.mu.Lock()
 	for l := range g.mu.locks {
 		candidateLocks = append(candidateLocks, l)
 	}
 	g.mu.Unlock()
-	var doneWaiting []*requestGuardImpl
+	var doneWaiting []*lockTableGuardImpl
 	var locksToGC [spanset.NumSpanScope][]*lockState
-	var err error
 	for _, l := range candidateLocks {
-		dw, gc, err2 := l.requestDone(g)
+		dw, gc := l.requestDone(g)
 		doneWaiting = append(doneWaiting, dw...)
-		err = firstError(err, err2)
 		if gc {
 			locksToGC[l.ss] = append(locksToGC[l.ss], l)
 		}
@@ -1637,25 +1369,52 @@ func (t *lockTableImpl) done(guard requestGuard) error {
 
 	for i := 0; i < len(locksToGC); i++ {
 		if len(locksToGC[i]) > 0 {
-			err = firstError(err, t.tryGCLocks(&t.locks[i], locksToGC[i]))
+			t.tryGCLocks(&t.locks[i], locksToGC[i])
 		}
 	}
 	processDoneWaiting(doneWaiting)
-	if err != nil {
-		// This is a lockTable bug.
-		panic(err)
-	}
-	return err
 }
 
-// acquireLock implements the lockTable interface.
-func (t *lockTableImpl) acquireLock(
-	key roachpb.Key, strength lock.Strength, durability lock.Durability, guard requestGuard,
+// AddDiscoveredLock implements the lockTable interface.
+func (t *lockTableImpl) AddDiscoveredLock(intent *roachpb.Intent, guard lockTableGuard) error {
+	g := guard.(*lockTableGuardImpl)
+	key := intent.Key
+	ss := spanset.SpanGlobal
+	if keys.IsLocal(key) {
+		ss = spanset.SpanLocal
+	}
+	sa, err := findAccessInSpans(key, ss, g.spans)
+	if err != nil {
+		return err
+	}
+	var l *lockState
+	tree := &t.locks[ss]
+	tree.mu.Lock()
+	// Can't release tree.mu until call l.discoveredLock() since someone may
+	// find an empty lock and remove it from the tree. If we expect that
+	// lockState will already be in tree we can optimize this by first trying
+	// with a tree.mu.RLock().
+	defer tree.mu.Unlock()
+	i := tree.Get(&lockState{key: key})
+	if i == nil {
+		l = &lockState{key: key, ss: ss}
+		l.queuedWriters.Init()
+		l.waitingReaders.Init()
+		tree.ReplaceOrInsert(l)
+		atomic.AddInt64(&tree.numLocks, 1)
+	} else {
+		l = i.(*lockState)
+	}
+	return l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa)
+}
+
+// AcquireLock implements the lockTable interface.
+func (t *lockTableImpl) AcquireLock(
+	txn *enginepb.TxnMeta, key roachpb.Key, strength lock.Strength, durability lock.Durability,
 ) error {
 	if strength != lock.Exclusive {
 		return errors.Errorf("caller violated contract")
 	}
-	g := guard.(*requestGuardImpl)
 	ss := spanset.SpanGlobal
 	if keys.IsLocal(key) {
 		ss = spanset.SpanLocal
@@ -1682,7 +1441,7 @@ func (t *lockTableImpl) acquireLock(
 	} else {
 		l = i.(*lockState)
 	}
-	doneWaiting, err := l.acquireLock(strength, durability, g.txn, g.ts)
+	doneWaiting, err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp)
 	tree.mu.Unlock()
 
 	processDoneWaiting(doneWaiting)
@@ -1700,8 +1459,8 @@ func (t *lockTableImpl) acquireLock(
 // elsewhere. A replicated lock which has been discovered by a request but the
 // request is not yet actively waiting on it will be preserved since we need
 // to tell that request who it is waiting for when it next calls
-// scanAndEnqueue(). If we aggressively removed even those requests, the next
-// scanAndEnqueue() would not find that lock, the request would evaluate
+// ScanAndEnqueue(). If we aggressively removed even those requests, the next
+// ScanAndEnqueue() would not find that lock, the request would evaluate
 // again, again discover that lock and if clearMostLocks() keeps getting
 // called would be stuck in this loop without pushing.
 func (t *lockTableImpl) clearMostLocks() {
@@ -1738,43 +1497,8 @@ func findAccessInSpans(
 	return spanset.NumSpanAccess, errors.Errorf("caller violated contract")
 }
 
-// addDiscoveredLock implements the lockTable interface.
-func (t *lockTableImpl) addDiscoveredLock(
-	key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp, guard requestGuard,
-) error {
-	g := guard.(*requestGuardImpl)
-	ss := spanset.SpanGlobal
-	if keys.IsLocal(key) {
-		ss = spanset.SpanLocal
-	}
-	sa, err := findAccessInSpans(key, ss, g.spans)
-	if err != nil {
-		return err
-	}
-	var l *lockState
-	tree := &t.locks[ss]
-	tree.mu.Lock()
-	// Can't release tree.mu until call l.discoveredLock() since someone may
-	// find an empty lock and remove it from the tree. If we expect that
-	// lockState will already be in tree we can optimize this by first trying
-	// with a tree.mu.RLock().
-	defer tree.mu.Unlock()
-	i := tree.Get(&lockState{key: key})
-	if i == nil {
-		l = &lockState{key: key, ss: ss}
-		l.queuedWriters.Init()
-		l.waitingReaders.Init()
-		tree.ReplaceOrInsert(l)
-		atomic.AddInt64(&tree.numLocks, 1)
-	} else {
-		l = i.(*lockState)
-	}
-	return l.discoveredLock(txn, ts, g, sa)
-}
-
 // Tries to GC locks that were previously known to have become empty.
-func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*lockState) error {
-	var err error
+func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*lockState) {
 	tree.mu.Lock()
 	defer tree.mu.Unlock()
 	for _, l := range locks {
@@ -1789,19 +1513,17 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*lockState) error {
 		}
 		l = i.(*lockState)
 		l.mu.Lock()
-		empty, err2 := l.isEmptyLock()
+		empty := l.isEmptyLock()
 		l.mu.Unlock()
-		err = firstError(err, err2)
-		if err2 == nil && empty {
+		if empty {
 			tree.Delete(l)
 			atomic.AddInt64(&tree.numLocks, -1)
 		}
 	}
-	return err
 }
 
-// updateLocks implements the lockTable interface.
-func (t *lockTableImpl) updateLocks(intent *roachpb.Intent) error {
+// UpdateLocks implements the lockTable interface.
+func (t *lockTableImpl) UpdateLocks(intent *roachpb.Intent) error {
 	span := intent.Span
 	ss := spanset.SpanGlobal
 	if keys.IsLocal(span.Key) {
@@ -1809,13 +1531,16 @@ func (t *lockTableImpl) updateLocks(intent *roachpb.Intent) error {
 	}
 	tree := &t.locks[ss]
 	var err error
-	var doneWaiting []*requestGuardImpl
+	var doneWaiting []*lockTableGuardImpl
 	var locksToGC []*lockState
 	changeFunc := func(i btree.Item) bool {
 		l := i.(*lockState)
 		dw, gc, err2 := l.tryUpdateLock(intent)
+		if err2 != nil {
+			err = err2
+			return false
+		}
 		doneWaiting = append(doneWaiting, dw...)
-		err = firstError(err, err2)
 		if gc {
 			locksToGC = append(locksToGC, l)
 		}
@@ -1830,21 +1555,18 @@ func (t *lockTableImpl) updateLocks(intent *roachpb.Intent) error {
 		}
 	}
 	tree.mu.RUnlock()
+
 	if len(locksToGC) > 0 {
-		err = firstError(err, t.tryGCLocks(tree, locksToGC))
+		t.tryGCLocks(tree, locksToGC)
 	}
 	processDoneWaiting(doneWaiting)
-
-	// Non-nil error could be due to lockTable bug or caller violating contract.
-	// Could differentiate between them here and call clearMostLocks() for the
-	// former case.
 	return err
 }
 
 // Iteration helper for findNextLockAfter. Returns the next span to search
 // over, or nil if the iteration is done.
 // REQUIRES: g.mu is locked.
-func stepToNextSpan(g *requestGuardImpl) *spanset.Span {
+func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
 	g.index++
 	for ; g.ss < spanset.NumSpanScope; g.ss++ {
 		for ; g.sa < spanset.NumSpanAccess; g.sa++ {
@@ -1865,7 +1587,7 @@ func stepToNextSpan(g *requestGuardImpl) *spanset.Span {
 // finds the next lock the request starts actively waiting there, else it is
 // told that it is done waiting.
 // Acquires g.mu. Acquires treeMu.mu's in read mode.
-func (t *lockTableImpl) findNextLockAfter(g *requestGuardImpl, notify bool) error {
+func (t *lockTableImpl) findNextLockAfter(g *lockTableGuardImpl, notify bool) {
 	spans := g.spans.GetSpans(g.sa, g.ss)
 	var span *spanset.Span
 	resumingInSameSpan := false
@@ -1886,12 +1608,8 @@ func (t *lockTableImpl) findNextLockAfter(g *requestGuardImpl, notify bool) erro
 			tree.mu.RUnlock()
 			if i != nil {
 				l := i.(*lockState)
-				waiting, err := l.tryActiveWait(g, sa, notify)
-				if err != nil {
-					return err
-				}
-				if waiting {
-					return nil
+				if l.tryActiveWait(g, sa, notify) {
+					return
 				}
 			}
 		} else {
@@ -1900,7 +1618,6 @@ func (t *lockTableImpl) findNextLockAfter(g *requestGuardImpl, notify bool) erro
 				startKey = g.key
 			}
 			waiting := false
-			var err error
 			tree.mu.RLock()
 			// From here on, the use of resumingInSameSpan is just a performance
 			// optimization to deal with the interface limitation of AscendRange()
@@ -1922,19 +1639,13 @@ func (t *lockTableImpl) findNextLockAfter(g *requestGuardImpl, notify bool) erro
 						// Else, past the lock where it stopped waiting. We may not
 						// encounter that lock since it may have been garbage collected.
 					}
-					waiting, err = l.tryActiveWait(g, sa, notify)
-					if err != nil || waiting {
-						return false
-					}
-					return true
+					waiting = l.tryActiveWait(g, sa, notify)
+					return !waiting
 				})
 			resumingInSameSpan = false
 			tree.mu.RUnlock()
-			if err != nil {
-				return err
-			}
 			if waiting {
-				return nil
+				return
 			}
 		}
 		span = stepToNextSpan(g)
@@ -1945,7 +1656,10 @@ func (t *lockTableImpl) findNextLockAfter(g *requestGuardImpl, notify bool) erro
 	if notify {
 		g.notify()
 	}
-	return nil
+}
+
+func (t *lockTableImpl) Clear() {
+	// TODO(nvanbenschoten): implement and test this.
 }
 
 // For tests.
@@ -1959,13 +1673,8 @@ func (t *lockTableImpl) String() string {
 	lockStateStrings := func(l *lockState) {
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		empty, err := l.isEmptyLock()
-		if empty {
+		if l.isEmptyLock() {
 			fmt.Fprintln(&buf, "empty")
-			return
-		}
-		if err != nil {
-			fmt.Fprintln(&buf, err.Error())
 			return
 		}
 		txn, ts := l.getLockerInfo()
@@ -1978,7 +1687,7 @@ func (t *lockTableImpl) String() string {
 		if l.waitingReaders.Len() > 0 {
 			fmt.Fprintln(&buf, "   waiting readers:")
 			for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
-				g := e.Value.(*requestGuardImpl)
+				g := e.Value.(*lockTableGuardImpl)
 				txnStr := "none"
 				if g.txn != nil {
 					txnStr = fmt.Sprintf("%v", g.txn.ID)
@@ -2012,11 +1721,4 @@ func (t *lockTableImpl) String() string {
 		tree.mu.RUnlock()
 	}
 	return buf.String()
-}
-
-func firstError(err0, err1 error) error {
-	if err0 != nil {
-		return err0
-	}
-	return err1
 }

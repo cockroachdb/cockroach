@@ -36,8 +36,8 @@ import (
 )
 
 /*
-Test needs to handle caller constraints wrt latches being held. The datadriven test uses the
-following format:
+Test needs to handle caller constraints wrt latches being held. The datadriven
+test uses the following format:
 
 txn txn=<name> ts=<int>[,<int>] epoch=<int>
 ----
@@ -53,8 +53,8 @@ scan r=<name>
 ----
 <error string>|start-waiting: <bool>
 
- Calls lockTable.scanAndEnqueue. If the request has an existing guard, uses it. If a guard is
- returned, stores it for later use.
+ Calls lockTable.ScanAndEnqueue. If the request has an existing guard, uses it.
+ If a guard is returned, stores it for later use.
 
 acquire r=<name> k=<key> durability=r|u
 ----
@@ -84,19 +84,21 @@ done r=<name>
 ----
 <error string>
 
- Calls lockTable.done() for the named request. The request and guard are discarded after this.
+ Calls lockTable.Dequeue() for the named request. The request and guard are
+ discarded after this.
 
 guard-state r=<name>
 ----
 new|old: state=<state> [txn=<name> ts=<ts>]
 
-  Calls requestGuard.newState() in a non-blocking manner, followed by currentState().
+  Calls lockTableGuard.NewStateChan() in a non-blocking manner, followed by
+  CurState().
 
 guard-start-waiting r=<name>
 ----
 <bool>
 
- Calls requestGuard.startWaiting().
+ Calls lockTableGuard.ShouldWait().
 
 print
 ----
@@ -171,26 +173,14 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 	return spans
 }
 
-type testRequest struct {
-	tM *enginepb.TxnMeta
-	s  *spanset.SpanSet
-	t  hlc.Timestamp
-}
-
-var _ Request = &testRequest{}
-
-func (r *testRequest) txnMeta() *enginepb.TxnMeta { return r.tM }
-func (r *testRequest) spans() *spanset.SpanSet    { return r.s }
-func (r *testRequest) ts() hlc.Timestamp          { return r.t }
-
 func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	lt := newLockTable(1000)
 	txnsByName := make(map[string]*enginepb.TxnMeta)
 	txnCounter := uint128.FromInts(0, 0)
-	requestsByName := make(map[string]*testRequest)
-	guardsByReqName := make(map[string]requestGuard)
+	requestsByName := make(map[string]Request)
+	guardsByReqName := make(map[string]lockTableGuard)
 	datadriven.RunTest(t, "testdata/lock_table", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "txn":
@@ -235,10 +225,15 @@ func TestLockTableBasic(t *testing.T) {
 			}
 			ts := scanTimestamp(t, d)
 			spans := scanSpans(t, d, ts)
-			req := &testRequest{
-				tM: txnMeta,
-				s:  spans,
-				t:  ts,
+			req := Request{
+				Timestamp: ts,
+				Spans:     spans,
+			}
+			if txnMeta != nil {
+				// Update the transaction's timestamp, if necessary. The transaction
+				// may have needed to move its timestamp for any number of reasons.
+				txnMeta.WriteTimestamp = ts
+				req.Txn = &roachpb.Transaction{TxnMeta: *txnMeta}
 			}
 			requestsByName[reqName] = req
 			return ""
@@ -246,24 +241,21 @@ func TestLockTableBasic(t *testing.T) {
 		case "scan":
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
-			req := requestsByName[reqName]
-			if req == nil {
+			req, ok := requestsByName[reqName]
+			if !ok {
 				d.Fatalf(t, "unknown request: %s", reqName)
 			}
 			g := guardsByReqName[reqName]
-			g, err := lt.scanAndEnqueue(req, g)
+			g = lt.ScanAndEnqueue(req, g)
 			guardsByReqName[reqName] = g
-			if err != nil {
-				return err.Error()
-			}
-			return fmt.Sprintf("start-waiting: %t", g.startWaiting())
+			return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
 		case "acquire":
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
-			g := guardsByReqName[reqName]
-			if g == nil {
-				d.Fatalf(t, "unknown guard: %s", reqName)
+			req, ok := requestsByName[reqName]
+			if !ok {
+				d.Fatalf(t, "unknown request: %s", reqName)
 			}
 			var key string
 			d.ScanArgs(t, "k", &key)
@@ -276,7 +268,7 @@ func TestLockTableBasic(t *testing.T) {
 			if s[0] == 'r' {
 				durability = lock.Replicated
 			}
-			if err := lt.acquireLock(roachpb.Key(key), lock.Exclusive, durability, g); err != nil {
+			if err := lt.AcquireLock(&req.Txn.TxnMeta, roachpb.Key(key), lock.Exclusive, durability); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
@@ -293,7 +285,7 @@ func TestLockTableBasic(t *testing.T) {
 			span := getSpan(t, d, s)
 			// TODO(sbhola): also test ABORTED.
 			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
-			if err := lt.updateLocks(intent); err != nil {
+			if err := lt.UpdateLocks(intent); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
@@ -317,7 +309,7 @@ func TestLockTableBasic(t *testing.T) {
 			span := getSpan(t, d, s)
 			// TODO(sbhola): also test STAGING.
 			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
-			if err := lt.updateLocks(intent); err != nil {
+			if err := lt.UpdateLocks(intent); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
@@ -337,34 +329,35 @@ func TestLockTableBasic(t *testing.T) {
 			if !ok {
 				d.Fatalf(t, "unknown txn %s", txnName)
 			}
-			if err := lt.addDiscoveredLock(roachpb.Key(key), txnMeta, txnMeta.WriteTimestamp, g); err != nil {
+			span := roachpb.Span{Key: roachpb.Key(key)}
+			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
+			if err := lt.AddDiscoveredLock(intent, g); err != nil {
 				return err.Error()
 			}
 			return lt.(*lockTableImpl).String()
 
 		case "done":
+			// TODO(nvanbenschoten): rename this command to dequeue.
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
 			g := guardsByReqName[reqName]
 			if g == nil {
 				d.Fatalf(t, "unknown guard: %s", reqName)
 			}
-			err := lt.done(g)
+			lt.Dequeue(g)
 			delete(guardsByReqName, reqName)
 			delete(requestsByName, reqName)
-			if err != nil {
-				return err.Error()
-			}
 			return lt.(*lockTableImpl).String()
 
 		case "guard-start-waiting":
+			// TODO(nvanbenschoten): rename this command to should-wait.
 			var reqName string
 			d.ScanArgs(t, "r", &reqName)
 			g := guardsByReqName[reqName]
 			if g == nil {
 				d.Fatalf(t, "unknown guard: %s", reqName)
 			}
-			return fmt.Sprintf("%t", g.startWaiting())
+			return fmt.Sprintf("%t", g.ShouldWait())
 
 		case "guard-state":
 			var reqName string
@@ -375,15 +368,12 @@ func TestLockTableBasic(t *testing.T) {
 			}
 			var str string
 			select {
-			case <-g.newState():
+			case <-g.NewStateChan():
 				str = "new: "
 			default:
 				str = "old: "
 			}
-			state, err := g.currentState()
-			if err != nil {
-				return str + err.Error()
-			}
+			state := g.CurState()
 			var typeStr string
 			switch state.stateKind {
 			case waitForDistinguished:
@@ -427,16 +417,16 @@ type workItem struct {
 	// Contains one of request or intents.
 
 	// Request.
-	request        *testRequest
+	request        *Request
 	locksToAcquire []roachpb.Key
 
-	// updateLocks
-	intents []*roachpb.Intent
+	// Update locks.
+	intents []roachpb.Intent
 }
 
 func (w *workItem) getRequestTxnID() uuid.UUID {
-	if w.request != nil && w.request.tM != nil {
-		return w.request.tM.ID
+	if w.request != nil && w.request.Txn != nil {
+		return w.request.Txn.ID
 	}
 	return uuid.UUID{}
 }
@@ -447,23 +437,19 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 	}()
 	if item.request != nil {
 		var lg *spanlatch.Guard
-		var g requestGuard
+		var g lockTableGuard
 		var err error
 		for {
 			// Since we can't do a select involving latch acquisition and context
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.TODO(), item.request.s)
+			lg, err = e.lm.Acquire(context.TODO(), item.request.Spans)
 			if err != nil {
 				return err
 			}
-			g, err = e.lt.scanAndEnqueue(item.request, g)
-			if err != nil {
-				e.lm.Release(lg)
-				return err
-			}
-			if !g.startWaiting() {
+			g = e.lt.ScanAndEnqueue(*item.request, g)
+			if !g.ShouldWait() {
 				break
 			}
 			e.lm.Release(lg)
@@ -471,39 +457,35 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 		L:
 			for {
 				select {
-				case <-g.newState():
+				case <-g.NewStateChan():
 				case <-ctx.Done():
 					return ctx.Err()
 				}
-				state, err := g.currentState()
-				if err != nil {
-					_ = e.lt.done(g)
-					return err
-				}
+				state := g.CurState()
 				switch state.stateKind {
 				case doneWaiting:
-					if !lastID.Equal(uuid.UUID{}) && item.request.tM != nil {
-						_, err = e.waitingFor(item.request.tM.ID, lastID, uuid.UUID{})
+					if !lastID.Equal(uuid.UUID{}) && item.request.Txn != nil {
+						_, err = e.waitingFor(item.request.Txn.ID, lastID, uuid.UUID{})
 						if err != nil {
-							_ = e.lt.done(g)
+							e.lt.Dequeue(g)
 							return err
 						}
 					}
 					break L
 				case waitSelf:
-					if item.request.tM == nil {
-						_ = e.lt.done(g)
+					if item.request.Txn == nil {
+						e.lt.Dequeue(g)
 						return errors.Errorf("non-transactional request cannot waitSelf")
 					}
 				case waitForDistinguished, waitFor, waitElsewhere:
-					if item.request.tM != nil {
+					if item.request.Txn != nil {
 						var aborted bool
-						aborted, err = e.waitingFor(item.request.tM.ID, lastID, state.txn.ID)
+						aborted, err = e.waitingFor(item.request.Txn.ID, lastID, state.txn.ID)
 						if !aborted {
 							lastID = state.txn.ID
 						}
 						if aborted {
-							_ = e.lt.done(g)
+							e.lt.Dequeue(g)
 							return err
 						}
 					}
@@ -515,17 +497,17 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 
 		// acquire locks.
 		for _, k := range item.locksToAcquire {
-			err = e.acquireLock(k, g, item.request.tM.ID)
+			err = e.acquireLock(&item.request.Txn.TxnMeta, k)
 			if err != nil {
 				break
 			}
 		}
-		err = firstError(err, e.lt.done(g))
+		e.lt.Dequeue(g)
 		e.lm.Release(lg)
 		return err
 	}
-	for _, intent := range item.intents {
-		if err := e.lt.updateLocks(intent); err != nil {
+	for i := range item.intents {
+		if err := e.lt.UpdateLocks(&item.intents[i]); err != nil {
 			return err
 		}
 	}
@@ -536,7 +518,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 // be released.
 type workloadItem struct {
 	// Request to be executed, iff request != nil
-	request *testRequest
+	request *Request
 	// locks to be acquired by the request.
 	locksToAcquire []roachpb.Key
 
@@ -566,12 +548,11 @@ type transactionState struct {
 func makeWorkItemFinishTxn(tstate *transactionState) workItem {
 	wItem := workItem{}
 	for i := range tstate.acquiredLocks {
-		intent := &roachpb.Intent{
+		wItem.intents = append(wItem.intents, roachpb.Intent{
 			Span:   roachpb.Span{Key: tstate.acquiredLocks[i]},
 			Txn:    *tstate.txn,
 			Status: roachpb.COMMITTED,
-		}
-		wItem.intents = append(wItem.intents, intent)
+		})
 	}
 	return wItem
 }
@@ -610,16 +591,16 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 	}
 }
 
-func (e *workloadExecutor) acquireLock(k roachpb.Key, g requestGuard, txnID uuid.UUID) error {
-	err := e.lt.acquireLock(k, lock.Exclusive, lock.Unreplicated, g)
+func (e *workloadExecutor) acquireLock(txn *enginepb.TxnMeta, k roachpb.Key) error {
+	err := e.lt.AcquireLock(txn, k, lock.Exclusive, lock.Unreplicated)
 	if err != nil {
 		return err
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	tstate, ok := e.transactions[txnID]
+	tstate, ok := e.transactions[txn.ID]
 	if !ok {
-		return errors.Errorf("testbug: lock acquiring request with txnID %v has no transaction", txnID)
+		return errors.Errorf("testbug: lock acquiring request with txnID %v has no transaction", txn.ID)
 	}
 	tstate.acquiredLocks = append(tstate.acquiredLocks, k)
 	return nil
@@ -764,13 +745,13 @@ L:
 		i++
 		if wi.request != nil {
 			work := makeWorkItemForRequest(wi)
-			if wi.request.tM != nil {
-				txnID := wi.request.tM.ID
+			if wi.request.Txn != nil {
+				txnID := wi.request.Txn.ID
 				_, ok := e.transactions[txnID]
 				if !ok {
 					// New transaction
 					tstate := &transactionState{
-						txn:             wi.request.tM,
+						txn:             &wi.request.Txn.TxnMeta,
 						dependsOn:       make(map[uuid.UUID]int),
 						ongoingRequests: make(map[*workItem]struct{}),
 					}
@@ -838,21 +819,23 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 				onlyReads = false
 			}
 		}
-		var txnMeta *enginepb.TxnMeta
+		var txn *roachpb.Transaction
 		if !onlyReads || rng.Intn(2) == 0 {
-			txnMeta = &enginepb.TxnMeta{
-				ID:             nextUUID(&txnCounter),
-				WriteTimestamp: ts,
+			txn = &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					ID:             nextUUID(&txnCounter),
+					WriteTimestamp: ts,
+				},
 			}
 		}
-		request := &testRequest{
-			tM: txnMeta,
-			s:  spans,
-			t:  ts,
+		request := &Request{
+			Txn:       txn,
+			Timestamp: ts,
+			Spans:     spans,
 		}
 		items = append(items, workloadItem{request: request})
-		if txnMeta != nil {
-			startedTxnIDs = append(startedTxnIDs, txnMeta.ID)
+		if txn != nil {
+			startedTxnIDs = append(startedTxnIDs, txn.ID)
 		}
 		randomMaxStartedTxns := rng.Intn(maxStartedTxns)
 		for len(startedTxnIDs) > randomMaxStartedTxns {
@@ -923,10 +906,12 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		spans := &spanset.SpanSet{}
 		onlyReads := txnMeta == nil
 		numKeys := rng.Intn(len(keys)-1) + 1
-		request := &testRequest{
-			tM: txnMeta,
-			s:  spans,
-			t:  ts,
+		request := &Request{
+			Timestamp: ts,
+			Spans:     spans,
+		}
+		if txnMeta != nil {
+			request.Txn = &roachpb.Transaction{TxnMeta: *txnMeta}
 		}
 		wi := workloadItem{request: request}
 		for i := 0; i < numKeys; i++ {
