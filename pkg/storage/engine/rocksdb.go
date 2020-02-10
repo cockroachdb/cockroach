@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -3340,7 +3341,7 @@ type rocksdbWritableFile struct {
 	rdb  *C.DBEngine
 }
 
-var _ File = &rocksdbWritableFile{}
+var _ fs.File = &rocksdbWritableFile{}
 
 // Write implements the File interface.
 func (f *rocksdbWritableFile) Write(data []byte) (int, error) {
@@ -3376,7 +3377,7 @@ type rocksdbReadableFile struct {
 	offset int64
 }
 
-var _ File = &rocksdbReadableFile{}
+var _ fs.File = &rocksdbReadableFile{}
 
 // Write implements the File interface.
 func (f *rocksdbReadableFile) Write(data []byte) (int, error) {
@@ -3412,7 +3413,7 @@ type rocksdbDirectory struct {
 	rdb  *C.DBEngine
 }
 
-var _ File = &rocksdbDirectory{}
+var _ fs.File = &rocksdbDirectory{}
 
 // Write implements the File interface.
 func (f *rocksdbDirectory) Write(data []byte) (int, error) {
@@ -3439,15 +3440,15 @@ func (f *rocksdbDirectory) ReadAt(p []byte, off int64) (n int, err error) {
 	return 0, fmt.Errorf("cannot read directory")
 }
 
-var _ FS = &RocksDB{}
+var _ fs.FS = &RocksDB{}
 
 // CreateFile implements the FS interface.
-func (r *RocksDB) CreateFile(name string) (File, error) {
+func (r *RocksDB) CreateFile(name string) (fs.File, error) {
 	return r.CreateFileWithSync(name, 0)
 }
 
 // CreateFileWithSync implements the FS interface.
-func (r *RocksDB) CreateFileWithSync(name string, bytesPerSync int) (File, error) {
+func (r *RocksDB) CreateFileWithSync(name string, bytesPerSync int) (fs.File, error) {
 	var file C.DBWritableFile
 	if err := statusToError(C.DBEnvOpenFile(
 		r.rdb, goToCSlice([]byte(name)), C.uint64_t(bytesPerSync), &file)); err != nil {
@@ -3457,7 +3458,7 @@ func (r *RocksDB) CreateFileWithSync(name string, bytesPerSync int) (File, error
 }
 
 // OpenFile implements the FS interface.
-func (r *RocksDB) OpenFile(name string) (File, error) {
+func (r *RocksDB) OpenFile(name string) (fs.File, error) {
 	var file C.DBReadableFile
 	if err := statusToError(C.DBEnvOpenReadableFile(r.rdb, goToCSlice([]byte(name)), &file)); err != nil {
 		return nil, notFoundErrOrDefault(err)
@@ -3466,7 +3467,7 @@ func (r *RocksDB) OpenFile(name string) (File, error) {
 }
 
 // OpenDir implements the FS interface.
-func (r *RocksDB) OpenDir(name string) (File, error) {
+func (r *RocksDB) OpenDir(name string) (fs.File, error) {
 	var file C.DBDirectory
 	if err := statusToError(C.DBEnvOpenDirectory(r.rdb, goToCSlice([]byte(name)), &file)); err != nil {
 		return nil, notFoundErrOrDefault(err)

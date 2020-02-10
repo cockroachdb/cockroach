@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/snappy"
@@ -166,7 +166,7 @@ type diskQueue struct {
 	numBufferedBatches int
 	writer             *diskQueueWriter
 	writeFileIdx       int
-	writeFile          engine.File
+	writeFile          fs.File
 	deserializerState  struct {
 		*colserde.FileDeserializer
 		curBatch int
@@ -174,7 +174,7 @@ type diskQueue struct {
 	// readFileIdx is an index into the current file in files the deserializer is
 	// reading from.
 	readFileIdx                  int
-	readFile                     engine.File
+	readFile                     fs.File
 	scratchDecompressedReadBytes []byte
 }
 
@@ -207,7 +207,7 @@ const (
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
-	FS engine.FS
+	FS fs.FS
 	// Path is where the temporary directory that will contain this DiskQueue's
 	// files should be created. The directory name will be a UUID.
 	Path string
@@ -335,7 +335,7 @@ func (d *diskQueue) rotateFile() error {
 	return nil
 }
 
-func (d *diskQueue) resetWriters(f engine.File) error {
+func (d *diskQueue) resetWriters(f fs.File) error {
 	d.writer.reset(f)
 	return d.serializer.Reset(d.writer)
 }

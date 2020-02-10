@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -380,7 +381,7 @@ func (t *TeeEngine) InMem() bool {
 }
 
 // CreateFile implements the FS interface.
-func (t *TeeEngine) CreateFile(filename string) (File, error) {
+func (t *TeeEngine) CreateFile(filename string) (fs.File, error) {
 	file1, err := t.eng1.CreateFile(filename)
 	if !t.inMem {
 		// No need to write twice if the two engines share the same file system.
@@ -398,7 +399,7 @@ func (t *TeeEngine) CreateFile(filename string) (File, error) {
 }
 
 // CreateFileWithSync implements the FS interface.
-func (t *TeeEngine) CreateFileWithSync(filename string, bytesPerSync int) (File, error) {
+func (t *TeeEngine) CreateFileWithSync(filename string, bytesPerSync int) (fs.File, error) {
 	file1, err := t.eng1.CreateFileWithSync(filename, bytesPerSync)
 	if !t.inMem {
 		// No need to write twice if the two engines share the same file system.
@@ -416,7 +417,7 @@ func (t *TeeEngine) CreateFileWithSync(filename string, bytesPerSync int) (File,
 }
 
 // OpenFile implements the FS interface.
-func (t *TeeEngine) OpenFile(filename string) (File, error) {
+func (t *TeeEngine) OpenFile(filename string) (fs.File, error) {
 	file1, err := t.eng1.OpenFile(filename)
 	file2, err2 := t.eng2.OpenFile(filename)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
@@ -430,7 +431,7 @@ func (t *TeeEngine) OpenFile(filename string) (File, error) {
 }
 
 // OpenDir implements the FS interface.
-func (t *TeeEngine) OpenDir(name string) (File, error) {
+func (t *TeeEngine) OpenDir(name string) (fs.File, error) {
 	file1, err := t.eng1.OpenDir(name)
 	file2, err2 := t.eng2.OpenDir(name)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
@@ -554,11 +555,11 @@ func (t TeeEngine) String() string {
 // and eng2 files.
 type TeeEngineFile struct {
 	ctx   context.Context
-	file1 File
-	file2 File
+	file1 fs.File
+	file2 fs.File
 }
 
-var _ File = &TeeEngineFile{}
+var _ fs.File = &TeeEngineFile{}
 
 // Close implements the File interface.
 func (t *TeeEngineFile) Close() error {

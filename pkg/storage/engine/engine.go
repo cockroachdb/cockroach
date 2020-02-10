@@ -13,7 +13,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -416,7 +416,7 @@ type Engine interface {
 	InMem() bool
 
 	// Filesystem functionality.
-	FS
+	fs.FS
 	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
 	ReadFile(filename string) ([]byte, error)
 	// WriteFile writes data to a file in this RocksDB's env.
@@ -468,58 +468,6 @@ type Batch interface {
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
-}
-
-// File and FS are a partial attempt at offering the Pebble vfs.FS interface. Given the constraints
-// of the RocksDB Env interface we've chosen to only include what is easy to implement. Additionally,
-// it does not try to subsume all the file related functionality already in the Engine interface.
-// It seems preferable to do a final cleanup only when the implementation can simply use Pebble's
-// implementation of vfs.FS. At that point the following interface will become a superset of vfs.FS.
-type File interface {
-	io.ReadWriteCloser
-	io.ReaderAt
-	Sync() error
-}
-
-// FS provides a filesystem interface.
-type FS interface {
-	// CreateFile creates the named file for writing, truncating it if it already
-	// exists.
-	CreateFile(name string) (File, error)
-
-	// CreateFileWithSync is similar to CreateFile, but the file is periodically
-	// synced whenever more than bytesPerSync bytes accumulate. This syncing
-	// does not provide any persistency guarantees, but can prevent latency
-	// spikes.
-	CreateFileWithSync(name string, bytesPerSync int) (File, error)
-
-	// LinkFile creates newname as a hard link to the oldname file.
-	LinkFile(oldname, newname string) error
-
-	// OpenFile opens the named file for reading.
-	OpenFile(name string) (File, error)
-
-	// OpenDir opens the named directory for syncing.
-	OpenDir(name string) (File, error)
-
-	// DeleteFile removes the named file. If the file with given name doesn't exist, return an error
-	// that returns true from os.IsNotExist().
-	DeleteFile(name string) error
-
-	// RenameFile renames a file. It overwrites the file at newname if one exists,
-	// the same as os.Rename.
-	RenameFile(oldname, newname string) error
-
-	// CreateDir creates the named dir. Does nothing if the directory already
-	// exists.
-	CreateDir(name string) error
-
-	// DeleteDir removes the named dir.
-	DeleteDir(name string) error
-
-	// ListDir returns a listing of the given directory. The names returned are
-	// relative to the directory.
-	ListDir(name string) ([]string, error)
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB
