@@ -12,6 +12,7 @@ package kvnemesis
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -34,7 +35,11 @@ func TestApplier(t *testing.T) {
 	check := func(t *testing.T, s Step, expected string) {
 		t.Helper()
 		require.NoError(t, a.Apply(ctx, &s))
-		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(s.String()))
+		actual := s.String()
+		// Trim out the txn stuff. It has things like timestamps in it that are not
+		// stable from run to run.
+		actual = regexp.MustCompile(` // nil txnpb:\(.*\)`).ReplaceAllString(actual, ` // nil txnpb:(...)`)
+		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(actual))
 	}
 	checkErr := func(t *testing.T, s Step, expected string) {
 		t.Helper()
@@ -73,7 +78,7 @@ func TestApplier(t *testing.T) {
 
 	// Txn commit
 	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`), batch(put(`f`, `6`)))), `
-db1.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   {
     b := &Batch{}
@@ -81,24 +86,24 @@ db1.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
     txn.Run(ctx, b) // nil
   }
   return nil
-}) // nil
+}) // nil txnpb:(...)
 		`)
 
 	// Txn commit in batch
 	check(t, step(closureTxnCommitInBatch(opSlice(get(`a`), put(`f`, `6`)), put(`e`, `5`))), `
-db0.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   b := &Batch{}
   b.Get(ctx, "a") // ("1", nil)
   b.Put(ctx, "f", 6) // nil
   txn.CommitInBatch(ctx, b) // nil
   return nil
-}) // nil
+}) // nil txnpb:(...)
 		`)
 
 	// Txn rollback
 	check(t, step(closureTxn(ClosureTxnType_Rollback, put(`e`, `5`))), `
-db1.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   return errors.New("rollback")
 }) // rollback
@@ -106,7 +111,7 @@ db1.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 
 	// Txn error
 	checkErr(t, step(closureTxn(ClosureTxnType_Rollback, put(`e`, `5`))), `
-db0.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Put(ctx, "e", 5)
   return errors.New("rollback")
 }) // context canceled

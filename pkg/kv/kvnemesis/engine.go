@@ -16,71 +16,95 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/google/btree"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
-// Engine is a simplified version of engine.ReadWriter. It is a multi-version
+// Engine is a simplified version of storage.ReadWriter. It is a multi-version
 // key-value map, meaning that each read or write has an associated timestamp
 // and a read returns the write for the key with the highest timestamp (which is
 // not necessarily the most recently ingested write). Engine is not threadsafe.
-//
-// TODO(dan): If this gets any more complicated, it should probably just be
-// swapped for an in-mem engine.Engine.
 type Engine struct {
-	kvs *btree.BTree
+	kvs *pebble.DB
+	b   bufalloc.ByteAllocator
 }
 
 // MakeEngine returns a new Engine.
-func MakeEngine() *Engine {
-	return &Engine{
-		kvs: btree.New(8),
+func MakeEngine() (*Engine, error) {
+	opts := storage.DefaultPebbleOptions()
+	opts.FS = vfs.NewMem()
+	kvs, err := pebble.Open(`kvnemesis`, opts)
+	if err != nil {
+		return nil, err
 	}
+	return &Engine{kvs: kvs}, nil
+}
+
+func (e *Engine) Close() error {
+	return e.kvs.Close()
 }
 
 // Get returns the value for this key with the highest timestamp <= ts. If no
 // such value exists, the returned value's RawBytes is nil.
 func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
-	var value roachpb.Value
-	e.kvs.AscendGreaterOrEqual(
-		btreeItem{Key: storage.MVCCKey{Key: key, Timestamp: ts}},
-		func(i btree.Item) bool {
-			if kv := i.(btreeItem); kv.Key.Key.Equal(key) {
-				value = roachpb.Value{
-					Timestamp: kv.Key.Timestamp,
-					RawBytes:  kv.Value,
-				}
-			}
-			return false
-		},
-	)
-	return value
+	iter := e.kvs.NewIter(nil)
+	defer iter.Close()
+	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: key, Timestamp: ts}))
+	if !iter.Valid() {
+		return roachpb.Value{}
+	}
+	mvccKey, err := storage.DecodeMVCCKey(iter.Key())
+	if err != nil {
+		panic(err)
+	}
+	if !mvccKey.Key.Equal(key) {
+		return roachpb.Value{}
+	}
+	return roachpb.Value{RawBytes: iter.Value(), Timestamp: mvccKey.Timestamp}
 }
 
 // Put inserts a key/value/timestamp tuple. If an exact key/timestamp pair is
 // Put again, it overwrites the previous value.
 func (e *Engine) Put(key storage.MVCCKey, value []byte) {
-	e.kvs.ReplaceOrInsert(btreeItem{Key: key, Value: value})
+	e.kvs.Set(storage.EncodeKey(key), value, nil)
+}
+
+func (e *Engine) Iterate(fn func(key storage.MVCCKey, value []byte, err error)) {
+	iter := e.kvs.NewIter(nil)
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		if err := iter.Error(); err != nil {
+			fn(storage.MVCCKey{}, nil, err)
+			continue
+		}
+		var keyCopy, valCopy []byte
+		keyCopy, e.b = e.b.Copy(iter.Key(), 0 /* extraCap */)
+		valCopy, e.b = e.b.Copy(iter.Value(), 0 /* extraCap */)
+		key, err := storage.DecodeMVCCKey(keyCopy)
+		if err != nil {
+			fn(storage.MVCCKey{}, nil, err)
+			continue
+		}
+		fn(key, valCopy, nil)
+	}
 }
 
 // DebugPrint returns the entire contents of this Engine as a string for use in
 // debugging.
 func (e *Engine) DebugPrint(indent string) string {
 	var buf strings.Builder
-	e.kvs.Ascend(func(item btree.Item) bool {
+	e.Iterate(func(key storage.MVCCKey, value []byte, err error) {
 		if buf.Len() > 0 {
 			buf.WriteString("\n")
 		}
-		kv := item.(btreeItem)
-		fmt.Fprintf(&buf, "%s%s %s -> %s",
-			indent, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}.PrettyPrint())
-		return true
+		if err != nil {
+			fmt.Fprintf(&buf, "(err:%s)", err)
+		} else {
+			fmt.Fprintf(&buf, "%s%s %s -> %s",
+				indent, key.Key, key.Timestamp, roachpb.Value{RawBytes: value}.PrettyPrint())
+		}
 	})
 	return buf.String()
-}
-
-type btreeItem storage.MVCCKeyValue
-
-func (i btreeItem) Less(o btree.Item) bool {
-	return i.Key.Less(o.(btreeItem).Key)
 }

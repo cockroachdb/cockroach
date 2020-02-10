@@ -59,7 +59,9 @@ func RunNemesis(
 				return err
 			}
 			buf.Reset()
+			fmt.Fprintf(&buf, "\n  before: %s", step.Before)
 			step.format(&buf, formatCtx{indent: `  ` + workerName + ` OP  `})
+			fmt.Fprintf(&buf, "\n  after: %s", step.After)
 			log.Info(ctx, buf.String())
 			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
 		}
@@ -80,6 +82,7 @@ func RunNemesis(
 		return nil, err
 	}
 	kvs := w.Finish()
+	defer kvs.Close()
 	failures := Validate(allSteps, kvs)
 
 	if len(failures) > 0 {
