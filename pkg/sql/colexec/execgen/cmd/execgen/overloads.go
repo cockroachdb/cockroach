@@ -662,7 +662,12 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 
 func (decimalCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf(`b := []byte(%[1]s.String())`, v) +
+		return fmt.Sprintf(`
+			// In order for equal decimals to hash to the same value we need to
+			// remove the trailing zeroes if there any.
+			tmpDec := &apd.Decimal{}
+			tmpDec.Reduce(&%[1]s)
+			b := []byte(tmpDec.String())`, v) +
 			fmt.Sprintf(hashByteSliceString, target, "b")
 	}
 }

@@ -26,6 +26,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -48,6 +49,9 @@ var _ reflect.SliceHeader
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
