@@ -91,9 +91,15 @@ func (l *localFileStorage) ReadFile(ctx context.Context, basename string) (io.Re
 	return l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename))
 }
 
-func (l *localFileStorage) ListFiles(ctx context.Context) ([]string, error) {
+func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
+
+	pattern := l.base
+	if patternSuffix != "" {
+		pattern = joinRelativePath(pattern, patternSuffix)
+	}
+
 	var fileList []string
-	matches, err := l.blobClient.List(ctx, l.base)
+	matches, err := l.blobClient.List(ctx, pattern)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to match pattern provided")
 	}
