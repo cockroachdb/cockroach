@@ -28,6 +28,8 @@ var (
 	zeroInt32Value    int32
 	zeroInt64Value    int64
 	zeroIntervalValue duration.Duration
+
+	tmpDec1, tmpDec2 apd.Decimal
 )
 
 // CopyBatch copies the original batch and returns that copy. However, note that

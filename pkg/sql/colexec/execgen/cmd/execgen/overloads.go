@@ -665,7 +665,7 @@ func (decimalCustomizer) getHashAssignFunc() assignFunc {
 		return fmt.Sprintf(`
 			// In order for equal decimals to hash to the same value we need to
 			// remove the trailing zeroes if there any.
-			tmpDec := &apd.Decimal{}
+			tmpDec := &tmpDec1
 			tmpDec.Reduce(&%[1]s)
 			b := []byte(tmpDec.String())`, v) +
 			fmt.Sprintf(hashByteSliceString, target, "b")
@@ -857,14 +857,13 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 		case tree.Div:
 			// Note that this is the '/' operator, which has a decimal result.
 			// TODO(rafi): implement the '//' floor division operator.
-			// todo(rafi): is there a way to avoid allocating on each operation?
 			args["Ctx"] = binaryOpDecCtx[op.BinOp]
 			t = template.Must(template.New("").Parse(`
 			{
 				if {{.Right}} == 0 {
 					execerror.NonVectorizedPanic(tree.ErrDivByZero)
 				}
-				leftTmpDec, rightTmpDec := &apd.Decimal{}, &apd.Decimal{}
+				leftTmpDec, rightTmpDec := &tmpDec1, &tmpDec2
 				leftTmpDec.SetFinite(int64({{.Left}}), 0)
 				rightTmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
@@ -888,10 +887,9 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		args := map[string]string{"Target": target, "Left": l, "Right": r}
 		buf := strings.Builder{}
-		// todo(rafi): is there a way to avoid allocating on each comparison?
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &apd.Decimal{}
+				tmpDec := &tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
 					execerror.NonVectorizedPanic(err)
 				}
@@ -909,10 +907,9 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		args := map[string]string{"Target": target, "Left": l, "Right": r}
 		buf := strings.Builder{}
-		// todo(rafi): is there a way to avoid allocating on each comparison?
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &apd.Decimal{}
+				tmpDec := &tmpDec1
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
@@ -934,7 +931,6 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":     target, "Left": l, "Right": r,
 		}
 		buf := strings.Builder{}
-		// todo(rafi): is there a way to avoid allocating on each operation?
 		t := template.Must(template.New("").Parse(`
 			{
 				{{ if .IsDivision }}
@@ -942,7 +938,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 					execerror.NonVectorizedPanic(tree.ErrDivByZero)
 				}
 				{{ end }}
-				tmpDec := &apd.Decimal{}
+				tmpDec := &tmpDec1
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
 					execerror.NonVectorizedPanic(err)
@@ -960,10 +956,9 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		args := map[string]string{"Target": target, "Left": l, "Right": r}
 		buf := strings.Builder{}
-		// todo(rafi): is there a way to avoid allocating on each comparison?
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &apd.Decimal{}
+				tmpDec := &tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
 					execerror.NonVectorizedPanic(err)
 				}
@@ -981,10 +976,9 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		args := map[string]string{"Target": target, "Left": l, "Right": r}
 		buf := strings.Builder{}
-		// todo(rafi): is there a way to avoid allocating on each comparison?
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &apd.Decimal{}
+				tmpDec := &tmpDec1
 				tmpDec.SetFinite(int64({{.Left}}), 0)
 				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
 			}
@@ -1007,10 +1001,9 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":     target, "Left": l, "Right": r,
 		}
 		buf := strings.Builder{}
-		// todo(rafi): is there a way to avoid allocating on each operation?
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &apd.Decimal{}
+				tmpDec := &tmpDec1
 				tmpDec.SetFinite(int64({{.Left}}), 0)
 				{{ if .IsDivision }}
 				cond, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})

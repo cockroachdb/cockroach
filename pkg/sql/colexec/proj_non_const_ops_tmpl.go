@@ -24,7 +24,6 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -43,9 +42,6 @@ import (
 
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
