@@ -12,6 +12,7 @@
 
 $side-panel-width = 140px
 $top-bar-height = 50px
+$container-top-offset = 120px
 
 .layout-panel
   display flex
@@ -22,6 +23,7 @@ $top-bar-height = 50px
   max-width 100vw
   min-height 100vh
   max-height 100vh
+  overflow hidden
 
 .layout-panel__header
   height $top-bar-height
@@ -44,11 +46,12 @@ $top-bar-height = 50px
   display flex
   flex-direction row
   flex 1
+  overflow hidden
+  height "calc(100% - %s)" % $container-top-offset
 
 .layout-panel__content
   width "calc(100% - %s)" % $side-panel-width
   overflow auto
-  margin $spacing-large 0 0
 
 .layout-panel__sidebar
   min-width $side-panel-width
