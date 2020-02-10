@@ -640,14 +640,6 @@ func splitBatchAndCheckForRefreshSpans(
 //
 // When the request spans ranges, it is split by range and a partial
 // subset of the batch request is sent to affected ranges in parallel.
-//
-// Note that on error, this method will return any batch responses for
-// successfully processed batch requests. This allows the caller to
-// deal with potential retry situations where a batch is split so that
-// EndTxn is processed alone, after earlier requests in the batch
-// succeeded. Where possible, the caller may be able to update spans
-// encountered in the transaction and retry just the EndTxn request to
-// avoid client-side serializable txn retries.
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -686,7 +678,6 @@ func (ds *DistSender) Send(
 		panic("batch with MaxSpanRequestKeys needs splitting")
 	}
 
-	var pErr *roachpb.Error
 	errIdxOffset := 0
 	for len(parts) > 0 {
 		part := parts[0]
@@ -710,6 +701,7 @@ func (ds *DistSender) Send(
 		}
 
 		var rpl *roachpb.BatchResponse
+		var pErr *roachpb.Error
 		if withParallelCommit {
 			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, 0 /* batchIdx */)
 		} else {
@@ -733,9 +725,7 @@ func (ds *DistSender) Send(
 			if pErr.Index != nil && pErr.Index.Index != -1 {
 				pErr.Index.Index += int32(errIdxOffset)
 			}
-			// Break out of loop to collate batch responses received so far to
-			// return with error.
-			break
+			return nil, pErr
 		}
 
 		errIdxOffset += len(ba.Requests)
@@ -759,7 +749,7 @@ func (ds *DistSender) Send(
 		reply.BatchResponse_Header = lastHeader
 	}
 
-	return reply, pErr
+	return reply, nil
 }
 
 type response struct {

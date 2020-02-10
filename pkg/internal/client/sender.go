@@ -52,9 +52,8 @@ const (
 // Notable implementors: client.Txn, kv.TxnCoordSender, storage.Node,
 // storage.Store, storage.Replica.
 type Sender interface {
-	// Send sends a batch for evaluation.
-	// The contract about whether both a response and an error can be
-	// returned varies between layers.
+	// Send sends a batch for evaluation. Either a response or an error is
+	// returned.
 	//
 	// The caller retains ownership of all the memory referenced by the
 	// BatchRequest; the callee is not allowed to hold on to any parts
