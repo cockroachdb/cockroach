@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -32,24 +31,6 @@ const (
 
 	raftSnapshotPriority float64 = 0
 )
-
-// raftSnapshotQueueMinimumTimeout is the minimum duration after which the
-// processing of the raft snapshot queue will time out. See the timeoutFunc
-// in newRaftSnapshotQueue.
-var raftSnapshotQueueMinimumTimeout = settings.RegisterDurationSetting(
-	// NB: this setting has a relatively awkward name because the linter does not
-	// permit `minimum_timeout` but rather asks for it to be `.minimum.timeout`.
-	"kv.raft_snapshot_queue.process.timeout_minimum",
-	"minimum duration after which the processing of the raft snapshot queue will "+
-		"time out; it is an escape hatch to raise the minimum timeout for sending "+
-		"a raft snapshot which is sent much more slowly than the allowable rate "+
-		"as specified by kv.snapshot_recovery.max_rate",
-	defaultProcessTimeout,
-)
-
-func init() {
-	raftSnapshotQueueMinimumTimeout.SetVisibility(settings.Reserved)
-}
 
 // raftSnapshotQueue manages a queue of replicas which may need to catch a
 // replica up with a snapshot to their range.
@@ -70,35 +51,11 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
 			needsLease:           false,
 			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
-			// Create a timeout which is a function of the size of the range and the
-			// maximum allowed rate of data transfer that adheres to a minimum timeout
-			// specified in a cluster setting.
-			processTimeoutFunc: func(r replicaInQueue) (d time.Duration) {
-				minimumTimeout := raftSnapshotQueueMinimumTimeout.Get(&store.ClusterSettings().SV)
-				// NB: In production code this will type assertion will always succeed.
-				// Some tests set up a fake implementation of replicaInQueue in which
-				// case we fall back to the configured minimum timeout.
-				repl, ok := r.(*Replica)
-				if !ok {
-					return minimumTimeout
-				}
-				stats := repl.GetMVCCStats()
-				totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
-				snapshotRecoveryRate := recoverySnapshotRate.Get(&store.ClusterSettings().SV)
-				estimatedDuration := time.Duration(totalBytes / snapshotRecoveryRate)
-				// Set a timeout to 1/10th of the allowed throughput.
-				const permittedSlowdown = 10
-				timeout := estimatedDuration * permittedSlowdown
-
-				if timeout < minimumTimeout {
-					timeout = minimumTimeout
-				}
-				return timeout
-			},
-			successes:       store.metrics.RaftSnapshotQueueSuccesses,
-			failures:        store.metrics.RaftSnapshotQueueFailures,
-			pending:         store.metrics.RaftSnapshotQueuePending,
-			processingNanos: store.metrics.RaftSnapshotQueueProcessingNanos,
+			processTimeoutFunc:   makeQueueSnapshotTimeoutFunc(recoverySnapshotRate),
+			successes:            store.metrics.RaftSnapshotQueueSuccesses,
+			failures:             store.metrics.RaftSnapshotQueueFailures,
+			pending:              store.metrics.RaftSnapshotQueuePending,
+			processingNanos:      store.metrics.RaftSnapshotQueueProcessingNanos,
 		},
 	)
 	return rq

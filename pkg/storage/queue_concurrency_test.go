@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,8 +32,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func constantTimeoutFunc(d time.Duration) func(replicaInQueue) time.Duration {
-	return func(replicaInQueue) time.Duration { return d }
+func constantTimeoutFunc(d time.Duration) func(*cluster.Settings, replicaInQueue) time.Duration {
+	return func(*cluster.Settings, replicaInQueue) time.Duration { return d }
 }
 
 // TestBaseQueueConcurrent verifies that under concurrent adds/removes of ranges
