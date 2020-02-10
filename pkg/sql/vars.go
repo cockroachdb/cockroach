@@ -387,6 +387,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`require_explicit_primary_keys`: {
+		GetStringVal: makeBoolGetStringValFn(`require_explicit_primary_keys`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetRequireExplicitPrimaryKeys(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.RequireExplicitPrimaryKeys)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(requireExplicitPrimaryKeysClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`vectorize`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.VectorizeExecModeFromString(s)

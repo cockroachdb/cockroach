@@ -38,3 +38,9 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.secondary_index_column_families' AND usage_count >= 2
 ----
 sql.schema.secondary_index_column_families
+
+statement ok
+set require_explicit_primary_keys=true
+
+statement error pq: no primary key specified for table t \(require_explicit_primary_keys = true\)
+CREATE TABLE t (x INT, y INT)

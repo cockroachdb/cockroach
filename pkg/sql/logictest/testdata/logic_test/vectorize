@@ -1108,3 +1108,12 @@ CREATE TABLE t44726(c0 INT); INSERT INTO t44726(c0) VALUES (0)
 query I
 SELECT * FROM t44726 WHERE 0 > (CASE WHEN nullif(NULL, ilike_escape('', current_user(), '')) THEN 0 ELSE t44726.c0 END)
 ----
+
+# Regression test for wrongly performing bounds check elimination on flat bytes
+# which might lead to a crash.
+statement ok
+CREATE TABLE t44822(c0 BYTES); CREATE VIEW v0(c0) AS SELECT min(t44822.c0) FROM t44822
+
+query T
+SELECT * FROM v0 WHERE v0.c0 NOT BETWEEN v0.c0 AND v0.c0
+----

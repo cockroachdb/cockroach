@@ -58,6 +58,9 @@ type SessionData struct {
 	// ReorderJoinsLimit indicates the number of joins at which the optimizer should
 	// stop attempting to reorder.
 	ReorderJoinsLimit int
+	// RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
+	// error out if no primary key is provided.
+	RequireExplicitPrimaryKeys bool
 	// SequenceState gives access to the SQL sequences that have been manipulated
 	// by the session.
 	SequenceState *SequenceState
