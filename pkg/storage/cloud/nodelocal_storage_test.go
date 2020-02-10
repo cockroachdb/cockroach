@@ -47,7 +47,7 @@ func TestLocalIOLimits(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = e.ListFiles(ctx)
+		_, err = e.ListFiles(ctx, "")
 		if !testutils.IsError(err, expected) {
 			t.Fatal(err)
 		}

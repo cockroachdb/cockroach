@@ -150,11 +150,17 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 	return rc, err
 }
 
-func (g *gcsStorage) ListFiles(ctx context.Context) ([]string, error) {
+func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 	it := g.bucket.Objects(ctx, &gcs.Query{
 		Prefix: getBucketBeforeWildcard(g.prefix),
 	})
+
+	pattern := g.prefix
+	if patternSuffix != "" {
+		pattern = filepath.Join(pattern, patternSuffix)
+	}
+
 	for {
 		attrs, err := it.Next()
 		if err == iterator.Done {
