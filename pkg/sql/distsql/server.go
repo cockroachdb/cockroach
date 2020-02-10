@@ -207,7 +207,7 @@ func (ds *ServerImpl) setupFlow(
 	// sp will be Finish()ed by Flow.Cleanup().
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
-	// The monitor opened here are closed in Flow.Cleanup().
+	// The monitor opened here is closed in Flow.Cleanup().
 	monitor := mon.MakeMonitor(
 		"flow",
 		mon.MemoryResource,
@@ -348,6 +348,9 @@ func (ds *ServerImpl) setupFlow(
 	var err error
 	if ctx, err = f.Setup(ctx, &req.Flow, opt); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
+		// Flow.Cleanup will not be called, so we have to close the memory monitor
+		// and finish the span manually.
+		monitor.Stop(ctx)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err

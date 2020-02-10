@@ -673,6 +673,18 @@ func (s *vectorizedFlowCreator) setupOutput(
 		}
 		// Make the materializer, which will write to the given receiver.
 		columnTypes := s.syncFlowConsumer.Types()
+		converted, err := typeconv.FromColumnTypes(columnTypes)
+		if err != nil {
+			return errors.AssertionFailedf(
+				"unsupported types should have been caught in SupportsVectorized check\n%v", err)
+		}
+		for i, expColType := range converted {
+			if opOutputTypes[i] != expColType {
+				return errors.Errorf("mismatched physical types at index %d: expected %v\tactual %v ",
+					i, converted, opOutputTypes,
+				)
+			}
+		}
 		var outputStatsToTrace func()
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
@@ -969,13 +981,22 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // full flow without running the components asynchronously.
 // It returns a list of the leaf operators of all flows for the purposes of
 // EXPLAIN output.
+// Note that passed-in output can be nil, but if it is non-nil, only Types()
+// method on it might be called (nothing will actually get Push()'ed into it).
 func SupportsVectorized(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
 	fuseOpt flowinfra.FuseOpt,
+	output execinfra.RowReceiver,
 ) (leaves []execinfra.OpNode, err error) {
-	creator := newVectorizedFlowCreator(newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{})
+	if output == nil {
+		output = &execinfra.RowChannel{}
+	}
+	creator := newVectorizedFlowCreator(
+		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
+		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed
