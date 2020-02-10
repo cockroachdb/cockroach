@@ -257,7 +257,8 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 
 	// Collect some refresh spans.
 	var ba roachpb.BatchRequest
-	ba.Header = roachpb.Header{Txn: &txn}
+	clonedTxn := txn.Clone()
+	ba.Header = roachpb.Header{Txn: clonedTxn}
 	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	ba.Add(&scanArgs)
 
