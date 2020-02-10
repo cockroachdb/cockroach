@@ -5140,6 +5140,18 @@ create_view_stmt:
       ColumnNames: $6.nameList(),
       AsSource: $8.slct(),
       Temporary: $2.persistenceType(),
+      IfNotExists: false,
+    }
+  }
+| CREATE opt_temp opt_view_recursive VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt
+  {
+    name := $8.unresolvedObjectName().ToTableName()
+    $$.val = &tree.CreateView{
+      Name: name,
+      ColumnNames: $9.nameList(),
+      AsSource: $11.slct(),
+      Temporary: $2.persistenceType(),
+      IfNotExists: true,
     }
   }
 | CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }

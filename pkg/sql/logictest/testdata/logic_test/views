@@ -16,8 +16,12 @@ CREATE VIEW v1 AS SELECT a, b FROM t
 statement error pgcode 42P07 relation \"t\" already exists
 CREATE VIEW t AS SELECT a, b FROM t
 
+# view statement ignored if other way around.
 statement ok
-CREATE VIEW v2 (x, y) AS SELECT a, b FROM t
+CREATE VIEW IF NOT EXISTS v1 AS SELECT b, a FROM v1
+
+statement ok
+CREATE VIEW IF NOT EXISTS v2 (x, y) AS SELECT a, b FROM t
 
 statement error pgcode 42601 CREATE VIEW specifies 1 column name, but data source has 2 columns
 CREATE VIEW v3 (x) AS SELECT a, b FROM t

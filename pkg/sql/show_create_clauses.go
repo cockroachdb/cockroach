@@ -78,7 +78,11 @@ func ShowCreateView(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteString("CREATE VIEW ")
+	f.WriteString("CREATE ")
+	if desc.Temporary {
+		f.WriteString("TEMP ")
+	}
+	f.WriteString("VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
 	for i := range desc.Columns {
@@ -195,7 +199,11 @@ func ShowCreateSequence(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteString("CREATE SEQUENCE ")
+	f.WriteString("CREATE ")
+	if desc.Temporary {
+		f.WriteString("TEMP ")
+	}
+	f.WriteString("SEQUENCE ")
 	f.FormatNode(tn)
 	opts := desc.SequenceOpts
 	f.Printf(" MINVALUE %d", opts.MinValue)
