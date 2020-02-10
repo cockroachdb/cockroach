@@ -287,7 +287,7 @@ func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io
 		})
 }
 
-func (h *httpStorage) ListFiles(_ context.Context) ([]string, error) {
+func (h *httpStorage) ListFiles(_ context.Context, _ string) ([]string, error) {
 	return nil, errors.New(`http storage does not support listing files`)
 }
 

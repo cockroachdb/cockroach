@@ -207,7 +207,7 @@ func importPlanHook(
 					if err != nil {
 						return err
 					}
-					expandedFiles, err := s.ListFiles(ctx)
+					expandedFiles, err := s.ListFiles(ctx, "")
 					if err != nil {
 						return err
 					}
