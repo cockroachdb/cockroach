@@ -111,7 +111,8 @@ type hashTable struct {
 	// each other.
 	allowNullEquality bool
 
-	cancelChecker CancelChecker
+	decimalScratch decimalOverloadScratch
+	cancelChecker  CancelChecker
 }
 
 var _ resetter = &hashTable{}
@@ -303,7 +304,7 @@ func (ht *hashTable) computeBuckets(
 	}
 
 	for i := range ht.keyCols {
-		rehash(ctx, buckets, keyTypes[i], keys[i], nKeys, sel, ht.cancelChecker)
+		rehash(ctx, buckets, keyTypes[i], keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)

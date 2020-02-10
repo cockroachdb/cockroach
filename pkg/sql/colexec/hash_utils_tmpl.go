@@ -114,6 +114,7 @@ func rehash(
 	nKeys uint64,
 	sel []uint16,
 	cancelChecker CancelChecker,
+	decimalScratch decimalOverloadScratch,
 ) {
 	switch t {
 	// {{range $hashType := .}}

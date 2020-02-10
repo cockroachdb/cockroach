@@ -30,6 +30,14 @@ var (
 	zeroIntervalValue duration.Duration
 )
 
+// decimalOverloadScratch is a utility struct that helps us avoid allocations
+// of temporary decimals on every overloaded operation with them. In order for
+// the templates to see it correctly, a local variable named `scratch` of this
+// type must be declared before the inlined overloaded code.
+type decimalOverloadScratch struct {
+	tmpDec1, tmpDec2 apd.Decimal
+}
+
 // CopyBatch copies the original batch and returns that copy. However, note that
 // the underlying capacity might be different (a new batch is created only with
 // capacity original.Length()).
