@@ -97,7 +97,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps> {
 
     return <div>
       <Helmet title="Tables | Databases" />
-      <section className="section"><h1 className="base-heading">Databases</h1></section>
+      <section className="section"><h1 className="base-heading page-title">Databases</h1></section>
       <DatabaseListNav selected="tables" onChange={this.handleOnNavigationListChange}/>
       <div className="section databases">
         {
@@ -128,7 +128,7 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps> {
 
     return <div>
       <Helmet title="Grants | Databases" />
-      <section className="section"><h1 className="base-heading">Databases</h1></section>
+      <section className="section"><h1 className="base-heading page-title">Databases</h1></section>
       <DatabaseListNav selected="grants" onChange={this.handleOnNavigationListChange}/>
       <div className="section databases">
         {
