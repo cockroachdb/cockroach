@@ -179,6 +179,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	BoolOrOp:          "bool_or",
 	ConcatAggOp:       "concat_agg",
 	CountOp:           "count",
+	CorrOp:            "corr",
 	CountRowsOp:       "count_rows",
 	MaxOp:             "max",
 	MinOp:             "min",
@@ -256,7 +257,7 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 // how many NULL values are included in that input, in any order.
 func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
-	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp,
+	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CorrOp, CountOp, MaxOp, MinOp,
 		SumIntOp, SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
 		AnyNotNullAggOp, StringAggOp:
 		return true
@@ -271,7 +272,7 @@ func AggregateIgnoresNulls(op Operator) bool {
 // NULL when its input is empty.
 func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
-	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp,
+	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CorrOp, MaxOp, MinOp, SumIntOp,
 		SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
 		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp, StringAggOp:
 		return true
