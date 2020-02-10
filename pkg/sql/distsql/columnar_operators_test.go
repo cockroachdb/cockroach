@@ -463,16 +463,14 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								if rng.Float64() < randTypesProbability {
 									lInputTypes = generateRandomSupportedTypes(rng, nCols)
 									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+									rInputTypes = append(rInputTypes[:0], lInputTypes...)
 									rEqCols = append(rEqCols[:0], lEqCols...)
 									rng.Shuffle(nEqCols, func(i, j int) {
+										iColIdx, jColIdx := rEqCols[i], rEqCols[j]
+										rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
 										rEqCols[i], rEqCols[j] = rEqCols[j], rEqCols[i]
 									})
-									shuffledInputTypes := make([]types.T, nCols)
-									copy(shuffledInputTypes, lInputTypes)
-									for i, colIdx := range rEqCols {
-										shuffledInputTypes[colIdx] = lInputTypes[lEqCols[i]]
-									}
-									rInputTypes = generateRandomComparableTypes(rng, shuffledInputTypes)
+									rInputTypes = generateRandomComparableTypes(rng, rInputTypes)
 									lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
 									rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 									usingRandomTypes = true
@@ -642,17 +640,17 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							)
 							if rng.Float64() < randTypesProbability {
 								lInputTypes = generateRandomSupportedTypes(rng, nCols)
-								//rInputTypes = generateRandomComparableTypes(rng, lInputTypes)
-								// TODO(yuzefovich): use the commented out line instead.
-								rInputTypes = lInputTypes
+								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+								rInputTypes = append(rInputTypes[:0], lInputTypes...)
+								rOrderingCols = append(rOrderingCols[:0], lOrderingCols...)
+								rng.Shuffle(nOrderingCols, func(i, j int) {
+									iColIdx, jColIdx := rOrderingCols[i].ColIdx, rOrderingCols[j].ColIdx
+									rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
+									rOrderingCols[i], rOrderingCols[j] = rOrderingCols[j], rOrderingCols[i]
+								})
+								rInputTypes = generateRandomComparableTypes(rng, rInputTypes)
 								lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
 								rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
-								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
-								// We use the same ordering columns in the same order because the
-								// columns can be not comparable in different order.
-								// TODO(yuzefovich): shuffle the equality columns on the right
-								// side.
-								rOrderingCols = lOrderingCols
 								usingRandomTypes = true
 							} else {
 								lInputTypes = intTyps[:nCols]
@@ -729,6 +727,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							if err := verifyColOperator(args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
 									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
+								fmt.Printf("--- left ordering = %v right ordering = %v ---\n", lOrderingCols, rOrderingCols)
 								prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
 								prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
 								prettyPrintInput(lRows, lInputTypes, "left_table" /* tableName */)
@@ -917,34 +916,33 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
 }
 
 // generateRandomComparableTypes generates random types that are supported by
-// the vectorized engine and are such that their physical (i.e. coltypes.T)
-// equivalents are comparable to the physical equivalents of the corresponding
-// types in inputTypes.
+// the vectorized engine and are such that they are comparable to the
+// corresponding types in inputTypes.
 func generateRandomComparableTypes(rng *rand.Rand, inputTypes []types.T) []types.T {
 	typs := make([]types.T, len(inputTypes))
 	for i, inputType := range inputTypes {
-		switch inputType.Family() {
-		case types.DateFamily, types.OidFamily:
-			// Both dates and oids are mapped to coltypes.Int64 which has too many
-			// comparisons (and not all of them are valid). For now, we'll keep these
-			// two types unmodified.
-			typs[i] = inputType
-			continue
-		}
-		inputPhysType := typeconv.FromColumnType(&inputType)
 		for {
 			typ := sqlbase.RandType(rng)
-			physType := typeconv.FromColumnType(typ)
-			comparable := false
-			for _, comparableType := range coltypes.ComparableTypes[inputPhysType] {
-				if physType == comparableType {
-					comparable = true
+			if isSupportedType(typ) {
+				comparable := false
+				for _, cmpOverloads := range tree.CmpOps[tree.LT] {
+					o := cmpOverloads.(*tree.CmpOp)
+					if inputType.Equivalent(o.LeftType) && typ.Equivalent(o.RightType) {
+						if (typ.Family() == types.DateFamily && inputType.Family() != types.DateFamily) ||
+							(typ.Family() != types.DateFamily && inputType.Family() == types.DateFamily) {
+							// We map Dates to int64 and don't have casts from int64 to
+							// timestamps (and there is a comparison between dates and
+							// timestamps).
+							continue
+						}
+						comparable = true
+						break
+					}
+				}
+				if comparable {
+					typs[i] = *typ
 					break
 				}
-			}
-			if comparable {
-				typs[i] = *typ
-				break
 			}
 		}
 	}

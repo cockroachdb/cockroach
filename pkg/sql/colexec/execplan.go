@@ -123,55 +123,6 @@ type NewColOperatorResult struct {
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
 
-// createJoiner adds a new hash or merge join with the argument function
-// createJoinOp distinguishing between the two.
-// Note: the passed in 'result' will be modified accordingly.
-func createJoiner(
-	ctx context.Context,
-	result *NewColOperatorResult,
-	flowCtx *execinfra.FlowCtx,
-	args NewColOperatorArgs,
-	joinType sqlbase.JoinType,
-	createJoinOp func(
-		result *NewColOperatorResult,
-		leftTypes, rightTypes []coltypes.T,
-	) (onExpr *execinfrapb.Expression, err error),
-) error {
-	spec := args.Spec
-	inputs := args.Inputs
-	acc := args.StreamingMemAccount
-	if err := checkNumIn(inputs, 2); err != nil {
-		return err
-	}
-
-	leftTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-	if err != nil {
-		return err
-	}
-	rightTypes, err := typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
-	if err != nil {
-		return err
-	}
-
-	onExpr, err := createJoinOp(result, leftTypes, rightTypes)
-	if err != nil {
-		return err
-	}
-
-	result.ColumnTypes = append(result.ColumnTypes[:0], spec.Input[0].ColumnTypes...)
-	result.ColumnTypes = append(result.ColumnTypes, spec.Input[1].ColumnTypes...)
-
-	if onExpr != nil && joinType == sqlbase.JoinType_INNER {
-		// We will plan other Operators on top of the joiners, so we need to
-		// account for the internal memory explicitly.
-		if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
-			result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
-		}
-		err = result.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, acc)
-	}
-	return err
-}
-
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
@@ -542,98 +493,109 @@ func NewColOperator(
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 		case core.HashJoiner != nil:
-			createHashJoiner := func(
-				result *NewColOperatorResult,
-				leftTypes, rightTypes []coltypes.T,
-			) (*execinfrapb.Expression, error) {
-				var (
-					onExpr *execinfrapb.Expression
-				)
-				if !core.HashJoiner.OnExpr.Empty() {
-					onExpr = &core.HashJoiner.OnExpr
-					if err != nil {
-						return onExpr, err
-					}
-				}
-
-				hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
-				var hashJoinerMemAccount *mon.BoundAccount
-				if useStreamingMemAccountForBuffering {
-					hashJoinerMemAccount = streamingMemAccount
-				} else {
-					hashJoinerMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, hashJoinerMemMonitorName,
-					)
-				}
-				// It is valid for empty set of equality columns to be considered as
-				// "key" (for example, the input has at most 1 row). However, hash
-				// joiner, in order to handle NULL values correctly, needs to think
-				// that an empty set of equality columns doesn't form a key.
-				rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
-				hjSpec, err := makeHashJoinerSpec(
-					core.HashJoiner.Type,
-					core.HashJoiner.LeftEqColumns,
-					core.HashJoiner.RightEqColumns,
-					leftTypes,
-					rightTypes,
-					rightEqColsAreKey,
-				)
-				if err != nil {
-					return onExpr, err
-				}
-				inMemoryHashJoiner := newHashJoiner(
-					NewAllocator(ctx, hashJoinerMemAccount), hjSpec, inputs[0], inputs[1],
-				)
-				if args.TestingKnobs.DiskSpillingDisabled {
-					// We will not be creating a disk-backed hash joiner because we're
-					// running a test that explicitly asked for only in-memory hash
-					// joiner.
-					result.Op = inMemoryHashJoiner
-				} else {
-					result.Op = newTwoInputDiskSpiller(
-						inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
-						hashJoinerMemMonitorName,
-						func(inputOne, inputTwo Operator) Operator {
-							monitorNamePrefix := "external-hash-joiner-"
-							// We need to create an allocator for external hash joiner to
-							// use, and the allocator needs to have some reasonable amount of
-							// memory to work with (because the external hash joiner creates
-							// several batches internally as well as uses an instance of
-							// in-memory hash joiner). We need to overwrite the testing
-							// memory limit before creating the memory account for the
-							// allocator because if we don't, the constructor below will
-							// result in an OOM panic or the internal in-memory hash joiner
-							// can hit the limit forcing us to do recursive partitioning
-							// (which is currently not supported).
-							defer func(oldLimit int64) {
-								flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = oldLimit
-							}(flowCtx.Cfg.TestingKnobs.MemoryLimitBytes)
-							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
-							allocator := NewAllocator(
-								ctx, result.createBufferingMemAccount(
-									ctx, flowCtx, monitorNamePrefix,
-								))
-							diskQueuesUnlimitedAllocator := NewAllocator(
-								ctx, result.createBufferingUnlimitedMemAccount(
-									ctx, flowCtx, monitorNamePrefix+"disk-queues",
-								))
-							return newExternalHashJoiner(
-								allocator, hjSpec,
-								inputOne, inputTwo,
-								diskQueuesUnlimitedAllocator,
-							)
-						},
-						args.TestingKnobs.SpillingCallbackFn,
-					)
-				}
-				return onExpr, err
+			if err := checkNumIn(inputs, 2); err != nil {
+				return result, err
+			}
+			leftLogTypes := spec.Input[0].ColumnTypes
+			leftPhysTypes, err := typeconv.FromColumnTypes(leftLogTypes)
+			if err != nil {
+				return result, err
+			}
+			rightLogTypes := spec.Input[1].ColumnTypes
+			rightPhysTypes, err := typeconv.FromColumnTypes(rightLogTypes)
+			if err != nil {
+				return result, err
 			}
 
-			err = createJoiner(
-				ctx, &result, flowCtx, args, core.HashJoiner.Type, createHashJoiner,
+			hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
+			var hashJoinerMemAccount *mon.BoundAccount
+			if useStreamingMemAccountForBuffering {
+				hashJoinerMemAccount = streamingMemAccount
+			} else {
+				hashJoinerMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, hashJoinerMemMonitorName,
+				)
+			}
+			// It is valid for empty set of equality columns to be considered as
+			// "key" (for example, the input has at most 1 row). However, hash
+			// joiner, in order to handle NULL values correctly, needs to think
+			// that an empty set of equality columns doesn't form a key.
+			rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
+			hjSpec, err := makeHashJoinerSpec(
+				core.HashJoiner.Type,
+				core.HashJoiner.LeftEqColumns,
+				core.HashJoiner.RightEqColumns,
+				leftPhysTypes,
+				rightPhysTypes,
+				rightEqColsAreKey,
 			)
+			if err != nil {
+				return result, err
+			}
+			inMemoryHashJoiner := newHashJoiner(
+				NewAllocator(ctx, hashJoinerMemAccount), hjSpec, inputs[0], inputs[1],
+			)
+			if args.TestingKnobs.DiskSpillingDisabled {
+				// We will not be creating a disk-backed hash joiner because we're
+				// running a test that explicitly asked for only in-memory hash
+				// joiner.
+				result.Op = inMemoryHashJoiner
+			} else {
+				result.Op = newTwoInputDiskSpiller(
+					inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
+					hashJoinerMemMonitorName,
+					func(inputOne, inputTwo Operator) Operator {
+						monitorNamePrefix := "external-hash-joiner-"
+						// We need to create an allocator for external hash joiner to
+						// use, and the allocator needs to have some reasonable amount of
+						// memory to work with (because the external hash joiner creates
+						// several batches internally as well as uses an instance of
+						// in-memory hash joiner). We need to overwrite the testing
+						// memory limit before creating the memory account for the
+						// allocator because if we don't, the constructor below will
+						// result in an OOM panic or the internal in-memory hash joiner
+						// can hit the limit forcing us to do recursive partitioning
+						// (which is currently not supported).
+						defer func(oldLimit int64) {
+							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = oldLimit
+						}(flowCtx.Cfg.TestingKnobs.MemoryLimitBytes)
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+						allocator := NewAllocator(
+							ctx, result.createBufferingMemAccount(
+								ctx, flowCtx, monitorNamePrefix,
+							))
+						diskQueuesUnlimitedAllocator := NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(
+								ctx, flowCtx, monitorNamePrefix+"disk-queues",
+							))
+						return newExternalHashJoiner(
+							allocator, hjSpec,
+							inputOne, inputTwo,
+							diskQueuesUnlimitedAllocator,
+						)
+					},
+					args.TestingKnobs.SpillingCallbackFn,
+				)
+			}
+			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
+
+			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.JoinType_INNER {
+				// We will plan other Operators on top of the hash joiner, so we need
+				// to account for the internal memory explicitly.
+				if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
+					result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
+				}
+				if err = result.planFilterExpr(
+					ctx, flowCtx.NewEvalCtx(), core.HashJoiner.OnExpr, streamingMemAccount,
+				); err != nil {
+					return result, err
+				}
+			}
 
 		case core.MergeJoiner != nil:
+			if err := checkNumIn(inputs, 2); err != nil {
+				return result, err
+			}
 			if core.MergeJoiner.Type.IsSetOpJoin() {
 				return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 			}
@@ -641,66 +603,86 @@ func NewColOperator(
 			// for both of the inputs.
 			result.IsStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
-			createMergeJoiner := func(
-				result *NewColOperatorResult,
-				leftTypes, rightTypes []coltypes.T,
-			) (*execinfrapb.Expression, error) {
-				var (
-					onExpr            *execinfrapb.Expression
-					filterOnlyOnLeft  bool
-					filterConstructor func(Operator) (Operator, error)
-				)
-				if !core.MergeJoiner.OnExpr.Empty() {
-					// At the moment, we want to be on the conservative side and not run
-					// queries with ON expressions when vectorize=auto, so we say that the
-					// merge join is not streaming which will reject running such a query
-					// through vectorized engine with 'auto' setting.
-					// TODO(yuzefovich): remove this when we're confident in ON expression
-					// support.
-					result.IsStreaming = false
-
-					onExpr = &core.MergeJoiner.OnExpr
-					switch core.MergeJoiner.Type {
-					case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
-						onExprPlanning := makeFilterPlanningState(len(leftTypes), len(rightTypes))
-						filterOnlyOnLeft, err = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
-						filterConstructor = func(op Operator) (Operator, error) {
-							r := NewColOperatorResult{
-								Op:          op,
-								ColumnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
-							}
-							err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount)
-							return r.Op, err
-						}
-					}
-				}
-				if err != nil {
-					return onExpr, err
-				}
-
-				mergeJoinerMemAccount := streamingMemAccount
-				if !result.IsStreaming && !useStreamingMemAccountForBuffering {
-					// Whether the merge joiner is streaming is already set above.
-					mergeJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner")
-				}
-				result.Op, err = NewMergeJoinOp(
-					NewAllocator(ctx, mergeJoinerMemAccount),
-					core.MergeJoiner.Type,
-					inputs[0],
-					inputs[1],
-					leftTypes,
-					rightTypes,
-					core.MergeJoiner.LeftOrdering.Columns,
-					core.MergeJoiner.RightOrdering.Columns,
-					filterConstructor,
-					filterOnlyOnLeft,
-				)
-				return onExpr, err
+			leftLogTypes := spec.Input[0].ColumnTypes
+			leftPhysTypes, err := typeconv.FromColumnTypes(leftLogTypes)
+			if err != nil {
+				return result, err
+			}
+			rightLogTypes := spec.Input[1].ColumnTypes
+			rightPhysTypes, err := typeconv.FromColumnTypes(rightLogTypes)
+			if err != nil {
+				return result, err
 			}
 
-			err = createJoiner(
-				ctx, &result, flowCtx, args, core.MergeJoiner.Type, createMergeJoiner,
+			var (
+				onExpr            *execinfrapb.Expression
+				filterOnlyOnLeft  bool
+				filterConstructor func(Operator) (Operator, error)
 			)
+			joinType := core.MergeJoiner.Type
+			if !core.MergeJoiner.OnExpr.Empty() {
+				// At the moment, we want to be on the conservative side and not run
+				// queries with ON expressions when vectorize=auto, so we say that the
+				// merge join is not streaming which will reject running such a query
+				// through vectorized engine with 'auto' setting.
+				// TODO(yuzefovich): remove this when we're confident in ON expression
+				// support.
+				result.IsStreaming = false
+
+				onExpr = &core.MergeJoiner.OnExpr
+				switch joinType {
+				case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
+					onExprPlanning := makeFilterPlanningState(len(leftPhysTypes), len(rightPhysTypes))
+					filterOnlyOnLeft, err = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
+					filterConstructor = func(op Operator) (Operator, error) {
+						r := NewColOperatorResult{
+							Op:          op,
+							ColumnTypes: append(leftLogTypes, rightLogTypes...),
+						}
+						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount)
+						return r.Op, err
+					}
+				}
+			}
+			if err != nil {
+				return result, err
+			}
+
+			mergeJoinerMemAccount := streamingMemAccount
+			if !result.IsStreaming && !useStreamingMemAccountForBuffering {
+				// Whether the merge joiner is streaming is already set above.
+				mergeJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner")
+			}
+			result.Op, err = NewMergeJoinOp(
+				NewAllocator(ctx, mergeJoinerMemAccount),
+				core.MergeJoiner.Type,
+				inputs[0],
+				inputs[1],
+				leftPhysTypes,
+				rightPhysTypes,
+				core.MergeJoiner.LeftOrdering.Columns,
+				core.MergeJoiner.RightOrdering.Columns,
+				filterConstructor,
+				filterOnlyOnLeft,
+			)
+			if err != nil {
+				return result, err
+			}
+
+			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
+
+			if onExpr != nil && joinType == sqlbase.JoinType_INNER {
+				// We will plan other Operators on top of the merge joiner, so we need
+				// to account for the internal memory explicitly.
+				if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
+					result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
+				}
+				if err = result.planFilterExpr(
+					ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount,
+				); err != nil {
+					return result, err
+				}
+			}
 
 		case core.Sorter != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
