@@ -446,15 +446,15 @@ func assertEqualKVs(
 					lessThisKey := dataSizeWhenExceeded - uint64(len(kv.Key.Key)+len(kv.Value))
 					if lessThisKey >= maxSize {
 						dataSizeWhenExceeded = lessThisKey
-						// It might be the case that this key would lead to an SST of exactly
-						// max size, in this case we overwrite max size to be less so that
-						// we still generate an error.
-						if dataSizeWhenExceeded == maxSize {
-							maxSize--
-						}
 					} else {
 						break
 					}
+				}
+				// It might be the case that this key would lead to an SST of exactly
+				// max size, in this case we overwrite max size to be less so that
+				// we still generate an error.
+				if dataSizeWhenExceeded == maxSize {
+					maxSize--
 				}
 				_, _, _, err = e.ExportToSst(prevStart, endKey, startTime, endTime,
 					exportAllRevisions, targetSize, maxSize, io)
