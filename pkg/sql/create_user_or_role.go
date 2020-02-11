@@ -103,7 +103,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 
 	var hashedPassword []byte
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
-		hashedPassword, err := n.roleOptions.GetHashedPassword()
+		hashedPassword, err = n.roleOptions.GetHashedPassword()
 		if err != nil {
 			return err
 		}

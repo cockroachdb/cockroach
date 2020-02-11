@@ -1,0 +1,19 @@
+create_role_or_user_stmt ::=
+	'CREATE' 'USER' name
+	| 'CREATE' 'ROLE' name
+	| 'CREATE' 'GROUP' name
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' name
+	| 'CREATE' 'GROUP' 'IF' 'NOT' 'EXISTS' name
+	| 'CREATE' 'USER' name OPTIONS
+	| 'CREATE' 'ROLE' name OPTIONS
+	| 'CREATE' 'GROUP' name OPTIONS
+	| 'CREATE' 'USER' name 'WITH' OPTIONS
+	| 'CREATE' 'ROLE' name 'WITH' OPTIONS
+	| 'CREATE' 'GROUP' name 'WITH' OPTIONS
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name OPTIONS
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' name OPTIONS
+	| 'CREATE' 'GROUP' 'IF' 'NOT' 'EXISTS' name OPTIONS
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name 'WITH' OPTIONS
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' name 'WITH' OPTIONS
+	| 'CREATE' 'GROUP' 'IF' 'NOT' 'EXISTS' name 'WITH' OPTIONS

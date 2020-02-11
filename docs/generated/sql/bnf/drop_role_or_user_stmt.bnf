@@ -1,0 +1,3 @@
+drop_role_or_user_stmt ::=
+	'DROP' role_or_group_or_user name
+	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' name
