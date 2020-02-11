@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,13 +21,51 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// memoryTestCase is a helper struct for a test with memory limits.
+type memoryTestCase struct {
+	// bytes is the memory limit.
+	bytes int64
+	// skipExpSpillCheck specifies whether expSpill should be checked to assert
+	// that expected spilling behavior happened. This is true if bytes was
+	// randomly generated.
+	skipExpSpillCheck bool
+	// expSpill specifies whether a spill is expected or not. Should be ignored if
+	// skipExpSpillCheck is true.
+	expSpill bool
+}
+
+// getDiskqueueCfgAndMemoryTestCases is a test helper that creates an in-memory
+// DiskQueueCfg that can be used to create a new DiskQueue. A cleanup function
+// is also returned as well as some default memory limits that are useful to
+// test with: 0 for an immediate spill, a random memory limit up to 64 MiB, and
+// 1GiB, which shouldn't result in a spill.
+// Note that not all tests will check for a spill, it is enough that some
+// deterministic tests do so for the simple cases.
+// TODO(asubiotto): We might want to also return a verify() function that will
+//  check for leftover files.
+func getDiskQueueCfgAndMemoryTestCases(
+	t *testing.T, rng *rand.Rand,
+) (colcontainer.DiskQueueCfg, func(), []memoryTestCase) {
+	t.Helper()
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+
+	return queueCfg, cleanup, []memoryTestCase{
+		{bytes: 0, expSpill: true},
+		{bytes: 1 + rng.Int63n(64<<20 /* 64 MiB */), skipExpSpillCheck: true},
+		{bytes: 1 << 30 /* 1 GiB */, expSpill: false},
+	}
+}
 
 // getDataAndFullSelection is a test helper that generates tuples representing
 // a one-column coltypes.Int64 batch where each element is its ordinal and an
@@ -92,33 +131,45 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	// in this test.
 	unblockEventsChan := make(chan struct{})
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
-			)
-			in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
-			out := newOpTestOutput(o, data[:len(tc.selection)])
-			in.Init()
-			for {
-				b := in.Next(ctx)
-				o.addBatch(b, tc.selection)
-				if b.Length() == 0 {
-					break
-				}
-			}
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
+	rng, _ := randutil.NewPseudoRand()
+	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
+	defer cleanup()
 
-			// The output should never block. This assumes test cases never send more
-			// than defaultRouterOutputBlockedThreshold values.
-			select {
-			case b := <-unblockEventsChan:
-				t.Fatalf("unexpected output state change blocked: %t", b)
-			default:
-			}
-		})
+	for _, tc := range testCases {
+		for _, mtc := range memoryTestCases {
+			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
+				// Clear the testAllocator for use.
+				testAllocator.Clear()
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+					testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, tc.blockedThreshold, tc.outputBatchSize,
+				)
+				in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
+				out := newOpTestOutput(o, data[:len(tc.selection)])
+				in.Init()
+				for {
+					b := in.Next(ctx)
+					o.addBatch(b, tc.selection)
+					if b.Length() == 0 {
+						break
+					}
+				}
+				if err := out.Verify(); err != nil {
+					t.Fatal(err)
+				}
+
+				// The output should never block. This assumes test cases never send more
+				// than defaultRouterOutputBlockedThreshold values.
+				select {
+				case b := <-unblockEventsChan:
+					t.Fatalf("unexpected output state change blocked: %t", b)
+				default:
+				}
+
+				if !mtc.skipExpSpillCheck {
+					require.Equal(t, mtc.expSpill, o.mu.data.spilled())
+				}
+			})
+		}
 	}
 }
 
@@ -161,7 +212,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// CancelUnblocksReader verifies that calling cancel on an output unblocks
 			// a reader.
 			unblockEvent: func(_ Operator, o *routerOutputOp) {
-				o.cancel()
+				o.cancel(ctx)
 			},
 			expected: tuples{},
 			name:     "CancelUnblocksReader",
@@ -172,138 +223,147 @@ func TestRouterOutputNext(t *testing.T) {
 	// never write to it in this test.
 	unblockedEventsChan := make(chan struct{})
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			var wg sync.WaitGroup
-			batchChan := make(chan coldata.Batch)
-			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan)
-			in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
-			in.Init()
-			wg.Add(1)
-			go func() {
+	rng, _ := randutil.NewPseudoRand()
+	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
+	defer cleanup()
+
+	for _, mtc := range memoryTestCases {
+		for _, tc := range testCases {
+			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
+				var wg sync.WaitGroup
+				batchChan := make(chan coldata.Batch)
+				if queueCfg.FS == nil {
+					t.Fatal("FS was nil")
+				}
+				o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg)
+				in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
+				in.Init()
+				wg.Add(1)
+				go func() {
+					for {
+						b := o.Next(ctx)
+						batchChan <- b
+						if b.Length() == 0 {
+							break
+						}
+					}
+					wg.Done()
+				}()
+
+				// Sleep a long enough amount of time to make sure that if Next didn't block
+				// above, we have a good chance of reading a batch.
+				time.Sleep(time.Millisecond)
+				select {
+				case <-batchChan:
+					t.Fatal("expected reader goroutine to block when no data ready")
+				default:
+				}
+
+				tc.unblockEvent(in, o)
+
+				// Should have data available, pushed by our reader goroutine.
+				batches := NewBatchBuffer()
+				out := newOpTestOutput(batches, tc.expected)
 				for {
-					b := o.Next(ctx)
-					batchChan <- b
+					b := <-batchChan
+					batches.Add(b)
 					if b.Length() == 0 {
 						break
 					}
 				}
-				wg.Done()
-			}()
-
-			// Sleep a long enough amount of time to make sure that if Next didn't block
-			// above, we have a good chance of reading a batch.
-			time.Sleep(time.Millisecond)
-			select {
-			case <-batchChan:
-				t.Fatal("expected reader goroutine to block when no data ready")
-			default:
-			}
-
-			tc.unblockEvent(in, o)
-
-			// Should have data available, pushed by our reader goroutine.
-			batches := NewBatchBuffer()
-			out := newOpTestOutput(batches, tc.expected)
-			for {
-				b := <-batchChan
-				batches.Add(b)
-				if b.Length() == 0 {
-					break
+				if err := out.Verify(); err != nil {
+					t.Fatal(err)
 				}
-			}
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
-			wg.Wait()
+				wg.Wait()
 
+				select {
+				case <-unblockedEventsChan:
+					t.Fatal("unexpected output state change")
+				default:
+				}
+			})
+		}
+
+		t.Run(fmt.Sprintf("NextAfterZeroBatchDoesntBlock/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
+			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg)
+			o.addBatch(coldata.ZeroBatch, fullSelection)
+			o.Next(ctx)
+			o.Next(ctx)
 			select {
 			case <-unblockedEventsChan:
 				t.Fatal("unexpected output state change")
 			default:
 			}
 		})
-	}
 
-	t.Run("NextAfterZeroBatchDoesntBlock", func(t *testing.T) {
-		o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan)
-		o.addBatch(coldata.ZeroBatch, fullSelection)
-		o.Next(ctx)
-		o.Next(ctx)
-		select {
-		case <-unblockedEventsChan:
-			t.Fatal("unexpected output state change")
-		default:
-		}
-	})
+		t.Run(fmt.Sprintf("AddBatchDoesntBlockWhenOutputIsBlocked/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
+			var (
+				smallBatchSize = 8
+				blockThreshold = smallBatchSize / 2
+			)
 
-	t.Run("AddBatchDoesntBlockWhenOutputIsBlocked", func(t *testing.T) {
-		var (
-			smallBatchSize = 8
-			blockThreshold = smallBatchSize / 2
-		)
-
-		if len(fullSelection) <= smallBatchSize {
-			// If a full batch is smaller than our small batch size, reduce it, since
-			// this test relies on multiple batches returned from the input.
-			smallBatchSize = 2
-			if smallBatchSize >= coldata.MinBatchSize {
-				// Sanity check.
-				t.Fatalf("smallBatchSize=%d still too large (must be less than MinBatchSize=%d)", smallBatchSize, coldata.MinBatchSize)
+			if len(fullSelection) <= smallBatchSize {
+				// If a full batch is smaller than our small batch size, reduce it, since
+				// this test relies on multiple batches returned from the input.
+				smallBatchSize = 2
+				if smallBatchSize >= coldata.MinBatchSize {
+					// Sanity check.
+					t.Fatalf("smallBatchSize=%d still too large (must be less than MinBatchSize=%d)", smallBatchSize, coldata.MinBatchSize)
+				}
+				blockThreshold = 1
 			}
-			blockThreshold = 1
-		}
 
-		// Use a smaller selection than the batch size; it increases test coverage.
-		selection := fullSelection[:blockThreshold]
+			// Use a smaller selection than the batch size; it increases test coverage.
+			selection := fullSelection[:blockThreshold]
 
-		expected := make(tuples, 0, len(data))
-		for i := 0; i < len(data); i += smallBatchSize {
-			for k := 0; k < blockThreshold && i+k < len(data); k++ {
-				expected = append(expected, data[i+k])
+			expected := make(tuples, 0, len(data))
+			for i := 0; i < len(data); i += smallBatchSize {
+				for k := 0; k < blockThreshold && i+k < len(data); k++ {
+					expected = append(expected, data[i+k])
+				}
 			}
-		}
 
-		ch := make(chan struct{}, 2)
-		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-			testAllocator, []coltypes.T{coltypes.Int64}, ch, blockThreshold, int(coldata.BatchSize()),
-		)
-		in := newOpTestInput(uint16(smallBatchSize), data, nil /* typs */)
-		out := newOpTestOutput(o, expected)
-		in.Init()
+			ch := make(chan struct{}, 2)
+			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+				testAllocator, []coltypes.T{coltypes.Int64}, ch, mtc.bytes, queueCfg, blockThreshold, int(coldata.BatchSize()),
+			)
+			in := newOpTestInput(uint16(smallBatchSize), data, nil /* typs */)
+			out := newOpTestOutput(o, expected)
+			in.Init()
 
-		b := in.Next(ctx)
-		// Make sure the output doesn't consider itself blocked. We're right at the
-		// limit but not over.
-		if o.addBatch(b, selection) {
-			t.Fatal("unexpectedly blocked")
-		}
-		b = in.Next(ctx)
-		// This addBatch call should now block the output.
-		if !o.addBatch(b, selection) {
-			t.Fatal("unexpectedly still unblocked")
-		}
-
-		// Add the rest of the data.
-		for {
-			b = in.Next(ctx)
+			b := in.Next(ctx)
+			// Make sure the output doesn't consider itself blocked. We're right at the
+			// limit but not over.
 			if o.addBatch(b, selection) {
-				t.Fatal("should only return true when switching from unblocked to blocked")
+				t.Fatal("unexpectedly blocked")
 			}
-			if b.Length() == 0 {
-				break
+			b = in.Next(ctx)
+			// This addBatch call should now block the output.
+			if !o.addBatch(b, selection) {
+				t.Fatal("unexpectedly still unblocked")
 			}
-		}
 
-		// Unblock the output.
-		if err := out.Verify(); err != nil {
-			t.Fatal(err)
-		}
+			// Add the rest of the data.
+			for {
+				b = in.Next(ctx)
+				if o.addBatch(b, selection) {
+					t.Fatal("should only return true when switching from unblocked to blocked")
+				}
+				if b.Length() == 0 {
+					break
+				}
+			}
 
-		// Verify that an unblock event is sent on the channel. This test will fail
-		// with a timeout on a channel read if not.
-		<-ch
-	})
+			// Unblock the output.
+			if err := out.Verify(); err != nil {
+				t.Fatal(err)
+			}
+
+			// Verify that an unblock event is sent on the channel. This test will fail
+			// with a timeout on a channel read if not.
+			<-ch
+		})
+	}
 }
 
 func TestRouterOutputRandom(t *testing.T) {
@@ -329,98 +389,109 @@ func TestRouterOutputRandom(t *testing.T) {
 		}
 	}
 
+	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
+	defer cleanup()
+
 	testName := fmt.Sprintf(
 		"blockedThreshold=%d/outputSize=%d/totalInputSize=%d", blockedThreshold, outputSize, len(data),
 	)
-	t.Run(testName, func(t *testing.T) {
-		runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
-			var wg sync.WaitGroup
-			unblockedEventsChans := make(chan struct{}, 2)
-			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				testAllocator, typs, unblockedEventsChans, blockedThreshold, outputSize,
-			)
-			inputs[0].Init()
+	for _, mtc := range memoryTestCases {
+		t.Run(fmt.Sprintf("%s/memoryLimit=%s", testName, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
+				var wg sync.WaitGroup
+				unblockedEventsChans := make(chan struct{}, 2)
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+					testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, blockedThreshold, outputSize,
+				)
+				inputs[0].Init()
 
-			expected := make(tuples, 0, len(data))
+				expected := make(tuples, 0, len(data))
 
-			// Producer.
-			errCh := make(chan error)
-			go func() {
-				lastBlockedState := false
-				for {
-					b := inputs[0].Next(ctx)
-					selection := b.Selection()
-					if selection == nil {
-						selection = randomSel(rng, b.Length(), rng.Float64())
-					}
-
-					selection = selection[:b.Length()]
-
-					for _, i := range selection {
-						expected = append(expected, make(tuple, len(typs)))
-						for j := range typs {
-							expected[len(expected)-1][j] = b.ColVec(j).Int64()[i]
+				// Producer.
+				errCh := make(chan error)
+				go func() {
+					lastBlockedState := false
+					for {
+						b := inputs[0].Next(ctx)
+						selection := b.Selection()
+						if selection == nil {
+							selection = randomSel(rng, b.Length(), rng.Float64())
 						}
-					}
 
-					if o.addBatch(b, selection) {
-						if lastBlockedState {
-							// We might have missed an unblock event during the last loop.
+						selection = selection[:b.Length()]
+
+						for _, i := range selection {
+							expected = append(expected, make(tuple, len(typs)))
+							for j := range typs {
+								expected[len(expected)-1][j] = b.ColVec(j).Int64()[i]
+							}
+						}
+
+						if o.addBatch(b, selection) {
+							if lastBlockedState {
+								// We might have missed an unblock event during the last loop.
+								select {
+								case <-unblockedEventsChans:
+								default:
+									errCh <- errors.New("output returned state change to blocked when already blocked")
+								}
+							}
+							lastBlockedState = true
+						}
+
+						// Read any state changes.
+						for moreToRead := true; moreToRead; {
 							select {
 							case <-unblockedEventsChans:
+								if !lastBlockedState {
+									errCh <- errors.New("received unblocked state change when output is already unblocked")
+								}
+								lastBlockedState = false
 							default:
-								errCh <- errors.New("output returned state change to blocked when already blocked")
+								moreToRead = false
 							}
 						}
-						lastBlockedState = true
-					}
 
-					// Read any state changes.
-					for moreToRead := true; moreToRead; {
-						select {
-						case <-unblockedEventsChans:
-							if !lastBlockedState {
-								errCh <- errors.New("received unblocked state change when output is already unblocked")
-							}
-							lastBlockedState = false
-						default:
-							moreToRead = false
+						if b.Length() == 0 {
+							errCh <- nil
+							return
 						}
 					}
+				}()
 
-					if b.Length() == 0 {
-						errCh <- nil
-						return
+				actual := NewBatchBuffer()
+
+				// Consumer.
+				wg.Add(1)
+				go func() {
+					// Create a new allocator to copy the resulting batches. We need
+					// a separate allocator to testAllocator since this is a separate
+					// goroutine and allocators may not be used concurrently.
+					acc := testMemMonitor.MakeBoundAccount()
+					allocator := NewAllocator(ctx, &acc)
+					defer acc.Close(ctx)
+					for {
+						b := o.Next(ctx)
+						actual.Add(CopyBatch(allocator, b))
+						if b.Length() == 0 {
+							wg.Done()
+							return
+						}
 					}
+				}()
+
+				if err := <-errCh; err != nil {
+					t.Fatal(err)
 				}
-			}()
 
-			actual := NewBatchBuffer()
+				wg.Wait()
 
-			// Consumer.
-			wg.Add(1)
-			go func() {
-				for {
-					b := o.Next(ctx)
-					actual.Add(b)
-					if b.Length() == 0 {
-						wg.Done()
-						return
-					}
+				if err := newOpTestOutput(actual, expected).Verify(); err != nil {
+					t.Fatal(err)
 				}
-			}()
-
-			if err := <-errCh; err != nil {
-				t.Fatal(err)
-			}
-
-			wg.Wait()
-
-			if err := newOpTestOutput(actual, expected).Verify(); err != nil {
-				t.Fatal(err)
-			}
+			})
 		})
-	})
+	}
 }
 
 type callbackRouterOutput struct {
@@ -438,7 +509,7 @@ func (o callbackRouterOutput) addBatch(batch coldata.Batch, selection []uint16) 
 	return false
 }
 
-func (o callbackRouterOutput) cancel() {
+func (o callbackRouterOutput) cancel(context.Context) {
 	if o.cancelCb != nil {
 		o.cancelCb()
 	}
@@ -629,32 +700,49 @@ func TestHashRouterOneOutput(t *testing.T) {
 	data, _ := getDataAndFullSelection()
 	typs := []coltypes.T{coltypes.Int64}
 
-	r, routerOutputs := NewHashRouter(
-		testAllocator, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []uint32{0}, 1, /* numOutputs */
-	)
-
-	if len(routerOutputs) != 1 {
-		t.Fatalf("expected 1 router output but got %d", len(routerOutputs))
-	}
-
 	expected := make(tuples, 0, len(data))
 	for _, i := range sel {
 		expected = append(expected, data[i])
 	}
 
-	o := newOpTestOutput(routerOutputs[0], expected)
+	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
+	defer cleanup()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		r.Run(ctx)
-		wg.Done()
-	}()
+	for _, mtc := range memoryTestCases {
+		t.Run(fmt.Sprintf("memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
+			// Clear the testAllocator for use.
+			testAllocator.Clear()
+			r, routerOutputs := NewHashRouter([]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []uint32{0}, mtc.bytes, queueCfg)
 
-	if err := o.Verify(); err != nil {
-		t.Fatal(err)
+			if len(routerOutputs) != 1 {
+				t.Fatalf("expected 1 router output but got %d", len(routerOutputs))
+			}
+
+			o := newOpTestOutput(routerOutputs[0], expected)
+
+			ro := routerOutputs[0].(*routerOutputOp)
+			// Set alwaysFlush so that data is always flushed to the spillingQueue.
+			ro.testingKnobs.alwaysFlush = true
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				r.Run(ctx)
+				wg.Done()
+			}()
+
+			if err := o.Verify(); err != nil {
+				t.Fatal(err)
+			}
+			wg.Wait()
+			if !mtc.skipExpSpillCheck {
+				// If len(sel) == 0, no items will have been enqueued so override an
+				// expected spill if this is the case.
+				mtc.expSpill = mtc.expSpill && len(sel) != 0
+				require.Equal(t, mtc.expSpill, ro.mu.data.spilled())
+			}
+		})
 	}
-	wg.Wait()
 }
 
 func TestHashRouterRandom(t *testing.T) {
@@ -705,88 +793,98 @@ func TestHashRouterRandom(t *testing.T) {
 		cancel,
 	)
 
+	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
+	defer cleanup()
+
 	// expectedDistribution is set after the first run and used to verify that the
 	// distribution of results does not change between runs, as we are sending the
 	// same data to the same number of outputs.
 	var expectedDistribution []int
-	t.Run(testName, func(t *testing.T) {
-		runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
-			unblockEventsChan := make(chan struct{}, 2*numOutputs)
-			outputs := make([]routerOutput, numOutputs)
-			outputsAsOps := make([]Operator, numOutputs)
-			for i := range outputs {
-				op := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-					testAllocator, typs, unblockEventsChan, blockedThreshold, outputSize,
+	for _, mtc := range memoryTestCases {
+		t.Run(testName, func(t *testing.T) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
+				unblockEventsChan := make(chan struct{}, 2*numOutputs)
+				outputs := make([]routerOutput, numOutputs)
+				outputsAsOps := make([]Operator, numOutputs)
+				for i := range outputs {
+					acc := testMemMonitor.MakeBoundAccount()
+					defer acc.Close(ctx)
+					// Create a separate allocator for each output as a single allocator
+					// may not be used concurrently.
+					allocator := NewAllocator(ctx, &acc)
+					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+						allocator, typs, unblockEventsChan, mtc.bytes, queueCfg, blockedThreshold, outputSize,
+					)
+					outputs[i] = op
+					outputsAsOps[i] = op
+				}
+
+				r := newHashRouterWithOutputs(
+					inputs[0], typs, hashCols, unblockEventsChan, outputs,
 				)
-				outputs[i] = op
-				outputsAsOps[i] = op
-			}
 
-			r := newHashRouterWithOutputs(
-				inputs[0], typs, hashCols, unblockEventsChan, outputs,
-			)
-
-			var (
-				results uint64
-				wg      sync.WaitGroup
-			)
-			resultsByOp := make([]int, len(outputsAsOps))
-			wg.Add(len(outputsAsOps))
-			for i := range outputsAsOps {
-				go func(i int) {
-					for {
-						b := outputsAsOps[i].Next(ctx)
-						if b.Length() == 0 {
-							break
+				var (
+					results uint64
+					wg      sync.WaitGroup
+				)
+				resultsByOp := make([]int, len(outputsAsOps))
+				wg.Add(len(outputsAsOps))
+				for i := range outputsAsOps {
+					go func(i int) {
+						for {
+							b := outputsAsOps[i].Next(ctx)
+							if b.Length() == 0 {
+								break
+							}
+							atomic.AddUint64(&results, uint64(b.Length()))
+							resultsByOp[i] += int(b.Length())
 						}
-						atomic.AddUint64(&results, uint64(b.Length()))
-						resultsByOp[i] += int(b.Length())
-					}
+						wg.Done()
+					}(i)
+				}
+
+				ctx, cancelFunc := context.WithCancel(context.Background())
+				wg.Add(1)
+				go func() {
+					r.Run(ctx)
 					wg.Done()
-				}(i)
-			}
+				}()
 
-			ctx, cancelFunc := context.WithCancel(context.Background())
-			wg.Add(1)
-			go func() {
-				r.Run(ctx)
-				wg.Done()
-			}()
-
-			if cancel {
-				// Sleep between 0 and ~5 milliseconds.
-				time.Sleep(time.Microsecond * time.Duration(rng.Intn(5000)))
-				cancelFunc()
-			} else {
-				// Satisfy linter context leak error.
-				defer cancelFunc()
-			}
-
-			// Ensure all goroutines end. If a test fails with a hang here it is most
-			// likely due to a cancellation bug.
-			wg.Wait()
-			if !cancel {
-				// Only do output verification if no cancellation happened.
-				if actualTotal := atomic.LoadUint64(&results); actualTotal != uint64(len(data)) {
-					t.Fatalf("unexpected number of results %d, expected %d", actualTotal, len(data))
+				if cancel {
+					// Sleep between 0 and ~5 milliseconds.
+					time.Sleep(time.Microsecond * time.Duration(rng.Intn(5000)))
+					cancelFunc()
+				} else {
+					// Satisfy linter context leak error.
+					defer cancelFunc()
 				}
-				if expectedDistribution == nil {
-					expectedDistribution = resultsByOp
-					return
-				}
-				for i, numVals := range expectedDistribution {
-					if numVals != resultsByOp[i] {
-						t.Fatalf(
-							"distribution of results changed compared to first run at output %d. expected: %v, actual: %v",
-							i,
-							expectedDistribution,
-							resultsByOp,
-						)
+
+				// Ensure all goroutines end. If a test fails with a hang here it is most
+				// likely due to a cancellation bug.
+				wg.Wait()
+				if !cancel {
+					// Only do output verification if no cancellation happened.
+					if actualTotal := atomic.LoadUint64(&results); actualTotal != uint64(len(data)) {
+						t.Fatalf("unexpected number of results %d, expected %d", actualTotal, len(data))
+					}
+					if expectedDistribution == nil {
+						expectedDistribution = resultsByOp
+						return
+					}
+					for i, numVals := range expectedDistribution {
+						if numVals != resultsByOp[i] {
+							t.Fatalf(
+								"distribution of results changed compared to first run at output %d. expected: %v, actual: %v",
+								i,
+								expectedDistribution,
+								resultsByOp,
+							)
+						}
 					}
 				}
-			}
+			})
 		})
-	})
+	}
 }
 
 func BenchmarkHashRouter(b *testing.B) {
@@ -801,11 +899,20 @@ func BenchmarkHashRouter(b *testing.B) {
 	batch.SetLength(coldata.BatchSize())
 	input := NewRepeatableBatchSource(testAllocator, batch)
 
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, true /* inMem */)
+	defer cleanup()
+
 	var wg sync.WaitGroup
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				r, outputs := NewHashRouter(testAllocator, input, types, []uint32{0}, numOutputs)
+				allocators := make([]*Allocator, numOutputs)
+				for i := range allocators {
+					acc := testMemMonitor.MakeBoundAccount()
+					allocators[i] = NewAllocator(ctx, &acc)
+					defer acc.Close(ctx)
+				}
+				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20 /* 64 MiB */, queueCfg)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.

@@ -388,9 +388,10 @@ type testClusterConfig struct {
 	overrideVectorize string
 	// if non-empty, overrides the default automatic statistics mode.
 	overrideAutoStats string
-	// if set, queries using distSQL processors that can fall back to disk do
-	// so immediately, using only their disk-based implementation.
-	distSQLUseDisk bool
+	// if set, queries using distSQL processors or vectorized operators that can
+	// fall back to disk do so immediately, using only their disk-based
+	// implementation.
+	sqlExecUseDisk bool
 	// if set, enables DistSQL metadata propagation tests.
 	distSQLMetadataTestEnabled bool
 	// if set and the -test.short flag is passed, skip this config.
@@ -474,6 +475,16 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize:   "experimental_on",
 	},
 	{
+		name:                "fakedist-vec-disk",
+		numNodes:            3,
+		useFakeSpanResolver: true,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+		overrideVectorize:   "experimental_on",
+		sqlExecUseDisk:      true,
+		skipShort:           true,
+	},
+	{
 		name:                       "fakedist-metadata",
 		numNodes:                   3,
 		useFakeSpanResolver:        true,
@@ -488,7 +499,7 @@ var logicTestConfigs = []testClusterConfig{
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-		distSQLUseDisk:      true,
+		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
 	{
@@ -522,7 +533,7 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "5node-dist-disk",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
-		distSQLUseDisk:      true,
+		sqlExecUseDisk:      true,
 		skipShort:           true,
 		overrideAutoStats:   "false",
 	},
@@ -1072,7 +1083,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel: execinfra.Off, DeterministicStats: true,
 	}
-	if cfg.distSQLUseDisk {
+	if cfg.sqlExecUseDisk {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
 	if cfg.distSQLMetadataTestEnabled {
