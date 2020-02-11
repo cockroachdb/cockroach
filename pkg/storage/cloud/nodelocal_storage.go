@@ -95,6 +95,9 @@ func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) 
 
 	pattern := l.base
 	if patternSuffix != "" {
+		if containsGlob(l.base) {
+			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
+		}
 		pattern = joinRelativePath(pattern, patternSuffix)
 	}
 
@@ -105,7 +108,15 @@ func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) 
 	}
 
 	for _, fileName := range matches {
-		fileList = append(fileList, makeNodeLocalURIWithNodeID(l.cfg.NodeID, fileName))
+		if patternSuffix != "" {
+			if !strings.HasPrefix(fileName, l.base) {
+				// TODO(dt): return a nice rel-path instead of erroring out.
+				return nil, errors.Errorf("pattern matched file outside of base path %q", l.base)
+			}
+			fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(fileName, l.base), "/"))
+		} else {
+			fileList = append(fileList, makeNodeLocalURIWithNodeID(l.cfg.NodeID, fileName))
+		}
 	}
 
 	return fileList, nil

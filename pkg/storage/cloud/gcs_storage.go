@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"strings"
 
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -167,11 +168,14 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 	it := g.bucket.Objects(ctx, &gcs.Query{
-		Prefix: getBucketBeforeWildcard(g.prefix),
+		Prefix: getPrefixBeforeWildcard(g.prefix),
 	})
 
 	pattern := g.prefix
 	if patternSuffix != "" {
+		if containsGlob(g.prefix) {
+			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
+		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
 
@@ -189,13 +193,21 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 			continue
 		}
 		if matches {
-			gsURL := url.URL{
-				Scheme:   "gs",
-				Host:     attrs.Bucket,
-				Path:     attrs.Name,
-				RawQuery: gcsQueryParams(g.conf),
+			if patternSuffix != "" {
+				if !strings.HasPrefix(attrs.Name, g.prefix) {
+					// TODO(dt): return a nice rel-path instead of erroring out.
+					return nil, errors.New("pattern matched file outside of path")
+				}
+				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(attrs.Name, g.prefix), "/"))
+			} else {
+				gsURL := url.URL{
+					Scheme:   "gs",
+					Host:     attrs.Bucket,
+					Path:     attrs.Name,
+					RawQuery: gcsQueryParams(g.conf),
+				}
+				fileList = append(fileList, gsURL.String())
 			}
-			fileList = append(fileList, gsURL.String())
 		}
 	}
 

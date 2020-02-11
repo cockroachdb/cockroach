@@ -164,7 +164,7 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 	return out.Body, nil
 }
 
-func getBucketBeforeWildcard(p string) string {
+func getPrefixBeforeWildcard(p string) string {
 	globIndex := strings.IndexAny(p, "*?[")
 	if globIndex < 0 {
 		return p
@@ -174,32 +174,46 @@ func getBucketBeforeWildcard(p string) string {
 
 func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
-	baseBucket := getBucketBeforeWildcard(*s.bucket)
 
 	pattern := s.prefix
 	if patternSuffix != "" {
+		if containsGlob(s.prefix) {
+			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
+		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
 
+	var matchErr error
 	err := s.s3.ListObjectsPagesWithContext(
 		ctx,
 		&s3.ListObjectsInput{
-			Bucket: &baseBucket,
+			Bucket: s.bucket,
+			Prefix: aws.String(getPrefixBeforeWildcard(s.prefix)),
 		},
 		func(page *s3.ListObjectsOutput, lastPage bool) bool {
 			for _, fileObject := range page.Contents {
 				matches, err := path.Match(pattern, *fileObject.Key)
 				if err != nil {
-					continue
+					matchErr = err
+					return false
 				}
 				if matches {
-					s3URL := url.URL{
-						Scheme:   "s3",
-						Host:     *s.bucket,
-						Path:     *fileObject.Key,
-						RawQuery: s3QueryParams(s.conf),
+					if patternSuffix != "" {
+						if !strings.HasPrefix(*fileObject.Key, s.prefix) {
+							// TODO(dt): return a nice rel-path instead of erroring out.
+							matchErr = errors.New("pattern matched file outside of path")
+							return false
+						}
+						fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(*fileObject.Key, s.prefix), "/"))
+					} else {
+						s3URL := url.URL{
+							Scheme:   "s3",
+							Host:     *s.bucket,
+							Path:     *fileObject.Key,
+							RawQuery: s3QueryParams(s.conf),
+						}
+						fileList = append(fileList, s3URL.String())
 					}
-					fileList = append(fileList, s3URL.String())
 				}
 			}
 			return !lastPage
@@ -207,6 +221,9 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, `failed to list s3 bucket`)
+	}
+	if matchErr != nil {
+		return nil, errors.Wrap(matchErr, `failed to list s3 bucket`)
 	}
 
 	return fileList, nil

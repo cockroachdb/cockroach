@@ -114,8 +114,17 @@ type ExternalStorage interface {
 	// WriteFile should write the content to requested name.
 	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
 
-	// ListFiles should treat the ExternalStorage URI plus the passed suffix as a
-	// glob pattern, and return a list of files that match the pattern.
+	// ListFiles returns files that match a globs-style pattern. The returned
+	// results are usually relative to the base path, meaning an ExternalStorage
+	// instance can be initialized with some base path, used to query for files,
+	// then pass those results to its other methods.
+	//
+	// As a special-case, if the passed patternSuffix is empty, the base path used
+	// to initialize the storage connection is treated as a pattern. In this case,
+	// as the connection is not really reusable for interacting with other files
+	// and there is no clear definition of what it would mean to be relative to
+	// that, the results are fully-qualified absolute URIs. The base URI is *only*
+	// allowed to contain globs-patterns when the explicit patternSuffix is "".
 	ListFiles(ctx context.Context, patternSuffix string) ([]string, error)
 
 	// Delete removes the named file from the store.
@@ -297,7 +306,11 @@ func URINeedsGlobExpansion(uri string) bool {
 		}
 	}
 
-	return strings.ContainsAny(parsedURI.Path, "*?[")
+	return containsGlob(parsedURI.Path)
+}
+
+func containsGlob(str string) bool {
+	return strings.ContainsAny(str, "*?[")
 }
 
 var (

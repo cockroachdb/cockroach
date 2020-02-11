@@ -159,7 +159,7 @@ func (l *LocalStorage) List(pattern string) ([]string, error) {
 
 	var fileList []string
 	for _, file := range matches {
-		fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(file, l.externalIODir), "/"))
+		fileList = append(fileList, strings.TrimPrefix(file, l.externalIODir))
 	}
 	return fileList, nil
 }

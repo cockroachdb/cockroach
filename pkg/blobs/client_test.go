@@ -282,8 +282,8 @@ func TestBlobClientList(t *testing.T) {
 
 	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
 
-	localFileNames := []string{"file/local/dataA.csv", "file/local/dataB.csv", "file/local/dataC.csv"}
-	remoteFileNames := []string{"file/remote/A.csv", "file/remote/B.csv", "file/remote/C.csv"}
+	localFileNames := []string{"/file/local/dataA.csv", "/file/local/dataB.csv", "/file/local/dataC.csv"}
+	remoteFileNames := []string{"/file/remote/A.csv", "/file/remote/B.csv", "/file/remote/C.csv"}
 	for _, fileName := range localFileNames {
 		fullPath := filepath.Join(localExternalDir, fileName)
 		writeTestFile(t, fullPath, []byte("testLocalFile"))
@@ -340,7 +340,7 @@ func TestBlobClientList(t *testing.T) {
 			"list-star",
 			remoteNodeID,
 			"*",
-			[]string{"file"},
+			[]string{"/file"},
 			"",
 		},
 		{
