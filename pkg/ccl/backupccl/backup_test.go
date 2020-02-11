@@ -170,7 +170,7 @@ func verifyBackupRestoreStatementResult(
 		return err
 	}
 	if e, a := columns, []string{
-		"job_id", "status", "fraction_completed", "rows", "index_entries", "system_records", "bytes",
+		"job_id", "status", "fraction_completed", "rows", "index_entries", "bytes",
 	}; !reflect.DeepEqual(e, a) {
 		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
 	}
@@ -189,7 +189,7 @@ func verifyBackupRestoreStatementResult(
 		return errors.New("zero rows in result")
 	}
 	if err := rows.Scan(
-		&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused, &unused, &unused, &unused,
+		&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused, &unused, &unused,
 	); err != nil {
 		return err
 	}
@@ -480,13 +480,13 @@ func backupAndRestore(
 
 		var unused string
 		var exported struct {
-			rows, idx, sys, bytes int64
+			rows, idx, bytes int64
 		}
 
 		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", backupURIFmtString)
 		sqlDB.QueryRow(t, backupQuery, backupURIArgs...).Scan(
-			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.sys, &exported.bytes,
+			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.bytes,
 		)
 		// When numAccounts == 0, our approxBytes formula breaks down because
 		// backups of no data still contain the system.users and system.descriptor
@@ -553,13 +553,13 @@ func backupAndRestore(
 
 		var unused string
 		var restored struct {
-			rows, idx, sys, bytes int64
+			rows, idx, bytes int64
 		}
 
 		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
 		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
 		sqlDBRestore.QueryRow(t, restoreQuery, restoreURIArgs...).Scan(
-			&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
+			&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
 		)
 		approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
 		if max := approxBytes * 3; restored.bytes < approxBytes || restored.bytes > max {
@@ -1366,7 +1366,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	var unused string
 	var exportedRows int
 	sqlDB.QueryRow(t, `BACKUP DATABASE data TO $1`, localFoo).Scan(
-		&unused, &unused, &unused, &exportedRows, &unused, &unused, &unused,
+		&unused, &unused, &unused, &exportedRows, &unused, &unused,
 	)
 	if exportedRows != totalRows {
 		// TODO(dt): fix row-count including interleaved garbarge
@@ -1383,7 +1383,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 
 		var importedRows int
 		sqlDBRestore.QueryRow(t, `RESTORE data.* FROM $1`, localFoo).Scan(
-			&unused, &unused, &unused, &importedRows, &unused, &unused, &unused,
+			&unused, &unused, &unused, &importedRows, &unused, &unused,
 		)
 
 		if importedRows != totalRows {

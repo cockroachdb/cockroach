@@ -418,7 +418,7 @@ func importFixtureTable(
 	var rows, index, tableBytes int64
 	var discard driver.Value
 	err := sqlDB.QueryRow(buf.String(), params...).Scan(
-		&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
+		&discard, &discard, &discard, &rows, &index, &tableBytes,
 	)
 	if err != nil {
 		return 0, err

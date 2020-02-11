@@ -537,7 +537,6 @@ func (b *backupResumer) OnTerminal(
 			tree.NewDFloat(tree.DFloat(1.0)),
 			tree.NewDInt(tree.DInt(b.res.Rows)),
 			tree.NewDInt(tree.DInt(b.res.IndexEntries)),
-			tree.NewDInt(tree.DInt(b.res.SystemRecords)),
 			tree.NewDInt(tree.DInt(b.res.DataSize)),
 		}
 	}

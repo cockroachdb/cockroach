@@ -1342,7 +1342,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 			var unused string
 			var restored struct {
-				rows, idx, sys, bytes int
+				rows, idx, bytes int
 			}
 
 			var result int
@@ -1353,7 +1353,7 @@ func TestImportCSVStmt(t *testing.T) {
 				return
 			}
 			sqlDB.QueryRow(t, query, tc.args...).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
 			)
 
 			jobPrefix := fmt.Sprintf(`IMPORT TABLE %s.public.t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))`, intodb)
@@ -1855,7 +1855,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 			var unused string
 			var restored struct {
-				rows, idx, sys, bytes int
+				rows, idx, bytes int
 			}
 
 			// Insert the test data
@@ -1875,7 +1875,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 
 			sqlDB.QueryRow(t, query).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
 			)
 
 			jobPrefix := fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b)`)
