@@ -1,5 +1,6 @@
 statement ok
-SET experimental_enable_primary_key_changes = true
+SET experimental_enable_primary_key_changes = true;
+SET experimental_enable_hash_sharded_indexes = true
 
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX i (x), INDEX i2 (z))
@@ -432,3 +433,69 @@ ALTER TABLE t44782 ALTER PRIMARY KEY USING COLUMNS (y)
 
 statement ok
 ROLLBACK
+
+subtest hash_sharded
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z INT,
+  INDEX i1 (z) USING HASH WITH BUCKET_COUNT = 5,
+  FAMILY (x, y, z)
+);
+INSERT INTO t VALUES (1, 2, 3);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT = 10
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   z INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
+   UNIQUE INDEX t_x_key (x ASC),
+   INDEX i1 (z ASC) USING HASH WITH BUCKET_COUNT = 5,
+   FAMILY fam_0_x_y_z_crdb_internal_z_shard_5 (x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
+)
+
+query TTT
+SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
+----
+count                  ·            ·
+ └── insert-fast-path  ·            ·
+·                      into         t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
+·                      strategy     inserter
+·                      auto commit  ·
+·                      size         7 columns, 1 row
+
+# Ensure that all of the indexes have been rewritten.
+query IT
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+----
+3 primary
+4 t_x_key
+5 i1
+
+query III
+SELECT * FROM t@primary
+----
+1 2 3
+
+query III
+SELECT * FROM t@t_x_key
+----
+1 2 3
+
+query III
+SELECT * FROM t@i1
+----
+1 2 3
+
+statement error pq: interleaved indexes cannot also be hash sharded
+DROP TABLE IF EXISTS parent, t CASCADE;
+CREATE TABLE parent (x INT PRIMARY KEY);
+CREATE TABLE t (x INT NOT NULL, y INT NOT NULL);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x, y) USING HASH WITH BUCKET_COUNT = 10 INTERLEAVE IN PARENT parent (x)
