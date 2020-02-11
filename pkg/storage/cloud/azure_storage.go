@@ -25,6 +25,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func azureQueryParams(conf *roachpb.ExternalStorage_Azure) string {
+	q := make(url.Values)
+	if conf.AccountName != "" {
+		q.Set(AzureAccountNameParam, conf.AccountName)
+	}
+	if conf.AccountKey != "" {
+		q.Set(AzureAccountKeyParam, conf.AccountKey)
+	}
+	return q.Encode()
+}
+
 type azureStorage struct {
 	conf      *roachpb.ExternalStorage_Azure
 	container azblob.ContainerURL
@@ -116,9 +127,10 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 		}
 		if matches {
 			azureURL := url.URL{
-				Scheme: "azure",
-				Host:   strings.TrimPrefix(s.container.URL().Path, "/"),
-				Path:   blob.Name,
+				Scheme:   "azure",
+				Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
+				Path:     blob.Name,
+				RawQuery: azureQueryParams(s.conf),
 			}
 			fileList = append(fileList, azureURL.String())
 		}

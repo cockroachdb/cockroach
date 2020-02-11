@@ -30,6 +30,20 @@ import (
 	"google.golang.org/api/option"
 )
 
+func gcsQueryParams(conf *roachpb.ExternalStorage_GCS) string {
+	q := make(url.Values)
+	if conf.Auth != "" {
+		q.Set(AuthParam, conf.Auth)
+	}
+	if conf.Credentials != "" {
+		q.Set(CredentialsParam, conf.Credentials)
+	}
+	if conf.BillingProject != "" {
+		q.Set(GoogleBillingProjectParam, conf.BillingProject)
+	}
+	return q.Encode()
+}
+
 type gcsStorage struct {
 	bucket   *gcs.BucketHandle
 	client   *gcs.Client
@@ -176,9 +190,10 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 		}
 		if matches {
 			gsURL := url.URL{
-				Scheme: "gs",
-				Host:   attrs.Bucket,
-				Path:   attrs.Name,
+				Scheme:   "gs",
+				Host:     attrs.Bucket,
+				Path:     attrs.Name,
+				RawQuery: gcsQueryParams(g.conf),
 			}
 			fileList = append(fileList, gsURL.String())
 		}
