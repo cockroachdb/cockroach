@@ -40,6 +40,7 @@ func Scan(
 	opts := engine.MVCCScanOptions{
 		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:          h.Txn,
+		TargetBytes:  h.TargetBytes,
 		Reverse:      false,
 	}
 
@@ -63,6 +64,7 @@ func Scan(
 	}
 
 	reply.NumKeys = res.NumKeys
+	reply.NumBytes = res.NumBytes
 
 	if res.ResumeSpan != nil {
 		reply.ResumeSpan = res.ResumeSpan
