@@ -546,6 +546,8 @@ func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
 		}
 		startIdx, endIdx := hj.exportBufferedState.rightExported, newRightExported
 		b := hj.exportBufferedState.rightWindowedBatch
+		// We don't need to worry about selection vectors on hj.ht.vals because the
+		// tuples have been already selected during building of the hash table.
 		for i, t := range hj.spec.right.sourceTypes {
 			window := hj.ht.vals.colVecs[i].Window(t, startIdx, endIdx)
 			b.ReplaceCol(window, i)
