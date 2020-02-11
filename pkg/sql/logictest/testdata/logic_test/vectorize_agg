@@ -28,12 +28,12 @@ INSERT INTO bools VALUES
 (4, NULL),  (4, true),
 (5, false), (5, NULL)
 
-query BB
-SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a
+query IBB
+SELECT a, bool_and(b), bool_or(b) FROM bools GROUP BY a ORDER BY a ASC;
 ----
-NULL NULL
-true true
-false false
-false true
-true true
-false false
+0 NULL NULL
+1 true true
+2 false false
+3 false true
+4 true true
+5 false false
