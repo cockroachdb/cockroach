@@ -931,6 +931,8 @@ func tupleEquals(expected tuple, actual tuple) bool {
 				if f2, ok := actual[i].(float64); ok {
 					if math.IsNaN(f1) && math.IsNaN(f2) {
 						continue
+					} else if !math.IsNaN(f1) && !math.IsNaN(f2) && math.Abs(f1-f2) < 1e-6 {
+						continue
 					}
 				}
 			}
