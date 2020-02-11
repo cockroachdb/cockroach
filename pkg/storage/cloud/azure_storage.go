@@ -95,7 +95,11 @@ func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCl
 	return reader, nil
 }
 
-func (s *azureStorage) ListFiles(ctx context.Context) ([]string, error) {
+func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
+	pattern := s.prefix
+	if patternSuffix != "" {
+		pattern = filepath.Join(pattern, patternSuffix)
+	}
 	var fileList []string
 	response, err := s.container.ListBlobsFlatSegment(ctx,
 		azblob.Marker{},
@@ -106,7 +110,7 @@ func (s *azureStorage) ListFiles(ctx context.Context) ([]string, error) {
 	}
 
 	for _, blob := range response.Segment.BlobItems {
-		matches, err := filepath.Match(s.prefix, blob.Name)
+		matches, err := filepath.Match(pattern, blob.Name)
 		if err != nil {
 			continue
 		}

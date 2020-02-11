@@ -114,9 +114,9 @@ type ExternalStorage interface {
 	// WriteFile should write the content to requested name.
 	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
 
-	// ListFiles should treat the ExternalStorage URI as a glob
-	// pattern, and return a list of files that match the pattern.
-	ListFiles(ctx context.Context) ([]string, error)
+	// ListFiles should treat the ExternalStorage URI plus the passed suffix as a
+	// glob pattern, and return a list of files that match the pattern.
+	ListFiles(ctx context.Context, patternSuffix string) ([]string, error)
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error

@@ -237,26 +237,61 @@ func testListFiles(t *testing.T, storeURI string) {
 	for _, tc := range []struct {
 		name       string
 		URI        string
+		suffix     string
 		resultList []string
 	}{
 		{
 			"list-all-csv",
 			appendPath(t, storeURI, "file/*/*.csv"),
+			"",
 			fileNames,
 		},
 		{
 			"list-letter-csv",
 			appendPath(t, storeURI, "file/abc/?.csv"),
+			"",
 			letterFiles,
+		},
+		{
+			"list-letter-csv-suffix",
+			appendPath(t, storeURI, "file/abc"),
+			"?.csv",
+			letterFiles,
+		},
+		{
+			"list-letter-csv-dotdot",
+			appendPath(t, storeURI, "file/abc/xzy/../?.csv"),
+			"",
+			letterFiles,
+		},
+		{
+			"list-letter-csv-dotdotdotdot-suffix",
+			appendPath(t, storeURI, "file/abc/xzy"),
+			"../?.csv",
+			letterFiles,
+		},
+		{
+			"list-letter-csv-dotdot-suffix",
+			appendPath(t, storeURI, "file/abc/xzy"),
+			"../../?.csv",
+			nil,
 		},
 		{
 			"list-data-num-csv",
 			appendPath(t, storeURI, "file/numbers/data[0-9].csv"),
+			"",
 			dataNumberFiles,
 		},
 		{
 			"wildcard-bucket-and-filename",
 			appendPath(t, storeURI, "*/numbers/*.csv"),
+			"",
+			dataNumberFiles,
+		},
+		{
+			"wildcard-bucket-and-filename-suffix",
+			appendPath(t, storeURI, ""),
+			"*/numbers/*.csv",
 			dataNumberFiles,
 		},
 		{
@@ -264,27 +299,43 @@ func testListFiles(t *testing.T, storeURI string) {
 			// filepath.Glob() assumes that / is the separator, and enforces that it's there.
 			// So this pattern would not actually match anything.
 			appendPath(t, storeURI, "file/*.csv"),
+			"",
 			[]string{},
 		},
 		{
 			"list-no-matches",
 			appendPath(t, storeURI, "file/letters/dataD.csv"),
+			"",
 			[]string{},
 		},
 		{
 			"list-escaped-star",
 			appendPath(t, storeURI, "file/*/\\*.csv"),
+			"",
+			[]string{},
+		},
+		{
+			"list-escaped-star-suffix",
+			appendPath(t, storeURI, "file"),
+			"*/\\*.csv",
 			[]string{},
 		},
 		{
 			"list-escaped-range",
 			appendPath(t, storeURI, "file/*/data\\[0-9\\].csv"),
+			"",
+			[]string{},
+		},
+		{
+			"list-escaped-range-suffix",
+			appendPath(t, storeURI, "file"),
+			"*/data\\[0-9\\].csv",
 			[]string{},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := storeFromURI(ctx, t, tc.URI, clientFactory)
-			filesList, err := s.ListFiles(ctx)
+			filesList, err := s.ListFiles(ctx, tc.suffix)
 			if err != nil {
 				t.Fatal(err)
 			}

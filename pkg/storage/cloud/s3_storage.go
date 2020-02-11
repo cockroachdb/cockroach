@@ -155,9 +155,14 @@ func getBucketBeforeWildcard(path string) string {
 	return filepath.Dir(path[:globIndex])
 }
 
-func (s *s3Storage) ListFiles(ctx context.Context) ([]string, error) {
+func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 	baseBucket := getBucketBeforeWildcard(*s.bucket)
+
+	pattern := s.prefix
+	if patternSuffix != "" {
+		pattern = filepath.Join(pattern, patternSuffix)
+	}
 
 	err := s.s3.ListObjectsPagesWithContext(
 		ctx,
@@ -166,7 +171,7 @@ func (s *s3Storage) ListFiles(ctx context.Context) ([]string, error) {
 		},
 		func(page *s3.ListObjectsOutput, lastPage bool) bool {
 			for _, fileObject := range page.Contents {
-				matches, err := filepath.Match(s.prefix, *fileObject.Key)
+				matches, err := filepath.Match(pattern, *fileObject.Key)
 				if err != nil {
 					continue
 				}
