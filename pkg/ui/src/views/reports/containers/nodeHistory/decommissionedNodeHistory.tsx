@@ -12,44 +12,82 @@ import * as React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, withRouter } from "react-router-dom";
-import moment from "moment";
+import { Moment } from "moment";
 import _ from "lodash";
 
 import { AdminUIState } from "src/redux/state";
 import {
-  LivenessStatus,
-  NodesSummary,
   nodesSummarySelector,
   partitionedStatuses,
-  selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { SortedTable } from "src/views/shared/components/sortedtable";
 import { INodeStatus } from "src/util/proto";
 import { LongToMoment } from "src/util/convert";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LocalSetting } from "src/redux/localsettings";
 
 import "./decommissionedNodeHistory.styl";
+import { ColumnsConfig, Table, Text } from "src/components";
+import { createSelector } from "reselect";
 
 const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/decommissioned_sort_setting", (s) => s.localSettings,
 );
 
-class NodeSortedTable extends SortedTable<INodeStatus> {}
+interface DecommissionedNodeStatusRow {
+  key: string;
+  nodeId: number;
+  address: string;
+  decommissionedDate: Moment;
+}
 
 export interface DecommissionedNodeHistoryProps {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
-  nodesSummaryValid: boolean;
-  status: LivenessStatus.DECOMMISSIONED;
-  sortSetting: SortSetting;
-  setSort: typeof decommissionedNodesSortSetting.set;
-  statuses: INodeStatus[];
-  nodesSummary: NodesSummary;
+  dataSource: DecommissionedNodeStatusRow[];
 }
 
+const sortByNodeId = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
+  if (a.nodeId < b.nodeId) { return -1; }
+  if (a.nodeId > b.nodeId) { return 1; }
+  return 0;
+};
+
+const sortByDecommissioningDate = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
+  if (a.decommissionedDate.isBefore(b.decommissionedDate)) { return -1; }
+  if (a.decommissionedDate.isAfter(b.decommissionedDate)) { return 1; }
+  return 0;
+};
+
 export class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
+  columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
+    {
+      key: "id",
+      title: "ID",
+      sorter: sortByNodeId,
+      render: (_text, record) => (
+        <Text>{`n${record.nodeId}`}</Text>
+      ),
+    },
+    {
+      key: "address",
+      title: "Address",
+      sorter: true,
+      render: (_text, record) => (
+        <Link to={`/node/${record.nodeId}`}>
+          <Text>{record.address}</Text>
+        </Link>),
+    },
+    {
+      key: "decommissionedOn",
+      title: "Decommissioned On",
+      sorter: sortByDecommissioningDate,
+      render: (_text, record) => {
+        return record.decommissionedDate.format("LL[ at ]h:mm a");
+      },
+    },
+  ];
+
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLiveness();
@@ -61,70 +99,55 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
   }
 
   render() {
-    const { status, statuses, nodesSummary, sortSetting, setSort } = this.props;
-    if (!statuses || statuses.length === 0) {
-      return null;
-    }
-
-    const statusName = _.capitalize(LivenessStatus[status]);
+    const { dataSource } = this.props;
 
     return (
       <section className="section">
         <Helmet title="Decommissioned Node History | Debug" />
-        <h1 className="title">Decommissioned Node History</h1>
+        <h1 className="base-heading title">Decommissioned Node History</h1>
         <div>
-          <NodeSortedTable
-            data={statuses}
-            sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => setSort(setting)}
-            columns={[
-              {
-                title: "ID",
-                cell: (ns) => `n${ns.desc.node_id}`,
-                sort: (ns) => ns.desc.node_id,
-              },
-              {
-                title: "Address",
-                cell: (ns) => {
-                  return (
-                    <div>
-                      <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
-                    </div>
-                  );
-                },
-                sort: (ns) => ns.desc.node_id,
-                className: "sort-table__cell--link",
-              },
-              {
-                title: `${statusName} Since`,
-                cell: (ns) => {
-                  const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                  if (!liveness) {
-                    return "no information";
-                  }
-
-                  const deadTime = liveness.expiration.wall_time;
-                  const deadMoment = LongToMoment(deadTime);
-                  return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
-                },
-                sort: (ns) => {
-                  const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                  return liveness.expiration.wall_time;
-                },
-              },
-            ]} />
+          <Table
+            dataSource={dataSource}
+            columns={this.columns}
+            noDataMessage="There are no decommissioned nodes in this cluster."
+          />
         </div>
       </section>
     );
   }
 }
 
+const decommissionedNodesTableData = createSelector(
+  partitionedStatuses,
+  nodesSummarySelector,
+  (statuses, nodesSummary): DecommissionedNodeStatusRow[] => {
+    const decommissionedStatuses = statuses.decommissioned || [];
+
+    const getDecommissionedTime = (nodeId: number) => {
+      const liveness = nodesSummary.livenessByNodeID[nodeId];
+      if (!liveness) {
+        return undefined;
+      }
+      const deadTime = liveness.expiration.wall_time;
+      return LongToMoment(deadTime);
+    };
+
+    const data = _.chain(decommissionedStatuses)
+      .orderBy([(ns: INodeStatus) => getDecommissionedTime(ns.desc.node_id)], ["desc"])
+      .map((ns: INodeStatus, idx: number) => {
+        return {
+          key: `${idx}`,
+          nodeId: ns.desc.node_id,
+          address: ns.desc.address.address_field,
+          decommissionedDate: getDecommissionedTime(ns.desc.node_id),
+        };
+      })
+      .value();
+    return data;
+  });
+
 const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummaryValid: selectNodesSummaryValid(state),
-  sortSetting: decommissionedNodesSortSetting.selector(state),
-  status: LivenessStatus.DECOMMISSIONED,
-  statuses: partitionedStatuses(state).decommissioned,
-  nodesSummary: nodesSummarySelector(state),
+  dataSource: decommissionedNodesTableData(state),
 });
 
 const mapDispatchToProps = {
