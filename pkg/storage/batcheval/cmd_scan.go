@@ -37,24 +37,24 @@ func Scan(
 	var res engine.MVCCScanResult
 	var err error
 
+	opts := engine.MVCCScanOptions{
+		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:          h.Txn,
+		TargetBytes:  h.TargetBytes,
+		Reverse:      false,
+	}
+
 	switch args.ScanFormat {
 	case roachpb.BATCH_RESPONSE:
 		res, err = engine.MVCCScanToBytes(
-			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
-			engine.MVCCScanOptions{
-				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-				Txn:          h.Txn,
-			})
+			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
 		reply.BatchResponses = res.KVData
 	case roachpb.KEY_VALUES:
 		res, err = engine.MVCCScan(
-			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
-				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-				Txn:          h.Txn,
-			})
+			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -62,7 +62,9 @@ func Scan(
 	default:
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}
+
 	reply.NumKeys = res.NumKeys
+	reply.NumBytes = res.NumBytes
 
 	if res.ResumeSpan != nil {
 		reply.ResumeSpan = res.ResumeSpan
