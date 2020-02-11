@@ -9,23 +9,18 @@
 // licenses/APL.txt.
 
 import d3 from "d3";
-import React from "react";
+import _ from "lodash";
 import moment from "moment";
 import * as nvd3 from "nvd3";
+import React from "react";
 import { createSelector } from "reselect";
-
-import * as protos from  "src/js/protos";
-import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
-import { findChildrenOfType } from "src/util/find";
-import {
-  ConfigureLineChart, InitLineChart, CHART_MARGINS, ConfigureLinkedGuideline,
-} from "src/views/cluster/util/graphs";
-import {
-  Metric, MetricProps, Axis, AxisProps, QueryTimeInfo,
-} from "src/views/shared/components/metricQuery";
-import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
-import Visualization from "src/views/cluster/components/visualization";
+import * as protos from "src/js/protos";
+import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { NanoToMilli } from "src/util/convert";
+import { findChildrenOfType } from "src/util/find";
+import Visualization from "src/views/cluster/components/visualization";
+import { CHART_MARGINS, ConfigureLineChart, ConfigureLinkedGuideline, InitLineChart } from "src/views/cluster/util/graphs";
+import { Axis, AxisProps, Metric, MetricProps, MetricsDataComponentProps, QueryTimeInfo } from "src/views/shared/components/metricQuery";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -223,7 +218,6 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
 
   render() {
     const { title, subtitle, tooltip, data } = this.props;
-
     let hoverProps: Partial<React.SVGProps<SVGSVGElement>> = {};
     if (this.props.hoverOn) {
       hoverProps = {
@@ -231,7 +225,6 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
         onMouseLeave: this.mouseLeave,
       };
     }
-
     return (
       <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
         <div className="linegraph">

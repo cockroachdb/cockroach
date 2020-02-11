@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Divider } from "antd";
 import _ from "lodash";
 import moment from "moment";
 import { queryByName, queryToObj, queryToString } from "oss/src/util/query";
@@ -18,13 +19,13 @@ import { refreshNodes } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import * as timewindow from "src/redux/timewindow";
+import { availableTimeScales } from "src/redux/timewindow";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus } from "src/util/proto";
 import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/components/dropdown";
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
-import { Divider } from "antd";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
@@ -172,9 +173,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const start = queryStart && moment.unix(Number(queryStart)).utc();
     const end = queryEnd && moment.unix(Number(queryEnd)).utc();
 
-    if (start || end) {
-      this.setDatesByQueryParams({ start, end });
-    }
+    this.setDatesByQueryParams({ start, end });
   }
 
   setQueryParams = (date: moment.Moment, type: DateTypes) => {
@@ -207,14 +206,22 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     });
   }
 
-  setDatesByQueryParams = (dates: timewindow.TimeWindow) => {
-    const selected = _.clone(this.props.currentScale);
-    const end  = dates.end || moment().set({hours: 23, minutes: 59, seconds: 0});
-    const start = dates.start || moment().set({hours: 0, minutes: 0, seconds: 0});
+  findClosestTimeScale = (seconds: number) => {
+    const data: timewindow.TimeScale[] = [];
+    Object.keys(availableTimeScales).forEach((val) => data.push(availableTimeScales[val]));
+    data.sort( (a, b) => (Math.abs(seconds - a.windowSize.asSeconds()) - Math.abs(seconds - b.windowSize.asSeconds())) );
+    return data[0];
+  }
 
-    selected.key = "Custom";
-    this.props.setTimeScale(selected);
+  setDatesByQueryParams = (dates?: timewindow.TimeWindow) => {
+    const end = dates.end || moment();
+    const start = dates.start || moment().subtract(10, "minutes");
+    const seconds = moment.duration(moment(end).diff(start)).asSeconds();
+    const newSettings = this.findClosestTimeScale(seconds);
+    const timeScale = newSettings.windowSize.asSeconds() === seconds ? newSettings : { ...newSettings, key: "Custom" };
+    timeScale.windowEnd = null;
     this.props.setTimeRange({ end, start });
+    this.props.setTimeScale(timeScale);
   }
 
   setDate = (date: moment.Moment, type: DateTypes) => {

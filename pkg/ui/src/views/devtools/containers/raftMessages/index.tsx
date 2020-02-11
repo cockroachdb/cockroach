@@ -81,7 +81,7 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
     this.setClusterPath(selected.value);
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
   }
 
