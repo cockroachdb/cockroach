@@ -413,7 +413,7 @@
   revision = "053dcac06c2701d27c934a994a99954a28e1a1ea"
 
 [[projects]]
-  digest = "1:7cfbe9c31d82a7044c86f36c24354363da85cc0a69ee7f2a20908a620d7e9b8a"
+  digest = "1:d17dbdabe736cb437be8bba0e98b0fbf4a81522a8d8d1bfdd7861a9c17e26995"
   name = "github.com/cockroachdb/errors"
   packages = [
     ".",
@@ -436,8 +436,8 @@
     "withstack",
   ]
   pruneopts = "UT"
-  revision = "9e21257b06ad938e53c24c52b393076a51b61540"
-  version = "v1.2.4"
+  revision = "3697abcdd5d983630284c6c19791b4e07999e594"
+  version = "v1.3"
 
 [[projects]]
   digest = "1:a44e537b3e080ff297315d166956dba9607f070644a89be78b59af6c54876b64"
@@ -707,6 +707,14 @@
   pruneopts = "UT"
   revision = "221b2b44fb33f84ed3ea13f3aed62ff48c85636b"
   source = "https://github.com/cockroachdb/raven-go"
+
+[[projects]]
+  digest = "1:9fde49eaa3ee34e80f2ce31bd3ed0695ec048321dfe02c60a46c22e5b8e3968e"
+  name = "github.com/getsentry/sentry-go"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "93b68f59e483f3eede43c3212220a9f6689f8812"
+  version = "v0.5.1"
 
 [[projects]]
   branch = "master"
