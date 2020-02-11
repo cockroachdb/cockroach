@@ -144,6 +144,7 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 			Endpoint:  uri.Query().Get(S3EndpointParam),
 			Region:    uri.Query().Get(S3RegionParam),
 			Auth:      uri.Query().Get(AuthParam),
+			/* NB: additions here should also update s3QueryParams() serializer */
 		}
 		conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
 		// AWS secrets often contain + characters, which must be escaped when
@@ -162,6 +163,7 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 			Auth:           uri.Query().Get(AuthParam),
 			BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 			Credentials:    uri.Query().Get(CredentialsParam),
+			/* NB: additions here should also update gcsQueryParams() serializer */
 		}
 		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	case "azure":
@@ -171,6 +173,7 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 			Prefix:      uri.Path,
 			AccountName: uri.Query().Get(AzureAccountNameParam),
 			AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+			/* NB: additions here should also update azureQueryParams() serializer */
 		}
 		if conf.AzureConfig.AccountName == "" {
 			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)

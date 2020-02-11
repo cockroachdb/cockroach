@@ -37,6 +37,23 @@ type s3Storage struct {
 
 var _ ExternalStorage = &s3Storage{}
 
+func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
+	q := make(url.Values)
+	setIf := func(key, value string) {
+		if value != "" {
+			q.Set(key, value)
+		}
+	}
+	setIf(S3AccessKeyParam, conf.AccessKey)
+	setIf(S3SecretParam, conf.Secret)
+	setIf(S3TempTokenParam, conf.TempToken)
+	setIf(S3EndpointParam, conf.Endpoint)
+	setIf(S3RegionParam, conf.Region)
+	setIf(AuthParam, conf.Auth)
+
+	return q.Encode()
+}
+
 func makeS3Storage(
 	ctx context.Context, conf *roachpb.ExternalStorage_S3, settings *cluster.Settings,
 ) (ExternalStorage, error) {
@@ -177,9 +194,10 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 				}
 				if matches {
 					s3URL := url.URL{
-						Scheme: "s3",
-						Host:   *s.bucket,
-						Path:   *fileObject.Key,
+						Scheme:   "s3",
+						Host:     *s.bucket,
+						Path:     *fileObject.Key,
+						RawQuery: s3QueryParams(s.conf),
 					}
 					fileList = append(fileList, s3URL.String())
 				}
