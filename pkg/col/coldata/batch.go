@@ -114,7 +114,16 @@ func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
 		b.b[i] = NewMemColumn(t, size)
 	}
 	b.sel = make([]uint16, size)
+	return b
+}
 
+// NewMemBatchNoCols creates a "skeleton" of new in-memory Batch. It allocates
+// memory for the selection vector but does *not* allocate any memory for the
+// column vectors - those will have to be added separately.
+func NewMemBatchNoCols(types []coltypes.T) Batch {
+	b := &MemBatch{}
+	b.b = make([]Vec, len(types))
+	b.sel = make([]uint16, BatchSize())
 	return b
 }
 

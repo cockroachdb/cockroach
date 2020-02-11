@@ -35,7 +35,7 @@ query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 ·               distributed  false
-·               vectorized   true
+·               vectorized   false
 limit           ·            ·
  │              count        2
  └── sort       ·            ·
