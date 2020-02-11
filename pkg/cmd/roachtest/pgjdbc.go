@@ -44,6 +44,8 @@ func registerPgjdbc(r *testRegistry) {
 		}
 
 		t.Status("cloning pgjdbc and installing prerequisites")
+		// Report the latest tag, but do not use it. The newest versions produces output that breaks our xml parser,
+		// and we want to pin to the working version for now.
 		latestTag, err := repeatGetLatestTag(
 			ctx, c, "pgjdbc", "pgjdbc", pgjdbcReleaseTagRegex,
 		)
@@ -80,7 +82,7 @@ func registerPgjdbc(r *testRegistry) {
 			c,
 			"https://github.com/pgjdbc/pgjdbc.git",
 			"/mnt/data1/pgjdbc",
-			latestTag,
+			"REL42.2.9",
 			node,
 		); err != nil {
 			t.Fatal(err)
