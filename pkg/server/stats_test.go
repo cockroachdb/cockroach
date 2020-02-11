@@ -1,0 +1,132 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package server
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+func TestSQLStatCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	sqlServer := s.(*TestServer).Server.pgServer.SQLServer
+
+	// Flush stats at the beginning of the test.
+	sqlServer.ResetSQLStats(ctx)
+	sqlServer.ResetReportedStats(ctx)
+
+	// Execute some queries against the sqlDB to build up some stats.
+	if _, err := sqlDB.Exec(`
+	CREATE DATABASE t;
+	CREATE TABLE t.test (x INT PRIMARY KEY);
+	INSERT INTO t.test VALUES (1);
+	INSERT INTO t.test VALUES (2);
+	INSERT INTO t.test VALUES (3);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Collect stats from the SQL Server and ensure our queries are present.
+	stats := sqlServer.GetUnscrubbedStmtStats()
+	foundStat := false
+	var sqlStatData roachpb.StatementStatistics
+
+	for _, stat := range stats {
+		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+			foundStat = true
+			sqlStatData = stat.Stats
+		}
+	}
+	if !foundStat {
+		t.Fatal("expected to find stats for insert query, but didn't")
+	}
+
+	const epsilon = 0.00001
+
+	// Reset the SQL statistics, which will dump stats into the
+	// reported statistics pool.
+	sqlServer.ResetSQLStats(ctx)
+
+	// Query the reported statistics.
+	stats = sqlServer.GetUnscrubbedReportingStats()
+	foundStat = false
+	for _, stat := range stats {
+		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+			foundStat = true
+			if !stat.Stats.AlmostEqual(&sqlStatData, epsilon) {
+				t.Fatal("expected stats", sqlStatData.String(), "found", stat.Stats.String())
+			}
+		}
+	}
+
+	if !foundStat {
+		t.Fatal("expected to find stats for insert query in reported pool, but didn't")
+	}
+
+	// Make another query to the db.
+	if _, err := sqlDB.Exec(`
+	INSERT INTO t.test VALUES (4);
+	INSERT INTO t.test VALUES (5);
+	INSERT INTO t.test VALUES (6);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Find and record the stats for our second query.
+	stats = sqlServer.GetUnscrubbedStmtStats()
+	foundStat = false
+	for _, stat := range stats {
+		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+			foundStat = true
+			// Add into the current stat data the collected data.
+			sqlStatData.Add(&stat.Stats)
+		}
+	}
+	if !foundStat {
+		t.Fatal("expected to find stats for insert query, but didn't")
+	}
+
+	// Flush the SQL stats again.
+	sqlServer.ResetSQLStats(ctx)
+
+	// Find our statement stat from the reported stats pool.
+	stats = sqlServer.GetUnscrubbedReportingStats()
+	foundStat = false
+	for _, stat := range stats {
+		if strings.HasPrefix(stat.Key.Query, "INSERT INTO t.test VALUES") {
+			foundStat = true
+			// The new value for the stat should be the aggregate of the previous stat
+			// value, and the old stat value. Additionally, zero out the timestamps for
+			// the logical plans, as they won't be the same.
+			now := timeutil.Now()
+			stat.Stats.SensitiveInfo.MostRecentPlanTimestamp, sqlStatData.SensitiveInfo.MostRecentPlanTimestamp = now, now
+			if !stat.Stats.AlmostEqual(&sqlStatData, epsilon) {
+				t.Fatal("expected stats", sqlStatData, "found", stat.Stats)
+			}
+		}
+	}
+
+	if !foundStat {
+		t.Fatal("expected to find stats for insert query in reported pool, but didn't")
+	}
+}
