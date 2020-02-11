@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -425,14 +426,25 @@ func (s *scope) setTableAlias(alias tree.Name) {
 	}
 }
 
-// findExistingCol finds the given expression among the bound variables
-// in this scope. Returns nil if the expression is not found.
-func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
+// findExistingCol finds the given expression among the bound variables in this
+// scope. Returns nil if the expression is not found (or an expression is found
+// but it has side-effects and allowSideEffects is false).
+func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *scopeColumn {
 	exprStr := symbolicExprStr(expr)
 	for i := range s.cols {
 		col := &s.cols[i]
-		if expr == col || exprStr == col.getExprStr() {
+		if expr == col {
 			return col
+		}
+		if exprStr == col.getExprStr() {
+			if allowSideEffects || col.scalar == nil {
+				return col
+			}
+			var p props.Shared
+			memo.BuildSharedProps(s.builder.factory.Memo(), col.scalar, &p)
+			if !p.CanHaveSideEffects {
+				return col
+			}
 		}
 	}
 	return nil
