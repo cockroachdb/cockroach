@@ -3523,6 +3523,7 @@ const int ResponseHeader::kTxnFieldNumber;
 const int ResponseHeader::kResumeSpanFieldNumber;
 const int ResponseHeader::kResumeReasonFieldNumber;
 const int ResponseHeader::kNumKeysFieldNumber;
+const int ResponseHeader::kNumBytesFieldNumber;
 const int ResponseHeader::kRangeInfosFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -3549,15 +3550,15 @@ ResponseHeader::ResponseHeader(const ResponseHeader& from)
     resume_span_ = NULL;
   }
   ::memcpy(&num_keys_, &from.num_keys_,
-    static_cast<size_t>(reinterpret_cast<char*>(&resume_reason_) -
-    reinterpret_cast<char*>(&num_keys_)) + sizeof(resume_reason_));
+    static_cast<size_t>(reinterpret_cast<char*>(&num_bytes_) -
+    reinterpret_cast<char*>(&num_keys_)) + sizeof(num_bytes_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ResponseHeader)
 }
 
 void ResponseHeader::SharedCtor() {
   ::memset(&txn_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&resume_reason_) -
-      reinterpret_cast<char*>(&txn_)) + sizeof(resume_reason_));
+      reinterpret_cast<char*>(&num_bytes_) -
+      reinterpret_cast<char*>(&txn_)) + sizeof(num_bytes_));
 }
 
 ResponseHeader::~ResponseHeader() {
@@ -3595,8 +3596,8 @@ void ResponseHeader::Clear() {
   }
   resume_span_ = NULL;
   ::memset(&num_keys_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&resume_reason_) -
-      reinterpret_cast<char*>(&num_keys_)) + sizeof(resume_reason_));
+      reinterpret_cast<char*>(&num_bytes_) -
+      reinterpret_cast<char*>(&num_keys_)) + sizeof(num_bytes_));
   _internal_metadata_.Clear();
 }
 
@@ -3680,6 +3681,20 @@ bool ResponseHeader::MergePartialFromCodedStream(
         break;
       }
 
+      // int64 num_bytes = 8;
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &num_bytes_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -3737,6 +3752,11 @@ void ResponseHeader::SerializeWithCachedSizes(
       7, this->resume_reason(), output);
   }
 
+  // int64 num_bytes = 8;
+  if (this->num_bytes() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(8, this->num_bytes(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ResponseHeader)
@@ -3785,6 +3805,13 @@ size_t ResponseHeader::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->resume_reason());
   }
 
+  // int64 num_bytes = 8;
+  if (this->num_bytes() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->num_bytes());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -3815,6 +3842,9 @@ void ResponseHeader::MergeFrom(const ResponseHeader& from) {
   if (from.resume_reason() != 0) {
     set_resume_reason(from.resume_reason());
   }
+  if (from.num_bytes() != 0) {
+    set_num_bytes(from.num_bytes());
+  }
 }
 
 void ResponseHeader::CopyFrom(const ResponseHeader& from) {
@@ -3839,6 +3869,7 @@ void ResponseHeader::InternalSwap(ResponseHeader* other) {
   swap(resume_span_, other->resume_span_);
   swap(num_keys_, other->num_keys_);
   swap(resume_reason_, other->resume_reason_);
+  swap(num_bytes_, other->num_bytes_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -35146,6 +35177,7 @@ const int Header::kUserPriorityFieldNumber;
 const int Header::kTxnFieldNumber;
 const int Header::kReadConsistencyFieldNumber;
 const int Header::kMaxSpanRequestKeysFieldNumber;
+const int Header::kTargetBytesFieldNumber;
 const int Header::kDistinctSpansFieldNumber;
 const int Header::kReturnRangeInfoFieldNumber;
 const int Header::kGatewayNodeIdFieldNumber;
@@ -35180,15 +35212,15 @@ Header::Header(const Header& from)
     txn_ = NULL;
   }
   ::memcpy(&range_id_, &from.range_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&defer_write_too_old_error_) -
-    reinterpret_cast<char*>(&range_id_)) + sizeof(defer_write_too_old_error_));
+    static_cast<size_t>(reinterpret_cast<char*>(&target_bytes_) -
+    reinterpret_cast<char*>(&range_id_)) + sizeof(target_bytes_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Header)
 }
 
 void Header::SharedCtor() {
   ::memset(&timestamp_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&defer_write_too_old_error_) -
-      reinterpret_cast<char*>(&timestamp_)) + sizeof(defer_write_too_old_error_));
+      reinterpret_cast<char*>(&target_bytes_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(target_bytes_));
 }
 
 Header::~Header() {
@@ -35230,8 +35262,8 @@ void Header::Clear() {
   }
   txn_ = NULL;
   ::memset(&range_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&defer_write_too_old_error_) -
-      reinterpret_cast<char*>(&range_id_)) + sizeof(defer_write_too_old_error_));
+      reinterpret_cast<char*>(&target_bytes_) -
+      reinterpret_cast<char*>(&range_id_)) + sizeof(target_bytes_));
   _internal_metadata_.Clear();
 }
 
@@ -35409,6 +35441,20 @@ bool Header::MergePartialFromCodedStream(
         break;
       }
 
+      // int64 target_bytes = 15;
+      case 15: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(120u /* 120 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &target_bytes_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -35494,6 +35540,11 @@ void Header::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->defer_write_too_old_error(), output);
   }
 
+  // int64 target_bytes = 15;
+  if (this->target_bytes() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(15, this->target_bytes(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Header)
@@ -35573,6 +35624,13 @@ size_t Header::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // int64 target_bytes = 15;
+  if (this->target_bytes() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->target_bytes());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -35626,6 +35684,9 @@ void Header::MergeFrom(const Header& from) {
   if (from.defer_write_too_old_error() != 0) {
     set_defer_write_too_old_error(from.defer_write_too_old_error());
   }
+  if (from.target_bytes() != 0) {
+    set_target_bytes(from.target_bytes());
+  }
 }
 
 void Header::CopyFrom(const Header& from) {
@@ -35657,6 +35718,7 @@ void Header::InternalSwap(Header* other) {
   swap(return_range_info_, other->return_range_info_);
   swap(async_consensus_, other->async_consensus_);
   swap(defer_write_too_old_error_, other->defer_write_too_old_error_);
+  swap(target_bytes_, other->target_bytes_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

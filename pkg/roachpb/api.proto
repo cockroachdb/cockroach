@@ -104,6 +104,11 @@ message ResponseHeader {
 
   // The number of keys operated on.
   int64 num_keys = 5;
+  // The number of bytes returned. Only populated for requests that support it
+  // (at the time of writing, Scan and ReverseScan). The number returned here
+  // corresponds to the (Header).TargetBytes field and loosely measures the
+  // bytes in the timestamps, keys, and values of the returned rows.
+  int64 num_bytes = 8;
   // Range or list of ranges used to execute the request. Multiple
   // ranges may be returned for Scan, ReverseScan or DeleteRange.
   repeated RangeInfo range_infos = 6 [(gogoproto.nullable) = false];
@@ -1784,6 +1789,12 @@ message Header {
   // If a batch limit is used with ReverseScan requests, the spans for the
   // requests must be non-overlapping and in decreasing order.
   int64 max_span_request_keys = 8;
+  // If set to a non-zero value, sets a target (in bytes) for how large the
+  // response may grow. This is only supported for (forward and reverse) scans
+  // and limits the number of rows scanned (and returned). The target will be
+  // overshot; in particular, at least one row will always be returned (assuming
+  // one exists). A suitable resume span will be returned.
+  int64 target_bytes = 15;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be
