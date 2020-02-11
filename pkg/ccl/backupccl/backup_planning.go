@@ -145,9 +145,10 @@ func optsToKVOptions(opts map[string]string) tree.KVOptions {
 
 // getURIsByLocalityKV takes a slice of URIs for a single (possibly partitioned)
 // backup, and returns the default backup destination URI and a map of all other
-// URIs by locality KV. The URIs in the result do not include the
-// COCKROACH_LOCALITY parameter.
-func getURIsByLocalityKV(to []string) (string, map[string]string, error) {
+// URIs by locality KV, apppending appendPath to the path component of both the
+// default URI and all the locality URIs. The URIs in the result do not include
+// the COCKROACH_LOCALITY parameter.
+func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]string, error) {
 	localityAndBaseURI := func(uri string) (string, string, error) {
 		parsedURI, err := url.Parse(uri)
 		if err != nil {
@@ -158,6 +159,9 @@ func getURIsByLocalityKV(to []string) (string, map[string]string, error) {
 		// Remove the backup locality parameter.
 		q.Del(localityURLParam)
 		parsedURI.RawQuery = q.Encode()
+		if appendPath != "" {
+			parsedURI.Path = parsedURI.Path + appendPath
+		}
 		baseURI := parsedURI.String()
 		return localityKV, baseURI, nil
 	}
@@ -314,16 +318,6 @@ func backupPlanHook(
 			}
 		}
 
-		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to)
-		if err != nil {
-			return err
-		}
-		defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI)
-		if err != nil {
-			return err
-		}
-		defer defaultStore.Close()
-
 		opts, err := optsFn()
 		if err != nil {
 			return err
@@ -332,11 +326,6 @@ func backupPlanHook(
 		mvccFilter := MVCCFilter_Latest
 		if _, ok := opts[backupOptRevisionHistory]; ok {
 			mvccFilter = MVCCFilter_All
-		}
-
-		var encryptionPassphrase []byte
-		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			encryptionPassphrase = []byte(passphrase)
 		}
 
 		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets, backupStmt.DescriptorCoverage)
@@ -374,11 +363,33 @@ func backupPlanHook(
 			return err
 		}
 
+		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+
+		var encryptionPassphrase []byte
+		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
+			encryptionPassphrase = []byte(passphrase)
+		}
+
+		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
+		if err != nil {
+			return err
+		}
+		defaultStore, err := makeCloudStorage(ctx, defaultURI)
+		if err != nil {
+			return err
+		}
+		// We can mutate `defaultStore` below so we defer a func which closes over
+		// the var, instead of defering the Close() method directly on this specifc
+		// instance.
+		defer func() {
+			defaultStore.Close()
+		}()
+
 		var encryption *roachpb.FileEncryptionOptions
 		var prevBackups []BackupManifest
 		if len(incrementalFrom) > 0 {
 			if encryptionPassphrase != nil {
-				exportStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incrementalFrom[0])
+				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0])
 				if err != nil {
 					return err
 				}
@@ -391,7 +402,6 @@ func backupPlanHook(
 					Key: storageccl.GenerateKey(encryptionPassphrase, opts.Salt),
 				}
 			}
-			clusterID := p.ExecCfg().ClusterID()
 			prevBackups = make([]BackupManifest, len(incrementalFrom))
 			for i, uri := range incrementalFrom {
 				// TODO(lucy): We may want to upgrade the table descs to the newer
@@ -401,18 +411,73 @@ func backupPlanHook(
 				// but it will be safer for future code to avoid having older-style
 				// descriptors around.
 				desc, err := ReadBackupManifestFromURI(
-					ctx, uri, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
+					ctx, uri, makeCloudStorage, encryption,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "failed to read backup from %q", uri)
 				}
-				// IDs are how we identify tables, and those are only meaningful in the
-				// context of their own cluster, so we need to ensure we only allow
-				// incremental previous backups that we created.
-				if !desc.ClusterID.Equal(clusterID) {
-					return errors.Newf("previous BACKUP %q belongs to cluster %s", uri, desc.ClusterID.String())
-				}
 				prevBackups[i] = desc
+			}
+		} else {
+			exists, err := containsManifest(ctx, defaultStore)
+			if err != nil {
+				return err
+			}
+			if exists {
+				if encryptionPassphrase != nil {
+					encOpts, err := readEncryptionOptions(ctx, defaultStore)
+					if err != nil {
+						return err
+					}
+					encryption = &roachpb.FileEncryptionOptions{
+						Key: storageccl.GenerateKey(encryptionPassphrase, encOpts.Salt),
+					}
+				}
+
+				prev, err := findPriorBackups(ctx, defaultStore)
+				if err != nil {
+					return err
+				}
+				prevBackups = make([]BackupManifest, 0, len(prev)+1)
+
+				m, err := readBackupManifestFromStore(ctx, defaultStore, encryption)
+				if err != nil {
+					return errors.Wrap(err, "loading base backup manifest")
+				}
+				prevBackups = append(prevBackups, m)
+
+				for _, inc := range prev {
+					m, err := readBackupManifest(ctx, defaultStore, inc, encryption)
+					if err != nil {
+						return errors.Wrapf(err, "loading prior backup part manifest %q", inc)
+					}
+					prevBackups = append(prevBackups, m)
+				}
+
+				// Pick a piece-specific suffix and update the destination path(s).
+				partName := endTime.GoTime().Format("/20060102/150405.00")
+				defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
+				if err != nil {
+					return errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
+				}
+				// Close the old store before overwriting the reference with the new
+				// subdir store.
+				defaultStore.Close()
+				defaultStore, err = makeCloudStorage(ctx, defaultURI)
+				if err != nil {
+					return errors.Wrap(err, "re-opening layer-specific destination location")
+				}
+				// Note that a Close() is already deferred above.
+			}
+		}
+
+		clusterID := p.ExecCfg().ClusterID()
+		for i := range prevBackups {
+			// IDs are how we identify tables, and those are only meaningful in the
+			// context of their own cluster, so we need to ensure we only allow
+			// incremental previous backups that we created.
+			if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(clusterID) {
+				return errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
 			}
 		}
 
@@ -562,7 +627,7 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			exportStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI)
+			exportStore, err := makeCloudStorage(ctx, defaultURI)
 			if err != nil {
 				return err
 			}
