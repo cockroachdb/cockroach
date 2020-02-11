@@ -807,6 +807,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hashtable.eg.go \
+  pkg/sql/colexec/hash_aggregator.eg.go \
   pkg/sql/colexec/hash_utils.eg.go \
   pkg/sql/colexec/like_ops.eg.go \
   pkg/sql/colexec/mergejoinbase.eg.go \

@@ -67,9 +67,23 @@ type aggType struct {
 	name string
 }
 
+// This is a wrapper around NewHashAggregator so its signature is compatible
+// with orderedAggregator.
+func newHashAggregatorForTest(
+	allocator *Allocator,
+	input Operator,
+	colTypes []coltypes.T,
+	aggFns []execinfrapb.AggregatorSpec_Func,
+	groupCols []uint32,
+	aggCols [][]uint32,
+	_ bool,
+) (Operator, error) {
+	return NewHashAggregator(allocator, input, colTypes, aggFns, groupCols, aggCols)
+}
+
 var aggTypes = []aggType{
 	{
-		new:  NewHashAggregator,
+		new:  newHashAggregatorForTest,
 		name: "hash",
 	},
 	{
@@ -895,7 +909,7 @@ func TestHashAggregator(t *testing.T) {
 			t.Fatal(err)
 		}
 		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []Operator) (Operator, error) {
-			return NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+			return NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 		})
 	}
 }
