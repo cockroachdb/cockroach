@@ -56,7 +56,10 @@ func registerSQLAlchemy(r *testRegistry) {
 		c.l.Printf("Latest sqlalchemy release is %s.", latestTag)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, c, node, "update apt-get",
+			`
+				sudo add-apt-repository ppa:deadsnakes/ppa &&
+				sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +69,23 @@ func registerSQLAlchemy(r *testRegistry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc python3-setuptools python-setuptools python3-pip`,
+			`sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, c, node, "set python3.7 as default", `
+				sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
+ 				sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
+ 				sudo update-alternatives --config python3`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, c, node, "install pip",
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -76,7 +95,7 @@ func registerSQLAlchemy(r *testRegistry) {
 			c,
 			node,
 			"install pytest",
-			`sudo pip3 install --system pytest pytest-xdist psycopg2`,
+			`sudo pip3 install --upgrade --force-reinstall setuptools pytest pytest-xdist psycopg2`,
 		); err != nil {
 			t.Fatal(err)
 		}
