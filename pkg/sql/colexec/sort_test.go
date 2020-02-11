@@ -28,17 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-type sortTestCase struct {
-	tuples   tuples
-	expected tuples
-	ordCols  []execinfrapb.Ordering_Column
-	logTypes []types.T
-}
-
-var sortTestCases []sortTestCase
+var sortAllTestCases []sortTestCase
 
 func init() {
-	sortTestCases = []sortTestCase{
+	sortAllTestCases = []sortTestCase{
 		{
 			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
@@ -145,7 +138,7 @@ func init() {
 
 func TestSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, tc := range sortTestCases {
+	for _, tc := range sortAllTestCases {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
 			physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
 			if err != nil {

@@ -118,6 +118,19 @@ func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
 	return b
 }
 
+// NewWindowedBatch creates a new "windowed" Batch with the given column types.
+// It allocates memory for the selection vector but does *not* allocate any
+// memory for the column vectors - those will have to be replaced into this
+// batch.
+// NOTE: use this only when selection vector might be needed (in which case
+// NewMemBatchWithSize of 0 size is not sufficient).
+func NewWindowedBatch(types []coltypes.T) Batch {
+	b := &MemBatch{}
+	b.b = make([]Vec, len(types))
+	b.sel = make([]uint16, BatchSize())
+	return b
+}
+
 // ZeroBatch is a schema-less Batch of length 0.
 var ZeroBatch = &zeroBatch{MemBatch: NewMemBatchWithSize(nil /* types */, 0 /* size */).(*MemBatch)}
 

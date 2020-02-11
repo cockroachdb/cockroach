@@ -714,43 +714,63 @@ func NewColOperator(
 			}
 			orderingCols := core.Sorter.OutputOrdering.Columns
 			matchLen := core.Sorter.OrderingMatchLen
-			if matchLen > 0 {
-				// The input is already partially ordered. Use a chunks sorter to avoid
-				// loading all the rows into memory.
-				var sortChunksMemAccount *mon.BoundAccount
-				if useStreamingMemAccountForBuffering {
-					sortChunksMemAccount = streamingMemAccount
-				} else {
-					sortChunksMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "sort-chunks")
-				}
-				result.Op, err = NewSortChunks(
-					NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
-					orderingCols, int(matchLen),
-				)
-			} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
-				// There is a limit specified with no post-process filter, so we know
-				// exactly how many rows the sorter should output. Choose a top K sorter,
-				// which uses a heap to avoid storing more rows than necessary.
-				k := uint16(post.Limit + post.Offset)
-				result.Op = NewTopKSorter(
-					NewAllocator(ctx, streamingMemAccount), input, inputTypes,
-					orderingCols, k,
-				)
-				result.IsStreaming = true
+			if len(orderingCols) == int(matchLen) {
+				// The input is already fully ordered, so there is nothing to sort.
+				result.Op = input
 			} else {
-				// No optimizations possible. Default to the standard sort operator.
-				sorterMemMonitorName := fmt.Sprintf("sort-all-%d", spec.ProcessorID)
-				var sorterMemAccount *mon.BoundAccount
-				if useStreamingMemAccountForBuffering {
-					sorterMemAccount = streamingMemAccount
+				var (
+					sorterMemMonitorName string
+					inMemorySorter       Operator
+				)
+				if matchLen > 0 {
+					// The input is already partially ordered. Use a chunks sorter to avoid
+					// loading all the rows into memory.
+					sorterMemMonitorName = fmt.Sprintf("sort-chunks-%d", spec.ProcessorID)
+					var sortChunksMemAccount *mon.BoundAccount
+					if useStreamingMemAccountForBuffering {
+						sortChunksMemAccount = streamingMemAccount
+					} else {
+						sortChunksMemAccount = result.createBufferingMemAccount(
+							ctx, flowCtx, sorterMemMonitorName,
+						)
+					}
+					inMemorySorter, err = NewSortChunks(
+						NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
+						orderingCols, int(matchLen),
+					)
+				} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
+					// There is a limit specified with no post-process filter, so we know
+					// exactly how many rows the sorter should output. Choose a top K sorter,
+					// which uses a heap to avoid storing more rows than necessary.
+					sorterMemMonitorName = fmt.Sprintf("topk-sort-%d", spec.ProcessorID)
+					var topKSorterMemAccount *mon.BoundAccount
+					if useStreamingMemAccountForBuffering {
+						topKSorterMemAccount = streamingMemAccount
+					} else {
+						topKSorterMemAccount = result.createBufferingMemAccount(
+							ctx, flowCtx, sorterMemMonitorName,
+						)
+					}
+					k := uint16(post.Limit + post.Offset)
+					inMemorySorter = NewTopKSorter(
+						NewAllocator(ctx, topKSorterMemAccount), input, inputTypes,
+						orderingCols, k,
+					)
 				} else {
-					sorterMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, sorterMemMonitorName,
+					// No optimizations possible. Default to the standard sort operator.
+					sorterMemMonitorName = fmt.Sprintf("sort-all-%d", spec.ProcessorID)
+					var sorterMemAccount *mon.BoundAccount
+					if useStreamingMemAccountForBuffering {
+						sorterMemAccount = streamingMemAccount
+					} else {
+						sorterMemAccount = result.createBufferingMemAccount(
+							ctx, flowCtx, sorterMemMonitorName,
+						)
+					}
+					inMemorySorter, err = NewSorter(
+						NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
 					)
 				}
-				inMemorySorter, err := NewSorter(
-					NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
-				)
 				if err != nil {
 					return result, err
 				}
@@ -758,7 +778,7 @@ func NewColOperator(
 					input, inMemorySorter.(bufferingInMemoryOperator),
 					sorterMemMonitorName,
 					func(input Operator) Operator {
-						monitorNamePrefix := "external-sorter-"
+						monitorNamePrefix := "external-sorter"
 						// We are using an unlimited memory monitor here because external
 						// sort itself is responsible for making sure that we stay within
 						// the memory limit.
@@ -768,7 +788,7 @@ func NewColOperator(
 							))
 						diskQueuesUnlimitedAllocator := NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
+								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
 							))
 						return newExternalSorter(
 							unlimitedAllocator,
