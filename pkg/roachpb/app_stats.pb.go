@@ -26,6 +26,8 @@ var _ = time.Kitchen
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+// N.B: When fields are added to this struct, make sure to update
+// (*StatementStatistics).Add in app_stats.go.
 type StatementStatistics struct {
 	// Count is the total number of times this statement was executed
 	// since the begin of the reporting period.
@@ -80,7 +82,7 @@ func (m *StatementStatistics) Reset()         { *m = StatementStatistics{} }
 func (m *StatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*StatementStatistics) ProtoMessage()    {}
 func (*StatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{0}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{0}
 }
 func (m *StatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -119,7 +121,7 @@ func (m *SensitiveInfo) Reset()         { *m = SensitiveInfo{} }
 func (m *SensitiveInfo) String() string { return proto.CompactTextString(m) }
 func (*SensitiveInfo) ProtoMessage()    {}
 func (*SensitiveInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{1}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{1}
 }
 func (m *SensitiveInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -159,7 +161,7 @@ func (m *NumericStat) Reset()         { *m = NumericStat{} }
 func (m *NumericStat) String() string { return proto.CompactTextString(m) }
 func (*NumericStat) ProtoMessage()    {}
 func (*NumericStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{2}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{2}
 }
 func (m *NumericStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -197,7 +199,7 @@ func (m *StatementStatisticsKey) Reset()         { *m = StatementStatisticsKey{}
 func (m *StatementStatisticsKey) String() string { return proto.CompactTextString(m) }
 func (*StatementStatisticsKey) ProtoMessage()    {}
 func (*StatementStatisticsKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{3}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{3}
 }
 func (m *StatementStatisticsKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -232,7 +234,7 @@ func (m *CollectedStatementStatistics) Reset()         { *m = CollectedStatement
 func (m *CollectedStatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedStatementStatistics) ProtoMessage()    {}
 func (*CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{4}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{4}
 }
 func (m *CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -272,7 +274,7 @@ func (m *ExplainTreePlanNode) Reset()         { *m = ExplainTreePlanNode{} }
 func (m *ExplainTreePlanNode) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode) ProtoMessage()    {}
 func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{5}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{5}
 }
 func (m *ExplainTreePlanNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -306,7 +308,7 @@ func (m *ExplainTreePlanNode_Attr) Reset()         { *m = ExplainTreePlanNode_At
 func (m *ExplainTreePlanNode_Attr) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode_Attr) ProtoMessage()    {}
 func (*ExplainTreePlanNode_Attr) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{5, 0}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{5, 0}
 }
 func (m *ExplainTreePlanNode_Attr) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -332,6 +334,8 @@ func (m *ExplainTreePlanNode_Attr) XXX_DiscardUnknown() {
 var xxx_messageInfo_ExplainTreePlanNode_Attr proto.InternalMessageInfo
 
 // TxnStats contains statistics about transactions of one application.
+// N.B: When field are added to this struct, make sure to updated
+// (*TxnStats).Add in app_stats.go.
 type TxnStats struct {
 	TxnCount       int64       `protobuf:"varint,1,opt,name=txn_count,json=txnCount" json:"txn_count"`
 	TxnTimeSec     NumericStat `protobuf:"bytes,2,opt,name=txn_time_sec,json=txnTimeSec" json:"txn_time_sec"`
@@ -343,7 +347,7 @@ func (m *TxnStats) Reset()         { *m = TxnStats{} }
 func (m *TxnStats) String() string { return proto.CompactTextString(m) }
 func (*TxnStats) ProtoMessage()    {}
 func (*TxnStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_78f287cf05837cfd, []int{6}
+	return fileDescriptor_app_stats_7a0c2f71047eaf79, []int{6}
 }
 func (m *TxnStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2311,9 +2315,9 @@ var (
 	ErrIntOverflowAppStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_78f287cf05837cfd) }
+func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_7a0c2f71047eaf79) }
 
-var fileDescriptor_app_stats_78f287cf05837cfd = []byte{
+var fileDescriptor_app_stats_7a0c2f71047eaf79 = []byte{
 	// 931 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x56, 0xcd, 0x6e, 0xdb, 0x46,
 	0x10, 0x36, 0x2b, 0xc9, 0xa2, 0x86, 0x92, 0x83, 0xae, 0xdb, 0x84, 0x15, 0x0c, 0xd9, 0x55, 0x11,

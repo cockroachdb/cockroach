@@ -236,7 +236,8 @@ type Server struct {
 
 	// sqlStats tracks per-application statistics for all applications on each
 	// node.
-	sqlStats sqlStats
+	sqlStats      sqlStats
+	reportedStats sqlStats
 
 	reCache *tree.RegexpCache
 
@@ -280,10 +281,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
-		dbCache:  newDatabaseCacheHolder(newDatabaseCache(systemCfg)),
-		pool:     pool,
-		sqlStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reCache:  tree.NewRegexpCache(512),
+		dbCache:       newDatabaseCacheHolder(newDatabaseCache(systemCfg)),
+		pool:          pool,
+		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		reCache:       tree.NewRegexpCache(512),
 	}
 }
 
@@ -330,12 +332,23 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 			}
 		}
 	})
-	s.PeriodicallyClearSQLStats(ctx, stopper)
+	// Start a loop to clear SQL stats at the max reset interval. This is
+	// to ensure that we always have some worker clearing SQL stats to avoid
+	// continually allocating space for the SQL stats.
+	s.PeriodicallyClearSQLStats(ctx, stopper, maxSQLStatReset)
+	// Start a second loop to clear SQL stats at the requested interval.
+	s.PeriodicallyClearSQLStats(ctx, stopper, sqlStatReset)
 }
 
 // ResetSQLStats resets the executor's collected sql statistics.
 func (s *Server) ResetSQLStats(ctx context.Context) {
+	// Dump the SQL stats into the reported stats before clearing the SQL stats.
+	s.reportedStats.Add(&s.sqlStats)
 	s.sqlStats.resetStats(ctx)
+}
+
+func (s *Server) ResetReportedStats(ctx context.Context) {
+	s.reportedStats.resetStats(ctx)
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
@@ -343,6 +356,10 @@ func (s *Server) ResetSQLStats(ctx context.Context) {
 // scrubbed will be omitted from the returned map.
 func (s *Server) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
 	return s.sqlStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
+}
+
+func (s *Server) GetScrubbedReportingStats() []roachpb.CollectedStatementStatistics {
+	return s.reportedStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
 // GetUnscrubbedStmtStats returns the same thing as GetScrubbedStmtStats, except
@@ -699,27 +716,31 @@ func (s *Server) newConnExecutorWithTxn(
 	return ex, nil
 }
 
-var maxSQLStatReset = settings.RegisterPublicNonNegativeDurationSetting(
-	"diagnostics.forced_stat_reset.interval",
-	"interval after which pending diagnostics statistics should be discarded even if not reported",
-	time.Hour*2, // 2 x diagnosticReportFrequency
+var sqlStatReset = settings.RegisterPublicNonNegativeDurationSetting(
+	"diagnostics.sql_stat_reset.interval",
+	"interval controlling how often SQL statement statistics should be reset",
+	time.Hour,
 )
 
-// PeriodicallyClearSQLStats runs a loop to ensure that sql stats are reset.
-// Usually we expect those stats to be reset by diagnostics reporting, after it
-// generates its reports. However if the diagnostics loop crashes and stops
-// resetting stats, this loop ensures stats do not accumulate beyond a
-// the diagnostics.forced_stat_reset.interval limit.
-func (s *Server) PeriodicallyClearSQLStats(ctx context.Context, stopper *stop.Stopper) {
+var maxSQLStatReset = settings.RegisterPublicNonNegativeDurationSetting(
+	"diagnostics.forced_sql_stat_reset.interval",
+	"interval after which SQL statement statistics are refreshed even if not collected",
+	time.Hour*2, // 2 x diagnostics.sql_stat_reset.interval
+)
+
+// PeriodicallyClearSQLStats spawns a loop to reset SQL stats based on the setting
+// of a given duration settings variable.
+func (s *Server) PeriodicallyClearSQLStats(
+	ctx context.Context, stopper *stop.Stopper, setting *settings.DurationSetting,
+) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
 		for {
-
 			s.sqlStats.Lock()
 			last := s.sqlStats.lastReset
 			s.sqlStats.Unlock()
 
-			next := last.Add(maxSQLStatReset.Get(&s.cfg.Settings.SV))
+			next := last.Add(setting.Get(&s.cfg.Settings.SV))
 			wait := next.Sub(timeutil.Now())
 			if wait < 0 {
 				s.ResetSQLStats(ctx)

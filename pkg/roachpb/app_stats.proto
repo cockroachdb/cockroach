@@ -15,6 +15,8 @@ option go_package = "roachpb";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
+// N.B: When fields are added to this struct, make sure to update
+// (*StatementStatistics).Add in app_stats.go.
 message StatementStatistics {
   // Count is the total number of times this statement was executed
   // since the begin of the reporting period.
@@ -139,6 +141,8 @@ message ExplainTreePlanNode {
 }
 
 // TxnStats contains statistics about transactions of one application.
+// N.B: When field are added to this struct, make sure to updated
+// (*TxnStats).Add in app_stats.go.
 message TxnStats {
   optional int64 txn_count = 1 [(gogoproto.nullable) = false];
 

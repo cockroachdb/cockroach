@@ -54,3 +54,37 @@ func (si SensitiveInfo) GetScrubbedCopy() SensitiveInfo {
 	// Not copying over MostRecentPlanDescription until we have an algorithm to scrub plan nodes.
 	return output
 }
+
+// Add combines other into this TxnStats.
+func (s *TxnStats) Add(other TxnStats) {
+	s.TxnTimeSec.Add(other.TxnTimeSec, s.TxnCount, other.TxnCount)
+	s.TxnCount += other.TxnCount
+	s.ImplicitCount += other.ImplicitCount
+	s.CommittedCount += other.CommittedCount
+}
+
+// Add combines other into this StatementStatistics.
+func (s *StatementStatistics) Add(other *StatementStatistics) {
+	s.FirstAttemptCount += other.FirstAttemptCount
+	if other.MaxRetries > s.MaxRetries {
+		s.MaxRetries = other.MaxRetries
+	}
+	s.NumRows.Add(other.NumRows, s.Count, other.Count)
+	s.ParseLat.Add(other.ParseLat, s.Count, other.Count)
+	s.PlanLat.Add(other.PlanLat, s.Count, other.Count)
+	s.RunLat.Add(other.RunLat, s.Count, other.Count)
+	s.ServiceLat.Add(other.ServiceLat, s.Count, other.Count)
+	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
+
+	if other.SensitiveInfo.LastErr != "" {
+		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
+	}
+
+	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
+		s.SensitiveInfo = other.SensitiveInfo
+	}
+
+	s.BytesRead += other.BytesRead
+	s.RowsRead += other.RowsRead
+	s.Count += other.Count
+}
