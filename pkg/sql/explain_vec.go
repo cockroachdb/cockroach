@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -100,8 +101,15 @@ func (n *explainVecNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		for _, op := range opChains {
-			formatOpChain(op, node, verbose)
+		// It is possible that when iterating over execinfra.OpNodes we will hit
+		// a panic (an input that doesn't implement OpNode interface), so we're
+		// catching such errors.
+		if err := execerror.CatchVectorizedRuntimeError(func() {
+			for _, op := range opChains {
+				formatOpChain(op, node, verbose)
+			}
+		}); err != nil {
+			return err
 		}
 	}
 	n.run.lines = tp.FormattedRows()
