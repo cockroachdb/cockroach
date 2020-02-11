@@ -442,7 +442,7 @@ func NewColOperator(
 				}
 				result.Op, err = NewHashAggregator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
-					aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+					aggSpec.GroupCols, aggCols,
 				)
 			} else {
 				result.Op, err = NewOrderedAggregator(

@@ -28,8 +28,8 @@ INSERT INTO bools VALUES
 (4, NULL),  (4, true),
 (5, false), (5, NULL)
 
-query BB
-SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a
+query BB rowsort
+SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a;
 ----
 NULL NULL
 true true
