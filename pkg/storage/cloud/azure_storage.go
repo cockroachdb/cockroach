@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -59,7 +59,7 @@ func makeAzureStorage(
 }
 
 func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
-	name := filepath.Join(s.prefix, basename)
+	name := path.Join(s.prefix, basename)
 	return s.container.NewBlockBlobURL(name)
 }
 
@@ -98,7 +98,7 @@ func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCl
 func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	pattern := s.prefix
 	if patternSuffix != "" {
-		pattern = filepath.Join(pattern, patternSuffix)
+		pattern = path.Join(pattern, patternSuffix)
 	}
 	var fileList []string
 	response, err := s.container.ListBlobsFlatSegment(ctx,
@@ -110,7 +110,7 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 	}
 
 	for _, blob := range response.Segment.BlobItems {
-		matches, err := filepath.Match(pattern, blob.Name)
+		matches, err := path.Match(pattern, blob.Name)
 		if err != nil {
 			continue
 		}
