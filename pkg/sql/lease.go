@@ -1515,7 +1515,7 @@ func (m *LeaseManager) AcquireByName(
 	// We failed to find something in the cache, or what we found is not
 	// guaranteed to be valid by the time we use it because we don't have a
 	// lease with at least a bit of lifetime left in it. So, we do it the hard
-	// way: look in the database to resolveUsername the name, then acquire a new table.
+	// way: look in the database to resolve the name, then acquire a new table.
 	var err error
 	tableID, err := m.resolveName(ctx, timestamp, dbID, schemaID, tableName)
 	if err != nil {
@@ -1555,7 +1555,7 @@ func (m *LeaseManager) AcquireByName(
 		//
 		// How do we disambiguate between the a) and b)? We get a fresh lease on
 		// the descriptor, as required by b), and then we'll know if we're trying to
-		// resolveUsername the current or the old name.
+		// resolve the current or the old name.
 		//
 		// TODO(vivek): check if the entire above comment is indeed true. Review the
 		// use of nameMatchesTable() throughout this function.

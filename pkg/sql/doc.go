@@ -268,14 +268,14 @@ a few of the techniques involved.
 
 For a SELECT query, after parsing it, the query planner performs semantic
 analysis to statically verify if the query obeys basic type-safety checks, and
-to resolveUsername names within the query to actual objects within the system. Let's
+to resolve names within the query to actual objects within the system. Let's
 consider a query which looks up the stock of an item in the inventory table
 named "foo" with item_id X:
 
   SELECT stock FROM inventory WHERE item_id = X AND name = 'test'
 
-The query planner first needs to resolveUsername the "inventory" qualified name in the
-FROM clause to the appropriate TableDescriptor. It also needs to resolveUsername the
+The query planner first needs to resolve the "inventory" qualified name in the
+FROM clause to the appropriate TableDescriptor. It also needs to resolve the
 "item_id", "stock" and "name" column references to the appropriate column
 descriptions with the "inventory" TableDescriptor. Lastly, as part of semantic
 analysis, the query planner verifies that the expressions in the select targets

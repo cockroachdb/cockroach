@@ -234,7 +234,7 @@ func (dc *databaseCache) getDatabaseID(
 }
 
 // getCachedDatabaseID returns the ID of a database given its name
-// from the cache. This method never goes to the store to resolveUsername
+// from the cache. This method never goes to the store to resolve
 // the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
 func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {

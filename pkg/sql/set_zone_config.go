@@ -309,7 +309,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	)
 
 	// If the specifier is for a table, partition or index, this will
-	// resolveUsername the table descriptor. If the specifier is for a database
+	// resolve the table descriptor. If the specifier is for a database
 	// or range, this is a no-op and a nil pointer is returned as
 	// descriptor.
 	table, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
