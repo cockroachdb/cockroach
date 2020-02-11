@@ -30,7 +30,7 @@ func TestPutLocal(t *testing.T) {
 	dest := MakeLocalStorageURI(p)
 
 	testExportStore(t, dest, false)
-	testListFiles(t, fmt.Sprintf("nodelocal:///%s", "listing-test"))
+	testListFiles(t, "nodelocal:///listing-test/basepath")
 }
 
 func TestLocalIOLimits(t *testing.T) {

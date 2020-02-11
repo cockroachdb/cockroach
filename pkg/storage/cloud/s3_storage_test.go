@@ -83,16 +83,14 @@ func TestPutS3(t *testing.T) {
 			),
 			false,
 		)
-		t.Run("ListFiles", func(t *testing.T) {
-			testListFiles(t,
-				fmt.Sprintf(
-					"s3://%s/%s?%s=%s&%s=%s",
-					bucket, "listing-test",
-					S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-					S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
-				),
-			)
-		})
+		testListFiles(t,
+			fmt.Sprintf(
+				"s3://%s/%s?%s=%s&%s=%s",
+				bucket, "listing-test",
+				S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+				S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
+			),
+		)
 	})
 }
 

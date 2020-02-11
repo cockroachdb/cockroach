@@ -25,7 +25,7 @@ func TestBlobServiceList(t *testing.T) {
 	defer cleanupFn()
 
 	fileContent := []byte("a")
-	files := []string{"file/dir/a.csv", "file/dir/b.csv", "file/dir/c.csv"}
+	files := []string{"/file/dir/a.csv", "/file/dir/b.csv", "/file/dir/c.csv"}
 	for _, file := range files {
 		writeTestFile(t, filepath.Join(tmpDir, file), fileContent)
 	}
