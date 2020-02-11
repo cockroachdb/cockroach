@@ -285,8 +285,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       title: "decommissioned nodes",
       render: (_text, record) => (
         <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-          <Text>{`N`}</Text>
-          <Text textType={TextTypes.BodyStrong}>{`${record.nodeId} `}</Text>
+          <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
           <Text>{record.region}</Text>
         </Link>),
     },
@@ -340,32 +339,7 @@ const getNodeRegion = (nodeStatus: INodeStatus) => {
   return region ? region.value : undefined;
 };
 
-/**
- * partitionedStatuses divides the list of node statuses into "live" and "dead".
- */
-const partitionedStatuses = createSelector(
-  nodesSummarySelector,
-  (summary) => {
-    return _.groupBy(
-      summary.nodeStatuses,
-      (ns) => {
-        switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
-          case LivenessStatus.LIVE:
-          case LivenessStatus.UNAVAILABLE:
-          case LivenessStatus.DEAD:
-          case LivenessStatus.DECOMMISSIONING:
-            return "live";
-          case LivenessStatus.DECOMMISSIONED:
-            return "decommissioned";
-          default:
-            return "live";
-        }
-      },
-    );
-  },
-);
-
-const liveNodesTableData = createSelector(
+export const liveNodesTableDataSelector = createSelector(
   partitionedStatuses,
   nodesSummarySelector,
   (statuses, nodesSummary) => {
@@ -420,7 +394,7 @@ const liveNodesTableData = createSelector(
     return data;
   });
 
-const decommissionedNodesTableData = createSelector(
+export const decommissionedNodesTableDataSelector = createSelector(
   partitionedStatuses,
   nodesSummarySelector,
   (statuses, nodesSummary): DecommissionedNodeStatusRow[] => {
@@ -459,7 +433,7 @@ const decommissionedNodesTableData = createSelector(
 const NodesConnected = connect(
   (state: AdminUIState) => {
     const liveNodes = partitionedStatuses(state).live || [];
-    const data = liveNodesTableData(state);
+    const data = liveNodesTableDataSelector(state);
     return {
       sortSetting: liveNodesSortSetting.selector(state),
       dataSource: data,
@@ -480,7 +454,7 @@ const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
-      dataSource: decommissionedNodesTableData(state),
+      dataSource: decommissionedNodesTableDataSelector(state),
       isCollapsible: true,
     };
   },
