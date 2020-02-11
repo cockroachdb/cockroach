@@ -85,7 +85,7 @@ const (
 
 var diagnosticReportFrequency = settings.RegisterPublicNonNegativeDurationSetting(
 	"diagnostics.reporting.interval",
-	"interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)",
+	"interval at which diagnostics data should be reported",
 	time.Hour,
 )
 
@@ -283,7 +283,7 @@ func (s *Server) maybeReportDiagnostics(
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(ctx)
 	}
-	s.pgServer.SQLServer.ResetSQLStats(ctx)
+	s.pgServer.SQLServer.ResetReportedStats(ctx)
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
@@ -392,7 +392,7 @@ func (s *Server) getReportingInfo(
 		}
 	}
 
-	info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
+	info.SqlStats = s.pgServer.SQLServer.GetScrubbedReportingStats()
 	return &info
 }
 
