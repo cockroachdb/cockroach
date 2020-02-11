@@ -118,10 +118,10 @@ func runUnreplicatedTruncatedState(t *testing.T, tc unreplicatedTruncStateTest) 
 		firstIndex = 100
 	)
 
-	evalCtx := mockEvalCtx{
-		desc:       &roachpb.RangeDescriptor{RangeID: rangeID},
-		term:       term,
-		firstIndex: firstIndex,
+	evalCtx := &MockEvalCtx{
+		Desc:       &roachpb.RangeDescriptor{RangeID: rangeID},
+		Term:       term,
+		FirstIndex: firstIndex,
 	}
 
 	eng := engine.NewDefaultInMem()
@@ -141,7 +141,7 @@ func runUnreplicatedTruncatedState(t *testing.T, tc unreplicatedTruncStateTest) 
 		Index:   firstIndex + 7,
 	}
 	cArgs := CommandArgs{
-		EvalCtx: &evalCtx,
+		EvalCtx: evalCtx.EvalContext(),
 		Args:    &req,
 	}
 	resp := &roachpb.TruncateLogResponse{}
