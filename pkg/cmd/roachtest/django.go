@@ -184,7 +184,16 @@ func registerDjango(r *testRegistry) {
 			rawResults, _ := c.RunWithBuffer(
 				ctx, t.l, node, fmt.Sprintf(djangoRunTestCmd, testName))
 			fullTestResults = append(fullTestResults, rawResults...)
-			c.l.Printf("Test Results for app %s: %s", testName, rawResults)
+			c.l.Printf("Test results for app %s: %s", testName, rawResults)
+			if err := c.RunL(
+				ctx, t.l, node, fmt.Sprintf("Test stdout for app %s:", testName),
+				fmt.Sprintf(
+					"cd /mnt/data1/django/tests && cat %s.stdout",
+					testName,
+				),
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 		t.Status("collating test results")
 
@@ -200,7 +209,7 @@ func registerDjango(r *testRegistry) {
 		MinVersion: "v19.2.0",
 		Name:       "django",
 		Owner:      OwnerAppDev,
-		Cluster:    makeClusterSpec(1),
+		Cluster:    makeClusterSpec(1, cpu(8)),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runDjango(ctx, t, c)
@@ -208,9 +217,10 @@ func registerDjango(r *testRegistry) {
 	})
 }
 
+// Test results are only in stderr, so stdout is redirected and printed later.
 const djangoRunTestCmd = `
 cd /mnt/data1/django/tests &&
-python3 runtests.py %s --settings cockroach_settings --parallel 1 -v 2
+python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
 `
 
 const cockroachDjangoSettings = `
