@@ -278,41 +278,51 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	for _, spillForced := range []bool{false, true} {
 		for run := 0; run < nRuns; run++ {
 			for nCols := 1; nCols <= maxCols; nCols++ {
-				var (
-					rows       sqlbase.EncDatumRows
-					inputTypes []types.T
-				)
-				if rng.Float64() < randTypesProbability {
-					inputTypes = generateRandomSupportedTypes(rng, nCols)
-					rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-				} else {
-					inputTypes = intTyps[:nCols]
-					rows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-				}
+				// We will try both general sort and top K sort.
+				for _, topK := range []uint64{0, uint64(1 + rng.Intn(64))} {
+					var (
+						rows       sqlbase.EncDatumRows
+						inputTypes []types.T
+					)
+					if rng.Float64() < randTypesProbability {
+						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+					} else {
+						inputTypes = intTyps[:nCols]
+						rows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+					}
 
-				// Note: we're only generating column orderings on all nCols columns since
-				// if there are columns not in the ordering, the results are not fully
-				// deterministic.
-				orderingCols := generateColumnOrdering(rng, nCols, nCols)
-				sorterSpec := &execinfrapb.SorterSpec{
-					OutputOrdering: execinfrapb.Ordering{Columns: orderingCols},
-				}
-				pspec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
-				}
-				args := verifyColOperatorArgs{
-					inputTypes:     [][]types.T{inputTypes},
-					inputs:         []sqlbase.EncDatumRows{rows},
-					outputTypes:    inputTypes,
-					pspec:          pspec,
-					forceDiskSpill: spillForced,
-				}
-				if err := verifyColOperator(args); err != nil {
-					fmt.Printf("--- seed = %d spillForced = %t nCols = %d ---\n", seed, spillForced, nCols)
-					prettyPrintTypes(inputTypes, "t" /* tableName */)
-					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
-					t.Fatal(err)
+					// Note: we're only generating column orderings on all nCols columns since
+					// if there are columns not in the ordering, the results are not fully
+					// deterministic.
+					orderingCols := generateColumnOrdering(rng, nCols, nCols)
+					sorterSpec := &execinfrapb.SorterSpec{
+						OutputOrdering: execinfrapb.Ordering{Columns: orderingCols},
+					}
+					var limit, offset uint64
+					if topK > 0 {
+						offset = uint64(rng.Intn(int(topK)))
+						limit = topK - offset
+					}
+					pspec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
+						Post:  execinfrapb.PostProcessSpec{Limit: limit, Offset: offset},
+					}
+					args := verifyColOperatorArgs{
+						inputTypes:     [][]types.T{inputTypes},
+						inputs:         []sqlbase.EncDatumRows{rows},
+						outputTypes:    inputTypes,
+						pspec:          pspec,
+						forceDiskSpill: spillForced,
+					}
+					if err := verifyColOperator(args); err != nil {
+						fmt.Printf("--- seed = %d spillForced = %t nCols = %d K = %d ---\n",
+							seed, spillForced, nCols, topK)
+						prettyPrintTypes(inputTypes, "t" /* tableName */)
+						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+						t.Fatal(err)
+					}
 				}
 			}
 		}
@@ -337,54 +347,58 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	for run := 0; run < nRuns; run++ {
-		for nCols := 1; nCols <= maxCols; nCols++ {
-			for matchLen := 1; matchLen <= nCols; matchLen++ {
-				var (
-					rows       sqlbase.EncDatumRows
-					inputTypes []types.T
-				)
-				if rng.Float64() < randTypesProbability {
-					inputTypes = generateRandomSupportedTypes(rng, nCols)
-					rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-				} else {
-					inputTypes = intTyps[:nCols]
-					rows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-				}
+	for _, spillForced := range []bool{false, true} {
+		for run := 0; run < nRuns; run++ {
+			for nCols := 2; nCols <= maxCols; nCols++ {
+				for matchLen := 1; matchLen < nCols; matchLen++ {
+					var (
+						rows       sqlbase.EncDatumRows
+						inputTypes []types.T
+					)
+					if rng.Float64() < randTypesProbability {
+						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+					} else {
+						inputTypes = intTyps[:nCols]
+						rows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+					}
 
-				// Note: we're only generating column orderings on all nCols columns since
-				// if there are columns not in the ordering, the results are not fully
-				// deterministic.
-				orderingCols := generateColumnOrdering(rng, nCols, nCols)
-				matchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: orderingCols[:matchLen]})
-				// Presort the input on first matchLen columns.
-				sort.Slice(rows, func(i, j int) bool {
-					cmp, err := rows[i].Compare(inputTypes, &da, matchedCols, &evalCtx, rows[j])
-					if err != nil {
+					// Note: we're only generating column orderings on all nCols columns since
+					// if there are columns not in the ordering, the results are not fully
+					// deterministic.
+					orderingCols := generateColumnOrdering(rng, nCols, nCols)
+					matchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: orderingCols[:matchLen]})
+					// Presort the input on first matchLen columns.
+					sort.Slice(rows, func(i, j int) bool {
+						cmp, err := rows[i].Compare(inputTypes, &da, matchedCols, &evalCtx, rows[j])
+						if err != nil {
+							t.Fatal(err)
+						}
+						return cmp < 0
+					})
+
+					sorterSpec := &execinfrapb.SorterSpec{
+						OutputOrdering:   execinfrapb.Ordering{Columns: orderingCols},
+						OrderingMatchLen: uint32(matchLen),
+					}
+					pspec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
+					}
+					args := verifyColOperatorArgs{
+						inputTypes:     [][]types.T{inputTypes},
+						inputs:         []sqlbase.EncDatumRows{rows},
+						outputTypes:    inputTypes,
+						pspec:          pspec,
+						forceDiskSpill: spillForced,
+					}
+					if err := verifyColOperator(args); err != nil {
+						fmt.Printf("--- seed = %d spillForced = %t nCols = %d matchLen = %d ---\n",
+							seed, spillForced, nCols, matchLen)
+						prettyPrintTypes(inputTypes, "t" /* tableName */)
+						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 						t.Fatal(err)
 					}
-					return cmp < 0
-				})
-
-				sorterSpec := &execinfrapb.SorterSpec{
-					OutputOrdering:   execinfrapb.Ordering{Columns: orderingCols},
-					OrderingMatchLen: uint32(matchLen),
-				}
-				pspec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
-				}
-				args := verifyColOperatorArgs{
-					inputTypes:  [][]types.T{inputTypes},
-					inputs:      []sqlbase.EncDatumRows{rows},
-					outputTypes: inputTypes,
-					pspec:       pspec,
-				}
-				if err := verifyColOperator(args); err != nil {
-					fmt.Printf("--- seed = %d nCols = %d ---\n", seed, nCols)
-					prettyPrintTypes(inputTypes, "t" /* tableName */)
-					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
-					t.Fatal(err)
 				}
 			}
 		}

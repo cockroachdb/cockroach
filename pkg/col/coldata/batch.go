@@ -104,17 +104,23 @@ func NewMemBatch(types []coltypes.T) Batch {
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
 // size. Use for operators that have a precisely-sized output batch.
 func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
+	b := NewMemBatchNoCols(types, size).(*MemBatch)
+	for i, t := range types {
+		b.b[i] = NewMemColumn(t, size)
+	}
+	return b
+}
+
+// NewMemBatchNoCols creates a "skeleton" of new in-memory Batch. It allocates
+// memory for the selection vector but does *not* allocate any memory for the
+// column vectors - those will have to be added separately.
+func NewMemBatchNoCols(types []coltypes.T, size int) Batch {
 	if max := math.MaxUint16; size > max {
 		panic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
 	}
 	b := &MemBatch{}
 	b.b = make([]Vec, len(types))
-
-	for i, t := range types {
-		b.b[i] = NewMemColumn(t, size)
-	}
 	b.sel = make([]uint16, size)
-
 	return b
 }
 
