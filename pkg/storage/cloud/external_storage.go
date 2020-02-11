@@ -297,7 +297,11 @@ func URINeedsGlobExpansion(uri string) bool {
 		}
 	}
 
-	return strings.ContainsAny(parsedURI.Path, "*?[")
+	return containsGlob(parsedURI.Path)
+}
+
+func containsGlob(str string) bool {
+	return strings.ContainsAny(str, "*?[")
 }
 
 var (
