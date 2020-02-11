@@ -336,6 +336,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
 			}
 
+			if t.Sharded != nil {
+				if !version.IsActive(cluster.VersionHashShardedIndexes) {
+					return invalidClusterForShardedIndexError
+				}
+				if !params.p.EvalContext().SessionData.HashShardedIndexesEnabled {
+					return hashShardedIndexesDisabledError
+				}
+				if t.Interleave != nil {
+					return pgerror.Newf(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
+				}
+			}
+
 			if n.tableDesc.IsNewTable() {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"cannot create table and change it's primary key in the same transaction")
@@ -391,6 +403,36 @@ func (n *alterTableNode) startExec(params runParams) error {
 				EncodingType:      sqlbase.PrimaryIndexEncoding,
 				Type:              sqlbase.IndexDescriptor_FORWARD,
 			}
+
+			// If the new index is requested to be sharded, set up the index descriptor
+			// to be sharded, and add the new shard column if it is missing.
+			if t.Sharded != nil {
+				shardCol, newColumn, err := setupShardedIndex(
+					params.ctx,
+					params.EvalContext().Settings,
+					params.SessionData().HashShardedIndexesEnabled,
+					&t.Columns,
+					t.Sharded.ShardBuckets,
+					n.tableDesc,
+					newPrimaryIndexDesc,
+					false, /* isNewTable */
+				)
+				if err != nil {
+					return err
+				}
+				if newColumn {
+					if err := setupFamilyAndConstraintForShard(
+						params,
+						n.tableDesc,
+						shardCol,
+						newPrimaryIndexDesc.Sharded.ColumnNames,
+						newPrimaryIndexDesc.Sharded.ShardBuckets,
+					); err != nil {
+						return err
+					}
+				}
+			}
+
 			if err := newPrimaryIndexDesc.FillColumns(t.Columns); err != nil {
 				return err
 			}
