@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -24,6 +24,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 )
+
+func azureQueryParams(conf *roachpb.ExternalStorage_Azure) string {
+	q := make(url.Values)
+	if conf.AccountName != "" {
+		q.Set(AzureAccountNameParam, conf.AccountName)
+	}
+	if conf.AccountKey != "" {
+		q.Set(AzureAccountKeyParam, conf.AccountKey)
+	}
+	return q.Encode()
+}
 
 type azureStorage struct {
 	conf      *roachpb.ExternalStorage_Azure
@@ -59,7 +70,7 @@ func makeAzureStorage(
 }
 
 func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
-	name := filepath.Join(s.prefix, basename)
+	name := path.Join(s.prefix, basename)
 	return s.container.NewBlockBlobURL(name)
 }
 
@@ -98,27 +109,31 @@ func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCl
 func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	pattern := s.prefix
 	if patternSuffix != "" {
-		pattern = filepath.Join(pattern, patternSuffix)
+		if containsGlob(s.prefix) {
+			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
+		}
+		pattern = path.Join(pattern, patternSuffix)
 	}
 	var fileList []string
 	response, err := s.container.ListBlobsFlatSegment(ctx,
 		azblob.Marker{},
-		azblob.ListBlobsSegmentOptions{Prefix: getBucketBeforeWildcard(s.prefix)},
+		azblob.ListBlobsSegmentOptions{Prefix: getPrefixBeforeWildcard(s.prefix)},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to list files for specified blob")
 	}
 
 	for _, blob := range response.Segment.BlobItems {
-		matches, err := filepath.Match(pattern, blob.Name)
+		matches, err := path.Match(pattern, blob.Name)
 		if err != nil {
 			continue
 		}
 		if matches {
 			azureURL := url.URL{
-				Scheme: "azure",
-				Host:   strings.TrimPrefix(s.container.URL().Path, "/"),
-				Path:   blob.Name,
+				Scheme:   "azure",
+				Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
+				Path:     blob.Name,
+				RawQuery: azureQueryParams(s.conf),
 			}
 			fileList = append(fileList, azureURL.String())
 		}
