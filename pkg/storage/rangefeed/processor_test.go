@@ -511,7 +511,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	// exactly one event to be dropped, but it is possible that multiple events
 	// were dropped due to rapid event consumption before the r1's outputLoop
 	// began consuming from its event buffer.
-	require.True(t, len(r1Stream.Events()) <= toFill)
+	require.LessOrEqual(t, len(r1Stream.Events()), toFill)
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), (<-r1ErrC).GoError())
 	testutils.SucceedsSoon(t, func() error {
 		if act, exp := p.Len(), 1; exp != act {

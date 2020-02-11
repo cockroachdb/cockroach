@@ -760,7 +760,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 		}
 	}
 	require.True(t, pushed)
-	require.True(t, m.DeadlocksTotal.Count() >= 1)
+	require.GreaterOrEqual(t, m.DeadlocksTotal.Count(), int64(1))
 }
 
 // TestTxnWaitQueueDependencyCycleWithPriorityInversion verifies that
