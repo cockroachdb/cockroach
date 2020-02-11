@@ -902,17 +902,17 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}
 			var resp roachpb.EndTxnResponse
 			_, err := EndTxn(ctx, batch, CommandArgs{
-				EvalCtx: &mockEvalCtx{
-					desc:      &desc,
-					abortSpan: as,
-					canCreateTxnFn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+				EvalCtx: (&MockEvalCtx{
+					Desc:      &desc,
+					AbortSpan: as,
+					CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
 						require.NotNil(t, c.canCreateTxn, "CanCreateTxnRecord unexpectedly called")
 						if can, minTS := c.canCreateTxn(); can {
 							return true, minTS, 0
 						}
 						return false, hlc.Timestamp{}, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 					},
-				},
+				}).EvalContext(),
 				Args: &req,
 				Header: roachpb.Header{
 					Timestamp: ts,
@@ -1014,12 +1014,12 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		}
 		var resp roachpb.EndTxnResponse
 		if _, err := EndTxn(ctx, batch, CommandArgs{
-			EvalCtx: &mockEvalCtx{
-				desc: &desc,
-				canCreateTxnFn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+			EvalCtx: (&MockEvalCtx{
+				Desc: &desc,
+				CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
 					return true, ts, 0
 				},
-			},
+			}).EvalContext(),
 			Args: &req,
 			Header: roachpb.Header{
 				Timestamp: ts,
