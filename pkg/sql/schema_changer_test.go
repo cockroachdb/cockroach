@@ -741,6 +741,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // successfully complete without deleting the data.
 func TestDropWhileBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/44944")
 	// protects backfillNotification
 	var mu syncutil.Mutex
 	backfillNotification := make(chan struct{})
