@@ -11,12 +11,18 @@
 import React from "react";
 import { ReactWrapper } from "enzyme";
 import { assert } from "chai";
+import { times } from "lodash";
+import Long from "long";
 
-import { NodeList, NodeStatusRow } from "./index";
-import { AdminUIState} from "src/redux/state";
+import { decommissionedNodesTableDataSelector, liveNodesTableDataSelector, NodeList, NodeStatusRow } from "./index";
+import { AdminUIState } from "src/redux/state";
 import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { connectedMount } from "src/test-utils";
+import { cockroach } from "src/js/protos";
+import { livenessByNodeIDSelector } from "src/redux/nodes";
+
+import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 describe("Nodes Overview page", () => {
   describe("Live <NodeList/> section initial state", () => {
@@ -208,7 +214,7 @@ describe("Nodes Overview page", () => {
         />));
       const expectedColumns = [
         "nodes",
-        "# of nodes",
+        "node count",
         "uptime",
         "replicas",
         "capacity use",
@@ -227,7 +233,7 @@ describe("Nodes Overview page", () => {
     it("doesn't display '# of nodes column' when nodes are in single regions", () => {
       const expectedColumns = [
         "nodes",
-        // should not be displayed "# of nodes",
+        // should not be displayed "node count",
         "uptime",
         "replicas",
         "capacity use",
@@ -262,6 +268,104 @@ describe("Nodes Overview page", () => {
         />));
       const columnAttributes = wrapper.find("table colgroup col");
       columnAttributes.forEach(node => assert.exists(node.hostNodes().props().style.width));
+    });
+  });
+
+  describe("Selectors", () => {
+    const state = {
+      cachedData: {
+        nodes: {
+          data: times(7).map(idx => (
+            {
+              desc: { node_id: idx + 1, locality: {}},
+              metrics: {
+                "capacity.used": 0,
+                "capacity.available": 0,
+              },
+              started_at: Long.fromNumber(Date.now()),
+              total_system_memory: Long.fromNumber(Math.random() * 1000000),
+              build_info: {
+                tag: "tag_value",
+              },
+            }
+          )),
+          inFlight: false,
+          valid: true,
+        },
+        liveness: {
+          data: {
+            livenesses: [
+              { node_id: 1},
+              { node_id: 2, expiration: { wall_time: Long.fromNumber(Date.now()) }},
+              { node_id: 3},
+              { node_id: 4},
+              { node_id: 5},
+              { node_id: 6},
+              { node_id: 7, expiration: { wall_time: Long.fromNumber(Date.now()) }},
+            ],
+            statuses: {
+              1: NodeLivenessStatus.LIVE,
+              2: NodeLivenessStatus.DECOMMISSIONED, // node_id: 2
+              3: NodeLivenessStatus.DEAD,
+              4: NodeLivenessStatus.UNAVAILABLE,
+              5: NodeLivenessStatus.UNKNOWN,
+              6: NodeLivenessStatus.DECOMMISSIONING,
+              7: NodeLivenessStatus.DECOMMISSIONED, // node_id: 7
+            },
+            toJSON: () => ({}),
+          },
+          inFlight: false,
+          valid: true,
+        },
+      },
+    };
+    const partitionedNodes = {
+      live: [
+        state.cachedData.nodes.data[0],
+        state.cachedData.nodes.data[2],
+        state.cachedData.nodes.data[3],
+        state.cachedData.nodes.data[4],
+        state.cachedData.nodes.data[5],
+      ],
+      decommissioned: [
+        state.cachedData.nodes.data[1],
+        state.cachedData.nodes.data[6],
+      ],
+    };
+    const nodeSummary: any = {
+      livenessStatusByNodeID: state.cachedData.liveness.data.statuses,
+      livenessByNodeID: livenessByNodeIDSelector.resultFunc(state.cachedData.liveness.data),
+      nodeIDs: undefined,
+      nodeDisplayNameByID: undefined,
+      nodeStatusByID: undefined,
+      nodeStatuses: undefined,
+      nodeSums: undefined,
+      storeIDsByNodeID: undefined,
+    }
+
+    describe("decommissionedNodesTableDataSelector", () => {
+      it("returns node records with 'decommissioned' status only", () => {
+        const expectedDecommissionedNodeIds = [2, 7];
+        const records = decommissionedNodesTableDataSelector.resultFunc(partitionedNodes, nodeSummary);
+
+        assert.lengthOf(records, expectedDecommissionedNodeIds.length);
+        records.forEach(record => {
+          assert.isTrue(expectedDecommissionedNodeIds.some(nodeId => nodeId === record.nodeId));
+        });
+      });
+    });
+
+    describe("liveNodesTableDataSelector", () => {
+      it("returns node records with all statuses except 'decommissioned' status", () => {
+        const expectedLiveNodeIds = [1, 3, 4, 5, 6];
+        const recordsGroupedByRegion = liveNodesTableDataSelector.resultFunc(partitionedNodes, nodeSummary);
+
+        assert.lengthOf(recordsGroupedByRegion, 1);
+        assert.lengthOf(recordsGroupedByRegion[0].children, expectedLiveNodeIds.length);
+        recordsGroupedByRegion[0].children.forEach(record => {
+          assert.isTrue(expectedLiveNodeIds.some(nodeId => nodeId === record.nodeId));
+        });
+      });
     });
   });
 });
