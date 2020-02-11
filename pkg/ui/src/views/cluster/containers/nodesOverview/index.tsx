@@ -19,6 +19,7 @@ import {
   LivenessStatus,
   nodeCapacityStats,
   nodesSummarySelector,
+  partitionedStatuses,
   selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -134,8 +135,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           return (
             <React.Fragment>
               <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-                <Text>{`N`}</Text>
-                <Text textType={TextTypes.BodyStrong}>{`${record.nodeId} `}</Text>
+                <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
                 <Text>{record.region}</Text>
               </Link>
             </React.Fragment>);
@@ -158,7 +158,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "nodesCount",
-      title: "# of nodes",
+      title: "node count",
       sorter: (a, b) => {
         if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) { return 0; }
         if (a.nodesCount < b.nodesCount) { return -1; }
@@ -336,7 +336,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
 }
 
 const getNodeRegion = (nodeStatus: INodeStatus) => {
-  const region = nodeStatus.desc.locality.tiers.find(tier => tier.key === "region");
+  const region = nodeStatus.desc.locality?.tiers?.find(tier => tier.key === "region");
   return region ? region.value : undefined;
 };
 
@@ -424,7 +424,7 @@ const decommissionedNodesTableData = createSelector(
   partitionedStatuses,
   nodesSummarySelector,
   (statuses, nodesSummary): DecommissionedNodeStatusRow[] => {
-    const decommissionedStatuses = statuses.live || [];
+    const decommissionedStatuses = statuses.decommissioned || [];
 
     const getDecommissionedTime = (nodeId: number) => {
       const liveness = nodesSummary.livenessByNodeID[nodeId];
