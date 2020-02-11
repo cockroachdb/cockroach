@@ -86,14 +86,112 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				tree.ErrString(index.tn))
 		}
 
+		// If we couldn't find the index by name, this is either a legitimate error or
+		// this statement contains an 'IF EXISTS' qualifier. Both of these cases are
+		// handled by `dropIndexByName()` below so we just ignore the error here.
+		idxDesc, dropped, _ := tableDesc.FindIndexByName(string(index.idxName))
+		var shardColName string
+		// If we're dropping a sharded index, record the name of its shard column to
+		// potentially drop it if no other index refers to it.
+		if idxDesc != nil && idxDesc.IsSharded() && !dropped {
+			shardColName = idxDesc.Sharded.Name
+		}
+
 		if err := params.p.dropIndexByName(
 			ctx, index.tn, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
 			return err
 		}
+
+		if shardColName != "" {
+			if err := n.maybeDropShardColumn(params, tableDesc, shardColName); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+// dropShardColumnAndConstraint drops the given shard column and its associated check
+// constraint.
+func (n *dropIndexNode) dropShardColumnAndConstraint(
+	params runParams,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	shardColDesc *sqlbase.ColumnDescriptor,
+) error {
+	validChecks := tableDesc.Checks[:0]
+	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
+		if used, err := check.UsesColumn(tableDesc.TableDesc(), shardColDesc.ID); err != nil {
+			return err
+		} else if used {
+			if check.Validity == sqlbase.ConstraintValidity_Validating {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"referencing constraint %q in the middle of being added, try again later", check.Name)
+			}
+		} else {
+			validChecks = append(validChecks, check)
+		}
+	}
+
+	if len(validChecks) != len(tableDesc.Checks) {
+		tableDesc.Checks = validChecks
+	}
+
+	tableDesc.AddColumnMutation(shardColDesc, sqlbase.DescriptorMutation_DROP)
+	for i := range tableDesc.Columns {
+		if tableDesc.Columns[i].ID == shardColDesc.ID {
+			tmp := tableDesc.Columns[:0]
+			for j, col := range tableDesc.Columns {
+				if i == j {
+					continue
+				}
+				tmp = append(tmp, col)
+			}
+			tableDesc.Columns = tmp
+			break
+		}
+	}
+
+	if err := tableDesc.AllocateIDs(); err != nil {
+		return err
+	}
+	mutationID, err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc,
+		tree.AsStringWithFQNames(n.n, params.Ann()))
+	if err != nil {
+		return err
+	}
+	if err := params.p.writeSchemaChange(params.ctx, tableDesc, mutationID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// maybeDropShardColumn drops the given shard column, if there aren't any other indexes
+// referring to it.
+//
+// Assumes that the given index is sharded.
+func (n *dropIndexNode) maybeDropShardColumn(
+	params runParams, tableDesc *sqlbase.MutableTableDescriptor, shardColName string,
+) error {
+	shardColDesc, dropped, err := tableDesc.FindColumnByName(tree.Name(shardColName))
+	if err != nil {
+		return err
+	}
+	if dropped {
+		return nil
+	}
+	shouldDropShardColumn := true
+	for _, otherIdx := range tableDesc.AllNonDropIndexes() {
+		if otherIdx.ContainsColumnID(shardColDesc.ID) {
+			shouldDropShardColumn = false
+			break
+		}
+	}
+	if !shouldDropShardColumn {
+		return nil
+	}
+	return n.dropShardColumnAndConstraint(params, tableDesc, shardColDesc)
 }
 
 func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }
@@ -239,15 +337,13 @@ func (p *planner) dropIndexByName(
 			return idx.IsValidOriginIndex(fk.OriginColumnIDs)
 		}
 		// The index being deleted could be used as the origin index for this foreign key.
-		if idx.IsValidOriginIndex(fk.OriginColumnIDs) {
-			if !indexHasReplacementCandidate(canReplace) {
-				if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
-					return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
-				}
-				sliceIdx--
-				if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
-					return err
-				}
+		if idx.IsValidOriginIndex(fk.OriginColumnIDs) && !indexHasReplacementCandidate(canReplace) {
+			if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
+				return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
+			}
+			sliceIdx--
+			if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
+				return err
 			}
 		}
 	}
@@ -262,18 +358,17 @@ func (p *planner) dropIndexByName(
 			return idx.IsValidReferencedIndex(fk.ReferencedColumnIDs)
 		}
 		// The index being deleted could potentially be the referenced index for this fk.
-		if idx.IsValidReferencedIndex(fk.ReferencedColumnIDs) {
+		if idx.IsValidReferencedIndex(fk.ReferencedColumnIDs) &&
 			// If we haven't found a replacement candidate for this foreign key, then
 			// we need a cascade to delete this index.
-			if !indexHasReplacementCandidate(canReplace) {
-				// If we found haven't found a replacement, then we check that the drop behavior is cascade.
-				if err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior); err != nil {
-					return err
-				}
-				sliceIdx--
-				if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
-					return err
-				}
+			!indexHasReplacementCandidate(canReplace) {
+			// If we found haven't found a replacement, then we check that the drop behavior is cascade.
+			if err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior); err != nil {
+				return err
+			}
+			sliceIdx--
+			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
+				return err
 			}
 		}
 	}

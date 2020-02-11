@@ -271,7 +271,7 @@ func statisticsMutator(
 					DistinctCount: distinctCount,
 					NullCount:     nullCount,
 				}
-				if def.Unique || def.PrimaryKey {
+				if def.Unique || def.PrimaryKey.IsPrimaryKey {
 					makeHistogram(def)
 				}
 			case *tree.IndexTableDef:

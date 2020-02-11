@@ -159,7 +159,8 @@ func MakeSimpleTableDescriptor(
 		affected,
 		&semaCtx,
 		&evalCtx,
-		false, /* temporary */
+		&sessiondata.SessionData{}, /* sessionData */
+		false,                      /* temporary */
 	)
 	if err != nil {
 		return nil, err

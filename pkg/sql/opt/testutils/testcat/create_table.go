@@ -81,7 +81,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		for _, def := range stmt.Defs {
 			switch def := def.(type) {
 			case *tree.ColumnTableDef:
-				if def.PrimaryKey {
+				if def.PrimaryKey.IsPrimaryKey {
 					hasPrimaryIndex = true
 				}
 
@@ -119,7 +119,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		for _, def := range stmt.Defs {
 			switch def := def.(type) {
 			case *tree.ColumnTableDef:
-				if def.PrimaryKey {
+				if def.PrimaryKey.IsPrimaryKey {
 					// Add the primary index over the single column.
 					tab.addPrimaryColumnIndex(string(def.Name))
 				}
@@ -348,7 +348,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 }
 
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
-	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
+	nullable := !def.PrimaryKey.IsPrimaryKey && def.Nullable.Nullability != tree.NotNull
 	col := &Column{
 		Ordinal:  tt.ColumnCount(),
 		Name:     string(def.Name),

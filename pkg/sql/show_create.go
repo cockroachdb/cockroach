@@ -79,7 +79,8 @@ func ShowCreateTable(
 			primaryKeyIsOnVisibleColumn = true
 		}
 	}
-	if primaryKeyIsOnVisibleColumn {
+	if primaryKeyIsOnVisibleColumn ||
+		(desc.IsPhysicalTable() && desc.PrimaryIndex.IsSharded()) {
 		f.WriteString(",\n\tCONSTRAINT ")
 		formatQuoteNames(&f.Buffer, desc.PrimaryIndex.Name)
 		f.WriteString(" ")
