@@ -306,6 +306,16 @@ func (g *lockTableGuardImpl) notify() {
 	}
 }
 
+func (g *lockTableGuardImpl) doneWaitingAtLock(hasReservation bool, l *lockState) {
+	g.mu.Lock()
+	if !hasReservation {
+		delete(g.mu.locks, l)
+	}
+	g.mu.mustFindNextLockAfter = true
+	g.notify()
+	g.mu.Unlock()
+}
+
 func (g *lockTableGuardImpl) isTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
@@ -838,25 +848,20 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 	return true
 }
 
-// TODO(sbhola): the deferred call to tryActiveWait() removes the need to
-// return these doneWaiting slices -- the callee can notify the channel
-// itself. Simplify this when switching to the copy-on-write btree since that
-// will cause some related code restructuring.
-
 // Acquires this lock. Returns the list of guards that are done actively
 // waiting at this key -- these will be requests from the same transaction
 // that is acquiring the lock.
 // Acquires l.mu.
 func (l *lockState) acquireLock(
 	_ lock.Strength, durability lock.Durability, txn *enginepb.TxnMeta, ts hlc.Timestamp,
-) (doneWaiting []*lockTableGuardImpl, err error) {
+) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.holder.locked {
 		// Already held.
 		beforeTxn, beforeTs := l.getLockerInfo()
 		if txn.ID != beforeTxn.ID {
-			return nil, errors.Errorf("caller violated contract")
+			return errors.Errorf("caller violated contract")
 		}
 		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
 			// Clear the sequences for the older epoch.
@@ -867,7 +872,7 @@ func (l *lockState) acquireLock(
 		if len(seqs) > 0 {
 			lastSeq := seqs[len(seqs)-1]
 			if lastSeq > txn.Sequence {
-				return nil, errors.Errorf("caller violated contract")
+				return errors.Errorf("caller violated contract")
 			}
 			if lastSeq == txn.Sequence {
 				// Idempotent lock acquisition.
@@ -881,11 +886,11 @@ func (l *lockState) acquireLock(
 		l.holder.holder[durability].ts = ts
 		_, afterTs := l.getLockerInfo()
 		if afterTs.Less(beforeTs) {
-			return nil, errors.Errorf("caller violated contract")
+			return errors.Errorf("caller violated contract")
 		} else if beforeTs.Less(afterTs) {
-			return l.increasedLockTs(afterTs), nil
+			l.increasedLockTs(afterTs)
 		}
-		return nil, nil
+		return nil
 	}
 	// Not already held, so may be reserved by this request. There is also the
 	// possibility that some other request has broken this reservation because
@@ -938,7 +943,6 @@ func (l *lockState) acquireLock(
 		g := qg.guard
 		if g.isTxn(txn) {
 			if qg.active {
-				doneWaiting = append(doneWaiting, g)
 				if g == l.distinguishedWaiter {
 					if brokeReservation {
 						l.distinguishedWaiter = nil
@@ -948,15 +952,13 @@ func (l *lockState) acquireLock(
 				}
 			}
 			l.queuedWriters.Remove(curr)
-			g.mu.Lock()
-			delete(g.mu.locks, l)
-			g.mu.Unlock()
+			g.doneWaitingAtLock(false, l)
 		}
 	}
 	if brokeReservation {
 		l.informActiveWaiters()
 	}
-	return doneWaiting, nil
+	return nil
 }
 
 // A replicated lock held by txn with timestamp ts was discovered by guard g
@@ -1123,17 +1125,14 @@ func removeIgnored(
 }
 
 // Tries to update the lock: noop if this lock is held by a different
-// transaction, else the lock is updated. Returns the list of guards that are
-// done actively waiting at this key and whether the lockState can be garbage
-// collected.
+// transaction, else the lock is updated. Returns whether the lockState can be
+// garbage collected.
 // Acquires l.mu.
-func (l *lockState) tryUpdateLock(
-	intent *roachpb.Intent,
-) (doneWaiting []*lockTableGuardImpl, gc bool, err error) {
+func (l *lockState) tryUpdateLock(intent *roachpb.Intent) (gc bool, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.isLockedBy(intent.Txn.ID) {
-		return nil, false, nil
+		return false, nil
 	}
 	if intent.Status.IsFinalized() {
 		l.holder.locked = false
@@ -1142,8 +1141,8 @@ func (l *lockState) tryUpdateLock(
 			l.holder.holder[i].ts = hlc.Timestamp{}
 			l.holder.holder[i].seqs = nil
 		}
-		doneWaiting, gc = l.lockIsFree()
-		return doneWaiting, gc, nil
+		gc = l.lockIsFree()
+		return gc, nil
 	}
 
 	ts := intent.Txn.WriteTimestamp
@@ -1173,24 +1172,22 @@ func (l *lockState) tryUpdateLock(
 
 	if !isLocked {
 		l.holder.locked = false
-		doneWaiting, gc = l.lockIsFree()
-		return doneWaiting, gc, nil
+		gc = l.lockIsFree()
+		return gc, nil
 	}
 
 	if ts.Less(beforeTs) {
-		return nil, false, errors.Errorf("caller violated contract")
+		return false, errors.Errorf("caller violated contract")
 	} else if beforeTs.Less(ts) {
-		doneWaiting := l.increasedLockTs(ts)
-		return doneWaiting, false, nil
+		l.increasedLockTs(ts)
 	}
-	return nil, false, nil
+	return false, nil
 }
 
-// The lock holder timestamp has increased. Returns the list of guards that
-// are done actively waiting at this key.
+// The lock holder timestamp has increased. Some of the waiters may no longer
+// need to wait.
 // REQUIRES: l.mu is locked.
-func (l *lockState) increasedLockTs(newTs hlc.Timestamp) []*lockTableGuardImpl {
-	var doneWaiting []*lockTableGuardImpl
+func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 	distinguishedRemoved := false
 	for e := l.waitingReaders.Front(); e != nil; {
 		g := e.Value.(*lockTableGuardImpl)
@@ -1203,37 +1200,30 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) []*lockTableGuardImpl {
 				distinguishedRemoved = true
 				l.distinguishedWaiter = nil
 			}
-			g.mu.Lock()
-			delete(g.mu.locks, l)
-			g.mu.Unlock()
-			doneWaiting = append(doneWaiting, g)
+			g.doneWaitingAtLock(false, l)
 		}
+		// Else don't inform an active waiter which continues to be an active waiter
+		// despite the timestamp increase.
 	}
 	if distinguishedRemoved {
 		l.tryMakeNewDistinguished()
 	}
-	// Don't inform other active waiters about increased timestamp, since it
-	// does not change their situation.
-	return doneWaiting
 }
 
 // A request known to this lockState is done. The request could be a reserver,
 // or waiting reader or writer. Acquires l.mu. Note that there is the
 // possibility of a race and the g may no longer be known to l, which we treat
-// as a noop (this race is allowed since we order l.mu > g.mu). Returns the
-// list of guards that are done actively waiting at this key and whether the
-// lockState can be garbage collected.
+// as a noop (this race is allowed since we order l.mu > g.mu). Returns whether
+// the lockState can be garbage collected.
 // Acquires l.mu.
-func (l *lockState) requestDone(
-	g *lockTableGuardImpl,
-) (doneWaiting []*lockTableGuardImpl, gc bool) {
+func (l *lockState) requestDone(g *lockTableGuardImpl) (gc bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	g.mu.Lock()
 	if _, present := g.mu.locks[l]; !present {
 		g.mu.Unlock()
-		return nil, false
+		return false
 	}
 	delete(g.mu.locks, l)
 	g.mu.Unlock()
@@ -1277,13 +1267,13 @@ func (l *lockState) requestDone(
 	if distinguishedRemoved {
 		l.tryMakeNewDistinguished()
 	}
-	return nil, false
+	return false
 }
 
 // The lock has transitioned from locked/reserved to unlocked. There could be
 // waiters, but there cannot be a reservation.
 // REQUIRES: l.mu is locked.
-func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
+func (l *lockState) lockIsFree() (gc bool) {
 	if l.reservation != nil {
 		panic("lockTable bug")
 	}
@@ -1300,10 +1290,7 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
 		}
-		g.mu.Lock()
-		delete(g.mu.locks, l)
-		g.mu.Unlock()
-		doneWaiting = append(doneWaiting, g)
+		g.doneWaitingAtLock(false, l)
 	}
 
 	// The prefix of the queue that is non-transactional writers is done
@@ -1319,17 +1306,14 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 				findDistinguished = true
 				l.distinguishedWaiter = nil
 			}
-			g.mu.Lock()
-			delete(g.mu.locks, l)
-			g.mu.Unlock()
-			doneWaiting = append(doneWaiting, g)
+			g.doneWaitingAtLock(false, l)
 		} else {
 			break
 		}
 	}
 
 	if l.queuedWriters.Len() == 0 {
-		return doneWaiting, true
+		return true
 	}
 
 	// First waiting writer (it must be transactional) gets the reservation.
@@ -1339,7 +1323,7 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 	l.reservation = g
 	l.queuedWriters.Remove(e)
 	if qg.active {
-		doneWaiting = append(doneWaiting, g)
+		g.doneWaitingAtLock(true, l)
 	}
 	// Else inactive waiter and is waiting elsewhere.
 
@@ -1384,7 +1368,7 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 			g.mu.Unlock()
 		}
 	}
-	return doneWaiting, false
+	return false
 }
 
 // ScanAndEnqueue implements the lockTable interface.
@@ -1419,15 +1403,6 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 	return g
 }
 
-func processDoneWaiting(doneWaiting []*lockTableGuardImpl) {
-	for _, g := range doneWaiting {
-		g.mu.Lock()
-		g.mu.mustFindNextLockAfter = true
-		g.notify()
-		g.mu.Unlock()
-	}
-}
-
 // Dequeue implements the lockTable interface.
 func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 	g := guard.(*lockTableGuardImpl)
@@ -1437,12 +1412,9 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 		candidateLocks = append(candidateLocks, l)
 	}
 	g.mu.Unlock()
-	var doneWaiting []*lockTableGuardImpl
 	var locksToGC [spanset.NumSpanScope][]*lockState
 	for _, l := range candidateLocks {
-		dw, gc := l.requestDone(g)
-		doneWaiting = append(doneWaiting, dw...)
-		if gc {
+		if gc := l.requestDone(g); gc {
 			locksToGC[l.ss] = append(locksToGC[l.ss], l)
 		}
 	}
@@ -1452,7 +1424,6 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 			t.tryGCLocks(&t.locks[i], locksToGC[i])
 		}
 	}
-	processDoneWaiting(doneWaiting)
 }
 
 // AddDiscoveredLock implements the lockTable interface.
@@ -1521,10 +1492,9 @@ func (t *lockTableImpl) AcquireLock(
 	} else {
 		l = i.(*lockState)
 	}
-	doneWaiting, err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp)
+	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp)
 	tree.mu.Unlock()
 
-	processDoneWaiting(doneWaiting)
 	var totalLocks int64
 	for i := 0; i < len(t.locks); i++ {
 		totalLocks += atomic.LoadInt64(&t.locks[i].numLocks)
@@ -1611,16 +1581,14 @@ func (t *lockTableImpl) UpdateLocks(intent *roachpb.Intent) error {
 	}
 	tree := &t.locks[ss]
 	var err error
-	var doneWaiting []*lockTableGuardImpl
 	var locksToGC []*lockState
 	changeFunc := func(i btree.Item) bool {
 		l := i.(*lockState)
-		dw, gc, err2 := l.tryUpdateLock(intent)
+		gc, err2 := l.tryUpdateLock(intent)
 		if err2 != nil {
 			err = err2
 			return false
 		}
-		doneWaiting = append(doneWaiting, dw...)
 		if gc {
 			locksToGC = append(locksToGC, l)
 		}
@@ -1639,7 +1607,6 @@ func (t *lockTableImpl) UpdateLocks(intent *roachpb.Intent) error {
 	if len(locksToGC) > 0 {
 		t.tryGCLocks(tree, locksToGC)
 	}
-	processDoneWaiting(doneWaiting)
 	return err
 }
 
