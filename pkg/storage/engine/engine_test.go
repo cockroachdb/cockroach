@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1173,7 +1174,7 @@ func TestEngineFS(t *testing.T) {
 				"9h: delete-dir /dir1",
 			}
 
-			var f File
+			var f fs.File
 			for _, tc := range testCases {
 				s := strings.Split(tc, " ")[1:]
 
@@ -1191,7 +1192,7 @@ func TestEngineFS(t *testing.T) {
 				}
 
 				var (
-					g   File
+					g   fs.File
 					err error
 				)
 				switch s[0] {

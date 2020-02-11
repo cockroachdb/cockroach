@@ -412,7 +412,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
-	tempEngine, err := engine.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
+	tempEngine, tempFS, err := engine.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create temp storage")
 	}
@@ -617,8 +617,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ClusterID:      &s.rpcContext.ClusterID,
 		ClusterName:    s.cfg.ClusterName,
 
-		TempStorage: tempEngine,
-		DiskMonitor: s.cfg.TempStorageConfig.Mon,
+		TempStorage:     tempEngine,
+		TempStoragePath: s.cfg.TempStorageConfig.Path,
+		TempFS:          tempFS,
+		DiskMonitor:     s.cfg.TempStorageConfig.Mon,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		BulkAdder: func(

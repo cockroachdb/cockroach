@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -123,6 +124,14 @@ type ServerConfig struct {
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
 	TempStorage diskmap.Factory
+
+	// TempStoragePath is the path where the vectorized execution engine should
+	// create files using TempFS.
+	TempStoragePath string
+
+	// TempFS is used by the vectorized execution engine to store columns when the
+	// working set is larger than can be stored in memory.
+	TempFS fs.FS
 
 	// BulkAdder is used by some processors to bulk-ingest data as SSTs.
 	BulkAdder storagebase.BulkAdderFactory

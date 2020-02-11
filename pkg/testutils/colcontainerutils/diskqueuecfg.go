@@ -8,33 +8,35 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colcontainer
+package colcontainerutils
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 const inMemDirName = "testing"
 
 // NewTestingDiskQueueCfg returns a DiskQueueCfg and a non-nil cleanup function.
-func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func()) {
+func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg, func()) {
 	t.Helper()
 
 	var (
-		cfg     DiskQueueCfg
-		cleanup func()
-		fs      engine.FS
-		path    string
+		cfg       colcontainer.DiskQueueCfg
+		cleanup   func()
+		testingFS fs.FS
+		path      string
 	)
 
 	if inMem {
 		ngn := engine.NewDefaultInMem()
-		fs = ngn.(engine.FS)
-		if err := fs.CreateDir(inMemDirName); err != nil {
+		testingFS = ngn.(fs.FS)
+		if err := testingFS.CreateDir(inMemDirName); err != nil {
 			t.Fatal(err)
 		}
 		path = inMemDirName
@@ -44,7 +46,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func()) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fs = ngn.(engine.FS)
+		testingFS = ngn.(fs.FS)
 		tempPath, dirCleanup := testutils.TempDir(t)
 		path = tempPath
 		cleanup = func() {
@@ -52,7 +54,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func()) {
 			dirCleanup()
 		}
 	}
-	cfg.FS = fs
+	cfg.FS = testingFS
 	cfg.Path = path
 
 	if err := cfg.EnsureDefaults(); err != nil {
