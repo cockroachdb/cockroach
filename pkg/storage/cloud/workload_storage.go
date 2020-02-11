@@ -89,7 +89,7 @@ func (s *workloadStorage) WriteFile(_ context.Context, _ string, _ io.ReadSeeker
 	return errors.Errorf(`workload storage does not support writes`)
 }
 
-func (s *workloadStorage) ListFiles(_ context.Context) ([]string, error) {
+func (s *workloadStorage) ListFiles(_ context.Context, _ string) ([]string, error) {
 	return nil, errors.Errorf(`workload storage does not support listing files`)
 }
 
