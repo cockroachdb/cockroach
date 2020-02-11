@@ -173,7 +173,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							ClusterID:   &dsp.rpcCtx.ClusterID,
 						},
 						NodeID: -1,
-					}, spec.Processors, fuseOpt,
+					}, spec.Processors, fuseOpt, recv,
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
