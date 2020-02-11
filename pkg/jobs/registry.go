@@ -545,13 +545,13 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *client.Txn, id int6
 	return job.WithTxn(txn).cancelRequested(ctx, nil)
 }
 
-// Pause marks the job with id as paused using the specified txn (may be nil).
-func (r *Registry) Pause(ctx context.Context, txn *client.Txn, id int64) error {
+// PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
+func (r *Registry) PauseRequested(ctx context.Context, txn *client.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).paused(ctx)
+	return job.WithTxn(txn).pauseRequested(ctx, nil)
 }
 
 // Resume resumes the paused job with id using the specified txn (may be nil).
@@ -657,8 +657,8 @@ func (r *Registry) stepThroughStateMachine(
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"unexpected error provided for a running job")
+			errorMsg := fmt.Sprintf("job %d: resuming with non-nil error: %v", *job.ID(), jobErr)
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
 		err := resumer.Resume(ctx, phs, resultsCh)
 		if err == nil {
@@ -674,17 +674,20 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
 		}
 		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
-			if err.status != StatusPaused && err.status != StatusCancelRequested {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"job %d: unexpected status %s provided for a running job", job.ID(), err.status)
+			if err.status != StatusCancelRequested && err.status != StatusPauseRequested {
+				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a running job", *job.ID(), err.status)
+				return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 			}
-			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, err.status, err)
+			return err
 		}
 		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, err)
-	case StatusPaused:
+	case StatusPauseRequested:
 		return errors.Errorf("job %s", status)
 	case StatusCancelRequested:
 		return errors.Errorf("job %s", status)
+	case StatusPaused:
+		errorMsg := fmt.Sprintf("job %d: unexpected status %s provided to state machine", *job.ID(), status)
+		return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 	case StatusCanceled:
 		if err := job.canceled(ctx, nil); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
@@ -695,8 +698,8 @@ func (r *Registry) stepThroughStateMachine(
 		return errors.Errorf("job %s", status)
 	case StatusSucceeded:
 		if jobErr != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: successful bu unexpected error provided", *job.ID())
+			errorMsg := fmt.Sprintf("job %d: successful bu unexpected error provided", *job.ID())
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
 		if err := job.Succeeded(ctx, resumer.OnSuccess); err != nil {
 			// If it didn't succeed, we consider the job as failed and need to go
@@ -704,7 +707,7 @@ func (r *Registry) stepThroughStateMachine(
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
 			// execute them in resume so that the client can handle these errors
 			// better.
-			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.id))
+			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
 		}
 		resumer.OnTerminal(ctx, status, resultsCh)
 		return nil
@@ -730,21 +733,18 @@ func (r *Registry) stepThroughStateMachine(
 		if e, ok := err.(retryJobError); ok {
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
 		}
-		if ierr, ok := errors.Cause(err).(*InvalidStatusError); ok {
-			// TODO(spaskob): enable pausing of reverting jobs.
-			//if ierr.status != StatusPaused {
-			//	return errors.NewAssertionErrorWithWrappedErrf(err,
-			//		"job %d: unexpected status %s provided for a reverting job", job.ID(), err.status)
-			//}
-			//return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusPaused, err)
-			return errors.NewAssertionErrorWithWrappedErrf(ierr,
-				"unexpected error provided for a reverting job")
+		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
+			if err.status != StatusPauseRequested {
+				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a reverting job", job.ID(), err.status)
+				return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
+			}
+			return err
 		}
 		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
 	case StatusFailed:
 		if jobErr == nil {
-			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: has StatusFailed but no error was provided", *job.ID())
+			errorMsg := fmt.Sprintf("job %d: has StatusFailed but no error was provided", *job.ID())
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
 		if err := job.Failed(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
@@ -783,6 +783,9 @@ func (r *Registry) resume(
 		if err == nil {
 			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, nil)
 			if err != nil {
+				if errors.HasAssertionFailure(err) {
+					log.ReportOrPanic(ctx, nil, err.Error())
+				}
 				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 			}
 			status, err := job.CurrentStatus(ctx)
@@ -818,9 +821,10 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 	const stmt = `
 SELECT id, payload, progress IS NULL, status
 FROM system.jobs
-WHERE status IN ($1, $2, $3, $4) ORDER BY created DESC`
+WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 	rows, err := r.ex.Query(
-		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning, StatusCancelRequested, StatusReverting,
+		ctx, "adopt-job", nil /* txn */, stmt,
+		StatusPending, StatusRunning, StatusCancelRequested, StatusPauseRequested, StatusReverting,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed querying for jobs")
@@ -869,8 +873,10 @@ WHERE status IN ($1, $2, $3, $4) ORDER BY created DESC`
 			return err
 		}
 
-		if log.V(2) {
-			log.Infof(ctx, "evaluating job %d with lease %#v", *id, payload.Lease)
+		status := Status(tree.MustBeDString(row[3]))
+		if log.V(3) {
+			log.Infof(ctx, "job %d: evaluating for adoption with status `%s` and lease %v",
+				*id, status, payload.Lease)
 		}
 
 		if payload.Lease == nil {
@@ -943,24 +949,47 @@ WHERE status IN ($1, $2, $3, $4) ORDER BY created DESC`
 		// Below we know that this node holds the lease on the job.
 		job := &Job{id: id, registry: r}
 		resumeCtx, cancel := r.makeCtx()
-		if err := r.register(*id, cancel); err != nil {
-			status := Status(tree.MustBeDString(row[3]))
-			if cancelJob := (status == StatusCancelRequested); cancelJob {
-				if log.V(2) {
-					log.Infof(ctx, "job %d: canceling: the job is cancelRequested and running on this node", *id)
-				}
+
+		if pauseRequested := status == StatusPauseRequested; pauseRequested {
+			if err := job.Paused(ctx, func(context.Context, *client.Txn) error {
 				r.unregister(*id)
-			} else {
+				return nil
+			}); err != nil {
+				log.Errorf(ctx, "job %d: could not set to paused: %v", *id, err)
+				continue
+			}
+			log.Infof(ctx, "job %d: paused", *id)
+			continue
+		}
+
+		if err := r.register(*id, cancel); err != nil {
+			if keepRunning := status != StatusCancelRequested; keepRunning {
 				if log.V(3) {
 					log.Infof(ctx, "job %d: skipping: the job is already running/reverting on this node", *id)
 				}
+				continue
 			}
-			// It makes sense to continue even in the case of canceling the job since
-			// the node may be under load and we will give a chance for another node
-			// to adopt it.
+			if err := job.Reverted(ctx, func(context.Context, *client.Txn) error {
+				r.unregister(*id)
+				return nil
+			}); err != nil {
+				log.Errorf(ctx, "job %d: could not set to reverting: %v", *id, err)
+				continue
+			}
+			if log.V(2) {
+				log.Infof(ctx, "job %d: canceled: the job is now reverting", *id)
+			}
+			// Don't continue but adopt job for reverting.
+		}
+		// Check if job status has changed in the meanwhile.
+		currentStatus, err := job.CurrentStatus(ctx)
+		if err != nil {
+			return err
+		}
+		if status != currentStatus {
 			continue
 		}
-		// Adopt job and resume it.
+		// Adopt job and resume/revert it.
 		if err := job.adopt(ctx, payload.Lease); err != nil {
 			r.unregister(*id)
 			return errors.Wrap(err, "unable to acquire lease")
@@ -972,6 +1001,7 @@ WHERE status IN ($1, $2, $3, $4) ORDER BY created DESC`
 			r.unregister(*id)
 			return err
 		}
+		log.Infof(ctx, "job %d: resuming execution", *id)
 		errCh, err := r.resume(resumeCtx, resumer, resultsCh, job)
 		if err != nil {
 			r.unregister(*id)
