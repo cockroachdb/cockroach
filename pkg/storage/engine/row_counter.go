@@ -52,21 +52,17 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 
 	r.prev = append(r.prev[:0], row...)
 
-	rest, tbl, err := keys.DecodeTablePrefix(row)
+	rest, _, err := keys.DecodeTablePrefix(row)
 	if err != nil {
 		return err
 	}
 
-	if tbl < keys.MaxReservedDescID {
-		r.SystemRecords++
+	if _, indexID, err := encoding.DecodeUvarintAscending(rest); err != nil {
+		return err
+	} else if indexID == 1 {
+		r.Rows++
 	} else {
-		if _, indexID, err := encoding.DecodeUvarintAscending(rest); err != nil {
-			return err
-		} else if indexID == 1 {
-			r.Rows++
-		} else {
-			r.IndexEntries++
-		}
+		r.IndexEntries++
 	}
 
 	return nil
