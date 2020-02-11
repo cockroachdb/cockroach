@@ -61,3 +61,38 @@ func CopyBatch(allocator *Allocator, original coldata.Batch) coldata.Batch {
 	})
 	return b
 }
+
+// makeWindowIntoBatch updates windowedBatch so that it provides a "window"
+// into inputBatch starting at tuple index startIdx. It handles selection
+// vectors on inputBatch as well (in which case windowedBatch will also have a
+// "windowed" selection vector).
+func makeWindowIntoBatch(
+	windowedBatch, inputBatch coldata.Batch, startIdx uint16, inputTypes []coltypes.T,
+) {
+	inputBatchLen := inputBatch.Length()
+	windowStart := uint64(startIdx)
+	windowEnd := uint64(inputBatchLen)
+	if sel := inputBatch.Selection(); sel != nil {
+		// We have a selection vector on the input batch, and in order to avoid
+		// deselecting (i.e. moving the data over), we will provide an adjusted
+		// selection vector to the windowed batch as well.
+		windowedBatch.SetSelection(true)
+		windowIntoSel := sel[startIdx:inputBatchLen]
+		copy(windowedBatch.Selection(), windowIntoSel)
+		maxSelIdx := uint16(0)
+		for _, selIdx := range windowIntoSel {
+			if selIdx > maxSelIdx {
+				maxSelIdx = selIdx
+			}
+		}
+		windowStart = 0
+		windowEnd = uint64(maxSelIdx + 1)
+	} else {
+		windowedBatch.SetSelection(false)
+	}
+	for i, typ := range inputTypes {
+		window := inputBatch.ColVec(i).Window(typ, windowStart, windowEnd)
+		windowedBatch.ReplaceCol(window, i)
+	}
+	windowedBatch.SetLength(inputBatchLen - startIdx)
+}

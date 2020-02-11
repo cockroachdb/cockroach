@@ -44,16 +44,15 @@ func NewDeselectorOp(allocator *Allocator, input Operator, colTypes []coltypes.T
 
 func (p *deselectorOp) Init() {
 	p.input.Init()
-	p.output = p.allocator.NewMemBatch(p.inputTypes)
 }
 
 func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
+	p.resetOutput()
 	batch := p.input.Next(ctx)
 	if batch.Selection() == nil {
 		return batch
 	}
 
-	p.output.ResetInternalBatch()
 	sel := batch.Selection()
 	p.allocator.PerformOperation(p.output.ColVecs(), func() {
 		for i, t := range p.inputTypes {
@@ -73,4 +72,12 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	})
 	p.output.SetLength(batch.Length())
 	return p.output
+}
+
+func (p *deselectorOp) resetOutput() {
+	if p.output == nil {
+		p.output = p.allocator.NewMemBatch(p.inputTypes)
+	} else {
+		p.output.ResetInternalBatch()
+	}
 }

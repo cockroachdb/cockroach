@@ -50,23 +50,25 @@ func TestExternalSort(t *testing.T) {
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-		t.Run(fmt.Sprintf("spillForced=%t", spillForced), func(t *testing.T) {
-			for _, tc := range sortTestCases {
-				runTests(
-					t,
-					[]tuples{tc.tuples},
-					tc.expected,
-					orderedVerifier,
-					func(input []Operator) (Operator, error) {
-						sorter, accounts, monitors, err := createDiskBackedSorter(
-							ctx, flowCtx, input, tc.logTypes, tc.ordCols, func() {},
-						)
-						memAccounts = append(memAccounts, accounts...)
-						memMonitors = append(memMonitors, monitors...)
-						return sorter, err
-					})
+		for _, tcs := range [][]sortTestCase{sortAllTestCases, topKSortTestCases, sortChunksTestCases} {
+			for _, tc := range tcs {
+				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
+					runTests(
+						t,
+						[]tuples{tc.tuples},
+						tc.expected,
+						orderedVerifier,
+						func(input []Operator) (Operator, error) {
+							sorter, accounts, monitors, err := createDiskBackedSorter(
+								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
+							)
+							memAccounts = append(memAccounts, accounts...)
+							memMonitors = append(memMonitors, monitors...)
+							return sorter, err
+						})
+				})
 			}
-		})
+		}
 	}
 	for _, account := range memAccounts {
 		account.Close(ctx)
@@ -124,7 +126,8 @@ func TestExternalSortRandomized(t *testing.T) {
 						orderedVerifier,
 						func(input []Operator) (Operator, error) {
 							sorter, accounts, monitors, err := createDiskBackedSorter(
-								ctx, flowCtx, input, logTypes[:nCols], ordCols, func() {},
+								ctx, flowCtx, input, logTypes[:nCols], ordCols,
+								0 /* matchLen */, 0 /* k */, func() {},
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -191,7 +194,8 @@ func BenchmarkExternalSort(b *testing.B) {
 						source := newFiniteBatchSource(batch, nBatches)
 						var spilled bool
 						sorter, accounts, monitors, err := createDiskBackedSorter(
-							ctx, flowCtx, []Operator{source}, logTypes, ordCols, func() { spilled = true },
+							ctx, flowCtx, []Operator{source}, logTypes, ordCols,
+							0 /* matchLen */, 0 /* k */, func() { spilled = true },
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -228,16 +232,22 @@ func createDiskBackedSorter(
 	input []Operator,
 	logTypes []types.T,
 	ordCols []execinfrapb.Ordering_Column,
+	matchLen int,
+	k uint16,
 	spillingCallbackFn func(),
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
-	sorterSpec := &execinfrapb.SorterSpec{}
-	sorterSpec.OutputOrdering.Columns = ordCols
+	sorterSpec := &execinfrapb.SorterSpec{
+		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
+		OrderingMatchLen: uint32(matchLen),
+	}
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: logTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
 			Sorter: sorterSpec,
 		},
-		Post: execinfrapb.PostProcessSpec{},
+		Post: execinfrapb.PostProcessSpec{
+			Limit: uint64(k),
+		},
 	}
 	args := NewColOperatorArgs{
 		Spec:                spec,

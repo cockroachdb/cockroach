@@ -45,7 +45,7 @@ func NewTopKSorter(
 	}
 }
 
-var _ Operator = &topKSorter{}
+var _ bufferingInMemoryOperator = &topKSorter{}
 
 // topKSortState represents the state of the sort operator.
 type topKSortState int
@@ -69,6 +69,11 @@ type topKSorter struct {
 
 	// state is the current state of the sort.
 	state topKSortState
+	// inputBatch is the last read batch from the input.
+	inputBatch coldata.Batch
+	// firstUnprocessedTupleIdx indicates the index of the first tuple in
+	// inputBatch that hasn't been processed yet.
+	firstUnprocessedTupleIdx uint16
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
 	// topK stores the top K rows. It is not sorted internally.
@@ -80,17 +85,21 @@ type topKSorter struct {
 	// emitted is the count of rows which have been emitted so far.
 	emitted uint16
 	output  coldata.Batch
+
+	exportedFromTopK  uint64
+	exportedFromBatch uint16
+	windowedBatch     coldata.Batch
 }
 
 func (t *topKSorter) Init() {
 	t.input.Init()
-	t.topK = t.allocator.NewMemBatchWithSize(t.inputTypes, int(t.k))
+	t.topK = t.allocator.NewMemBatchWithSize(t.inputTypes, 0 /* size */)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i := range t.inputTypes {
 		typ := t.inputTypes[i]
 		t.comparators[i] = GetVecComparator(typ, 2)
 	}
-	t.output = t.allocator.NewMemBatchWithSize(t.inputTypes, int(coldata.BatchSize()))
+	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, int(coldata.BatchSize()))
 }
 
 func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
@@ -117,41 +126,41 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 // in sorted order.
 func (t *topKSorter) spool(ctx context.Context) {
 	// Fill up t.topK by spooling up to K rows from the input.
-	inputBatch := t.input.Next(ctx)
-	inputBatchIdx := uint16(0)
+	t.inputBatch = t.input.Next(ctx)
 	spooledRows := uint16(0)
 	remainingRows := t.k
-	for remainingRows > 0 && inputBatch.Length() > 0 {
+	for remainingRows > 0 && t.inputBatch.Length() > 0 {
 		toLength := uint64(spooledRows)
-		fromLength := inputBatch.Length()
-		if remainingRows < inputBatch.Length() {
+		fromLength := t.inputBatch.Length()
+		if remainingRows < t.inputBatch.Length() {
 			// t.topK will be full after this batch.
 			fromLength = remainingRows
-			inputBatchIdx = fromLength
 		}
+		t.firstUnprocessedTupleIdx = fromLength
 		t.allocator.PerformOperation(t.topK.ColVecs(), func() {
 			for i := range t.inputTypes {
 				destVec := t.topK.ColVec(i)
-				vec := inputBatch.ColVec(i)
+				vec := t.inputBatch.ColVec(i)
 				colType := t.inputTypes[i]
 				destVec.Append(
 					coldata.SliceArgs{
 						ColType:   colType,
 						Src:       vec,
-						Sel:       inputBatch.Selection(),
+						Sel:       t.inputBatch.Selection(),
 						DestIdx:   toLength,
 						SrcEndIdx: uint64(fromLength),
 					},
 				)
 			}
 			spooledRows += fromLength
+			t.topK.SetLength(spooledRows)
 		})
 		remainingRows -= fromLength
-		if fromLength == inputBatch.Length() {
-			inputBatch = t.input.Next(ctx)
+		if fromLength == t.inputBatch.Length() {
+			t.inputBatch = t.input.Next(ctx)
+			t.firstUnprocessedTupleIdx = 0
 		}
 	}
-	t.topK.SetLength(spooledRows)
 	t.updateComparators(topKVecIdx, t.topK)
 
 	// Initialize the heap.
@@ -163,13 +172,13 @@ func (t *topKSorter) spool(ctx context.Context) {
 
 	// Read the remainder of the input. Whenever a row is less than the heap max,
 	// swap it in.
-	for inputBatch.Length() > 0 {
-		t.updateComparators(inputVecIdx, inputBatch)
-		sel := inputBatch.Selection()
+	for t.inputBatch.Length() > 0 {
+		t.updateComparators(inputVecIdx, t.inputBatch)
+		sel := t.inputBatch.Selection()
 		t.allocator.PerformOperation(
 			t.topK.ColVecs(),
 			func() {
-				for i := inputBatchIdx; i < inputBatch.Length(); i++ {
+				for i := t.firstUnprocessedTupleIdx; i < t.inputBatch.Length(); i++ {
 					idx := i
 					if sel != nil {
 						idx = sel[i]
@@ -182,10 +191,11 @@ func (t *topKSorter) spool(ctx context.Context) {
 						heap.Fix(t, 0)
 					}
 				}
+				t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 			},
 		)
-		inputBatch = t.input.Next(ctx)
-		inputBatchIdx = 0
+		t.inputBatch = t.input.Next(ctx)
+		t.firstUnprocessedTupleIdx = 0
 	}
 
 	// t.topK now contains the top K rows unsorted. Create a selection vector
@@ -198,8 +208,16 @@ func (t *topKSorter) spool(ctx context.Context) {
 	}
 }
 
+func (t *topKSorter) resetOutput() {
+	if t.output == nil {
+		t.output = t.allocator.NewMemBatchWithSize(t.inputTypes, int(coldata.BatchSize()))
+	} else {
+		t.output.ResetInternalBatch()
+	}
+}
+
 func (t *topKSorter) emit() coldata.Batch {
-	t.output.ResetInternalBatch()
+	t.resetOutput()
 	toEmit := t.topK.Length() - t.emitted
 	if toEmit == 0 {
 		// We're done.
@@ -208,22 +226,25 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
-	t.allocator.PerformOperation(t.output.ColVecs(), func() {
-		for i := range t.inputTypes {
-			vec := t.output.ColVec(i)
-			vec.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						ColType:     t.inputTypes[i],
-						Src:         t.topK.ColVec(i),
-						Sel:         t.sel,
-						SrcStartIdx: uint64(t.emitted),
-						SrcEndIdx:   uint64(t.emitted + toEmit),
-					},
+	for i := range t.inputTypes {
+		vec := t.output.ColVec(i)
+		// At this point, we have already fully sorted the input. It is ok to do
+		// this Copy outside of the allocator - the work has been done, but
+		// theoretically it is possible to hit the limit here (mainly with
+		// variable-sized types like Bytes). Nonetheless, for performance reasons
+		// it would be sad to fallback to disk at this point.
+		vec.Copy(
+			coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
+					ColType:     t.inputTypes[i],
+					Src:         t.topK.ColVec(i),
+					Sel:         t.sel,
+					SrcStartIdx: uint64(t.emitted),
+					SrcEndIdx:   uint64(t.emitted + toEmit),
 				},
-			)
-		}
-	})
+			},
+		)
+	}
 	t.output.SetLength(toEmit)
 	t.emitted += toEmit
 	return t.output
@@ -251,6 +272,33 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	for i := range t.inputTypes {
 		t.comparators[i].setVec(vecIdx, batch.ColVec(i))
 	}
+}
+
+func (t *topKSorter) ExportBuffered(Operator) coldata.Batch {
+	topKLen := uint64(t.topK.Length())
+	// First, we check whether we have exported all tuples from the topK vector.
+	if t.exportedFromTopK < topKLen {
+		newExportedFromTopK := t.exportedFromTopK + uint64(coldata.BatchSize())
+		if newExportedFromTopK > topKLen {
+			newExportedFromTopK = topKLen
+		}
+		for i, typ := range t.inputTypes {
+			window := t.topK.ColVec(i).Window(typ, t.exportedFromTopK, newExportedFromTopK)
+			t.windowedBatch.ReplaceCol(window, i)
+		}
+		t.windowedBatch.SetSelection(false)
+		t.windowedBatch.SetLength(uint16(newExportedFromTopK - t.exportedFromTopK))
+		t.exportedFromTopK = newExportedFromTopK
+		return t.windowedBatch
+	}
+	// Next, we check whether we have exported all tuples from the last read
+	// batch.
+	if t.inputBatch != nil && t.firstUnprocessedTupleIdx+t.exportedFromBatch < t.inputBatch.Length() {
+		makeWindowIntoBatch(t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputTypes)
+		t.exportedFromBatch = t.windowedBatch.Length()
+		return t.windowedBatch
+	}
+	return coldata.ZeroBatch
 }
 
 // Len is part of heap.Interface and is only meant to be used internally.

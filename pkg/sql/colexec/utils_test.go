@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
@@ -1207,4 +1208,14 @@ func (tc *joinTestCase) init() {
 			tc.rightDirections[i] = execinfrapb.Ordering_Column_ASC
 		}
 	}
+}
+
+type sortTestCase struct {
+	description string
+	tuples      tuples
+	expected    tuples
+	logTypes    []types.T
+	ordCols     []execinfrapb.Ordering_Column
+	matchLen    int
+	k           uint16
 }
