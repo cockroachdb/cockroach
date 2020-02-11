@@ -341,7 +341,7 @@ describe("Nodes Overview page", () => {
       nodeStatuses: undefined,
       nodeSums: undefined,
       storeIDsByNodeID: undefined,
-    }
+    };
 
     describe("decommissionedNodesTableDataSelector", () => {
       it("returns node records with 'decommissioned' status only", () => {
