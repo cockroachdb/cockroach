@@ -11,15 +11,20 @@
 package colexec
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRandomizedCast(t *testing.T) {
@@ -102,5 +107,47 @@ func TestRandomizedCast(t *testing.T) {
 					return GetCastOperator(testAllocator, input[0], 0 /* inputIdx*/, 1 /* resultIdx */, c.fromTyp, c.toTyp)
 				})
 		})
+	}
+}
+
+func BenchmarkCastOp(b *testing.B) {
+	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
+	for _, typePair := range [][]types.T{
+		{*types.Int, *types.Float},
+		{*types.Int, *types.Decimal},
+		{*types.Float, *types.Decimal},
+	} {
+		for _, useSel := range []bool{true, false} {
+			for _, hasNulls := range []bool{true, false} {
+				b.Run(
+					fmt.Sprintf("useSel=%t/hasNulls=%t/%s_to_%s",
+						useSel, hasNulls, typePair[0].Name(), typePair[1].Name(),
+					), func(b *testing.B) {
+						fromType := typeconv.FromColumnType(&typePair[0])
+						nullProbability := nullProbability
+						if !hasNulls {
+							nullProbability = 0
+						}
+						selectivity := selectivity
+						if !useSel {
+							selectivity = 1.0
+						}
+						batch := randomBatchWithSel(
+							testAllocator, rng, []coltypes.T{fromType},
+							int(coldata.BatchSize()), nullProbability, selectivity,
+						)
+						source := NewRepeatableBatchSource(testAllocator, batch)
+						op, err := GetCastOperator(testAllocator, source, 0, 1, &typePair[0], &typePair[1])
+						require.NoError(b, err)
+						b.SetBytes(int64(8 * coldata.BatchSize()))
+						b.ResetTimer()
+						op.Init()
+						for i := 0; i < b.N; i++ {
+							op.Next(ctx)
+						}
+					})
+			}
+		}
 	}
 }
