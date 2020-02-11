@@ -1294,3 +1294,298 @@ print
 ----
 global: num=0
 local: num=0
+
+# ======== Tests for non-transactional writes ==========
+
+# Non-transactional write waits behind the lock holder and then waits behind the reservation holder.
+
+# First locks at a, b, c are acquired by txn1
+request r=req24 txn=txn1 ts=10 spans=w@a+w@b+w@c
+----
+
+scan r=req24
+----
+start-waiting: false
+
+acquire r=req24 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+acquire r=req24 k=b durability=u
+----
+global: num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+acquire r=req24 k=c durability=u
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+done r=req24
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+# Next, two different transactional requests wait at a and b.
+request r=req25 txn=txn2 ts=10 spans=w@a
+----
+
+scan r=req25
+----
+start-waiting: true
+
+request r=req26 txn=txn3 ts=10 spans=w@b
+----
+
+scan r=req26
+----
+start-waiting: true
+
+# Next, a non-transactional request that wants to write a, b, c waits at a.
+
+request r=req27 txn=none ts=10 spans=w@a+w@b+w@c
+----
+
+scan r=req27
+----
+start-waiting: true
+
+# Next, a transactional request that arrives later than the non-transactional request waits at c
+
+request r=req28 txn=txn3 ts=10 spans=w@c
+----
+
+scan r=req28
+----
+start-waiting: true
+
+print
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 25, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 27, txn: none
+   distinguished req: 25
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 26, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 26
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 28, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 28
+local: num=0
+
+# The locks at a, b, c are released. The non-transactional request waits behind
+# the reservation holder at a.
+
+release txn=txn1 span=a,d
+----
+global: num=3
+ lock: "a"
+  res: req: 25, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: true req: 27, txn: none
+   distinguished req: 27
+ lock: "b"
+  res: req: 26, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+guard-state r=req25
+----
+new: state=doneWaiting
+
+guard-state r=req26
+----
+new: state=doneWaiting
+
+guard-state r=req27
+----
+new: state=waitForDistinguished txn=txn2 ts=10
+
+guard-state r=req28
+----
+new: state=doneWaiting
+
+# Add another transactional request at a. It will wait behind the non-transactional request.
+
+request r=req29 txn=txn1 ts=10 spans=w@a
+----
+
+scan r=req29
+----
+start-waiting: true
+
+print
+----
+global: num=3
+ lock: "a"
+  res: req: 25, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: true req: 27, txn: none
+    active: true req: 29, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 27
+ lock: "b"
+  res: req: 26, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+# Release the reservation at a. The first waiter is non-transactional so it will not acquire the
+# reservation. The second waiter will acquire the reservation. The non-transactional request will
+# wait behind the reservation holder at b.
+
+done r=req25
+----
+global: num=3
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  res: req: 26, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+guard-state r=req27
+----
+new: state=waitForDistinguished txn=txn3 ts=10
+
+guard-state r=req29
+----
+new: state=doneWaiting
+
+print
+----
+global: num=3
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  res: req: 26, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+   queued writers:
+    active: true req: 27, txn: none
+   distinguished req: 27
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+# Release the reservation at b. The non-transactional waiter will be done at b, and when it gets
+# to c it will see a reservation holder with a higher sequence num and ignore it.
+
+done r=req26
+----
+global: num=2
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+guard-state r=req27
+----
+new: state=doneWaiting
+
+guard-state r=req28
+----
+old: state=doneWaiting
+
+print
+----
+global: num=2
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+# Non-transactional request scans again and proceeds to evaluation and discovers a lock at c
+
+scan r=req27
+----
+start-waiting: false
+
+add-discovered r=req27 k=c txn=txn2
+----
+global: num=2
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: false req: 27, txn: none
+    active: false req: 28, txn: 00000000-0000-0000-0000-000000000003
+local: num=0
+
+scan r=req27
+----
+start-waiting: true
+
+scan r=req28
+----
+start-waiting: true
+
+guard-state r=req27
+----
+new: state=waitForDistinguished txn=txn2 ts=10
+
+guard-state r=req28
+----
+new: state=waitFor txn=txn2 ts=10
+
+# Release the lock. The non-transactional request does not acquire the reservation.
+
+release txn=txn2 span=c
+----
+global: num=2
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+# Make all requests done.
+
+done r=req27
+----
+global: num=2
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  res: req: 28, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+done r=req28
+----
+global: num=1
+ lock: "a"
+  res: req: 29, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+done r=req29
+----
+global: num=0
+local: num=0

@@ -395,6 +395,25 @@ type lockWaitQueue struct {
 	// the behavior will extend when we start supporting Shared and Upgrade
 	// locks.
 	//
+	// Non-transactional requests can do both reads and writes but cannot be
+	// depended on since they don't have a transaction that can be pushed.
+	// Therefore they not only do not acquire locks, but cannot make reservations.
+	// The non-reservation for reads is already covered in the previous
+	// paragraph. For non-transactional writes, the request waits in the queue
+	// with other writers. The difference occurs:
+	// - when it gets to the front of the queue and there is no lock holder
+	//   or reservation: instead of acquiring the reservation it removes
+	//   itself from the lockState and proceeds to the next lock. If it
+	//   does not need to wait for any more locks and manages to acquire
+	//   latches before those locks are acquired by some other request, it
+	//   will evaluate.
+	// - when deciding to wait at a lock: if the lock has a reservation with
+	//   a sequence num higher than this non-transactional request it will
+	//   ignore that reservation. Note that ignoring such reservations is
+	//   safe since when this non-transactional request is holding latches
+	//   those reservation holders cannot be holding latches, so they cannot
+	//   conflict.
+	//
 	// Multiple requests from the same transaction wait independently, including
 	// the situation where one of the requests has a reservation and the other
 	// is waiting (currently this can only happen if both requests are doing
@@ -534,7 +553,8 @@ func (l *lockState) informActiveWaiters() {
 		checkForWaitSelf = true
 		waitForTxn = l.reservation.txn
 		waitForTs = l.reservation.ts
-		if !findDistinguished && l.distinguishedWaiter.txn.ID == waitForTxn.ID {
+		if !findDistinguished && l.distinguishedWaiter.txn != nil &&
+			l.distinguishedWaiter.txn.ID == waitForTxn.ID {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
 		}
@@ -571,7 +591,7 @@ func (l *lockState) informActiveWaiters() {
 		}
 		g := qg.guard
 		var state waitingState
-		if checkForWaitSelf && waitForTxn.ID == g.txn.ID {
+		if checkForWaitSelf && g.txn != nil && waitForTxn.ID == g.txn.ID {
 			state = waitSelfState
 		} else {
 			state = waitForState
@@ -601,7 +621,8 @@ func (l *lockState) tryMakeNewDistinguished() {
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
-			if qg.active && (l.reservation == nil || l.reservation.txn.ID != qg.guard.txn.ID) {
+			if qg.active &&
+				(l.reservation == nil || qg.guard.txn == nil || l.reservation.txn.ID != qg.guard.txn.ID) {
 				g = qg.guard
 				break
 			}
@@ -692,6 +713,11 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 		waitForTxn = l.reservation.txn
 		waitForTs = l.reservation.ts
 		reservedBySelfTxn = g.txn != nil && g.txn.ID == waitForTxn.ID
+		if g.txn == nil && sa == spanset.SpanReadWrite && l.reservation.seqNum > g.seqNum {
+			// Reservation is held by a request with a higher seqNum and g is a
+			// non-transactional request. Ignore the reservation.
+			return false
+		}
 	}
 
 	if sa == spanset.SpanReadOnly {
@@ -889,7 +915,7 @@ func (l *lockState) acquireLock(
 		curr := e
 		e = e.Next()
 		g := qg.guard
-		if g.txn.ID == txn.ID {
+		if g.txn != nil && g.txn.ID == txn.ID {
 			if qg.active {
 				doneWaiting = append(doneWaiting, g)
 				if g == l.distinguishedWaiter {
@@ -936,16 +962,20 @@ func (l *lockState) discoveredLock(
 		l.holder.holder[lock.Replicated].txn = txn
 		l.holder.holder[lock.Replicated].ts = ts
 	}
-	// Queue the existing reservation holder.
-	var hadReservation bool
+
+	g.mu.Lock()
+	_, presentHere := g.mu.locks[l]
+	if !presentHere {
+		g.mu.locks[l] = struct{}{}
+	}
+	g.mu.Unlock()
+
+	// Queue the existing reservation holder. Note that this reservation
+	// holder may not be equal to g due to two reasons (a) the reservation
+	// of g could have been broken even though g is holding latches (see
+	// the comment in acquireLock()), (b) g may be a non-transactional
+	// request (read or write) that can ignore the reservation.
 	if l.reservation != nil {
-		if l.reservation == g {
-			hadReservation = true
-		} else if sa == spanset.SpanReadWrite {
-			// There was a reservation and it was not this request -- this is wrong
-			// since this request should not have evaluated and discovered this lock.
-			return errors.Errorf("caller violated contract")
-		}
 		qg := &queuedGuard{
 			guard:  l.reservation,
 			active: false,
@@ -959,22 +989,25 @@ func (l *lockState) discoveredLock(
 		informWaiters = false
 	}
 
-	if !hadReservation && sa == spanset.SpanReadWrite {
-		// Put self in queue as inactive waiter. Since did not have the
-		// reservation the lock must not have been known to be held so the queue
-		// must be empty.
-		if l.queuedWriters.Len() > 0 {
-			panic("lockTable bug")
-		}
+	if !presentHere && sa == spanset.SpanReadWrite {
+		// Put self in queue as inactive waiter.
 		qg := &queuedGuard{
 			guard:  g,
 			active: false,
 		}
-		l.queuedWriters.PushFront(qg)
-		g.mu.Lock()
-		g.mu.locks[l] = struct{}{}
-		g.mu.Unlock()
-		informWaiters = false
+		// g is not necessarily first in the queue in the (rare) case (a) above.
+		var e *list.Element
+		for e = l.queuedWriters.Front(); e != nil; e = e.Next() {
+			qqg := e.Value.(*queuedGuard)
+			if qqg.guard.seqNum > g.seqNum {
+				break
+			}
+		}
+		if e == nil {
+			l.queuedWriters.PushBack(qg)
+		} else {
+			l.queuedWriters.InsertBefore(qg, e)
+		}
 	}
 
 	// Active waiters need to be told about who they are waiting for.
@@ -1251,10 +1284,34 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 		g.mu.Unlock()
 		doneWaiting = append(doneWaiting, g)
 	}
+
+	// The prefix of the queue that is non-transactional writers is done
+	// waiting.
+	for e := l.queuedWriters.Front(); e != nil; {
+		qg := e.Value.(*queuedGuard)
+		g := qg.guard
+		if g.txn == nil {
+			curr := e
+			e = e.Next()
+			l.queuedWriters.Remove(curr)
+			if g == l.distinguishedWaiter {
+				findDistinguished = true
+				l.distinguishedWaiter = nil
+			}
+			g.mu.Lock()
+			delete(g.mu.locks, l)
+			g.mu.Unlock()
+			doneWaiting = append(doneWaiting, g)
+		} else {
+			break
+		}
+	}
+
 	if l.queuedWriters.Len() == 0 {
 		return doneWaiting, true
 	}
-	// First waiting writer gets the reservation.
+
+	// First waiting writer (it must be transactional) gets the reservation.
 	e := l.queuedWriters.Front()
 	qg := e.Value.(*queuedGuard)
 	g := qg.guard
@@ -1267,7 +1324,8 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 
 	// Need to find a new distinguished waiter if the current distinguished is
 	// from the same transaction (possibly it is the request that has reserved).
-	if l.distinguishedWaiter != nil && l.distinguishedWaiter.txn.ID == g.txn.ID {
+	if l.distinguishedWaiter != nil && l.distinguishedWaiter.txn != nil &&
+		l.distinguishedWaiter.txn.ID == g.txn.ID {
 		findDistinguished = true
 		l.distinguishedWaiter = nil
 	}
@@ -1286,7 +1344,7 @@ func (l *lockState) lockIsFree() (doneWaiting []*lockTableGuardImpl, gc bool) {
 		if qg.active {
 			g := qg.guard
 			var state waitingState
-			if g.txn.ID == l.reservation.txn.ID {
+			if g.txn != nil && g.txn.ID == l.reservation.txn.ID {
 				state = waitSelfState
 			} else {
 				state = waitForState
@@ -1699,8 +1757,13 @@ func (t *lockTableImpl) String() string {
 			fmt.Fprintln(&buf, "   queued writers:")
 			for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 				qg := e.Value.(*queuedGuard)
-				fmt.Fprintf(&buf, "    active: %t req: %d, txn: %v\n",
-					qg.active, qg.guard.seqNum, qg.guard.txn.ID)
+				g := qg.guard
+				txnStr := "none"
+				if g.txn != nil {
+					txnStr = fmt.Sprintf("%v", g.txn.ID)
+				}
+				fmt.Fprintf(&buf, "    active: %t req: %d, txn: %s\n",
+					qg.active, qg.guard.seqNum, txnStr)
 			}
 		}
 		if l.distinguishedWaiter != nil {
