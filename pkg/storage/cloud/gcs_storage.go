@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"path/filepath"
+	"path"
 
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -127,7 +127,7 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 		// Set the timeout within the retry loop.
 		return contextutil.RunWithTimeout(ctx, "put gcs file", timeoutSetting.Get(&g.settings.SV),
 			func(ctx context.Context) error {
-				w := g.bucket.Object(filepath.Join(g.prefix, basename)).NewWriter(ctx)
+				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 				if _, err := io.Copy(w, content); err != nil {
 					_ = w.Close()
 					return err
@@ -144,7 +144,7 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 	var rc io.ReadCloser
 	err := delayedRetry(ctx, func() error {
 		var readErr error
-		rc, readErr = g.bucket.Object(filepath.Join(g.prefix, basename)).NewReader(ctx)
+		rc, readErr = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
 		return readErr
 	})
 	return rc, err
@@ -158,7 +158,7 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 
 	pattern := g.prefix
 	if patternSuffix != "" {
-		pattern = filepath.Join(pattern, patternSuffix)
+		pattern = path.Join(pattern, patternSuffix)
 	}
 
 	for {
@@ -170,7 +170,7 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 			return nil, errors.Wrap(err, "unable to list files in gcs bucket")
 		}
 
-		matches, errMatch := filepath.Match(pattern, attrs.Name)
+		matches, errMatch := path.Match(pattern, attrs.Name)
 		if errMatch != nil {
 			continue
 		}
@@ -191,7 +191,7 @@ func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete gcs file",
 		timeoutSetting.Get(&g.settings.SV),
 		func(ctx context.Context) error {
-			return g.bucket.Object(filepath.Join(g.prefix, basename)).Delete(ctx)
+			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
 		})
 }
 
@@ -201,7 +201,7 @@ func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 		timeoutSetting.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			var err error
-			r, err = g.bucket.Object(filepath.Join(g.prefix, basename)).NewReader(ctx)
+			r, err = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
 			return err
 		}); err != nil {
 		return 0, err
