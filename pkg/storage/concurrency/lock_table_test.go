@@ -13,8 +13,10 @@ package concurrency
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -943,6 +946,214 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	}
 }
 
+type benchWorkItem struct {
+	Request
+	locksToAcquire []roachpb.Key
+}
+
+type benchEnv struct {
+	lm *spanlatch.Manager
+	lt lockTable
+	// Stats. As expected, the contended benchmarks have most requests
+	// encountering a wait, and the number of scan calls is twice the
+	// number of requests.
+	numRequestsWaited *uint64
+	numScanCalls      *uint64
+}
+
+// Does the work for one request. Both acquires and releases the locks.
+// It drops the latches after acquiring locks and reacquires latches
+// before releasing the locks, which will induce contention in the
+// lockTable since the requests that were waiting for latches will do
+// a call to ScanAndEnqueue before the locks are released.
+func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
+	var lg *spanlatch.Guard
+	var g lockTableGuard
+	var err error
+	firstIter := true
+	for {
+		if lg, err = env.lm.Acquire(context.TODO(), item.Spans); err != nil {
+			doneCh <- err
+			return
+		}
+		g = env.lt.ScanAndEnqueue(item.Request, g)
+		atomic.AddUint64(env.numScanCalls, 1)
+		if !g.ShouldWait() {
+			break
+		}
+		if firstIter {
+			atomic.AddUint64(env.numRequestsWaited, 1)
+			firstIter = false
+		}
+		env.lm.Release(lg)
+		for {
+			<-g.NewStateChan()
+			state := g.CurState()
+			if state.stateKind == doneWaiting {
+				break
+			}
+		}
+	}
+	for _, k := range item.locksToAcquire {
+		if err = env.lt.AcquireLock(&item.Txn.TxnMeta, k, lock.Exclusive, lock.Unreplicated); err != nil {
+			doneCh <- err
+			return
+		}
+	}
+	env.lm.Release(lg)
+	if len(item.locksToAcquire) == 0 {
+		doneCh <- nil
+		return
+	}
+	// Release locks.
+	if lg, err = env.lm.Acquire(context.TODO(), item.Spans); err != nil {
+		doneCh <- err
+		return
+	}
+	for _, k := range item.locksToAcquire {
+		intent := roachpb.Intent{
+			Span:   roachpb.Span{Key: k},
+			Txn:    item.Request.Txn.TxnMeta,
+			Status: roachpb.COMMITTED,
+		}
+		if err = env.lt.UpdateLocks(&intent); err != nil {
+			doneCh <- err
+			return
+		}
+	}
+	env.lm.Release(lg)
+	doneCh <- nil
+}
+
+// Creates requests for a group of contending requests. The group is
+// identified by index. The group has numOutstanding requests at a time, so
+// that is the number of requests created. numKeys is the number of keys
+// accessed by this group, of which numReadKeys are only read -- the remaining
+// keys will be locked.
+func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int) []benchWorkItem {
+	ts := hlc.Timestamp{WallTime: 10}
+	spans := &spanset.SpanSet{}
+	wi := benchWorkItem{
+		Request: Request{
+			Timestamp: ts,
+			Spans:     spans,
+		},
+	}
+	for i := 0; i < numKeys; i++ {
+		key := roachpb.Key(fmt.Sprintf("k%d.%d", index, i))
+		if i <= numReadKeys {
+			spans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: key}, ts)
+		} else {
+			spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key}, ts)
+			wi.locksToAcquire = append(wi.locksToAcquire, key)
+		}
+	}
+	var result []benchWorkItem
+	txnCounter := uint128.FromInts(0, 0)
+	for i := 0; i < numOutstanding; i++ {
+		wiCopy := wi
+		wiCopy.Request.Txn = &roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{ID: nextUUID(&txnCounter), WriteTimestamp: ts},
+		}
+		result = append(result, wiCopy)
+	}
+	return result
+}
+
+// Interface that is also implemented by *testing.PB.
+type iterations interface {
+	Next() bool
+}
+
+type simpleIters struct {
+	n int
+}
+
+var _ iterations = (*simpleIters)(nil)
+
+func (i *simpleIters) Next() bool {
+	i.n--
+	return i.n >= 0
+}
+
+// Runs the requests for a group of contending requests. The number of
+// concurrent requests is equal to the length of items.
+func runRequests(b *testing.B, pb iterations, items []benchWorkItem, env benchEnv) {
+	requestDoneCh := make(chan error, len(items))
+	i := 0
+	outstanding := 0
+	for pb.Next() {
+		if outstanding == len(items) {
+			if err := <-requestDoneCh; err != nil {
+				b.Fatal(err)
+			}
+			outstanding--
+		}
+		go doBenchWork(&items[i], env, requestDoneCh)
+		outstanding++
+		i = (i + 1) % len(items)
+	}
+	// Drain
+	for outstanding > 0 {
+		if err := <-requestDoneCh; err != nil {
+			b.Fatal(err)
+		}
+		outstanding--
+	}
+}
+
+// Benchmarks that varies the number of request groups (requests within a
+// group are contending), the number of outstanding requests per group, and
+// the number of read keys for the requests in each group (when the number of
+// read keys is equal to the total keys, there is no contention within the
+// group). The number of groups is either 1 or GOMAXPROCS, in order to use
+// RunParallel() -- it doesn't seem possible to get parallelism between these
+// two values when using B.RunParallel() since B.SetParallelism() accepts an
+// integer multiplier to GOMAXPROCS.
+func BenchmarkLockTable(b *testing.B) {
+	maxGroups := runtime.GOMAXPROCS(0)
+	const numKeys = 5
+	for _, numGroups := range []int{1, maxGroups} {
+		for _, outstandingPerGroup := range []int{1, 2, 4, 8, 16} {
+			for numReadKeys := 0; numReadKeys <= numKeys; numReadKeys++ {
+				b.Run(
+					fmt.Sprintf("groups=%d,outstanding=%d,read=%d/", numGroups, outstandingPerGroup,
+						numReadKeys),
+					func(b *testing.B) {
+						var numRequestsWaited uint64
+						var numScanCalls uint64
+						env := benchEnv{
+							lm:                &spanlatch.Manager{},
+							lt:                newLockTable(100000),
+							numRequestsWaited: &numRequestsWaited,
+							numScanCalls:      &numScanCalls,
+						}
+						var requestsPerGroup [][]benchWorkItem
+						for i := 0; i < numGroups; i++ {
+							requestsPerGroup = append(requestsPerGroup,
+								createRequests(i, outstandingPerGroup, numKeys, numReadKeys))
+						}
+						b.ResetTimer()
+						if numGroups > 1 {
+							var groupNum int32 = -1
+							b.RunParallel(func(pb *testing.PB) {
+								index := atomic.AddInt32(&groupNum, 1)
+								runRequests(b, pb, requestsPerGroup[index], env)
+							})
+						} else {
+							iters := &simpleIters{b.N}
+							runRequests(b, iters, requestsPerGroup[0], env)
+						}
+						if log.V(1) {
+							log.Infof(context.TODO(), "num requests that waited: %d, num scan calls: %d\n",
+								atomic.LoadUint64(&numRequestsWaited), atomic.LoadUint64(&numScanCalls))
+						}
+					})
+			}
+		}
+	}
+}
+
 // TODO(sbhola):
 // - More datadriven and randomized test cases:
 //   - both local and global keys
@@ -952,4 +1163,3 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 // - Test with concurrency in lockTable calls.
 //   - test for race in gc'ing lock that has since become non-empty or new
 //     non-empty one has been inserted.
-// - Benchmark.
