@@ -69,7 +69,20 @@ type aggType struct {
 
 var aggTypes = []aggType{
 	{
-		new:  NewHashAggregator,
+		// This is a wrapper around NewHashAggregator so its signature is compatible
+		// with orderedAggregator.
+		new: func(
+			allocator *Allocator,
+			input Operator,
+			colTypes []coltypes.T,
+			aggFns []execinfrapb.AggregatorSpec_Func,
+			groupCols []uint32,
+			aggCols [][]uint32,
+			_ bool,
+		) (Operator, error) {
+			return NewHashAggregator(
+				allocator, input, colTypes, aggFns, groupCols, aggCols)
+		},
 		name: "hash",
 	},
 	{
@@ -517,6 +530,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 
 func TestAggregatorRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	// This test aggregates random inputs, keeping track of the expected results
 	// to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
@@ -890,13 +904,19 @@ func TestHashAggregator(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tcs {
-		if err := tc.init(); err != nil {
-			t.Fatal(err)
+	for _, numOfHashBuckets := range []uint64{0 /* no limit */, 1, uint64(coldata.BatchSize())} {
+		for _, tc := range tcs {
+			if err := tc.init(); err != nil {
+				t.Fatal(err)
+			}
+			t.Run(fmt.Sprintf("numOfHashBuckets=%d", numOfHashBuckets), func(t *testing.T) {
+				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []Operator) (Operator, error) {
+					a, err := NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+					a.(*hashAggregator).testingKnobs.numOfHashBuckets = numOfHashBuckets
+					return a, err
+				})
+			})
 		}
-		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []Operator) (Operator, error) {
-			return NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
-		})
 	}
 }
 
