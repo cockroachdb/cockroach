@@ -646,6 +646,9 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
+	if node.Sharded != nil {
+		ctx.FormatNode(node.Sharded)
+	}
 	if node.Storing != nil {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
