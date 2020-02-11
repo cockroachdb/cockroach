@@ -31,6 +31,7 @@ CREATE TABLE level4 (
   k1 INT,
   k2 INT,
   k3 INT,
+  FAMILY (k1, k2, k3),
   PRIMARY KEY (k1, k2, k3),
   CONSTRAINT fk3 FOREIGN KEY (k1, k2, k3) REFERENCES level3
 ) INTERLEAVE IN PARENT level3 (k1, k2, k3)

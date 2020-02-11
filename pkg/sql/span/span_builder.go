@@ -100,7 +100,7 @@ func MakeBuilder(table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor)
 // SetNeededColumns sets the needed columns on the Builder. This information
 // is used by MaybeSplitSpanIntoSeparateFamilies.
 func (s *Builder) SetNeededColumns(neededCols util.FastIntSet) {
-	s.neededFamilies = sqlbase.NeededColumnFamilyIDs(s.table.ColumnIdxMap(), s.table.Families, neededCols)
+	s.neededFamilies = sqlbase.NeededColumnFamilyIDs(neededCols, s.table, s.index)
 }
 
 // UnsetNeededColumns resets the needed columns for column family specific optimizations
@@ -259,7 +259,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	// families, only scan the relevant column families. This is disabled for
 	// deletions to ensure that the entire row is deleted.
 	if !forDelete && needed.Len() > 0 && span.Key.Equal(span.EndKey) {
-		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(s.table.ColumnIdxMap(), s.table.Families, needed)
+		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(needed, s.table, s.index)
 		if s.CanSplitSpanIntoSeparateFamilies(len(neededFamilyIDs), cs.StartKey().Length(), containsNull) {
 			return sqlbase.SplitSpanIntoSeparateFamilies(appendTo, span, neededFamilyIDs), nil
 		}
