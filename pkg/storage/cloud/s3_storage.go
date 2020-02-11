@@ -14,7 +14,7 @@ import (
 	"context"
 	"io"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -36,6 +36,23 @@ type s3Storage struct {
 }
 
 var _ ExternalStorage = &s3Storage{}
+
+func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
+	q := make(url.Values)
+	setIf := func(key, value string) {
+		if value != "" {
+			q.Set(key, value)
+		}
+	}
+	setIf(S3AccessKeyParam, conf.AccessKey)
+	setIf(S3SecretParam, conf.Secret)
+	setIf(S3TempTokenParam, conf.TempToken)
+	setIf(S3EndpointParam, conf.Endpoint)
+	setIf(S3RegionParam, conf.Region)
+	setIf(AuthParam, conf.Auth)
+
+	return q.Encode()
+}
 
 func makeS3Storage(
 	ctx context.Context, conf *roachpb.ExternalStorage_S3, settings *cluster.Settings,
@@ -127,7 +144,7 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 		func(ctx context.Context) error {
 			_, err := s.s3.PutObjectWithContext(ctx, &s3.PutObjectInput{
 				Bucket: s.bucket,
-				Key:    aws.String(filepath.Join(s.prefix, basename)),
+				Key:    aws.String(path.Join(s.prefix, basename)),
 				Body:   content,
 			})
 			return err
@@ -139,7 +156,7 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	out, err := s.s3.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: s.bucket,
-		Key:    aws.String(filepath.Join(s.prefix, basename)),
+		Key:    aws.String(path.Join(s.prefix, basename)),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get s3 object")
@@ -147,41 +164,56 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 	return out.Body, nil
 }
 
-func getBucketBeforeWildcard(path string) string {
-	globIndex := strings.IndexAny(path, "*?[")
+func getPrefixBeforeWildcard(p string) string {
+	globIndex := strings.IndexAny(p, "*?[")
 	if globIndex < 0 {
-		return path
+		return p
 	}
-	return filepath.Dir(path[:globIndex])
+	return path.Dir(p[:globIndex])
 }
 
 func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
-	baseBucket := getBucketBeforeWildcard(*s.bucket)
 
 	pattern := s.prefix
 	if patternSuffix != "" {
-		pattern = filepath.Join(pattern, patternSuffix)
+		if containsGlob(s.prefix) {
+			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
+		}
+		pattern = path.Join(pattern, patternSuffix)
 	}
 
+	var matchErr error
 	err := s.s3.ListObjectsPagesWithContext(
 		ctx,
 		&s3.ListObjectsInput{
-			Bucket: &baseBucket,
+			Bucket: s.bucket,
+			Prefix: aws.String(getPrefixBeforeWildcard(s.prefix)),
 		},
 		func(page *s3.ListObjectsOutput, lastPage bool) bool {
 			for _, fileObject := range page.Contents {
-				matches, err := filepath.Match(pattern, *fileObject.Key)
+				matches, err := path.Match(pattern, *fileObject.Key)
 				if err != nil {
-					continue
+					matchErr = err
+					return false
 				}
 				if matches {
-					s3URL := url.URL{
-						Scheme: "s3",
-						Host:   *s.bucket,
-						Path:   *fileObject.Key,
+					if patternSuffix != "" {
+						if !strings.HasPrefix(*fileObject.Key, s.prefix) {
+							// TODO(dt): return a nice rel-path instead of erroring out.
+							matchErr = errors.New("pattern matched file outside of path")
+							return false
+						}
+						fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(*fileObject.Key, s.prefix), "/"))
+					} else {
+						s3URL := url.URL{
+							Scheme:   "s3",
+							Host:     *s.bucket,
+							Path:     *fileObject.Key,
+							RawQuery: s3QueryParams(s.conf),
+						}
+						fileList = append(fileList, s3URL.String())
 					}
-					fileList = append(fileList, s3URL.String())
 				}
 			}
 			return !lastPage
@@ -189,6 +221,9 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, `failed to list s3 bucket`)
+	}
+	if matchErr != nil {
+		return nil, errors.Wrap(matchErr, `failed to list s3 bucket`)
 	}
 
 	return fileList, nil
@@ -200,7 +235,7 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 		func(ctx context.Context) error {
 			_, err := s.s3.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 				Bucket: s.bucket,
-				Key:    aws.String(filepath.Join(s.prefix, basename)),
+				Key:    aws.String(path.Join(s.prefix, basename)),
 			})
 			return err
 		})
@@ -214,7 +249,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 			var err error
 			out, err = s.s3.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 				Bucket: s.bucket,
-				Key:    aws.String(filepath.Join(s.prefix, basename)),
+				Key:    aws.String(path.Join(s.prefix, basename)),
 			})
 			return err
 		})

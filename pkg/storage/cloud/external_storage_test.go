@@ -232,124 +232,142 @@ func testListFiles(t *testing.T, storeURI string) {
 	}
 
 	uri, _ := url.Parse(storeURI)
-	expectedBaseURI := fmt.Sprintf("%s://%s%s", uri.Scheme, uri.Host, uri.Path)
 
-	for _, tc := range []struct {
-		name       string
-		URI        string
-		suffix     string
-		resultList []string
-	}{
-		{
-			"list-all-csv",
-			appendPath(t, storeURI, "file/*/*.csv"),
-			"",
-			fileNames,
-		},
-		{
-			"list-letter-csv",
-			appendPath(t, storeURI, "file/abc/?.csv"),
-			"",
-			letterFiles,
-		},
-		{
-			"list-letter-csv-suffix",
-			appendPath(t, storeURI, "file/abc"),
-			"?.csv",
-			letterFiles,
-		},
-		{
-			"list-letter-csv-dotdot",
-			appendPath(t, storeURI, "file/abc/xzy/../?.csv"),
-			"",
-			letterFiles,
-		},
-		{
-			"list-letter-csv-dotdotdotdot-suffix",
-			appendPath(t, storeURI, "file/abc/xzy"),
-			"../?.csv",
-			letterFiles,
-		},
-		{
-			"list-letter-csv-dotdot-suffix",
-			appendPath(t, storeURI, "file/abc/xzy"),
-			"../../?.csv",
-			nil,
-		},
-		{
-			"list-data-num-csv",
-			appendPath(t, storeURI, "file/numbers/data[0-9].csv"),
-			"",
-			dataNumberFiles,
-		},
-		{
-			"wildcard-bucket-and-filename",
-			appendPath(t, storeURI, "*/numbers/*.csv"),
-			"",
-			dataNumberFiles,
-		},
-		{
-			"wildcard-bucket-and-filename-suffix",
-			appendPath(t, storeURI, ""),
-			"*/numbers/*.csv",
-			dataNumberFiles,
-		},
-		{
-			"list-all-csv-skip-dir",
-			// filepath.Glob() assumes that / is the separator, and enforces that it's there.
-			// So this pattern would not actually match anything.
-			appendPath(t, storeURI, "file/*.csv"),
-			"",
-			[]string{},
-		},
-		{
-			"list-no-matches",
-			appendPath(t, storeURI, "file/letters/dataD.csv"),
-			"",
-			[]string{},
-		},
-		{
-			"list-escaped-star",
-			appendPath(t, storeURI, "file/*/\\*.csv"),
-			"",
-			[]string{},
-		},
-		{
-			"list-escaped-star-suffix",
-			appendPath(t, storeURI, "file"),
-			"*/\\*.csv",
-			[]string{},
-		},
-		{
-			"list-escaped-range",
-			appendPath(t, storeURI, "file/*/data\\[0-9\\].csv"),
-			"",
-			[]string{},
-		},
-		{
-			"list-escaped-range-suffix",
-			appendPath(t, storeURI, "file"),
-			"*/data\\[0-9\\].csv",
-			[]string{},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := storeFromURI(ctx, t, tc.URI, clientFactory)
-			filesList, err := s.ListFiles(ctx, tc.suffix)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if len(filesList) != len(tc.resultList) {
-				t.Fatal(`listed incorrect number of files`, filesList)
-			}
-			for i, result := range filesList {
-				if result != fmt.Sprintf("%s/%s", expectedBaseURI, tc.resultList[i]) {
-					t.Fatal(`resulting list is incorrect`, expectedBaseURI, filesList)
-				}
-			}
-		})
+	abs := func(in []string) []string {
+		out := make([]string, len(in))
+		for i := range in {
+			u := *uri
+			u.Path = u.Path + "/" + in[i]
+			out[i] = u.String()
+		}
+		return out
 	}
+
+	t.Run("ListFiles", func(t *testing.T) {
+
+		for _, tc := range []struct {
+			name       string
+			URI        string
+			suffix     string
+			resultList []string
+		}{
+			{
+				"list-all-csv",
+				appendPath(t, storeURI, "file/*/*.csv"),
+				"",
+				abs(fileNames),
+			},
+			{
+				"list-letter-csv",
+				appendPath(t, storeURI, "file/abc/?.csv"),
+				"",
+				abs(letterFiles),
+			},
+			{
+				"list-letter-csv-rel-file-suffix",
+				appendPath(t, storeURI, "file"),
+				"abc/?.csv",
+				[]string{"abc/A.csv", "abc/B.csv", "abc/C.csv"},
+			},
+			{
+				"list-letter-csv-rel-abc-suffix",
+				appendPath(t, storeURI, "file/abc"),
+				"?.csv",
+				[]string{"A.csv", "B.csv", "C.csv"},
+			},
+			{
+				"list-letter-csv-dotdot",
+				appendPath(t, storeURI, "file/abc/xzy/../?.csv"),
+				"",
+				abs(letterFiles),
+			},
+			{
+				"list-abc-csv-suffix",
+				appendPath(t, storeURI, "file"),
+				"abc/?.csv",
+				[]string{"abc/A.csv", "abc/B.csv", "abc/C.csv"},
+			},
+			{
+				"list-letter-csv-dotdot-suffix",
+				appendPath(t, storeURI, "file/abc/xzy"),
+				"../../?.csv",
+				nil,
+			},
+			{
+				"list-data-num-csv",
+				appendPath(t, storeURI, "file/numbers/data[0-9].csv"),
+				"",
+				abs(dataNumberFiles),
+			},
+			{
+				"wildcard-bucket-and-filename",
+				appendPath(t, storeURI, "*/numbers/*.csv"),
+				"",
+				abs(dataNumberFiles),
+			},
+			{
+				"wildcard-bucket-and-filename-suffix",
+				appendPath(t, storeURI, ""),
+				"*/numbers/*.csv",
+				[]string{"file/numbers/data1.csv", "file/numbers/data2.csv", "file/numbers/data3.csv"},
+			},
+			{
+				"list-all-csv-skip-dir",
+				// filepath.Glob() assumes that / is the separator, and enforces that it's there.
+				// So this pattern would not actually match anything.
+				appendPath(t, storeURI, "file/*.csv"),
+				"",
+				[]string{},
+			},
+			{
+				"list-no-matches",
+				appendPath(t, storeURI, "file/letters/dataD.csv"),
+				"",
+				[]string{},
+			},
+			{
+				"list-escaped-star",
+				appendPath(t, storeURI, "file/*/\\*.csv"),
+				"",
+				[]string{},
+			},
+			{
+				"list-escaped-star-suffix",
+				appendPath(t, storeURI, "file"),
+				"*/\\*.csv",
+				[]string{},
+			},
+			{
+				"list-escaped-range",
+				appendPath(t, storeURI, "file/*/data\\[0-9\\].csv"),
+				"",
+				[]string{},
+			},
+			{
+				"list-escaped-range-suffix",
+				appendPath(t, storeURI, "file"),
+				"*/data\\[0-9\\].csv",
+				[]string{},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				s := storeFromURI(ctx, t, tc.URI, clientFactory)
+				filesList, err := s.ListFiles(ctx, tc.suffix)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if len(filesList) != len(tc.resultList) {
+					t.Fatal(`listed incorrect number of files`, filesList)
+				}
+				for i, got := range filesList {
+					if expected := tc.resultList[i]; got != expected {
+						t.Fatal(`resulting list is incorrect. got: `, got, `expected: `, expected, "\n", filesList)
+					}
+				}
+			})
+		}
+	})
 
 	for _, fileName := range fileNames {
 		file := storeFromURI(ctx, t, storeURI, clientFactory)
