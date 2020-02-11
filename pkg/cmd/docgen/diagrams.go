@@ -350,6 +350,19 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
+		name:   "alter_primary_key",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd"},
+		regreplace: map[string]string{
+			regList: "",
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name"},
+	},
+	{
 		name:   "alter_user_password_stmt",
 		inline: []string{"password_clause", "opt_with"},
 		replace: map[string]string{
@@ -1019,6 +1032,7 @@ var specs = []stmtSpec{
 			"select_no_parens",
 			"opt_sort_clause",
 			"select_limit",
+			"opt_for_locking_clause",
 		},
 		replace: map[string]string{
 			"( simple_select |":    "(",
