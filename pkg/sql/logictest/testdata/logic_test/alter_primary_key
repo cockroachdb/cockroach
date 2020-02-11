@@ -324,10 +324,33 @@ CREATE TABLE t (
   UNIQUE INDEX i3 (z) STORING (y), -- will not be rewritten.
   UNIQUE INDEX i4 (z), -- will be rewritten.
   UNIQUE INDEX i5 (w) STORING (y), -- will be rewritten.
-  INVERTED INDEX i6 (v) -- will be rewritten.
+  INVERTED INDEX i6 (v), -- will be rewritten.
+  INDEX i7 (z) USING HASH WITH BUCKET_COUNT = 4, -- will be rewritten.
+  FAMILY (x, y, z, w, v)
 );
 INSERT INTO t VALUES (1, 2, 3, 4, '{}');
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   z INT8 NOT NULL,
+   w INT8 NULL,
+   v JSONB NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   UNIQUE INDEX i3 (z ASC) STORING (y),
+   UNIQUE INDEX t_x_key (x ASC),
+   INDEX i1 (w ASC),
+   INDEX i2 (y ASC),
+   UNIQUE INDEX i4 (z ASC),
+   UNIQUE INDEX i5 (w ASC) STORING (y),
+   INVERTED INDEX i6 (v),
+   INDEX i7 (z ASC) USING HASH WITH BUCKET_COUNT = 4,
+   FAMILY fam_0_x_y_z_w_v_crdb_internal_z_shard_4 (x, y, z, w, v, crdb_internal_z_shard_4)
+)
 
 # Test that the indexes we expect got rewritten. All but i3 should have been rewritten,
 # so all but i3's indexID should be larger than 7.
@@ -336,13 +359,14 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 4 i3
-8 primary
-9 t_x_key
-10 i1
-11 i2
-12 i4
-13 i5
-14 i6
+9 primary
+10 t_x_key
+11 i1
+12 i2
+13 i4
+14 i5
+15 i6
+16 i7
 
 # Make sure that each index can index join against the new primary key;
 
@@ -414,6 +438,21 @@ index-join  ·            ·
  │          key columns  y
  └── scan   ·            ·
 ·           table        t@i5
+·           spans        ALL
+
+query IIIIT
+SELECT * FROM t@i5
+----
+1 2 3 4 {}
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
+----
+index-join  ·            ·
+ │          table        t@primary
+ │          key columns  y
+ └── scan   ·            ·
+·           table        t@i7
 ·           spans        ALL
 
 query IIIIT
@@ -499,3 +538,38 @@ DROP TABLE IF EXISTS parent, t CASCADE;
 CREATE TABLE parent (x INT PRIMARY KEY);
 CREATE TABLE t (x INT NOT NULL, y INT NOT NULL);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x, y) USING HASH WITH BUCKET_COUNT = 10 INTERLEAVE IN PARENT parent (x)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=5,
+  y INT NOT NULL,
+  z INT,
+  INDEX i (z),
+  FAMILY (x, y, z)
+);
+INSERT INTO t VALUES (1, 2, 3);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   z INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   UNIQUE INDEX t_crdb_internal_x_shard_5_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
+   INDEX i (z ASC),
+   FAMILY fam_0_x_y_z_crdb_internal_x_shard_5 (x, y, z, crdb_internal_x_shard_5)
+)
+
+query III
+SELECT * FROM t@t_crdb_internal_x_shard_5_x_key
+----
+1 2 3
+
+query III
+SELECT * FROM t@i
+----
+1 2 3
