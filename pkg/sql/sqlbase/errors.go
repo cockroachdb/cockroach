@@ -172,6 +172,11 @@ func IsOutOfMemoryError(err error) bool {
 	return errHasCode(err, pgcode.OutOfMemory)
 }
 
+// IsUndefinedColumnError checks whether this is an undefined column error.
+func IsUndefinedColumnError(err error) bool {
+	return errHasCode(err, pgcode.UndefinedColumn)
+}
+
 func errHasCode(err error, code ...string) bool {
 	pgCode := pgerror.GetPGCode(err)
 	for _, c := range code {

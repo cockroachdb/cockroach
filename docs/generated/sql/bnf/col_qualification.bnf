@@ -3,6 +3,7 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'NULL'
 	| 'CONSTRAINT' constraint_name 'UNIQUE'
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY'
+	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
 	| 'CONSTRAINT' constraint_name 'CHECK' '(' a_expr ')'
 	| 'CONSTRAINT' constraint_name 'DEFAULT' b_expr
 	| 'CONSTRAINT' constraint_name 'REFERENCES' table_name opt_name_parens key_match reference_actions
@@ -11,6 +12,7 @@ col_qualification ::=
 	| 'NULL'
 	| 'UNIQUE'
 	| 'PRIMARY' 'KEY'
+	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
