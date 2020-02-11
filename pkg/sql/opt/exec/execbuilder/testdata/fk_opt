@@ -10,10 +10,10 @@ SET enable_insert_fast_path = false
 # -- Tests with INSERT --
 
 statement ok
-CREATE TABLE parent (p INT PRIMARY KEY, other INT UNIQUE)
+CREATE TABLE parent (p INT PRIMARY KEY, other INT UNIQUE, FAMILY (p, other))
 
 statement ok
-CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), FAMILY (c, p))
 
 query TTT
 EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
