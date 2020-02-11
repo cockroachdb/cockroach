@@ -530,11 +530,11 @@ local: num=0
 
 guard-state r=req6
 ----
-old: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=true guard-access=write
 
 guard-state r=req7
 ----
-old: state=waitForDistinguished txn=txn2 ts=8,12 key="c" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 ts=8,12 key="c" held=true guard-access=write
 
 print
 ----
@@ -607,7 +607,7 @@ new: state=doneWaiting
 
 guard-state r=req6
 ----
-old: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=false guard-access=write
+old: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=true guard-access=write
 
 print
 ----
@@ -867,7 +867,7 @@ local: num=0
 
 guard-state r=req11
 ----
-old: state=waitForDistinguished txn=txn2 ts=8,12 key="c" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 ts=8,12 key="c" held=true guard-access=write
 
 # Since req10 that is also txn2 has acquired the lock, req12 does not need to wait here anymore.
 guard-state r=req12
@@ -916,7 +916,7 @@ local: num=0
 
 guard-state r=req11
 ----
-old: state=waitForDistinguished txn=txn2 ts=8,12 key="c" held=false guard-access=write
+old: state=waitForDistinguished txn=txn2 ts=8,12 key="c" held=true guard-access=write
 
 release txn=txn2 span=b,d
 ----
