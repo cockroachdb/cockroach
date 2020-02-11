@@ -28,17 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-type sortTestCase struct {
-	tuples   tuples
-	expected tuples
-	ordCols  []execinfrapb.Ordering_Column
-	logTypes []types.T
-}
-
-var sortTestCases []sortTestCase
+var sortAllTestCases []sortTestCase
 
 func init() {
-	sortTestCases = []sortTestCase{
+	sortAllTestCases = []sortTestCase{
 		{
 			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
@@ -145,7 +138,7 @@ func init() {
 
 func TestSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, tc := range sortTestCases {
+	for _, tc := range sortAllTestCases {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
 			physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
 			if err != nil {
@@ -160,24 +153,22 @@ func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 	nTups := int(coldata.BatchSize()*2 + 1)
-	k := uint16(rng.Intn(nTups)) + 1
 	maxCols := 3
 	// TODO(yuzefovich): randomize types as well.
 	typs := make([]coltypes.T, maxCols)
 	for i := range typs {
 		typs[i] = coltypes.Int64
 	}
-
 	for nCols := 1; nCols < maxCols; nCols++ {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-			for _, topK := range []bool{false, true} {
+			for _, k := range []uint16{0, uint16(rng.Intn(nTups)) + 1} {
+				topK := k != 0
 				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
 				t.Run(name, func(t *testing.T) {
 					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
 					if topK {
 						expected = expected[:k]
 					}
-
 					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []Operator) (Operator, error) {
 						if topK {
 							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
