@@ -288,6 +288,7 @@ type MetricExporter interface {
 // other in-flight requests it conflicts with.
 type Request struct {
 	// The (optional) transaction that sent the request.
+	// Non-transactional requests do not acquire locks.
 	Txn *roachpb.Transaction
 
 	// The timestamp that the request should evaluate at.
@@ -364,7 +365,8 @@ type latchGuard interface{}
 // based on multiple versions requires some form of mutual exclusion to ensure
 // that a read and a conflicting lock acquisition do not happen concurrently.
 // The lock table provides both locking and sequencing of requests (in concert
-// with the use of latches).
+// with the use of latches). The lock table sequences both transactional and
+// non-transactional requests, but the latter cannot acquire locks.
 //
 // Locks outlive the requests themselves and thereby extend the duration of the
 // isolation provided over specific keys to the lifetime of the lock-holder
