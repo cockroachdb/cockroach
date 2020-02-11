@@ -1925,6 +1925,14 @@ type sqlStatsCollector struct {
 	// appStats track per-application SQL usage statistics. This is a pointer
 	// into sqlStats set as the session's current app.
 	appStats *appStats
+
+	// In order to facilitate separation of SQL statement statistics for
+	// the UI and statement statistics reported to telemetry, we store
+	// statement statistics that are to be reported separately so that
+	// they can get cleared independently of the normal statement stats.
+	reportedSqlStats *sqlStats
+	reportedAppStats *appStats
+
 	// phaseTimes tracks session-level phase times.
 	phaseTimes phaseTimes
 }
@@ -1932,12 +1940,18 @@ type sqlStatsCollector struct {
 // newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
 // phaseTimes is an array, not a slice, so this performs a copy-by-value.
 func newSQLStatsCollector(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
+	sqlStats *sqlStats,
+	appStats *appStats,
+	reportedSqlStats *sqlStats,
+	reportedAppStats *appStats,
+	phaseTimes *phaseTimes,
 ) *sqlStatsCollector {
 	return &sqlStatsCollector{
-		sqlStats:   sqlStats,
-		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		sqlStats:         sqlStats,
+		reportedSqlStats: reportedSqlStats,
+		appStats:         appStats,
+		reportedAppStats: reportedAppStats,
+		phaseTimes:       *phaseTimes,
 	}
 }
 
@@ -1958,17 +1972,29 @@ func (s *sqlStatsCollector) recordStatement(
 	s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, optUsed, implicitTxn, automaticRetryCount, numRows, err,
 		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
+	s.reportedAppStats.recordStatement(
+		stmt, samplePlanDescription, distSQLUsed, optUsed, implicitTxn, automaticRetryCount, numRows, err,
+		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
 // recordTransaction records stats for one transaction.
 func (s *sqlStatsCollector) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
 	s.appStats.recordTransaction(txnTimeSec, ev, implicit)
+	s.reportedAppStats.recordTransaction(txnTimeSec, ev, implicit)
 }
 
-func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
+func (s *sqlStatsCollector) reset(
+	sqlStats *sqlStats,
+	appStats *appStats,
+	reportedSqlStats *sqlStats,
+	reportedAppStats *appStats,
+	phaseTimes *phaseTimes,
+) {
 	*s = sqlStatsCollector{
-		sqlStats:   sqlStats,
-		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		sqlStats:         sqlStats,
+		reportedSqlStats: reportedSqlStats,
+		appStats:         appStats,
+		reportedAppStats: reportedAppStats,
+		phaseTimes:       *phaseTimes,
 	}
 }

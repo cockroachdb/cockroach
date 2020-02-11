@@ -314,7 +314,8 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	ex.statsCollector.reset(
+		&ex.server.sqlStats, ex.appStats, &ex.server.reportedStats, ex.reportedAppStats, &ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
 
 	if os.ImplicitTxn.Get() {
@@ -760,18 +761,22 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 func (ex *connExecutor) saveLogicalPlanDescription(
 	stmt *Statement, useDistSQL bool, optimizerUsed bool, implicitTxn bool, err error,
 ) bool {
-	stats := ex.appStats.getStatsForStmt(
-		stmt, useDistSQL, optimizerUsed, implicitTxn, err, false /* createIfNonexistent */)
-	if stats == nil {
-		// Save logical plan the first time we see new statement fingerprint.
-		return true
+	shouldSave := false
+	for _, st := range []*appStats{ex.appStats, ex.reportedAppStats} {
+		stats := st.getStatsForStmt(
+			stmt, useDistSQL, optimizerUsed, implicitTxn, err, false /* createIfNonexistent */)
+		if stats == nil {
+			shouldSave = true
+			break
+		}
+		now := timeutil.Now()
+		period := logicalPlanCollectionPeriod.Get(&st.st.SV)
+		stats.Lock()
+		timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
+		stats.Unlock()
+		shouldSave = shouldSave || now.Sub(timeLastSampled) >= period
 	}
-	now := timeutil.Now()
-	period := logicalPlanCollectionPeriod.Get(&ex.appStats.st.SV)
-	stats.Lock()
-	defer stats.Unlock()
-	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
-	return now.Sub(timeLastSampled) >= period
+	return shouldSave
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -872,7 +877,8 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
 		return rwMode, now.GoTime(), nil, nil
 	}
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	ex.statsCollector.reset(
+		&ex.server.sqlStats, ex.appStats, &ex.server.reportedStats, ex.reportedAppStats, &ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime(), 0 /* numAnnotations */)
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)

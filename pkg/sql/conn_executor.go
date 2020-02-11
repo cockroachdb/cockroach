@@ -237,6 +237,11 @@ type Server struct {
 	// sqlStats tracks per-application statistics for all applications on each
 	// node.
 	sqlStats sqlStats
+	// reportedStats tracks the same metrics as sqlStats but stores its statistics
+	// in a separate pool that can be queried and refreshed independently from
+	// sqlStats. This is needed in order to separate the telemetry statements
+	// refresh interval from the SQL statements refresh interval.
+	reportedStats sqlStats
 
 	reCache *tree.RegexpCache
 
@@ -280,10 +285,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
-		dbCache:  newDatabaseCacheHolder(newDatabaseCache(systemCfg)),
-		pool:     pool,
-		sqlStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reCache:  tree.NewRegexpCache(512),
+		dbCache:       newDatabaseCacheHolder(newDatabaseCache(systemCfg)),
+		pool:          pool,
+		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		reCache:       tree.NewRegexpCache(512),
 	}
 }
 
@@ -338,11 +344,23 @@ func (s *Server) ResetSQLStats(ctx context.Context) {
 	s.sqlStats.resetStats(ctx)
 }
 
+// ResetReportedSQLStats resets the executor's collected sql statistics
+// in the reporting statistics pool.
+func (s *Server) ResetReportedSQLStats(ctx context.Context) {
+	s.reportedStats.resetStats(ctx)
+}
+
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
 func (s *Server) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
 	return s.sqlStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
+}
+
+// GetScrubbedReportedStmtStatistics does the same thing as GetScrubbedStatementStatistics
+// but returns statistics from the reporting statistics pool.
+func (s *Server) GetScrubbedReportedStmtStats() []roachpb.CollectedStatementStatistics {
+	return s.reportedStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
 // GetUnscrubbedStmtStats returns the same thing as GetScrubbedStmtStats, except
@@ -580,6 +598,7 @@ func (s *Server) newConnExecutor(
 	}
 	sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
 		ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
+		ex.reportedAppStats = ex.server.reportedStats.getStatsForApplication(newName)
 		ex.applicationName.Store(newName)
 	})
 	// Initialize the session data from provided defaults. We need to do this early
@@ -611,6 +630,7 @@ func (s *Server) newConnExecutor(
 			appStatsBucketName = ex.sessionData.ApplicationName
 		}
 		ex.appStats = s.sqlStats.getStatsForApplication(appStatsBucketName)
+		ex.reportedAppStats = s.reportedStats.getStatsForApplication(appStatsBucketName)
 	}
 
 	ex.phaseTimes[sessionInit] = timeutil.Now()
@@ -960,9 +980,12 @@ type connExecutor struct {
 	// statements that manipulate session state to an internal executor.
 	dataMutator *sessionDataMutator
 	// appStats tracks per-application SQL usage statistics. It is maintained to
-	// represent statistrics for the application currently identified by
+	// represent statistics for the application currently identified by
 	// sessiondata.ApplicationName.
 	appStats *appStats
+	// reportedAppStats serves the same purpose as appStats but stores stats
+	// in a separately managed pool for telemetry reporting.
+	reportedAppStats *appStats
 	// applicationName is the same as sessionData.ApplicationName. It's copied
 	// here as an atomic so that it can be read concurrently by serialize().
 	applicationName atomic.Value
@@ -1703,7 +1726,7 @@ func (ex *connExecutor) execCopyIn(
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
 		ex.statsCollector = ex.newStatsCollector()
-		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.server.reportedStats, ex.reportedAppStats, &ex.phaseTimes)
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
 	}
@@ -2167,7 +2190,8 @@ func (ex *connExecutor) initStatementResult(
 // newStatsCollector returns a sqlStatsCollector that will record stats in the
 // session's stats containers.
 func (ex *connExecutor) newStatsCollector() *sqlStatsCollector {
-	return newSQLStatsCollector(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	return newSQLStatsCollector(
+		&ex.server.sqlStats, ex.appStats, &ex.server.reportedStats, ex.reportedAppStats, &ex.phaseTimes)
 }
 
 // cancelQuery is part of the registrySession interface.
