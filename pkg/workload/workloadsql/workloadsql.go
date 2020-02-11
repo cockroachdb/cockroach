@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
@@ -60,6 +61,8 @@ func Setup(
 	return bytes, nil
 }
 
+// maybeDisableMergeQueue disables the merge queue for versions prior to
+// 19.2.
 func maybeDisableMergeQueue(db *gosql.DB) error {
 	var ok bool
 	if err := db.QueryRow(
@@ -67,7 +70,20 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 	).Scan(&ok); err != nil || !ok {
 		return err
 	}
-	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	var versionStr string
+	err := db.QueryRow(
+		`SELECT value FROM crdb_internal.node_build_info WHERE field = 'Version'`,
+	).Scan(&versionStr)
+	if err != nil {
+		return err
+	}
+	v, err := version.Parse(versionStr)
+	// If we can't parse the error then we'll assume that we should disable the
+	// queue. This happens in testing.
+	if err == nil && (v.Major() > 19 || (v.Major() == 19 && v.Minor() >= 2)) {
+		return nil
+	}
+	_, err = db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 	return err
 }
 
