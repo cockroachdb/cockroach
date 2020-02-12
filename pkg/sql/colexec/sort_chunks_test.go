@@ -295,7 +295,6 @@ func BenchmarkSortChunks(b *testing.B) {
 										}
 									}
 								}
-								rowsTotal := nBatches * int(coldata.BatchSize())
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := newFiniteChunksSource(batch, nBatches, matchLen)
@@ -305,13 +304,7 @@ func BenchmarkSortChunks(b *testing.B) {
 									}
 
 									sorter.Init()
-									rowsEmitted := 0
-									for rowsEmitted < rowsTotal {
-										out := sorter.Next(ctx)
-										if out.Length() == 0 {
-											b.Fail()
-										}
-										rowsEmitted += int(out.Length())
+									for out := sorter.Next(ctx); out.Length() != 0; out = sorter.Next(ctx) {
 									}
 								}
 								b.StopTimer()
