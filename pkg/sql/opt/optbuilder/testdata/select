@@ -396,7 +396,7 @@ limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── scan xyzw
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── limit hint: -100.00
+ │    └── limit hint: 1.00
  └── const: -100 [type=int]
 
 # At execution time, this will cause the error: negative value for OFFSET
@@ -439,7 +439,8 @@ SELECT * FROM xyzw LIMIT 0
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── scan xyzw
- │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── limit hint: 1.00
  └── const: 0 [type=int]
 
 build

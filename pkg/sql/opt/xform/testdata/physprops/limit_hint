@@ -403,3 +403,44 @@ limit
  │              ├── const: 1 [type=int]
  │              └── variable: x [type=int]
  └── const: 10 [type=int]
+
+# Regression test for #44683.
+exec-ddl
+CREATE TABLE t44683(c0 INT)
+----
+
+exec-ddl
+CREATE VIEW v44683(c0) AS SELECT 1 FROM t44683 LIMIT -1
+----
+
+opt
+SELECT DISTINCT t44683.c0 FROM t44683, v44683 LIMIT -1;
+----
+limit
+ ├── columns: c0:1(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── distinct-on
+ │    ├── columns: c0:1(int)
+ │    ├── grouping columns: c0:1(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── side-effects
+ │    ├── key: (1)
+ │    ├── limit hint: 1.00
+ │    └── inner-join (cross)
+ │         ├── columns: c0:1(int)
+ │         ├── cardinality: [0 - 0]
+ │         ├── side-effects
+ │         ├── scan t44683
+ │         │    └── columns: c0:1(int)
+ │         ├── limit
+ │         │    ├── cardinality: [0 - 0]
+ │         │    ├── side-effects
+ │         │    ├── key: ()
+ │         │    ├── scan t44683
+ │         │    │    └── limit hint: 1.00
+ │         │    └── const: -1 [type=int]
+ │         └── filters (true)
+ └── const: -1 [type=int]
