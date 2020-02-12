@@ -406,7 +406,8 @@ func TestLockTableBasic(t *testing.T) {
 				if state.ts.Logical != 0 {
 					tsS += fmt.Sprintf(",%d", state.ts.Logical)
 				}
-				return fmt.Sprintf("%sstate=%s txn=%s ts=%s", str, typeStr, txnS, tsS)
+				return fmt.Sprintf("%sstate=%s txn=%s ts=%s key=%s held=%t guard-access=%s",
+					str, typeStr, txnS, tsS, state.key, state.held, state.guardAccess)
 
 			case "print":
 				return lt.(*lockTableImpl).String()
