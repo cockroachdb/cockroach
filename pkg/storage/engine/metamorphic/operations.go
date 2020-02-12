@@ -110,7 +110,7 @@ func runMvccScan(
 	// m.engine instead of a readWriterManager-generated engine.Reader, otherwise
 	// we will try MVCCScanning on batches and produce diffs between runs on
 	// different engines that don't point to an actual issue.
-	result, err := engine.MVCCScan(ctx, m.engine, key.Key, endKey.Key, math.MaxInt64, ts, engine.MVCCScanOptions{
+	result, err := engine.MVCCScan(ctx, m.engine, key.Key, endKey.Key, ts, engine.MVCCScanOptions{
 		Inconsistent: inconsistent,
 		Tombstones:   true,
 		Reverse:      reverse,
