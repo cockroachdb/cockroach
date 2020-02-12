@@ -19,12 +19,57 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/pebble"
 )
 
 const zipfMax uint64 = 100000
+
+func makeStorageConfig(path string) base.StorageConfig {
+	return base.StorageConfig{
+		Dir:      path,
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+}
+
+func createTestRocksDBEngine(path string) (engine.Engine, error) {
+	cache := engine.NewRocksDBCache(1 << 20)
+	defer cache.Release()
+	cfg := engine.RocksDBConfig{
+		StorageConfig: makeStorageConfig(path),
+		ReadOnly:      false,
+	}
+
+	return engine.NewRocksDB(cfg, cache)
+}
+
+func createTestPebbleEngine(path string) (engine.Engine, error) {
+	pebbleConfig := engine.PebbleConfig{
+		StorageConfig: makeStorageConfig(path),
+		Opts:          engine.DefaultPebbleOptions(),
+	}
+	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
+
+	return engine.NewPebble(context.Background(), pebbleConfig)
+}
+
+type engineImpl struct {
+	name   string
+	create func(path string) (engine.Engine, error)
+}
+
+var _ fmt.Stringer = &engineImpl{}
+
+func (e *engineImpl) String() string {
+	return e.name
+}
+
+var engineImplRocksDB = engineImpl{"rocksdb", createTestRocksDBEngine}
+var engineImplPebble = engineImpl{"pebble", createTestPebbleEngine}
 
 // Object to store info corresponding to one metamorphic test run. Responsible
 // for generating and executing operations.
@@ -34,6 +79,10 @@ type metaTestRunner struct {
 	t           *testing.T
 	rng         *rand.Rand
 	seed        int64
+	path        string
+	engineImpls []engineImpl
+	curEngine   int
+	restarts    bool
 	engine      engine.Engine
 	tsGenerator tsGenerator
 	managers    map[operandType]operandManager
@@ -46,6 +95,13 @@ func (m *metaTestRunner) init() {
 	// test runs should guarantee the same operations being generated.
 	m.rng = rand.New(rand.NewSource(m.seed))
 	m.tsGenerator.init(m.rng)
+	m.curEngine = 0
+
+	var err error
+	m.engine, err = m.engineImpls[0].create(m.path)
+	if err != nil {
+		m.t.Fatal(err)
+	}
 
 	m.managers = map[operandType]operandManager{
 		operandTransaction: &txnManager{
@@ -57,7 +113,7 @@ func (m *metaTestRunner) init() {
 		},
 		operandReadWriter: &readWriterManager{
 			rng:          m.rng,
-			eng:          m.engine,
+			m:            m,
 			batchToIDMap: make(map[engine.Batch]int),
 		},
 		operandMVCCKey: &keyManager{
@@ -89,6 +145,10 @@ func (m *metaTestRunner) init() {
 // Run this function in a defer to ensure any Fatals on m.t do not cause panics
 // due to leaked iterators.
 func (m *metaTestRunner) closeAll() {
+	if m.engine == nil {
+		// Engine already closed; possibly running in a defer after a panic.
+		return
+	}
 	// Close all open objects. This should let the engine close cleanly.
 	closingOrder := []operandType{
 		operandIterator,
@@ -98,18 +158,40 @@ func (m *metaTestRunner) closeAll() {
 	for _, operandType := range closingOrder {
 		m.managers[operandType].closeAll()
 	}
+	m.engine.Close()
+	m.engine = nil
 }
 
 // generateAndRun generates n operations using a TPCC-style deck shuffle with
 // weighted probabilities of each operation appearing.
 func (m *metaTestRunner) generateAndRun(n int) {
 	deck := newDeck(m.rng, m.weights...)
-
 	for i := 0; i < n; i++ {
 		op := &operations[deck.Int()]
 
 		m.resolveAndRunOp(op)
 	}
+}
+
+// Closes the current engine and starts another one up, with the same path.
+// Returns the engine transition that
+func (m *metaTestRunner) restart() (string, string) {
+	m.closeAll()
+	oldEngineName := m.engineImpls[m.curEngine].name
+	// TODO(itsbilal): Select engines at random instead of cycling through them.
+	m.curEngine++
+	if m.curEngine >= len(m.engineImpls) {
+		// If we're restarting more times than the number of engine implementations
+		// specified, loop back around to the first engine type specified.
+		m.curEngine = 0
+	}
+
+	var err error
+	m.engine, err = m.engineImpls[m.curEngine].create(m.path)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	return oldEngineName, m.engineImpls[m.curEngine].name
 }
 
 func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
@@ -118,17 +200,36 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 	for {
 		var argList []operand
 		var opName, argListString, expectedOutput string
+		var firstByte byte
 		var err error
 
 		lineCount++
-		// TODO(itsbilal): Implement the ability to skip comments.
+		// Read the first byte to check if this line is a comment.
+		firstByte, err = reader.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				return
+			}
+			m.t.Fatal(err)
+		}
+		if firstByte == '#' {
+			// Advance to the end of the line and continue.
+			if _, err := reader.ReadString('\n'); err != nil {
+				if err == io.EOF {
+					return
+				}
+				m.t.Fatal(err)
+			}
+			continue
+		}
+
 		if opName, err = reader.ReadString('('); err != nil {
 			if err == io.EOF {
 				return
 			}
 			m.t.Fatal(err)
 		}
-		opName = opName[:len(opName)-1]
+		opName = string(firstByte) + opName[:len(opName)-1]
 
 		if argListString, err = reader.ReadString(')'); err != nil {
 			m.t.Fatal(err)
@@ -173,6 +274,11 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 		})
 
 		if strings.Compare(strings.TrimSpace(expectedOutput), strings.TrimSpace(actualOutput)) != 0 {
+			// Error messages can sometimes mismatch. If both outputs contain "error",
+			// consider this a pass.
+			if strings.Contains(expectedOutput, "error") && strings.Contains(actualOutput, "error") {
+				continue
+			}
 			m.t.Fatalf("mismatching output at line %d: expected %s, got %s", lineCount, expectedOutput, actualOutput)
 		}
 	}
@@ -234,6 +340,12 @@ func (m *metaTestRunner) printOp(op *mvccOp, argStrings []string, output string)
 		fmt.Fprintf(m.w, "%s", arg)
 	}
 	fmt.Fprintf(m.w, ") -> %s\n", output)
+}
+
+// printComment prints a comment line into the output file. Supports single-line
+// comments only.
+func (m *metaTestRunner) printComment(comment string) {
+	fmt.Fprintf(m.w, "# %s\n", comment)
 }
 
 // Monotonically increasing timestamp generator.

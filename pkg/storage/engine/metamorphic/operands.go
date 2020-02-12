@@ -259,10 +259,24 @@ func (t *txnManager) clearBatch(batch engine.Batch) {
 	}
 }
 
+func (t *txnManager) trackWriteOnBatch(w engine.Writer, txn *roachpb.Transaction) {
+	if batch, ok := w.(engine.Batch); ok {
+		openBatches, ok := t.openBatches[txn]
+		if !ok {
+			t.openBatches[txn] = make(map[engine.Batch]struct{})
+			openBatches = t.openBatches[txn]
+		}
+		openBatches[batch] = struct{}{}
+	}
+}
+
 func (t *txnManager) closeAll() {
 	for _, txn := range t.liveTxns {
 		t.close(txn)
 	}
+	t.liveTxns = nil
+	t.txnIDMap = make(map[string]*roachpb.Transaction)
+	t.openBatches = make(map[*roachpb.Transaction]map[engine.Batch]struct{})
 }
 
 func (t *txnManager) toString(op operand) string {
@@ -353,7 +367,7 @@ func (t *testRunnerManager) get() operand {
 
 type readWriterManager struct {
 	rng          *rand.Rand
-	eng          engine.Engine
+	m            *metaTestRunner
 	liveBatches  []engine.Batch
 	batchToIDMap map[engine.Batch]int
 	batchCounter int
@@ -364,14 +378,14 @@ var _ operandManager = &readWriterManager{}
 func (w *readWriterManager) get() operand {
 	// 25% chance of returning the engine, even if there are live batches.
 	if len(w.liveBatches) == 0 || w.rng.Float64() < 0.25 {
-		return w.eng
+		return w.m.engine
 	}
 
 	return w.liveBatches[w.rng.Intn(len(w.liveBatches))]
 }
 
 func (w *readWriterManager) open() engine.ReadWriter {
-	batch := w.eng.NewBatch()
+	batch := w.m.engine.NewBatch()
 	w.batchCounter++
 	w.liveBatches = append(w.liveBatches, batch)
 	w.batchToIDMap[batch] = w.batchCounter
@@ -388,7 +402,7 @@ func (w *readWriterManager) count() int {
 
 func (w *readWriterManager) close(op operand) {
 	// No-op if engine.
-	if op == w.eng {
+	if op == w.m.engine {
 		return
 	}
 
@@ -413,7 +427,7 @@ func (w *readWriterManager) closeAll() {
 }
 
 func (w *readWriterManager) toString(op operand) string {
-	if w.eng == op {
+	if w.m.engine == op {
 		return "engine"
 	}
 	return fmt.Sprintf("batch%d", w.batchToIDMap[op.(engine.Batch)])
@@ -421,7 +435,7 @@ func (w *readWriterManager) toString(op operand) string {
 
 func (w *readWriterManager) parse(input string) operand {
 	if input == "engine" {
-		return w.eng
+		return w.m.engine
 	}
 
 	var id int
@@ -512,6 +526,9 @@ func (i *iteratorManager) closeAll() {
 	for iter := range i.iterToInfo {
 		iter.Close()
 	}
+	i.liveIters = nil
+	i.iterToInfo = make(map[engine.Iterator]iteratorInfo)
+	i.readerToIter = make(map[engine.Reader][]engine.Iterator)
 }
 
 func (i *iteratorManager) toString(op operand) string {
