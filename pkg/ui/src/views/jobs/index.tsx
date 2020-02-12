@@ -17,9 +17,8 @@ import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import { withRouter, Link } from "react-router-dom";
 
-import { Link } from "react-router";
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -50,7 +49,7 @@ const statusOptions = [
   { value: "failed", label: "Failed" },
 ];
 
-const statusSetting = new LocalSetting<AdminUIState, string>(
+export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting", s => s.localSettings, statusOptions[0].value,
 );
 
@@ -65,7 +64,7 @@ const typeOptions = [
   { value: JobType.AUTO_CREATE_STATS.toString(), label: "Auto-Statistics Creation"},
 ];
 
-const typeSetting = new LocalSetting<AdminUIState, number>(
+export const typeSetting = new LocalSetting<AdminUIState, number>(
   "jobs/type_setting", s => s.localSettings, JobType.UNSPECIFIED,
 );
 
@@ -74,24 +73,24 @@ const showOptions = [
   { value: "0", label: "All" },
 ];
 
-const showSetting = new LocalSetting<AdminUIState, string>(
+export const showSetting = new LocalSetting<AdminUIState, string>(
   "jobs/show_setting", s => s.localSettings, showOptions[0].value,
 );
 
 // Moment cannot render durations (moment/moment#1048). Hack it ourselves.
-const formatDuration = (d: moment.Duration) =>
+export const formatDuration = (d: moment.Duration) =>
   [Math.floor(d.asHours()).toFixed(0), d.minutes(), d.seconds()]
     .map(c => ("0" + c).slice(-2))
     .join(":");
 
-const JOB_STATUS_SUCCEEDED = "succeeded";
-const JOB_STATUS_FAILED = "failed";
-const JOB_STATUS_CANCELED = "canceled";
-const JOB_STATUS_PENDING = "pending";
-const JOB_STATUS_PAUSED = "paused";
-const JOB_STATUS_RUNNING = "running";
+export const JOB_STATUS_SUCCEEDED = "succeeded";
+export const JOB_STATUS_FAILED = "failed";
+export const JOB_STATUS_CANCELED = "canceled";
+export const JOB_STATUS_PENDING = "pending";
+export const JOB_STATUS_PAUSED = "paused";
+export const JOB_STATUS_RUNNING = "running";
 
-const renamedStatuses = (status: string) => {
+export const renamedStatuses = (status: string) => {
   switch (status) {
     case JOB_STATUS_SUCCEEDED:
       return "Completed";
@@ -204,7 +203,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
       // statement.
       const additionalStyle = (job.statement ? "" : " jobs-table__cell--sql");
       return (
-        <Link className={`jobs-table__cell--description${additionalStyle}`} to="/">
+        <Link className={`jobs-table__cell--description${additionalStyle}`} to={`jobs/${String(job.id)}`}>
           <div className="cl-table-link__tooltip">
             <Tooltip overlayClassName="preset-black" placement="bottom" title={
               <pre style={{ whiteSpace: "pre-wrap" }}>{ job.description }</pre>
@@ -242,7 +241,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
 ];
 
-const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
+export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "jobs/sort_setting",
   s => s.localSettings,
   { sortKey: 3 /* creation time */, ascending: false },
