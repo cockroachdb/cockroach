@@ -270,7 +270,6 @@ func backupPlanHook(
 		{Name: "fraction_completed", Typ: types.Float},
 		{Name: "rows", Typ: types.Int},
 		{Name: "index_entries", Typ: types.Int},
-		{Name: "system_records", Typ: types.Int},
 		{Name: "bytes", Typ: types.Int},
 	}
 
