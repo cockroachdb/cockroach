@@ -18,185 +18,196 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/errors"
 )
 
 const (
-	defaultCGroupRootPath    = "/sys/fs/cgroup/"
-	cgroupV1FilesystemSpec   = "cgroup"
-	cgroupV2FilesystemSpec   = "cgroup2"
-	cgroupMemorySubsystem    = "memory"
-	cgroupV1MemLimitFilename = "memory.limit_in_bytes"
+	cgroupV1MemLimitFilename = "memory.stat"
 	cgroupV2MemLimitFilename = "memory.max"
 )
 
-// GetCgroupMemoryLimit attempts to retrieve the memory limit for the current
-// process.
-func GetCgroupMemoryLimit() (limit int64, warnings string, err error) {
+// GetMemoryLimit attempts to retrieve the cgroup memory limit for the current
+// process
+func GetMemoryLimit() (limit int64, warnings string, err error) {
 	return getCgroupMem("/")
 }
 
-// treeRoot is set to "/" in production code and exists only for testing.
-func getCgroupMem(treeRoot string) (limit int64, warnings string, err error) {
-	procCgroupFile := filepath.Join(treeRoot, "proc", strconv.Itoa(os.Getpid()), "cgroup")
-	cgroupPath, isV2, err := parseMemoryPathFromProcCgroupFile(procCgroupFile)
+// `root` is set to "/" in production code and exists only for testing.
+// cgroup memory limit detection path implemented here as
+// /proc/self/cgroup file -> /proc/self/mountinfo mounts -> cgroup version -> version specific limit check
+func getCgroupMem(root string) (limit int64, warnings string, err error) {
+	path, err := detectMemCntrlPath(filepath.Join(root, "/proc/self/cgroup"))
 	if err != nil {
-		return 0, "", errors.Wrap(err, "failed to read memory cgroup from cgroups file")
+		return 0, "", err
 	}
-	var cgroupRoot, memoryLimitFile string
-	if !isV2 {
-		memoryLimitFile = cgroupV1MemLimitFilename
-		if cgroupRoot, err = getMemoryCgroupRoot(treeRoot); err != nil {
-			return 0, "", err
-		}
-	} else {
-		memoryLimitFile = cgroupV2MemLimitFilename
-		if cgroupRoot, err = getUnifiedCgroupRoot(treeRoot); err != nil {
-			return 0, "", err
-		}
+
+	// no memory controller detected
+	if path == "" {
+		return 0, "no cgroup memory controller detected", nil
 	}
-	limit = int64(math.MaxInt64)
-	var parseErrors []error
-	// Walk the cgroup hierarchy from the most specific group containing the
-	// current process to the root. The minimum limit applies.
-	for p := cgroupPath; true; p = filepath.Dir(p) {
-		limitFilePath := filepath.Join(treeRoot, cgroupRoot, p, memoryLimitFile)
-		// NB: The current cgroup may not have the memory subsystem enabled. If it's
-		// not enabled an os.PathError will be returned.
-		if read, err := parseCgroupLimitFile(limitFilePath); err != nil {
-			if pe := new(os.PathError); !errors.As(err, &pe) {
-				parseErrors = append(parseErrors, err)
-			}
-		} else {
-			limit = min(limit, read)
-		}
-		if p == "/" {
-			break
-		}
+
+	mount, ver, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path)
+	if err != nil {
+		return 0, "", err
 	}
-	if limit == math.MaxInt64 {
-		if len(parseErrors) == 0 {
-			return 0, "", fmt.Errorf("failed to find cgroup memory limit")
-		}
-		return 0, "", parseErrors[0]
+
+	switch ver {
+	case 1:
+		limit, warnings, err = detectLimitInV1(filepath.Join(root, mount))
+	case 2:
+		limit, warnings, err = detectLimitInV2(filepath.Join(root, mount, path))
+	default:
+		limit, err = 0, fmt.Errorf("detected unknown cgroup version index: %d", ver)
 	}
-	return limit, joinErrorsForWarning(parseErrors), nil
+
+	return limit, warnings, err
 }
 
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// parseMemoryPathFromProcCgroupFile determines the path for the cgroup which
-// contains the memory subsystem from the provided path to a cgroup file.
-//
-// From man 7 cgroups:
-//
-//  /proc/[pid]/cgroup (since Linux 2.6.24)
-//
-//  This file describes control groups to which the process with the
-//  corresponding PID belongs.  The displayed information differs for cgroups
-//  version 1 and version 2 hierarchies.
-//
-//  For each cgroup hierarchy of which the process is a member, there is one
-//  entry containing three colon-separated fields:
-//
-//    hierarchy-ID:controller-list:cgroup-path
-//
-//  For example:
-//
-//    5:cpuacct,cpu,cpuset:/daemons
-//
-//  The colon-separated fields are, from left to right:
-//
-//    1. For cgroups version 1 hierarchies, this field contains a unique
-//       hierarchy ID number that can be matched to a hierarchy ID in
-//       /proc/cgroups. For the cgroups version 2 hierarchy, this field contains
-//       the value 0.
-//
-//    2. For cgroups version 1 hierarchies, this field contains a comma-
-//       separated list of the controllers bound to the hierarchy. For the
-//       cgroups version 2 hierarchy, this field is empty.
-//
-//    3. This field contains the pathname of the control group in the hierarchy
-//       to which the process belongs.  This pathname is relative to the mount
-//       point of the hierarchy.
-//
-func parseMemoryPathFromProcCgroupFile(
-	procCgroupFilePath string,
-) (memoryCgroupPath string, isUnified bool, err error) {
-	f, err := os.Open(procCgroupFilePath)
+// Finds memory limit for cgroup V1 via looking in [contoller mount path]/memory.stat
+func detectLimitInV1(cRoot string) (limit int64, warnings string, err error) {
+	statFilePath := filepath.Join(cRoot, cgroupV1MemLimitFilename)
+	stat, err := os.Open(statFilePath)
 	if err != nil {
-		return "", false, err
+		return 0, "", errors.Wrapf(err, "can't read available memory from cgroup v1 at %s", statFilePath)
 	}
-	defer func() { _ = f.Close() }()
-	scanner := bufio.NewScanner(f) // scan lines
-	var unifiedPath string
+	defer func() {
+		_ = stat.Close()
+	}()
+
+	scanner := bufio.NewScanner(stat)
 	for scanner.Scan() {
-		row := scanner.Bytes()
-		matches := rowRegexp.FindSubmatchIndex(row)
-		if matches == nil {
-			// TODO(ajwerner): consider propagating a warning or something.
+		fields := bytes.Fields(scanner.Bytes())
+		if len(fields) != 2 || string(fields[0]) != "hierarchical_memory_limit" {
 			continue
 		}
-		// See 1. above: For the cgroups version 2 hierarchy, this field contains
-		// the value 0. Mark its 3rd field as the unifiedPath to be returned if
-		// we don't encounter a memory hierarchy.
-		if isV2 := string(row[matches[2]:matches[3]]) == "0"; isV2 {
-			unifiedPath = string(row[matches[6]:matches[7]])
-			continue
+
+		trimmed := string(bytes.TrimSpace(fields[1]))
+		limit, err = strconv.ParseInt(trimmed, 10, 64)
+		if err != nil {
+			return 0, "", errors.Wrapf(err, "can't read available memory from cgroup v1 at %s", statFilePath)
 		}
-		// See 2. above.
-		if !strings.Contains(string(row[matches[4]:matches[5]]), cgroupMemorySubsystem) {
-			continue
-		}
-		// This row is for a hierarchy which contains the memory subsystem, return
-		// its 3rd field.
-		return string(row[matches[6]:matches[7]]), false, nil
+
+		return limit, "", nil
 	}
-	if unifiedPath != "" {
-		return unifiedPath, true, nil
-	}
-	return "", false, errors.New("failed to find memory cgroup, must not be in one")
+
+	return 0, "", fmt.Errorf("failed to find expected memory limit for cgroup v1 in %s", statFilePath)
 }
 
-// see parseMemoryPathFromProcCgroupFile.
-var rowRegexp = regexp.MustCompile(`(\d+):(.*):(.*)`)
+// Finds memory limit for cgroup V2 via looking into [controller mount path]/[leaf path]/memory.max
+// TODO(vladdy): this implementation was based on podman+criu environment. It may cover not
+// all the cases when v2 becomes more widely used in container world.
+func detectLimitInV2(cRoot string) (limit int64, warnings string, err error) {
+	limitFilePath := filepath.Join(cRoot, cgroupV2MemLimitFilename)
 
-func joinErrorsForWarning(errs []error) string {
-	var buf strings.Builder
-	for _, err := range errs {
-		if buf.Len() == 0 {
-			buf.WriteString("failed to read some cgroup files: ")
-		} else {
-			buf.WriteString("; ")
-		}
-		buf.WriteString(err.Error())
-	}
-	return buf.String()
-}
-
-// parseCgroupLimitFile reads and parses a decimal integer from the provided
-// file path.
-func parseCgroupLimitFile(limitFilePath string) (limit int64, err error) {
 	var buf []byte
 	if buf, err = ioutil.ReadFile(limitFilePath); err != nil {
-		return 0, errors.Wrapf(err, "can't read available memory from cgroup at %s", limitFilePath)
+		return 0, "", errors.Wrapf(err, "can't read available memory from cgroup v2 at %s", limitFilePath)
 	}
+
 	trimmed := string(bytes.TrimSpace(buf))
 	if trimmed == "max" {
-		return math.MaxInt64, nil
+		return math.MaxInt64, "", nil
 	}
+
 	limit, err = strconv.ParseInt(trimmed, 10, 64)
 	if err != nil {
-		return 0, errors.Wrapf(err, "can't read available memory from cgroup at %s", limitFilePath)
+		return 0, "", errors.Wrapf(err, "can't parse available memory from cgroup v2 in %s", limitFilePath)
 	}
-	return limit, nil
+	return limit, "", nil
+}
+
+// The controller is defined via either type `memory` for cgroup v1 or via empty type for cgroup v2,
+// where the type is the second field in /proc/[pid]/cgroup file
+func detectMemCntrlPath(cgroupFilePath string) (string, error) {
+	cgroup, err := os.Open(cgroupFilePath)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to read memory cgroup from cgroups file: %s", cgroupFilePath)
+	}
+	defer func() { _ = cgroup.Close() }()
+
+	scanner := bufio.NewScanner(cgroup)
+	var unifiedPathIfFound string
+	for scanner.Scan() {
+		fields := bytes.Split(scanner.Bytes(), []byte{':'})
+		if len(fields) != 3 {
+			// The lines should always have three fields, there's something fishy here.
+			continue
+		}
+
+		f0, f1 := string(fields[0]), string(fields[1])
+		// First case if v2, second - v1. We give v2 the priority here.
+		// There is also a `hybrid` mode when both  versions are enabled,
+		// but no known container solutions support it afaik
+		if f0 == "0" && f1 == "" {
+			unifiedPathIfFound = string(fields[2])
+		} else if f1 == "memory" {
+			return string(fields[2]), nil
+		}
+	}
+
+	return unifiedPathIfFound, nil
+}
+
+// Reads /proc/[pid]/mountinfo for cgoup or cgroup2 mount which defines the used version.
+// See http://man7.org/linux/man-pages/man5/proc.5.html for `mountinfo` format.
+func getCgroupDetails(mountinfoPath string, cRoot string) (string, int, error) {
+	info, err := os.Open(mountinfoPath)
+	if err != nil {
+		return "", 0, errors.Wrapf(err, "failed to read mounts info from file: %s", mountinfoPath)
+	}
+	defer func() {
+		_ = info.Close()
+	}()
+
+	scanner := bufio.NewScanner(info)
+	for scanner.Scan() {
+		fields := bytes.Fields(scanner.Bytes())
+		if len(fields) < 10 {
+			continue
+		}
+
+		ver, ok := detectCgroupVersion(fields)
+		if ok && (ver == 1 && string(fields[3]) == cRoot) || ver == 2 {
+			return string(fields[4]), ver, nil
+		}
+	}
+
+	return "", 0, fmt.Errorf("failed to detect cgroup root mount and version")
+}
+
+// Return version of cgroup mount for memory controller if found
+func detectCgroupVersion(fields [][]byte) (_ int, found bool) {
+	if len(fields) < 10 {
+		return 0, false
+	}
+
+	// Due to strange format there can be optional fields in the middle of the set, starting
+	// from the field #7. The end of the fields is marked with "-" field
+	var pos = 6
+	for pos < len(fields) {
+		if bytes.Equal(fields[pos], []byte{'-'}) {
+			break
+		}
+
+		pos++
+	}
+
+	// No optional fields separator found or there is less than 3 fields after it which is wrong
+	if (len(fields) - pos - 1) < 3 {
+		return 0, false
+	}
+
+	pos++
+
+	// Check for memory controller specifically in cgroup v1 (it is listed in super options field),
+	// as the limit can't be found if it is not enforced
+	if bytes.Equal(fields[pos], []byte("cgroup")) && bytes.Contains(fields[pos+2], []byte("memory")) {
+		return 1, true
+	} else if bytes.Equal(fields[pos], []byte("cgroup2")) {
+		return 2, true
+	}
+
+	return 0, false
 }

@@ -626,7 +626,7 @@ func GetTotalMemoryWithoutLogging() (int64, string, error) {
 	if runtime.GOOS != "linux" {
 		return checkTotal(totalMem, "")
 	}
-	cgAvlMem, warning, err := cgroups.GetCgroupMemoryLimit()
+	cgAvlMem, warning, err := cgroups.GetMemoryLimit()
 	if err != nil {
 		return checkTotal(totalMem,
 			fmt.Sprintf("available memory from cgroups is unsupported, using system memory %s instead: %v",
