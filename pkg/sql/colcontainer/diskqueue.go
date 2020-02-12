@@ -218,6 +218,10 @@ type DiskQueueCfg struct {
 	// rolling over to a new one.
 	MaxFileSizeBytes int
 
+	// OnNewDiskQueue is an optional callback function that will be called when
+	// a NewDiskQueue is called.
+	OnNewDiskQueue func()
+
 	// TestingKnobs are used to test the queue implementation.
 	TestingKnobs struct {
 		// AlwaysCompress, if true, will skip a check that determines whether
@@ -247,6 +251,9 @@ func (cfg *DiskQueueCfg) EnsureDefaults() error {
 func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
 	if err := cfg.EnsureDefaults(); err != nil {
 		return nil, err
+	}
+	if cfg.OnNewDiskQueue != nil {
+		cfg.OnNewDiskQueue()
 	}
 	d := &diskQueue{
 		dirName: uuid.FastMakeV4().String(),
