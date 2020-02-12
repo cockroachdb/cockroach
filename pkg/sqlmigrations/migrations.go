@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -391,10 +392,10 @@ func (r runner) execAsRootWithRetry(
 // leaseManager is defined just to allow us to use a fake client.LeaseManager
 // when testing this package.
 type leaseManager interface {
-	AcquireLease(ctx context.Context, key roachpb.Key) (*client.Lease, error)
-	ExtendLease(ctx context.Context, l *client.Lease) error
-	ReleaseLease(ctx context.Context, l *client.Lease) error
-	TimeRemaining(l *client.Lease) time.Duration
+	AcquireLease(ctx context.Context, key roachpb.Key) (*leasemanager.Lease, error)
+	ExtendLease(ctx context.Context, l *leasemanager.Lease) error
+	ReleaseLease(ctx context.Context, l *leasemanager.Lease) error
+	TimeRemaining(l *leasemanager.Lease) time.Duration
 }
 
 // db is defined just to allow us to use a fake client.DB when testing this
@@ -427,13 +428,13 @@ func NewManager(
 	clientID string,
 	settings *cluster.Settings,
 ) *Manager {
-	opts := client.LeaseManagerOptions{
+	opts := leasemanager.Options{
 		ClientID:      clientID,
 		LeaseDuration: leaseDuration,
 	}
 	return &Manager{
 		stopper:      stopper,
-		leaseManager: client.NewLeaseManager(db, clock, opts),
+		leaseManager: leasemanager.New(db, clock, opts),
 		db:           db,
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
@@ -514,7 +515,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	// Note that we shouldn't ever let client.LeaseNotAvailableErrors cause us
 	// to stop trying, because if we return an error the server will be shut down,
 	// and this server being down may prevent the leaseholder from finishing.
-	var lease *client.Lease
+	var lease *leasemanager.Lease
 	if log.V(1) {
 		log.Info(ctx, "trying to acquire lease")
 	}
