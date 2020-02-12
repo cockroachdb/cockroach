@@ -810,22 +810,18 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	var items []workloadItem
 	var startedTxnIDs []uuid.UUID // inefficient queue, but ok for a test.
 	const maxStartedTxns = 10
-	const numRequests = 5000
+	const numRequests = 10000
 	for i := 0; i < numRequests; i++ {
 		ts := timestamps[rng.Intn(len(timestamps))]
 		keysPerm := rng.Perm(len(keys))
 		spans := &spanset.SpanSet{}
-		onlyReads := true
 		for i := 0; i < numKeys; i++ {
 			span := roachpb.Span{Key: keys[keysPerm[i]]}
 			acc := spanset.SpanAccess(rng.Intn(int(spanset.NumSpanAccess)))
 			spans.AddMVCC(acc, span, ts)
-			if acc != spanset.SpanReadOnly {
-				onlyReads = false
-			}
 		}
 		var txn *roachpb.Transaction
-		if !onlyReads || rng.Intn(2) == 0 {
+		if rng.Intn(2) == 0 {
 			txn = &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					ID:             nextUUID(&txnCounter),
@@ -882,7 +878,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	const numActiveTxns = 8
 	var activeTxns [numActiveTxns]*enginepb.TxnMeta
 	var items []workloadItem
-	const numRequests = 5000
+	const numRequests = 20000
 	for i := 0; i < numRequests; i++ {
 		var txnMeta *enginepb.TxnMeta
 		var ts hlc.Timestamp
@@ -909,7 +905,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		}
 		keysPerm := rng.Perm(len(keys))
 		spans := &spanset.SpanSet{}
-		onlyReads := txnMeta == nil
+		onlyReads := txnMeta == nil && rng.Intn(2) != 0
 		numKeys := rng.Intn(len(keys)-1) + 1
 		request := &Request{
 			Timestamp: ts,
@@ -924,7 +920,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 			acc := spanset.SpanReadOnly
 			if !onlyReads {
 				acc = spanset.SpanAccess(rng.Intn(int(spanset.NumSpanAccess)))
-				if acc == spanset.SpanReadWrite && rng.Intn(2) == 0 {
+				if acc == spanset.SpanReadWrite && txnMeta != nil && rng.Intn(2) == 0 {
 					wi.locksToAcquire = append(wi.locksToAcquire, span.Key)
 				}
 			}
