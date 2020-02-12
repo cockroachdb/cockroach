@@ -8,13 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package client
+// Package leasemanager provides functionality for acquiring and managing leases
+// via the kv api for use during sqlmigrations.
+package leasemanager
 
 import (
 	"context"
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -40,7 +43,7 @@ func (e *LeaseNotAvailableError) Error() string {
 // LeaseManager provides functionality for acquiring and managing leases
 // via the kv api.
 type LeaseManager struct {
-	db            *DB
+	db            *client.DB
 	clock         *hlc.Clock
 	clientID      string
 	leaseDuration time.Duration
@@ -56,15 +59,15 @@ type Lease struct {
 	}
 }
 
-// LeaseManagerOptions are used to configure a new LeaseManager.
-type LeaseManagerOptions struct {
+// Options are used to configure a new LeaseManager.
+type Options struct {
 	// ClientID must be unique to this LeaseManager instance.
 	ClientID      string
 	LeaseDuration time.Duration
 }
 
-// NewLeaseManager allocates a new LeaseManager.
-func NewLeaseManager(db *DB, clock *hlc.Clock, options LeaseManagerOptions) *LeaseManager {
+// New allocates a new LeaseManager.
+func New(db *client.DB, clock *hlc.Clock, options Options) *LeaseManager {
 	if options.ClientID == "" {
 		options.ClientID = uuid.MakeV4().String()
 	}
@@ -91,7 +94,7 @@ func (m *LeaseManager) AcquireLease(ctx context.Context, key roachpb.Key) (*Leas
 		key: key,
 	}
 	lease.val.sem = make(chan struct{}, 1)
-	if err := m.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
+	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var val LeaseVal
 		err := txn.GetProto(ctx, key, &val)
 		if err != nil {
