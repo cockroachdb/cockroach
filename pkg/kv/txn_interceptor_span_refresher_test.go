@@ -163,7 +163,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 
 			// Collect some refresh spans.
 			var ba roachpb.BatchRequest
-			ba.Header = roachpb.Header{Txn: &txn}
+			ba.Header = roachpb.Header{Txn: txn.Clone()} // clone txn since it's shared between subtests
 			getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
 			delRangeArgs := roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
 			ba.Add(&getArgs, &delRangeArgs)
@@ -175,7 +175,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			require.Equal(t, []roachpb.Span{getArgs.Span(), delRangeArgs.Span()}, tsr.refreshSpans)
 			require.False(t, tsr.refreshInvalid)
 			require.Equal(t, int64(3), tsr.refreshSpansBytes)
-			require.Equal(t, ba.Txn.ReadTimestamp, tsr.refreshedTimestamp)
+			require.Equal(t, br.Txn.ReadTimestamp, tsr.refreshedTimestamp)
 
 			// Hook up a chain of mocking functions.
 			onFirstSend := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -268,7 +268,7 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshSpans)
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, int64(2), tsr.refreshSpansBytes)
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Equal(t, br.Txn.ReadTimestamp, tsr.refreshedTimestamp)
 
 	// Hook up a chain of mocking functions.
 	onPut := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
