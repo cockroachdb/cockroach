@@ -182,6 +182,9 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const dataType = type === DateTypes.DATE_FROM ? "start" : "end";
     const timestamp = moment(date).format("X");
     const query = queryToObj(location, dataType, timestamp);
+    queryToObj(location, "test", "test");
+    queryToObj(location, "test", undefined);
+    queryToObj(location, undefined, undefined);
     history.push({
       pathname: location.pathname,
       search: `?${queryToString(query)}`,

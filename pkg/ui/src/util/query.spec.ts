@@ -10,7 +10,6 @@
 
 import { assert } from "chai";
 import {
-  removeURLParameters,
   queryToString,
   queryByName,
   queryToObj,
@@ -19,25 +18,13 @@ import { Location } from "history";
 
 const location: Location = {
   pathname: "/debug/chart",
-  search: "?charts=%5B%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%2C%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%2C%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%5D&start=1579014600&end=1579101000",
-  action: "POP",
-  key: "",
-  state: "",
-  query: {
-    charts: `[{"axisUnits":0,"metrics":[{"downsampler":1,"aggregator":2,"derivative":0,"perNode":false,"source":""}]},{"axisUnits":0,"metrics":[{"downsampler":1,"aggregator":2,"derivative":0,"perNode":false,"source":""}]},{"axisUnits":0,"metrics":[{"downsampler":1,"aggregator":2,"derivative":0,"perNode":false,"source":""}]}]`,
-    end: "1579101000",
-    start: "1579014600",
-  },
+  search: "?charts=%5B%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.build.timestamp%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.changefeed.poll_request_nanos-p50%22%7D%5D%2C%22axisUnits%22%3A0%7D%5D&start=1581478532&end=1581500132",
+  hash: "",
+  state: null,
+  key: null,
 };
 
 describe("Query utils", () => {
-  describe("removeURLParameters", () => {
-    it("remove query params by keys", () => {
-      assert.equal(removeURLParameters(location, undefined), location.search);
-      assert.equal(removeURLParameters(location, ["start", "end"]), "?charts=%5B%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%2C%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%2C%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%5D");
-      assert.equal(removeURLParameters(location, ["start", undefined]), "?charts=%5B%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%2C%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%2C%7B%22axisUnits%22%3A0%2C%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%7D%5D%7D%5D&end=1579101000");
-    });
-  });
   describe("queryToString", () => {
     it("make query to string", () => {
       assert.equal(queryToString({ a: "test" }), "a=test");
@@ -54,11 +41,11 @@ describe("Query utils", () => {
   });
   describe("queryToObj", () => {
     it("set/change value to/in query object", () => {
-      assert.deepEqual(queryToObj(location, "start", "test"), { ...location.query, start: "test" });
-      assert.deepEqual(queryToObj(location, undefined, "test"), location.query);
-      assert.deepEqual(queryToObj(location, "test", "test"), { test: "test", ...location.query });
-      assert.deepEqual(queryToObj(location, "test", undefined), location.query);
-      assert.deepEqual(queryToObj(location, undefined, undefined), location.query);
+      assert.deepEqual(queryToObj(location, "start", "test"), { start: "test" });
+      assert.deepEqual(queryToObj(location, undefined, "test"), {});
+      assert.deepEqual(queryToObj(location, "test", "test"), { test: "test" });
+      assert.deepEqual(queryToObj(location, "test", undefined), { test: undefined });
+      assert.deepEqual(queryToObj(location, undefined, undefined), {});
     });
   });
 });
