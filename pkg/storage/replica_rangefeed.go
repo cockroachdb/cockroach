@@ -72,8 +72,9 @@ type rangefeedTxnPusher struct {
 func (tp *rangefeedTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
 ) ([]roachpb.Transaction, error) {
-	pushTxnMap := make(map[uuid.UUID]enginepb.TxnMeta, len(txns))
-	for _, txn := range txns {
+	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
+	for i := range txns {
+		txn := &txns[i]
 		pushTxnMap[txn.ID] = txn
 	}
 
