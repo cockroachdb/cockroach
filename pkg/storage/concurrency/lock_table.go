@@ -1044,10 +1044,30 @@ func (l *lockState) discoveredLock(
 func (l *lockState) tryClearLock() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.distinguishedWaiter == nil {
-		// No active waiter
+	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
+	if replicatedHeld && l.distinguishedWaiter == nil {
+		// Replicated lock is held and has no distinguished waiter.
 		return false
 	}
+
+	// Remove unreplicated holder.
+	l.holder.holder[lock.Unreplicated] = lockHolderInfo{}
+	var waitState waitingState
+	if replicatedHeld {
+		holderTxn, holderTs := l.getLockerInfo()
+		// Note that none of the current waiters can be requests
+		// from holderTxn.
+		waitState = waitingState{
+			stateKind: waitElsewhere,
+			txn:       holderTxn,
+			ts:        holderTs,
+			access:    spanset.SpanReadWrite,
+		}
+	} else {
+		l.holder.locked = false
+		waitState = waitingState{stateKind: doneWaiting}
+	}
+
 	l.distinguishedWaiter = nil
 	if l.reservation != nil {
 		g := l.reservation
@@ -1063,7 +1083,7 @@ func (l *lockState) tryClearLock() bool {
 		l.waitingReaders.Remove(curr)
 
 		g.mu.Lock()
-		g.mu.state.stateKind = waitElsewhere
+		g.mu.state = waitState
 		g.notify()
 		delete(g.mu.locks, l)
 		g.mu.Unlock()
@@ -1078,13 +1098,7 @@ func (l *lockState) tryClearLock() bool {
 		g.mu.Lock()
 		delete(g.mu.locks, l)
 		if qg.active {
-			if g.mu.state.stateKind == waitSelf {
-				// We can't tell it to waitElsewhere since we haven't given it a txn
-				// to push, so it should just stop waiting.
-				g.mu.state.stateKind = doneWaiting
-			} else {
-				g.mu.state.stateKind = waitElsewhere
-			}
+			g.mu.state = waitState
 			g.notify()
 		}
 		g.mu.Unlock()
@@ -1137,9 +1151,7 @@ func (l *lockState) tryUpdateLock(intent *roachpb.Intent) (gc bool, err error) {
 	if intent.Status.IsFinalized() {
 		l.holder.locked = false
 		for i := range l.holder.holder {
-			l.holder.holder[i].txn = nil
-			l.holder.holder[i].ts = hlc.Timestamp{}
-			l.holder.holder[i].seqs = nil
+			l.holder.holder[i] = lockHolderInfo{}
 		}
 		gc = l.lockIsFree()
 		return gc, nil
@@ -1505,14 +1517,15 @@ func (t *lockTableImpl) AcquireLock(
 	return err
 }
 
-// Removes all locks that have active waiters and tells those waiters to wait
-// elsewhere. A replicated lock which has been discovered by a request but the
-// request is not yet actively waiting on it will be preserved since we need
-// to tell that request who it is waiting for when it next calls
-// ScanAndEnqueue(). If we aggressively removed even those requests, the next
-// ScanAndEnqueue() would not find that lock, the request would evaluate
-// again, again discover that lock and if clearMostLocks() keeps getting
-// called would be stuck in this loop without pushing.
+// Removes all locks, except for those that are held with replicated
+// durability and have no distinguished waiter, and tells those waiters to
+// wait elsewhere or that they are done waiting. A replicated lock which has
+// been discovered by a request but no request is actively waiting on it will
+// be preserved since we need to tell that request who it is waiting for when
+// it next calls ScanAndEnqueue(). If we aggressively removed even these
+// locks, the next ScanAndEnqueue() would not find the lock, the request would
+// evaluate again, again discover that lock and if clearMostLocks() keeps
+// getting called would be stuck in this loop without pushing.
 func (t *lockTableImpl) clearMostLocks() {
 	for i := 0; i < int(spanset.NumSpanScope); i++ {
 		tree := &t.locks[i]
