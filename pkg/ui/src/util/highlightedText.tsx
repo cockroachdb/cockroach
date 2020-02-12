@@ -11,7 +11,7 @@
 import React from "react";
 
 export default function getHighlightedText(text: string, highlight: string, isOriginalText?: boolean) {
-  if (highlight.length === 0) {
+  if (!highlight || highlight.length === 0) {
     return text;
   }
   highlight = highlight.replace(/[°§%()\[\]{}\\?´`'#|;:+-]+/g, "highlightNotDefined");

@@ -272,7 +272,6 @@ export const selectStatements = createSelector(
     if (!state.data) {
       return null;
     }
-
     let statements = flattenStatementStats(state.data.statements);
     const app = getMatchParamByName(props.match, appAttr);
 
