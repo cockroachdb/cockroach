@@ -123,5 +123,15 @@ SELECT CAST(0 BETWEEN(CASE NULL WHEN c0 = 0 THEN NULL END) AND 0 IS TRUE AS INT)
 ----
 0
 
+# Regression test for #45038 (mismatched physical types between expected and
+# actual physical types when wrapping unsupported processor cores).
+statement ok
+CREATE TABLE t45038(c0 INT); INSERT INTO t45038 VALUES(NULL)
+
+query R
+SELECT sum(c) FROM (SELECT CAST((IF(IF(false, false, c0 IS NULL), NULL, NULL)) BETWEEN 0 AND 0 IS TRUE AS INT) c FROM t45038)
+----
+0
+
 statement ok
 RESET default_int_size
