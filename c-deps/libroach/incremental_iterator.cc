@@ -173,10 +173,10 @@ void DBIncrementalIterator::advanceKey() {
     }
 
     if (legacyTimestampIsLess(end_time, meta.timestamp())) {
-      DBIterNext(iter.get(), false);
+      DBIterNext(iter.get(), true);
       continue;
     } else if (!legacyTimestampIsLess(start_time, meta.timestamp())) {
-      DBIterNext(iter.get(), true);
+      DBIterNext(iter.get(), false);
       continue;
     }
 
