@@ -129,33 +129,30 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 	return err
 }
 
-// GetReplicaForRangeID returns the replica which contains the specified range,
-// or nil if it's not found.
-func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error) {
-	var replica *Replica
-
-	err := ls.VisitStores(func(store *Store) error {
-		replicaFromStore, err := store.GetReplica(rangeID)
-
-		switch err.(type) {
+// GetReplicaForRangeID returns the replica and store which contains the
+// specified range. If the replica is not found on any store then
+// roachpb.RangeNotFoundError will be returned.
+func (ls *Stores) GetReplicaForRangeID(
+	rangeID roachpb.RangeID,
+) (replica *Replica, store *Store, err error) {
+	err = ls.VisitStores(func(s *Store) error {
+		switch r, err := s.GetReplica(rangeID); err.(type) {
 		case nil:
-			replica = replicaFromStore
+			replica, store = r, s
+			return nil
 		case *roachpb.RangeNotFoundError:
 			return nil
 		default:
 			return err
 		}
-
-		return nil
 	})
-
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if replica == nil {
-		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
+		return nil, nil, roachpb.NewRangeNotFoundError(rangeID, 0)
 	}
-	return replica, nil
+	return replica, store, nil
 }
 
 // Send implements the client.Sender interface. The store is looked up from the

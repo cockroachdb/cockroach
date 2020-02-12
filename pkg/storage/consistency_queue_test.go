@@ -559,7 +559,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	// The stats should magically repair themselves. We'll first do a quick check
 	// and then a full recomputation.
-	repl, err := ts.Stores().GetReplicaForRangeID(rangeID)
+	repl, _, err := ts.Stores().GetReplicaForRangeID(rangeID)
 	if err != nil {
 		t.Fatal(err)
 	}

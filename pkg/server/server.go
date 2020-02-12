@@ -522,7 +522,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// before this is ever called.
 			Refresh: func(rangeIDs ...roachpb.RangeID) {
 				for _, rangeID := range rangeIDs {
-					repl, err := s.node.stores.GetReplicaForRangeID(rangeID)
+					repl, _, err := s.node.stores.GetReplicaForRangeID(rangeID)
 					if err != nil || repl == nil {
 						continue
 					}
