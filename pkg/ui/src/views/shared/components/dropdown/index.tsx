@@ -41,6 +41,8 @@ interface DropdownOwnProps {
   disabledArrows?: ArrowDirection[];
   content?: any;
   isTimeRange?: boolean;
+  palette?: "blue";
+  focused?: boolean;
 }
 
 /**
@@ -78,12 +80,14 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   }
 
   render() {
-    const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange } = this.props;
+    const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange, palette = "default", focused } = this.props;
 
     const className = classNames(
       "dropdown",
+      `dropdown__palette--${palette}`,
       isTimeRange ? "_range" : "",
       { "dropdown--side-arrows": !_.isNil(onArrowClick) },
+      { "focused": focused },
     );
     const leftClassName = classNames(
       "dropdown__side-arrow",
@@ -115,6 +119,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         value={selected}
         onChange={onChange}
         ref={this.selectRef}
+        placeholder="Select"
       />}
       <span
         className={rightClassName}
