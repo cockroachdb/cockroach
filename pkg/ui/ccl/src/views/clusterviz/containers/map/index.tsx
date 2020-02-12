@@ -22,7 +22,6 @@ import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
 import { getMatchParamByName } from "src/util/query";
 
-import { Button } from "src/components/button";
 import { Dropdown } from "src/components/dropdown";
 
 // tslint:disable-next-line:variable-name
@@ -68,9 +67,7 @@ export class ClusterVisualization extends React.Component<ClusterVisualizationPr
               items={this.items}
               onChange={this.handleMapTableToggle}
             >
-              <Button type="flat" size="small">
-                Node Map
-              </Button>
+              Node Map
             </Dropdown>
           </div>
           <div className={contentItemClasses}><Breadcrumbs tiers={tiers} /></div>

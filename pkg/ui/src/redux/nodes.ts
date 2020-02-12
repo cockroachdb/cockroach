@@ -378,13 +378,15 @@ export const partitionedStatuses = createSelector(
         switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
           case LivenessStatus.LIVE:
           case LivenessStatus.UNAVAILABLE:
+          case LivenessStatus.DEAD:
           case LivenessStatus.DECOMMISSIONING:
             return "live";
           case LivenessStatus.DECOMMISSIONED:
             return "decommissioned";
-          case LivenessStatus.DEAD:
           default:
-            return "dead";
+            // TODO (koorosh): "live" has to be renamed to some partition which
+            // represent all except "partitioned" nodes.
+            return "live";
         }
       },
     );

@@ -18,10 +18,13 @@ export interface ButtonProps {
   disabled?: boolean;
   size?: "default" | "small";
   children?: React.ReactNode;
+  icon?: () => React.ReactNode;
+  iconPosition?: "left" | "right";
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
 }
 
 export function Button(props: ButtonProps) {
-  const { children, type, disabled, size } = props;
+  const { children, type, disabled, size, icon, iconPosition, onClick } = props;
 
   const rootStyles = cn(
     "crl-button",
@@ -32,8 +35,29 @@ export function Button(props: ButtonProps) {
     },
   );
 
+  const renderIcon = () => {
+    if (icon === undefined) {
+      return null;
+    }
+    return (
+      <div className={`crl-button__icon--push-${iconPosition}`}>
+        { icon() }
+      </div>
+    );
+  };
+
   return (
-    <button className={rootStyles}>{children}</button>
+    <button
+      onClick={onClick}
+      className={rootStyles}
+    >
+      <div className="crl-button__container">
+        <div className="crl-button__content">
+          {children}
+        </div>
+        { renderIcon() }
+      </div>
+    </button>
   );
 }
 
@@ -41,4 +65,5 @@ Button.defaultProps = {
   type: "primary",
   disabled: false,
   size: "default",
+  iconPosition: "left",
 };

@@ -256,6 +256,9 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			tsc := TestStoreConfig(nil)
 			mc := &manualCache{}
 			tsc.ProtectedTimestampCache = mc
+			// Under extreme stressrace scenarios the single replica can somehow
+			// lose the lease. Make the timeout extremely long.
+			tsc.RaftConfig.RangeLeaseRaftElectionTimeoutMultiplier = 100
 			stopper := stop.NewStopper()
 			tc.StartWithStoreConfig(t, stopper, tsc)
 			stopper.Stop(ctx)

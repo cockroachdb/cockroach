@@ -13,6 +13,8 @@ import cn from "classnames";
 
 import { OutsideEventHandler } from "../outsideEventHandler";
 import "./dropdown.styl";
+import { Icon } from "antd";
+import { Button } from "oss/src/components/button";
 
 export interface Item {
   value: string;
@@ -23,10 +25,35 @@ export interface DropdownProps {
   items: Array<Item>;
   onChange: (item: Item["value"]) => void;
   children: React.ReactNode;
+  dropdownToggleButton?: () => React.ReactNode;
 }
 
 interface DropdownState {
   isOpen: boolean;
+}
+
+interface DropdownButtonProps {
+  children: React.ReactNode;
+  isOpen: boolean;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
+}
+
+function DropdownButton(props: DropdownButtonProps) {
+  const { children } = props;
+  return (
+    <Button
+      type="flat"
+      size="small"
+      iconPosition="right"
+      icon={() => (
+        <Icon
+          className="collapse-toggle__icon"
+          type="caret-down" />
+      )}
+    >
+      {children}
+    </Button>
+  );
 }
 
 export class Dropdown extends React.Component<DropdownProps, DropdownState> {
@@ -51,8 +78,25 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
     this.handleMenuOpen();
   }
 
+  renderDropdownToggleButton = () => {
+    const { children, dropdownToggleButton } = this.props;
+    const { isOpen } = this.state;
+
+    if (dropdownToggleButton) {
+      return dropdownToggleButton();
+    } else {
+      return (
+        <DropdownButton
+          isOpen={isOpen}
+        >
+          {children}
+        </DropdownButton>
+      );
+    }
+  }
+
   render() {
-    const { children, items } = this.props;
+    const { items } = this.props;
     const { isOpen } = this.state;
 
     const menuStyles = cn(
@@ -78,7 +122,7 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
           <div
             className="crl-dropdown__handler"
             onClick={this.handleMenuOpen}>
-            {children}
+            { this.renderDropdownToggleButton() }
           </div>
           <div className="crl-dropdown__overlay">
             <div className={menuStyles}>
