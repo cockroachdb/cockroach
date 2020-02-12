@@ -160,7 +160,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 	// Test the case where the replica we're looking for exists.
 	rangeID1 := roachpb.RangeID(5)
-	replica1, err1 := ls.GetReplicaForRangeID(rangeID1)
+	replica1, _, err1 := ls.GetReplicaForRangeID(rangeID1)
 	if replica1 == nil {
 		t.Fatal("expected replica to be found; was nil")
 	}
@@ -173,7 +173,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 	// Test the case where the replica we're looking for doesn't exist.
 	rangeID2 := roachpb.RangeID(1000)
-	replica2, err2 := ls.GetReplicaForRangeID(rangeID2)
+	replica2, _, err2 := ls.GetReplicaForRangeID(rangeID2)
 	if replica2 != nil {
 		t.Fatalf("expected replica to be nil; was %v", replica2)
 	}

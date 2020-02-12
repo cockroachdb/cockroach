@@ -410,7 +410,7 @@ func replsForRange(
 	testutils.SucceedsSoon(t, func() error {
 		repls = nil
 		for i := 0; i < numNodes; i++ {
-			repl, err := tc.Server(i).GetStores().(*storage.Stores).GetReplicaForRangeID(desc.RangeID)
+			repl, _, err := tc.Server(i).GetStores().(*storage.Stores).GetReplicaForRangeID(desc.RangeID)
 			if err != nil {
 				return err
 			}
