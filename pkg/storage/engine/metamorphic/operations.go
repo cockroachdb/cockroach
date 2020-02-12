@@ -14,7 +14,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -132,14 +136,10 @@ func printIterState(iter engine.Iterator) string {
 // List of operations, where each operation is defined as one instance of mvccOp.
 //
 // TODO(itsbilal): Add more missing MVCC operations, such as:
-//  - MVCCConditionalPut
 //  - MVCCBlindPut
 //  - MVCCMerge
-//  - MVCCClearTimeRange
 //  - MVCCIncrement
 //  - MVCCResolveWriteIntent in the aborted case
-//  - MVCCFindSplitKey
-//  - ingestions.
 //  - and any others that would be important to test.
 var operations = []mvccOp{
 	{
@@ -166,7 +166,7 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandPastTS,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "mvcc_get",
@@ -189,7 +189,7 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandTransaction,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "mvcc_put",
@@ -209,20 +209,9 @@ var operations = []mvccOp{
 			txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
 				Key: key.Key,
 			})
-			// If this write happened on a batch, track that in the txn manager so
-			// that the batch is committed before the transaction is aborted or
-			// committed. Note that this append happens without checking if this
-			// batch is already in the slice; readers of this slice need to be aware
-			// of duplicates.
-			if batch, ok := writer.(engine.Batch); ok {
-				txnManager := m.managers[operandTransaction].(*txnManager)
-				openBatches, ok := txnManager.openBatches[txn]
-				if !ok {
-					txnManager.openBatches[txn] = make(map[engine.Batch]struct{})
-					openBatches = txnManager.openBatches[txn]
-				}
-				openBatches[batch] = struct{}{}
-			}
+			// Track this write in the txn manager. This ensures the batch will be
+			// committed before the transaction is committed
+			m.managers[operandTransaction].(*txnManager).trackWriteOnBatch(writer, txn)
 			return "ok"
 		},
 		operands: []operandType{
@@ -231,7 +220,145 @@ var operations = []mvccOp{
 			operandValue,
 			operandTransaction,
 		},
-		weight: 30,
+		weight: 500,
+	},
+	{
+		name: "mvcc_conditional_put",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			writer := args[0].(engine.ReadWriter)
+			key := args[1].(engine.MVCCKey)
+			value := roachpb.MakeValueFromBytes(args[2].([]byte))
+			expVal := roachpb.MakeValueFromBytes(args[3].([]byte))
+			txn := args[4].(*roachpb.Transaction)
+			txn.Sequence++
+
+			err := engine.MVCCConditionalPut(ctx, writer, nil, key.Key, txn.WriteTimestamp, value, &expVal, true, txn)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err)
+			}
+
+			// Update the txn's intent spans to account for this intent being written.
+			txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+				Key: key.Key,
+			})
+			// Track this write in the txn manager. This ensures the batch will be
+			// committed before the transaction is committed
+			m.managers[operandTransaction].(*txnManager).trackWriteOnBatch(writer, txn)
+			return "ok"
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandMVCCKey,
+			operandValue,
+			operandValue,
+			operandTransaction,
+		},
+		weight: 50,
+	},
+	{
+		name: "mvcc_init_put",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			writer := args[0].(engine.ReadWriter)
+			key := args[1].(engine.MVCCKey)
+			value := roachpb.MakeValueFromBytes(args[2].([]byte))
+			txn := args[3].(*roachpb.Transaction)
+			txn.Sequence++
+
+			err := engine.MVCCInitPut(ctx, writer, nil, key.Key, txn.WriteTimestamp, value, false, txn)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err)
+			}
+
+			// Update the txn's intent spans to account for this intent being written.
+			txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+				Key: key.Key,
+			})
+			// Track this write in the txn manager. This ensures the batch will be
+			// committed before the transaction is committed
+			m.managers[operandTransaction].(*txnManager).trackWriteOnBatch(writer, txn)
+			return "ok"
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandMVCCKey,
+			operandValue,
+			operandTransaction,
+		},
+		weight: 50,
+	},
+	{
+		name: "mvcc_delete_range",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			writer := args[0].(engine.ReadWriter)
+			key := args[1].(engine.MVCCKey).Key
+			endKey := args[2].(engine.MVCCKey).Key
+			txn := args[3].(*roachpb.Transaction)
+			txn.Sequence++
+
+			if endKey.Compare(key) < 0 {
+				key, endKey = endKey, key
+			}
+
+			keys, _, _, err := engine.MVCCDeleteRange(ctx, writer, nil, key, endKey, 0, txn.WriteTimestamp, txn, true)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err)
+			}
+
+			// Update the txn's intent spans to account for this intent being written.
+			for _, key := range keys {
+				txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+					Key: key,
+				})
+			}
+			// Track this write in the txn manager. This ensures the batch will be
+			// committed before the transaction is committed
+			m.managers[operandTransaction].(*txnManager).trackWriteOnBatch(writer, txn)
+			return fmt.Sprintf("keys = %v", keys)
+		},
+		dependentOps: func(m *metaTestRunner, args ...operand) (results []opRun) {
+			return closeItersOnBatch(m, args[0].(engine.Reader))
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandTransaction,
+		},
+		weight: 20,
+	},
+	{
+		name: "mvcc_clear_time_range",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			writer := args[0].(engine.ReadWriter)
+			key := args[1].(engine.MVCCKey).Key
+			endKey := args[2].(engine.MVCCKey).Key
+			startTime := args[3].(hlc.Timestamp)
+			endTime := args[3].(hlc.Timestamp)
+
+			if endKey.Compare(key) < 0 {
+				key, endKey = endKey, key
+			}
+			if endTime.Less(startTime) {
+				startTime, endTime = endTime, startTime
+			}
+
+			span, err := engine.MVCCClearTimeRange(ctx, writer, nil, key, endKey, startTime, endTime, math.MaxInt64)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err)
+			}
+			return fmt.Sprintf("ok, span = %v", span)
+		},
+		dependentOps: func(m *metaTestRunner, args ...operand) (results []opRun) {
+			return closeItersOnBatch(m, args[0].(engine.Reader))
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandPastTS,
+			operandPastTS,
+		},
+		weight: 20,
 	},
 	{
 		name: "mvcc_delete",
@@ -250,18 +377,9 @@ var operations = []mvccOp{
 			txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
 				Key: key.Key,
 			})
-			// If this write happened on a batch, track that in the txn manager so
-			// that the batch is committed before the transaction is aborted or
-			// committed.
-			if batch, ok := writer.(engine.Batch); ok {
-				txnManager := m.managers[operandTransaction].(*txnManager)
-				openBatches, ok := txnManager.openBatches[txn]
-				if !ok {
-					txnManager.openBatches[txn] = make(map[engine.Batch]struct{})
-					openBatches = txnManager.openBatches[txn]
-				}
-				openBatches[batch] = struct{}{}
-			}
+			// Track this write in the txn manager. This ensures the batch will be
+			// committed before the transaction is committed
+			m.managers[operandTransaction].(*txnManager).trackWriteOnBatch(writer, txn)
 			return "ok"
 		},
 		operands: []operandType{
@@ -269,7 +387,27 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandTransaction,
 		},
-		weight: 10,
+		weight: 100,
+	},
+	{
+		name: "mvcc_find_split_key",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			key, _ := keys.Addr(args[0].(engine.MVCCKey).Key)
+			endKey, _ := keys.Addr(args[1].(engine.MVCCKey).Key)
+			splitSize := int64(1024)
+
+			splitKey, err := engine.MVCCFindSplitKey(ctx, m.engine, key, endKey, splitSize)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err)
+			}
+
+			return fmt.Sprintf("ok, splitSize = %d, splitKey = %v", splitSize, splitKey)
+		},
+		operands: []operandType{
+			operandMVCCKey,
+			operandMVCCKey,
+		},
+		weight: 20,
 	},
 	{
 		name: "mvcc_scan",
@@ -281,7 +419,7 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandTransaction,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "mvcc_inconsistent_scan",
@@ -293,7 +431,7 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandPastTS,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "mvcc_reverse_scan",
@@ -305,7 +443,7 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandTransaction,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "txn_open",
@@ -314,7 +452,7 @@ var operations = []mvccOp{
 			return m.managers[operandTransaction].toString(txn)
 		},
 		operands: []operandType{},
-		weight:   4,
+		weight:   40,
 	},
 	{
 		name: "txn_commit",
@@ -343,7 +481,7 @@ var operations = []mvccOp{
 		operands: []operandType{
 			operandTransaction,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "batch_open",
@@ -352,7 +490,7 @@ var operations = []mvccOp{
 			return m.managers[operandReadWriter].toString(batch)
 		},
 		operands: []operandType{},
-		weight:   4,
+		weight:   40,
 	},
 	{
 		name: "batch_commit",
@@ -374,7 +512,7 @@ var operations = []mvccOp{
 		operands: []operandType{
 			operandReadWriter,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "iterator_open",
@@ -408,7 +546,7 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandMVCCKey,
 		},
-		weight: 2,
+		weight: 20,
 	},
 	{
 		name: "iterator_close",
@@ -421,7 +559,7 @@ var operations = []mvccOp{
 		operands: []operandType{
 			operandIterator,
 		},
-		weight: 5,
+		weight: 50,
 	},
 	{
 		name: "iterator_seekge",
@@ -446,7 +584,7 @@ var operations = []mvccOp{
 			operandIterator,
 			operandMVCCKey,
 		},
-		weight: 5,
+		weight: 50,
 	},
 	{
 		name: "iterator_seeklt",
@@ -467,7 +605,7 @@ var operations = []mvccOp{
 			operandIterator,
 			operandMVCCKey,
 		},
-		weight: 5,
+		weight: 50,
 	},
 	{
 		name: "iterator_next",
@@ -488,7 +626,7 @@ var operations = []mvccOp{
 		operands: []operandType{
 			operandIterator,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "iterator_nextkey",
@@ -509,7 +647,7 @@ var operations = []mvccOp{
 		operands: []operandType{
 			operandIterator,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		name: "iterator_prev",
@@ -533,7 +671,7 @@ var operations = []mvccOp{
 		operands: []operandType{
 			operandIterator,
 		},
-		weight: 10,
+		weight: 100,
 	},
 	{
 		// Note that this is not an MVCC* operation; unlike MVCC{Put,Get,Scan}, etc,
@@ -541,9 +679,9 @@ var operations = []mvccOp{
 		// behavior.
 		name: "delete_range",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			key := args[0].(engine.MVCCKey)
-			endKey := args[1].(engine.MVCCKey)
-			if endKey.Less(key) {
+			key := args[0].(engine.MVCCKey).Key
+			endKey := args[1].(engine.MVCCKey).Key
+			if endKey.Compare(key) < 0 {
 				key, endKey = endKey, key
 			} else if endKey.Equal(key) {
 				// Range tombstones where start = end can exhibit different behavior on
@@ -552,7 +690,9 @@ var operations = []mvccOp{
 				// standardize behavior.
 				endKey = endKey.Next()
 			}
-			err := m.engine.ClearRange(key, endKey)
+			// All ClearRange calls in Cockroach usually happen with metadata keys, so
+			// mimic the same behavior here.
+			err := m.engine.ClearRange(engine.MakeMVCCMetadataKey(key), engine.MakeMVCCMetadataKey(endKey))
 			if err != nil {
 				return fmt.Sprintf("error: %s", err.Error())
 			}
@@ -562,7 +702,7 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandMVCCKey,
 		},
-		weight: 2,
+		weight: 20,
 	},
 	{
 		name: "compact",
@@ -582,6 +722,64 @@ var operations = []mvccOp{
 			operandMVCCKey,
 			operandMVCCKey,
 		},
-		weight: 2,
+		weight: 10,
+	},
+	{
+		name: "ingest",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			sstPath := filepath.Join(m.path, "ingest.sst")
+			f, err := os.Create(sstPath)
+			if err != nil {
+				return fmt.Sprintf("error = %s", err.Error())
+			}
+			defer f.Close()
+
+			var keys []engine.MVCCKey
+			for _, arg := range args {
+				keys = append(keys, arg.(engine.MVCCKey))
+			}
+			// SST Writer expects keys in sorted order, so sort them first.
+			sort.Slice(keys, func(i, j int) bool {
+				return keys[i].Less(keys[j])
+			})
+
+			sstWriter := engine.MakeIngestionSSTWriter(f)
+			for _, key := range keys {
+				_ = sstWriter.Put(key, []byte("ingested"))
+			}
+			if err := sstWriter.Finish(); err != nil {
+				return fmt.Sprintf("error = %s", err.Error())
+			}
+			sstWriter.Close()
+
+			if err := m.engine.IngestExternalFiles(ctx, []string{sstPath}); err != nil {
+				return fmt.Sprintf("error = %s", err.Error())
+			}
+
+			return "ok"
+		},
+		operands: []operandType{
+			operandMVCCKey,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandMVCCKey,
+		},
+		weight: 10,
+	},
+	{
+		name: "restart",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			if !m.restarts {
+				m.printComment("no-op due to restarts being disabled")
+				return "ok"
+			}
+
+			oldEngineName, newEngineName := m.restart()
+			m.printComment(fmt.Sprintf("restarting: %s -> %s", oldEngineName, newEngineName))
+			return "ok"
+		},
+		operands: nil,
+		weight:   4,
 	},
 }
