@@ -407,15 +407,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
 	p.discardRows = discardRows
-
-	// TODO(andrei): Ideally we'd like to fork off a context for each individual
-	// statement. But the heartbeat loop in TxnCoordSender currently assumes that
-	// the context of the first operation in a txn batch lasts at least as long as
-	// the transaction itself. Once that sender is able to distinguish between
-	// statement and transaction contexts, we should move to per-statement
-	// contexts.
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
-
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
