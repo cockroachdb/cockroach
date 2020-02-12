@@ -251,21 +251,18 @@ func (stats *Reporter) update(
 // meta1LeaseHolderStore returns the node store that is the leaseholder of Meta1
 // range or nil if none of the node's stores are holding the Meta1 lease.
 func (stats *Reporter) meta1LeaseHolderStore() *storage.Store {
-	meta1RangeID := roachpb.RangeID(1)
-	var meta1LeaseHolder *storage.Store
-	err := stats.localStores.VisitStores(func(s *storage.Store) error {
-		if repl, _ := s.GetReplica(meta1RangeID); repl != nil {
-			if repl.OwnsValidLease(s.Clock().Now()) {
-				meta1LeaseHolder = s
-				return nil
-			}
-		}
+	const meta1RangeID = roachpb.RangeID(1)
+	repl, store, err := stats.localStores.GetReplicaForRangeID(meta1RangeID)
+	if roachpb.IsRangeNotFoundError(err) {
 		return nil
-	})
+	}
 	if err != nil {
 		log.Fatalf(context.TODO(), "unexpected error when visiting stores: %s", err)
 	}
-	return meta1LeaseHolder
+	if repl.OwnsValidLease(store.Clock().Now()) {
+		return store
+	}
+	return nil
 }
 
 func (stats *Reporter) updateLatestConfig() {
