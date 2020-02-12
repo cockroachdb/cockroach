@@ -567,8 +567,7 @@ func (l *lockState) informActiveWaiters() {
 		checkForWaitSelf = true
 		waitForTxn = l.reservation.txn
 		waitForTs = l.reservation.ts
-		if !findDistinguished && l.distinguishedWaiter.txn != nil &&
-			l.distinguishedWaiter.txn.ID == waitForTxn.ID {
+		if !findDistinguished && l.distinguishedWaiter.isTxn(waitForTxn) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
 		}
@@ -635,8 +634,7 @@ func (l *lockState) tryMakeNewDistinguished() {
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
-			if qg.active &&
-				(l.reservation == nil || qg.guard.txn == nil || l.reservation.txn.ID != qg.guard.txn.ID) {
+			if qg.active && (l.reservation == nil || !qg.guard.isTxn(l.reservation.txn)) {
 				g = qg.guard
 				break
 			}
@@ -942,6 +940,8 @@ func (l *lockState) acquireLock(
 			g.doneWaitingAtLock(false, l)
 		}
 	}
+	// TODO: change to always informActiveWaiters since this is a transition from
+	// !held to held.
 	if brokeReservation {
 		l.informActiveWaiters()
 	}
@@ -1276,9 +1276,6 @@ func (l *lockState) lockIsFree() (gc bool) {
 	if l.reservation != nil {
 		panic("lockTable bug")
 	}
-	// There may not be a distinguished waiter currently because of who had the
-	// previous reservation but we may be able to find one.
-	findDistinguished := l.distinguishedWaiter == nil
 	// All waiting readers don't need to wait here anymore.
 	for e := l.waitingReaders.Front(); e != nil; {
 		g := e.Value.(*lockTableGuardImpl)
@@ -1286,7 +1283,6 @@ func (l *lockState) lockIsFree() (gc bool) {
 		e = e.Next()
 		l.waitingReaders.Remove(curr)
 		if g == l.distinguishedWaiter {
-			findDistinguished = true
 			l.distinguishedWaiter = nil
 		}
 		g.doneWaitingAtLock(false, l)
@@ -1302,7 +1298,6 @@ func (l *lockState) lockIsFree() (gc bool) {
 			e = e.Next()
 			l.queuedWriters.Remove(curr)
 			if g == l.distinguishedWaiter {
-				findDistinguished = true
 				l.distinguishedWaiter = nil
 			}
 			g.doneWaitingAtLock(false, l)
@@ -1323,48 +1318,14 @@ func (l *lockState) lockIsFree() (gc bool) {
 	l.queuedWriters.Remove(e)
 	if qg.active {
 		g.doneWaitingAtLock(true, l)
+		if g == l.distinguishedWaiter {
+			l.distinguishedWaiter = nil
+		}
 	}
 	// Else inactive waiter and is waiting elsewhere.
 
-	// Need to find a new distinguished waiter if the current distinguished is
-	// from the same transaction (possibly it is the request that has reserved).
-	if l.distinguishedWaiter != nil && l.distinguishedWaiter.isTxn(l.reservation.txn) {
-		findDistinguished = true
-		l.distinguishedWaiter = nil
-	}
-
-	// Need to tell the remaining active waiting writers who they are waiting
-	// for.
-	waitForState := waitingState{
-		stateKind: waitFor,
-		txn:       g.txn,
-		ts:        g.ts,
-		access:    spanset.SpanReadWrite,
-	}
-	waitSelfState := waitingState{stateKind: waitSelf}
-	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
-		qg := e.Value.(*queuedGuard)
-		if qg.active {
-			g := qg.guard
-			var state waitingState
-			if g.isTxn(l.reservation.txn) {
-				state = waitSelfState
-			} else {
-				state = waitForState
-				if findDistinguished {
-					l.distinguishedWaiter = g
-					findDistinguished = false
-				}
-			}
-			g.mu.Lock()
-			g.mu.state = state
-			if l.distinguishedWaiter == g {
-				g.mu.state.stateKind = waitForDistinguished
-			}
-			g.notify()
-			g.mu.Unlock()
-		}
-	}
+	// Tell the active waiters who they are waiting for.
+	l.informActiveWaiters()
 	return false
 }
 
