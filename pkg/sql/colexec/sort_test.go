@@ -320,23 +320,20 @@ func BenchmarkSort(b *testing.B) {
 					for n := 0; n < b.N; n++ {
 						source := newFiniteBatchSource(batch, nBatches)
 						var sorter Operator
-						var resultBatches int
 						if topK {
 							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
-							resultBatches = 1
 						} else {
 							var err error
 							sorter, err = NewSorter(testAllocator, source, typs, ordCols)
 							if err != nil {
 								b.Fatal(err)
 							}
-							resultBatches = nBatches
 						}
 						sorter.Init()
-						for i := 0; i < resultBatches; i++ {
+						for {
 							out := sorter.Next(ctx)
 							if out.Length() == 0 {
-								b.Fail()
+								break
 							}
 						}
 					}
