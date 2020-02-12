@@ -177,5 +177,4 @@ const databaseGrantsListConnected = withRouter(connect(
   mapDispatchToProps,
 )(DatabaseGrantsList));
 
-export { databaseTablesListConnected as DatabaseTablesList, databaseGrantsListConnected as DatabaseGrantsList, };
-
+export { databaseTablesListConnected as DatabaseTablesList, databaseGrantsListConnected as DatabaseGrantsList };
