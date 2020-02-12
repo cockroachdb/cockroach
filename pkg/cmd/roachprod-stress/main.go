@@ -54,7 +54,7 @@ func roundToSeconds(d time.Duration) time.Duration {
 
 func run() error {
 	flags.Usage = func() {
-		fmt.Fprintf(flags.Output(), "usage: %s <cluster> <pkg> [<flags>] [<args>]\n", flags.Name())
+		fmt.Fprintf(flags.Output(), "usage: %s <cluster> <pkg> [<flags>] -- [<args>]\n", flags.Name())
 		flags.PrintDefaults()
 	}
 
@@ -92,6 +92,16 @@ func run() error {
 		}
 		if !fi.Mode().IsRegular() {
 			return fmt.Errorf("test binary %q is not a file", localTestBin)
+		}
+	}
+	flagsAndArgs := os.Args[3:]
+	stressArgs := flagsAndArgs
+	var testArgs []string
+	for i, arg := range flagsAndArgs {
+		if arg == "--" {
+			stressArgs = flagsAndArgs[:i]
+			testArgs = flagsAndArgs[i+1:]
+			break
 		}
 	}
 
@@ -247,12 +257,14 @@ func run() error {
 					}
 				}
 			}()
-
 			var stderr bytes.Buffer
 			cmd := exec.Command("roachprod",
 				"ssh", fmt.Sprintf("%s:%d", cluster, i), "--",
-				fmt.Sprintf("cd %s; GOTRACEBACK=all ~/stress ./%s %s", pkg, filepath.Base(testBin),
-					strings.Join(os.Args[3:], " ")))
+				fmt.Sprintf("cd %s; GOTRACEBACK=all ~/stress %s ./%s %s",
+					pkg,
+					strings.Join(stressArgs, " "),
+					filepath.Base(testBin),
+					strings.Join(testArgs, " ")))
 			cmd.Stdout = stdoutW
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
