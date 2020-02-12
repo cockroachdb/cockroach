@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // CanProvidePhysicalProps returns true if the given expression can provide the
@@ -82,6 +83,9 @@ func BuildChildPhysicalProps(
 	case opt.LimitOp:
 		if constLimit, ok := parent.(*memo.LimitExpr).Limit.(*memo.ConstExpr); ok {
 			childProps.LimitHint = float64(*constLimit.Value.(*tree.DInt))
+			if childProps.LimitHint <= 0 {
+				childProps.LimitHint = 1
+			}
 		}
 	case opt.OffsetOp:
 		if parentProps.LimitHint == 0 {
@@ -89,17 +93,26 @@ func BuildChildPhysicalProps(
 		}
 		if constOffset, ok := parent.(*memo.OffsetExpr).Offset.(*memo.ConstExpr); ok {
 			childProps.LimitHint = parentProps.LimitHint + float64(*constOffset.Value.(*tree.DInt))
+			if childProps.LimitHint <= 0 {
+				childProps.LimitHint = 1
+			}
 		}
+
 	case opt.IndexJoinOp:
 		childProps.LimitHint = parentProps.LimitHint
+
 	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
 		opt.UnionOp, opt.UnionAllOp:
 		// TODO(celine): Set operation limits need further thought; for example,
 		// the right child of an ExceptOp should not be limited.
 		childProps.LimitHint = parentProps.LimitHint
+
 	case opt.DistinctOnOp:
 		distinctCount := parent.(memo.RelExpr).Relational().Stats.RowCount
-		childProps.LimitHint = distinctOnLimitHint(distinctCount, parentProps.LimitHint)
+		if parentProps.LimitHint > 0 {
+			childProps.LimitHint = distinctOnLimitHint(distinctCount, parentProps.LimitHint)
+		}
+
 	case opt.SelectOp:
 		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
 		if outputRows == 0 || outputRows < parentProps.LimitHint {
@@ -111,6 +124,10 @@ func BuildChildPhysicalProps(
 		}
 	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
 		childProps.LimitHint = parentProps.LimitHint
+	}
+
+	if childProps.LimitHint < 0 {
+		panic(errors.AssertionFailedf("negative limit hint"))
 	}
 
 	// If properties haven't changed, no need to re-intern them.
