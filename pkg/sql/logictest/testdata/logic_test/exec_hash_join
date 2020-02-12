@@ -170,13 +170,46 @@ SELECT * FROM t44207_0, t44207_1 WHERE t44207_0.c0 IS NULL
 NULL 0
 NULL 0
 
-# Regression test for the inputs that have comparable but different types.
+# Regression test for the inputs that have comparable but different types (see
+# issues #44547 and #44797).
 statement ok
 CREATE TABLE t44547_0(c0 INT4); CREATE TABLE t44547_1(c0 INT8)
 
 statement ok
 INSERT INTO t44547_0(c0) VALUES(0); INSERT INTO t44547_1(c0) VALUES(0)
 
+# Note that integers of different width are still considered equal.
 query I
 SELECT * FROM t44547_0 NATURAL JOIN t44547_1
 ----
+0
+
+statement ok
+CREATE TABLE t44797_0(a FLOAT, b DECIMAL); CREATE TABLE t44797_1(c INT2, d INT4)
+
+statement ok
+INSERT INTO t44797_0 VALUES (1.0, 1.0), (2.0, 2.0); INSERT INTO t44797_1 VALUES (1, 1), (2, 2)
+
+# Note that mixed-type comparisons - of what appears to be "same" values - do
+# not consider those values equal.
+query RRII
+SELECT * FROM t44797_0 NATURAL JOIN t44797_1
+----
+1  1.0  2  2
+1  1.0  1  1
+2  2.0  2  2
+2  2.0  1  1
+
+statement ok
+CREATE TABLE t44797_2(a FLOAT); CREATE TABLE t44797_3(b DECIMAL)
+
+statement ok
+INSERT INTO t44797_2 VALUES (1.0), (2.0); INSERT INTO t44797_3 VALUES (1.0), (2.0)
+
+query RR
+SELECT * FROM t44797_2 NATURAL JOIN t44797_3
+----
+1  2.0
+1  1.0
+2  2.0
+2  1.0

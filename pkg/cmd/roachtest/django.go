@@ -185,12 +185,9 @@ func registerDjango(r *testRegistry) {
 				ctx, t.l, node, fmt.Sprintf(djangoRunTestCmd, testName))
 			fullTestResults = append(fullTestResults, rawResults...)
 			c.l.Printf("Test results for app %s: %s", testName, rawResults)
+			c.l.Printf("Test stdout for app %s:", testName)
 			if err := c.RunL(
-				ctx, t.l, node, fmt.Sprintf("Test stdout for app %s:", testName),
-				fmt.Sprintf(
-					"cd /mnt/data1/django/tests && cat %s.stdout",
-					testName,
-				),
+				ctx, t.l, node, fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
 			); err != nil {
 				t.Fatal(err)
 			}

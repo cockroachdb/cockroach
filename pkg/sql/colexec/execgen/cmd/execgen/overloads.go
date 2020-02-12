@@ -195,6 +195,20 @@ func intToFloat(floatSize int) func(string, string) string {
 	}
 }
 
+func intToInt32(to, from string) string {
+	convStr := `
+    %[1]s = int32(%[2]s)
+  `
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func intToInt64(to, from string) string {
+	convStr := `
+    %[1]s = int64(%[2]s)
+  `
+	return fmt.Sprintf(convStr, to, from)
+}
+
 func floatToInt(intSize int, floatSize int) func(string, string) string {
 	return func(to, from string) string {
 		convStr := `
@@ -398,6 +412,10 @@ func init() {
 					ov.AssignFunc = intToDecimal
 				case coltypes.Int16:
 					ov.AssignFunc = castIdentity
+				case coltypes.Int32:
+					ov.AssignFunc = intToInt32
+				case coltypes.Int64:
+					ov.AssignFunc = intToInt64
 				case coltypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
@@ -413,6 +431,8 @@ func init() {
 					ov.AssignFunc = intToDecimal
 				case coltypes.Int32:
 					ov.AssignFunc = castIdentity
+				case coltypes.Int64:
+					ov.AssignFunc = intToInt64
 				case coltypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
@@ -742,7 +762,12 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 
 func (c intCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf("%[1]s = memhash%[3]d(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
+		return fmt.Sprintf(`
+				// In order for integers with different widths but of the same value to
+				// to hash to the same value, we upcast all of them to int64.
+				asInt64 := int64(%[2]s)
+				%[1]s = memhash64(noescape(unsafe.Pointer(&asInt64)), %[1]s)`,
+			target, v)
 	}
 }
 

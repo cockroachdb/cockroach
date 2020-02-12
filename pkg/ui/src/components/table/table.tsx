@@ -21,6 +21,7 @@ export interface TableProps<T> {
   columns: Array<ColumnProps<T>>;
   dataSource: Array<T>;
   noDataMessage?: string;
+  tableLayout?: "fixed" | "auto";
 }
 
 const customizeRenderEmpty = (text: string) => () => (
@@ -31,10 +32,11 @@ const customizeRenderEmpty = (text: string) => () => (
 
 Table.defaultProps = {
   noDataMessage: "No data to display",
+  tableLayout: "auto",
 };
 
 export function Table<T>(props: TableProps<T>) {
-  const { columns, dataSource, noDataMessage } = props;
+  const { columns, dataSource, noDataMessage, tableLayout } = props;
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
     <AntTable<T>
@@ -42,6 +44,7 @@ export function Table<T>(props: TableProps<T>) {
       columns={columns}
       dataSource={dataSource}
       expandRowByClick
+      tableLayout={tableLayout}
       pagination={{hideOnSinglePage: true}} />
     </ConfigProvider>
   );

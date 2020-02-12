@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,21 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-.empty-state
-  display flex
-  justify-content center
-  align-items center
-  min-height 157px
-  flex-direction column
-
-  &__line
-    margin 12px
-
-.table-icon
-  position relative
-  top 3px
-  right 2px
-
-.ant-pagination
-  text-align center
-  margin 20px 0
+export * from "./connectedMount";

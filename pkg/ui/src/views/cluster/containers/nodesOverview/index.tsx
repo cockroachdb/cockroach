@@ -19,6 +19,7 @@ import {
   LivenessStatus,
   nodeCapacityStats,
   nodesSummarySelector,
+  partitionedStatuses,
   selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -45,7 +46,7 @@ const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSettin
 // AggregatedNodeStatus indexes have to be greater than LivenessStatus indexes
 // for correct sorting in the table.
 enum AggregatedNodeStatus {
-  READY = 6,
+  LIVE = 6,
   WARNING = 7,
 }
 
@@ -54,7 +55,7 @@ enum AggregatedNodeStatus {
 // instead, column values are computed based on these fields.
 // It is required to reduce computation for top level (grouped) fields,
 // and to allow sorting functionality with specific rather then on column value.
-interface NodeStatusRow {
+export interface NodeStatusRow {
   key: string;
   nodeId?: number;
   region: string;
@@ -123,7 +124,7 @@ const getStatusDescription = (status: LivenessStatus) => {
  * both healthy and suspect nodes. Included is a side-bar with summary
  * statistics for these nodes.
  */
-class NodeList extends React.Component<LiveNodeListProps> {
+export class NodeList extends React.Component<LiveNodeListProps> {
 
   readonly columns: ColumnsConfig<NodeStatusRow> = [
     {
@@ -133,8 +134,8 @@ class NodeList extends React.Component<LiveNodeListProps> {
         if (!!record.nodeId) {
           return (
             <React.Fragment>
-              <Link to={`/node/${record.nodeId}`}>
-                <Text>{record.nodeId}</Text>
+              <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+                <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
                 <Text>{record.region}</Text>
               </Link>
             </React.Fragment>);
@@ -153,10 +154,11 @@ class NodeList extends React.Component<LiveNodeListProps> {
         return 0;
       },
       className: "column--border-right",
+      width: "20%",
     },
     {
       key: "nodesCount",
-      title: "# of nodes",
+      title: "node count",
       sorter: (a, b) => {
         if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) { return 0; }
         if (a.nodesCount < b.nodesCount) { return -1; }
@@ -166,6 +168,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       render: (_text, record) => record.nodesCount,
       sortDirections: ["ascend", "descend"],
       className: "column--align-right",
+      width: "10%",
     },
     {
       key: "uptime",
@@ -173,6 +176,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       title: "uptime",
       sorter: true,
       className: "column--align-right",
+      width: "10%",
     },
     {
       key: "replicas",
@@ -180,6 +184,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       title: "replicas",
       sorter: true,
       className: "column--align-right",
+      width: "10%",
     },
     {
       key: "capacityUse",
@@ -188,6 +193,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       sorter: (a, b) =>
         a.usedCapacity / a.availableCapacity - b.usedCapacity / b.availableCapacity,
       className: "column--align-right",
+      width: "10%",
     },
     {
       key: "memoryUse",
@@ -196,12 +202,15 @@ class NodeList extends React.Component<LiveNodeListProps> {
       sorter: (a, b) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
       className: "column--align-right",
+      width: "10%",
     },
     {
       key: "version",
       dataIndex: "version",
       title: "version",
       sorter: true,
+      width: "10%",
+      ellipsis: true,
     },
     {
       key: "status",
@@ -210,9 +219,9 @@ class NodeList extends React.Component<LiveNodeListProps> {
         let tooltipText: string;
 
         switch (record.status) {
-          case AggregatedNodeStatus.READY:
+          case AggregatedNodeStatus.LIVE:
           case AggregatedNodeStatus.WARNING:
-            status =  _.capitalize(AggregatedNodeStatus[record.status]);
+            status = _.capitalize(AggregatedNodeStatus[record.status]);
             break;
           default:
             status = _.capitalize(LivenessStatus[record.status]);
@@ -222,21 +231,23 @@ class NodeList extends React.Component<LiveNodeListProps> {
         return (
           <Text
             className={`status-column status-column--color-${status.toLowerCase()}`}
-            textType={TextTypes.Body}>
+            textType={TextTypes.BodyStrong}>
             { tooltipText ? (<Tooltip title={tooltipText}>{status}</Tooltip>) : status }
           </Text>
         );
       },
       title: "status",
       sorter: (a, b) => a.status - b.status,
+      width: "15%",
     },
     {
       key: "logs",
       title: "",
       render: (_text, record) => record.nodeId && (
-        <div className="cell--show-on-hover">
+        <div className="cell--show-on-hover nodes-table__link">
           <Link to={`/node/${record.nodeId}/logs`}>Logs</Link>
         </div>),
+      width: "5%",
     },
   ];
 
@@ -254,9 +265,9 @@ class NodeList extends React.Component<LiveNodeListProps> {
       <div className="nodes-overview__panel">
         <TableSection
           id={`nodes-overview__live-nodes`}
-          title={`Live Nodes (${nodesCount})`}
+          title={`Nodes (${nodesCount})`}
           className="embedded-table">
-          <Table dataSource={dataSource} columns={columns} />
+          <Table dataSource={dataSource} columns={columns} tableLayout="fixed" />
         </TableSection>
       </div>
     );
@@ -273,14 +284,14 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "nodes",
       title: "decommissioned nodes",
       render: (_text, record) => (
-        <Link  to={`/node/${record.nodeId}`}>
-          <Text>{record.nodeId}</Text>
+        <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+          <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
           <Text>{record.region}</Text>
         </Link>),
     },
     {
       key: "decommissionedSince",
-      title: "decommissioned since",
+      title: "decommissioned on",
       render: (_text, record) => record.decommissionedDate.format("LL[ at ]h:mm a"),
     },
     {
@@ -313,10 +324,9 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
         <TableSection
           id={`nodes-overview__decommissioned-nodes`}
           title="Recently Decommissioned Nodes"
-          // TODO (koorosh): Uncomment link after Decommissioned node history page is added
-          // footer={<Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>}
+          footer={<Link to={`/reports/nodes/history`}>View all decommissioned nodes </Link>}
           isCollapsible={isCollapsible}
-          className="embedded-table">
+          className="embedded-table embedded-table--dense">
           <Table dataSource={dataSource} columns={this.columns} />
         </TableSection>
       </div>
@@ -325,36 +335,11 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
 }
 
 const getNodeRegion = (nodeStatus: INodeStatus) => {
-  const region = nodeStatus.desc.locality.tiers.find(tier => tier.key === "region");
+  const region = nodeStatus.desc.locality?.tiers?.find(tier => tier.key === "region");
   return region ? region.value : undefined;
 };
 
-/**
- * partitionedStatuses divides the list of node statuses into "live" and "dead".
- */
-const partitionedStatuses = createSelector(
-  nodesSummarySelector,
-  (summary) => {
-    return _.groupBy(
-      summary.nodeStatuses,
-      (ns) => {
-        switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
-          case LivenessStatus.LIVE:
-          case LivenessStatus.UNAVAILABLE:
-          case LivenessStatus.DEAD:
-          case LivenessStatus.DECOMMISSIONING:
-            return "live";
-          case LivenessStatus.DECOMMISSIONED:
-            return "decommissioned";
-          default:
-            return "live";
-        }
-      },
-    );
-  },
-);
-
-const liveNodesTableData = createSelector(
+export const liveNodesTableDataSelector = createSelector(
   partitionedStatuses,
   nodesSummarySelector,
   (statuses, nodesSummary) => {
@@ -400,7 +385,7 @@ const liveNodesTableData = createSelector(
           usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
           availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
           status: nestedRows.every(nestedRow => nestedRow.status === LivenessStatus.LIVE) ?
-            AggregatedNodeStatus.READY : AggregatedNodeStatus.WARNING,
+            AggregatedNodeStatus.LIVE : AggregatedNodeStatus.WARNING,
           children: nestedRows,
         };
       })
@@ -409,7 +394,7 @@ const liveNodesTableData = createSelector(
     return data;
   });
 
-const decommissionedNodesTableData = createSelector(
+export const decommissionedNodesTableDataSelector = createSelector(
   partitionedStatuses,
   nodesSummarySelector,
   (statuses, nodesSummary): DecommissionedNodeStatusRow[] => {
@@ -448,7 +433,7 @@ const decommissionedNodesTableData = createSelector(
 const NodesConnected = connect(
   (state: AdminUIState) => {
     const liveNodes = partitionedStatuses(state).live || [];
-    const data = liveNodesTableData(state);
+    const data = liveNodesTableDataSelector(state);
     return {
       sortSetting: liveNodesSortSetting.selector(state),
       dataSource: data,
@@ -469,7 +454,7 @@ const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
-      dataSource: decommissionedNodesTableData(state),
+      dataSource: decommissionedNodesTableDataSelector(state),
       isCollapsible: true,
     };
   },

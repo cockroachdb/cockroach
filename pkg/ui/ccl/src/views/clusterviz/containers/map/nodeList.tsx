@@ -11,7 +11,6 @@ import { RouteComponentProps } from "react-router-dom";
 
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import { Dropdown } from "src/components/dropdown";
-import { Button } from "src/components/button";
 
 import "./nodesList.styl";
 
@@ -34,9 +33,7 @@ export default class NodeList extends React.Component<RouteComponentProps> {
             items={this.items}
             onChange={this.handleMapTableToggle}
           >
-            <Button type="flat" size="small">
-              Node List
-            </Button>
+            Node List
           </Dropdown>
         </div>
         <div className="fixed-panel__content">
