@@ -101,6 +101,7 @@ limit
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── limit hint: 1.00
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 0 [type=int]

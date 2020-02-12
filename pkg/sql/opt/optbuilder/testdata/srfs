@@ -475,6 +475,7 @@ limit
  ├── columns: a:1(int) b:2(int) word:3(string) catcode:4(string) catdesc:5(string)
  ├── inner-join-apply
  │    ├── columns: generate_series:1(int) unnest:2(int) word:3(string) catcode:4(string) catdesc:5(string)
+ │    ├── limit hint: 1.00
  │    ├── inner-join-apply
  │    │    ├── columns: generate_series:1(int) unnest:2(int)
  │    │    ├── project-set

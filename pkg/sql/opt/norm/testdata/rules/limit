@@ -106,7 +106,7 @@ limit
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
- │    └── limit hint: -1.00
+ │    └── limit hint: 1.00
  └── const: -1 [type=int]
 
 # --------------------------------------------------
@@ -282,7 +282,7 @@ limit
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
- │    └── limit hint: -1.00
+ │    └── limit hint: 1.00
  └── const: -1 [type=int]
 
 # --------------------------------------------------
@@ -1062,7 +1062,7 @@ limit
  │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2), (3)-->(4)
- │    ├── limit hint: -1.00
+ │    ├── limit hint: 1.00
  │    ├── scan ab
  │    │    ├── columns: a:1(int!null) b:2(int)
  │    │    ├── key: (1)
