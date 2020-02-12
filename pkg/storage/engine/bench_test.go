@@ -242,7 +242,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		endKey = endKey.Next()
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		res, err := MVCCScan(ctx, eng, startKey, endKey, -1, ts, MVCCScanOptions{
+		res, err := MVCCScan(ctx, eng, startKey, endKey, ts, MVCCScanOptions{
 			MaxKeys: int64(opts.numRows),
 			Reverse: opts.reverse,
 		})

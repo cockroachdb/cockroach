@@ -707,7 +707,7 @@ func cmdScan(e *evalCtx) error {
 		e.scanArg(key, &tb)
 		opts.TargetBytes = int64(tb)
 	}
-	res, err := MVCCScan(e.ctx, e.engine, key, endKey, -1, ts, opts)
+	res, err := MVCCScan(e.ctx, e.engine, key, endKey, ts, opts)
 	// NB: the error is returned below. This ensures the test can
 	// ascertain no result is populated in the intents when an error
 	// occurs.

@@ -12,7 +12,6 @@ package kv
 
 import (
 	"context"
-	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -116,7 +115,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := engine.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{}); err != nil {
+		if _, err := engine.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, engine.MVCCScanOptions{}); err != nil {
 			return errors.Errorf("failed to verify no dangling intents: %s", err)
 		}
 		return nil
@@ -226,7 +225,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := engine.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{}); err != nil {
+		if _, err := engine.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, engine.MVCCScanOptions{}); err != nil {
 			return errors.Errorf("failed to verify no dangling intents: %s", err)
 		}
 		return nil
