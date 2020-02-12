@@ -13,7 +13,6 @@ package storage
 import (
 	"bytes"
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -225,19 +224,8 @@ func evaluateBatch(
 		var curResult result.Result
 		var pErr *roachpb.Error
 
-		// Translate from MaxSpanRequestKeys (0=unlimited, -1=nothing) to
-		// MVCC (0=nothing, infinity=unlimited).
-		//
-		// TODO(tbg): fix this in the MVCC layer and address long-standing TODO
-		// of moving the key count limit to MVCCScanOptions.
-		maxKeys := baHeader.MaxSpanRequestKeys
-		if maxKeys < 0 {
-			maxKeys = 0
-		} else if maxKeys == 0 {
-			maxKeys = math.MaxInt64
-		}
 		curResult, pErr = evaluateCommand(
-			ctx, idKey, index, readWriter, rec, ms, baHeader, maxKeys, args, reply)
+			ctx, idKey, index, readWriter, rec, ms, baHeader, baHeader.MaxSpanRequestKeys, args, reply)
 
 		// If an EndTxn wants to restart because of a write too old, we
 		// might have a better error to return to the client.

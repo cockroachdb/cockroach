@@ -1225,8 +1225,8 @@ func kvDataEqual(ctx context.Context, data1 []byte, data2 [][]byte) bool {
 func (t *TeeEngineIter) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	res1, err := mvccScanToBytes(t.ctx, t.iter1, start, end, max, timestamp, opts)
-	res2, err2 := mvccScanToBytes(t.ctx, t.iter2, start, end, max, timestamp, opts)
+	res1, err := mvccScanToBytes(t.ctx, t.iter1, start, end, timestamp, opts)
+	res2, err2 := mvccScanToBytes(t.ctx, t.iter2, start, end, timestamp, opts)
 
 	if err := fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return MVCCScanResult{}, err
