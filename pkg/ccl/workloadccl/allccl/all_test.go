@@ -249,7 +249,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`intro`:      0x81c6a8cfd9c3452a,
 		`json`:       0xcbf29ce484222325,
 		`ledger`:     0xebe27d872d980271,
-		`movr`:       0x6a094e9d15a07970,
+		`movr`:       0x4c0da49085e0bc5c,
 		`queue`:      0xcbf29ce484222325,
 		`rand`:       0xcbf29ce484222325,
 		`roachmart`:  0xda5e73423dbdb2d9,
