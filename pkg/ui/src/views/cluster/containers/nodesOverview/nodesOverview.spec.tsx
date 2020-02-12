@@ -47,6 +47,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "us-east1-0",
             "nodeId": 1,
+            "nodeName": "127.0.0.1:50945",
             "region": "us-east1",
             "uptime": "3 minutes",
             "replicas": 78,
@@ -60,6 +61,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "us-east1-1",
             "nodeId": 2,
+            "nodeName": "127.0.0.2:50945",
             "region": "us-east1",
             "uptime": "3 minutes",
             "replicas": 74,
@@ -73,6 +75,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "us-east1-2",
             "nodeId": 3,
+            "nodeName": "127.0.0.3:50945",
             "region": "us-east1",
             "uptime": "3 minutes",
             "replicas": 72,
@@ -99,6 +102,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "us-west1-0",
             "nodeId": 4,
+            "nodeName": "127.0.0.4:50945",
             "region": "us-west1",
             "uptime": "3 minutes",
             "replicas": 73,
@@ -112,6 +116,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "us-west1-1",
             "nodeId": 5,
+            "nodeName": "127.0.0.5:50945",
             "region": "us-west1",
             "uptime": "3 minutes",
             "replicas": 78,
@@ -125,6 +130,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "us-west1-2",
             "nodeId": 6,
+            "nodeName": "127.0.0.6:50945",
             "region": "us-west1",
             "uptime": "3 minutes",
             "replicas": 78,
@@ -151,6 +157,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "europe-west1-0",
             "nodeId": 7,
+            "nodeName": "127.0.0.7:50945",
             "region": "europe-west1",
             "uptime": "3 minutes",
             "replicas": 71,
@@ -164,6 +171,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "europe-west1-1",
             "nodeId": 8,
+            "nodeName": "127.0.0.8:50945",
             "region": "europe-west1",
             "uptime": "3 minutes",
             "replicas": 74,
@@ -177,6 +185,7 @@ describe("Nodes Overview page", () => {
           {
             "key": "europe-west1-2",
             "nodeId": 9,
+            "nodeName": "127.0.0.9:50945",
             "region": "europe-west1",
             "uptime": "3 minutes",
             "replicas": 71,
@@ -277,7 +286,13 @@ describe("Nodes Overview page", () => {
         nodes: {
           data: times(7).map(idx => (
             {
-              desc: { node_id: idx + 1, locality: {}},
+              desc: {
+                node_id: idx + 1,
+                locality: {},
+                address: {
+                  address_field: `127.0.0.${idx + 1}:50945`,
+                },
+              },
               metrics: {
                 "capacity.used": 0,
                 "capacity.available": 0,
@@ -353,6 +368,14 @@ describe("Nodes Overview page", () => {
           assert.isTrue(expectedDecommissionedNodeIds.some(nodeId => nodeId === record.nodeId));
         });
       });
+
+      it("returns correct node name", () => {
+        const recordsGroupedByRegion = decommissionedNodesTableDataSelector.resultFunc(partitionedNodes, nodeSummary);
+        recordsGroupedByRegion.forEach(record => {
+          const expectedName = `127.0.0.${record.nodeId}:50945`;
+          assert.equal(record.nodeName, expectedName);
+        });
+      });
     });
 
     describe("liveNodesTableDataSelector", () => {
@@ -364,6 +387,14 @@ describe("Nodes Overview page", () => {
         assert.lengthOf(recordsGroupedByRegion[0].children, expectedLiveNodeIds.length);
         recordsGroupedByRegion[0].children.forEach(record => {
           assert.isTrue(expectedLiveNodeIds.some(nodeId => nodeId === record.nodeId));
+        });
+      });
+
+      it("returns correct node name", () => {
+        const recordsGroupedByRegion = liveNodesTableDataSelector.resultFunc(partitionedNodes, nodeSummary);
+        recordsGroupedByRegion[0].children.forEach(record => {
+          const expectedName = `127.0.0.${record.nodeId}:50945`;
+          assert.equal(record.nodeName, expectedName);
         });
       });
     });

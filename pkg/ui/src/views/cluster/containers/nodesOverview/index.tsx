@@ -58,6 +58,7 @@ enum AggregatedNodeStatus {
 export interface NodeStatusRow {
   key: string;
   nodeId?: number;
+  nodeName?: string;
   region: string;
   nodesCount?: number;
   uptime?: string;
@@ -80,6 +81,7 @@ export interface NodeStatusRow {
 interface DecommissionedNodeStatusRow {
   key: string;
   nodeId: number;
+  nodeName: string;
   region: string;
   status: LivenessStatus;
   decommissionedDate: Moment;
@@ -136,7 +138,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
             <React.Fragment>
               <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
                 <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
-                <Text>{record.region}</Text>
+                <Text>{record.nodeName}</Text>
               </Link>
             </React.Fragment>);
         } else {
@@ -286,7 +288,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       render: (_text, record) => (
         <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
           <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
-          <Text>{record.region}</Text>
+          <Text>{record.nodeName}</Text>
         </Link>),
     },
     {
@@ -363,6 +365,7 @@ export const liveNodesTableDataSelector = createSelector(
           return {
             key: `${regionKey}-${idx}`,
             nodeId: ns.desc.node_id,
+            nodeName: ns.desc.address.address_field,
             region: getNodeRegion(ns),
             uptime: moment.duration(LongToMoment(ns.started_at).diff(moment())).humanize(),
             replicas: ns.metrics[MetricConstants.replicas],
@@ -417,6 +420,7 @@ export const decommissionedNodesTableDataSelector = createSelector(
         return {
           key: `${idx}`,
           nodeId: ns.desc.node_id,
+          nodeName: ns.desc.address.address_field,
           region: getNodeRegion(ns),
           status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id],
           decommissionedDate: getDecommissionedTime(ns.desc.node_id),
