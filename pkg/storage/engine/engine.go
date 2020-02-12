@@ -144,7 +144,7 @@ type MVCCIterator interface {
 	// alternating from key to value, where numKVs specifies the number of pairs
 	// in the buffer.
 	MVCCScan(
-		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+		start, end roachpb.Key, timestamp hlc.Timestamp, opts MVCCScanOptions,
 	) (MVCCScanResult, error)
 }
 

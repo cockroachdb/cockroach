@@ -2274,7 +2274,7 @@ func MVCCDeleteRange(
 		scanTxn = prevSeqTxn
 	}
 	res, err := MVCCScan(
-		ctx, rw, key, endKey, -1, scanTs, MVCCScanOptions{Txn: scanTxn, MaxKeys: max})
+		ctx, rw, key, endKey, scanTs, MVCCScanOptions{Txn: scanTxn, MaxKeys: max})
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -2324,7 +2324,7 @@ func mvccScanToBytes(
 
 	// If the iterator has a specialized implementation, defer to that.
 	if mvccIter, ok := iter.(MVCCIterator); ok && mvccIter.MVCCOpsSpecialized() {
-		return mvccIter.MVCCScan(key, endKey, opts.MaxKeys /* TODO(tbg): remove */, timestamp, opts)
+		return mvccIter.MVCCScan(key, endKey, timestamp, opts)
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
@@ -2488,23 +2488,6 @@ type MVCCScanResult struct {
 	Intents    []roachpb.Intent
 }
 
-func assertMaxKeys(ctx context.Context, max int64, opts MVCCScanOptions) {
-	if max == -1 {
-		// Caller was already updated to use opts.MaxKeys correctly.
-		return
-	}
-	if max == math.MaxInt64 {
-		// Legacy path. We'll just remove the max parameter in all of those
-		// callers.
-		if opts.MaxKeys != 0 {
-			log.Fatalf(ctx, "need to set MaxKeys=0, it's %d", opts.MaxKeys)
-		}
-		return
-	}
-	// We need to still update the caller.
-	log.Fatalf(ctx, "need to set MaxKeys")
-}
-
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some
 // maximum number of results in ascending order. If it hits max, it returns a
 // "resume span" to be used in the next call to this function. If the limit is
@@ -2540,12 +2523,9 @@ func MVCCScan(
 	ctx context.Context,
 	reader Reader,
 	key, endKey roachpb.Key,
-	max int64,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	assertMaxKeys(ctx, max, opts)
-
 	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
@@ -2556,12 +2536,9 @@ func MVCCScanToBytes(
 	ctx context.Context,
 	reader Reader,
 	key, endKey roachpb.Key,
-	max int64,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	assertMaxKeys(ctx, max, opts)
-
 	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
