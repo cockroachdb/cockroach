@@ -15,6 +15,7 @@ declare module "rc-progress" {
       strokeColor?: string;
       strokeWidth?: number;
       trailWidth?: number;
+      trailColor?: string;
       className?: string;
       percent?: number;
     }
