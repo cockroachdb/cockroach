@@ -14,6 +14,7 @@ option go_package = "serverpb";
 
 import "build/info.proto";
 import "gossip/gossip.proto";
+import "jobs/jobspb/jobs.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
@@ -753,6 +754,19 @@ message StatementsResponse {
   string internal_app_name_prefix = 4;
 }
 
+message JobRegistryStatusRequest {
+  string node_id = 1;
+}
+
+message JobRegistryStatusResponse {
+  int32 node_id = 1 [
+                    (gogoproto.customname) = "NodeID",
+                    (gogoproto.casttype) =
+                    "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+                    ];
+  repeated cockroach.sql.jobs.jobspb.Job running_jobs = 2;
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
@@ -903,5 +917,9 @@ service Status {
       get: "/_status/statements"
     };
   }
+  rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {
+    option (google.api.http) = {
+      get : "/_status/job_registry/{node_id}"
+    };
+  }
 }
-
