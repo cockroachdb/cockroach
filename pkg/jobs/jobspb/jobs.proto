@@ -320,3 +320,10 @@ enum Type {
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
   AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
 }
+
+message Job {
+  int64 id = 1;
+  // TODO(spaskob): add later:
+  // Payload payload = 2;
+  // Progress progress = 3;
+}
