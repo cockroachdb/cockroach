@@ -179,240 +179,242 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	lt := newLockTable(1000)
-	txnsByName := make(map[string]*enginepb.TxnMeta)
-	txnCounter := uint128.FromInts(0, 0)
-	requestsByName := make(map[string]Request)
-	guardsByReqName := make(map[string]lockTableGuard)
-	datadriven.RunTest(t, "testdata/lock_table", func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "txn":
-			var txnName string
-			// UUIDs for transactions are numbered from 1 by this test code and
-			// lockTableImpl.String() knows about UUIDs and not transaction names.
-			// Assigning txnNames of the form txn1, txn2, ... keeps the two in sync,
-			// which makes test cases easier to understand.
-			d.ScanArgs(t, "txn", &txnName)
-			ts := scanTimestamp(t, d)
-			var epoch int
-			d.ScanArgs(t, "epoch", &epoch)
-			txnMeta, ok := txnsByName[txnName]
-			var id uuid.UUID
-			if ok {
-				id = txnMeta.ID
-			} else {
-				id = nextUUID(&txnCounter)
-			}
-			txnsByName[txnName] = &enginepb.TxnMeta{
-				ID:             id,
-				Epoch:          enginepb.TxnEpoch(epoch),
-				WriteTimestamp: ts,
-			}
-			return ""
-
-		case "request":
-			// Seqnums for requests are numbered from 1 by lockTableImpl and
-			// lockTableImpl.String() does not know about request names. Assigning
-			// request names of the form req1, req2, ... keeps the two in sync,
-			// which makes test cases easier to understand.
-			var reqName string
-			d.ScanArgs(t, "r", &reqName)
-			if _, ok := requestsByName[reqName]; ok {
-				d.Fatalf(t, "duplicate request: %s", reqName)
-			}
-			var txnName string
-			d.ScanArgs(t, "txn", &txnName)
-			txnMeta, ok := txnsByName[txnName]
-			if !ok && txnName != "none" {
-				d.Fatalf(t, "unknown txn %s", txnName)
-			}
-			ts := scanTimestamp(t, d)
-			spans := scanSpans(t, d, ts)
-			req := Request{
-				Timestamp: ts,
-				Spans:     spans,
-			}
-			if txnMeta != nil {
-				// Update the transaction's timestamp, if necessary. The transaction
-				// may have needed to move its timestamp for any number of reasons.
-				txnMeta.WriteTimestamp = ts
-				req.Txn = &roachpb.Transaction{TxnMeta: *txnMeta}
-			}
-			requestsByName[reqName] = req
-			return ""
-
-		case "scan":
-			var reqName string
-			d.ScanArgs(t, "r", &reqName)
-			req, ok := requestsByName[reqName]
-			if !ok {
-				d.Fatalf(t, "unknown request: %s", reqName)
-			}
-			g := guardsByReqName[reqName]
-			g = lt.ScanAndEnqueue(req, g)
-			guardsByReqName[reqName] = g
-			return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
-
-		case "acquire":
-			var reqName string
-			d.ScanArgs(t, "r", &reqName)
-			req, ok := requestsByName[reqName]
-			if !ok {
-				d.Fatalf(t, "unknown request: %s", reqName)
-			}
-			var key string
-			d.ScanArgs(t, "k", &key)
-			var s string
-			d.ScanArgs(t, "durability", &s)
-			if len(s) != 1 || (s[0] != 'r' && s[0] != 'u') {
-				d.Fatalf(t, "incorrect durability: %s", s)
-			}
-			durability := lock.Unreplicated
-			if s[0] == 'r' {
-				durability = lock.Replicated
-			}
-			if err := lt.AcquireLock(&req.Txn.TxnMeta, roachpb.Key(key), lock.Exclusive, durability); err != nil {
-				return err.Error()
-			}
-			return lt.(*lockTableImpl).String()
-
-		case "release":
-			var txnName string
-			d.ScanArgs(t, "txn", &txnName)
-			txnMeta, ok := txnsByName[txnName]
-			if !ok {
-				d.Fatalf(t, "unknown txn %s", txnName)
-			}
-			var s string
-			d.ScanArgs(t, "span", &s)
-			span := getSpan(t, d, s)
-			// TODO(sbhola): also test ABORTED.
-			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
-			if err := lt.UpdateLocks(intent); err != nil {
-				return err.Error()
-			}
-			return lt.(*lockTableImpl).String()
-
-		case "update":
-			var txnName string
-			d.ScanArgs(t, "txn", &txnName)
-			txnMeta, ok := txnsByName[txnName]
-			if !ok {
-				d.Fatalf(t, "unknown txn %s", txnName)
-			}
-			ts := scanTimestamp(t, d)
-			var epoch int
-			d.ScanArgs(t, "epoch", &epoch)
-			txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID}
-			txnMeta.Epoch = enginepb.TxnEpoch(epoch)
-			txnMeta.WriteTimestamp = ts
-			txnsByName[txnName] = txnMeta
-			var s string
-			d.ScanArgs(t, "span", &s)
-			span := getSpan(t, d, s)
-			// TODO(sbhola): also test STAGING.
-			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
-			if err := lt.UpdateLocks(intent); err != nil {
-				return err.Error()
-			}
-			return lt.(*lockTableImpl).String()
-
-		case "add-discovered":
-			var reqName string
-			d.ScanArgs(t, "r", &reqName)
-			g := guardsByReqName[reqName]
-			if g == nil {
-				d.Fatalf(t, "unknown guard: %s", reqName)
-			}
-			var key string
-			d.ScanArgs(t, "k", &key)
-			var txnName string
-			d.ScanArgs(t, "txn", &txnName)
-			txnMeta, ok := txnsByName[txnName]
-			if !ok {
-				d.Fatalf(t, "unknown txn %s", txnName)
-			}
-			span := roachpb.Span{Key: roachpb.Key(key)}
-			intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
-			if err := lt.AddDiscoveredLock(intent, g); err != nil {
-				return err.Error()
-			}
-			return lt.(*lockTableImpl).String()
-
-		case "done":
-			// TODO(nvanbenschoten): rename this command to dequeue.
-			var reqName string
-			d.ScanArgs(t, "r", &reqName)
-			g := guardsByReqName[reqName]
-			if g == nil {
-				d.Fatalf(t, "unknown guard: %s", reqName)
-			}
-			lt.Dequeue(g)
-			delete(guardsByReqName, reqName)
-			delete(requestsByName, reqName)
-			return lt.(*lockTableImpl).String()
-
-		case "guard-start-waiting":
-			// TODO(nvanbenschoten): rename this command to should-wait.
-			var reqName string
-			d.ScanArgs(t, "r", &reqName)
-			g := guardsByReqName[reqName]
-			if g == nil {
-				d.Fatalf(t, "unknown guard: %s", reqName)
-			}
-			return fmt.Sprintf("%t", g.ShouldWait())
-
-		case "guard-state":
-			var reqName string
-			d.ScanArgs(t, "r", &reqName)
-			g := guardsByReqName[reqName]
-			if g == nil {
-				d.Fatalf(t, "unknown guard: %s", reqName)
-			}
-			var str string
-			select {
-			case <-g.NewStateChan():
-				str = "new: "
-			default:
-				str = "old: "
-			}
-			state := g.CurState()
-			var typeStr string
-			switch state.stateKind {
-			case waitForDistinguished:
-				typeStr = "waitForDistinguished"
-			case waitFor:
-				typeStr = "waitFor"
-			case waitElsewhere:
-				typeStr = "waitElsewhere"
-			case waitSelf:
-				return str + "state=waitSelf"
-			case doneWaiting:
-				return str + "state=doneWaiting"
-			}
-			id := state.txn.ID
-			var txnS string
-			for k, v := range txnsByName {
-				if v.ID.Equal(id) {
-					txnS = k
-					break
+	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
+		lt := newLockTable(1000)
+		txnsByName := make(map[string]*enginepb.TxnMeta)
+		txnCounter := uint128.FromInts(0, 0)
+		requestsByName := make(map[string]Request)
+		guardsByReqName := make(map[string]lockTableGuard)
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "txn":
+				// UUIDs for transactions are numbered from 1 by this test code and
+				// lockTableImpl.String() knows about UUIDs and not transaction names.
+				// Assigning txnNames of the form txn1, txn2, ... keeps the two in sync,
+				// which makes test cases easier to understand.
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				ts := scanTimestamp(t, d)
+				var epoch int
+				d.ScanArgs(t, "epoch", &epoch)
+				txnMeta, ok := txnsByName[txnName]
+				var id uuid.UUID
+				if ok {
+					id = txnMeta.ID
+				} else {
+					id = nextUUID(&txnCounter)
 				}
-			}
-			if txnS == "" {
-				txnS = fmt.Sprintf("unknown txn with ID: %v", state.txn.ID)
-			}
-			tsS := fmt.Sprintf("%d", state.ts.WallTime)
-			if state.ts.Logical != 0 {
-				tsS += fmt.Sprintf(",%d", state.ts.Logical)
-			}
-			return fmt.Sprintf("%sstate=%s txn=%s ts=%s", str, typeStr, txnS, tsS)
+				txnsByName[txnName] = &enginepb.TxnMeta{
+					ID:             id,
+					Epoch:          enginepb.TxnEpoch(epoch),
+					WriteTimestamp: ts,
+				}
+				return ""
 
-		case "print":
-			return lt.(*lockTableImpl).String()
+			case "request":
+				// Seqnums for requests are numbered from 1 by lockTableImpl and
+				// lockTableImpl.String() does not know about request names. Assigning
+				// request names of the form req1, req2, ... keeps the two in sync,
+				// which makes test cases easier to understand.
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				if _, ok := requestsByName[reqName]; ok {
+					d.Fatalf(t, "duplicate request: %s", reqName)
+				}
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				txnMeta, ok := txnsByName[txnName]
+				if !ok && txnName != "none" {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+				ts := scanTimestamp(t, d)
+				spans := scanSpans(t, d, ts)
+				req := Request{
+					Timestamp: ts,
+					Spans:     spans,
+				}
+				if txnMeta != nil {
+					// Update the transaction's timestamp, if necessary. The transaction
+					// may have needed to move its timestamp for any number of reasons.
+					txnMeta.WriteTimestamp = ts
+					req.Txn = &roachpb.Transaction{TxnMeta: *txnMeta}
+				}
+				requestsByName[reqName] = req
+				return ""
 
-		default:
-			return fmt.Sprintf("unknown command: %s", d.Cmd)
-		}
+			case "scan":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				req, ok := requestsByName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				g := guardsByReqName[reqName]
+				g = lt.ScanAndEnqueue(req, g)
+				guardsByReqName[reqName] = g
+				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
+
+			case "acquire":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				req, ok := requestsByName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				var key string
+				d.ScanArgs(t, "k", &key)
+				var s string
+				d.ScanArgs(t, "durability", &s)
+				if len(s) != 1 || (s[0] != 'r' && s[0] != 'u') {
+					d.Fatalf(t, "incorrect durability: %s", s)
+				}
+				durability := lock.Unreplicated
+				if s[0] == 'r' {
+					durability = lock.Replicated
+				}
+				if err := lt.AcquireLock(&req.Txn.TxnMeta, roachpb.Key(key), lock.Exclusive, durability); err != nil {
+					return err.Error()
+				}
+				return lt.(*lockTableImpl).String()
+
+			case "release":
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				txnMeta, ok := txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+				var s string
+				d.ScanArgs(t, "span", &s)
+				span := getSpan(t, d, s)
+				// TODO(sbhola): also test ABORTED.
+				intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
+				if err := lt.UpdateLocks(intent); err != nil {
+					return err.Error()
+				}
+				return lt.(*lockTableImpl).String()
+
+			case "update":
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				txnMeta, ok := txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+				ts := scanTimestamp(t, d)
+				var epoch int
+				d.ScanArgs(t, "epoch", &epoch)
+				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID}
+				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
+				txnMeta.WriteTimestamp = ts
+				txnsByName[txnName] = txnMeta
+				var s string
+				d.ScanArgs(t, "span", &s)
+				span := getSpan(t, d, s)
+				// TODO(sbhola): also test STAGING.
+				intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
+				if err := lt.UpdateLocks(intent); err != nil {
+					return err.Error()
+				}
+				return lt.(*lockTableImpl).String()
+
+			case "add-discovered":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				var key string
+				d.ScanArgs(t, "k", &key)
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				txnMeta, ok := txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+				span := roachpb.Span{Key: roachpb.Key(key)}
+				intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
+				if err := lt.AddDiscoveredLock(intent, g); err != nil {
+					return err.Error()
+				}
+				return lt.(*lockTableImpl).String()
+
+			case "done":
+				// TODO(nvanbenschoten): rename this command to dequeue.
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				lt.Dequeue(g)
+				delete(guardsByReqName, reqName)
+				delete(requestsByName, reqName)
+				return lt.(*lockTableImpl).String()
+
+			case "guard-start-waiting":
+				// TODO(nvanbenschoten): rename this command to should-wait.
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				return fmt.Sprintf("%t", g.ShouldWait())
+
+			case "guard-state":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				var str string
+				select {
+				case <-g.NewStateChan():
+					str = "new: "
+				default:
+					str = "old: "
+				}
+				state := g.CurState()
+				var typeStr string
+				switch state.stateKind {
+				case waitForDistinguished:
+					typeStr = "waitForDistinguished"
+				case waitFor:
+					typeStr = "waitFor"
+				case waitElsewhere:
+					typeStr = "waitElsewhere"
+				case waitSelf:
+					return str + "state=waitSelf"
+				case doneWaiting:
+					return str + "state=doneWaiting"
+				}
+				id := state.txn.ID
+				var txnS string
+				for k, v := range txnsByName {
+					if v.ID.Equal(id) {
+						txnS = k
+						break
+					}
+				}
+				if txnS == "" {
+					txnS = fmt.Sprintf("unknown txn with ID: %v", state.txn.ID)
+				}
+				tsS := fmt.Sprintf("%d", state.ts.WallTime)
+				if state.ts.Logical != 0 {
+					tsS += fmt.Sprintf(",%d", state.ts.Logical)
+				}
+				return fmt.Sprintf("%sstate=%s txn=%s ts=%s", str, typeStr, txnS, tsS)
+
+			case "print":
+				return lt.(*lockTableImpl).String()
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
 	})
 }
 
