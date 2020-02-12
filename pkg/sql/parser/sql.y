@@ -4734,7 +4734,7 @@ constraint_elem:
         Columns: $4.idxElems(),
         Sharded: $6.shardedIndexDef(),
       },
-      PrimaryKey:    true,
+      PrimaryKey: true,
     }
   }
 | FOREIGN KEY '(' name_list ')' REFERENCES table_name
