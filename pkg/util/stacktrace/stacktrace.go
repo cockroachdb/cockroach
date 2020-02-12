@@ -15,20 +15,17 @@ import (
 	"encoding/json"
 	"fmt"
 
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/raven-go"
+	sentry "github.com/getsentry/sentry-go"
 )
-
-// ReportableObject is an interface suitable for the extra detail
-// objects provided to SendReport().
-type ReportableObject = raven.Interface
 
 // StackTrace is an object suitable for inclusion in errors that can
 // ultimately be reported with ReportInternalError() or similar.
-type StackTrace = raven.Stacktrace
+type StackTrace = sentry.Stacktrace
 
 // It also implements the interface ReportableObject below and is
 // thus suitable for use with SendReport().
-var _ ReportableObject = &StackTrace{}
+// var _ ReportableObject = &StackTrace{}
 
 // NewStackTrace generates a stacktrace suitable for inclusion in
 // error reports.
