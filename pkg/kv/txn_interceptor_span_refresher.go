@@ -176,7 +176,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	}
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
-	br, pErr, largestRefreshTS := sr.sendLockedWithRefreshAttempts(ctx, ba, maxAttempts)
+	br, pErr := sr.sendLockedWithRefreshAttempts(ctx, ba, maxAttempts)
 	if pErr != nil {
 		// The server sometimes "performs refreshes" - it updates the transaction's
 		// ReadTimestamp when the client said that there's nothing to refresh. In
@@ -204,7 +204,6 @@ func (sr *txnSpanRefresher) SendLocked(
 	// qualified by possible resume spans in the responses, if we
 	// haven't yet exceeded the max read key bytes.
 	if !sr.refreshInvalid {
-		ba.Txn.ReadTimestamp.Forward(largestRefreshTS)
 		if err := sr.appendRefreshSpans(ctx, ba, br); err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -222,16 +221,15 @@ func (sr *txnSpanRefresher) SendLocked(
 
 // sendLockedWithRefreshAttempts sends the batch through the wrapped sender. It
 // catches serializable errors and attempts to avoid them by refreshing the txn
-// at a larger timestamp. It returns the response, an error, and the largest
-// timestamp that the request was able to refresh at.
+// at a larger timestamp.
 func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	ctx context.Context, ba roachpb.BatchRequest, maxRefreshAttempts int,
-) (_ *roachpb.BatchResponse, _ *roachpb.Error, largestRefreshTS hlc.Timestamp) {
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	br, pErr := sr.sendHelper(ctx, ba)
 	if pErr != nil && maxRefreshAttempts > 0 {
-		br, pErr, largestRefreshTS = sr.maybeRetrySend(ctx, ba, pErr, maxRefreshAttempts)
+		br, pErr = sr.maybeRetrySend(ctx, ba, pErr, maxRefreshAttempts)
 	}
-	return br, pErr, largestRefreshTS
+	return br, pErr
 }
 
 // maybeRetrySend attempts to catch serializable errors and avoid them by
@@ -240,11 +238,11 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 // batch. If the refresh fails, the input pErr is returned.
 func (sr *txnSpanRefresher) maybeRetrySend(
 	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
-) (*roachpb.BatchResponse, *roachpb.Error, hlc.Timestamp) {
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Check for an error which can be retried after updating spans.
 	canRetryTxn, retryTxn := roachpb.CanTransactionRetryAtRefreshedTimestamp(ctx, pErr)
 	if !canRetryTxn || !sr.canAutoRetry {
-		return nil, pErr, hlc.Timestamp{}
+		return nil, pErr
 	}
 
 	ba.UpdateTxn(retryTxn)
@@ -253,26 +251,22 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 	// Try updating the txn spans so we can retry.
 	if ok := sr.tryUpdatingTxnSpans(ctx, retryTxn); !ok {
-		return nil, pErr, hlc.Timestamp{}
+		return nil, pErr
 	}
 
-	// We've refreshed all of the read spans successfully and set
-	// newBa.Txn.ReadTimestamp to the current timestamp. Submit the
-	// batch again.
-	retryBr, retryErr, retryLargestRefreshTS := sr.sendLockedWithRefreshAttempts(
+	// We've refreshed all of the read spans successfully and bumped
+	// ba.Txn's timestamps. Attempt the request again.
+	retryBr, retryErr := sr.sendLockedWithRefreshAttempts(
 		ctx, ba, maxRefreshAttempts-1,
 	)
 	if retryErr != nil {
 		log.VEventf(ctx, 2, "retry failed with %s", retryErr)
-		return nil, retryErr, hlc.Timestamp{}
+		return nil, retryErr
 	}
 
-	log.VEventf(ctx, 2, "retry successful @%s", ba.Txn.WriteTimestamp)
+	log.VEventf(ctx, 2, "retry successful @%s", retryBr.Txn.ReadTimestamp)
 	sr.autoRetryCounter.Inc(1)
-	retryTxn.ReadTimestamp.Forward(retryLargestRefreshTS)
-
-	// On success, combine responses if applicable and set error to nil.
-	return retryBr, nil, retryTxn.ReadTimestamp
+	return retryBr, nil
 }
 
 // tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all spans read
@@ -351,13 +345,13 @@ func (sr *txnSpanRefresher) sendHelper(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) error {
-	batchTimestamp := ba.Txn.ReadTimestamp
-	if batchTimestamp.Less(sr.refreshedTimestamp) {
+	readTimestamp := br.Txn.ReadTimestamp
+	if readTimestamp.Less(sr.refreshedTimestamp) {
 		// This can happen with (illegal) concurrent txn use, but that's supposed to
 		// be detected by the gatekeeper interceptor.
 		return errors.AssertionFailedf("attempting to append refresh spans after the tracked"+
 			" timestamp has moved forward. batchTimestamp: %s refreshedTimestamp: %s ba: %s",
-			errors.Safe(batchTimestamp), errors.Safe(sr.refreshedTimestamp), ba)
+			errors.Safe(readTimestamp), errors.Safe(sr.refreshedTimestamp), ba)
 	}
 
 	ba.RefreshSpanIterate(br, func(span roachpb.Span) {
