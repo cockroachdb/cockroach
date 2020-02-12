@@ -179,7 +179,7 @@ func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 	}
 
 	var resume *roachpb.Span
-	if p.results.count == p.maxKeys && p.advanceKey() {
+	if p.maxKeys > 0 && p.results.count == p.maxKeys && p.advanceKey() {
 		if p.reverse {
 			// curKey was not added to results, so it needs to be included in the
 			// resume span.
@@ -356,7 +356,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve
 		// it.
-		if p.results.count == p.maxKeys {
+		if p.maxKeys > 0 && p.results.count == p.maxKeys {
 			// We've already retrieved the desired number of keys and now
 			// we're adding the resume key. We don't want to add the
 			// intent here as the intents should only correspond to KVs
@@ -409,7 +409,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// history that has a sequence number equal to or less than the read
 		// sequence, read that value.
 		if p.getFromIntentHistory() {
-			if p.results.count == p.maxKeys {
+			if p.maxKeys > 0 && p.results.count == p.maxKeys {
 				return false
 			}
 			return p.advanceKey()
@@ -564,7 +564,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
 			// TODO(bilal): see if this can be implemented more transparently.
 			p.maxKeys = p.results.count
 		}
-		if p.results.count == p.maxKeys {
+		if p.maxKeys > 0 && p.results.count == p.maxKeys {
 			return false
 		}
 	}
