@@ -54,7 +54,7 @@ export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {
   // is a performance concern with invalidation periods.
   loadTableDetails(props = this.props) {
     if (props.tableInfos && props.tableInfos.length > 0) {
-      const data: TableInfo[] = this.getDatabaseSummaryData ? this.getDatabaseSummaryData(props.tableInfos) : props.tableInfos;
+      const data: TableInfo[] = this.getDatabaseSummaryData(props.tableInfos);
       _.each(data, (tblInfo) => {
         if (_.isUndefined(tblInfo.numColumns)) {
           props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
