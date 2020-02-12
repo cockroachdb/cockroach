@@ -461,3 +461,18 @@ weird_names  CREATE TABLE weird_names (
                 INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH BUCKET_COUNT = 4,
                 FAMILY "primary" ("I am a column with spaces", "'quotes' in the column's name", "crdb_internal_I am a column with spaces_shard_12", "crdb_internal_'quotes' in the column's name_shard_4")
 )
+
+subtest interleave_disabled
+
+statement ok
+CREATE TABLE parent (x INT PRIMARY KEY);
+
+statement error pq: interleaved indexes cannot also be hash sharded
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 10) INTERLEAVE IN PARENT parent (x)
+
+statement error pq: interleaved indexes cannot also be hash sharded
+CREATE TABLE t (x INT, y INT, PRIMARY KEY (x, y) USING HASH WITH BUCKET_COUNT = 10) INTERLEAVE IN PARENT parent (x)
+
+statement error pq: interleaved indexes cannot also be hash sharded
+CREATE INDEX ON parent (x) USING HASH WITH BUCKET_COUNT = 10 INTERLEAVE IN PARENT parent(x)
+

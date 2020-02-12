@@ -147,6 +147,9 @@ func MakeIndexDescriptor(
 		if n.PartitionBy != nil {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 		}
+		if n.Interleave != nil {
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
+		}
 		shardCol, newColumn, err := setupShardedIndex(
 			params.ctx,
 			params.EvalContext().Settings,

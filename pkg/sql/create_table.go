@@ -1211,6 +1211,9 @@ func MakeTableDesc(
 				if n.PartitionBy != nil {
 					return desc, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 				}
+				if n.Interleave != nil {
+					return desc, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
+				}
 				buckets, err := tree.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
 				if err != nil {
 					return desc, err
@@ -1332,6 +1335,9 @@ func MakeTableDesc(
 				idx.Type = sqlbase.IndexDescriptor_INVERTED
 			}
 			if d.Sharded != nil {
+				if d.Interleave != nil {
+					return desc, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
+				}
 				if err := setupShardedIndexForNewTable(d, &idx); err != nil {
 					return desc, err
 				}
@@ -1361,6 +1367,9 @@ func MakeTableDesc(
 				Version:          indexEncodingVersion,
 			}
 			if d.Sharded != nil {
+				if n.Interleave != nil && d.PrimaryKey {
+					return desc, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
+				}
 				if err := setupShardedIndexForNewTable(&d.IndexTableDef, &idx); err != nil {
 					return desc, err
 				}
