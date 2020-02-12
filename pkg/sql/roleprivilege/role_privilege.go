@@ -58,6 +58,12 @@ var toBool = map[Kind]bool{
 	NOCREATEROLE: false,
 }
 
+// toPositiveOption is a map of "negative" role options (Kind) ->
+// to it's positive option
+var toPositiveOption = map[Kind]Kind{
+	NOCREATEROLE: CREATEROLE,
+}
+
 // ToSQLColumnName returns the SQL Column Name corresponding to the Role Privilege.
 func (k Kind) ToSQLColumnName() string {
 	return toSQLColumn[k]
@@ -106,25 +112,54 @@ func (pl List) String() string {
 	return strings.Join(pl.names(), " ")
 }
 
-// CreateSetStmtFromRolePrivileges returns a string of the form:
-// "SET "privilegeA" = true, "privilegeB" = false".
-func (pl List) CreateSetStmtFromRolePrivileges() (string, error) {
+// GetInsertStmtRows returns the rows to insert for the given role options.
+func (pl List) GetInsertStmtRows() (rows string, numRows int, err error) {
 	if len(pl) <= 0 {
-		return "", pgerror.Newf(pgcode.Syntax, "no role privileges found")
-	}
-	var sb strings.Builder
-	sb.WriteString("SET ")
-	for i, privilege := range pl {
-		if i > 0 {
-			sb.WriteString(" , ")
-		}
-		sb.WriteString(fmt.Sprintf(
-			`"%s" = %t`,
-			toSQLColumn[privilege],
-			toBool[privilege]))
+		return "", 0, nil
 	}
 
-	return sb.String(), nil
+	numRows = 0
+	err = pl.CheckRolePrivilegeConflicts()
+	if err != nil {
+		return "", 0, err
+	}
+	var sb strings.Builder
+	for i, privilege := range pl {
+		// Only consider "positive" options.
+		if toPositiveOption[privilege] != 0 {
+			continue
+		}
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(fmt.Sprintf(
+			`($1, '%s', %s)`,
+			privilege.String(),
+			// TODO(richardjcai): Update this in the role refactor PR.
+			// Currently no role options have a value.
+			"NULL",
+		))
+		numRows++
+	}
+
+	return sb.String(), numRows, nil
+}
+
+// GetDeleteStmtRows returns the list of privileges to delete.
+// Converts negative options to positive for removing from system.role_options
+// since only positive options are saved. (Ie. NOCREATEROLE -> CREATEROLE)
+func (pl List) GetDeleteStmtRows() []string {
+	var strList []string
+	for _, option := range pl {
+		positiveOption := toPositiveOption[option]
+		if positiveOption != 0 {
+			strList = append(strList, positiveOption.String())
+		} else {
+			strList = append(strList, option.String())
+		}
+	}
+
+	return strList
 }
 
 // ListFromStrings takes a list of strings and attempts to build a list of Kind.

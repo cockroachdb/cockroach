@@ -70,8 +70,15 @@ CREATE TABLE system.users (
   username         STRING PRIMARY KEY,
   "hashedPassword" BYTES,
   "isRole"         BOOL NOT NULL DEFAULT false,
-  "hasCreateRole"  BOOL NOT NULL DEFAULT false
 );`
+
+	RoleOptionsTableSchema = `
+CREATE TABLE system.role_options (
+	username STRING NOT NULL,
+	option STRING NOT NULL,
+	value STRING,
+	PRIMARY KEY (username, option)
+)`
 
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
@@ -265,6 +272,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.DeprecatedNamespaceTableID: privilege.ReadData,
 	keys.DescriptorTableID:          privilege.ReadData,
 	keys.UsersTableID:               privilege.ReadWriteData,
+	keys.RoleOptionsTableID:         privilege.ReadWriteData,
 	keys.ZonesTableID:               privilege.ReadWriteData,
 	// We eventually want to migrate the table to appear read-only to force the
 	// the use of a validating, logging accessor, so we'll go ahead and tolerate
@@ -428,19 +436,50 @@ var (
 			{Name: "username", ID: 1, Type: *types.String},
 			{Name: "hashedPassword", ID: 2, Type: *types.Bytes, Nullable: true},
 			{Name: "isRole", ID: 3, Type: *types.Bool, DefaultExpr: &falseBoolString},
-			{Name: "hasCreateRole", ID: 4, Type: *types.Bool, DefaultExpr: &falseBoolString},
 		},
-		NextColumnID: 5,
+		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
 			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
 			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
-			{Name: "fam_4_hasCreateRole", ID: 4, ColumnNames: []string{"hasCreateRole"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
 		},
 		PrimaryIndex:   pk("username"),
-		NextFamilyID:   5,
+		NextFamilyID:   4,
 		NextIndexID:    2,
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// RoleOptionsTable is the descriptor for the role_options table.
+	RoleOptionsTable = TableDescriptor{
+		Name:                    "role_options",
+		ID:                      keys.RoleOptionsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "username", ID: 1, Type: *types.String},
+			{Name: "option", ID: 2, Type: *types.String},
+			{Name: "value", ID: 3, Type: *types.String, Nullable: true},
+		},
+		NextColumnID: 4,
+
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"username", "option", "value"}, ColumnIDs: []ColumnID{1, 2, 3}},
+		},
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"username", "option"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+			Version:          SecondaryIndexFamilyFormatVersion,
+		},
+		NextFamilyID:   1,
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleOptionsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -1281,6 +1320,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &RoleOptionsTable)
 
 	// Tables introduced in 2.0, added here for 2.1.
 	target.AddDescriptor(keys.SystemDatabaseID, &TableStatisticsTable)

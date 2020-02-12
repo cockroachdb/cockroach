@@ -124,8 +124,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
-		// Replaced by addAdminRoleWithHasCreateRole migration.
-		name: "add system.users isRole column and create admin role",
+		name:   "add system.users isRole column and create admin role",
+		workFn: addAdminRole,
 	},
 	{
 		// Introduced in v2.0, replaced by "ensure admin role privileges in all descriptors"
@@ -289,15 +289,15 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
 	},
 	{
-		// Introduced in v20.1.
-		name:                "add hasCreateRole column to system.users table",
-		workFn:              addHasCreateRoleToSystemUsers,
-		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
+		// Introduced in v20.1.,
+		name:             "create system.role_options table.",
+		workFn:           createRoleOptionsTable,
+		newDescriptorIDs: staticIDs(keys.RoleOptionsTableID),
 	},
 	{
 		// Introduced in v20.1.
-		name:   "set isRole and hasCreateRole for admin role in system.users table",
-		workFn: addAdminRoleWithHasCreateRole,
+		name:   "insert (admin, CREATEROLE) column into system.role_options.",
+		workFn: addCreateRoleToAdmin,
 	},
 }
 
@@ -746,6 +746,11 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 	})
 }
 
+func createRoleOptionsTable(ctx context.Context, r runner) error {
+	return errors.Wrap(createSystemTable(ctx, r, sqlbase.RoleOptionsTable),
+		"failed to create system.role_options")
+}
+
 // migrateSystemNamespace migrates entries from the deprecated system.namespace
 // table to the new one, which includes a parentSchemaID column. Each database
 // entry is copied to the new table along with a corresponding entry for the
@@ -871,6 +876,14 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	return nil
 }
 
+func addAdminRole(ctx context.Context, r runner) error {
+	// Upsert the admin role into the table. We intentionally override any existing entry.
+	const upsertAdminStmt = `
+          UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
+          `
+	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
+}
+
 func addRootUser(ctx context.Context, r runner) error {
 	// Upsert the root user into the table. We intentionally override any existing entry.
 	const upsertRootStmt = `
@@ -888,35 +901,13 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 		ctx, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
 }
 
-func addAdminRoleWithHasCreateRole(ctx context.Context, r runner) error {
+func addCreateRoleToAdmin(ctx context.Context, r runner) error {
 	// Upsert the admin role with CreateRole privilege into the table.
 	// We intentionally override any existing entry.
 	const upsertAdminStmt = `
-          UPSERT INTO system.users (username, "hashedPassword", "isRole", "hasCreateRole") VALUES ($1, '', true, true)
+          INSERT INTO system.role_options (username, option, value) VALUES ($1, 'CREATEROLE', NULL)
           `
-	return r.execAsRootWithRetry(ctx, "addAdminRoleWithHasCreateRole", upsertAdminStmt, sqlbase.AdminRole)
-}
-
-func addHasCreateRoleToSystemUsers(ctx context.Context, r runner) error {
-	const addHasCreateRoleColumn = `
-          ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "hasCreateRole" bool NOT NULL DEFAULT false
-          `
-
-	var err error
-
-	// Root user doesn't have CREATE privilege on system.users. Use node user.
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		_, err = r.sqlExecutor.ExecEx(ctx, "addHasCreateRoleColumn", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{
-				User: security.NodeUser,
-			}, addHasCreateRoleColumn)
-		if err == nil {
-			break
-		}
-		log.Warningf(ctx, "failed to run %s: %v", addHasCreateRoleColumn, err)
-	}
-
-	return err
+	return r.execAsRootWithRetry(ctx, "addCreateRoleToAdmin", upsertAdminStmt, sqlbase.AdminRole)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {

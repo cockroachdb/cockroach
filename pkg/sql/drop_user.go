@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -173,9 +174,26 @@ func (n *DropUserNode) startExec(params runParams) error {
 			params.ctx,
 			"drop-user",
 			params.p.txn,
-			`DELETE FROM system.users WHERE username=$1 AND "isRole" = $2`,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE username=$1 AND "isRole" = $2`,
+				userTableName,
+			),
 			normalizedUsername,
 			n.isRole,
+		)
+		if err != nil {
+			return err
+		}
+
+		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			"drop-user",
+			params.p.txn,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE username=$1`,
+				roleOptionsTableName,
+			),
+			normalizedUsername,
 		)
 		if err != nil {
 			return err

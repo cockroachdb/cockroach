@@ -315,19 +315,21 @@ func (p *planner) HasRolePrivilege(ctx context.Context, rolePrivilege roleprivil
 		}
 	}
 
-	hasCreateRoleRows, err := p.ExecCfg().InternalExecutor.Query(
-		ctx, "hasCreateRole", p.Txn(),
+	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryEx(
+		ctx, "has-role-privilege", p.Txn(),
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		fmt.Sprintf(
-			`SELECT * from %s WHERE "%s" = true AND username = ANY($1)`,
-			userTableName,
-			rolePrivilege.ToSQLColumnName()),
+			`SELECT * from %s WHERE option = '%s' AND username = ANY($1)`,
+			roleOptionsTableName,
+			rolePrivilege.String(),
+		),
 		roles)
 
 	if err != nil {
 		return err
 	}
 
-	if len(hasCreateRoleRows) != 0 {
+	if len(hasRolePrivilege) != 0 {
 		return nil
 	}
 

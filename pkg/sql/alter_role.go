@@ -13,6 +13,10 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -77,25 +81,68 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	setStmt, err := n.rolePrivileges.CreateSetStmtFromRolePrivileges()
-	if err != nil {
-		return err
-	}
-
-	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+	// Check if role exists.
+	_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
 		"update-role",
 		params.p.txn,
-		fmt.Sprintf(`UPDATE %s %s WHERE username = $1`, userTableName, setStmt),
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		fmt.Sprintf("SELECT * FROM %s WHERE username = $1", userTableName),
 		normalizedUsername,
 	)
-
 	if err != nil {
 		return err
 	}
-	if n.run.rowsAffected == 0 {
-		return pgerror.Newf(pgcode.UndefinedObject,
-			"user %s does not exist", name)
+
+	toDelete := n.rolePrivileges.GetDeleteStmtRows()
+	if len(toDelete) > 0 {
+		var options = tree.NewDArray(types.String)
+		for _, option := range toDelete {
+			err := options.Append(tree.NewDString(option))
+			if err != nil {
+				return err
+			}
+		}
+
+		_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			"drop-user",
+			params.p.txn,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE username = $1 AND option = ANY($2)`,
+				roleOptionsTableName,
+			),
+			normalizedUsername,
+			options,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	rows, numRows, err := n.rolePrivileges.GetInsertStmtRows()
+	if err != nil {
+		return err
+	}
+	if numRows > 0 {
+		n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			"update-role",
+			params.p.txn,
+			fmt.Sprintf("INSERT INTO %s VALUES %s", roleOptionsTableName, rows),
+			normalizedUsername,
+		)
+
+		if err != nil {
+			return err
+		}
+
+		if n.run.rowsAffected != numRows {
+			return errors.Newf(
+				"expected %d rows inserted into system.role_options, inserted %d",
+				numRows,
+				n.run.rowsAffected)
+		}
 	}
 	return nil
 }

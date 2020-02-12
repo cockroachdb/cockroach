@@ -36,6 +36,7 @@ type CreateUserNode struct {
 }
 
 var userTableName = tree.NewTableName("system", "users")
+var roleOptionsTableName = tree.NewTableName("system", "role_options")
 
 // CreateUser creates a user.
 // Privileges: INSERT on system.users.
@@ -134,17 +135,15 @@ func (n *CreateUserNode) startExec(params runParams) error {
 			msg, normalizedUsername)
 	}
 
-	hasCreateRole := n.rolePrivileges.Contains(roleprivilege.CREATEROLE)
-
+	// TODO(richardjcai): move hashedPassword column to system.role_options.
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
-		fmt.Sprintf("insert into %s values ($1, $2, $3, $4)", userTableName),
+		fmt.Sprintf("insert into %s values ($1, $2, $3)", userTableName),
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,
-		hasCreateRole,
 	)
 
 	if err != nil {
@@ -153,6 +152,31 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		return errors.AssertionFailedf("%d rows affected by user creation; expected exactly one row affected",
 			n.run.rowsAffected,
 		)
+	}
+
+	rows, numRows, err := n.rolePrivileges.GetInsertStmtRows()
+	if err != nil {
+		return err
+	}
+
+	if numRows > 0 {
+		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			opName,
+			params.p.txn,
+			fmt.Sprintf("INSERT INTO %s VALUES %s", roleOptionsTableName, rows),
+			normalizedUsername,
+		)
+		if err != nil {
+			return err
+		}
+
+		if rowsAffected != numRows {
+			return errors.Newf(
+				"expected %d rows inserted into system.role_options, inserted %d",
+				numRows,
+				rowsAffected)
+		}
 	}
 
 	return nil
