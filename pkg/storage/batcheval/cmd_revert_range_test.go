@@ -134,7 +134,7 @@ func TestCmdRevertRange(t *testing.T) {
 				StartKey: roachpb.RKey(startKey),
 				EndKey:   roachpb.RKey(endKey),
 			}
-			cArgs := CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC}, MaxKeys: 2}
+			cArgs := CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC, MaxSpanRequestKeys: 2}}
 			evalCtx := &MockEvalCtx{Desc: &desc, Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), Stats: stats}
 			cArgs.EvalCtx = evalCtx.EvalContext()
 			afterStats := getStats(t, eng)

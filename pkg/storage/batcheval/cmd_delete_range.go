@@ -52,7 +52,7 @@ func DeleteRange(
 		timestamp = h.Timestamp
 	}
 	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
-		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, cArgs.MaxKeys, timestamp, h.Txn, args.ReturnKeys,
+		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.MaxSpanRequestKeys, timestamp, h.Txn, args.ReturnKeys,
 	)
 	if err == nil {
 		reply.Keys = deleted
