@@ -2855,7 +2855,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// We will be testing the SSTs written on store2's engine.
-	var eng engine.Engine
+	var receivingEng, sendingEng engine.Engine
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
@@ -2892,19 +2892,62 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			return errors.Errorf("expected to ingest 7 SSTs, got %d SSTs", len(sstNames))
 		}
 
-		// Only verify the SSTs of the subsumed replicas (the last three SSTs) by
-		// constructing the expected SST and ensuring that they are byte-by-byte
-		// equal. This verification ensures that the SSTs have the same tombstones
-		// and range deletion tombstones.
-		var expectedSSTs [][]byte
-		sstNames = sstNames[4:]
+		// Only try to predict SSTs 3 and 5-7. SSTs 1, 2 and 4 are excluded in
+		// the test since the state of the Raft log can be non-deterministic
+		// with extra entries being appended to the sender's log after the
+		// snapshot has already been sent.
+		var sstNamesSubset []string
+		sstNamesSubset = append(sstNamesSubset, sstNames[2])
+		sstNamesSubset = append(sstNamesSubset, sstNames[4:]...)
 
-		// Range-id local range of subsumed replicas.
+		// Construct the expected SSTs and ensure that they are byte-by-byte
+		// equal. This verification ensures that the SSTs have the same
+		// tombstones and range deletion tombstones.
+		var expectedSSTs [][]byte
+
+		// Construct SST #1 through #3 as numbered above, but only ultimately
+		// keep the 3rd one.
+		keyRanges := rditer.MakeReplicatedKeyRanges(inSnap.State.Desc)
+		it := rditer.NewReplicaDataIterator(inSnap.State.Desc, sendingEng, true /* replicatedOnly */, false /* seekEnd */)
+		defer it.Close()
+		// Write a range deletion tombstone to each of the SSTs then put in the
+		// kv entries from the sender of the snapshot.
+		for _, r := range keyRanges {
+			sstFile := &engine.MemFile{}
+			sst := engine.MakeIngestionSSTWriter(sstFile)
+			if err := sst.ClearRange(r.Start, r.End); err != nil {
+				return err
+			}
+
+			// Keep adding kv data to the SST until the the key exceeds the
+			// bounds of the range, then proceed to the next range.
+			for ; ; it.Next() {
+				valid, err := it.Valid()
+				if err != nil {
+					return err
+				}
+				if !valid || r.End.Key.Compare(it.Key().Key) <= 0 {
+					if err := sst.Finish(); err != nil {
+						return err
+					}
+					sst.Close()
+					expectedSSTs = append(expectedSSTs, sstFile.Data())
+					break
+				}
+				if err := sst.Put(it.Key(), it.Value()); err != nil {
+					return err
+				}
+			}
+		}
+		expectedSSTs = expectedSSTs[2:]
+
+		// Construct SSTs #5 and #6: range-id local keys of subsumed replicas
+		// with RangeIDs 3 and 4.
 		for _, rangeID := range []roachpb.RangeID{roachpb.RangeID(3), roachpb.RangeID(4)} {
 			sstFile := &engine.MemFile{}
 			sst := engine.MakeIngestionSSTWriter(sstFile)
 			defer sst.Close()
-			r := rditer.MakeRangeIDLocalKeyRange(rangeID, false)
+			r := rditer.MakeRangeIDLocalKeyRange(rangeID, false /* replicatedOnly */)
 			if err := sst.ClearRange(r.Start, r.End); err != nil {
 				return err
 			}
@@ -2920,7 +2963,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			expectedSSTs = append(expectedSSTs, sstFile.Data())
 		}
 
-		// User key range of subsumed replicas.
+		// Construct SST #7: user key range of subsumed replicas.
 		sstFile := &engine.MemFile{}
 		sst := engine.MakeIngestionSSTWriter(sstFile)
 		defer sst.Close()
@@ -2929,7 +2972,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKeyMax,
 		}
 		r := rditer.MakeUserKeyRange(&desc)
-		if err := engine.ClearRangeWithHeuristic(eng, &sst, r.Start.Key, r.End.Key); err != nil {
+		if err := engine.ClearRangeWithHeuristic(receivingEng, &sst, r.Start.Key, r.End.Key); err != nil {
 			return err
 		}
 		err := sst.Finish()
@@ -2938,14 +2981,19 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		expectedSSTs = append(expectedSSTs, sstFile.Data())
 
-		for i := range sstNames {
-			actualSST, err := eng.ReadFile(sstNames[i])
+		var mismatchedSstsIdx []int
+		// Iterate over all the tested SSTs and check that they're byte-by-byte equal.
+		for i := range sstNamesSubset {
+			actualSST, err := receivingEng.ReadFile(sstNamesSubset[i])
 			if err != nil {
 				return err
 			}
 			if !bytes.Equal(actualSST, expectedSSTs[i]) {
-				return errors.Errorf("contents of %s were unexpected", sstNames[i])
+				mismatchedSstsIdx = append(mismatchedSstsIdx, i)
 			}
+		}
+		if len(mismatchedSstsIdx) != 0 {
+			return errors.Errorf("SST indices %v don't match", mismatchedSstsIdx)
 		}
 		return nil
 	}
@@ -2959,7 +3007,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
-	eng = store2.Engine()
+	sendingEng = store0.Engine()
+	receivingEng = store2.Engine()
 	distSender := mtc.distSenders[0]
 
 	// Create three fully-caught-up, adjacent ranges on all three stores.
@@ -2988,7 +3037,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	aRepl0 := store0.LookupReplica(roachpb.RKey("a"))
 
-	// Start dropping all Raft traffic to the first range on store1.
+	// Start dropping all Raft traffic to the first range on store2.
 	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
 		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
