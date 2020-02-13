@@ -41,6 +41,7 @@ interface DropdownOwnProps {
   disabledArrows?: ArrowDirection[];
   content?: any;
   isTimeRange?: boolean;
+  className?: string;
 }
 
 /**
@@ -84,6 +85,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       "dropdown",
       isTimeRange ? "_range" : "",
       { "dropdown--side-arrows": !_.isNil(onArrowClick) },
+      this.props.className,
     );
     const leftClassName = classNames(
       "dropdown__side-arrow",
@@ -107,7 +109,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
           {this.props.title}{this.props.title && !isTimeRange ? ":" : ""}
       </span>
       {content ? content : <Select
-        className="dropdown__select"
+        className="dropdown__select is-focused is-open"
         arrowRenderer={this.arrowRenderer}
         clearable={false}
         searchable={false}
