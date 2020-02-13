@@ -174,6 +174,12 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// localStoreNodeUpgradePendingVersionSuffix stores the version
+	// in which this local store should upgrade to when starting up.
+	localStoreNodeUpgradePendingVersionSuffix = []byte("nodeupgrade_pending_version")
+	// localStoreNodeUpgradeCurrentVersionSuffix stores the version
+	// in which this local store is currently set to.
+	localStoreNodeUpgradeCurrentVersionSuffix = []byte("nodeupgrade_current_version")
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
