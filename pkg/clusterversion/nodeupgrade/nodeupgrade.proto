@@ -1,0 +1,68 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.nodeupgrade;
+option go_package = "nodeupgrade";
+
+import "errorspb/errors.proto";
+import "gogoproto/gogo.proto";
+
+// Version represents the current version this node is on.
+enum Version {
+  // Unset is the reserved 0 value for unknown unset state.
+  // For new nodes, this should "leapfrog" to the maximum current version
+  // in the cluster.
+  Unset = 0;
+
+  Version_20_1 = 1;
+  ExampleUpgrade = 2;
+}
+
+message SetTargetVersionRequest {
+  Version target_version = 1;
+}
+
+message SetTargetVersionResponse {
+  errorspb.EncodedError err = 1;
+}
+
+message RunPendingUpgradesRequest {}
+
+message RunPendingUpgradesResponse {
+  errorspb.EncodedError err = 1;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  errorspb.EncodedError err = 1;
+  message Engine {
+    // CurrentVersion represents the version in which the node has completed
+    // upgrades up to.
+    // This should always be >= pending_version.
+    Version current_version = 1;
+    // PendingVersion represents the version the node is trying to upgrade
+    // to, if any.
+    Version pending_version = 2;
+  }
+  repeated Engine engines = 2;
+}
+
+// NodeUpgrader is a service which runs uode upgrades.
+service NodeUpgrader {
+  // SetTargetVersion sets a target for the node to be upgraded to.
+  rpc SetTargetVersion(SetTargetVersionRequest) returns (SetTargetVersionResponse) {};
+  // RunPendingUpgrades informs the node to run all pending upgrades.
+  // This will upgrade a node from it's current version to the pending version.
+  rpc RunPendingUpgrades(RunPendingUpgradesRequest) returns (RunPendingUpgradesResponse) {};
+  // Status returns version info about the current node.
+  rpc Status(StatusRequest) returns (StatusResponse) {};
+}
