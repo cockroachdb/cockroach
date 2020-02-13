@@ -375,6 +375,7 @@ message Version {
 
   // The names "major" and "minor" are reserved in C in
   // some platforms (e.g. FreeBSD).
+
   optional int32 major_val = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "Major"];
   optional int32 minor_val = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "Minor"];
   // Note that patch is a placeholder and will always be zero.
