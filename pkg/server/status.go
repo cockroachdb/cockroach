@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1998,7 +1997,7 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 	return si.info
 }
 
-// RegistryStatus returns details about the jobs running on the registry at a
+// JobRegistryStatus returns details about the jobs running on the registry at a
 // particular node.
 func (s *statusServer) JobRegistryStatus(
 	ctx context.Context, req *serverpb.JobRegistryStatusRequest,
@@ -2026,10 +2025,31 @@ func (s *statusServer) JobRegistryStatus(
 		NodeID: remoteNodeID,
 	}
 	for _, jID := range s.admin.server.jobRegistry.CurrentlyRunningJobs() {
-		job := jobspb.Job{
+		job := serverpb.JobRegistryStatusResponse_Job{
 			Id: jID,
 		}
 		resp.RunningJobs = append(resp.RunningJobs, &job)
 	}
 	return resp, nil
+}
+
+// JobStatus returns details about the jobs running on the registry at a
+// particular node.
+func (s *statusServer) JobStatus(
+	ctx context.Context, req *serverpb.JobStatusRequest,
+) (*serverpb.JobStatusResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	j, err := s.admin.server.jobRegistry.LoadJob(ctx, req.JobId)
+	if err != nil {
+		return nil, err
+	}
+	return &serverpb.JobStatusResponse{
+		Job: j.ToProto(),
+	}, nil
 }

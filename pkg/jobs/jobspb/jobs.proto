@@ -329,7 +329,8 @@ enum Type {
 
 message Job {
   int64 id = 1;
-  // TODO(spaskob): add later:
-  // Payload payload = 2;
-  // Progress progress = 3;
+  // Keep progress first as it may bre more relevant to see when looking at a
+  // running job.
+  Progress progress = 2;
+  Payload payload = 3;
 }
