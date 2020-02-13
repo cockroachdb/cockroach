@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,10 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2937,6 +2940,197 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 	close(unblock)
 	require.NoError(t, <-incErr)
 	require.NoError(t, <-transferErr)
+}
+
+// TestStrictGCEnforcement ensures that strict GC enforcement is respected and
+// furthermore is responsive to changes in protected timestamps and in changes
+// to the zone configs.
+func TestStrictGCEnforcement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The unfortunate thing about this test is that the gcttl is in seconds and
+	// we need to wait for the replica's lease start time to be sufficiently old.
+	// It takes about two seconds. All of that time is in setup.
+	if testing.Short() {
+		return
+	}
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+
+	var (
+		db         = tc.Server(0).DB()
+		getTableID = func() (tableID uint32) {
+			sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
+				` WHERE name = 'foo' AND database_name = current_database()`).Scan(&tableID)
+			return tableID
+		}
+		tableID       = getTableID()
+		tenSecondsAgo hlc.Timestamp // written in setup
+		tableKey      = roachpb.Key(keys.MakeTablePrefix(tableID))
+		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+		mkRecord      = func() ptpb.Record {
+			return ptpb.Record{
+				ID:        uuid.MakeV4(),
+				Timestamp: tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
+				Spans:     []roachpb.Span{tableSpan},
+			}
+		}
+		mkStaleTxn = func() *kv.Txn {
+			txn := db.NewTxn(ctx, "foo")
+			txn.SetFixedTimestamp(ctx, tenSecondsAgo)
+			return txn
+		}
+		getRejectedMsg = func() string {
+			return tenSecondsAgo.String() + " must be after replica GC threshold "
+		}
+		performScan = func() error {
+			txn := mkStaleTxn()
+			_, err := txn.Scan(ctx, tableKey, tableKey.PrefixEnd(), 1)
+			return err
+		}
+		assertScanRejected = func(t *testing.T) {
+			t.Helper()
+			require.Regexp(t, getRejectedMsg(), performScan())
+		}
+
+		assertScanOk = func(t *testing.T) {
+			t.Helper()
+			require.NoError(t, performScan())
+		}
+		// Make sure the cache has been updated. Once it has then we know it won't
+		// be for minutes. It should read on startup.
+		waitForCacheAfter = func(t *testing.T, min hlc.Timestamp) {
+			t.Helper()
+			testutils.SucceedsSoon(t, func() error {
+				for i := 0; i < tc.NumServers(); i++ {
+					ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+					if ptp.Iterate(ctx, tableKey, tableKey, func(record *ptpb.Record) (wantMore bool) {
+						return false
+					}).Less(min) {
+						return errors.Errorf("not yet read")
+					}
+				}
+				return nil
+			})
+		}
+		setGCTTL = func(t *testing.T, object string, exp int) {
+			t.Helper()
+			testutils.SucceedsSoon(t, func() error {
+				sqlDB.Exec(t, `ALTER `+object+` CONFIGURE ZONE USING gc.ttlseconds = `+strconv.Itoa(exp))
+				for i := 0; i < tc.NumServers(); i++ {
+					s := tc.Server(i)
+					_, r := getFirstStoreReplica(t, s, tableKey)
+					if _, z := r.DescAndZone(); z.GC.TTLSeconds != int32(exp) {
+						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
+						require.NoError(t, sysCfg.MaybeGossipSystemConfig(ctx))
+						return errors.Errorf("expected %d, got %d", exp, z.GC.TTLSeconds)
+					}
+				}
+				return nil
+			})
+		}
+		setStrictGC = func(t *testing.T, val bool) {
+			t.Helper()
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = `+fmt.Sprint(val))
+			testutils.SucceedsSoon(t, func() error {
+				for i := 0; i < tc.NumServers(); i++ {
+					s, r := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
+					if kvserver.StrictGCEnforcement.Get(&s.ClusterSettings().SV) != val {
+						require.NoError(t, r.MaybeGossipSystemConfig(ctx))
+						return errors.Errorf("expected %v, got %v", val, !val)
+					}
+				}
+				return nil
+			})
+		}
+		setTableGCTTL = func(t *testing.T, exp int) {
+			t.Helper()
+			setGCTTL(t, "TABLE foo", exp)
+		}
+		setSystemGCTTL = func(t *testing.T, exp int) {
+			// TODO(ajwerner): adopt this to test the system ranges are unaffected.
+			t.Helper()
+			setGCTTL(t, "RANGE system", exp)
+		}
+		refreshPastLeaseStart = func(t *testing.T) {
+			for i := 0; i < tc.NumServers(); i++ {
+				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
+				l, _ := r.GetLease()
+				require.NoError(t, ptp.Refresh(ctx, l.Start.Next()))
+				r.ReadProtectedTimestamps(ctx)
+			}
+		}
+	)
+
+	{
+		// Setup the initial state to be sure that we'll actually strictly enforce
+		// gc ttls.
+		tc.SplitRangeOrFatal(t, tableKey)
+		_, err := tc.AddReplicas(tableKey, tc.Target(1), tc.Target(2))
+		require.NoError(t, err)
+		_, err = tc.AddReplicas(keys.SystemConfigSpan.Key, tc.Target(1), tc.Target(2))
+		require.NoError(t, err)
+
+		setTableGCTTL(t, 1)
+		waitForCacheAfter(t, hlc.Timestamp{})
+
+		defer sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
+		setStrictGC(t, true)
+		tenSecondsAgo = tc.Server(0).Clock().Now().Add(-10*time.Second.Nanoseconds(), 0)
+	}
+
+	t.Run("strict enforcement", func(t *testing.T) {
+		refreshPastLeaseStart(t)
+		assertScanRejected(t)
+	})
+	t.Run("disable strict enforcement", func(t *testing.T) {
+		setStrictGC(t, false)
+		defer setStrictGC(t, true)
+		assertScanOk(t)
+	})
+	t.Run("zone config changes are respected", func(t *testing.T) {
+		setTableGCTTL(t, 60)
+		assertScanOk(t)
+		setTableGCTTL(t, 1)
+		assertScanRejected(t)
+	})
+	t.Run("system ranges are unaffected", func(t *testing.T) {
+		setSystemGCTTL(t, 1)
+		txn := mkStaleTxn()
+		descriptorTable := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+		_, err := txn.Scan(ctx, descriptorTable, descriptorTable.PrefixEnd(), 1)
+		require.NoError(t, err)
+	})
+	t.Run("protected timestamps are respected", func(t *testing.T) {
+		waitForCacheAfter(t, hlc.Timestamp{})
+		ptp := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+		assertScanRejected(t)
+		// Create a protected timestamp, don't verify it, make sure it's not
+		// respected.
+		rec := mkRecord()
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return ptp.Protect(ctx, txn, &rec)
+		}))
+		assertScanRejected(t)
+
+		require.NoError(t, ptp.Verify(ctx, rec.ID))
+		assertScanOk(t)
+
+		// Transfer the lease and demonstrate that the query succeeds because we're
+		// cautious in the face of lease transfers.
+		desc, err := tc.LookupRange(tableKey)
+		require.NoError(t, err)
+		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
+		assertScanOk(t)
+	})
 }
 
 // getRangeInfo retreives range info by performing a get against the provided

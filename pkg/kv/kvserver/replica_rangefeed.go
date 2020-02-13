@@ -657,7 +657,7 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 	// Make sure there's a leaseholder. If there's no leaseholder, there's no
 	// closed timestamp updates.
 	var leaseholderNodeID roachpb.NodeID
-	_, err := r.redirectOnOrAcquireLease(ctx)
+	_, _, err := r.redirectOnOrAcquireLease(ctx)
 	if err == nil {
 		// We have the lease. Request is essentially a wrapper for calling EmitMLAI
 		// on a remote node, so cut out the middleman.

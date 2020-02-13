@@ -366,7 +366,7 @@ func (r *Replica) executeAdminBatch(
 	}
 
 	// Admin commands always require the range lease.
-	status, pErr := r.redirectOnOrAcquireLease(ctx)
+	status, now, pErr := r.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -376,7 +376,7 @@ func (r *Replica) executeAdminBatch(
 	// NB: we pass nil for the spanlatch guard because we haven't acquired
 	// latches yet. This is ok because each individual request that the admin
 	// request sends will acquire latches.
-	if err := r.checkExecutionCanProceed(ba, nil /* lg */, &status); err != nil {
+	if err := r.checkExecutionCanProceed(ba, nil /* g */, now, &status); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
