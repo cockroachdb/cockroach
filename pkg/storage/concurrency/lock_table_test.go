@@ -92,27 +92,33 @@ done r=<name>
 ----
 <error string>
 
- Calls lockTable.Dequeue() for the named request. The request and guard are
+ Calls lockTable.Dequeue for the named request. The request and guard are
  discarded after this.
 
 guard-state r=<name>
 ----
 new|old: state=<state> [txn=<name> ts=<ts>]
 
-  Calls lockTableGuard.NewStateChan() in a non-blocking manner, followed by
-  CurState().
+  Calls lockTableGuard.NewStateChan in a non-blocking manner, followed by
+  CurState.
 
 guard-start-waiting r=<name>
 ----
 <bool>
 
- Calls lockTableGuard.ShouldWait().
+ Calls lockTableGuard.ShouldWait.
+
+clear
+----
+<state of lock table>
+
+ Calls lockTable.Clear.
 
 print
 ----
 <state of lock table>
 
- Calls lockTable.String()
+ Calls lockTable.String.
 */
 
 func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
@@ -419,6 +425,10 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return fmt.Sprintf("%sstate=%s txn=%s ts=%s key=%s held=%t guard-access=%s",
 					str, typeStr, txnS, tsS, state.key, state.held, state.guardAccess)
+
+			case "clear":
+				lt.Clear()
+				return lt.(*lockTableImpl).String()
 
 			case "print":
 				return lt.(*lockTableImpl).String()
