@@ -579,6 +579,11 @@ strongly discouraged for production usage and should never be used on
 a public network without combining it with --listen-addr.`,
 	}
 
+	ExternalIODisableHTTP = FlagInfo{
+		Name:        "external-io-disable-http",
+		Description: `Disable use of HTTP when accessing external data.`,
+	}
+
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
 	// certificate generation functions.
 	KeySize = FlagInfo{

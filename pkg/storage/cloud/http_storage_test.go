@@ -27,7 +27,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -147,7 +149,8 @@ func TestPutHttp(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExternalStorage(ctx, conf, testSettings, blobs.TestEmptyBlobClientFactory)
+		s, err := MakeExternalStorage(ctx, conf, base.ExternalIOConfig{},
+			testSettings, blobs.TestEmptyBlobClientFactory)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,4 +285,48 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 
 	_, err = store.ReadFile(ctx, "/something")
 	require.Error(t, context.Canceled, err)
+}
+
+func TestCanDisableHttp(t *testing.T) {
+	conf := base.ExternalIOConfig{
+		DisableHTTP: true,
+	}
+	s, err := MakeExternalStorage(
+		context.TODO(),
+		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http},
+		conf,
+		testSettings, blobs.TestEmptyBlobClientFactory)
+	require.Nil(t, s)
+	require.Error(t, err)
+}
+
+func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(fmt.Sprintf("proxied-%s", r.URL)))
+	}))
+	defer proxy.Close()
+
+	// Normally, we would set proxy via HTTP_PROXY environment variable.
+	// However, if we run multiple tests in this package, and earlier tests
+	// happen to create an http client, then the DefaultTransport will have
+	// been been initialized with an empty Proxy.  So, set proxy directly.
+	http.DefaultTransport.(*http.Transport).Proxy = func(_ *http.Request) (*url.URL, error) {
+		return url.Parse(proxy.URL)
+	}
+	defer func() {
+		http.DefaultTransport.(*http.Transport).Proxy = nil
+	}()
+
+	conf, err := ExternalStorageConfFromURI("http://my-server")
+	require.NoError(t, err)
+	s, err := MakeExternalStorage(
+		context.TODO(), conf, base.ExternalIOConfig{}, testSettings, nil)
+	require.NoError(t, err)
+	stream, err := s.ReadFile(context.TODO(), "file")
+	require.NoError(t, err)
+	defer stream.Close()
+	data, err := ioutil.ReadAll(stream)
+	require.NoError(t, err)
+
+	require.EqualValues(t, "proxied-http://my-server/file", string(data))
 }

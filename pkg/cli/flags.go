@@ -360,6 +360,10 @@ func init() {
 		// We share the default with the ClientInsecure flag.
 		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, startCtx.serverInsecure)
 
+		// Enable/disable various external storage endpoints.
+		serverCfg.ExternalIOConfig = base.ExternalIOConfig{}
+		BoolFlag(f, &serverCfg.ExternalIOConfig.DisableHTTP, cliflags.ExternalIODisableHTTP, false)
+
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
 		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
