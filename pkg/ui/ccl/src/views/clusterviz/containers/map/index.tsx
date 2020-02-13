@@ -20,9 +20,8 @@ import { parseLocalityRoute } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
-import { getMatchParamByName } from "src/util/query";
-
 import { Dropdown } from "src/components/dropdown";
+import { parseSplatParams } from "src/util/parseSplatParams";
 
 // tslint:disable-next-line:variable-name
 const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContainer);
@@ -43,9 +42,14 @@ export class ClusterVisualization extends React.Component<ClusterVisualizationPr
     this.props.history.push(`/overview/${value}`);
   }
 
+  getTiers() {
+    const { match, location } = this.props;
+    const splat = parseSplatParams(match, location);
+    return parseLocalityRoute(splat);
+  }
+
   render() {
-    const splat = getMatchParamByName(this.props.match, "splat");
-    const tiers = parseLocalityRoute(splat);
+    const tiers = this.getTiers();
 
     // TODO(couchand): integrate with license swapper
     const showingLicensePage = this.props.licenseDataExists && !this.props.enterpriseEnabled;
