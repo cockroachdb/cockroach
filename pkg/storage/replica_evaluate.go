@@ -159,13 +159,6 @@ func evaluateBatch(
 	baHeader := ba.Header
 	br := ba.CreateReply()
 
-	maxKeys := int64(math.MaxInt64)
-	if baHeader.MaxSpanRequestKeys != 0 {
-		// We have a batch of requests with a limit. We keep track of how many
-		// remaining keys we can touch.
-		maxKeys = baHeader.MaxSpanRequestKeys
-	}
-
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(baReqs) >= optimizePutThreshold && !readOnly {
 		baReqs = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
@@ -241,6 +234,18 @@ func evaluateBatch(
 
 		var curResult result.Result
 		var pErr *roachpb.Error
+
+		// Translate from MaxSpanRequestKeys (0=unlimited, -1=nothing) to
+		// MVCC (0=nothing, infinity=unlimited).
+		//
+		// TODO(tbg): fix this in the MVCC layer and address long-standing TODO
+		// of moving the key count limit to MVCCScanOptions.
+		maxKeys := baHeader.MaxSpanRequestKeys
+		if maxKeys < 0 {
+			maxKeys = 0
+		} else if maxKeys == 0 {
+			maxKeys = math.MaxInt64
+		}
 		curResult, pErr = evaluateCommand(
 			ctx, idKey, index, readWriter, rec, ms, baHeader, maxKeys, args, reply)
 
@@ -322,12 +327,21 @@ func evaluateBatch(
 			}
 		}
 
-		if maxKeys != math.MaxInt64 {
+		// If the last request was carried out with a limit, subtract the number
+		// of results from the limit going forward. Exhausting the limit results
+		// in a limit of -1. This makes sure that we still execute the rest of
+		// the batch, but with limit-aware operations returning no data.
+		if limit := baHeader.MaxSpanRequestKeys; limit > 0 {
 			retResults := reply.Header().NumKeys
-			if retResults > maxKeys {
-				log.Fatalf(ctx, "received %d results, limit was %d", retResults, maxKeys)
+			if retResults > limit {
+				log.Fatalf(ctx, "received %d results, limit was %d", retResults, limit)
+			} else if retResults < limit {
+				baHeader.MaxSpanRequestKeys -= retResults
+			} else {
+				// They were equal, so drop to -1 instead of zero (which would
+				// mean "no limit").
+				baHeader.MaxSpanRequestKeys = -1
 			}
-			maxKeys -= retResults
 		}
 
 		// If transactional, we use ba.Txn for each individual command and
