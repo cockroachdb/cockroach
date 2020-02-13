@@ -34,17 +34,17 @@ type lockTableWaiterImpl struct {
 	stopper *stop.Stopper
 
 	// Used to push conflicting transactions and resolve conflicting intents.
-	ir intentResolver
+	ir IntentResolver
 
 	// How long to wait until pushing conflicting transactions to detect
 	// dependency cycles.
 	dependencyCyclePushDelay time.Duration
 }
 
-// intentResolver is an interface used by lockTableWaiterImpl to push
+// IntentResolver is an interface used by lockTableWaiterImpl to push
 // transactions and to resolve intents. It contains only the subset of the
 // intentresolver.IntentResolver interface that lockTableWaiterImpl needs.
-type intentResolver interface {
+type IntentResolver interface {
 	// PushTransaction pushes the provided transaction. The method will push the
 	// provided pushee transaction immediately, if possible. Otherwise, it will
 	// block until the pushee transaction is finalized or eventually can be
