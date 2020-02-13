@@ -217,6 +217,7 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 func ExternalStorageFromURI(
 	ctx context.Context,
 	uri string,
+	externalConfig base.ExternalIOConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
@@ -224,7 +225,7 @@ func ExternalStorageFromURI(
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, settings, blobClientFactory)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -265,6 +266,7 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 func MakeExternalStorage(
 	ctx context.Context,
 	dest roachpb.ExternalStorage,
+	conf base.ExternalIOConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
@@ -273,11 +275,14 @@ func MakeExternalStorage(
 		telemetry.Count("external-io.nodelocal")
 		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory)
 	case roachpb.ExternalStorageProvider_Http:
+		if conf.DisableHTTP {
+			return nil, errors.New("external http access disabled")
+		}
 		telemetry.Count("external-io.http")
 		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
 	case roachpb.ExternalStorageProvider_S3:
 		telemetry.Count("external-io.s3")
-		return makeS3Storage(ctx, dest.S3Config, settings)
+		return makeS3Storage(ctx, conf, dest.S3Config, settings)
 	case roachpb.ExternalStorageProvider_GoogleCloud:
 		telemetry.Count("external-io.google_cloud")
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)

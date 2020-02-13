@@ -699,6 +699,16 @@ type TempStorageConfig struct {
 	SpecIdx int
 }
 
+// ExternalIOConfig describes various configuration options pertaining
+// to external storage implementations.
+type ExternalIOConfig struct {
+	// Disables the use of external HTTP endpoints.
+	// This turns off http:// external storage as well as any custom
+	// endpoints cloud storage implementations.
+	DisableHTTP bool
+	// TODO(yevgeniy): Support disabling of implicit credentials in cloud storage.
+}
+
 // TempStorageConfigFromEnv creates a TempStorageConfig.
 // If parentDir is not specified and the specified store is in-memory,
 // then the temp storage will also be in-memory.

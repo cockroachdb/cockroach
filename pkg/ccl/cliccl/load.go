@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
@@ -58,7 +59,8 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	}
 
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(ctx, uri, cluster.NoSettings, blobs.TestEmptyBlobClientFactory)
+		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIOConfig{},
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory)
 	}
 	// This reads the raw backup descriptor (with table descriptors possibly not
 	// upgraded from the old FK representation, or even older formats). If more
