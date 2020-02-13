@@ -514,6 +514,17 @@ func (j *Job) Progress() jobspb.Progress {
 	return j.mu.progress
 }
 
+// ToProto returns the protobuf representation of the job.
+func (j *Job) ToProto() jobspb.Job {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return jobspb.Job{
+		Id:       *j.ID(),
+		Payload:  &j.mu.payload,
+		Progress: &j.mu.progress,
+	}
+}
+
 // Details returns the details from the most recently sent Payload for this Job.
 func (j *Job) Details() jobspb.Details {
 	j.mu.Lock()
