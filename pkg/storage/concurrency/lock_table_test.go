@@ -1155,6 +1155,7 @@ func BenchmarkLockTable(b *testing.B) {
 
 // TODO(sbhola):
 // - More datadriven and randomized test cases:
+//   - add test when maxLocks is exceeded
 //   - both local and global keys
 //   - repeated lock acquisition at same seqnums, different seqnums, epoch changes
 //   - updates with ignored seqs
