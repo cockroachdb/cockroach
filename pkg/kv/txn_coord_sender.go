@@ -875,6 +875,14 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 	return tc.mu.txn.CommitTimestampFixed
 }
 
+func (tc *TxnCoordSender) PushTo(ts hlc.Timestamp) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txn.WriteTimestamp.Less(ts) {
+		tc.mu.txn.WriteTimestamp = ts
+	}
+}
+
 // SetFixedTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()
