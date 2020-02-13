@@ -42,9 +42,10 @@ type JobMetadata struct {
 	Progress *jobspb.Progress
 }
 
-// CheckRunning returns an InvalidStatusError if md.Status is not StatusRunning.
-func (md *JobMetadata) CheckRunning() error {
-	if md.Status != StatusRunning {
+// CheckRunningOrReverting returns an InvalidStatusError if md.Status is not
+// StatusRunning or StatusReverting.
+func (md *JobMetadata) CheckRunningOrReverting() error {
+	if md.Status != StatusRunning && md.Status != StatusReverting {
 		return &InvalidStatusError{md.ID, md.Status, "update progress on", md.Payload.Error}
 	}
 	return nil
