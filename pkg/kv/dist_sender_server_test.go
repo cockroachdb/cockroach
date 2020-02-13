@@ -1774,19 +1774,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
-			name: "deferred write too old with put",
-			afterTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "a", "put")
-			},
-			retryable: func(ctx context.Context, txn *client.Txn) error {
-				b := txn.NewBatch()
-				b.Header.DeferWriteTooOldError = true
-				b.Put("a", "put")
-				return txn.Run(ctx, b)
-			},
-			// This trivially succeeds as there are no refresh spans.
-		},
-		{
 			name: "write too old with put timestamp leaked",
 			afterTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "put")
@@ -2151,23 +2138,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
-			name: "multi-range batch with deferred write too old",
-			afterTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "c", "value")
-			},
-			retryable: func(ctx context.Context, txn *client.Txn) error {
-				b := txn.NewBatch()
-				b.Header.DeferWriteTooOldError = true
-				b.Put("a", "put")
-				b.Put("c", "put")
-				// Both sub-batches will succeed, but the Put(a) will return a pushed
-				// timestamp, which is turned into a retriable error by the txnCommitter
-				// interceptor (because it's concurrent with writing the STAGING record).
-				return txn.CommitInBatch(ctx, b)
-			},
-			txnCoordRetry: true,
-		},
-		{
 			name: "multi-range batch with write too old and failed cput",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "orig")
@@ -2194,42 +2164,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
-				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b)
-			},
-			// We expect the request to succeed after a server-side retry.
-			txnCoordRetry: false,
-		},
-		{
-			name: "multi-range batch with deferred write too old and failed cput",
-			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "a", "orig")
-			},
-			afterTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "a", "value")
-			},
-			retryable: func(ctx context.Context, txn *client.Txn) error {
-				b := txn.NewBatch()
-				b.Header.DeferWriteTooOldError = true
-				b.CPut("a", "cput", strToValue("orig"))
-				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b)
-			},
-			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
-			expFailure:    "unexpected value", // the failure we get is a condition failed error
-		},
-		{
-			name: "multi-range batch with deferred write too old and successful cput",
-			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "a", "orig")
-			},
-			afterTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "a", "orig")
-			},
-			retryable: func(ctx context.Context, txn *client.Txn) error {
-				b := txn.NewBatch()
-				b.Header.DeferWriteTooOldError = true
 				b.CPut("a", "cput", strToValue("orig"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)

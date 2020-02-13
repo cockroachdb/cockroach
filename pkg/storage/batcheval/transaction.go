@@ -129,21 +129,7 @@ func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 func CanCreateTxnRecord(rec EvalContext, txn *roachpb.Transaction) error {
 	// Provide the transaction's minimum timestamp. The transaction could not
 	// have written a transaction record previously with a timestamp below this.
-	//
-	// We use InclusiveTimeBounds to remain backward compatible. However, if we
-	// don't need to worry about compatibility, we require the transaction to
-	// have a minimum timestamp field.
-	// TODO(nvanbenschoten): Replace this with txn.MinTimestamp in v20.1.
-	txnMinTS, _ := txn.InclusiveTimeBounds()
-	if util.RaceEnabled {
-		newTxnMinTS := txn.MinTimestamp
-		if newTxnMinTS.IsEmpty() {
-			return errors.Errorf("no minimum transaction timestamp provided: %v", txn)
-		} else if newTxnMinTS != txnMinTS {
-			return errors.Errorf("minimum transaction timestamp differs from lower time bound: %v", txn)
-		}
-	}
-	ok, minCommitTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, txnMinTS)
+	ok, minCommitTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
 	if !ok {
 		return roachpb.NewTransactionAbortedError(reason)
 	}

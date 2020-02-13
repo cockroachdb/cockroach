@@ -4471,30 +4471,17 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 		t.Errorf("expected transaction record to be cleared (%t): %+v", ok, err)
 	}
 
-	// Now replay put for key A; by default this fails with a WriteTooOldError.
-	_, pErr = tc.Sender().Send(context.Background(), ba)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
-		t.Errorf("expected WriteTooOldError, got: %v", pErr)
-	}
+	// Now replay put for key A; this succeeds as there's nothing to detect
+	// the replay. The WriteTooOld flag will be set though.
+	br, pErr = tc.Sender().Send(context.Background(), ba)
+	require.NoError(t, pErr.GoError())
+	require.True(t, br.Txn.WriteTooOld)
 
-	// Intent should not have been created.
+	// Intent should have been created.
 	gArgs := getArgs(key)
-	if _, pErr = tc.SendWrapped(&gArgs); pErr != nil {
-		t.Errorf("unexpected error reading key: %s", pErr)
-	}
-
-	// Send a put for keyB; by default this fails with a WriteTooOldError.
-	_, pErr = tc.SendWrappedWith(roachpb.Header{Txn: putTxn}, &putB)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
-		t.Errorf("expected WriteTooOldError, got: %v", pErr)
-	}
-
-	// Try again with DeferWriteTooOldError. This currently succeeds
-	// (with a pushed timestamp) as there's nothing to detect the retry.
-	if _, pErr = tc.SendWrappedWith(roachpb.Header{
-		Txn: putTxn, DeferWriteTooOldError: true,
-	}, &putB); pErr != nil {
-		t.Error(pErr)
+	_, pErr = tc.SendWrapped(&gArgs)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+		t.Errorf("expected WriteIntentError, got: %v", pErr)
 	}
 
 	// Heartbeat should fail with a TransactionAbortedError.
@@ -4510,8 +4497,8 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 		t.Errorf("expected %s; got %v", expErr, pErr)
 	}
 
-	// Expect that keyB intent got written!
-	gArgs = getArgs(keyB)
+	// Expect that the txn left behind an intent on key A.
+	gArgs = getArgs(key)
 	_, pErr = tc.SendWrapped(&gArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected WriteIntentError, got: %v", pErr)

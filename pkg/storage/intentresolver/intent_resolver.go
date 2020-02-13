@@ -820,8 +820,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		}
 	}()
 	// Resolve intents.
-	min, _ := txn.InclusiveTimeBounds()
-	opts := ResolveOptions{Wait: true, Poison: poison, MinTimestamp: min}
+	opts := ResolveOptions{Wait: true, Poison: poison, MinTimestamp: txn.MinTimestamp}
 	if pErr := ir.ResolveIntents(ctx, intents, opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
