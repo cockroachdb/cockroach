@@ -179,6 +179,19 @@ func (r *Registry) MetricsStruct() *Metrics {
 	return &r.metrics
 }
 
+// CurrentlyRunningJobs returns a slice of the ids of all jobs running on this node.
+func (r *Registry) CurrentlyRunningJobs() []int64 {
+	jobs := make([]int64, len(r.mu.jobs))
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	i := 0
+	for jID := range r.mu.jobs {
+		jobs[i] = jID
+		i++
+	}
+	return jobs
+}
+
 // lenientNow returns the timestamp after which we should attempt
 // to steal a job from a node whose liveness is failing.  This allows
 // jobs coordinated by a node which is temporarily saturated to continue.
