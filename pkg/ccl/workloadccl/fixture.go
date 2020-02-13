@@ -417,11 +417,30 @@ func importFixtureTable(
 	}
 	var rows, index, tableBytes int64
 	var discard driver.Value
-	err := sqlDB.QueryRow(buf.String(), params...).Scan(
-		&discard, &discard, &discard, &rows, &index, &tableBytes,
-	)
+	res, err := sqlDB.Query(buf.String(), params...)
 	if err != nil {
 		return 0, err
+	}
+	defer res.Close()
+	if !res.Next() {
+		return 0, gosql.ErrNoRows
+	}
+	resCols, err := res.Columns()
+	if err != nil {
+		return 0, err
+	}
+	if len(resCols) == 7 {
+		if err := res.Scan(
+			&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
+		); err != nil {
+			return 0, err
+		}
+	} else {
+		if err := res.Scan(
+			&discard, &discard, &discard, &rows, &index, &tableBytes,
+		); err != nil {
+			return 0, err
+		}
 	}
 	elapsed := timeutil.Since(start)
 	log.Infof(ctx, `imported %s in %s table (%d rows, %d index entries, took %s, %s)`,
@@ -537,10 +556,30 @@ func RestoreFixture(
 			importStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
 			var rows, index, tableBytes int64
 			var discard interface{}
-			if err := sqlDB.QueryRow(importStmt, table.BackupURI, database).Scan(
-				&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
-			); err != nil {
+			res, err := sqlDB.Query(importStmt, table.BackupURI, database)
+			if err != nil {
 				return err
+			}
+			defer res.Close()
+			if !res.Next() {
+				return gosql.ErrNoRows
+			}
+			resCols, err := res.Columns()
+			if err != nil {
+				return err
+			}
+			if len(resCols) == 7 {
+				if err := res.Scan(
+					&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := res.Scan(
+					&discard, &discard, &discard, &rows, &index, &tableBytes,
+				); err != nil {
+					return err
+				}
 			}
 			atomic.AddInt64(&bytesAtomic, tableBytes)
 			elapsed := timeutil.Since(start)
