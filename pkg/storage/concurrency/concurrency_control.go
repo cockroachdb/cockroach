@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -228,11 +229,11 @@ type ContentionHandler interface {
 type LockManager interface {
 	// OnLockAcquired informs the concurrency manager that a transaction has
 	// acquired a new lock or re-acquired an existing lock that it already held.
-	OnLockAcquired(context.Context, roachpb.Intent)
+	OnLockAcquired(context.Context, *roachpb.Intent)
 
 	// OnLockUpdated informs the concurrency manager that a transaction has
 	// updated or released a lock or range of locks that it previously held.
-	OnLockUpdated(context.Context, roachpb.Intent)
+	OnLockUpdated(context.Context, *roachpb.Intent)
 }
 
 // TransactionManager is concerned with tracking transactions that have their
@@ -312,7 +313,7 @@ type Request struct {
 // Manager.FinishReq to release the request's resources when it has completed.
 type Guard struct {
 	req Request
-	lag latchGuard
+	lg  latchGuard
 	ltg lockTableGuard
 }
 
@@ -337,6 +338,9 @@ type latchManager interface {
 
 	// Releases latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)
+
+	// Info returns information about the state of the latchManager.
+	Info() (global, local storagepb.LatchManagerInfo)
 }
 
 // latchGuard is a handle to a set of acquired key latches.
@@ -726,11 +730,3 @@ type txnWaitQueue interface {
 	// true, future transactions may not be enqueued or waiting pushers added.
 	Clear(disable bool)
 }
-
-// Silence unused warnings until this package is used.
-var _ = Manager(nil)
-var _ = latchManager(nil)
-var _ = lockTableWaiter(nil)
-var _ = txnWaitQueue(nil)
-var _ = Guard{req: Request{}, lag: nil, ltg: nil}
-var _ = latchManagerImpl{}
