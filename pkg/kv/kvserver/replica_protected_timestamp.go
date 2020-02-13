@@ -23,6 +23,47 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// cachedProtectedTimestampState is used to cache information about the state
+// of protected timestamps as they pertain to this replica. The data is
+// refreshed when the replica examines protected timestamps when being
+// considered for gc or when verifying a protected timestamp record.
+// It is consulted when determining whether a request can be served.
+type cachedProtectedTimestampState struct {
+	// readAt denotes the timestamp at which this record was read.
+	// It is used to coordinate updates to this field. It is also used to
+	// ensure that the protected timestamp subsystem can be relied upon. If
+	// the cache state is older than the lease start time then it is possible
+	// that protected timestamps have not been observed. In this case we must
+	// assume that any protected timestamp could exist to provide the contract
+	// on verify.
+	readAt         hlc.Timestamp
+	earliestRecord *ptpb.Record
+}
+
+// makeUpdateFunc returns a function which will attempt to update the Replica's
+// cached with cpts if it is non-empty. It assumes that the Replica is not
+// locked when the returned function is called.
+func (ts *cachedProtectedTimestampState) makeUpdateFunc(r *Replica) func() {
+	return func() {
+		if ts.readAt.IsEmpty() {
+			return
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.mu.cachedProtectedTS.readAt.Less(ts.readAt) {
+			r.mu.cachedProtectedTS = *ts
+		}
+	}
+}
+
+// clearIfNotNewer clears the state in cpts if it is not newer than the passed
+// ts. This will enable the fastpath in the update func.
+func (ts *cachedProtectedTimestampState) clearIfNotNewer(existing cachedProtectedTimestampState) {
+	if !existing.readAt.Less(ts.readAt) {
+		*ts = cachedProtectedTimestampState{}
+	}
+}
+
 // protectedTimestampRecordApplies returns true if it is this case that the
 // record which protects the `protected` timestamp. It returns false if it may
 // not. If the state of the cache  is not sufficiently new to determine whether
@@ -55,6 +96,37 @@ func (r *Replica) protectedTimestampRecordApplies(
 	return willApply, nil
 }
 
+func (r *Replica) readProtectedTimestampsRLocked(
+	ctx context.Context, f func(r *ptpb.Record),
+) (cpts cachedProtectedTimestampState) {
+	desc := r.descRLocked()
+	gcThreshold := *r.mu.state.GCThreshold
+
+	// earliestValidRecord is the record with the earliest timestamp which is
+	// greater than the existing gcThreshold.
+	cpts.readAt = r.store.protectedtsCache.Iterate(ctx,
+		roachpb.Key(desc.StartKey),
+		roachpb.Key(desc.EndKey),
+		func(rec *ptpb.Record) (wantMore bool) {
+			// Check if we've already GC'd past the timestamp this record was trying
+			// to protect, in which case we know that the record does not apply.
+			// Note that when we implement PROTECT_AT, we'll need to consult some
+			// replica state here to determine whether the record indeed has been
+			// applied.
+			if isValid := gcThreshold.LessEq(rec.Timestamp); !isValid {
+				return true
+			}
+			if f != nil {
+				f(rec)
+			}
+			if cpts.earliestRecord == nil || rec.Timestamp.Less(cpts.earliestRecord.Timestamp) {
+				cpts.earliestRecord = rec
+			}
+			return true
+		})
+	return cpts
+}
+
 // protectedTimestampRecordCurrentlyApplies determines whether a record with
 // the specified ID which protects `protected` and is known to exist at
 // `recordAliveAt` will apply given the current state of the cache. This method
@@ -72,7 +144,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// record or we're not and if we don't then we'll push the cache and re-assert
 	// that we're still the leaseholder. If somebody else becomes the leaseholder
 	// then they will have to go through the same process.
-	ls, pErr := r.redirectOnOrAcquireLease(ctx)
+	ls, _, pErr := r.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return false, false, pErr.GoError()
 	}
@@ -88,8 +160,16 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// TODO(ajwerner): do we need to assert that indeed the recordAliveAt precedes
 	// the batch timestamp? Probably not a bad sanity check.
 
+	// We may be reading the protected timestamp cache underneath the replica
+	// here. If we do so, update the replica's cache of its state. The guarantee
+	// we provide is that if a record is successfully verified then the state will
+	// be updated to include it or some protected timestamp which precedes it.
+	var read cachedProtectedTimestampState
+	defer read.makeUpdateFunc(r)()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	defer read.clearIfNotNewer(r.mu.cachedProtectedTS)
+
 	// If the key that routed this request to this range is now out of this
 	// range's bounds, return an error for the client to try again on the
 	// correct range.
@@ -114,14 +194,12 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	}
 
 	var seen bool
-	readAt := r.store.protectedtsCache.Iterate(ctx,
-		roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey),
-		func(r *ptpb.Record) (wantMore bool) {
-			if r.ID == args.RecordID {
-				seen = true
-			}
-			return !seen
-		})
+	read = r.readProtectedTimestampsRLocked(ctx, func(r *ptpb.Record) {
+		if r.ID == args.RecordID {
+			seen = true
+		}
+	})
+
 	// If we observed the record in question then we know that all future attempts
 	// to run GC will observe the Record if it still exists. The one hazard we
 	// need to avoid is a race whereby an attempt to run GC first checks the
@@ -131,13 +209,13 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// threshold which will verify the safety of the new value relative to
 	// minStateReadTimestamp.
 	if seen {
-		r.protectedTimestampMu.minStateReadTimestamp = readAt
+		r.protectedTimestampMu.minStateReadTimestamp = read.readAt
 		return true, false, nil
 	}
 
 	// Protected timestamp state has progressed past the point at which we
 	// should see this record. This implies that the record has been removed.
-	return false, readAt.Less(args.RecordAliveAt), nil
+	return false, read.readAt.Less(args.RecordAliveAt), nil
 }
 
 // checkProtectedTimestampsForGC determines whether the Replica can run GC.
@@ -154,34 +232,28 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 func (r *Replica) checkProtectedTimestampsForGC(
 	ctx context.Context, policy zonepb.GCPolicy,
 ) (canGC bool, cacheTimestamp, gcTimestamp, newThreshold hlc.Timestamp) {
+
+	// We may be reading the protected timestamp cache underneath the replica
+	// here. If we do so, update the replica's cache of its state. The guarantee
+	// we provide is that if a record is successfully verified then the state will
+	// be updated to include it or some protected timestamp which precedes it.
+	var read cachedProtectedTimestampState
+	defer read.makeUpdateFunc(r)()
 	r.mu.RLock()
-	desc := r.descRLocked()
+	defer r.mu.RUnlock()
+	defer read.clearIfNotNewer(r.mu.cachedProtectedTS)
+
 	gcThreshold := *r.mu.state.GCThreshold
 	lease := *r.mu.state.Lease
-	r.mu.RUnlock()
+
 	// earliestValidRecord is the record with the earliest timestamp which is
 	// greater than the existing gcThreshold.
-	var earliestValidRecord *ptpb.Record
-	cacheTimestamp = r.store.protectedtsCache.Iterate(ctx,
-		roachpb.Key(desc.StartKey),
-		roachpb.Key(desc.EndKey),
-		func(rec *ptpb.Record) (wantMore bool) {
-			// Check if we've already GC'd past the timestamp this record was trying
-			// to protect, in which case we know that the record does not apply.
-			// Note that when we implement PROTECT_AT, we'll need to consult some
-			// replica state here to determine whether the record indeed has been
-			// applied.
-			if gcThreshold.LessEq(rec.Timestamp) &&
-				(earliestValidRecord == nil || rec.Timestamp.Less(earliestValidRecord.Timestamp)) {
-				earliestValidRecord = rec
-			}
-			return true
-		})
-	gcTimestamp = cacheTimestamp
-	if earliestValidRecord != nil {
+	read = r.readProtectedTimestampsRLocked(ctx, nil)
+	gcTimestamp = read.readAt
+	if read.earliestRecord != nil {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid
 		// record.
-		impliedGCTimestamp := gc.TimestampForThreshold(earliestValidRecord.Timestamp.Prev(), policy)
+		impliedGCTimestamp := gc.TimestampForThreshold(read.earliestRecord.Timestamp.Prev(), policy)
 		if impliedGCTimestamp.Less(gcTimestamp) {
 			gcTimestamp = impliedGCTimestamp
 		}
