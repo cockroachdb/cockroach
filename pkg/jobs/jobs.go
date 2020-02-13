@@ -156,10 +156,10 @@ func (j *Job) Started(ctx context.Context) error {
 }
 
 // CheckStatus verifies the status of the job and returns an error if the job's
-// status isn't Running.
+// status isn't Running or Reverting.
 func (j *Job) CheckStatus(ctx context.Context) error {
 	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, _ *JobUpdater) error {
-		return md.CheckRunning()
+		return md.CheckRunningOrReverting()
 	})
 }
 
@@ -180,7 +180,7 @@ func (j *Job) CheckTerminalStatus(ctx context.Context) bool {
 // and persists runningStatusFn's modifications to the job's details, if any.
 func (j *Job) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn) error {
 	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if err := md.CheckRunning(); err != nil {
+		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
 		runningStatus, err := runningStatusFn(ctx, md.Progress.Details)
@@ -243,7 +243,7 @@ type HighWaterProgressedFn func(ctx context.Context, details jobspb.ProgressDeta
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgressedFn) error {
 	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if err := md.CheckRunning(); err != nil {
+		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
 		fractionCompleted := progressedFn(ctx, md.Progress.Details)
@@ -270,7 +270,7 @@ func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgr
 // progressedFn's modifications to the job's progress details, if any.
 func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterProgressedFn) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if err := md.CheckRunning(); err != nil {
+		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
 		highWater := progressedFn(ctx, md.Progress.Details)
