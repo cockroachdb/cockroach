@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -63,19 +64,19 @@ type fakeLeaseManager struct {
 
 func (f *fakeLeaseManager) AcquireLease(
 	ctx context.Context, key roachpb.Key,
-) (*client.Lease, error) {
-	return &client.Lease{}, nil
+) (*leasemanager.Lease, error) {
+	return &leasemanager.Lease{}, nil
 }
 
-func (f *fakeLeaseManager) ExtendLease(ctx context.Context, l *client.Lease) error {
+func (f *fakeLeaseManager) ExtendLease(ctx context.Context, l *leasemanager.Lease) error {
 	return f.extendErr
 }
 
-func (f *fakeLeaseManager) ReleaseLease(ctx context.Context, l *client.Lease) error {
+func (f *fakeLeaseManager) ReleaseLease(ctx context.Context, l *leasemanager.Lease) error {
 	return f.releaseErr
 }
 
-func (f *fakeLeaseManager) TimeRemaining(l *client.Lease) time.Duration {
+func (f *fakeLeaseManager) TimeRemaining(l *leasemanager.Lease) time.Duration {
 	// Default to a reasonable amount of time left if the field wasn't set.
 	if f.leaseTimeRemaining == 0 {
 		return leaseRefreshInterval * 2
