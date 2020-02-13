@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1995,4 +1996,40 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 		si.info.KernelInfo = string(bytes.TrimSpace(output))
 	})
 	return si.info
+}
+
+// RegistryStatus returns details about the jobs running on the registry at a
+// particular node.
+func (s *statusServer) JobRegistryStatus(
+	ctx context.Context, req *serverpb.JobRegistryStatusRequest,
+) (*serverpb.JobRegistryStatusResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.JobRegistryStatus(ctx, req)
+	}
+
+	remoteNodeID := s.gossip.NodeID.Get()
+	resp := &serverpb.JobRegistryStatusResponse{
+		NodeID: remoteNodeID,
+	}
+	for _, jID := range s.admin.server.jobRegistry.CurrentlyRunningJobs() {
+		job := jobspb.Job{
+			Id: jID,
+		}
+		resp.RunningJobs = append(resp.RunningJobs, &job)
+	}
+	return resp, nil
 }
