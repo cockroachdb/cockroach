@@ -2988,9 +2988,29 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			}
 
 			// Actually write the new primary index into the descriptor, and remove it from the indexes list.
-			// Additionally, schedule the old primary index for deletion. Note that if needed, a copy of the primary index
-			// that doesn't store any columns was created at the beginning of the primary key change operation.
+			// Additionally, schedule the old primary index for deletion. Note that the old primary key
+			// has already been rewritten as a secondary index if requested by the user.
 			primaryIndexCopy := protoutil.Clone(&desc.PrimaryIndex).(*IndexDescriptor)
+
+			// We need to make the old primary key denoted with the PrimaryIndexEncoding
+			// so that operations on it that rely on its encoding succeed while it is in
+			// the schema change stages are correct. Additionally, we want to denote that
+			// this index stores all the columns in the table.
+			primaryIndexCopy.EncodingType = PrimaryIndexEncoding
+			for _, col := range desc.Columns {
+				containsCol := false
+				for _, colID := range primaryIndexCopy.ColumnIDs {
+					if colID == col.ID {
+						containsCol = true
+						break
+					}
+				}
+				if !containsCol {
+					primaryIndexCopy.StoreColumnIDs = append(primaryIndexCopy.StoreColumnIDs, col.ID)
+					primaryIndexCopy.StoreColumnNames = append(primaryIndexCopy.StoreColumnNames, col.Name)
+				}
+			}
+
 			if err := desc.AddIndexMutation(primaryIndexCopy, DescriptorMutation_DROP); err != nil {
 				return err
 			}
