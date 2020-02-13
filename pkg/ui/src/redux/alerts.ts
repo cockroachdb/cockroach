@@ -179,7 +179,7 @@ export const newVersionNotificationSelector = createSelector(
 
     // Check local dismissal. Local dismissal is valid for one day.
     const yesterday = moment().subtract(1, "day");
-    if (newVersionDismissedLocal.isAfter(yesterday)) {
+    if (newVersionDismissedLocal.isAfter && newVersionDismissedLocal.isAfter(yesterday)) {
       return undefined;
     }
 
