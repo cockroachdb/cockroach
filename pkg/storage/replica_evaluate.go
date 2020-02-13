@@ -143,7 +143,17 @@ func evaluateBatch(
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
 	readOnly bool,
-) (*roachpb.BatchResponse, result.Result, *roachpb.Error) {
+) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
+
+	defer func() {
+		// Ensure that errors don't carry the WriteTooOld flag set. The client
+		// handles non-error responses with the WriteTooOld flag set, and errors
+		// with this flag set confuse it.
+		if retErr != nil && retErr.GetTxn() != nil {
+			retErr.GetTxn().WriteTooOld = false
+		}
+	}()
+
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
 	baHeader := ba.Header
