@@ -55,6 +55,12 @@ func StoreIdentKey() roachpb.Key {
 	return MakeStoreKey(localStoreIdentSuffix, nil)
 }
 
+// StoreUpgradeEngineStateKey returns a store-local key for the store's
+// current upgrade EngineEtate.
+func StoreUpgradeEngineStateKey() roachpb.Key {
+	return MakeStoreKey(localStoreUpgradeEngineStateSuffix, nil)
+}
+
 // StoreGossipKey returns a store-local key for the gossip bootstrap metadata.
 func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)
