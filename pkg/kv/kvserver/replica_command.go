@@ -525,7 +525,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		// Without the lease, a replica's local descriptor can be arbitrarily
 		// stale, which will result in a ConditionFailedError. To avoid this, we
 		// make sure that we still have the lease before each attempt.
-		if _, pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
+		if _, _, pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			return pErr
 		}
 

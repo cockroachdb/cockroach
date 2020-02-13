@@ -470,6 +470,14 @@ func (r *Replica) UnquiesceAndWakeLeader() {
 	r.unquiesceAndWakeLeaderLocked()
 }
 
+func (r *Replica) ReadProtectedTimestamps() {
+	var ts cachedProtectedTimestampState
+	defer r.maybeUpdateCachedProtectedTS(&ts)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ts = r.readProtectedTimestampsRLocked(context.TODO(), nil)
+}
+
 func (nl *NodeLiveness) SetDrainingInternal(
 	ctx context.Context, liveness storagepb.Liveness, drain bool,
 ) error {

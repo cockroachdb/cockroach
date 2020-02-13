@@ -88,6 +88,8 @@ func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 	return nil
 }
 
+// Set the GC TTL to 0 for the given table ID. One must make sure to disable
+// strict GC TTL enforcement when using this.
 func addImmediateGCZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (zonepb.ZoneConfig, error) {
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.GC.TTLSeconds = 0
@@ -97,6 +99,15 @@ func addImmediateGCZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (zonepb.ZoneConfig
 	}
 	_, err = sqlDB.Exec(`UPSERT INTO system.zones VALUES ($1, $2)`, id, buf)
 	return cfg, err
+}
+
+func disableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) {
+	_, err := db.Exec(`SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false`)
+	require.NoError(t, err)
+	return func() {
+		_, err := db.Exec(`SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
+		require.NoError(t, err)
+	}
 }
 
 func addDefaultZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (zonepb.ZoneConfig, error) {
@@ -295,6 +306,10 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -523,6 +538,11 @@ func TestDropIndex(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
 	numRows := 2*chunkSize + 1
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
@@ -796,6 +816,10 @@ func TestDropTableDeleteData(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
 
 	const numRows = 2*sql.TableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
