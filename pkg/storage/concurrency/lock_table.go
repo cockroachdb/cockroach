@@ -61,8 +61,6 @@ type waitingState struct {
 // - proper error strings and give better explanation to all panics.
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
-// - update waitingState.held on each waiter when locks are acquired and
-//   released.
 
 // The btree for a particular SpanScope.
 type treeMu struct {
@@ -306,6 +304,10 @@ func (g *lockTableGuardImpl) notify() {
 	}
 }
 
+// Called when the request is no longer actively waiting at lock l, and should
+// look for the next lock to wait at. hasReservation is true iff the request
+// acquired the reservation at l. Note that it will be false for requests that
+// were doing a read at the key, or non-transactional writes at the key.
 func (g *lockTableGuardImpl) doneWaitingAtLock(hasReservation bool, l *lockState) {
 	g.mu.Lock()
 	if !hasReservation {
@@ -953,11 +955,9 @@ func (l *lockState) acquireLock(
 			g.doneWaitingAtLock(false, l)
 		}
 	}
-	// TODO: change to always informActiveWaiters since this is a transition from
-	// !held to held.
-	if brokeReservation {
-		l.informActiveWaiters()
-	}
+
+	// Inform active waiters since lock has transitioned to held.
+	l.informActiveWaiters()
 	return nil
 }
 
@@ -1101,11 +1101,11 @@ func (l *lockState) tryClearLock() bool {
 
 		g := qg.guard
 		g.mu.Lock()
-		delete(g.mu.locks, l)
 		if qg.active {
 			g.mu.state = waitState
 			g.notify()
 		}
+		delete(g.mu.locks, l)
 		g.mu.Unlock()
 	}
 	return true
@@ -1335,10 +1335,10 @@ func (l *lockState) lockIsFree() (gc bool) {
 	l.reservation = g
 	l.queuedWriters.Remove(e)
 	if qg.active {
-		g.doneWaitingAtLock(true, l)
 		if g == l.distinguishedWaiter {
 			l.distinguishedWaiter = nil
 		}
+		g.doneWaitingAtLock(true, l)
 	}
 	// Else inactive waiter and is waiting elsewhere.
 
