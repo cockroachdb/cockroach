@@ -42,6 +42,11 @@ import (
 Test needs to handle caller constraints wrt latches being held. The datadriven
 test uses the following format:
 
+locktable maxlocks=<int>
+----
+
+  Creates a lockTable.
+
 txn txn=<name> ts=<int>[,<int>] epoch=<int>
 ----
 
@@ -180,13 +185,19 @@ func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
-		lt := newLockTable(1000)
+		var lt lockTable
 		txnsByName := make(map[string]*enginepb.TxnMeta)
 		txnCounter := uint128.FromInts(0, 0)
 		requestsByName := make(map[string]Request)
 		guardsByReqName := make(map[string]lockTableGuard)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "locktable":
+				var maxLocks int
+				d.ScanArgs(t, "maxlocks", &maxLocks)
+				lt = newLockTable(int64(maxLocks))
+				return ""
+
 			case "txn":
 				// UUIDs for transactions are numbered from 1 by this test code and
 				// lockTableImpl.String() knows about UUIDs and not transaction names.
@@ -1155,7 +1166,6 @@ func BenchmarkLockTable(b *testing.B) {
 
 // TODO(sbhola):
 // - More datadriven and randomized test cases:
-//   - add test when maxLocks is exceeded
 //   - both local and global keys
 //   - repeated lock acquisition at same seqnums, different seqnums, epoch changes
 //   - updates with ignored seqs
