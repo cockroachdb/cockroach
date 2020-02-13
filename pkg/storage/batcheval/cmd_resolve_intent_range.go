@@ -48,7 +48,7 @@ func ResolveIntentRange(
 	defer iterAndBuf.Cleanup()
 
 	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, readWriter, iterAndBuf, ms, update, cArgs.MaxKeys,
+		ctx, readWriter, iterAndBuf, ms, update, h.MaxSpanRequestKeys,
 	)
 	if err != nil {
 		return result.Result{}, err
