@@ -1,0 +1,247 @@
+# Tests various cases when the locks are cleared:
+# - lock with reservation and waiters (lock "a"): cleared and waiters transition to doneWaiting
+# - lock held unreplicated with waiters (lock "b"): cleared and waiters transition to doneWaiting
+# - lock held replicated with active waiter (lock "c"): cleared and waiters transition to
+#   waitElsewhere
+# - lock held replicated with no active waiter (lock "d"): not cleared and inactive waiter remains
+#   in queue. The next ScanAndEnqueue call makes it an active waiter.
+
+locktable maxlocks=4
+----
+
+txn txn=txn1 ts=10 epoch=0
+----
+
+txn txn=txn2 ts=10 epoch=0
+----
+
+request r=req1 txn=txn1 ts=10 spans=w@a,e
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+acquire r=req1 k=b durability=u
+----
+global: num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+# c is locked both replicated and unreplicated, though we really only need it
+# replicated locked for the case we want to exercise. This is because the
+# lockTable currently does not keep track of uncontended replicated locks.
+# When that behavior changes with the segregated lock table, we can remove
+# this unreplicated lock acquisition.
+acquire r=req1 k=c durability=u
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+acquire r=req1 k=c durability=r
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+done r=req1
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+request r=req2 txn=txn2 ts=10 spans=w@a,c
+----
+
+scan r=req2
+----
+start-waiting: true
+
+request r=req3 txn=txn2 ts=10 spans=w@a,c
+----
+
+scan r=req3
+----
+start-waiting: true
+
+print
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 2
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+release txn=txn1 span=a
+----
+global: num=3
+ lock: "a"
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+guard-state r=req2
+----
+new: state=waitForDistinguished txn=txn1 ts=10 key="b" held=true guard-access=write
+
+guard-state r=req3
+----
+new: state=waitSelf
+
+print
+----
+global: num=3
+ lock: "a"
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+request r=req4 txn=txn2 ts=10 spans=r@b
+----
+
+scan r=req4
+----
+start-waiting: true
+
+request r=req5 txn=txn2 ts=10 spans=w@b
+----
+
+scan r=req5
+----
+start-waiting: true
+
+request r=req6 txn=txn2 ts=10 spans=w@c
+----
+
+scan r=req6
+----
+start-waiting: true
+
+request r=req7 txn=txn2 ts=10 spans=w@d
+----
+
+scan r=req7
+----
+start-waiting: false
+
+guard-state r=req7
+----
+new: state=doneWaiting
+
+add-discovered r=req7 k=d txn=txn1
+----
+global: num=4
+ lock: "a"
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   waiting readers:
+    req: 4, txn: 00000000-0000-0000-0000-000000000002
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 5, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 6, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 6
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000002
+local: num=0
+
+request r=req8 txn=txn2 ts=10 spans=w@e
+----
+
+scan r=req8
+----
+start-waiting: false
+
+# The lock table hits its size limit at this acquisition, and clears all
+# locks except "d" which is the discovered lock with no active waiter.
+acquire r=req8 k=e durability=u
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000002
+local: num=0
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+guard-state r=req3
+----
+new: state=doneWaiting
+
+guard-state r=req4
+----
+new: state=doneWaiting
+
+guard-state r=req5
+----
+new: state=doneWaiting
+
+guard-state r=req6
+----
+new: state=waitElsewhere txn=txn1 ts=10 key="c" held=true guard-access=write
+
+scan r=req7
+----
+start-waiting: true
+
+guard-state r=req7
+----
+new: state=waitForDistinguished txn=txn1 ts=10 key="d" held=true guard-access=write

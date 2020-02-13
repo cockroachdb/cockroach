@@ -190,10 +190,7 @@ func BenchmarkExternalSort(b *testing.B) {
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						source := newFiniteBatchSource(batch, nBatches)
-						var (
-							resultBatches int
-							spilled       bool
-						)
+						var spilled bool
 						sorter, accounts, monitors, err := createDiskBackedSorter(
 							ctx, flowCtx, []Operator{source}, logTypes, ordCols, func() { spilled = true },
 						)
@@ -202,13 +199,8 @@ func BenchmarkExternalSort(b *testing.B) {
 						if err != nil {
 							b.Fatal(err)
 						}
-						resultBatches = nBatches
 						sorter.Init()
-						for i := 0; i < resultBatches; i++ {
-							out := sorter.Next(ctx)
-							if out.Length() == 0 {
-								b.Fail()
-							}
+						for out := sorter.Next(ctx); out.Length() != 0; out = sorter.Next(ctx) {
 						}
 						require.Equal(b, shouldSpill, spilled, fmt.Sprintf(
 							"expected: spilled=%t\tactual: spilled=%t", shouldSpill, spilled,

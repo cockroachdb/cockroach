@@ -1493,17 +1493,19 @@ func (t *lockTableImpl) AcquireLock(
 func (t *lockTableImpl) clearMostLocks() {
 	for i := 0; i < int(spanset.NumSpanScope); i++ {
 		tree := &t.locks[i]
-		var cleared int64
 		tree.mu.Lock()
+		var locksToClear []*lockState
 		tree.Ascend(func(it btree.Item) bool {
 			l := it.(*lockState)
 			if l.tryClearLock() {
-				tree.Delete(l)
-				cleared++
+				locksToClear = append(locksToClear, l)
 			}
 			return true
 		})
-		atomic.AddInt64(&tree.numLocks, -cleared)
+		atomic.AddInt64(&tree.numLocks, int64(-len(locksToClear)))
+		for _, l := range locksToClear {
+			tree.Delete(l)
+		}
 		tree.mu.Unlock()
 	}
 }
