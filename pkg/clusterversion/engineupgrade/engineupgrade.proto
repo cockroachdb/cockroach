@@ -1,0 +1,74 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.engineupgrade;
+option go_package = "engineupgrade";
+
+import "errorspb/errors.proto";
+import "gogoproto/gogo.proto";
+
+// Version represents the current version this node is on.
+// TODO(otan): should this read off clusterversions instead? If so, we can delete this
+// and use that instead.
+enum Version {
+  // Unset is the reserved 0 value for unknown unset state.
+  // For new nodes, this should "leapfrog" to the maximum current version
+  // in the cluster.
+  Unset = 0;
+
+  Version_20_1 = 1;
+  // TODO(otan): this and below should be replaced.
+  ExampleUpgrade = 2;
+}
+
+message UpgradeEnginesRequest {
+  Version target_version = 1;
+}
+
+message UpgradeEnginesResponse {
+  errorspb.EncodedError err = 1;
+}
+
+message StatusRequest {}
+
+message EngineState {
+  // CurrentVersion is the highest version into which all engines on the node have
+  // successfully upgraded. The node may be in the process of upgrading its engines
+  // to a higher version, see below.
+  // This should always be <= target_version.
+  Version current_version = 1;
+  // TargetVersion represents the version the node is trying to upgrade to.
+  Version target_version = 2;
+}
+
+message StatusResponse {
+  repeated EngineState engine_states = 1;
+}
+
+// NodeUpgrader is a service which runs node upgrades.
+service NodeUpgrader {
+  // UpgradeEngines to run all upgrades to a target version for all engines on the
+  // given node. This can potentially be a long-running RPC, which only returns when
+  // all the upgrades have been run..
+  //
+  // Once this RPC is called, the upgrade could happen at any point on any node without
+  // further instruction, even if the RPC call returns a failure.
+  //
+  // A maximum of one if these upgrades should run at any given time - if
+  // it is requested multiple times, it will block until the previous upgrade
+  // has completed.
+  //
+  // If the engines already have the version requested, no operation will be
+  // done.
+  rpc UpgradeEngines(UpgradeEnginesRequest) returns (UpgradeEnginesResponse) {};
+  // Status returns version info about the current node.
+  rpc Status(StatusRequest) returns (StatusResponse) {};
+}

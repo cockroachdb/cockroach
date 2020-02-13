@@ -204,6 +204,7 @@ var _ = [...]interface{}{
 	StoreHLCUpperBoundKey,       // "hlcu"
 	StoreIdentKey,               // "iden"
 	StoreLastUpKey,              // "uptm"
+	StoreUpgradeEngineStateKey,  // "ueng"
 
 	// The global keyspace includes the meta{1,2}, system, and SQL keys.
 	//
