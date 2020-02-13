@@ -18,7 +18,9 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +44,7 @@ func TestPutS3(t *testing.T) {
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		_, err := ExternalStorageFromURI(
 			ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"),
-			testSettings, blobs.TestEmptyBlobClientFactory,
+			base.ExternalIOConfig{}, testSettings, blobs.TestEmptyBlobClientFactory,
 		)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
@@ -125,4 +127,15 @@ func TestPutS3Endpoint(t *testing.T) {
 	}
 
 	testExportStore(t, u.String(), false)
+}
+
+func TestS3DisallowCustomEndpoints(t *testing.T) {
+	s3, err := makeS3Storage(context.TODO(),
+		base.ExternalIOConfig{DisableHTTP: true},
+		&roachpb.ExternalStorage_S3{
+			Endpoint: "http://do.not.go.there/",
+		}, nil,
+	)
+	require.Nil(t, s3)
+	require.Error(t, err)
 }
