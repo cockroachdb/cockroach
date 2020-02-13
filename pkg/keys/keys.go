@@ -55,6 +55,18 @@ func StoreIdentKey() roachpb.Key {
 	return MakeStoreKey(localStoreIdentSuffix, nil)
 }
 
+// StoreCurrentVersionKey returns a store-local key for the store's
+// current version.
+func StoreCurrentVersionKey() roachpb.Key {
+	return MakeStoreKey(localStoreCurrentVersionSuffix, nil)
+}
+
+// StorePendingVersionKey returns a store-local key for the store's
+// pending version.
+func StorePendingVersionKey() roachpb.Key {
+	return MakeStoreKey(localStorePendingVersionSuffix, nil)
+}
+
 // StoreGossipKey returns a store-local key for the gossip bootstrap metadata.
 func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)
