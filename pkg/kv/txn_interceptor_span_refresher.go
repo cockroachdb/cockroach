@@ -225,7 +225,7 @@ func (sr *txnSpanRefresher) SendLocked(
 func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	ctx context.Context, ba roachpb.BatchRequest, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	if ba.Txn.WriteTooOld && sr.canAutoRetry {
+	if ba.Txn.WriteTooOld {
 		// The WriteTooOld flag is not supposed to be set on requests. It's only set
 		// by the server and it's terminated by this interceptor on the client.
 		log.Fatalf(ctx, "unexpected WriteTooOld request. ba: %s (txn: %s)",
