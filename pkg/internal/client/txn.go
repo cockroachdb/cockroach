@@ -297,6 +297,12 @@ func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.ProvisionalCommitTimestamp()
 }
 
+func (txn *Txn) PushTo(timestamp hlc.Timestamp) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.PushTo(timestamp)
+}
+
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTxnRequest.
 func (txn *Txn) SetSystemConfigTrigger() error {

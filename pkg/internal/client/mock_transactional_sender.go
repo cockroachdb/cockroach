@@ -123,6 +123,10 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 	m.txn.DeprecatedOrigTimestamp = ts
 }
 
+func (m *MockTransactionalSender) PushTo(ts hlc.Timestamp) {
+	panic("unimplemented")
+}
+
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
 	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
