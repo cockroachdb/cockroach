@@ -221,6 +221,8 @@ type TxnSender interface {
 	// been fixed to the start timestamp and cannot be pushed forward.
 	CommitTimestampFixed() bool
 
+	PushTo(timestamp hlc.Timestamp)
+
 	// ProvisionalCommitTimestamp returns the transaction's provisional
 	// commit timestamp. This can move forward throughout the txn's
 	// lifetime. See the explanatory comments for the WriteTimestamp
