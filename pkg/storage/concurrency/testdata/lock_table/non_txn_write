@@ -1,3 +1,6 @@
+locktable maxlocks=10000
+----
+
 txn txn=txn1 ts=10 epoch=0
 ----
 
