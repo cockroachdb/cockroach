@@ -1,0 +1,57 @@
+# -------------------------------------------------------------
+# Read-only request runs into replicated intent. It informs the
+# lock table and waits for the intent to be resolved.
+# -------------------------------------------------------------
+
+txn name=txn1 ts=10,1 epoch=0
+----
+
+txn name=txn2 ts=12,1 epoch=0
+----
+
+single-request name=get1 type=get fields=key=k
+----
+
+batch-request name=req1 txn=txn2 ts=12,1 reqs=get1
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 txn=txn1 key=k
+----
+[2] handle write intent error req1: handling conflicting intents on "k"
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: pushing txn 00000000-0000-0000-0000-000000000001
+
+on-txn-updated txn=txn1
+----
+[4] update txn: committing txn1
+[3] sequence req1: resolving intent "k" for txn 00000000-0000-0000-0000-000000000001
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[5] finish req1: finishing request
+
+reset
+----

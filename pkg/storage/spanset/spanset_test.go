@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // Test that spans are properly classified as global or local and that
@@ -46,6 +47,45 @@ func TestSpanSetGetSpansScope(t *testing.T) {
 	if act := ss.GetSpans(SpanReadOnly, SpanGlobal); !reflect.DeepEqual(act, exp) {
 		t.Errorf("get global spans: got %v, expected %v", act, exp)
 	}
+}
+
+func TestSpanSetMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spA := roachpb.Span{Key: roachpb.Key("a")}
+	spBC := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}
+	spCE := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}
+	spBE := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("e")}
+	spLocal := roachpb.Span{Key: keys.RangeLastGCKey(1)}
+
+	var ss SpanSet
+	ss.AddNonMVCC(SpanReadOnly, spLocal)
+	ss.AddNonMVCC(SpanReadOnly, spA)
+	ss.AddNonMVCC(SpanReadWrite, spBC)
+	require.Equal(t, []Span{{Span: spLocal}}, ss.GetSpans(SpanReadOnly, SpanLocal))
+	require.Equal(t, []Span{{Span: spA}}, ss.GetSpans(SpanReadOnly, SpanGlobal))
+	require.Equal(t, []Span{{Span: spBC}}, ss.GetSpans(SpanReadWrite, SpanGlobal))
+
+	var ss2 SpanSet
+	ss2.AddNonMVCC(SpanReadWrite, spCE)
+	require.Nil(t, ss2.GetSpans(SpanReadOnly, SpanLocal))
+	require.Nil(t, ss2.GetSpans(SpanReadOnly, SpanGlobal))
+	require.Equal(t, []Span{{Span: spCE}}, ss2.GetSpans(SpanReadWrite, SpanGlobal))
+
+	// Merge merges all spans. Notice the new spBE span.
+	ss2.Merge(&ss)
+	require.Equal(t, []Span{{Span: spLocal}}, ss2.GetSpans(SpanReadOnly, SpanLocal))
+	require.Equal(t, []Span{{Span: spA}}, ss2.GetSpans(SpanReadOnly, SpanGlobal))
+	require.Equal(t, []Span{{Span: spBE}}, ss2.GetSpans(SpanReadWrite, SpanGlobal))
+
+	// The source set is not mutated on future changes to the merged set.
+	ss2.AddNonMVCC(SpanReadOnly, spCE)
+	require.Equal(t, []Span{{Span: spLocal}}, ss.GetSpans(SpanReadOnly, SpanLocal))
+	require.Equal(t, []Span{{Span: spA}}, ss.GetSpans(SpanReadOnly, SpanGlobal))
+	require.Equal(t, []Span{{Span: spBC}}, ss.GetSpans(SpanReadWrite, SpanGlobal))
+	require.Equal(t, []Span{{Span: spLocal}}, ss2.GetSpans(SpanReadOnly, SpanLocal))
+	require.Equal(t, []Span{{Span: spA}, {Span: spCE}}, ss2.GetSpans(SpanReadOnly, SpanGlobal))
+	require.Equal(t, []Span{{Span: spBE}}, ss2.GetSpans(SpanReadWrite, SpanGlobal))
 }
 
 // Test that CheckAllowed properly enforces span boundaries.

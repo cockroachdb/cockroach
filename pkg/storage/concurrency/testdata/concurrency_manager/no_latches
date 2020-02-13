@@ -1,0 +1,45 @@
+# -------------------------------------------------------------
+# Inconsistent reads do not acquire latches
+# -------------------------------------------------------------
+
+single-request name=get1 type=get fields=key=k
+----
+
+batch-request name=inconsistentReq txn=none ts=10,1 reqs=get1 inconsistent
+----
+
+sequence req=inconsistentReq
+----
+[1] sequence inconsistentReq: sequencing request
+[1] sequence inconsistentReq: not acquiring latches
+[1] sequence inconsistentReq: sequencing complete, returned guard
+
+finish req=inconsistentReq
+----
+[2] finish inconsistentReq: finishing request
+
+reset
+----
+
+# -------------------------------------------------------------
+# Lease requests do not acquire latches
+# -------------------------------------------------------------
+
+single-request name=reqlease1 type=request-lease
+----
+
+batch-request name=leaseReq txn=none ts=10,1 reqs=reqlease1
+----
+
+sequence req=leaseReq
+----
+[1] sequence leaseReq: sequencing request
+[1] sequence leaseReq: not acquiring latches
+[1] sequence leaseReq: sequencing complete, returned guard
+
+finish req=leaseReq
+----
+[2] finish leaseReq: finishing request
+
+reset
+----

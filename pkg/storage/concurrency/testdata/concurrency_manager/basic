@@ -1,0 +1,143 @@
+txn name=txn1 ts=10,1 epoch=0
+----
+
+txn name=txn2 ts=12,1 epoch=0
+----
+
+txn name=txn3 ts=14,1 epoch=0
+----
+
+single-request name=get1 type=get fields=key=k
+----
+
+single-request name=scan1 type=scan fields=key=k,endkey=k2
+----
+
+single-request name=put1 type=put fields=key=k,value=v
+----
+
+# -------------------------------------------------------------
+# Simple read-only request
+# -------------------------------------------------------------
+
+batch-request name=req1 txn=txn1 ts=10,1 reqs=get1,scan1
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 1
+
+finish req=req1
+----
+[2] finish req1: finishing request
+
+reset
+----
+
+# -------------------------------------------------------------
+# Simple read-write request that acquires a lock
+# -------------------------------------------------------------
+
+batch-request name=req2 txn=txn2 ts=12,1 reqs=put1
+----
+
+sequence req=req2
+----
+[1] sequence req2: sequencing request
+[1] sequence req2: acquiring latches
+[1] sequence req2: scanning lock table for conflicting locks
+[1] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired txn=txn2 key=k
+----
+[2] acquire lock: txn2 @ k
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000012,1
+local: num=0
+
+finish req=req2
+----
+[3] finish req2: finishing request
+
+reset
+----
+
+# Demonstrate that 'reset' clears the lock table.
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+# -------------------------------------------------------------
+# 1. Acquire a lock
+# 2. Read-only requests blocks on lock
+# 3. Lock is released, read-only request proceeds
+# 4. Read-write request blocks on latches
+# 5. Requests proceed in order
+# -------------------------------------------------------------
+
+on-lock-acquired txn=txn2 key=k
+----
+[1] acquire lock: txn2 @ k
+
+batch-request name=req3 txn=txn3 ts=14,1 reqs=get1,scan1
+----
+
+sequence req=req3
+----
+[2] sequence req3: sequencing request
+[2] sequence req3: acquiring latches
+[2] sequence req3: scanning lock table for conflicting locks
+[2] sequence req3: waiting in lock wait-queues
+[2] sequence req3: pushing txn 00000000-0000-0000-0000-000000000002
+
+on-txn-updated txn=txn2
+----
+[3] update txn: committing txn2
+[2] sequence req3: resolving intent "k" for txn 00000000-0000-0000-0000-000000000002
+[2] sequence req3: acquiring latches
+[2] sequence req3: scanning lock table for conflicting locks
+[2] sequence req3: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+batch-request name=req4 txn=txn1 ts=10,1 reqs=put1
+----
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+
+debug-latch-manager
+----
+write count: 1
+ read count: 1
+
+finish req=req3
+----
+[5] finish req3: finishing request
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+
+finish req=req4
+----
+[6] finish req4: finishing request
+
+reset
+----
