@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -37,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,6 +107,15 @@ var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
 		}
 		return nil
 	},
+)
+
+// StrictGCEnforcement controls whether requests are rejected based on the GC
+// threshold and the current GC TTL (true) or just based on the GC threshold
+// (false).
+var StrictGCEnforcement = settings.RegisterBoolSetting(
+	"kv.gc_ttl.strict_enforcement.enabled",
+	"if true, fail to serve requests at timestamps below the TTL even if the data still exists",
+	true,
 )
 
 type proposalReevaluationReason int
@@ -445,6 +455,16 @@ type Replica struct {
 		// transfers due to a lease change will be attempted even if the target does
 		// not have all the log entries.
 		draining bool
+
+		// cachedProtectedTS provides the state of the protected timestamp
+		// subsystem as used on the request serving path to determine the effective
+		// gc threshold given the current TTL when using strict GC enforcement.
+		//
+		// It would be too expensive to go read from the protected timestamp cache
+		// for every request. Instead, if clients want to ensure that their request
+		// will see the effect of a protected timestamp record, they need to verify
+		// the request. See the comment on the struct for more details.
+		cachedProtectedTS cachedProtectedTimestampState
 	}
 
 	rangefeedMu struct {
@@ -682,6 +702,46 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.mu.state.GCThreshold
+}
+
+// getImpliedGCThresholdRLocked returns the gc threshold of the replica which
+// should be used to determine the validity of commands. The returned timestamp
+// may be newer than the replica's true GC threshold if strict enforcement
+// is enabled and the TTL has passed. If this is an admin command or this range
+// contains data outside of the user keyspace, we return the true GC threshold.
+func (r *Replica) getImpliedGCThresholdRLocked(
+	now hlc.Timestamp, st *storagepb.LeaseStatus, isAdmin bool,
+) hlc.Timestamp {
+	threshold := *r.mu.state.GCThreshold
+
+	// The GC threshold is the oldest value we can return here.
+	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
+		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.UserTableDataMin)) {
+		return threshold
+	}
+
+	// In order to make this check inexpensive, we keep a copy of the reading of
+	// protected timestamp state in the replica. This state may be stale, may not
+	// exist, or may be unusable given the current lease status. In those cases we
+	// must return the GC threshold. On the one hand this seems like a big deal,
+	// after a lease transfer, for minutes, users will be able to read data that
+	// has technically expired. Fortunately this strict enforcement is merely a
+	// user experience win; it's always safe to allow reads to continue so long
+	// as they are after the GC threshold.
+	c := r.mu.cachedProtectedTS
+	if st == nil || c.readAt.Less(st.Lease.Start) {
+		return threshold
+	}
+
+	impliedThreshold := gc.CalculateThreshold(now, *r.mu.zone.GC)
+	threshold.Forward(impliedThreshold)
+
+	// If we have a protected timestamp record which precedes the implied
+	// threshold, use the threshold it implies instead.
+	if c.earliestRecord != nil && c.earliestRecord.Timestamp.Less(threshold) {
+		threshold = c.earliestRecord.Timestamp.Prev()
+	}
+	return threshold
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
@@ -931,20 +991,19 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // they know that they will end up checking for a pending merge at some later
 // time.
 func (r *Replica) checkExecutionCanProceed(
-	ba *roachpb.BatchRequest, g *concurrency.Guard, st *storagepb.LeaseStatus,
+	ba *roachpb.BatchRequest, g *concurrency.Guard, now hlc.Timestamp, st *storagepb.LeaseStatus,
 ) error {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
 		return err
 	}
-
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
 	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp, now, st, ba.IsAdmin()); err != nil {
 		return err
 	} else if g.HoldingLatches() && st != nil {
 		// Only check for a pending merge if latches are held and the Range
@@ -966,7 +1025,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 		return err
 	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ts); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ts, r.Clock().Now(), nil, false /* isAdmin */); err != nil {
 		return err
 	} else if r.requiresExpiringLeaseRLocked() {
 		// Ensure that the range does not require an expiration-based lease. If it
@@ -991,14 +1050,16 @@ func (r *Replica) checkSpanInRangeRLocked(rspan roachpb.RSpan) error {
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified
 // by its MVCC timestamp) can be run on the replica.
-func (r *Replica) checkTSAboveGCThresholdRLocked(ts hlc.Timestamp) error {
-	threshold := r.mu.state.GCThreshold
+func (r *Replica) checkTSAboveGCThresholdRLocked(
+	ts, now hlc.Timestamp, st *storagepb.LeaseStatus, isAdmin bool,
+) error {
+	threshold := r.getImpliedGCThresholdRLocked(now, st, isAdmin)
 	if threshold.Less(ts) {
 		return nil
 	}
 	return &roachpb.BatchTimestampBeforeGCError{
 		Timestamp: ts,
-		Threshold: *threshold,
+		Threshold: threshold,
 	}
 }
 

@@ -1587,7 +1587,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 			s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
 				repl := (*Replica)(v)
 				annotatedCtx := repl.AnnotateCtx(ctx)
-				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
+				if _, _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
 					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
 					}
