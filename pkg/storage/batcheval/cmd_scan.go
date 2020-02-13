@@ -40,11 +40,9 @@ func Scan(
 	opts := engine.MVCCScanOptions{
 		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:          h.Txn,
-		// TODO(tbg): MaxKeys should be sourced from h.MaxSpanRequestKeys and
-		// cArgs.MaxKeys removed.
-		MaxKeys:     cArgs.MaxKeys,
-		TargetBytes: h.TargetBytes,
-		Reverse:     false,
+		MaxKeys:      h.MaxSpanRequestKeys,
+		TargetBytes:  h.TargetBytes,
+		Reverse:      false,
 	}
 
 	switch args.ScanFormat {

@@ -77,8 +77,7 @@ func testScanReverseScanInner(
 	req.SetHeader(roachpb.RequestHeader{Key: k1, EndKey: roachpb.KeyMax})
 
 	cArgs := CommandArgs{
-		MaxKeys: 100000,
-		Args:    req,
+		Args: req,
 		Header: roachpb.Header{
 			Timestamp:   ts,
 			TargetBytes: tb,

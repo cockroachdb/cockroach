@@ -40,7 +40,7 @@ func ReverseScan(
 	opts := engine.MVCCScanOptions{
 		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:          h.Txn,
-		MaxKeys:      cArgs.MaxKeys,
+		MaxKeys:      h.MaxSpanRequestKeys,
 		TargetBytes:  h.TargetBytes,
 		Reverse:      true,
 	}
