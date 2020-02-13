@@ -225,7 +225,7 @@ func evaluateBatch(
 		var pErr *roachpb.Error
 
 		curResult, pErr = evaluateCommand(
-			ctx, idKey, index, readWriter, rec, ms, baHeader, baHeader.MaxSpanRequestKeys, args, reply)
+			ctx, idKey, index, readWriter, rec, ms, baHeader, args, reply)
 
 		// If an EndTxn wants to restart because of a write too old, we
 		// might have a better error to return to the client.
@@ -379,7 +379,6 @@ func evaluateCommand(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
-	maxKeys int64,
 	args roachpb.Request,
 	reply roachpb.Response,
 ) (result.Result, *roachpb.Error) {
@@ -410,7 +409,6 @@ func evaluateCommand(
 			EvalCtx: rec,
 			Header:  h,
 			Args:    args,
-			MaxKeys: maxKeys,
 			Stats:   ms,
 		}
 

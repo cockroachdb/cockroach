@@ -88,9 +88,8 @@ func RevertRange(
 
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
-	resume, err := engine.MVCCClearTimeRange(
-		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
-	)
+	resume, err := engine.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
+		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -110,7 +109,7 @@ func RevertRange(
 		// currently response combining's handling of resume spans prefers that
 		// there only be one. Thus we just set it to MaxKeys when, and only when,
 		// we're returning a ResumeSpan.
-		reply.NumKeys = cArgs.MaxKeys
+		reply.NumKeys = cArgs.Header.MaxSpanRequestKeys
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
