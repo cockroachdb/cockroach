@@ -472,7 +472,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:b9ff2b36e421c1acce4c33a359e3757e0802b71b1def7ff81362c30a95878467"
+  digest = "1:7d7b209de66cda4be1dbad85270e51f01d968800bf2c7ebfed8eb1ac04809802"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -486,6 +486,7 @@
     "internal/humanize",
     "internal/invariants",
     "internal/manifest",
+    "internal/manual",
     "internal/private",
     "internal/rangedel",
     "internal/rate",
@@ -496,7 +497,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "dc0074b9a99adde01cda1afdfbcee4a6e1f2ed98"
+  revision = "481920c693f14e0926064e8c7c3f89eea728ae8f"
 
 [[projects]]
   branch = "master"
