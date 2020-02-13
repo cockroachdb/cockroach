@@ -366,8 +366,6 @@ func (r *Replica) evaluate1PC(
 	// Try executing with transaction stripped.
 	strippedBa := *ba
 	strippedBa.Txn = nil
-	// strippedBa is non-transactional, so DeferWriteTooOldError cannot be set.
-	strippedBa.DeferWriteTooOldError = false
 	strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 
 	rec := NewReplicaEvalContext(r, spans)
@@ -474,10 +472,18 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, spans)
 
+		var success bool
+		if pErr == nil {
+			wto := br.Txn != nil && br.Txn.WriteTooOld
+			success = !wto
+		} else {
+			success = false
+		}
+
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, deadline) {
+		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, deadline) {
 			break
 		}
 	}
@@ -506,11 +512,12 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	return batch, br, res, pErr
 }
 
-// canDoServersideRetry looks at the error produced by evaluating ba and decides
-// if it's possible to retry the batch evaluation at a higher timestamp.
-// Retrying is sometimes possible in case of some retriable errors which ask for
-// higher timestamps: for transactional requests, retrying is possible if the
-// transaction had not performed any prior reads that need refreshing.
+// canDoServersideRetry looks at the error produced by evaluating ba (or the
+// WriteTooOldFlag in br.Txn if there's no error) and decides if it's possible
+// to retry the batch evaluation at a higher timestamp. Retrying is sometimes
+// possible in case of some retriable errors which ask for higher timestamps:
+// for transactional requests, retrying is possible if the transaction had not
+// performed any prior reads that need refreshing.
 //
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
 // the request can be evaluated. If ba is a transactional request, then dealine
@@ -519,7 +526,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // If true is returned, ba and ba.Txn will have been updated with the new
 // timestamp.
 func canDoServersideRetry(
-	ctx context.Context, pErr *roachpb.Error, ba *roachpb.BatchRequest, deadline *hlc.Timestamp,
+	ctx context.Context,
+	pErr *roachpb.Error,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	deadline *hlc.Timestamp,
 ) bool {
 	if ba.Txn != nil {
 		if deadline != nil {
@@ -538,21 +549,30 @@ func canDoServersideRetry(
 		deadline = et.Deadline
 	}
 	var newTimestamp hlc.Timestamp
-	switch tErr := pErr.GetDetail().(type) {
-	case *roachpb.WriteTooOldError:
-		newTimestamp = tErr.ActualTimestamp
-	case *roachpb.TransactionRetryError:
-		if ba.Txn == nil {
-			// TODO(andrei): I don't know if TransactionRetryError is possible for
-			// non-transactional batches, but some tests inject them for 1PC
-			// transactions. I'm not sure how to deal with them, so let's not retry.
+
+	if pErr != nil {
+		switch tErr := pErr.GetDetail().(type) {
+		case *roachpb.WriteTooOldError:
+			newTimestamp = tErr.ActualTimestamp
+		case *roachpb.TransactionRetryError:
+			if ba.Txn == nil {
+				// TODO(andrei): I don't know if TransactionRetryError is possible for
+				// non-transactional batches, but some tests inject them for 1PC
+				// transactions. I'm not sure how to deal with them, so let's not retry.
+				return false
+			}
+			newTimestamp = pErr.GetTxn().WriteTimestamp
+		default:
+			// TODO(andrei): Handle other retriable errors too.
 			return false
 		}
-		newTimestamp = pErr.GetTxn().WriteTimestamp
-	default:
-		// TODO(andrei): Handle other retriable errors too.
-		return false
+	} else {
+		if !br.Txn.WriteTooOld {
+			log.Fatalf(ctx, "programming error: expected the WriteTooOld flag to be set")
+		}
+		newTimestamp = br.Txn.WriteTimestamp
 	}
+
 	if deadline != nil && deadline.LessEq(newTimestamp) {
 		return false
 	}
