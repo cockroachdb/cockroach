@@ -59,7 +59,9 @@ func runDiskStalledDetection(
 	if err := execCmd(ctx, t.l, roachprod, "install", c.makeNodes(n), "charybdefs"); err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real && chmod 777 {store-dir}/{real,faulty}")
+	c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real")
+	c.Run(ctx, n, "sudo mkdir -p {store-dir}/real/logs")
+	c.Run(ctx, n, "sudo chmod -R 777 {store-dir}/{real,faulty}")
 	l, err := t.l.ChildLogger("cockroach")
 	if err != nil {
 		t.Fatal(err)
