@@ -241,6 +241,29 @@ func (a *appStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit b
 	a.txns.recordTransaction(txnTimeSec, ev, implicit)
 }
 
+// shouldSaveLogicalPlanDescription returns whether we should save this as a
+// sample logical plan for its corresponding fingerprint. We use
+// `logicalPlanCollectionPeriod` to assess how frequently to sample logical
+// plans.
+func (a *appStats) shouldSaveLogicalPlanDescription(
+	stmt *Statement, useDistSQL bool, implicitTxn bool, err error,
+) bool {
+	if !sampleLogicalPlans.Get(&a.st.SV) {
+		return false
+	}
+	stats := a.getStatsForStmt(stmt, useDistSQL, implicitTxn, err, false /* createIfNonexistent */)
+	if stats == nil {
+		// Save logical plan the first time we see new statement fingerprint.
+		return true
+	}
+	now := timeutil.Now()
+	period := logicalPlanCollectionPeriod.Get(&a.st.SV)
+	stats.Lock()
+	defer stats.Unlock()
+	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
+	return now.Sub(timeLastSampled) >= period
+}
+
 // sqlStats carries per-application statistics for all applications.
 type sqlStats struct {
 	syncutil.Mutex
