@@ -12,6 +12,7 @@ package movr
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -551,6 +552,7 @@ func (g *movr) movrVehicleLocationHistoriesInitialRow(rowIdx int) []interface{} 
 func (g *movr) movrPromoCodesInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
 	code := strings.ToLower(strings.Join(g.faker.Words(rng, 3), `_`))
+	code = fmt.Sprintf("%d_%s", rowIdx, code)
 	description := g.faker.Paragraph(rng)
 	expirationTime := g.creationTime.Add(time.Duration(rng.Intn(30)) * 24 * time.Hour)
 	// TODO(dan): This is nil in the reference impl, is that intentional?
