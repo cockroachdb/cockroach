@@ -930,13 +930,22 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		for i := 0; i < numKeys; i++ {
 			span := roachpb.Span{Key: keys[keysPerm[i]]}
 			acc := spanset.SpanReadOnly
+			dupRead := false
 			if !onlyReads {
 				acc = spanset.SpanAccess(rng.Intn(int(spanset.NumSpanAccess)))
 				if acc == spanset.SpanReadWrite && txnMeta != nil && rng.Intn(2) == 0 {
+					// Acquire lock.
 					wi.locksToAcquire = append(wi.locksToAcquire, span.Key)
+				}
+				if acc == spanset.SpanReadWrite && rng.Intn(2) == 0 {
+					// Also include the key as read.
+					dupRead = true
 				}
 			}
 			spans.AddMVCC(acc, span, ts)
+			if dupRead {
+				spans.AddMVCC(spanset.SpanReadOnly, span, ts)
+			}
 		}
 		items = append(items, wi)
 	}

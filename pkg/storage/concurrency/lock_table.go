@@ -229,10 +229,10 @@ type lockTableGuardImpl struct {
 	// The key for the lockState.
 	key roachpb.Key
 	// The key for the lockState is contained in the Span specified by
-	// spans[sa][ss][index].
-	ss    spanset.SpanScope
-	sa    spanset.SpanAccess
-	index int
+	// spans[accessDecreasingStrength[saIndex]][ss][index].
+	ss      spanset.SpanScope
+	saIndex int // index into accessDecreasingStrength
+	index   int
 
 	mu struct {
 		syncutil.Mutex
@@ -241,8 +241,8 @@ type lockTableGuardImpl struct {
 		state  waitingState
 		signal chan struct{}
 
-		// locks for which this request has a reservation or is in the queue or
-		// actively waiting as a reader.
+		// locks for which this request has a reservation or is in the queue of
+		// writers (active or inactive) or actively waiting as a reader.
 		//
 		// TODO(sbhola): investigate whether the logic to maintain this locks map
 		// can be simplified so it doesn't need to be adjusted by various
@@ -483,19 +483,29 @@ type lockWaitQueue struct {
 	// - Holders: only shared locks are compatible with themselves, so there can
 	//   be one of (a) no holder (b) multiple shared lock holders, (c) one
 	//   exclusive holder, (d) one upgrade holder. Non-locking reads will
-	//   continue to wait in waitingReaders for only an incompatible exclusive
-	//   holder.
+	//   wait in waitingReaders for only an incompatible exclusive holder.
 	//
 	// - Reservers: This follows the same pattern as holders. Non-locking reads
 	//   do not wait on reservers.
 	//
-	// - Queueing and dependencies: All potential lockers will wait in the same
-	//   queue. A sequence of consecutive requests that have the potential to
-	//   acquire a shared lock will jointly reserve that shared lock. Such
-	//   requests cannot jump ahead of requests with a lower seqnum just because
-	//   there is currently a shared lock reservation (this can cause lockTable
-	//   induced deadlocks). Such joint reservations can be partially broken by
-	//   a waiter desiring an exclusive or upgrade lock.
+	// - Queueing and dependencies: All potential lockers and non-transactional
+	//   writers will wait in the same queue. A sequence of consecutive requests
+	//   that have the potential to acquire a shared lock will jointly reserve
+	//   that shared lock. Such requests cannot jump ahead of requests with a
+	//   lower seqnum just because there is currently a shared lock reservation
+	//   (this can cause lockTable induced deadlocks). Such joint reservations
+	//   can be partially broken by a waiter desiring an exclusive or upgrade
+	//   lock. Like the current code, non-transactional writes will wait for
+	//   reservations that have a lower sequence num, but not make their own
+	//   reservation. Additionally, they can partially break joint reservations.
+	//
+	//   Reservations that are (partially or fully) broken cause requests to
+	//   reenter the queue as inactive waiters. This is no different than the
+	//   current behavior. Each request can specify the same key in spans for
+	//   ReadOnly, ReadShared, ReadUpgrade, ReadWrite. The spans will be
+	//   iterated over in decreasing order of strength, to only wait at a lock
+	//   at the highest strength (this is similar to the current behavior using
+	//   accessDecreasingStrength).
 	//
 	//   For dependencies, a waiter desiring an exclusive or upgrade lock always
 	//   conflicts with the holder(s) or reserver(s) so that is the dependency
@@ -757,6 +767,25 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 		if g.ts.Less(waitForTs) {
 			return false
 		}
+		g.mu.Lock()
+		_, alsoHasStrongerAccess := g.mu.locks[l]
+		g.mu.Unlock()
+
+		// If the request already has this lock in its locks map, it must also be
+		// writing to this key and must be either a reservation holder or inactive
+		// waiter at this lock. The former has already been handled above. For the
+		// latter, it must have had its reservation broken. Since this is a weaker
+		// access we defer to the stronger access and don't wait here.
+		//
+		// For non-transactional requests that have the key specified as both
+		// SpanReadOnly and SpanReadWrite, the request never acquires a
+		// reservation, so using the locks map to detect this duplication of the
+		// key is not possible. In the rare case, the lock is now held at a
+		// timestamp that is not compatible with this request and it will wait
+		// here -- there is no correctness issue with doing that.
+		if alsoHasStrongerAccess {
+			return false
+		}
 	}
 
 	// Incompatible with whoever is holding lock or reservation.
@@ -986,13 +1015,6 @@ func (l *lockState) discoveredLock(
 		l.holder.holder[lock.Replicated].ts = ts
 	}
 
-	g.mu.Lock()
-	_, presentHere := g.mu.locks[l]
-	if !presentHere {
-		g.mu.locks[l] = struct{}{}
-	}
-	g.mu.Unlock()
-
 	// Queue the existing reservation holder. Note that this reservation
 	// holder may not be equal to g due to two reasons (a) the reservation
 	// of g could have been broken even though g is holding latches (see
@@ -1012,7 +1034,16 @@ func (l *lockState) discoveredLock(
 		informWaiters = false
 	}
 
-	if !presentHere && sa == spanset.SpanReadWrite {
+	g.mu.Lock()
+	_, presentHere := g.mu.locks[l]
+	addToQueue := !presentHere && sa == spanset.SpanReadWrite
+	if addToQueue {
+		// Since g will place itself in queue as inactive waiter below.
+		g.mu.locks[l] = struct{}{}
+	}
+	g.mu.Unlock()
+
+	if addToQueue {
 		// Put self in queue as inactive waiter.
 		qg := &queuedGuard{
 			guard:  g,
@@ -1347,6 +1378,8 @@ func (l *lockState) lockIsFree() (gc bool) {
 	return false
 }
 
+var accessDecreasingStrength = [spanset.NumSpanAccess]spanset.SpanAccess{spanset.SpanReadWrite, spanset.SpanReadOnly}
+
 // ScanAndEnqueue implements the lockTable interface.
 func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTableGuard {
 	var g *lockTableGuardImpl
@@ -1368,7 +1401,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g = guard.(*lockTableGuardImpl)
 		g.mu.Lock()
 		g.key = nil
-		g.sa = spanset.SpanAccess(0)
+		g.saIndex = 0
 		g.ss = spanset.SpanScope(0)
 		g.index = -1
 		g.mu.startWait = false
@@ -1510,10 +1543,13 @@ func (t *lockTableImpl) clearMostLocks() {
 	}
 }
 
+// Given the key with scope ss must be in spans, returns the strongest access
+// specified in the spans.
 func findAccessInSpans(
 	key roachpb.Key, ss spanset.SpanScope, spans *spanset.SpanSet,
 ) (spanset.SpanAccess, error) {
-	for sa := spanset.SpanAccess(0); sa < spanset.NumSpanAccess; sa++ {
+	for i := 0; i < len(accessDecreasingStrength); i++ {
+		sa := accessDecreasingStrength[i]
 		s := spans.GetSpans(sa, ss)
 		// First span that starts after key
 		i := sort.Search(len(s), func(i int) bool {
@@ -1595,8 +1631,8 @@ func (t *lockTableImpl) UpdateLocks(intent *roachpb.Intent) error {
 func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
 	g.index++
 	for ; g.ss < spanset.NumSpanScope; g.ss++ {
-		for ; g.sa < spanset.NumSpanAccess; g.sa++ {
-			spans := g.spans.GetSpans(g.sa, g.ss)
+		for ; g.saIndex < len(accessDecreasingStrength); g.saIndex++ {
+			spans := g.spans.GetSpans(accessDecreasingStrength[g.saIndex], g.ss)
 			if g.index < len(spans) {
 				span := &spans[g.index]
 				g.key = span.Key
@@ -1604,7 +1640,7 @@ func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
 			}
 			g.index = 0
 		}
-		g.sa = 0
+		g.saIndex = 0
 	}
 	return nil
 }
@@ -1614,7 +1650,7 @@ func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
 // told that it is done waiting.
 // Acquires g.mu. Acquires treeMu.mu's in read mode.
 func (t *lockTableImpl) findNextLockAfter(g *lockTableGuardImpl, notify bool) {
-	spans := g.spans.GetSpans(g.sa, g.ss)
+	spans := g.spans.GetSpans(accessDecreasingStrength[g.saIndex], g.ss)
 	var span *spanset.Span
 	resumingInSameSpan := false
 	if g.index == -1 || len(spans[g.index].EndKey) == 0 {
@@ -1625,7 +1661,7 @@ func (t *lockTableImpl) findNextLockAfter(g *lockTableGuardImpl, notify bool) {
 	}
 	for span != nil {
 		tree := &t.locks[g.ss]
-		sa := g.sa
+		sa := accessDecreasingStrength[g.saIndex]
 		if len(span.EndKey) == 0 {
 			// NB: !resumingInSameSpan
 			tree.mu.RLock()
