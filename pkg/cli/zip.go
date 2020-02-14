@@ -383,7 +383,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			for _, r := range []zipRequest{
 				{
 					fn: func(ctx context.Context) (interface{}, error) {
-						return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Ready: false})
+						return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id})
 					},
 					pathName: prefix + "/details",
 				},

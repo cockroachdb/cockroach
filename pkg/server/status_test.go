@@ -130,7 +130,6 @@ func TestStatusJson(t *testing.T) {
 	})
 
 	for _, path := range []string{
-		"/health",
 		statusPrefix + "details/local",
 		statusPrefix + "details/" + strconv.FormatUint(uint64(nodeID), 10),
 	} {

@@ -422,13 +422,32 @@ message SettingsResponse {
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }
 
-// HealthRequest inquires whether the addressed node is healthy.
+// HealthRequest requests a liveness or readiness check.
+//
+// A liveness check is triggered via ready set to false. In this mode,
+// an empty response is returned immediately, that is, the caller merely
+// learns that the process is running.
+//
+// A readiness check (ready == true) is suitable for determining whether
+// user traffic should be directed at a given node, for example by a load
+// balancer. In this mode, a successful response is returned only if the
+// node:
+//
+// - is not in the process of shutting down or booting up (including
+//   waiting for cluster bootstrap);
+// - is regarded as healthy by the cluster via the recent broadcast of
+//   a liveness beacon. Absent either of these conditions, an error
+//   code will result.
+//
 message HealthRequest {
+  // ready specifies whether the client wants to know whether the
+  // target node is ready to receive traffic. If a node is unready, an
+  // error will be returned.
+  bool ready = 1;
 }
 
 // HealthResponse is the response to HealthRequest. It currently does not
-// contain any information. The request fails however if the node is not live.
-// TODO(tschottdorf): Should it contain information, and if so, what?
+// contain any information.
 message HealthResponse {
 }
 
@@ -742,6 +761,7 @@ service Admin {
   rpc Health(HealthRequest) returns (HealthResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/health"
+      additional_bindings {get : "/health"}
     };
   }
 
