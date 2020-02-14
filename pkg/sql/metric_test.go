@@ -33,7 +33,6 @@ type queryCounter struct {
 	selectCount                     int64
 	selectExecutedCount             int64
 	distSQLSelectCount              int64
-	optCount                        int64
 	fallbackCount                   int64
 	updateCount                     int64
 	insertCount                     int64
@@ -67,42 +66,42 @@ func TestQueryCounts(t *testing.T) {
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
-		{query: "SET DISTSQL = 'off'", miscCount: 1, miscExecutedCount: 1, optCount: 1},
+		{query: "SET DISTSQL = 'off'", miscCount: 1, miscExecutedCount: 1},
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
-		{query: "SELECT 1", selectCount: 1, selectExecutedCount: 1, txnCommitCount: 1, optCount: 1},
-		{query: "CREATE DATABASE mt", ddlCount: 1, optCount: 1},
-		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1, optCount: 1},
-		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1, optCount: 1},
+		{query: "SELECT 1", selectCount: 1, selectExecutedCount: 1, txnCommitCount: 1},
+		{query: "CREATE DATABASE mt", ddlCount: 1},
+		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
+		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1},
 		// Test failure (uniqueness violation).
-		{query: "INSERT INTO mt.n VALUES (3)", failureCount: 1, insertCount: 1, optCount: 1, expectError: true},
+		{query: "INSERT INTO mt.n VALUES (3)", failureCount: 1, insertCount: 1, expectError: true},
 		// Test failure (planning error).
 		{
 			query:        "INSERT INTO nonexistent VALUES (3)",
 			failureCount: 1, insertCount: 1, expectError: true,
 		},
-		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1, optCount: 1},
-		{query: "DELETE FROM mt.n", deleteCount: 1, optCount: 1},
-		{query: "ALTER TABLE mt.n ADD COLUMN num2 INTEGER", ddlCount: 1, optCount: 1},
-		{query: "EXPLAIN SELECT * FROM mt.n", miscCount: 1, miscExecutedCount: 1, optCount: 1},
+		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
+		{query: "DELETE FROM mt.n", deleteCount: 1},
+		{query: "ALTER TABLE mt.n ADD COLUMN num2 INTEGER", ddlCount: 1},
+		{query: "EXPLAIN SELECT * FROM mt.n", miscCount: 1, miscExecutedCount: 1},
 		{
 			query:         "BEGIN; UPDATE mt.n SET num = num + 1; END",
-			txnBeginCount: 1, updateCount: 1, txnCommitCount: 1, optCount: 1,
+			txnBeginCount: 1, updateCount: 1, txnCommitCount: 1,
 		},
 		{
 			query:       "SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n",
-			selectCount: 3, selectExecutedCount: 3, optCount: 3,
+			selectCount: 3, selectExecutedCount: 3,
 		},
-		{query: "SET DISTSQL = 'on'", miscCount: 1, miscExecutedCount: 1, optCount: 1},
+		{query: "SET DISTSQL = 'on'", miscCount: 1, miscExecutedCount: 1},
 		{
 			query:       "SELECT * FROM mt.n",
-			selectCount: 1, selectExecutedCount: 1, distSQLSelectCount: 1, optCount: 1,
+			selectCount: 1, selectExecutedCount: 1, distSQLSelectCount: 1,
 		},
-		{query: "SET DISTSQL = 'off'", miscCount: 1, miscExecutedCount: 1, optCount: 1},
-		{query: "DROP TABLE mt.n", ddlCount: 1, optCount: 1},
-		{query: "SET database = system", miscCount: 1, miscExecutedCount: 1, optCount: 1},
-		{query: "SELECT 3", selectCount: 1, selectExecutedCount: 1, optCount: 1},
-		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1, optCount: 1},
-		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1, optCount: 1},
+		{query: "SET DISTSQL = 'off'", miscCount: 1, miscExecutedCount: 1},
+		{query: "DROP TABLE mt.n", ddlCount: 1},
+		{query: "SET database = system", miscCount: 1, miscExecutedCount: 1},
+		{query: "SELECT 3", selectCount: 1, selectExecutedCount: 1},
+		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
+		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -156,9 +155,6 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
-				t.Errorf("%q: %s", tc.query, err)
-			}
-			if accum.optCount, err = checkCounterDelta(s, sql.MetaSQLOpt, accum.optCount, tc.optCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {

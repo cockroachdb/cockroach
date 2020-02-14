@@ -421,12 +421,9 @@ func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
 type planFlags uint32
 
 const (
-	// planFlagOptUsed is set if the optimizer was used to create the plan.
-	planFlagOptUsed planFlags = (1 << iota)
-
 	// planFlagOptCacheHit is set if a plan from the query plan cache was used (and
 	// re-optimized).
-	planFlagOptCacheHit
+	planFlagOptCacheHit = (1 << iota)
 
 	// planFlagOptCacheMiss is set if we looked for a plan in the query plan cache but
 	// did not find one.
