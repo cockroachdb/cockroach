@@ -16,6 +16,7 @@ import "./textInput.styl";
 
 interface TextInputProps {
   onChange: (value: string) => void;
+  value: string;
   initialValue?: string;
   placeholder?: string;
   className?: string;
@@ -26,9 +27,10 @@ interface TextInputProps {
 }
 
 interface TextInputState {
-  value: string;
   validationMessage: string;
   isValid: boolean;
+  isDirty: boolean;
+  isTouched: boolean;
 }
 
 export class TextInput extends React.Component<TextInputProps, TextInputState> {
@@ -41,16 +43,17 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     super(props);
 
     this.state = {
-      value: "",
       isValid: true,
       validationMessage: undefined,
+      isDirty: false,
+      isTouched: false,
     };
   }
 
   handleOnTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     this.setState({
-      value,
+      isDirty: true,
     });
     this.props.onChange(value);
   }
@@ -63,13 +66,14 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     this.setState({
       isValid: !Boolean(validationMessage),
       validationMessage,
+      isTouched: true,
     });
   }
 
   render() {
-    const { initialValue, placeholder, className, name } = this.props;
-    const { value, isValid, validationMessage } = this.state;
-    const textValue = value || initialValue;
+    const { initialValue, placeholder, className, name, value } = this.props;
+    const { isDirty, isValid, validationMessage } = this.state;
+    const textValue = isDirty ? value : initialValue;
 
     const classes = cn(
       className,

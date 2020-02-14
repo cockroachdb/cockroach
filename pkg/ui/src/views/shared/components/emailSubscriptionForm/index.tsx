@@ -10,9 +10,9 @@
 
 import React from "react";
 import { TextInput, Button } from "src/components";
+import { isValidEmail } from "src/util/validation/isValidEmail";
 
 import "./emailSubscriptionForm.styl";
-import { isValidEmail } from "src/util/validation/isValidEmail";
 
 interface EmailSubscriptionFormState {
   emailAddress: string | undefined;
@@ -34,8 +34,11 @@ export class EmailSubscriptionForm extends React.Component<EmailSubscriptionForm
 
   handleSubmit = () => {
     if (this.state.canSubmit) {
-      // TODO (koorosh): it is a stub for farther implementation of actual subscription.
-      // Has to be connected to redux for dispatching an action.
+      this.props.onSubmit(this.state.emailAddress);
+      this.setState({
+        emailAddress: "",
+        canSubmit: false,
+      });
     }
   }
 
@@ -61,7 +64,7 @@ export class EmailSubscriptionForm extends React.Component<EmailSubscriptionForm
   }
 
   render() {
-    const { canSubmit } = this.state;
+    const { canSubmit, emailAddress } = this.state;
     return (
       <div className="email-subscription-form">
         <TextInput
@@ -70,10 +73,13 @@ export class EmailSubscriptionForm extends React.Component<EmailSubscriptionForm
           placeholder="Enter your email"
           validate={this.handleEmailValidation}
           onChange={this.handleChange}
+          value={emailAddress}
         />
         <Button
+          type={"primary"}
           onClick={this.handleSubmit}
           disabled={!canSubmit}
+          className="email-subscription-form__submit-button"
         >
           Sign up
         </Button>
