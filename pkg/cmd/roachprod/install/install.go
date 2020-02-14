@@ -39,7 +39,7 @@ sudo service cassandra stop;
     sudo mkdir -p "${thrift_dir}"
     sudo chmod 777 "${thrift_dir}"
     cd "${thrift_dir}"
-    curl "http://www-eu.apache.org/dist/thrift/0.10.0/thrift-0.10.0.tar.gz" | sudo tar xvz --strip-components 1
+    curl "http://www.apache.org/dist/thrift/0.10.0/thrift-0.10.0.tar.gz" | sudo tar xvz --strip-components 1
     sudo ./configure --prefix=/usr
     sudo make -j$(nproc)
     sudo make install
