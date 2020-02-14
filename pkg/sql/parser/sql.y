@@ -2619,11 +2619,11 @@ drop_database_stmt:
 drop_user_or_role_stmt:
   DROP role_or_group_or_user string_or_placeholder_list
   {
-    $$.val = &tree.DropUserOrRole{Names: $3.exprs(), IfExists: false, IsRole: $2.isRole()}
+    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false, IsRole: $2.isRole()}
   }
 | DROP role_or_group_or_user IF EXISTS string_or_placeholder_list
   {
-    $$.val = &tree.DropUserOrRole{Names: $5.exprs(), IfExists: true, IsRole: $2.isRole()}
+    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true, IsRole: $2.isRole()}
   }
 | DROP role_or_group_or_user error // SHOW HELP: DROP USER
 
@@ -5108,27 +5108,27 @@ password_clause:
 create_user_or_role_stmt:
   CREATE role_or_group_or_user string_or_placeholder
   {
-    $$.val = &tree.CreateUserOrRole{Name: $3.expr(), IsRole: $2.isRole()}
+    $$.val = &tree.CreateRole{Name: $3.expr(), IsRole: $2.isRole()}
   }
 | CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder
   {
-    $$.val = &tree.CreateUserOrRole{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true}
+    $$.val = &tree.CreateRole{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true}
   }
 | CREATE role_or_group_or_user string_or_placeholder role_options
   {
-    $$.val = &tree.CreateUserOrRole{Name: $3.expr(), IsRole: $2.isRole(), OptionsWithValues: $4.optionWithValueList()}
+    $$.val = &tree.CreateRole{Name: $3.expr(), IsRole: $2.isRole(), OptionsWithValues: $4.optionWithValueList()}
   }
 | CREATE role_or_group_or_user string_or_placeholder WITH role_options
   {
-    $$.val = &tree.CreateUserOrRole{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, OptionsWithValues: $5.optionWithValueList()}
+    $$.val = &tree.CreateRole{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, OptionsWithValues: $5.optionWithValueList()}
   }
 | CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder role_options
   {
-    $$.val = &tree.CreateUserOrRole{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, OptionsWithValues: $7.optionWithValueList()}
+    $$.val = &tree.CreateRole{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, OptionsWithValues: $7.optionWithValueList()}
   }
 | CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder WITH role_options
   {
-    $$.val = &tree.CreateUserOrRole{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, HasWith: true, OptionsWithValues: $8.optionWithValueList()}
+    $$.val = &tree.CreateRole{Name: $6.expr(), IsRole: $2.isRole(), IfNotExists: true, HasWith: true, OptionsWithValues: $8.optionWithValueList()}
   }
 | CREATE role_or_group_or_user error // SHOW HELP: CREATE USER
 
@@ -5140,19 +5140,19 @@ create_user_or_role_stmt:
 alter_user_or_role_stmt:
   ALTER role_or_group_or_user string_or_placeholder role_options
 {
-  $$.val = &tree.AlterUserOrRoleOptions{Name: $3.expr(), IsRole: $2.isRole(), OptionsWithValues: $4.optionWithValueList()}
+  $$.val = &tree.AlterRoleOptions{Name: $3.expr(), IsRole: $2.isRole(), OptionsWithValues: $4.optionWithValueList()}
 }
 | ALTER role_or_group_or_user string_or_placeholder WITH role_options
 {
-  $$.val = &tree.AlterUserOrRoleOptions{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, OptionsWithValues: $5.optionWithValueList()}
+  $$.val = &tree.AlterRoleOptions{Name: $3.expr(), IsRole: $2.isRole(), HasWith: true, OptionsWithValues: $5.optionWithValueList()}
 }
 | ALTER role_or_group_or_user IF EXISTS string_or_placeholder role_options
 {
-  $$.val = &tree.AlterUserOrRoleOptions{Name: $5.expr(), IsRole: $2.isRole(), IfExists: true, OptionsWithValues: $6.optionWithValueList()}
+  $$.val = &tree.AlterRoleOptions{Name: $5.expr(), IsRole: $2.isRole(), IfExists: true, OptionsWithValues: $6.optionWithValueList()}
 }
 | ALTER role_or_group_or_user IF EXISTS string_or_placeholder WITH role_options
 {
-  $$.val = &tree.AlterUserOrRoleOptions{Name: $5.expr(), IsRole: $2.isRole(), IfExists: true, HasWith: true, OptionsWithValues: $7.optionWithValueList()}
+  $$.val = &tree.AlterRoleOptions{Name: $5.expr(), IsRole: $2.isRole(), IfExists: true, HasWith: true, OptionsWithValues: $7.optionWithValueList()}
 }
 | ALTER role_or_group_or_user error // SHOW HELP: ALTER USER
 

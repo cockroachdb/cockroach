@@ -91,7 +91,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 	if row == nil {
-		return errors.Newf("role %s does not exist", normalizedUsername)
+		return errors.Newf("role/user %s does not exist", normalizedUsername)
 	}
 
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
@@ -128,7 +128,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	for _, stmt := range stmts {
-		_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			"update-role",
 			params.p.txn,
@@ -139,6 +139,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+		n.run.rowsAffected += rowsAffected
 	}
 	return nil
 }

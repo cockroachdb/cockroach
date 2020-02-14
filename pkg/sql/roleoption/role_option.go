@@ -86,7 +86,7 @@ func (pl List) GetSQLStmts() (stmts []string, err error) {
 
 	for _, ro := range pl {
 		val, ok := toSQLStmt[ro.Option]
-		if ok {
+		if !ok {
 			continue
 		}
 		stmts = append(stmts, val)
@@ -155,6 +155,8 @@ func (rol List) GetHashedPassword() ([]byte, error) {
 			if err != nil {
 				return hashedPassword, err
 			}
+
+			return hashedPassword, nil
 		}
 	}
 	// Password option not found.

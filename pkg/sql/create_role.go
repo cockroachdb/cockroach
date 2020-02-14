@@ -143,19 +143,8 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		return errors.Wrapf(err, "error looking up user")
 	}
 	if row != nil {
-		isRole := bool(*row[0].(*tree.DBool))
-		if isRole == n.isRole && n.ifNotExists {
-			// The username exists with the same role setting, and we asked to skip
-			// if it exists: no error.
-			return nil
-		}
-		msg := "a user"
-		if isRole {
-			msg = "a role"
-		}
 		return pgerror.Newf(pgcode.DuplicateObject,
-			"%s named %s already exists",
-			msg, normalizedUsername)
+			"a role/user named %s already exists", normalizedUsername)
 	}
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
@@ -165,6 +154,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		fmt.Sprintf("insert into %s values ($1, $2, $3)", userTableName),
 		normalizedUsername,
 		hashedPassword,
+		n.isRole,
 	)
 
 	if err != nil {
