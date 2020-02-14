@@ -219,14 +219,12 @@ start-waiting: true
 #  res           req4  req4
 #                txn2  txn2
 #                8,12  8,12
-# Requests: * is active wait, + is in queue as inactive.
-#  req4      w+     w     w    r   r    r*
-#
-# Note that req4 is waiting on f since SpanReadOnly spans are ordered before SpanReadWrite spans.
+# Requests: * is active wait.
+#  req4      w*     w     w    r   r    r
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn3 ts=6 key="f" held=true guard-access=read
+new: state=waitForDistinguished txn=txn3 ts=6 key="a" held=true guard-access=write
 
 print
 ----
@@ -234,7 +232,8 @@ global: num=5
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
    queued writers:
-    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 4
  lock: "b"
   res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
  lock: "c"
@@ -243,9 +242,6 @@ global: num=5
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
  lock: "f"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
-   waiting readers:
-    req: 4, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 4
 local: num=0
 
 # req5 is again from transaction 1. Since it is reading from b, c, and even though txn1
@@ -264,7 +260,8 @@ global: num=5
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
    queued writers:
-    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 4
  lock: "b"
   res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
  lock: "c"
@@ -273,9 +270,6 @@ global: num=5
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
  lock: "f"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
-   waiting readers:
-    req: 4, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 4
 local: num=0
 
 # req6 from txn1 conflicts with lock at f, and reservations at b, c.
@@ -287,7 +281,7 @@ scan r=req6
 ----
 start-waiting: true
 
-# req6 is not a distinguished waiter at f.
+# req6 is a distinguished waiter at b.
 #
 # Locks:
 #             a    b    c    d    e    f    g
@@ -296,9 +290,9 @@ start-waiting: true
 #  res           req4  req4
 #                txn2  txn2
 #                8,12  8,12
-# Requests: * is active wait, + is in queue as inactive.
-#  req4      w+   w     w    r   r    r*
-#  req6           w     w             r*
+# Requests: * is active wait.
+#  req4      w*   w     w    r   r    r
+#  req6           w*    w             r
 #   txn1
 #   11,1
 
@@ -308,24 +302,24 @@ global: num=5
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
    queued writers:
-    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 4
  lock: "b"
   res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+   queued writers:
+    active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 6
  lock: "c"
   res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
  lock: "f"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
-   waiting readers:
-    req: 6, txn: 00000000-0000-0000-0000-000000000001
-    req: 4, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 4
 local: num=0
 
 guard-state r=req6
 ----
-new: state=waitFor txn=txn3 ts=6 key="f" held=true guard-access=read
+new: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=false guard-access=write
 
 # req7 from txn3 only wants to write to c
 
@@ -343,9 +337,9 @@ start-waiting: true
 #  res           req4  req4
 #                txn2  txn2
 #                8,12  8,12
-# Requests: * is active wait, + is in queue as inactive.
-#  req4      w+    w     w    r   r    r*
-#  req6            w     w             r*
+# Requests: * is active wait.
+#  req4      w*    w     w    r   r    r
+#  req6            w*    w             r
 #   txn1
 #   11,1
 #  req7                  w*
@@ -359,73 +353,6 @@ new: state=waitForDistinguished txn=txn2 ts=8,12 key="c" held=false guard-access
 print
 ----
 global: num=5
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
-   queued writers:
-    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
- lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
- lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
-   queued writers:
-    active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 7
- lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
- lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
-   waiting readers:
-    req: 6, txn: 00000000-0000-0000-0000-000000000001
-    req: 4, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 4
-local: num=0
-
-# Release f. This will cause req4 to wait at a, and req6 to wait at b.
-release txn=txn3 span=f
-----
-global: num=4
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
-   queued writers:
-    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
- lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
- lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
-   queued writers:
-    active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 7
- lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
-local: num=0
-
-guard-state r=req6
-----
-new: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=false guard-access=write
-
-guard-state r=req4
-----
-new: state=waitForDistinguished txn=txn3 ts=6 key="a" held=true guard-access=write
-
-# Locks:
-#             a    b    c    d    e    f    g
-#  holder   txn3                 txn1
-#            6                   10,1
-#  res           req4  req4
-#                txn2  txn2
-#                8,12  8,12
-# Requests: * is active wait, + is in queue as inactive.
-#  req4      w*    w     w    r   r    r
-#  req6            w*    w             r
-#   txn1
-#   11,1
-#  req7                  w*
-#   txn3
-#   6
-
-print
-----
-global: num=4
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
    queued writers:
@@ -443,10 +370,67 @@ global: num=4
    distinguished req: 7
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
 local: num=0
 
-# Release a. req4 is done waiting.
+# Release a. req4 waits at f.
 release txn=txn3 span=a
+----
+global: num=5
+ lock: "a"
+  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+ lock: "b"
+  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+   queued writers:
+    active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 6
+ lock: "c"
+  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+   queued writers:
+    active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 7
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
+local: num=0
+
+guard-state r=req4
+----
+new: state=waitForDistinguished txn=txn3 ts=6 key="f" held=true guard-access=read
+
+guard-state r=req6
+----
+old: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=false guard-access=write
+
+print
+----
+global: num=5
+ lock: "a"
+  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+ lock: "b"
+  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+   queued writers:
+    active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 6
+ lock: "c"
+  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+   queued writers:
+    active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 7
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000006,0
+   waiting readers:
+    req: 4, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 4
+local: num=0
+
+# Release f. This will cause req4 to be done waiting.
+
+release txn=txn3 span=f
 ----
 global: num=4
  lock: "a"
@@ -465,10 +449,6 @@ global: num=4
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1
 local: num=0
 
-guard-state r=req6
-----
-old: state=waitForDistinguished txn=txn2 ts=8,12 key="b" held=false guard-access=write
-
 guard-state r=req4
 ----
 new: state=doneWaiting
@@ -480,7 +460,7 @@ new: state=doneWaiting
 #  res     req4  req4  req4
 #          txn2  txn2  txn2
 #          8,12  8,12  8,12
-# Requests: * is active wait, + is in queue as inactive.
+# Requests: * is active wait.
 #  req4      w     w     w    r   r    r
 #  req6            w*    w             r
 #   txn1
@@ -580,7 +560,7 @@ local: num=0
 #  holder        txn2  txn2      txn1
 #                8,12  8,12      10,1
 #  res
-# Requests: * is active wait, + is in queue as inactive.
+# Requests: * is active wait.
 #  req6            w*    w             r
 #   txn1
 #   11,1
@@ -656,7 +636,7 @@ old: state=doneWaiting
 #  res            req6 req6
 #                 txn1 txn1
 #                 11,1 11,1
-# Requests: * is active wait, + is in queue as inactive.
+# Requests: * is active wait.
 #  req6            w    w              r
 #   txn1
 #   11,1
