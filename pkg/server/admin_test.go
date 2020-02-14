@@ -1230,8 +1230,11 @@ func TestClusterAPI(t *testing.T) {
 
 func TestHealthAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	// We need to retry because the node ID isn't set until after
 	// bootstrapping.
@@ -1250,24 +1253,24 @@ func TestHealthAPI(t *testing.T) {
 	}
 	s.Clock().Update(hlc.Timestamp(self.Expiration).Add(1, 0))
 
-	expected := "503 Service Unavailable"
 	var resp serverpb.HealthResponse
-	for {
-		if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
-			type timeouter interface {
-				Timeout() bool
-			}
-			if _, ok := err.(timeouter); ok {
-				// Special case for `*http.httpError` which can happen since we
-				// have timeouts on our requests and things may not be going so smoothly
-				// on the server side. See:
-				// https://github.com/cockroachdb/cockroach/issues/18469
-				log.Warningf(context.Background(), "ignoring timeout error: %s (%T)", err, err)
-				continue
-			}
-			t.Errorf("expected %q error, got %v (%T)", expected, err, err)
+	testutils.SucceedsSoon(t, func() error {
+		err := getAdminJSONProto(s, "health?ready=1", &resp)
+		if err == nil {
+			return errors.New("health OK, still waiting for unhealth")
 		}
-		break
+
+		t.Logf("observed error: %v", err)
+		if !testutils.IsError(err, `(?s)503 Service Unavailable.*"error": "node is not healthy"`) {
+			return err
+		}
+		return nil
+	})
+
+	// After the node reports an error with `?ready=1`, the health
+	// endpoint must still succeed without error when `?ready=1` is not specified.
+	if err := getAdminJSONProto(s, "health", &resp); err != nil {
+		t.Fatal(err)
 	}
 }
 
