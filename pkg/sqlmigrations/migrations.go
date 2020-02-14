@@ -125,8 +125,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
-		name:   "add system.users isRole column and create admin role",
-		workFn: addAdminRole,
+		// Replaced by addAdminRoleWithHasCreateRole migration.
+		name: "add system.users isRole column and create admin role",
 	},
 	{
 		// Introduced in v2.0, replaced by "ensure admin role privileges in all descriptors"
@@ -277,17 +277,28 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
 	},
 	{
-		// Introduced in v20.1
+		// Introduced in v20.1.
 		name:                "create new system.namespace table",
 		workFn:              createNewSystemNamespaceDescriptor,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
 	},
 	{
-		// Introduced in v20.1
+		// Introduced in v20.1.
 		name:                "migrate system.namespace_deprecated entries into system.namespace",
 		workFn:              migrateSystemNamespace,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
+	},
+	{
+		// Introduced in v20.1.
+		name:                "add hasCreateRole column to system.users table",
+		workFn:              addHasCreateRoleToSystemUsers,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
+	},
+	{
+		// Introduced in v20.1.
+		name:   "set isRole and hasCreateRole for admin role in system.users table",
+		workFn: addAdminRoleWithHasCreateRole,
 	},
 }
 
@@ -869,14 +880,6 @@ func addRootUser(ctx context.Context, r runner) error {
 	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, security.RootUser)
 }
 
-func addAdminRole(ctx context.Context, r runner) error {
-	// Upsert the admin role into the table. We intentionally override any existing entry.
-	const upsertAdminStmt = `
-          UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
-          `
-	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
-}
-
 func addRootToAdminRole(ctx context.Context, r runner) error {
 	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
@@ -884,6 +887,37 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           `
 	return r.execAsRootWithRetry(
 		ctx, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
+}
+
+func addAdminRoleWithHasCreateRole(ctx context.Context, r runner) error {
+	// Upsert the admin role with CreateRole privilege into the table.
+	// We intentionally override any existing entry.
+	const upsertAdminStmt = `
+          UPSERT INTO system.users (username, "hashedPassword", "isRole", "hasCreateRole") VALUES ($1, '', true, true)
+          `
+	return r.execAsRootWithRetry(ctx, "addAdminRoleWithHasCreateRole", upsertAdminStmt, sqlbase.AdminRole)
+}
+
+func addHasCreateRoleToSystemUsers(ctx context.Context, r runner) error {
+	const addHasCreateRoleColumn = `
+          ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "hasCreateRole" bool NOT NULL DEFAULT false
+          `
+
+	var err error
+
+	// Root user doesn't have CREATE privilege on system.users. Use node user.
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		_, err = r.sqlExecutor.ExecEx(ctx, "addHasCreateRoleColumn", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{
+				User: security.NodeUser,
+			}, addHasCreateRoleColumn)
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "failed to run %s: %v", addHasCreateRoleColumn, err)
+	}
+
+	return err
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {
