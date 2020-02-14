@@ -17,37 +17,42 @@
   margin-bottom 10px
   min-height 282px;
   white-space pre-wrap
-  background-color $headings-color
+  background-color $colors--neutral-10
   .table-target
     color $popover-border-color
     &:hover
       text-decoration underline
 
 .sql-highlight.hljs
-  color $popover-border-color
+  color $colors--neutral-2
   overflow-x auto
-  font-family RobotoMono-Medium
-  font-size 12px
-  font-weight 500
-  line-height 1.83
+  font-family SFMono-Semibold
+  font-size 14px
+  line-height: 1.57;
   white-space pre-wrap
   word-wrap break-word
-  .hljs-string
-    color $syntax-string-color
-
+  .hljs-label
+    padding-left 8px
   .hljs-keyword
-  .hljs-literal
-  .hljs-attribute
+    color $colors--functional-purple-1
+
+  .hljs-string
   .hljs-built_in
-    color $light-blue
+    color $colors--functional-orange-3
 
 .ant-tooltip.hljs
   .ant-tooltip-content
     width 535px
   .ant-tooltip-inner, .sql-highlight.hljs
-    background-color #242a35
+    background-color $colors--neutral-8
   .ant-tooltip-inner
     padding 8px
   .sql-highlight.hljs
     padding 0
     margin 0
+
+.higlight-divider
+  width 100%
+  height 1px
+  border-bottom 1px dashed #475872
+  margin 15px 0
