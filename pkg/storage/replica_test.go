@@ -4353,6 +4353,47 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 	})
 }
 
+// Test that errors from batch evaluation never have the WriteTooOld flag set.
+// The WriteTooOld flag is supposed to only be set on successful responses.
+//
+// The test will construct a batch with a write that would normally cause the
+// WriteTooOld flag to be set on the response, and another CPut which causes an
+// error to be returned.
+func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	cfg := TestStoreConfig(nil /* clock */)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	// Start a transaction early to get a low timestamp.
+	txn := roachpb.MakeTransaction(
+		"test", keyA, roachpb.NormalUserPriority, tc.Clock().Now(), 0 /* offset */)
+
+	// Write a value outside of the txn to cause a WriteTooOldError later.
+	put := putArgs(keyA, []byte("val1"))
+	var ba roachpb.BatchRequest
+	ba.Add(&put)
+	_, pErr := tc.Sender().Send(ctx, ba)
+	require.Nil(t, pErr)
+
+	// This put will cause the WriteTooOld flag to be set.
+	put = putArgs(keyA, []byte("val2"))
+	// This will cause a ConditionFailedError.
+	cput := cPutArgs(keyB, []byte("missing"), []byte("newVal"))
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&put)
+	ba.Add(&cput)
+	assignSeqNumsForReqs(&txn, &put, &cput)
+	_, pErr = tc.Sender().Send(ctx, ba)
+	require.IsType(t, pErr.GetDetail(), &roachpb.ConditionFailedError{})
+	require.False(t, pErr.GetTxn().WriteTooOld)
+}
+
 // TestReplicaLaziness verifies that Raft Groups are brought up lazily.
 func TestReplicaLaziness(t *testing.T) {
 	defer leaktest.AfterTest(t)()

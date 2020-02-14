@@ -449,22 +449,27 @@ message Transaction {
   // transaction's write timestamp because a newer value was present. Had our
   // write been performed, it would have overwritten the other value even though
   // that value might not have been read by a previous read in the transaction
-  // (i.e. lost update anomaly).
-  // When this flag is set, the transaction's write timestamp is also bumped.
-  // The flag is used, though, to return a more specific error to the client
-  // instead of TransactionRetryError(RETRY_SERIALIZABLE).
+  // (i.e. lost update anomaly). The write is still performed, but this flag is
+  // set and the txn's write timestamp is bumped, so the client will not be able
+  // to commit without performing a refresh.
   //
-  // As explained above, this flag indicates that, if the key in question had
-  // been read previously by the transaction, a refresh of the transaction's
-  // read span will surely fail. The client does not currently take advantage of
-  // this flag to avoid hopeless refreshes, though.
+  // Since 20.1, errors do not carry this flag; only successful BatchResponses
+  // do. When possible, such a BatchResponse is preferred to a WriteTooOldError
+  // because the former leaves intents behind to act as locks.
+  //
+  // On the client, the txnSpanRefresher terminates this flag by refreshing
+  // eagerly when the flag is set. If the key that generated the write too old
+  // condition had been previously read by the transaction, a refresh of the
+  // transaction's read span will surely fail. The client is not currently smart
+  // enough to avoid hopeless refreshes, though.
   //
   // Historically, this field was also important for SNAPSHOT transactions which
   // could commit in other situations when the write timestamp is bumped, but
   // not when this flag is set (since lost updates cannot be tolerated even in
   // SNAPSHOT). In SERIALIZABLE isolation, transactions generally don't commit
-  // with a bumped write timestamp, so this flag stopped telling us anything
-  // more than ReadTimestamp != WriteTimestamp.
+  // with a bumped write timestamp, so this flag is only telling us that a
+  // refresh is less likely to succeed than in other cases where
+  // ReadTimestamp != WriteTimestamp.
   bool write_too_old = 12;
   // Set of spans that the transaction has written intents into. These
   // are spans which must be resolved on txn completion. Note that these
