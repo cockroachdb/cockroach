@@ -1071,7 +1071,8 @@ sort_clause ::=
 limit_clause ::=
 	'LIMIT' 'ALL'
 	| 'LIMIT' a_expr
-	| 'FETCH' first_or_next opt_select_fetch_first_value row_or_rows 'ONLY'
+	| 'FETCH' first_or_next select_fetch_first_value row_or_rows 'ONLY'
+	| 'FETCH' first_or_next row_or_rows 'ONLY'
 
 target_list ::=
 	( target_elem ) ( ( ',' target_elem ) )*
@@ -1466,10 +1467,10 @@ first_or_next ::=
 	'FIRST'
 	| 'NEXT'
 
-opt_select_fetch_first_value ::=
-	signed_iconst
-	| '(' a_expr ')'
-	| 
+select_fetch_first_value ::=
+	c_expr
+	| only_signed_iconst
+	| only_signed_fconst
 
 row_or_rows ::=
 	'ROW'
@@ -1601,7 +1602,7 @@ for_locking_items ::=
 
 offset_clause ::=
 	'OFFSET' a_expr
-	| 'OFFSET' c_expr row_or_rows
+	| 'OFFSET' select_fetch_first_value row_or_rows
 
 generic_set ::=
 	var_name to_or_eq var_list
@@ -1801,10 +1802,13 @@ sortby ::=
 	| 'PRIMARY' 'KEY' table_name opt_asc_desc
 	| 'INDEX' table_name '@' index_name opt_asc_desc
 
-signed_iconst ::=
-	'ICONST'
-	| '+' 'ICONST'
+only_signed_iconst ::=
+	'+' 'ICONST'
 	| '-' 'ICONST'
+
+only_signed_fconst ::=
+	'+' 'FCONST'
+	| '-' 'FCONST'
 
 target_name ::=
 	unrestricted_name
@@ -2390,6 +2394,10 @@ join_outer ::=
 
 rowsfrom_item ::=
 	func_expr_windowless
+
+signed_iconst ::=
+	'ICONST'
+	| only_signed_iconst
 
 create_as_col_qualification_elem ::=
 	'PRIMARY' 'KEY'

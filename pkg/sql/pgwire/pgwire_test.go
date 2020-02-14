@@ -669,6 +669,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(1, 1).Results(2),
 			baseTest.SetArgs(1, 2).Results(3),
 		}},
+		{"SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo (a) FETCH FIRST $1 ROWS ONLY OFFSET $2 ROWS", []preparedQueryTest{
+			baseTest.SetArgs(1, 0).Results(1),
+			baseTest.SetArgs(1, 1).Results(2),
+			baseTest.SetArgs(1, 2).Results(3),
+		}},
 		{"SELECT 3 + CASE (4) WHEN 4 THEN $1 ELSE 42 END", []preparedQueryTest{
 			baseTest.SetArgs(12).Results(15),
 			baseTest.SetArgs(-12).Results(-9),
