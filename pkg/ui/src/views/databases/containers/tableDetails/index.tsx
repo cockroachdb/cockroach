@@ -18,18 +18,19 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
-import { generateTableID, refreshStatements, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
+import { generateTableID, refreshStatements, refreshTableDetails, refreshTableStats, refreshDatabaseDetails } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { appAttr, databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { Bytes } from "src/util/format";
-import { getMatchParamByName } from "src/util/query";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import "./styles.styl";
 
 const { TabPane } = Tabs;
+import { getMatchParamByName } from "src/util/query";
+import { databaseDetails } from "../databaseSummary";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -56,7 +57,9 @@ interface TableMainActions {
   refreshTableDetails: typeof refreshTableDetails;
   refreshTableStats: typeof refreshTableStats;
   refreshStatements: typeof refreshStatements;
+  refreshDatabaseDetails: typeof refreshDatabaseDetails;
   setSort: typeof databaseTableGrantsSortSetting.set;
+  dbResponse: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 }
 
 /**
@@ -73,6 +76,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
   componentWillMount() {
     const database = getMatchParamByName(this.props.match, databaseNameAttr);
     const table = getMatchParamByName(this.props.match, tableNameAttr);
+    this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: getMatchParamByName(this.props.match, databaseNameAttr) }));
     this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
       database,
       table,
@@ -99,7 +103,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
   }
 
   render() {
-    const { tableInfo, grantsSortSetting, statements, match } = this.props;
+    const { tableInfo, grantsSortSetting, statements, match, dbResponse } = this.props;
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
     const selectedApp = getMatchParamByName(match, appAttr);
@@ -108,19 +112,21 @@ export class TableMain extends React.Component<TableMainProps, {}> {
     if (tableInfo) {
       return (
         <div>
-         <Helmet title={`${title} Table | Databases`} />
+          <Helmet title={`${title} Table | Databases`} />
           <div className="page--header">
             <div className="page--header__back-btn">
               <Icon type="arrow-left" /> <a onClick={this.prevPage}>Databases</a>
             </div>
-            <h1 className="page--header__title">{`CREATE TABLE ${table}`}</h1>
+            <div className="database-summary-title">
+              <h2 className="base-heading">{ title }</h2>
+            </div>
           </div>
           <section className="section section--container table-details">
             <Tabs defaultActiveKey="1" className="cockroach--tabs">
               <TabPane tab="Overview" key="1">
                 <Row gutter={16}>
                   <Col className="gutter-row" span={16}>
-                    <div className="box-highlight"><Highlight value={ tableInfo.createStatement || "" } /></div>
+                    <div className="box-highlight"><Highlight value={ tableInfo.createStatement || "" } zone={dbResponse} /></div>
                   </Col>
                   <Col className="gutter-row" span={8}>
                     <SummaryCard>
@@ -201,6 +207,7 @@ const mapStateToProps = (state: AdminUIState, ownProps: RouteComponentProps) => 
   tableInfo: selectTableInfo(state, ownProps),
   grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
   statements: selectStatements(state, ownProps),
+  dbResponse: databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)] && databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)].data,
 });
 
 const mapDispatchToProps = {
@@ -208,6 +215,7 @@ const mapDispatchToProps = {
   refreshTableDetails,
   refreshTableStats,
   refreshStatements,
+  refreshDatabaseDetails,
 };
 
 // Connect the TableMain class with our redux store.
