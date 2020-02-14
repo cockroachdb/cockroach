@@ -269,8 +269,7 @@ var _ planNodeSpooled = &spoolNode{}
 // TODO(jordan): investigate whether/how per-plan state like
 // placeholder data can be concentrated in a single struct.
 type planTop struct {
-	// AST is the syntax tree for the current statement.
-	AST tree.Statement
+	stmt *Statement
 
 	// plan is the top-level node of the logical plan.
 	plan planNode
@@ -299,17 +298,11 @@ type planTop struct {
 	// execErr retains the last execution error, if any.
 	execErr error
 
-	// maybeSavePlan, if defined, is called during close() to
-	// conditionally save the logical plan to savedPlanForStats.
-	maybeSavePlan func(context.Context) *roachpb.ExplainTreePlanNode
-
-	// savedPlanForStats is conditionally populated at the end of
-	// statement execution, for registration in statement statistics.
-	savedPlanForStats *roachpb.ExplainTreePlanNode
-
 	// avoidBuffering, when set, causes the execution to avoid buffering
 	// results.
 	avoidBuffering bool
+
+	instrumentation planInstrumentation
 }
 
 // postquery is a query tree that is executed after the main one. It can only
@@ -318,12 +311,15 @@ type postquery struct {
 	plan planNode
 }
 
+func (p *planTop) init(stmt *Statement, appStats *appStats) {
+	*p = planTop{stmt: stmt}
+	p.instrumentation.init(appStats)
+}
+
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
 	if p.plan != nil {
-		if p.maybeSavePlan != nil && p.flags.IsSet(planFlagExecDone) {
-			p.savedPlanForStats = p.maybeSavePlan(ctx)
-		}
+		p.instrumentation.savePlanInfo(ctx, p)
 		p.plan.Close(ctx)
 		p.plan = nil
 	}
@@ -451,4 +447,29 @@ func (pf planFlags) IsSet(flag planFlags) bool {
 
 func (pf *planFlags) Set(flag planFlags) {
 	*pf |= flag
+}
+
+// planInstrumentation handles collection of plan information before the plan is
+// closed.
+type planInstrumentation struct {
+	appStats          *appStats
+	savedPlanForStats *roachpb.ExplainTreePlanNode
+}
+
+func (pi *planInstrumentation) init(appStats *appStats) {
+	pi.appStats = appStats
+}
+
+func (pi *planInstrumentation) savePlanInfo(ctx context.Context, curPlan *planTop) {
+	if !curPlan.flags.IsSet(planFlagExecDone) {
+		return
+	}
+	if pi.appStats != nil && pi.appStats.shouldSaveLogicalPlanDescription(
+		curPlan.stmt,
+		curPlan.flags.IsSet(planFlagDistributed),
+		curPlan.flags.IsSet(planFlagImplicitTxn),
+		curPlan.execErr,
+	) {
+		pi.savedPlanForStats = planToTree(ctx, curPlan)
+	}
 }
