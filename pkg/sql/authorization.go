@@ -315,27 +315,20 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		}
 	}
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryEx(
+	hasRoleOption, err := p.ExecCfg().InternalExecutor.QueryEx(
 		ctx, "has-role-privilege", p.Txn(),
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		fmt.Sprintf(
-<<<<<<< HEAD
 			`SELECT 1 from %s WHERE option = '%s' AND username = ANY($1) LIMIT 1`,
 			roleOptionsTableName,
-			rolePrivilege.String(),
+			roleOption.String(),
 		))
-=======
-			`SELECT * from %s WHERE "%s" = true AND username = ANY($1)`,
-			userTableName,
-			roleOption.ToSQLColumnName()),
-		roles)
->>>>>>> Refactoring Users and Roles to be the same. (Same as PG)
 
 	if err != nil {
 		return err
 	}
 
-	if len(hasRolePrivilege) != 0 {
+	if len(hasRoleOption) != 0 {
 		return nil
 	}
 

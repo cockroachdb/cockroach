@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CreateUserNode creates entries in the system.users table.
+// CreateRoleNode creates entries in the system.users table.
 // This is called from CREATE USER and CREATE ROLE.
-type CreateUserNode struct {
+type CreateRoleNode struct {
 	ifNotExists bool
 	isRole      bool
 	roleOptions roleoption.List
@@ -40,34 +40,34 @@ type CreateUserNode struct {
 var userTableName = tree.NewTableName("system", "users")
 var roleOptionsTableName = tree.NewTableName("system", "role_options")
 
-// CreateUserOrRole creates a user.
+// CreateRole creates a user.
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUserOrRole(
-	ctx context.Context, n *tree.CreateUserOrRole,
+func (p *planner) CreateRole(
+	ctx context.Context, n *tree.CreateRole,
 ) (planNode, error) {
 
-	return p.CreateUserNode(ctx, n.Name, n.IfNotExists, n.IsRole,
-		"CREATE ROLE OR USER", n.OptionsWithValues)
+	return p.CreateRoleNode(ctx, n.Name, n.IfNotExists, n.IsRole,
+		"CREATE ROLE", n.OptionsWithValues)
 }
 
-// CreateUserNode creates a "create user" plan node.
+// CreateRoleNode creates a "create user" plan node.
 // This can be called from CREATE USER or CREATE ROLE.
-func (p *planner) CreateUserNode(
+func (p *planner) CreateRoleNode(
 	ctx context.Context,
 	nameE tree.Expr,
 	ifNotExists bool,
 	isRole bool,
 	opName string,
 	optionsWithValues tree.OptionsWithValues,
-) (*CreateUserNode, error) {
+) (*CreateRoleNode, error) {
 	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
 	var roleOptions roleoption.List
-	roleOptions, err := optionsWithValues.ToRoleOptions(p.TypeAsString, "CREATE ROLE OR USER")
+	roleOptions, err := optionsWithValues.ToRoleOptions(p.TypeAsString, "CREATE ROLE")
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (p *planner) CreateUserNode(
 		return nil, err
 	}
 
-	return &CreateUserNode{
+	return &CreateRoleNode{
 		userNameInfo: ua,
 		ifNotExists:  ifNotExists,
 		isRole:       isRole,
@@ -89,14 +89,11 @@ func (p *planner) CreateUserNode(
 	}, nil
 }
 
-func (n *CreateUserNode) startExec(params runParams) error {
-<<<<<<< HEAD:pkg/sql/create_user.go
-	telemetry.Inc(sqltelemetry.SchemaChangeCreate("user"))
+func (n *CreateRoleNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreate("role"))
 
-	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
-=======
 	normalizedUsername, err := n.userNameInfo.resolveUsername()
->>>>>>> Refactoring Users and Roles to be the same. (Same as PG):pkg/sql/create_user_or_role.go
+
 	if err != nil {
 		return err
 	}
@@ -161,11 +158,6 @@ func (n *CreateUserNode) startExec(params runParams) error {
 			msg, normalizedUsername)
 	}
 
-<<<<<<< HEAD:pkg/sql/create_user.go
-=======
-	hasCreateRole := n.roleOptions.Contains(roleoption.CREATEROLE)
-
->>>>>>> Refactoring Users and Roles to be the same. (Same as PG):pkg/sql/create_user_or_role.go
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
@@ -173,7 +165,6 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		fmt.Sprintf("insert into %s values ($1, $2, $3)", userTableName),
 		normalizedUsername,
 		hashedPassword,
-		n.isRole,
 	)
 
 	if err != nil {
@@ -184,7 +175,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		)
 	}
 
-	stmts, err := n.rolePrivileges.GetSQLStmts()
+	stmts, err := n.roleOptions.GetSQLStmts()
 	if err != nil {
 		return err
 	}
@@ -211,16 +202,16 @@ type createUserRun struct {
 }
 
 // Next implements the planNode interface.
-func (*CreateUserNode) Next(runParams) (bool, error) { return false, nil }
+func (*CreateRoleNode) Next(runParams) (bool, error) { return false, nil }
 
 // Values implements the planNode interface.
-func (*CreateUserNode) Values() tree.Datums { return tree.Datums{} }
+func (*CreateRoleNode) Values() tree.Datums { return tree.Datums{} }
 
 // Close implements the planNode interface.
-func (*CreateUserNode) Close(context.Context) {}
+func (*CreateRoleNode) Close(context.Context) {}
 
 // FastPathResults implements the planNodeFastPath interface.
-func (n *CreateUserNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
+func (n *CreateRoleNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
 
 const usernameHelp = "usernames are case insensitive, must start with a letter, " +
 	"digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters"

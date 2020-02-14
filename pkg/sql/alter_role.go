@@ -14,10 +14,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/security"
-
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -25,35 +25,39 @@ import (
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleNode struct {
-	name           func() (string, error)
-	rolePrivileges roleprivilege.List
+	userNameInfo
+	roleOptions roleoption.List
 
 	run alterRoleRun
 }
 
-// AlterRolePrivileges alters a user's permissios
-func (p *planner) AlterRolePrivileges(
-	ctx context.Context, n *tree.AlterRolePrivileges,
+// AlterRoleOptions alters a user's permissios
+func (p *planner) AlterRoleOptions(
+	ctx context.Context, n *tree.AlterRoleOptions,
 ) (*alterRoleNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support superuser privilege right now.
 	// However we make it so the admin role cannot be edited (done in startExec).
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := n.RolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
+	roleOptions, err := n.OptionsWithValues.ToRoleOptions(p.TypeAsString, "ALTER ROLE")
+	if err != nil {
+		return nil, err
+	}
+	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
 
-	name, err := p.TypeAsString(n.Name, "ALTER ROLE")
+	ua, err := p.getUserAuthInfo(n.Name, "ALTER ROLE")
 	if err != nil {
 		return nil, err
 	}
 
 	return &alterRoleNode{
-		name:           name,
-		rolePrivileges: n.RolePrivileges,
+		userNameInfo: ua,
+		roleOptions:  roleOptions,
 	}, nil
 }
 
@@ -64,20 +68,14 @@ type alterRoleRun struct {
 }
 
 func (n *alterRoleNode) startExec(params runParams) error {
-	name, err := n.name()
+	normalizedUsername, err := n.userNameInfo.resolveUsername()
 	if err != nil {
 		return err
 	}
-	if name == "" {
-		return errNoUserNameSpecified
-	}
-	if name == "admin" {
+
+	if normalizedUsername == "admin" {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"cannot edit admin role")
-	}
-	normalizedUsername, err := NormalizeAndValidateUsername(name)
-	if err != nil {
-		return err
 	}
 
 	// Check if role exists.
@@ -96,7 +94,35 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return errors.Newf("role %s does not exist", normalizedUsername)
 	}
 
-	stmts, err := n.rolePrivileges.GetSQLStmts()
+	if n.roleOptions.Contains(roleoption.PASSWORD) {
+		hashedPassword, err := n.roleOptions.GetHashedPassword()
+		if err != nil {
+			return err
+		}
+
+		// TODO(knz): Remove in 20.2.
+		if normalizedUsername == security.RootUser && len(hashedPassword) > 0 &&
+			!cluster.Version.IsActive(params.ctx, params.EvalContext().Settings, cluster.VersionRootPassword) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`setting a root password requires all nodes to be upgraded to %s`,
+				cluster.VersionByKey(cluster.VersionRootPassword),
+			)
+		}
+
+		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+			// We disallow setting a non-empty password in insecure mode
+			// because insecure means an observer may have MITM'ed the change
+			// and learned the password.
+			//
+			// It's valid to clear the password (WITH PASSWORD NULL) however
+			// since that forces cert auth when moving back to secure mode,
+			// and certs can't be MITM'ed over the insecure SQL connection.
+			return pgerror.New(pgcode.InvalidPassword,
+				"setting or updating a password is not supported in insecure mode")
+		}
+	}
+
+	stmts, err := n.roleOptions.GetSQLStmts()
 	if err != nil {
 		return err
 	}

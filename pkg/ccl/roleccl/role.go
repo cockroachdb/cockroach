@@ -24,7 +24,7 @@ import (
 func createRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	createRole, ok := stmt.(*tree.CreateUserOrRole)
+	createRole, ok := stmt.(*tree.CreateRole)
 	if !ok {
 		return nil, nil
 	}
@@ -37,14 +37,14 @@ func createRolePlanHook(
 	}
 
 	// Call directly into the OSS code.
-	return p.CreateUserNode(ctx, createRole.Name, createRole.IfNotExists, createRole.IsRole, /* isRole */
+	return p.CreateRoleNode(ctx, createRole.Name, createRole.IfNotExists, createRole.IsRole, /* isRole */
 		"CREATE ROLE", createRole.OptionsWithValues)
 }
 
 func dropRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	dropRole, ok := stmt.(*tree.DropUserOrRole)
+	dropRole, ok := stmt.(*tree.DropRole)
 	if !ok {
 		return nil, nil
 	}
@@ -57,7 +57,7 @@ func dropRolePlanHook(
 	}
 
 	// Call directly into the OSS code.
-	return p.DropUserNode(ctx, dropRole.Names, dropRole.IfExists, true, "DROP ROLE")
+	return p.DropRoleNode(ctx, dropRole.Names, dropRole.IfExists, true, "DROP ROLE")
 }
 
 func grantRolePlanHook(
@@ -113,7 +113,7 @@ func grantRolePlanHook(
 		// Check that users and roles exist.
 		// TODO(mberhault): just like GRANT/REVOKE privileges, we fetch the list of all users.
 		// This is wasteful when we have a LOT of users compared to the number of users being operated on.
-		users, err := p.GetAllUsersAndRoles(ctx)
+		users, err := p.GetAllRoles(ctx)
 		if err != nil {
 			return err
 		}
@@ -121,8 +121,7 @@ func grantRolePlanHook(
 		// NOTE: membership manipulation involving the "public" pseudo-role fails with
 		// "role public does not exist". This matches postgres behavior.
 
-		// Check roles: these have to be roles.
-		// Updated to match pg, can be roles or users.
+		// Check granted: can be roles or users. This matches postgres behaviour.
 		for _, r := range grant.Roles {
 			if _, ok := users[string(r)]; !ok {
 				return pgerror.Newf(pgcode.UndefinedObject, "role %s does not exist", r)
@@ -268,7 +267,7 @@ func revokeRolePlanHook(
 		// Check that users and roles exist.
 		// TODO(mberhault): just like GRANT/REVOKE privileges, we fetch the list of all users.
 		// This is wasteful when we have a LOT of users compared to the number of users being operated on.
-		users, err := p.GetAllUsersAndRoles(ctx)
+		users, err := p.GetAllRoles(ctx)
 		if err != nil {
 			return err
 		}

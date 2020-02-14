@@ -127,8 +127,8 @@ var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 	10*time.Second,
 )
 
-// The map value is true if the map key is a role, false if it is a user.
-func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
+// Returns a "set" represented by a map of name -> true of roles.
+func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username,"isRole"  FROM system.users`
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx, "read-users", p.txn,
@@ -141,8 +141,7 @@ func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, err
 	users := make(map[string]bool)
 	for _, row := range rows {
 		username := tree.MustBeDString(row[0])
-		isRole := row[1].(*tree.DBool)
-		users[string(username)] = bool(*isRole)
+		users[string(username)] = true
 	}
 	return users, nil
 }

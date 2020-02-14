@@ -83,14 +83,14 @@ type PlanHookState interface {
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
-	CreateUserNode(
+	CreateRoleNode(
 		ctx context.Context, nameE tree.Expr, ifNotExists bool, isRole bool, opName string,
 		optionsWithValues tree.OptionsWithValues,
-	) (*CreateUserNode, error)
-	DropUserNode(
+	) (*CreateRoleNode, error)
+	DropRoleNode(
 		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
-	) (*DropUserNode, error)
-	GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error)
+	) (*DropRoleNode, error)
+	GetAllRoles(ctx context.Context) (map[string]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	EvalAsOfTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, error)
 	ResolveUncachedDatabaseByName(

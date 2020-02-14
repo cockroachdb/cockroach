@@ -12,8 +12,6 @@ package roleoption
 
 import (
 	"errors"
-	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -55,24 +53,11 @@ var ByName = map[string]Option{
 	"PASSWORD":     PASSWORD,
 }
 
-// toSQLColumn is a map of roleoption (Option) ->
-// System.users SQL Column Name (string).
-var toSQLColumn = map[Option]string{
-	CREATEROLE:   "hasCreateRole",
-	NOCREATEROLE: "hasCreateRole",
-	PASSWORD:     "hashedPassword",
-}
-
-// ToSQLColumnName returns the SQL Column name of a role option.
-func (o Option) ToSQLColumnName() string {
-	return toSQLColumn[o]
-}
-
-// toBool is a map of roleoption (Option) ->
-// bool value in system.users table (bool).
-var toBool = map[Option]bool{
-	CREATEROLE:   true,
-	NOCREATEROLE: false,
+// toSQLStmt is a map of Kind -> SQL statement string for applying the
+// option to the role.
+var toSQLStmt = map[Option]string{
+	CREATEROLE:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
+	NOCREATEROLE: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -88,24 +73,26 @@ func ToOption(str string) (Option, error) {
 // List is a list of role options.
 type List []RoleOption
 
-// CreateSetStmt returns a string of the form:
-// "SET "optionA" = true, "optionB" = false".
-func (rol List) CreateSetStmt() (string, error) {
-	if len(rol) <= 0 {
-		return "", pgerror.Newf(pgcode.Syntax, "no role options found")
-	}
-	var sb strings.Builder
-	for i, option := range rol {
-		if i > 0 {
-			sb.WriteString(" , ")
-		}
-		sb.WriteString(fmt.Sprintf(
-			`"%s" = %t`,
-			option.Option.ToSQLColumnName(),
-			toBool[option.Option]))
+// GetSQLStmts returns a list of SQL stmts to apply each role option.
+func (pl List) GetSQLStmts() (stmts []string, err error) {
+	if len(pl) <= 0 {
+		return stmts, nil
 	}
 
-	return sb.String(), nil
+	err = pl.CheckRoleOptionConflicts()
+	if err != nil {
+		return stmts, err
+	}
+
+	for _, ro := range pl {
+		val, ok := toSQLStmt[ro.Option]
+		if ok {
+			continue
+		}
+		stmts = append(stmts, val)
+	}
+
+	return stmts, nil
 }
 
 // ToBitField returns the bitfield representation of
@@ -145,38 +132,6 @@ func (rol List) CheckRoleOptionConflicts() error {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil
-}
-
-func (ro RoleOption) toSQLValue() (string, error) {
-	// Password is a special case.
-	if ro.Option == PASSWORD {
-		if ro.IsNull {
-			// Use empty string for hashedPassword.
-			return "''", nil
-		}
-		password, err := ro.Value()
-		if err != nil {
-			return "", err
-		}
-		if password == "" {
-			return "", security.ErrEmptyPassword
-		}
-		hashedPassword, err := security.HashPassword(password)
-		return fmt.Sprintf("'%s'", hashedPassword), err
-	}
-
-	if ro.HasValue {
-		if ro.IsNull {
-			return "NULL", nil
-		}
-		value, err := ro.Value()
-		if err != nil {
-			return "", err
-		}
-		return value, nil
-	}
-
-	return strconv.FormatBool(toBool[ro.Option]), nil
 }
 
 // GetHashedPassword returns the value of the password after hashing it.
