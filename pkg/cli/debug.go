@@ -147,6 +147,8 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (engi
 			Opts:          engine.DefaultPebbleOptions(),
 		}
 		cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
+		defer cfg.Opts.Cache.Unref()
+
 		cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
 		cfg.Opts.ReadOnly = opts.ReadOnly
 

@@ -431,6 +431,8 @@ func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64)
 func newPebbleInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *Pebble {
 	opts := DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(cacheSize)
+	defer opts.Cache.Unref()
+
 	opts.FS = vfs.NewMem()
 	db, err := NewPebble(
 		ctx,
