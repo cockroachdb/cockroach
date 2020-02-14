@@ -66,7 +66,7 @@ var rpcsAllowedWhileBootstrapping = map[string]struct{}{
 	"/cockroach.rpc.Heartbeat/Ping":             {},
 	"/cockroach.gossip.Gossip/Gossip":           {},
 	"/cockroach.server.serverpb.Init/Bootstrap": {},
-	"/cockroach.server.serverpb.Status/Details": {},
+	"/cockroach.server.serverpb.Admin/Health":   {},
 }
 
 // intercept implements filtering rules for each server state.
