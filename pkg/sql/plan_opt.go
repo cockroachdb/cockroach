@@ -170,7 +170,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	result := plan.(*planTop)
-	result.AST = stmt.AST
+	result.stmt = stmt
 	result.flags = opc.flags
 
 	cols := planColumns(result.plan)

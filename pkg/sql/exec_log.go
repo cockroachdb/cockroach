@@ -164,7 +164,7 @@ func (p *planner) maybeLogStatementInternal(
 		logTrigger = buf.String()
 	}
 
-	stmtStr := p.curPlan.AST.String()
+	stmtStr := p.curPlan.stmt.AST.String()
 
 	plStr := p.extendedEvalCtx.Placeholders.Values.String()
 
