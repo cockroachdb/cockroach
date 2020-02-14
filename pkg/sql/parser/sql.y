@@ -915,7 +915,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <bool> opt_using_gin_btree
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
-%type <tree.Expr> opt_select_fetch_first_value
+%type <tree.Expr> select_fetch_first_value
 %type <empty> row_or_rows
 %type <empty> first_or_next
 
@@ -981,7 +981,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> extract_arg
 %type <bool> opt_varying
 
-%type <*tree.NumVal> signed_iconst
+%type <*tree.NumVal> signed_iconst only_signed_iconst
+%type <*tree.NumVal> signed_fconst only_signed_fconst
 %type <int32> iconst32
 %type <int64> signed_iconst64
 %type <int64> iconst64
@@ -4998,22 +4999,6 @@ reference_action:
     $$.val = tree.SetDefault
   }
 
-numeric_only:
-  FCONST
-  {
-    $$.val = $1.numVal()
-  }
-| '-' FCONST
-  {
-    n := $2.numVal()
-    n.SetNegative()
-    $$.val = n
-  }
-| signed_iconst
-  {
-    $$.val = $1.numVal()
-  }
-
 // %Help: CREATE SEQUENCE - create a new sequence
 // %Category: DDL
 // %Text:
@@ -6450,9 +6435,20 @@ limit_clause:
     }
   }
 // SQL:2008 syntax
-| FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY
+// To avoid shift/reduce conflicts, handle the optional value with
+// a separate production rather than an opt_ expression. The fact
+// that ONLY is fully reserved means that this way, we defer any
+// decision about what rule reduces ROW or ROWS to the point where
+// we can see the ONLY token in the lookahead slot.
+| FETCH first_or_next select_fetch_first_value row_or_rows ONLY
   {
     $$.val = &tree.Limit{Count: $3.expr()}
+  }
+| FETCH first_or_next row_or_rows ONLY
+	{
+    $$.val = &tree.Limit{
+      Count: tree.NewNumVal(constant.MakeInt64(1), "" /* origString */, false /* negative */),
+    }
   }
 
 offset_clause:
@@ -6463,27 +6459,26 @@ offset_clause:
   // SQL:2008 syntax
   // The trailing ROW/ROWS in this case prevent the full expression
   // syntax. c_expr is the best we can do.
-| OFFSET c_expr row_or_rows
+| OFFSET select_fetch_first_value row_or_rows
   {
     $$.val = &tree.Limit{Offset: $2.expr()}
   }
 
 // Allowing full expressions without parentheses causes various parsing
-// problems with the trailing ROW/ROWS key words. SQL only calls for constants,
-// so we allow the rest only with parentheses. If omitted, default to 1.
- opt_select_fetch_first_value:
-   signed_iconst
-   {
-     $$.val = $1.expr()
-   }
- | '(' a_expr ')'
-   {
-     $$.val = $2.expr()
-   }
- | /* EMPTY */
-   {
-     $$.val = tree.NewNumVal(constant.MakeInt64(1), "" /* origString */, false /* negative */)
-   }
+// problems with the trailing ROW/ROWS key words. SQL spec only calls for
+// <simple value specification>, which is either a literal or a parameter (but
+// an <SQL parameter reference> could be an identifier, bringing up conflicts
+// with ROW/ROWS). We solve this by leveraging the presence of ONLY (see above)
+// to determine whether the expression is missing rather than trying to make it
+// optional in this rule.
+//
+// c_expr covers almost all the spec-required cases (and more), but it doesn't
+// cover signed numeric literals, which are allowed by the spec. So we include
+// those here explicitly.
+select_fetch_first_value:
+  c_expr
+| only_signed_iconst
+| only_signed_fconst
 
 // noise words
 row_or_rows:
@@ -9333,13 +9328,36 @@ name_list:
   }
 
 // Constants
+numeric_only:
+  signed_iconst
+| signed_fconst
+
 signed_iconst:
   ICONST
-| '+' ICONST
+| only_signed_iconst
+
+only_signed_iconst:
+  '+' ICONST
   {
     $$.val = $2.numVal()
   }
 | '-' ICONST
+  {
+    n := $2.numVal()
+    n.SetNegative()
+    $$.val = n
+  }
+
+signed_fconst:
+  FCONST
+| only_signed_fconst
+
+only_signed_fconst:
+  '+' FCONST
+  {
+    $$.val = $2.numVal()
+  }
+| '-' FCONST
   {
     n := $2.numVal()
     n.SetNegative()
