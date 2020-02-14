@@ -424,11 +424,14 @@ message SettingsResponse {
 
 // HealthRequest inquires whether the addressed node is healthy.
 message HealthRequest {
+  // ready specifies whether the client wants to know whether the
+  // target node is ready to receive traffic. If a node is unready, an
+  // error will be returned.
+  bool ready = 1;
 }
 
 // HealthResponse is the response to HealthRequest. It currently does not
 // contain any information. The request fails however if the node is not live.
-// TODO(tschottdorf): Should it contain information, and if so, what?
 message HealthResponse {
 }
 
@@ -742,6 +745,7 @@ service Admin {
   rpc Health(HealthRequest) returns (HealthResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/health"
+      additional_bindings {get : "/health"}
     };
   }
 
