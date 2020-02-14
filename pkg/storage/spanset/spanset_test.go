@@ -228,23 +228,23 @@ func TestSpanSetCheckAllowedReversed(t *testing.T) {
 
 	allowed := []roachpb.Span{
 		// Exactly as declared.
-		{Key: roachpb.Key("d")},
-		{Key: roachpb.Key("q")},
+		{EndKey: roachpb.Key("d")},
+		{EndKey: roachpb.Key("q")},
 	}
 	for _, span := range allowed {
-		if err := bdGkq.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err != nil {
+		if err := bdGkq.CheckAllowed(SpanReadOnly, span); err != nil {
 			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
 		}
 	}
 
 	disallowed := []roachpb.Span{
 		// Points outside the declared spans, and on the endpoints.
-		{Key: roachpb.Key("b")},
-		{Key: roachpb.Key("g")},
-		{Key: roachpb.Key("k")},
+		{EndKey: roachpb.Key("b")},
+		{EndKey: roachpb.Key("g")},
+		{EndKey: roachpb.Key("k")},
 	}
 	for _, span := range disallowed {
-		if err := bdGkq.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err == nil {
+		if err := bdGkq.CheckAllowed(SpanReadOnly, span); err == nil {
 			t.Errorf("expected %s to be disallowed", span)
 		}
 	}
@@ -261,23 +261,23 @@ func TestSpanSetCheckAllowedAtReversed(t *testing.T) {
 
 	allowed := []roachpb.Span{
 		// Exactly as declared.
-		{Key: roachpb.Key("d")},
-		{Key: roachpb.Key("q")},
+		{EndKey: roachpb.Key("d")},
+		{EndKey: roachpb.Key("q")},
 	}
 	for _, span := range allowed {
-		if err := bdGkq.checkAllowedAt(SpanReadOnly, span, ts, true /* spanKeyExclusive */); err != nil {
+		if err := bdGkq.CheckAllowedAt(SpanReadOnly, span, ts); err != nil {
 			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
 		}
 	}
 
 	disallowed := []roachpb.Span{
 		// Points outside the declared spans, and on the endpoints.
-		{Key: roachpb.Key("b")},
-		{Key: roachpb.Key("g")},
-		{Key: roachpb.Key("k")},
+		{EndKey: roachpb.Key("b")},
+		{EndKey: roachpb.Key("g")},
+		{EndKey: roachpb.Key("k")},
 	}
 	for _, span := range disallowed {
-		if err := bdGkq.checkAllowedAt(SpanReadOnly, span, ts, true /* spanKeyExclusive */); err == nil {
+		if err := bdGkq.CheckAllowedAt(SpanReadOnly, span, ts); err == nil {
 			t.Errorf("expected %s to be disallowed", span)
 		}
 	}
