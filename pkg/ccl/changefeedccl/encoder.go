@@ -50,7 +50,7 @@ type encodeRow struct {
 	// It's valid for interpreting the row at `updated`.
 	tableDesc *sqlbase.TableDescriptor
 	// prevDatums is the old value of a changed table row. The field is set
-	// to nil if the before value for changes was not requested (changefeedbase.OptDiff).
+	// to nil if the before value for changes was not requested (OptDiff).
 	prevDatums sqlbase.EncDatumRow
 	// prevDeleted is true if prevDatums is missing or is a deletion.
 	prevDeleted bool

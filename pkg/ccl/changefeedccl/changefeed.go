@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,7 +52,7 @@ type emitEntry struct {
 func kvsToRows(
 	leaseMgr *sql.LeaseManager,
 	details jobspb.ChangefeedDetails,
-	inputFn func(context.Context) (bufferEntry, error),
+	inputFn func(context.Context) (kvfeed.Event, error),
 ) func(context.Context) ([]emitEntry, error) {
 	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	rfCache := newRowFetcherCache(leaseMgr)
@@ -180,28 +181,29 @@ func kvsToRows(
 			if err != nil {
 				return nil, err
 			}
-			if input.kv.Key != nil {
+			switch input.Type() {
+			case kvfeed.KVEvent:
+				kv := input.KV()
 				if log.V(3) {
-					log.Infof(ctx, "changed key %s %s", input.kv.Key, input.kv.Value.Timestamp)
+					log.Infof(ctx, "changed key %s %s", kv.Key, kv.Value.Timestamp)
 				}
-				schemaTimestamp := input.kv.Value.Timestamp
+				schemaTimestamp := kv.Value.Timestamp
 				prevSchemaTimestamp := schemaTimestamp
-				if input.backfillTimestamp != (hlc.Timestamp{}) {
-					schemaTimestamp = input.backfillTimestamp
+				if backfillTs := input.BackfillTimestamp(); backfillTs != (hlc.Timestamp{}) {
+					schemaTimestamp = backfillTs
 					prevSchemaTimestamp = schemaTimestamp.Prev()
 				}
 				output, err = appendEmitEntryForKV(
-					ctx, output, input.kv, input.prevVal,
+					ctx, output, kv, input.PrevValue(),
 					schemaTimestamp, prevSchemaTimestamp,
-					input.bufferGetTimestamp)
+					input.BufferGetTimestamp())
 				if err != nil {
 					return nil, err
 				}
-			}
-			if input.resolved != nil {
+			case kvfeed.ResolvedEvent:
 				output = append(output, emitEntry{
-					resolved:           input.resolved,
-					bufferGetTimestamp: input.bufferGetTimestamp,
+					resolved:           input.Resolved(),
+					bufferGetTimestamp: input.BufferGetTimestamp(),
 				})
 			}
 			if output != nil {
