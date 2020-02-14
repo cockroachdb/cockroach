@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import { Button, Tooltip } from "antd";
+import CaretLeft from "assets/caret-left.svg";
+import CaretRight from "assets/caret-right.svg";
 import _ from "lodash";
 import { ArrowDirection } from "oss/src/views/shared/components/dropdown";
 import React from "react";
@@ -42,26 +44,23 @@ class TimeFrameControls extends React.Component<RangeSelectProps> {
               onClick={this.handleChangeArrow(ArrowDirection.LEFT)}
               disabled={left}
               className={`_action ${left ? "disabled" : "active"}`}
-              icon="fast-backward"
-            />
-          </Tooltip>
-          <Tooltip placement="bottom" title="Now" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
-            <Button
-              onClick={this.handleChangeArrow(ArrowDirection.CENTER)}
-              disabled={center}
-              className={`_action ${center ? "disabled" : "active"}`}
-              icon="caret-right"
-            />
+            ><img src={CaretLeft} alt="previous timeframe" /></Button>
           </Tooltip>
           <Tooltip placement="bottom" title="next timeframe" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
             <Button
               onClick={this.handleChangeArrow(ArrowDirection.RIGHT)}
               disabled={right}
               className={`_action ${right ? "disabled" : "active"}`}
-              icon="fast-forward"
-            />
+            ><img src={CaretRight} alt="next timeframe" /></Button>
           </Tooltip>
         </ButtonGroup>
+        <Tooltip placement="bottom" title="Now" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
+          <Button
+            onClick={this.handleChangeArrow(ArrowDirection.CENTER)}
+            disabled={center}
+            className={`_action ${center ? "disabled" : "active"} btn__now`}
+          >Now</Button>
+        </Tooltip>
       </div>
     );
   }
