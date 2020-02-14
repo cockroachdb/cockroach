@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -1309,13 +1310,18 @@ var engineRealFSImpls = []struct {
 	}},
 	{"pebble", func(t *testing.T, dir string) Engine {
 
+		opts := DefaultPebbleOptions()
+		opts.FS = vfs.Default
+		opts.Cache = pebble.NewCache(testCacheSize)
+		defer opts.Cache.Unref()
+
 		db, err := NewPebble(
 			context.Background(),
 			PebbleConfig{
 				StorageConfig: base.StorageConfig{
 					Dir: dir,
 				},
-				Opts: testPebbleOptions(vfs.Default),
+				Opts: opts,
 			})
 		if err != nil {
 			t.Fatalf("could not create new pebble instance at %s: %+v", dir, err)

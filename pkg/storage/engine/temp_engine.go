@@ -135,6 +135,8 @@ func NewPebbleTempEngine(
 	// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
 	// now.
 	opts.Cache = pebble.NewCache(128 << 20)
+	defer opts.Cache.Unref()
+
 	// The Pebble temp engine does not use MVCC Encoding. Instead, the
 	// caller-provided key is used as-is (with the prefix prepended). See
 	// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
