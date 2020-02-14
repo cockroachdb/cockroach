@@ -12,35 +12,63 @@
 
 .crl-button
   border-radius 3px
-  color $colors--primary-blue-3
-
-  &:hover
-    color $colors--primary-blue-4
-  &:active
-    border solid 2px $colors--primary-blue-1
-  &:focus
-    outline none
-    border solid 1px $colors--primary-blue-3
 
 .crl-button--type-flat
   border none
   cursor pointer
   background-color transparent
+  color $colors--primary-blue-3
+
+  &:hover
+    color $colors--primary-blue-4
+
+  &:active
+    border solid 2px $colors--primary-blue-1
+
+  &:focus
+    outline none
+    border solid 1px $colors--primary-blue-3
+
+  &.crl-button--disabled
+    color $colors--neutral-4
+    pointer-events none
+    cursor default
+
+.crl-button--type-primary
+  cursor pointer
+  background-color $colors--primary-green-3
+  color $colors--white
+  border solid 1px $colors--primary-green-3
+
+  &:hover
+    color $colors--white
+
+  &:active
+    border solid 1px $colors--primary-green-4
+
+  &:focus
+    outline none
+    border solid 1px $colors--primary-green-4
+
+  &.crl-button--disabled
+    border solid 1px #c4e6ba
+    background #c4e6ba
+    color $colors--white
+    pointer-events none
+    cursor default
 
 .crl-button--size-default
   height $line-height--larger
   min-width $line-height--larger
-  padding $spacing-smaller $spacing-small
+  padding-left $spacing-small
+  padding-right $spacing-small
 
 .crl-button--size-small
   height $line-height--medium
   min-width $line-height--medium
   padding 0 $spacing-xx-small
 
-.crl-button--disabled
-  color $colors--neutral-4
-  pointer-events none
-  cursor default
+
 
 .crl-button__container
   display flex
