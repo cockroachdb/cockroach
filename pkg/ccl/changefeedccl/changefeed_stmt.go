@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -160,7 +161,7 @@ func changefeedPlanHook(
 				targets[tableDesc.ID] = jobspb.ChangefeedTarget{
 					StatementTimeName: tableDesc.Name,
 				}
-				if err := changefeedbase.ValidateTable(targets, tableDesc); err != nil {
+				if err := validateChangefeedTable(targets, tableDesc); err != nil {
 					return err
 				}
 			}
@@ -186,7 +187,7 @@ func changefeedPlanHook(
 		// - `validateDetails` has to run first to fill in defaults for `envelope`
 		//   and `format` if the user didn't specify them.
 		// - Then `getEncoder` is run to return any configuration errors.
-		// - Then the changefeed is opted in to `changefeedbase.OptKeyInValue` for any cloud
+		// - Then the changefeed is opted in to `OptKeyInValue` for any cloud
 		//   storage sink. Kafka etc have a key and value field in each message but
 		//   cloud storage sinks don't have anywhere to put the key. So if the key
 		//   is not in the value, then for DELETEs there is no way to recover which
@@ -360,6 +361,52 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	}
 
 	return details, nil
+}
+
+func validateChangefeedTable(
+	targets jobspb.ChangefeedTargets, tableDesc *sqlbase.TableDescriptor,
+) error {
+	t, ok := targets[tableDesc.ID]
+	if !ok {
+		return errors.Errorf(`unwatched table: %s`, tableDesc.Name)
+	}
+
+	// Technically, the only non-user table known not to work is system.jobs
+	// (which creates a cycle since the resolved timestamp high-water mark is
+	// saved in it), but there are subtle differences in the way many of them
+	// work and this will be under-tested, so disallow them all until demand
+	// dictates.
+	if tableDesc.ID < keys.MinUserDescID {
+		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+	}
+	if tableDesc.IsView() {
+		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.Name)
+	}
+	if tableDesc.IsVirtualTable() {
+		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.Name)
+	}
+	if tableDesc.IsSequence() {
+		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.Name)
+	}
+	if len(tableDesc.Families) != 1 {
+		return errors.Errorf(
+			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
+			tableDesc.Name, len(tableDesc.Families))
+	}
+
+	if tableDesc.State == sqlbase.TableDescriptor_DROP {
+		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
+	}
+	if tableDesc.Name != t.StatementTimeName {
+		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
+	}
+
+	// TODO(mrtracy): re-enable this when allow-backfill option is added.
+	// if tableDesc.HasColumnBackfillMutation() {
+	// 	return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
+	// }
+
+	return nil
 }
 
 type changefeedResumer struct {

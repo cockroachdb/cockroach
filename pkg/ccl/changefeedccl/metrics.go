@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -100,25 +101,7 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaChangefeedBufferEntriesIn = metric.Metadata{
-		Name:        "changefeed.buffer_entries.in",
-		Help:        "Total entries entering the buffer between raft and changefeed sinks",
-		Measurement: "Entries",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaChangefeedBufferEntriesOut = metric.Metadata{
-		Name:        "changefeed.buffer_entries.out",
-		Help:        "Total entries leaving the buffer between raft and changefeed sinks",
-		Measurement: "Entries",
-		Unit:        metric.Unit_COUNT,
-	}
 
-	metaChangefeedPollRequestNanos = metric.Metadata{
-		Name:        "changefeed.poll_request_nanos",
-		Help:        "Time spent fetching changes",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
 	metaChangefeedProcessingNanos = metric.Metadata{
 		Name:        "changefeed.processing_nanos",
 		Help:        "Time spent processing KV changes into SQL rows",
@@ -156,22 +139,18 @@ var (
 	}
 )
 
-const pollRequestNanosHistMaxLatency = time.Hour
-
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	EmittedMessages  *metric.Counter
-	EmittedBytes     *metric.Counter
-	Flushes          *metric.Counter
-	ErrorRetries     *metric.Counter
-	BufferEntriesIn  *metric.Counter
-	BufferEntriesOut *metric.Counter
+	KVFeedMetrics   kvfeed.Metrics
+	EmittedMessages *metric.Counter
+	EmittedBytes    *metric.Counter
+	Flushes         *metric.Counter
+	ErrorRetries    *metric.Counter
 
-	PollRequestNanosHist *metric.Histogram
-	ProcessingNanos      *metric.Counter
-	TableMetadataNanos   *metric.Counter
-	EmitNanos            *metric.Counter
-	FlushNanos           *metric.Counter
+	ProcessingNanos    *metric.Counter
+	TableMetadataNanos *metric.Counter
+	EmitNanos          *metric.Counter
+	FlushNanos         *metric.Counter
 
 	mu struct {
 		syncutil.Mutex
@@ -187,29 +166,12 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		EmittedMessages:  metric.NewCounter(metaChangefeedEmittedMessages),
-		EmittedBytes:     metric.NewCounter(metaChangefeedEmittedBytes),
-		Flushes:          metric.NewCounter(metaChangefeedFlushes),
-		ErrorRetries:     metric.NewCounter(metaChangefeedErrorRetries),
-		BufferEntriesIn:  metric.NewCounter(metaChangefeedBufferEntriesIn),
-		BufferEntriesOut: metric.NewCounter(metaChangefeedBufferEntriesOut),
+		KVFeedMetrics:   kvfeed.MakeMetrics(histogramWindow),
+		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
+		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
+		Flushes:         metric.NewCounter(metaChangefeedFlushes),
+		ErrorRetries:    metric.NewCounter(metaChangefeedErrorRetries),
 
-		// Metrics for changefeed performance debugging: - PollRequestNanos and
-		// PollRequestNanosHist, things are first
-		//   fetched with some limited concurrency. We're interested in both the
-		//   total amount of time fetching as well as outliers, so we need both
-		//   the counter and the histogram.
-		// - N/A. Each change is put into a buffer. Right now nothing measures
-		//   this since the buffer doesn't actually buffer and so it just tracks
-		//   the poll sleep time.
-		// - ProcessingNanos. Everything from the buffer until the SQL row is
-		//   about to be emitted. This includes TableMetadataNanos, which is
-		//   dependent on network calls, so also tracked in case it's ever the
-		//   cause of a ProcessingNanos blowup.
-		// - EmitNanos and FlushNanos. All of our interactions with the sink.
-		PollRequestNanosHist: metric.NewHistogram(
-			metaChangefeedPollRequestNanos, histogramWindow,
-			pollRequestNanosHistMaxLatency.Nanoseconds(), 1),
 		ProcessingNanos:    metric.NewCounter(metaChangefeedProcessingNanos),
 		TableMetadataNanos: metric.NewCounter(metaChangefeedTableMetadataNanos),
 		EmitNanos:          metric.NewCounter(metaChangefeedEmitNanos),
