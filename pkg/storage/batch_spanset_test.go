@@ -36,7 +36,8 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")})
 	outsideKey := engine.MakeMVCCMetadataKey(roachpb.Key("a"))
 	outsideKey2 := engine.MakeMVCCMetadataKey(roachpb.Key("b"))
-	outsideKey3 := engine.MakeMVCCMetadataKey(roachpb.Key("m"))
+	outsideKey3 := engine.MakeMVCCMetadataKey(roachpb.Key("g"))
+	outsideKey4 := engine.MakeMVCCMetadataKey(roachpb.Key("m"))
 	insideKey := engine.MakeMVCCMetadataKey(roachpb.Key("c"))
 	insideKey2 := engine.MakeMVCCMetadataKey(roachpb.Key("d"))
 	insideKey3 := engine.MakeMVCCMetadataKey(roachpb.Key("f"))
@@ -67,56 +68,115 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	isWriteSpanErr := func(err error) bool {
 		return testutils.IsError(err, "cannot write undeclared span")
 	}
-	if err := batch.Clear(outsideKey); !isWriteSpanErr(err) {
-		t.Errorf("Clear: unexpected error %v", err)
-	}
-	if err := batch.ClearRange(outsideKey, outsideKey2); !isWriteSpanErr(err) {
-		t.Errorf("ClearRange: unexpected error %v", err)
-	}
-	{
-		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
-		err := batch.ClearIterRange(iter, outsideKey.Key, outsideKey2.Key)
-		iter.Close()
-		if !isWriteSpanErr(err) {
-			t.Errorf("ClearIterRange: unexpected error %v", err)
-		}
-	}
-	if err := batch.Merge(outsideKey, nil); !isWriteSpanErr(err) {
-		t.Errorf("Merge: unexpected error %v", err)
-	}
-	if err := batch.Put(outsideKey, nil); !isWriteSpanErr(err) {
-		t.Errorf("Put: unexpected error %v", err)
-	}
 
-	// Reads inside the range work.
-	//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
-	if value, err := batch.Get(insideKey); err != nil {
-		t.Errorf("failed to read inside the range: %+v", err)
-	} else if !bytes.Equal(value, []byte("value")) {
-		t.Errorf("failed to read previously written value, got %q", value)
-	}
+	t.Run("writes before range", func(t *testing.T) {
+		if err := batch.Clear(outsideKey); !isWriteSpanErr(err) {
+			t.Errorf("Clear: unexpected error %v", err)
+		}
+		if err := batch.ClearRange(outsideKey, outsideKey2); !isWriteSpanErr(err) {
+			t.Errorf("ClearRange: unexpected error %v", err)
+		}
+		{
+			iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+			err := batch.ClearIterRange(iter, outsideKey.Key, outsideKey2.Key)
+			iter.Close()
+			if !isWriteSpanErr(err) {
+				t.Errorf("ClearIterRange: unexpected error %v", err)
+			}
+		}
+		if err := batch.Merge(outsideKey, nil); !isWriteSpanErr(err) {
+			t.Errorf("Merge: unexpected error %v", err)
+		}
+		if err := batch.Put(outsideKey, nil); !isWriteSpanErr(err) {
+			t.Errorf("Put: unexpected error %v", err)
+		}
+	})
+
+	t.Run("writes after range", func(t *testing.T) {
+		if err := batch.Clear(outsideKey3); !isWriteSpanErr(err) {
+			t.Errorf("Clear: unexpected error %v", err)
+		}
+		if err := batch.ClearRange(insideKey2, outsideKey4); !isWriteSpanErr(err) {
+			t.Errorf("ClearRange: unexpected error %v", err)
+		}
+		{
+			iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+			err := batch.ClearIterRange(iter, insideKey2.Key, outsideKey4.Key)
+			iter.Close()
+			if !isWriteSpanErr(err) {
+				t.Errorf("ClearIterRange: unexpected error %v", err)
+			}
+		}
+		if err := batch.Merge(outsideKey3, nil); !isWriteSpanErr(err) {
+			t.Errorf("Merge: unexpected error %v", err)
+		}
+		if err := batch.Put(outsideKey3, nil); !isWriteSpanErr(err) {
+			t.Errorf("Put: unexpected error %v", err)
+		}
+	})
+
+	t.Run("reads inside range", func(t *testing.T) {
+		//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
+		if value, err := batch.Get(insideKey); err != nil {
+			t.Errorf("failed to read inside the range: %+v", err)
+		} else if !bytes.Equal(value, []byte("value")) {
+			t.Errorf("failed to read previously written value, got %q", value)
+		}
+		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
+		if _, _, _, err := batch.GetProto(insideKey, nil); err != nil {
+			t.Errorf("GetProto: unexpected error %v", err)
+		}
+		if err := batch.Iterate(insideKey.Key, insideKey2.Key,
+			func(v engine.MVCCKeyValue) (bool, error) {
+				return false, nil
+			},
+		); err != nil {
+			t.Errorf("Iterate: unexpected error %v", err)
+		}
+	})
 
 	// Reads outside the range fail.
 	isReadSpanErr := func(err error) bool {
 		return testutils.IsError(err, "cannot read undeclared span")
 	}
-	//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
-	if _, err := batch.Get(outsideKey); !isReadSpanErr(err) {
-		t.Errorf("Get: unexpected error %v", err)
-	}
-	//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
-	if _, _, _, err := batch.GetProto(outsideKey, nil); !isReadSpanErr(err) {
-		t.Errorf("GetProto: unexpected error %v", err)
-	}
-	if err := batch.Iterate(outsideKey.Key, outsideKey2.Key,
-		func(v engine.MVCCKeyValue) (bool, error) {
-			return false, errors.Errorf("unexpected callback: %v", v)
-		},
-	); !isReadSpanErr(err) {
-		t.Errorf("Iterate: unexpected error %v", err)
-	}
 
-	func() {
+	t.Run("reads before range", func(t *testing.T) {
+		//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
+		if _, err := batch.Get(outsideKey); !isReadSpanErr(err) {
+			t.Errorf("Get: unexpected error %v", err)
+		}
+		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
+		if _, _, _, err := batch.GetProto(outsideKey, nil); !isReadSpanErr(err) {
+			t.Errorf("GetProto: unexpected error %v", err)
+		}
+		if err := batch.Iterate(outsideKey.Key, insideKey2.Key,
+			func(v engine.MVCCKeyValue) (bool, error) {
+				return false, errors.Errorf("unexpected callback: %v", v)
+			},
+		); !isReadSpanErr(err) {
+			t.Errorf("Iterate: unexpected error %v", err)
+		}
+	})
+
+	t.Run("reads after range", func(t *testing.T) {
+		//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
+		if _, err := batch.Get(outsideKey3); !isReadSpanErr(err) {
+			t.Errorf("Get: unexpected error %v", err)
+		}
+		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
+		if _, _, _, err := batch.GetProto(outsideKey3, nil); !isReadSpanErr(err) {
+			t.Errorf("GetProto: unexpected error %v", err)
+		}
+		if err := batch.Iterate(insideKey2.Key, outsideKey4.Key,
+			func(v engine.MVCCKeyValue) (bool, error) {
+				return false, errors.Errorf("unexpected callback: %v", v)
+			},
+		); !isReadSpanErr(err) {
+			t.Errorf("Iterate: unexpected error %v", err)
+		}
+	})
+
+	t.Run("forward scans", func(t *testing.T) {
 		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 
@@ -125,16 +185,20 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, err := iter.Valid(); !isReadSpanErr(err) {
 			t.Fatalf("Seek: unexpected error %v", err)
 		}
+		iter.SeekGE(outsideKey3)
+		if _, err := iter.Valid(); !isReadSpanErr(err) {
+			t.Fatalf("Seek: unexpected error %v", err)
+		}
 		// Seeking back in bounds restores validity.
 		iter.SeekGE(insideKey)
-		if ok, err := iter.Valid(); !ok {
+		if ok, err := iter.Valid(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.Key(), insideKey) {
 			t.Fatalf("expected key %s, got %s", insideKey, iter.Key())
 		}
 		iter.Next()
-		if ok, err := iter.Valid(); !ok {
+		if ok, err := iter.Valid(); !ok || err != nil {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.Key(), insideKey2) {
@@ -148,7 +212,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 			// Scanning out of bounds sets Valid() to false but is not an error.
 			t.Errorf("unexpected error on iterator: %+v", err)
 		}
-	}()
+	})
 
 	// Same test in reverse. We commit the batch and wrap an iterator on
 	// the raw engine because we don't support bidirectional iteration
@@ -156,47 +220,55 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	if err := batch.Commit(true); err != nil {
 		t.Fatal(err)
 	}
-	iter := spanset.NewIterator(eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax}), &ss)
-	defer iter.Close()
-	iter.SeekLT(outsideKey)
-	if _, err := iter.Valid(); !isReadSpanErr(err) {
-		t.Fatalf("SeekLT: unexpected error %v", err)
-	}
-	// Seeking back in bounds restores validity.
-	iter.SeekLT(insideKey3)
-	if ok, err := iter.Valid(); !ok {
-		t.Fatalf("expected valid iterator, err=%v", err)
-	}
-	if !reflect.DeepEqual(iter.Key(), insideKey2) {
-		t.Fatalf("expected key %s, got %s", insideKey2, iter.Key())
-	}
-	iter.Prev()
-	if ok, err := iter.Valid(); !ok {
-		t.Fatalf("expected valid iterator, err=%v", err)
-	}
-	if !reflect.DeepEqual(iter.Key(), insideKey) {
-		t.Fatalf("expected key %s, got %s", insideKey, iter.Key())
-	}
-	// Scan out of bounds.
-	iter.Prev()
-	if ok, err := iter.Valid(); ok {
-		t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
-	} else if err != nil {
-		t.Errorf("unexpected error on iterator: %+v", err)
-	}
 
-	// Seeking back in bounds restores validity.
-	iter.SeekLT(insideKey2)
-	if ok, err := iter.Valid(); !ok {
-		t.Fatalf("expected valid iterator, err=%v", err)
-	}
-	// SeekLT to the lower bound is invalid.
-	iter.SeekLT(insideKey)
-	if ok, err := iter.Valid(); ok {
-		t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
-	} else if !isReadSpanErr(err) {
-		t.Fatalf("SeekLT: unexpected error %v", err)
-	}
+	t.Run("reverse scans", func(t *testing.T) {
+		iter := spanset.NewIterator(eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax}), &ss)
+		defer iter.Close()
+		iter.SeekLT(outsideKey)
+		if _, err := iter.Valid(); !isReadSpanErr(err) {
+			t.Fatalf("SeekLT: unexpected error %v", err)
+		}
+		// Seeking back in bounds restores validity.
+		iter.SeekLT(insideKey3)
+		if ok, err := iter.Valid(); !ok || err != nil {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		if !reflect.DeepEqual(iter.Key(), insideKey2) {
+			t.Fatalf("expected key %s, got %s", insideKey2, iter.Key())
+		}
+		iter.Prev()
+		if ok, err := iter.Valid(); !ok || err != nil {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		if !reflect.DeepEqual(iter.Key(), insideKey) {
+			t.Fatalf("expected key %s, got %s", insideKey, iter.Key())
+		}
+		// Scan out of bounds.
+		iter.Prev()
+		if ok, err := iter.Valid(); ok {
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+		} else if err != nil {
+			t.Errorf("unexpected error on iterator: %+v", err)
+		}
+
+		// Seeking back in bounds restores validity.
+		iter.SeekLT(insideKey2)
+		if ok, err := iter.Valid(); !ok || err != nil {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		// SeekLT to the lower bound is invalid.
+		iter.SeekLT(insideKey)
+		if ok, err := iter.Valid(); ok {
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+		} else if !isReadSpanErr(err) {
+			t.Fatalf("SeekLT: unexpected error %v", err)
+		}
+		// SeekLT to upper bound restores validity.
+		iter.SeekLT(outsideKey3)
+		if ok, err := iter.Valid(); !ok || err != nil {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+	})
 }
 
 func TestSpanSetBatchTimestamps(t *testing.T) {
