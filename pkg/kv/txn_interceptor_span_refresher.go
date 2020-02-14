@@ -231,7 +231,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		log.Fatalf(ctx, "unexpected WriteTooOld request. ba: %s (txn: %s)",
 			ba.String(), ba.Txn.String())
 	}
-	br, pErr := sr.sendHelper(ctx, ba)
+	br, pErr := sr.wrapped.SendLocked(ctx, ba)
 
 	// 19.2 servers might give us an error with the WriteTooOld flag set. This
 	// interceptor wants to always terminate that flag. In the case of an error,
@@ -375,20 +375,13 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	addRefreshes(sr.refreshSpans)
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
-	if _, batchErr := sr.sendHelper(ctx, refreshSpanBa); batchErr != nil {
+	if _, batchErr := sr.wrapped.SendLocked(ctx, refreshSpanBa); batchErr != nil {
 		log.VEventf(ctx, 2, "failed to refresh txn spans (%s); propagating original retry error", batchErr)
 		return false
 	}
 
 	sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
 	return true
-}
-
-func (sr *txnSpanRefresher) sendHelper(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	br, pErr := sr.wrapped.SendLocked(ctx, ba)
-	return br, pErr
 }
 
 // appendRefreshSpans appends refresh spans from the supplied batch request,
