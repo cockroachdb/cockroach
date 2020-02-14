@@ -191,6 +191,8 @@ func TestPebbleEncryption(t *testing.T) {
 
 	opts := engine.DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(1 << 20)
+	defer opts.Cache.Unref()
+
 	memFS := vfs.NewMem()
 	opts.FS = memFS
 	keyFile128 := "111111111111111111111111111111111234567890123456"
@@ -238,6 +240,8 @@ func TestPebbleEncryption(t *testing.T) {
 
 	opts2 := engine.DefaultPebbleOptions()
 	opts2.Cache = pebble.NewCache(1 << 20)
+	defer opts2.Cache.Unref()
+
 	opts2.FS = memFS
 	db, err = engine.NewPebble(
 		context.Background(),
