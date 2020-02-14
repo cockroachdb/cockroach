@@ -53,6 +53,7 @@ func createTestPebbleEngine(path string) (engine.Engine, error) {
 		Opts:          engine.DefaultPebbleOptions(),
 	}
 	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
+	defer pebbleConfig.Opts.Cache.Unref()
 
 	return engine.NewPebble(context.Background(), pebbleConfig)
 }
