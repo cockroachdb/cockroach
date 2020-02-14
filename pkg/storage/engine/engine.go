@@ -534,6 +534,8 @@ func NewEngine(
 			Opts:          DefaultPebbleOptions(),
 		}
 		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
+		defer pebbleConfig.Opts.Cache.Unref()
+
 		pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
 		cache := NewRocksDBCache(cacheSize)
 		defer cache.Release()
@@ -558,6 +560,7 @@ func NewEngine(
 			Opts:          DefaultPebbleOptions(),
 		}
 		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
+		defer pebbleConfig.Opts.Cache.Unref()
 
 		return NewPebble(context.Background(), pebbleConfig)
 	case enginepb.EngineTypeRocksDB:
