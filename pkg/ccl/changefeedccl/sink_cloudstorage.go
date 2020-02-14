@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -307,8 +308,8 @@ func makeCloudStorageSink(
 		s.dataFilePartition = timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
 	}
 
-	switch formatType(opts[optFormat]) {
-	case optFormatJSON:
+	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	case changefeedbase.OptFormatJSON:
 		// TODO(dan): It seems like these should be on the encoder, but that
 		// would require a bit of refactoring.
 		s.ext = `.ndjson`
@@ -318,18 +319,18 @@ func makeCloudStorageSink(
 		}
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			optFormat, opts[optFormat])
+			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
 	}
 
-	switch envelopeType(opts[optEnvelope]) {
-	case optEnvelopeWrapped:
+	switch changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) {
+	case changefeedbase.OptEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			optEnvelope, opts[optEnvelope])
+			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope])
 	}
 
-	if _, ok := opts[optKeyInValue]; !ok {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, optKeyInValue)
+	if _, ok := opts[changefeedbase.OptKeyInValue]; !ok {
+		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
 	ctx := context.TODO()

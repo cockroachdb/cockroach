@@ -28,7 +28,7 @@ import (
 type bufferEntry struct {
 	kv roachpb.KeyValue
 	// prevVal is set if the key had a non-tombstone value before the change
-	// and the before value of each change was requested (optDiff).
+	// and the before value of each change was requested (changefeedbase.OptDiff).
 	prevVal  roachpb.Value
 	resolved *jobspb.ResolvedSpan
 	// backfillTimestamp overrides the timestamp of the schema that should be

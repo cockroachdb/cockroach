@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -66,9 +67,9 @@ func TestCloudStorageSink(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	settings.ExternalIODir = dir
 	opts := map[string]string{
-		optFormat:     string(optFormatJSON),
-		optEnvelope:   string(optEnvelopeWrapped),
-		optKeyInValue: ``,
+		changefeedbase.OptFormat:     string(changefeedbase.OptFormatJSON),
+		changefeedbase.OptEnvelope:   string(changefeedbase.OptEnvelopeWrapped),
+		changefeedbase.OptKeyInValue: ``,
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
 	e, err := makeJSONEncoder(opts)

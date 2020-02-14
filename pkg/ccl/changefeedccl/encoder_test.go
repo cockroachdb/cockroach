@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -46,15 +47,15 @@ func TestEncoders(t *testing.T) {
 	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
 
 	var opts []map[string]string
-	for _, f := range []string{string(optFormatJSON), string(optFormatAvro)} {
+	for _, f := range []string{string(changefeedbase.OptFormatJSON), string(changefeedbase.OptFormatAvro)} {
 		for _, e := range []string{
-			string(optEnvelopeKeyOnly), string(optEnvelopeRow), string(optEnvelopeWrapped),
+			string(changefeedbase.OptEnvelopeKeyOnly), string(changefeedbase.OptEnvelopeRow), string(changefeedbase.OptEnvelopeWrapped),
 		} {
 			opts = append(opts,
-				map[string]string{optFormat: f, optEnvelope: e},
-				map[string]string{optFormat: f, optEnvelope: e, optDiff: ``},
-				map[string]string{optFormat: f, optEnvelope: e, optUpdatedTimestamps: ``},
-				map[string]string{optFormat: f, optEnvelope: e, optUpdatedTimestamps: ``, optDiff: ``},
+				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e},
+				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e, changefeedbase.OptDiff: ``},
+				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e, changefeedbase.OptUpdatedTimestamps: ``},
+				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e, changefeedbase.OptUpdatedTimestamps: ``, changefeedbase.OptDiff: ``},
 			)
 		}
 	}
@@ -180,11 +181,11 @@ func TestEncoders(t *testing.T) {
 	}
 
 	for _, o := range opts {
-		name := fmt.Sprintf("format=%s,envelope=%s", o[optFormat], o[optEnvelope])
-		if _, ok := o[optUpdatedTimestamps]; ok {
+		name := fmt.Sprintf("format=%s,envelope=%s", o[changefeedbase.OptFormat], o[changefeedbase.OptEnvelope])
+		if _, ok := o[changefeedbase.OptUpdatedTimestamps]; ok {
 			name += `,updated`
 		}
-		if _, ok := o[optDiff]; ok {
+		if _, ok := o[changefeedbase.OptDiff]; ok {
 			name += `,diff`
 		}
 		t.Run(name, func(t *testing.T) {
@@ -192,14 +193,14 @@ func TestEncoders(t *testing.T) {
 
 			var rowStringFn func([]byte, []byte) string
 			var resolvedStringFn func([]byte) string
-			switch o[optFormat] {
-			case string(optFormatJSON):
+			switch o[changefeedbase.OptFormat] {
+			case string(changefeedbase.OptFormatJSON):
 				rowStringFn = func(k, v []byte) string { return fmt.Sprintf(`%s->%s`, k, v) }
 				resolvedStringFn = func(r []byte) string { return string(r) }
-			case string(optFormatAvro):
+			case string(changefeedbase.OptFormatAvro):
 				reg := makeTestSchemaRegistry()
 				defer reg.Close()
-				o[optConfluentSchemaRegistry] = reg.server.URL
+				o[changefeedbase.OptConfluentSchemaRegistry] = reg.server.URL
 				rowStringFn = func(k, v []byte) string {
 					key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
 					return fmt.Sprintf(`%s->%s`, key, value)
@@ -208,7 +209,7 @@ func TestEncoders(t *testing.T) {
 					return string(avroToJSON(t, reg, r))
 				}
 			default:
-				t.Fatalf(`unknown format: %s`, o[optFormat])
+				t.Fatalf(`unknown format: %s`, o[changefeedbase.OptFormat])
 			}
 
 			e, err := getEncoder(o)
@@ -346,7 +347,7 @@ func TestAvroEncoder(t *testing.T) {
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			optFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.server.URL)
 		defer closeFeed(t, foo)
 		assertPayloadsAvro(t, reg, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},"before":null}`,
@@ -359,7 +360,7 @@ func TestAvroEncoder(t *testing.T) {
 
 		fooUpdated := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2, diff, updated`,
-			optFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.server.URL)
 		defer closeFeed(t, fooUpdated)
 		// Skip over the first two rows since we don't know the statement timestamp.
 		_, err := fooUpdated.Next()
@@ -397,7 +398,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2`,
-			optFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.server.URL)
 		defer closeFeed(t, foo)
 		assertPayloadsAvro(t, reg, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1}}}}`,
@@ -429,7 +430,7 @@ func TestAvroLedger(t *testing.T) {
 
 		ledger := feed(t, f, `CREATE CHANGEFEED FOR customer, transaction, entry, session
 	                       WITH format=$1, confluent_schema_registry=$2
-	               `, optFormatAvro, reg.server.URL)
+	               `, changefeedbase.OptFormatAvro, reg.server.URL)
 		defer closeFeed(t, ledger)
 
 		assertPayloadsAvro(t, reg, ledger, []string{

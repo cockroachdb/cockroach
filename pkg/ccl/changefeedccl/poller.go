@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -172,7 +173,7 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 func (p *poller) rangefeedImplIter(ctx context.Context, i int) error {
 	// Determine whether to request the previous value of each update from
 	// RangeFeed based on whether the `diff` option is specified.
-	_, withDiff := p.details.Opts[optDiff]
+	_, withDiff := p.details.Opts[changefeedbase.OptDiff]
 
 	p.mu.Lock()
 	lastHighwater := p.mu.highWater
@@ -552,7 +553,7 @@ func (p *poller) pollTableHistory(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(changefeedPollInterval.Get(&p.settings.SV)):
+		case <-time.After(changefeedbase.TableDescriptorPollInterval.Get(&p.settings.SV)):
 		}
 	}
 }
@@ -584,7 +585,7 @@ func clusterNodeCount(g *gossip.Gossip) int {
 }
 
 func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescriptor) error {
-	if err := validateChangefeedTable(p.details.Targets, desc); err != nil {
+	if err := changefeedbase.ValidateTable(p.details.Targets, desc); err != nil {
 		return err
 	}
 	p.mu.Lock()

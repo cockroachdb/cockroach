@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -200,7 +201,7 @@ func (u *tableHistoryUpdater) PollTableDescs(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(changefeedPollInterval.Get(&u.settings.SV)):
+		case <-time.After(changefeedbase.TableDescriptorPollInterval.Get(&u.settings.SV)):
 		}
 
 		startTS, endTS := u.m.HighWater(), u.db.Clock().Now()
