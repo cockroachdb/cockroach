@@ -12,10 +12,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -26,12 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-)
-
-var changefeedPollInterval = settings.RegisterNonNegativeDurationSetting(
-	"changefeed.experimental_poll_interval",
-	"polling interval for the prototype changefeed implementation",
-	1*time.Second,
 )
 
 const (
@@ -59,7 +53,7 @@ func kvsToRows(
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (bufferEntry, error),
 ) func(context.Context) ([]emitEntry, error) {
-	_, withDiff := details.Opts[optDiff]
+	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	rfCache := newRowFetcherCache(leaseMgr)
 
 	var kvs row.SpanKVFetcher
@@ -324,13 +318,13 @@ func emitEntries(
 		// is not changing), then this is sufficient and we don't have to do
 		// anything fancy with timers.
 		var timeBetweenFlushes time.Duration
-		if r, ok := details.Opts[optResolvedTimestamps]; ok && r != `` {
+		if r, ok := details.Opts[changefeedbase.OptResolvedTimestamps]; ok && r != `` {
 			var err error
 			if timeBetweenFlushes, err = time.ParseDuration(r); err != nil {
 				return nil, err
 			}
 		} else {
-			timeBetweenFlushes = changefeedPollInterval.Get(&settings.SV) / 5
+			timeBetweenFlushes = changefeedbase.TableDescriptorPollInterval.Get(&settings.SV) / 5
 		}
 		if len(resolvedSpans) == 0 || timeutil.Since(lastFlush) < timeBetweenFlushes {
 			return nil, nil

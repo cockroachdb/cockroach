@@ -14,6 +14,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -428,7 +429,7 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
-	if r, ok := cf.spec.Feed.Opts[optResolvedTimestamps]; ok {
+	if r, ok := cf.spec.Feed.Opts[changefeedbase.OptResolvedTimestamps]; ok {
 		var err error
 		if r == `` {
 			// Empty means emit them as often as we have them.
@@ -639,7 +640,7 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	// rangefeed is only checked at changefeed start/resume, so instead of
 	// switching on it here, just add them. Also add 1 second in case both these
 	// settings are set really low (as they are in unit tests).
-	pollInterval := changefeedPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+	pollInterval := changefeedbase.TableDescriptorPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
 	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Cfg.Settings.SV)
 	slownessThreshold := time.Second + 10*(pollInterval+closedtsInterval)
 	frontier := cf.sf.Frontier()

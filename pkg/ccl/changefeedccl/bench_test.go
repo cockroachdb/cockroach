@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -188,7 +189,7 @@ func createBenchmarkChangefeed(
 			StatementTimeName: tableDesc.Name,
 		}},
 		Opts: map[string]string{
-			optEnvelope: string(optEnvelopeRow),
+			changefeedbase.OptEnvelope: string(changefeedbase.OptEnvelopeRow),
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
