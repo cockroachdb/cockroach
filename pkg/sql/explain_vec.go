@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
-	"github.com/cockroachdb/errors"
 )
 
 // explainVecNode is a planNode that wraps a plan and returns
@@ -44,7 +43,6 @@ type explainVecNode struct {
 		// The current row returned by the node.
 		values tree.Datums
 	}
-	subqueryPlans []subquery
 }
 
 type flowWithNode struct {
@@ -56,17 +54,9 @@ func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	willDistributePlan, _ := willDistributePlan(distSQLPlanner, n.plan, params)
-	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistributePlan)
-	defer func() {
-		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
-	}()
+	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, n.stmtType, willDistributePlan)
 	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
-		if len(n.subqueryPlans) > 0 {
-			return errors.New("running EXPLAIN (VEC) on this query is " +
-				"unsupported because of the presence of subqueries")
-		}
 		return err
 	}
 
@@ -133,7 +123,6 @@ func makeExplainVecPlanningCtx(
 	distSQLPlanner *DistSQLPlanner,
 	params runParams,
 	stmtType tree.StatementType,
-	subqueryPlans []subquery,
 	willDistributePlan bool,
 ) *PlanningCtx {
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
@@ -141,13 +130,7 @@ func makeExplainVecPlanningCtx(
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = stmtType
-	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
-	for i := range planCtx.planner.curPlan.subqueryPlans {
-		p := &planCtx.planner.curPlan.subqueryPlans[i]
-		// Fake subquery results - they're not important for our explain output.
-		p.started = true
-		p.result = tree.DNull
-	}
+	planCtx.replaceSubqueriesWithNull = true
 	return planCtx
 }
 

@@ -969,6 +969,8 @@ func (*Subquery) SubqueryExpr() {}
 func (node *Subquery) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(FmtSymbolicSubqueries) {
 		ctx.Printf("@S%d", node.Idx)
+	} else if ctx.subqueryFormat != nil {
+		ctx.subqueryFormat(ctx, node)
 	} else {
 		// Ensure that type printing is disabled during the recursion, as
 		// the type annotations are not available in subqueries.

@@ -1153,10 +1153,9 @@ func (ef *execFactory) ConstructExplain(
 
 	case tree.ExplainVec:
 		return &explainVecNode{
-			options:       options,
-			plan:          p.plan,
-			subqueryPlans: p.subqueryPlans,
-			stmtType:      stmtType,
+			options:  options,
+			plan:     p.plan,
+			stmtType: stmtType,
 		}, nil
 
 	case tree.ExplainPlan:
