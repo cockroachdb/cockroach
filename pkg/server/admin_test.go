@@ -71,7 +71,16 @@ func getAdminJSONProtoWithAdminOption(
 func postAdminJSONProto(
 	ts serverutils.TestServerInterface, path string, request, response protoutil.Message,
 ) error {
-	return serverutils.PostJSONProto(ts, adminPrefix+path, request, response)
+	return postAdminJSONProtoWithAdminOption(ts, path, request, response, true)
+}
+
+func postAdminJSONProtoWithAdminOption(
+	ts serverutils.TestServerInterface,
+	path string,
+	request, response protoutil.Message,
+	isAdmin bool,
+) error {
+	return serverutils.PostJSONProtoWithAdminOption(ts, adminPrefix+path, request, response, isAdmin)
 }
 
 // getText fetches the HTTP response body as text in the form of a
@@ -1027,107 +1036,150 @@ func TestAdminAPISettings(t *testing.T) {
 	})
 }
 
+// TestAdminAPIUIData checks that UI customizations are properly
+// persisted for both admin and non-admin users.
 func TestAdminAPIUIData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	start := timeutil.Now()
+	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
+		start := timeutil.Now()
 
-	mustSetUIData := func(keyValues map[string][]byte) {
-		if err := postAdminJSONProto(s, "uidata", &serverpb.SetUIDataRequest{
-			KeyValues: keyValues,
-		}, &serverpb.SetUIDataResponse{}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	expectKeyValues := func(expKeyValues map[string][]byte) {
-		var resp serverpb.GetUIDataResponse
-		queryValues := make(url.Values)
-		for key := range expKeyValues {
-			queryValues.Add("keys", key)
-		}
-		url := "uidata?" + queryValues.Encode()
-		if err := getAdminJSONProto(s, url, &resp); err != nil {
-			t.Fatal(err)
-		}
-		// Do a two-way comparison. We can't use reflect.DeepEqual(), because
-		// resp.KeyValues has timestamps and expKeyValues doesn't.
-		for key, actualVal := range resp.KeyValues {
-			if a, e := actualVal.Value, expKeyValues[key]; !bytes.Equal(a, e) {
-				t.Fatalf("key %s: value = %v, expected = %v", key, a, e)
-			}
-		}
-		for key, expVal := range expKeyValues {
-			if a, e := resp.KeyValues[key].Value, expVal; !bytes.Equal(a, e) {
-				t.Fatalf("key %s: value = %v, expected = %v", key, a, e)
+		mustSetUIData := func(keyValues map[string][]byte) {
+			if err := postAdminJSONProtoWithAdminOption(s, "uidata", &serverpb.SetUIDataRequest{
+				KeyValues: keyValues,
+			}, &serverpb.SetUIDataResponse{}, isAdmin); err != nil {
+				t.Fatal(err)
 			}
 		}
 
-		// Sanity check LastUpdated.
-		for _, val := range resp.KeyValues {
-			now := timeutil.Now()
-			if val.LastUpdated.Before(start) {
-				t.Fatalf("val.LastUpdated %s < start %s", val.LastUpdated, start)
+		expectKeyValues := func(expKeyValues map[string][]byte) {
+			var resp serverpb.GetUIDataResponse
+			queryValues := make(url.Values)
+			for key := range expKeyValues {
+				queryValues.Add("keys", key)
 			}
-			if val.LastUpdated.After(now) {
-				t.Fatalf("val.LastUpdated %s > now %s", val.LastUpdated, now)
+			url := "uidata?" + queryValues.Encode()
+			if err := getAdminJSONProtoWithAdminOption(s, url, &resp, isAdmin); err != nil {
+				t.Fatal(err)
+			}
+			// Do a two-way comparison. We can't use reflect.DeepEqual(), because
+			// resp.KeyValues has timestamps and expKeyValues doesn't.
+			for key, actualVal := range resp.KeyValues {
+				if a, e := actualVal.Value, expKeyValues[key]; !bytes.Equal(a, e) {
+					t.Fatalf("key %s: value = %v, expected = %v", key, a, e)
+				}
+			}
+			for key, expVal := range expKeyValues {
+				if a, e := resp.KeyValues[key].Value, expVal; !bytes.Equal(a, e) {
+					t.Fatalf("key %s: value = %v, expected = %v", key, a, e)
+				}
+			}
+
+			// Sanity check LastUpdated.
+			for _, val := range resp.KeyValues {
+				now := timeutil.Now()
+				if val.LastUpdated.Before(start) {
+					t.Fatalf("val.LastUpdated %s < start %s", val.LastUpdated, start)
+				}
+				if val.LastUpdated.After(now) {
+					t.Fatalf("val.LastUpdated %s > now %s", val.LastUpdated, now)
+				}
 			}
 		}
-	}
 
-	expectValueEquals := func(key string, expVal []byte) {
-		expectKeyValues(map[string][]byte{key: expVal})
-	}
-
-	expectKeyNotFound := func(key string) {
-		var resp serverpb.GetUIDataResponse
-		url := "uidata?keys=" + key
-		if err := getAdminJSONProto(s, url, &resp); err != nil {
-			t.Fatal(err)
+		expectValueEquals := func(key string, expVal []byte) {
+			expectKeyValues(map[string][]byte{key: expVal})
 		}
-		if len(resp.KeyValues) != 0 {
-			t.Fatal("key unexpectedly found")
+
+		expectKeyNotFound := func(key string) {
+			var resp serverpb.GetUIDataResponse
+			url := "uidata?keys=" + key
+			if err := getAdminJSONProtoWithAdminOption(s, url, &resp, isAdmin); err != nil {
+				t.Fatal(err)
+			}
+			if len(resp.KeyValues) != 0 {
+				t.Fatal("key unexpectedly found")
+			}
 		}
-	}
 
-	// Basic tests.
-	var badResp serverpb.GetUIDataResponse
-	const errPattern = "400 Bad Request"
-	if err := getAdminJSONProto(s, "uidata", &badResp); !testutils.IsError(err, errPattern) {
-		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
-	}
+		// Basic tests.
+		var badResp serverpb.GetUIDataResponse
+		const errPattern = "400 Bad Request"
+		if err := getAdminJSONProtoWithAdminOption(s, "uidata", &badResp, isAdmin); !testutils.IsError(err, errPattern) {
+			t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
+		}
 
-	mustSetUIData(map[string][]byte{"k1": []byte("v1")})
-	expectValueEquals("k1", []byte("v1"))
+		mustSetUIData(map[string][]byte{"k1": []byte("v1")})
+		expectValueEquals("k1", []byte("v1"))
 
-	expectKeyNotFound("NON_EXISTENT_KEY")
+		expectKeyNotFound("NON_EXISTENT_KEY")
 
-	mustSetUIData(map[string][]byte{
-		"k2": []byte("v2"),
-		"k3": []byte("v3"),
+		mustSetUIData(map[string][]byte{
+			"k2": []byte("v2"),
+			"k3": []byte("v3"),
+		})
+		expectValueEquals("k2", []byte("v2"))
+		expectValueEquals("k3", []byte("v3"))
+		expectKeyValues(map[string][]byte{
+			"k2": []byte("v2"),
+			"k3": []byte("v3"),
+		})
+
+		mustSetUIData(map[string][]byte{"k2": []byte("v2-updated")})
+		expectKeyValues(map[string][]byte{
+			"k2": []byte("v2-updated"),
+			"k3": []byte("v3"),
+		})
+
+		// Write a binary blob with all possible byte values, then verify it.
+		var buf bytes.Buffer
+		for i := 0; i < 997; i++ {
+			buf.WriteByte(byte(i % 256))
+		}
+		mustSetUIData(map[string][]byte{"bin": buf.Bytes()})
+		expectValueEquals("bin", buf.Bytes())
 	})
-	expectValueEquals("k2", []byte("v2"))
-	expectValueEquals("k3", []byte("v3"))
-	expectKeyValues(map[string][]byte{
-		"k2": []byte("v2"),
-		"k3": []byte("v3"),
-	})
+}
 
-	mustSetUIData(map[string][]byte{"k2": []byte("v2-updated")})
-	expectKeyValues(map[string][]byte{
-		"k2": []byte("v2-updated"),
-		"k3": []byte("v3"),
-	})
+// TestAdminAPIUISeparateData check that separate users have separate customizations.
+func TestAdminAPIUISeparateData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
 
-	// Write a binary blob with all possible byte values, then verify it.
-	var buf bytes.Buffer
-	for i := 0; i < 997; i++ {
-		buf.WriteByte(byte(i % 256))
+	// Make a setting for an admin user.
+	if err := postAdminJSONProtoWithAdminOption(s, "uidata",
+		&serverpb.SetUIDataRequest{KeyValues: map[string][]byte{"k": []byte("v1")}},
+		&serverpb.SetUIDataResponse{},
+		true /*isAdmin*/); err != nil {
+		t.Fatal(err)
 	}
-	mustSetUIData(map[string][]byte{"bin": buf.Bytes()})
-	expectValueEquals("bin", buf.Bytes())
+
+	// Make a setting for a non-admin user.
+	if err := postAdminJSONProtoWithAdminOption(s, "uidata",
+		&serverpb.SetUIDataRequest{KeyValues: map[string][]byte{"k": []byte("v2")}},
+		&serverpb.SetUIDataResponse{},
+		false /*isAdmin*/); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp serverpb.GetUIDataResponse
+	url := "uidata?keys=k"
+
+	if err := getAdminJSONProtoWithAdminOption(s, url, &resp, true /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.KeyValues) != 1 || !bytes.Equal(resp.KeyValues["k"].Value, []byte("v1")) {
+		t.Fatalf("unexpected admin values: %+v", resp.KeyValues)
+	}
+	if err := getAdminJSONProtoWithAdminOption(s, url, &resp, false /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.KeyValues) != 1 || !bytes.Equal(resp.KeyValues["k"].Value, []byte("v2")) {
+		t.Fatalf("unexpected non-admin values: %+v", resp.KeyValues)
+	}
 }
 
 func TestClusterAPI(t *testing.T) {
