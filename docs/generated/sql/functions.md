@@ -1123,6 +1123,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="current_user"></a><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td></tr>
+<tr><td><a name="getdatabaseencoding"></a><code>getdatabaseencoding() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current encoding name used by database.</p>
+</span></td></tr>
 <tr><td><a name="version"></a><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
 </span></td></tr></tbody>
 </table>
