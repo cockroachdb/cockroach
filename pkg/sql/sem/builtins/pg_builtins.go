@@ -573,6 +573,23 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// Here getdatabaseencoding just returns UTF8 because,
+	// CockroachDB supports just UTF8 for now.
+	"getdatabaseencoding": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// We only support UTF-8 right now.
+				// If we allow more encodings, we must also change the virtual schema
+				// entry for pg_catalog.pg_database.
+				return datEncodingUTF8ShortName, nil
+			},
+			Info: "Returns the current encoding name used by the database.",
+		},
+	),
+
 	// Postgres defines pg_get_expr as a function that "decompiles the internal form
 	// of an expression", which is provided in the pg_node_tree type. In Cockroach's
 	// pg_catalog implementation, we populate all pg_node_tree columns with the
