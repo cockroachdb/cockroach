@@ -12,23 +12,21 @@ package sql_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
@@ -45,72 +43,37 @@ import (
 func TestGetUserHashedPasswordTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testing.Short() {
-		t.Skip("short flag")
+	if util.RaceEnabled {
+		// We want to use a low timeout below to prevent
+		// this test from taking forever, however
+		// race builds are so slow as to trigger this timeout spuriously.
+		t.Skip("not running under race")
 	}
 
 	ctx := context.Background()
 
-	// Two nodes, two localities. We need the localities to pin the
-	// ranges to a particular node velow.
-	tc := testcluster.StartTestCluster(t, 2,
-		base.TestClusterArgs{
-			ServerArgsPerNode: map[int]base.TestServerArgs{
-				0: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
-				1: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}}},
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	// Note: we are using fmt.Fprintln here and below instead of t.Logf
-	// so as to ensure that these messages are properly interleaved with
-	// the server logs in case of failure.
-	fmt.Fprintln(os.Stderr, "-- moving system ranges to 2nd node --")
-
-	// Disable replication (num replicas = 1) and move all ranges to r2.
-	if err := tc.Server(0).(*server.TestServer).Server.RunLocalSQL(ctx,
-		func(ctx context.Context, ie *sql.InternalExecutor) error {
-			rows, err := ie.Query(ctx, "get-zones", nil,
-				"SELECT target FROM crdb_internal.zones")
-			if err != nil {
-				return err
-			}
-			for _, row := range rows {
-				zone := string(*row[0].(*tree.DString))
-				if _, err := ie.Exec(ctx, "set-zone", nil,
-					fmt.Sprintf("ALTER %s CONFIGURE ZONE USING num_replicas = 1, constraints = '[+region=r2]'", zone)); err != nil {
-					return err
-				}
+	// unavailableCh is used by the replica command filter
+	// to conditionally block requests and simulate unavailability.
+	var unavailableCh atomic.Value
+	closedCh := make(chan struct{})
+	close(closedCh)
+	unavailableCh.Store(closedCh)
+	knobs := &storage.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, _ roachpb.BatchRequest) *roachpb.Error {
+			select {
+			case <-unavailableCh.Load().(chan struct{}):
+			case <-ctx.Done():
 			}
 			return nil
-		}); err != nil {
-		t.Fatal(err)
+		},
 	}
-
-	// Wait for ranges to move to node 2.
-	testutils.SucceedsSoon(t, func() error {
-		// Kick the replication queues, to speed up the rebalancing process.
-		for i := 0; i < tc.NumServers(); i++ {
-			if err := tc.Server(i).GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-				return s.ForceReplicationScanAndProcess()
-			}); err != nil {
-				t.Fatal(err)
-			}
-		}
-		row := tc.ServerConn(0).QueryRow(`SELECT min(unnest(replicas)) FROM crdb_internal.ranges`)
-		var nodeID int
-		if err := row.Scan(&nodeID); err != nil {
-			t.Fatal(err)
-		}
-		if nodeID != 2 {
-			return errors.New("not rebalanced, still waiting")
-		}
-		return nil
-	})
+	params := base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
 
 	// Make a user that must use a password to authenticate.
 	// Default privileges on defaultdb are needed to run simple queries.
-	if _, err := tc.ServerConn(0).Exec(`
+	if _, err := db.Exec(`
 CREATE USER foo WITH PASSWORD 'testabc';
 GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		t.Fatal(err)
@@ -118,10 +81,10 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 
 	// We'll attempt connections on gateway node 0.
 	userURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
-		tc.Server(0).ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false /* withClientCerts */)
+		s.ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false /* withClientCerts */)
 	defer cleanupFn()
 	rootURL, rootCleanupFn := sqlutils.PGUrl(t,
-		tc.Server(0).ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer rootCleanupFn()
 
 	// Override the timeout built into pgx so we are only subject to
@@ -168,14 +131,15 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 	}()
 
 	// Configure the login timeout to just 1s.
-	if _, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING server.user_login.timeout = '1s'`); err != nil {
+	if _, err := db.Exec(`SET CLUSTER SETTING server.user_login.timeout = '200ms'`); err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Fprintln(os.Stderr, "-- shutting down node 2 --")
+	fmt.Fprintln(os.Stderr, "-- make ranges unavailable --")
 
-	// This is intended to make the system ranges unavailable.
-	tc.StopServer(1)
+	ch := make(chan struct{})
+	unavailableCh.Store(ch)
+	defer close(ch)
 
 	fmt.Fprintln(os.Stderr, "-- expect timeout --")
 
@@ -208,7 +172,6 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 			t.Fatal(err)
 		}
 	}()
-
 }
 
 func pgxConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {

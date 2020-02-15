@@ -1201,7 +1201,7 @@ func (r *Replica) beginCmds(
 	}
 
 	if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
-		if pErr := filter(*ba); pErr != nil {
+		if pErr := filter(ctx, *ba); pErr != nil {
 			r.latchMgr.Release(lg)
 			return nil, pErr.GoError()
 		}

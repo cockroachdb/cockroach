@@ -667,7 +667,7 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 // to CREATE STATISTICS, i.e. Scanning a user table. See discussion
 // on jobutils.RunJob for where this might be useful.
 func createStatsRequestFilter(allowProgressIota *chan struct{}) storagebase.ReplicaRequestFilter {
-	return func(ba roachpb.BatchRequest) *roachpb.Error {
+	return func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		if req, ok := ba.GetArg(roachpb.Scan); ok {
 			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
 			// Ensure that the tableID is within the expected range for a table,

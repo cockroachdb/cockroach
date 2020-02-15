@@ -237,7 +237,7 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Maybe inject some retryable errors when the merge transaction commits.
 	var mtc *multiTestContext
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retries, -1) >= 0 {
@@ -573,7 +573,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	var readTS hlc.Timestamp
 	rhsKey := roachpb.Key("c")
-	mtc.storeConfig.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	mtc.storeConfig.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		if ba.IsSingleSubsumeRequest() {
 			// Before we execute a Subsume request, execute a read on the same store
 			// at a much higher timestamp.
@@ -700,7 +700,7 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	// Install a store filter that maybe injects retryable errors into a merge
 	// transaction before ultimately aborting the merge.
 	var retriesBeforeFailure int64
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retriesBeforeFailure, -1) >= 0 {
@@ -1275,7 +1275,7 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	var lhsDescKey atomic.Value
 	var launchSplit int64
 	var mergeRetries int64
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if cput := req.GetConditionalPut(); cput != nil {
 				if v := lhsDescKey.Load(); v != nil && v.(roachpb.Key).Equal(cput.Key) {
@@ -1335,7 +1335,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// Install a hook to control when the merge transaction commits.
 	mergeEndTxnReceived := make(chan *roachpb.Transaction, 10) // headroom in case the merge transaction retries
 	finishMerge := make(chan struct{})
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
 			if et := r.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				mergeEndTxnReceived <- ba.Txn
@@ -1350,7 +1350,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	const reqConcurrency = 10
 	rhsSentinel := roachpb.Key("rhs-sentinel")
 	reqAcquiredLatch := make(chan struct{}, reqConcurrency)
-	storeCfg.TestingKnobs.TestingLatchFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingLatchFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
 			req := r.GetInner()
 			switch req.Method() {
@@ -2282,7 +2282,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 	var mtc *multiTestContext
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		if ba.IsSingleSubsumeRequest() && mtc.Store(2) != nil {
 			mtc.stopStore(2)
 		}
@@ -2605,7 +2605,7 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 
 	// Maybe inject some retryable errors when the merge transaction commits.
 	var mtc *multiTestContext
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&mergeTxnRetries, -1) >= 0 {
@@ -2735,7 +2735,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	// about the status of the A <- B merge.
 	var syn syncutil.Mutex
 	cond := sync.NewCond(&syn)
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		syn.Lock()
 		defer syn.Unlock()
 		for _, req := range ba.Requests {

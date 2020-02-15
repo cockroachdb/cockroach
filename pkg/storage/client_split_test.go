@@ -1148,7 +1148,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			storeCfg.TestingKnobs.DisableMergeQueue = true
 			storeCfg.TestingKnobs.DisableSplitQueue = true
 			storeCfg.TestingKnobs.TestingRequestFilter =
-				func(ba roachpb.BatchRequest) *roachpb.Error {
+				func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 					for _, req := range ba.Requests {
 						if cPut, ok := req.GetInner().(*roachpb.ConditionalPutRequest); ok {
 							if cPut.Key.Equal(keys.RangeDescriptorKey(splitKey)) {
@@ -1774,7 +1774,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	inFilter := make(chan struct{}, 1)
 	beginBlockingSplit := make(chan struct{})
 	finishBlockingSplit := make(chan struct{})
-	filter := func(ba roachpb.BatchRequest) *roachpb.Error {
+	filter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		// Block replica 1's attempt to perform the AdminSplit. We detect the
 		// split's range descriptor update and block until the rest of the test
 		// is ready. We then return a ConditionFailedError, simulating a

@@ -2229,7 +2229,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	// where the first one gets a TransactionAbortedError.
 	errKey := roachpb.Key("a")
 	knobs := &storage.StoreTestingKnobs{
-		TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
 				txn := ba.Txn.Clone()
 				txn.Status = roachpb.ABORTED
