@@ -82,7 +82,7 @@ func (r *Replica) sendWithRangeID(
 	}
 
 	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
-		if pErr := filter(*ba); pErr != nil {
+		if pErr := filter(ctx, *ba); pErr != nil {
 			return nil, pErr
 		}
 	}

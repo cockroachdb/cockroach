@@ -4095,7 +4095,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.DisableReplicaGCQueue = true
-	sc.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) (retErr *roachpb.Error) {
+	sc.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) (retErr *roachpb.Error) {
 		if rangeID := roachpb.RangeID(atomic.LoadInt64(&filterRangeIDAtomic)); rangeID != ba.RangeID {
 			return nil
 		}
@@ -5133,7 +5133,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
 				DisableReplicaGCQueue: true,
-				TestingRequestFilter: storagebase.ReplicaRequestFilter(func(r roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: storagebase.ReplicaRequestFilter(func(_ context.Context, r roachpb.BatchRequest) *roachpb.Error {
 					if r.RangeID == roachpb.RangeID(atomic.LoadInt64(&rangeID)) {
 						if _, isPut := r.GetArg(roachpb.Put); isPut {
 							atomic.AddInt64(&putRequestCount, 1)
