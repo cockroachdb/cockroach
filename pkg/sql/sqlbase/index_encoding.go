@@ -862,11 +862,39 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 	if val == tree.DNull {
 		return [][]byte{encoding.EncodeNullAscending(inKey)}, nil
 	}
-	switch t := tree.UnwrapDatum(nil, val).(type) {
-	case *tree.DJSON:
-		return json.EncodeInvertedIndexKeys(inKey, (t.JSON))
+	datum := tree.UnwrapDatum(nil, val)
+	switch val.ResolvedType().Family() {
+	case types.JsonFamily:
+		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
+	case types.ArrayFamily:
+		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey)
 	}
-	return nil, errors.AssertionFailedf("trying to apply inverted index to non JSON type")
+	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
+}
+
+// encodeArrayInvertedIndexTableKeys returns a list of inverted index keys for
+// the given input array, one per entry in the array. The input inKey is
+// prefixed to all returned keys.
+// N.B.: This won't return any keys for
+func encodeArrayInvertedIndexTableKeys(val *tree.DArray, inKey []byte) (key [][]byte, err error) {
+	outKeys := make([][]byte, len(val.Array))
+	for i := range val.Array {
+		d := val.Array[i]
+		if d == tree.DNull {
+			// We don't need to make keys for NULL, since in SQL:
+			// SELECT ARRAY[1, NULL, 2] @> ARRAY[NULL]
+			// returns false.
+			continue
+		}
+		newKey, err := EncodeTableKey(nil, d, encoding.Ascending)
+		if err != nil {
+			return nil, err
+		}
+		outKey := make([]byte, len(inKey), len(inKey)+len(newKey))
+		copy(outKey, inKey)
+		outKeys[i] = append(outKey, newKey...)
+	}
+	return outKeys, nil
 }
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a row encoded as a primary index.
@@ -1194,21 +1222,19 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 ) ([]IndexEntry, error) {
-	if len(secondaryIndexEntries) != len(indexes) {
-		panic("Length of secondaryIndexEntries is not equal to the number of indexes.")
+	if len(secondaryIndexEntries) > 0 {
+		panic("Length of secondaryIndexEntries was non-zero")
 	}
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}
-		secondaryIndexEntries[i] = entries[0]
-
-		// This is specifically for inverted indexes which can have more than one entry
-		// associated with them, or secondary indexes which store columns from
-		// multiple column families.
-		if len(entries) > 1 {
-			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
+		for i := range entries {
+			// Normally, each index will have exactly one entry. Inverted indexes can
+			// have 0 or >1 entries, though, as well as secondary indexes which store
+			// columns from multiple column families.
+			secondaryIndexEntries = append(secondaryIndexEntries, entries[i])
 		}
 	}
 	return secondaryIndexEntries, nil

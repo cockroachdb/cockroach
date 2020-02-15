@@ -756,6 +756,86 @@ func (c *indexConstraintCtx) makeSpansForOr(
 	return tight
 }
 
+func (c *indexConstraintCtx) makeInvertedIndexSpansForJSONExpr(
+	nd opt.Expr, constraints []*constraint.Constraint, allPaths bool, datum tree.Datum,
+) (bool, []*constraint.Constraint) {
+	out := &constraint.Constraint{}
+	constrained := false
+
+	rd := datum.(*tree.DJSON).JSON
+
+	switch rd.Type() {
+	case json.ArrayJSONType, json.ObjectJSONType:
+		// First, check if there's more than one path through the datum.
+		paths, err := json.AllPaths(rd)
+		if err != nil {
+			log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
+			c.unconstrained(0 /* offset */, out)
+			return false, append(constraints, out)
+		}
+		for i := range paths {
+			hasContainerLeaf, err := paths[i].HasContainerLeaf()
+			if err != nil {
+				log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
+				c.unconstrained(0 /* offset */, out)
+				return false, append(constraints, out)
+			}
+			if hasContainerLeaf {
+				// We want to have a full index scan if the RHS contains either [] or {}.
+				continue
+			}
+			pathDatum, err := tree.MakeDJSON(paths[i])
+			if err != nil {
+				log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
+				c.unconstrained(0 /* offset */, out)
+				return false, append(constraints, out)
+			}
+			c.eqSpan(0 /* offset */, pathDatum, out)
+			constraints = append(constraints, out)
+			// The span is tight if we just had 1 path through the index constraint.
+			constrained = true
+			if !allPaths {
+				return len(paths) == 1, constraints
+			}
+			// Reset out for next iteration
+			out = &constraint.Constraint{}
+		}
+
+		// We found no paths that could constrain the scan.
+		if !constrained {
+			c.unconstrained(0 /* offset */, out)
+			return false, append(constraints, out)
+		}
+		return len(paths) == 1, constraints
+
+	default:
+		// If we find a scalar on the right side of the @> operator it means that we need to find
+		// both matching scalars and arrays that contain that value. In order to do this we generate
+		// two logical spans, one for the original scalar and one for arrays containing the scalar.
+		// This is valid because in JSON something can either be an array or scalar so the spans are
+		// guaranteed not to overlap when mapped onto the primary key space. Therefore there won't be
+		// any duplicate primary keys when we retrieve rows for both sets.
+		j := json.NewArrayBuilder(1)
+		j.Add(rd)
+		dJSON, err := tree.MakeDJSON(j.Build())
+		if err != nil {
+			break
+		}
+
+		// This is the span for the scalar.
+		c.eqSpan(0 /* offset */, datum, out)
+
+		// This is the span to match arrays.
+		var other constraint.Constraint
+		c.eqSpan(0 /* offset */, dJSON, &other)
+		out.UnionWith(c.evalCtx, &other)
+		return true, append(constraints, out)
+	}
+
+	// Just assume that we didn't find any constraints if we ran into an error.
+	return false, constraints
+}
+
 // makeInvertedIndexSpansForExpr is analogous to makeSpansForExpr, but it is
 // used for inverted indexes. If allPaths is true, the slice is populated with
 // all constraints found. Otherwise, this function stops at the first
@@ -787,74 +867,48 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			return false, append(constraints, out)
 		}
 
-		rd := rightDatum.(*tree.DJSON).JSON
+		switch rightDatum.ResolvedType().Family() {
+		case types.JsonFamily:
+			return c.makeInvertedIndexSpansForJSONExpr(nd, constraints, allPaths, rightDatum)
+		case types.ArrayFamily:
+			// We're going to make one span to search for every value inside of the
+			// array datum.
+			arr := rightDatum.(*tree.DArray)
+			for i := range arr.Array {
+				elt := arr.Array[i]
+				if elt == tree.DNull {
+					// In SQL:
+					// SELECT ARRAY[1, NULL, 2] @> ARRAY[NULL]
+					// returns false.
+					c.contradiction(0 /* offset */, out)
+					return false, append(constraints, out)
+				}
+				array := tree.NewDArray(arr.ParamTyp)
+				array.Array = make(tree.Datums, 1)
+				array.Array[0] = arr.Array[i]
+				c.eqSpan(0 /* offset */, array, out)
 
-		switch rd.Type() {
-		case json.ArrayJSONType, json.ObjectJSONType:
-			// First, check if there's more than one path through the datum.
-			paths, err := json.AllPaths(rd)
-			if err != nil {
-				log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
-				c.unconstrained(0 /* offset */, out)
-				return false, append(constraints, out)
-			}
-			for i := range paths {
-				hasContainerLeaf, err := paths[i].HasContainerLeaf()
-				if err != nil {
-					log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
-					c.unconstrained(0 /* offset */, out)
-					return false, append(constraints, out)
-				}
-				if hasContainerLeaf {
-					// We want to have a full index scan if the RHS contains either [] or {}.
-					continue
-				}
-				pathDatum, err := tree.MakeDJSON(paths[i])
-				if err != nil {
-					log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
-					c.unconstrained(0 /* offset */, out)
-					return false, append(constraints, out)
-				}
-				c.eqSpan(0 /* offset */, pathDatum, out)
 				constraints = append(constraints, out)
-				// The span is tight if we just had 1 path through the index constraint.
+
 				constrained = true
 				if !allPaths {
-					return len(paths) == 1, constraints
+					// The span is tight if we just had 1 path through the index constraint.
+					return len(arr.Array) == 1, constraints
 				}
+
 				// Reset out for next iteration
 				out = &constraint.Constraint{}
 			}
 
-			// We found no paths that could constrain the scan.
 			if !constrained {
 				c.unconstrained(0 /* offset */, out)
 				return false, append(constraints, out)
 			}
-			return len(paths) == 1, constraints
+
+			return len(arr.Array) == 1, constraints
 
 		default:
-			// If we find a scalar on the right side of the @> operator it means that we need to find
-			// both matching scalars and arrays that contain that value. In order to do this we generate
-			// two logical spans, one for the original scalar and one for arrays containing the scalar.
-			// This is valid because in JSON something can either be an array or scalar so the spans are
-			// guaranteed not to overlap when mapped onto the primary key space. Therefore there won't be
-			// any duplicate primary keys when we retrieve rows for both sets.
-			j := json.NewArrayBuilder(1)
-			j.Add(rd)
-			dJSON, err := tree.MakeDJSON(j.Build())
-			if err != nil {
-				break
-			}
-
-			// This is the span for the scalar.
-			c.eqSpan(0 /* offset */, rightDatum, out)
-
-			// This is the span to match arrays.
-			var other constraint.Constraint
-			c.eqSpan(0 /* offset */, dJSON, &other)
-			out.UnionWith(c.evalCtx, &other)
-			return true, append(constraints, out)
+			log.Errorf(context.TODO(), "unexpected type in inverted index: %s", rightDatum.ResolvedType())
 		}
 
 	case opt.AndOp, opt.FiltersOp:

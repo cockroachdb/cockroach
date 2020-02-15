@@ -330,3 +330,108 @@ scan  ·            ·                          (a, b)  ·
 ·     table        d@primary                  ·       ·
 ·     spans        ALL                        ·       ·
 ·     filter       b @> '{"a": {}, "b": {}}'  ·       ·
+
+statement ok
+DROP TABLE d
+
+subtest array
+
+statement ok
+CREATE TABLE d (
+  a INT PRIMARY KEY,
+  b INT[]
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON d(b)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> ARRAY[1]
+----
+·           distributed  false      ·       ·
+·           vectorized   false      ·       ·
+index-join  ·            ·          (a, b)  ·
+ │          table        d@primary  ·       ·
+ │          key columns  a          ·       ·
+ └── scan   ·            ·          (a)     ·
+·           table        d@foo_inv  ·       ·
+·           spans        /1-/2      ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> ARRAY[]::INT[]
+----
+·     distributed  false         ·       ·
+·     vectorized   false         ·       ·
+scan  ·            ·             (a, b)  ·
+·     table        d@primary     ·       ·
+·     spans        ALL           ·       ·
+·     filter       b @> ARRAY[]  ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> ARRAY[NULL]
+----
+·            distributed  false      ·       ·
+·            vectorized   false      ·       ·
+index-join   ·            ·          (a, b)  ·
+ │           table        d@primary  ·       ·
+ │           key columns  a          ·       ·
+ └── norows  ·            ·          (a)     ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> NULL
+----
+·       distributed  false  ·       ·
+·       vectorized   false  ·       ·
+norows  ·            ·      (a, b)  ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
+----
+·     distributed  false      ·       ·
+·     vectorized   false      ·       ·
+scan  ·            ·          (a, b)  ·
+·     table        d@primary  ·       ·
+·     spans        ALL        ·       ·
+·     filter       b IS NULL  ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> ARRAY[1,2]
+----
+·                 distributed            false             ·       ·
+·                 vectorized             false             ·       ·
+lookup-join       ·                      ·                 (a, b)  ·
+ │                table                  d@primary         ·       ·
+ │                type                   inner             ·       ·
+ │                equality               (a) = (a)         ·       ·
+ │                equality cols are key  ·                 ·       ·
+ │                parallel               ·                 ·       ·
+ │                pred                   @2 @> ARRAY[1,2]  ·       ·
+ └── zigzag-join  ·                      ·                 (a)     ·
+      │           type                   inner             ·       ·
+      ├── scan    ·                      ·                 (a)     ·
+      │           table                  d@foo_inv         ·       ·
+      │           fixedvals              1 column          ·       ·
+      └── scan    ·                      ·                 ()      ·
+·                 table                  d@foo_inv         ·       ·
+·                 fixedvals              1 column          ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> ARRAY[1] AND b @> ARRAY[2]
+----
+·                 distributed            false                                  ·       ·
+·                 vectorized             false                                  ·       ·
+lookup-join       ·                      ·                                      (a, b)  ·
+ │                table                  d@primary                              ·       ·
+ │                type                   inner                                  ·       ·
+ │                equality               (a) = (a)                              ·       ·
+ │                equality cols are key  ·                                      ·       ·
+ │                parallel               ·                                      ·       ·
+ │                pred                   (@2 @> ARRAY[1]) AND (@2 @> ARRAY[2])  ·       ·
+ └── zigzag-join  ·                      ·                                      (a)     ·
+      │           type                   inner                                  ·       ·
+      ├── scan    ·                      ·                                      (a)     ·
+      │           table                  d@foo_inv                              ·       ·
+      │           fixedvals              1 column                               ·       ·
+      └── scan    ·                      ·                                      ()      ·
+·                 table                  d@foo_inv                              ·       ·
+·                 fixedvals              1 column                               ·       ·
