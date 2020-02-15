@@ -3064,6 +3064,28 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"getdatabaseencoding": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// Compute encoding name by calling pg_encoding_to_char
+				// on the encoding from pg_database.
+				row, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "getdatabaseencoding",
+					ctx.Txn,
+					"SELECT pg_encoding_to_char(encoding) "+
+						"FROM pg_database WHERE datname = $1", ctx.SessionData.Database)
+				if err != nil {
+					return nil, err
+				}
+				return row[0], nil
+			},
+			Info: "Returns the current encoding name used by the database.",
+		},
+	),
+
 	// https://www.postgresql.org/docs/10/static/functions-info.html
 	//
 	// Note that in addition to what the pg doc says ("current_schema =
