@@ -199,6 +199,9 @@ type FmtCtx struct {
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
 	indexedVarFormat func(ctx *FmtCtx, idx int)
+	// subqueryFormat is an optional interceptor for
+	// Subquery exprs.
+	subqueryFormat func(ctx *FmtCtx, subquery *Subquery)
 	// tableNameFormatter will be called on all TableNames if it is non-nil.
 	tableNameFormatter func(*FmtCtx, *TableName)
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
@@ -288,6 +291,12 @@ func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases 
 // IndexedVars using the provided function.
 func (ctx *FmtCtx) SetIndexedVarFormat(fn func(ctx *FmtCtx, idx int)) {
 	ctx.indexedVarFormat = fn
+}
+
+// SetSubqueriesFormat modifies FmtCtx to customize the printing of
+// subqueries using the provided function.
+func (ctx *FmtCtx) SetSubqueriesFormat(fn func(ctx *FmtCtx, subquery *Subquery)) {
+	ctx.subqueryFormat = fn
 }
 
 // SetPlaceholderFormat modifies FmtCtx to customize the printing of
@@ -420,6 +429,7 @@ func (ctx *FmtCtx) Close() {
 	ctx.Buffer.Reset()
 	ctx.flags = 0
 	ctx.indexedVarFormat = nil
+	ctx.subqueryFormat = nil
 	ctx.tableNameFormatter = nil
 	ctx.placeholderFormat = nil
 	fmtCtxPool.Put(ctx)

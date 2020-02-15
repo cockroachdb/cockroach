@@ -967,7 +967,9 @@ func (*Subquery) SubqueryExpr() {}
 
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(FmtSymbolicSubqueries) {
+	if ctx.subqueryFormat != nil {
+		ctx.subqueryFormat(ctx, node)
+	} else if ctx.HasFlags(FmtSymbolicSubqueries) {
 		ctx.Printf("@S%d", node.Idx)
 	} else {
 		// Ensure that type printing is disabled during the recursion, as

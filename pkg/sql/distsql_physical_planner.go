@@ -536,6 +536,12 @@ type PlanningCtx struct {
 	// noEvalSubqueries indicates that the plan expects any subqueries to not
 	// be replaced by evaluation. Should only be set by EXPLAIN.
 	noEvalSubqueries bool
+
+	// replaceSubqueriesWithNull indicates that all subqueries will artificially
+	// evaluate to NULL. The purpose of this flag is to let EXPLAIN run queries
+	// that have subqueries without actually having to execute the subqueries.
+	// This flag should only be set by EXPLAIN.
+	replaceSubqueriesWithNull bool
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
@@ -554,12 +560,17 @@ func (p *PlanningCtx) IsLocal() bool {
 	return p.isLocal
 }
 
-// EvaluateSubqueries returns true if this plan requires subqueries be fully
+// MustEvaluateSubqueries returns true if this plan requires subqueries be fully
 // executed before trying to marshal. This is normally true except for in the
 // case of EXPLAIN queries, which ultimately want to describe the subquery that
 // will run, without actually running it.
-func (p *PlanningCtx) EvaluateSubqueries() bool {
+func (p *PlanningCtx) MustEvaluateSubqueries() bool {
 	return !p.noEvalSubqueries
+}
+
+// MustReplaceSubqueriesWithNull implements the ExprContext interface.
+func (p *PlanningCtx) MustReplaceSubqueriesWithNull() bool {
+	return p.replaceSubqueriesWithNull
 }
 
 // sanityCheckAddresses returns an error if the same address is used by two
