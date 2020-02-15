@@ -1051,14 +1051,14 @@ func (s *adminServer) getUIData(
 		if i != 0 {
 			query.Append(",")
 		}
-		query.Append("$", tree.NewDString(key))
+		query.Append("$", tree.NewDString(makeUIKey(userName, key)))
 	}
 	query.Append(");")
 	if err := query.Errors(); err != nil {
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
-		ctx, "admin-getUIData", nil /* txn */, userName, query.String(), query.QueryArguments()...,
+		ctx, "admin-getUIData", nil /* txn */, security.RootUser, query.String(), query.QueryArguments()...,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -1071,6 +1071,9 @@ func (s *adminServer) getUIData(
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
 		}
+		_, key := splitUIKey(string(dKey))
+		dKey = tree.DString(key)
+
 		dValue, ok := row[1].(*tree.DBytes)
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI value: %T", row[1])
@@ -1086,6 +1089,21 @@ func (s *adminServer) getUIData(
 		}
 	}
 	return &resp, nil
+}
+
+// makeUIKey combines username and key to form a lookup key in
+// system.ui.
+// The username is combined to ensure that different users
+// can use different customizations.
+func makeUIKey(username, key string) string {
+	return username + "$" + key
+}
+
+// splitUIKey is the inverse of makeUIKey.
+// The caller must ensure that the value was produced by makeUIKey.
+func splitUIKey(combined string) (string, string) {
+	pair := strings.SplitN(combined, "$", 2)
+	return pair[0], pair[1]
 }
 
 // SetUIData is an endpoint that stores the given key/value pairs in the
@@ -1109,7 +1127,7 @@ func (s *adminServer) SetUIData(
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
 		rowsAffected, err := s.server.internalExecutor.ExecWithUser(
-			ctx, "admin-set-ui-data", nil /* txn */, userName, query, key, val)
+			ctx, "admin-set-ui-data", nil /* txn */, security.RootUser, query, makeUIKey(userName, key), val)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
