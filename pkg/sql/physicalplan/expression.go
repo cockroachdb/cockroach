@@ -35,6 +35,11 @@ type ExprContext interface {
 	// EvaluateSubqueries returns true if subqueries should be evaluated before
 	// creating the execinfrapb.Expression.
 	EvaluateSubqueries() bool
+
+	// ReplaceSubqueriesWithNull returns true if subqueries should be replaced
+	// with null before creating the execinfrapb.Expression. This is useful for
+	// some explain variants.
+	ReplaceSubqueriesWithNull() bool
 }
 
 // fakeExprContext is a fake implementation of ExprContext that always behaves
@@ -53,6 +58,10 @@ func (fakeExprContext) IsLocal() bool {
 
 func (fakeExprContext) EvaluateSubqueries() bool {
 	return true
+}
+
+func (fakeExprContext) ReplaceSubqueriesWithNull() bool {
+	return false
 }
 
 // MakeExpression creates a execinfrapb.Expression.
@@ -84,12 +93,15 @@ func MakeExpression(
 	}
 
 	evalCtx := ctx.EvalContext()
-	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
-		evalCtx: evalCtx,
-	}
 
 	outExpr := expr.(tree.Expr)
 	if ctx.EvaluateSubqueries() {
+		subqueryVisitor := &evalAndReplaceSubqueryVisitor{
+			evalCtx: evalCtx,
+		}
+		if ctx.ReplaceSubqueriesWithNull() {
+			subqueryVisitor.replaceWithNull = true
+		}
 		outExpr, _ = tree.WalkExpr(subqueryVisitor, expr)
 		if subqueryVisitor.err != nil {
 			return execinfrapb.Expression{}, subqueryVisitor.err
@@ -114,8 +126,9 @@ func MakeExpression(
 }
 
 type evalAndReplaceSubqueryVisitor struct {
-	evalCtx *tree.EvalContext
-	err     error
+	evalCtx         *tree.EvalContext
+	replaceWithNull bool
+	err             error
 }
 
 var _ tree.Visitor = &evalAndReplaceSubqueryVisitor{}
@@ -123,10 +136,16 @@ var _ tree.Visitor = &evalAndReplaceSubqueryVisitor{}
 func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	switch expr := expr.(type) {
 	case *tree.Subquery:
-		val, err := e.evalCtx.Planner.EvalSubquery(expr)
-		if err != nil {
-			e.err = err
-			return false, expr
+		var val tree.Datum
+		var err error
+		if e.replaceWithNull {
+			val = tree.DNull
+		} else {
+			val, err = e.evalCtx.Planner.EvalSubquery(expr)
+			if err != nil {
+				e.err = err
+				return false, expr
+			}
 		}
 		var newExpr tree.Expr = val
 		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().Family() != types.UnknownFamily {

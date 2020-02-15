@@ -141,12 +141,7 @@ func makeExplainVecPlanningCtx(
 	planCtx.planner = params.p
 	planCtx.stmtType = stmtType
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
-	for i := range planCtx.planner.curPlan.subqueryPlans {
-		p := &planCtx.planner.curPlan.subqueryPlans[i]
-		// Fake subquery results - they're not important for our explain output.
-		p.started = true
-		p.result = tree.DNull
-	}
+	planCtx.replaceSubqueriesWithNull = true
 	return planCtx
 }
 

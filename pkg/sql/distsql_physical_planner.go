@@ -531,6 +531,8 @@ type PlanningCtx struct {
 	// noEvalSubqueries indicates that the plan expects any subqueries to not
 	// be replaced by evaluation. Should only be set by EXPLAIN.
 	noEvalSubqueries bool
+
+	replaceSubqueriesWithNull bool
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
@@ -555,6 +557,11 @@ func (p *PlanningCtx) IsLocal() bool {
 // will run, without actually running it.
 func (p *PlanningCtx) EvaluateSubqueries() bool {
 	return !p.noEvalSubqueries
+}
+
+// ReplaceSubqueriesWithNull implements the ExprContext interface.
+func (p *PlanningCtx) ReplaceSubqueriesWithNull() bool {
+	return p.replaceSubqueriesWithNull
 }
 
 // sanityCheckAddresses returns an error if the same address is used by two
