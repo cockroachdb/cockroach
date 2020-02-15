@@ -2556,3 +2556,10 @@ SELECT timezone('1970-01-01 01:00'::timestamptz, 'UTC+6')
 
 statement ok
 SET TIME ZONE +0
+
+subtest getdatabaseencoding
+
+query T
+SELECT getdatabaseencoding()
+----
+UTF8

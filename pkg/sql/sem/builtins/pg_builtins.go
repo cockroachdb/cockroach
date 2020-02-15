@@ -563,13 +563,33 @@ var pgBuiltins = map[string]builtinDefinition{
 				{"encoding_id", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
+			Fn:         getEncodingNameForEncodingID,
+			Info:       notUsableInfo,
+		},
+	),
+
+	"getdatabaseencoding": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0].Compare(ctx, DatEncodingUTFId) == 0 {
-					return datEncodingUTF8ShortName, nil
+				row, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "getdatabaseencoding",
+					ctx.Txn,
+					"SELECT encoding FROM pg_database WHERE datname = $1", ctx.SessionData.Database)
+				if err != nil {
+					return nil, err
 				}
-				return tree.DNull, nil
+				// Compute encoding by calling getEncodingNameForEncodingID
+				// on the encoding from pg_database.
+				row[0], err = getEncodingNameForEncodingID(ctx, row)
+				if err != nil {
+					return nil, err
+				}
+				return row[0], nil
 			},
-			Info: notUsableInfo,
+			Info: "Returns the current encoding name used by the database.",
 		},
 	),
 
@@ -1824,4 +1844,14 @@ SELECT description
 		return tree.DNull, nil
 	}
 	return r[0], nil
+}
+
+// getEncodingNameForEncodingID returns the Encoding name for a given Encoding ID.
+// Currently it only provides Encoding Name for UTF8 only because,
+// CockroachDB supports just UTF8 for now.
+func getEncodingNameForEncodingID(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	if args[0].Compare(ctx, DatEncodingUTFId) == 0 {
+		return datEncodingUTF8ShortName, nil
+	}
+	return tree.DNull, nil
 }
