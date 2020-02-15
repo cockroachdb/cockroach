@@ -525,7 +525,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				0: {
 					Knobs: base.TestingKnobs{
 						Store: &storage.StoreTestingKnobs{
-							TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+							TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 								if atomic.LoadInt64(&trapRead) == 0 {
 									return nil
 								}

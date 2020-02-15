@@ -2686,7 +2686,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		var rangeToBlockRangeDescriptorRead atomic.Value
 		rangeToBlockRangeDescriptorRead.Store(roachpb.RangeID(0))
 		blockRangeDescriptorReadChan := make(chan struct{}, 1)
-		blockOnChangeReplicasRead := storagebase.ReplicaRequestFilter(func(ba roachpb.BatchRequest) *roachpb.Error {
+		blockOnChangeReplicasRead := storagebase.ReplicaRequestFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			if req, isGet := ba.GetArg(roachpb.Get); !isGet ||
 				ba.RangeID != rangeToBlockRangeDescriptorRead.Load().(roachpb.RangeID) ||
 				!ba.IsSingleRequest() ||
@@ -2697,6 +2697,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 			select {
 			case <-blockRangeDescriptorReadChan:
 				<-blockRangeDescriptorReadChan
+			case <-ctx.Done():
 			default:
 			}
 			return nil

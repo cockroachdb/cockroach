@@ -451,7 +451,7 @@ func (st *scanTracker) setFilter(f func(roachpb.BatchRequest) *roachpb.Error) {
 	st.filterFunc = f
 }
 
-func (st *scanTracker) requestFilter(ba roachpb.BatchRequest) *roachpb.Error {
+func (st *scanTracker) requestFilter(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if scanReq, ok := ba.GetArg(roachpb.Scan); ok {

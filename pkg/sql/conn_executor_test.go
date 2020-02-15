@@ -491,7 +491,7 @@ func TestQueryProgress(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
-				TestingRequestFilter: func(req roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
 					if req.IsSingleRequest() {
 						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
 						if ok && tableSpan.ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {

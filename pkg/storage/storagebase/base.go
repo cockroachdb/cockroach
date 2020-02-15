@@ -77,7 +77,7 @@ func (f *FilterArgs) InRaftCmd() bool {
 // ReplicaRequestFilter can be used in testing to influence the error returned
 // from a request before it is evaluated. Return nil to continue with regular
 // processing or non-nil to terminate processing with the returned error.
-type ReplicaRequestFilter func(roachpb.BatchRequest) *roachpb.Error
+type ReplicaRequestFilter func(context.Context, roachpb.BatchRequest) *roachpb.Error
 
 // ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
 // intercept the handling of commands and artificially generate errors. Return
