@@ -9569,7 +9569,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs = StoreTestingKnobs{
-		TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			if _, ok := ba.GetArg(roachpb.ComputeChecksum); ok {
 				return roachpb.NewErrorf("boom")
 			}

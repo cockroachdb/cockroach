@@ -1447,7 +1447,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	var storeKnobs storage.StoreTestingKnobs
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	commitCh := make(chan error, 1)
-	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+	storeKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			switch r := req.GetInner().(type) {
 			case *roachpb.EndTxnRequest:
