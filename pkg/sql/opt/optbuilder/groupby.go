@@ -760,6 +760,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructBoolOr(args[0])
 	case "concat_agg":
 		return b.factory.ConstructConcatAgg(args[0])
+	case "corr":
+		return b.factory.ConstructCorr(args[0], args[1])
 	case "count":
 		return b.factory.ConstructCount(args[0])
 	case "count_rows":

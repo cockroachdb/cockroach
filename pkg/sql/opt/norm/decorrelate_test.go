@@ -23,8 +23,8 @@ import (
 // If that restriction is lifted this test can be deleted.
 func TestAllAggsIgnoreNullsOrNullOnEmpty(t *testing.T) {
 	for op := range opt.AggregateOpReverseMap {
-		if op == opt.CountRowsOp {
-			// CountRows is the only aggregate allowed to break this rule.
+		switch op {
+		case opt.CorrOp, opt.CountRowsOp:
 			continue
 		}
 		if !opt.AggregateIgnoresNulls(op) && !opt.AggregateIsNullOnEmpty(op) {

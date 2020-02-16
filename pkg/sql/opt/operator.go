@@ -179,6 +179,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	BoolOrOp:          "bool_or",
 	ConcatAggOp:       "concat_agg",
 	CountOp:           "count",
+	CorrOp:            "corr",
 	CountRowsOp:       "count_rows",
 	MaxOp:             "max",
 	MinOp:             "min",

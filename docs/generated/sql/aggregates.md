@@ -53,6 +53,14 @@
 </span></td></tr>
 <tr><td><a name="concat_agg"></a><code>concat_agg(arg1: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates all selected values.</p>
 </span></td></tr>
+<tr><td><a name="corr"></a><code>corr(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the correlation coefficient of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="corr"></a><code>corr(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the correlation coefficient of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="corr"></a><code>corr(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the correlation coefficient of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="corr"></a><code>corr(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the correlation coefficient of the selected values.</p>
+</span></td></tr>
 <tr><td><a name="count"></a><code>count(arg1: anyelement) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of selected elements.</p>
 </span></td></tr>
 <tr><td><a name="count_rows"></a><code>count_rows() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of rows.</p>
