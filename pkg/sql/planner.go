@@ -249,6 +249,7 @@ func newInternalPlanner(
 			"database":         "system",
 		}),
 		settings:          execCfg.Settings,
+		commandResultComm: &noopCommandResultCommBase{},
 		setCurTxnReadOnly: func(bool) {},
 	}
 

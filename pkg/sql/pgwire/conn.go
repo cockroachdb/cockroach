@@ -255,7 +255,7 @@ func (c *conn) serveImpl(
 		// we only need the minimum to make pgx happy.
 		var err error
 		for param, value := range testingStatusReportParams {
-			if err := c.sendStatusParam(param, value); err != nil {
+			if err := c.sendParamStatus(param, value); err != nil {
 				break
 			}
 		}
@@ -568,14 +568,14 @@ func (c *conn) processCommandsAsync(
 	return retCh
 }
 
-func (c *conn) sendStatusParam(param, value string) error {
+func (c *conn) sendParamStatus(param, value string) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
 	c.msgBuilder.writeTerminatedString(param)
 	c.msgBuilder.writeTerminatedString(value)
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-func (c *conn) bufferStatusParam(param, value string) error {
+func (c *conn) bufferParamStatus(param, value string) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
 	c.msgBuilder.writeTerminatedString(param)
 	c.msgBuilder.writeTerminatedString(value)
@@ -600,20 +600,14 @@ func (c *conn) sendInitialConnData(
 	// For details see: https://www.postgresql.org/docs/10/static/libpq-status.html
 	for _, param := range statusReportParams {
 		param := param
-		value := connHandler.GetStatusParam(ctx, param)
-		if err := c.sendStatusParam(param, value); err != nil {
+		value := connHandler.GetParamStatus(ctx, param)
+		if err := c.sendParamStatus(param, value); err != nil {
 			return sql.ConnectionHandler{}, err
 		}
-		// `pgwire` also expects updates when these parameters change.
-		connHandler.RegisterOnSessionDataChange(param, func(val string) {
-			if err := c.bufferStatusParam(param, val); err != nil {
-				panic(fmt.Sprintf("unexpected error when trying to send status param update: %s", err.Error()))
-			}
-		})
 	}
 	// The two following status parameters have no equivalent session
 	// variable.
-	if err := c.sendStatusParam("session_authorization", c.sessionArgs.User); err != nil {
+	if err := c.sendParamStatus("session_authorization", c.sessionArgs.User); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 
@@ -625,7 +619,7 @@ func (c *conn) sendInitialConnData(
 	if isSuperUser {
 		superUserVal = "on"
 	}
-	if err := c.sendStatusParam("is_superuser", superUserVal); err != nil {
+	if err := c.sendParamStatus("is_superuser", superUserVal); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 

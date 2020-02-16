@@ -71,8 +71,7 @@ type copyMachine struct {
 
 	// resetPlanner is a function to be used to prepare the planner for inserting
 	// data.
-	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time)
-
+	resetPlanner resetPlannerFunc
 	// execInsertPlan is a function to be used to execute the plan (stored in the
 	// planner) which performs an INSERT.
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error
@@ -98,7 +97,7 @@ func newCopyMachine(
 	n *tree.CopyFrom,
 	txnOpt copyTxnOpt,
 	execCfg *ExecutorConfig,
-	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time),
+	resetPlanner resetPlannerFunc,
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
@@ -113,7 +112,13 @@ func newCopyMachine(
 		resetPlanner:   resetPlanner,
 		execInsertPlan: execInsertPlan,
 	}
-	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
+	c.resetPlanner(
+		&c.p,
+		nil,         /* txn */
+		time.Time{}, /* txnTS */
+		time.Time{}, /* stmtTS */
+		&noopCommandResultCommBase{},
+	)
 	c.parsingEvalCtx = c.p.EvalContext()
 
 	cleanup := c.preparePlanner(ctx)
@@ -297,7 +302,7 @@ func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, 
 		stmtTs = txnTs
 		autoCommit = true
 	}
-	c.resetPlanner(&c.p, txn, txnTs, stmtTs)
+	c.resetPlanner(&c.p, txn, txnTs, stmtTs, &noopCommandResultCommBase{})
 	c.p.autoCommit = autoCommit
 
 	return func(ctx context.Context, err error) error {

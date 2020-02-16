@@ -28,7 +28,7 @@ import (
 )
 
 func (ex *connExecutor) execPrepare(
-	ctx context.Context, parseCmd PrepareStmt,
+	ctx context.Context, parseCmd PrepareStmt, res CommandResultCommBase,
 ) (fsm.Event, fsm.EventPayload) {
 
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
@@ -55,6 +55,7 @@ func (ex *connExecutor) execPrepare(
 		Statement{Statement: parseCmd.Statement},
 		parseCmd.TypeHints,
 		PreparedStatementOriginWire,
+		res,
 	)
 	if err != nil {
 		return retErr(err)
@@ -97,13 +98,14 @@ func (ex *connExecutor) addPreparedStmt(
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
 	origin PreparedStatementOrigin,
+	res CommandResultCommBase,
 ) (*PreparedStatement, error) {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
 		panic(fmt.Sprintf("prepared statement already exists: %q", name))
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
-	prepared, err := ex.prepare(ctx, stmt, placeholderHints, origin)
+	prepared, err := ex.prepare(ctx, stmt, placeholderHints, origin, res)
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +129,7 @@ func (ex *connExecutor) prepare(
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
 	origin PreparedStatementOrigin,
+	res CommandResultCommBase,
 ) (*PreparedStatement, error) {
 	if placeholderHints == nil {
 		placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
@@ -169,7 +172,7 @@ func (ex *connExecutor) prepare(
 
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
-	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations)
+	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations, res)
 	p.stmt = &stmt
 	flags, err := ex.populatePrepared(ctx, txn, placeholderHints, p)
 	if err != nil {

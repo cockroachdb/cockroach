@@ -1790,6 +1790,8 @@ type sessionDataMutator struct {
 	data     *sessiondata.SessionData
 	defaults SessionDefaults
 	settings *cluster.Settings
+	// commResultComm communicates results through the CommandResult to the client.
+	commandResultComm CommandResultCommBase
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	setCurTxnReadOnly func(val bool)
 	// onTempSchemaCreation is called when the temporary schema is set
@@ -1819,6 +1821,7 @@ func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string)
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
 	m.notifyOnDataChangeListeners("application_name", appName)
+	m.commandResultComm.BufferParamStatus("application_name", appName)
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondata.BytesEncodeFormat) {
@@ -1900,7 +1903,7 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.DataConversion.Location = loc
-	m.notifyOnDataChangeListeners("TimeZone", sessionDataTimeZoneFormat(loc))
+	m.commandResultComm.BufferParamStatus("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
