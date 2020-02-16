@@ -3070,29 +3070,18 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				rows1, err1 := ctx.InternalExecutor.QueryRow(
+				// encoding name has been computed bypassing encoding_id
+				// extracted from pg_database to pg_encoding_to_char function.
+				row, err := ctx.InternalExecutor.QueryRow(
 					ctx.Ctx(), "getdatabaseencoding",
 					ctx.Txn,
-					"SELECT encoding FROM pg_database "+
-						"WHERE datname = $1", ctx.SessionData.Database)
-				// Type assertions to DInt for accessing the encoding_id.
-				encodingID, ok := rows1[0].(*tree.DInt)
-				if !ok {
-					return tree.DNull, errors.New("failed to type assert Datum to DInt")
+					"SELECT pg_encoding_to_char(encoding) "+
+						"FROM (SELECT encoding FROM pg_database "+
+						"WHERE datname = $1)", ctx.SessionData.Database)
+				if err != nil {
+					return nil, err
 				}
-				if err1 != nil {
-					return tree.DNull, err1
-				}
-
-				// Using pg_encoding_to_char() to convert an encoding ID to an encoding name.
-				rows2, err2 := ctx.InternalExecutor.QueryRow(
-					ctx.Ctx(), "getdatabaseencoding",
-					ctx.Txn,
-					"SELECT pg_encoding_to_char($1)", *encodingID)
-				if err2 != nil {
-					return tree.DNull, err2
-				}
-				return rows2[0], nil
+				return row[0], nil
 			},
 			Info: "Returns the current encoding name used by the database.",
 		},
