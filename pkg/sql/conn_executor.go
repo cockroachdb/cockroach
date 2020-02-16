@@ -446,10 +446,10 @@ func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
 	}
 }
 
-// GetStatusParam retrieves the configured value of the session
+// GetParamStatus retrieves the configured value of the session
 // variable identified by varName. This is used for the initial
 // message sent to a client during a session set-up.
-func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) string {
+func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) string {
 	name := strings.ToLower(varName)
 	v, ok := varGen[name]
 	if !ok {
@@ -462,12 +462,6 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 		return ""
 	}
 	return defVal
-}
-
-// RegisterOnSessionDataChange adds a listener to execute when a change on the
-// given key is made using the mutator object.
-func (h ConnectionHandler) RegisterOnSessionDataChange(key string, f func(val string)) {
-	h.ex.dataMutator.RegisterOnSessionDataChange(key, f)
 }
 
 // ServeConn serves a client connection by reading commands from the stmtBuf
@@ -500,9 +494,10 @@ func (s *Server) makeSessionDataMutator(
 	sd *sessiondata.SessionData, defaults SessionDefaults,
 ) sessionDataMutator {
 	return sessionDataMutator{
-		data:     sd,
-		defaults: defaults,
-		settings: s.cfg.Settings,
+		data:               sd,
+		defaults:           defaults,
+		settings:           s.cfg.Settings,
+		paramStatusUpdater: &noopParamStatusUpdater{},
 	}
 }
 

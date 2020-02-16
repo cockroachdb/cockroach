@@ -1803,13 +1803,27 @@ type spanWithIndex struct {
 	index int
 }
 
+// paramStatusUpdater is a subset of RestrictedCommandResult which allows sending
+// status updates.
+type paramStatusUpdater interface {
+	AppendParamStatusUpdate(string, string)
+}
+
+// noopParamStatusUpdater implements paramStatusUpdater by performing a no-op.
+type noopParamStatusUpdater struct{}
+
+var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
+
+func (noopParamStatusUpdater) AppendParamStatusUpdate(string, string) {}
+
 // sessionDataMutator is the interface used by sessionVars to change the session
 // state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
 // see curTxnReadOnly).
 type sessionDataMutator struct {
-	data     *sessiondata.SessionData
-	defaults SessionDefaults
-	settings *cluster.Settings
+	data               *sessiondata.SessionData
+	defaults           SessionDefaults
+	settings           *cluster.Settings
+	paramStatusUpdater paramStatusUpdater
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	setCurTxnReadOnly func(val bool)
 	// onTempSchemaCreation is called when the temporary schema is set
@@ -1839,6 +1853,7 @@ func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string)
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
 	m.notifyOnDataChangeListeners("application_name", appName)
+	m.paramStatusUpdater.AppendParamStatusUpdate("application_name", appName)
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondata.BytesEncodeFormat) {
@@ -1924,7 +1939,7 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.DataConversion.Location = loc
-	m.notifyOnDataChangeListeners("TimeZone", sessionDataTimeZoneFormat(loc))
+	m.paramStatusUpdater.AppendParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
