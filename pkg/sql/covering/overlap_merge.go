@@ -12,6 +12,7 @@ package covering
 
 import (
 	"bytes"
+	"reflect"
 	"sort"
 )
 
@@ -22,20 +23,51 @@ type Range struct {
 	Payload interface{}
 }
 
+// intervals represent intervals of points sorted
+// on one line
+type intervals [][]byte
+
+var _ sort.Interface = intervals{}
+
+func (ip intervals) Len() int {
+	return len(ip)
+}
+
+func (ip intervals) Less(i, j int) bool {
+	return bytes.Compare(ip[i], ip[j]) < 0
+}
+
+func (ip intervals) Swap(i, j int) {
+	ip[i], ip[j] = ip[j], ip[i]
+}
+
+// marker is a wrapper for payload and cover index in order to be able to
+// append payloads based on the order among different covers
+type marker struct {
+	Payload       interface{}
+	CoveringIndex int
+}
+
+type markers []marker
+
+var _ sort.Interface = markers{}
+
+func (m markers) Len() int {
+	return len(m)
+}
+
+func (m markers) Less(i, j int) bool {
+	// sort markers based on the cover index it appears
+	return m[i].CoveringIndex < m[j].CoveringIndex
+}
+
+func (m markers) Swap(i, j int) {
+	m[i], m[j] = m[j], m[i]
+}
+
 // Covering represents a non-overlapping, but possibly non-contiguous, set of
 // intervals.
 type Covering []Range
-
-var _ sort.Interface = Covering{}
-
-func (c Covering) Len() int      { return len(c) }
-func (c Covering) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
-func (c Covering) Less(i, j int) bool {
-	if cmp := bytes.Compare(c[i].Start, c[j].Start); cmp != 0 {
-		return cmp < 0
-	}
-	return bytes.Compare(c[i].End, c[j].End) < 0
-}
 
 // OverlapCoveringMerge returns the set of intervals covering every range in the
 // input such that no output range crosses an input endpoint. The payloads are
@@ -49,97 +81,103 @@ func (c Covering) Less(i, j int) bool {
 // The input is mutated (sorted). It is also assumed (and not checked) to be
 // valid (e.g. non-overlapping intervals in each covering).
 func OverlapCoveringMerge(coverings []Covering) []Range {
-	for _, covering := range coverings {
-		sort.Sort(covering)
-	}
+
 	// TODO(dan): Verify that the ranges in each covering are non-overlapping.
 
-	// Each covering is now sorted. Repeatedly iterate through the first range
-	// in each covering to find the next output range. Then remove the ranges
-	// that have been fully represented in the output from the front of each
-	// covering.
-	//
-	// TODO(dan): This is O(number of coverings * total number of input ranges).
-	// The number of ranges in the output is O(total number of input ranges) and
-	// each has a payload that is O(number of coverings), so we can't do any
-	// better without changing the output representation. That said, constants
-	// matter so if this ever turns out to be too slow, we could sort all start
-	// and end points (each point becomes an "event" to either start or end a
-	// range) and scan them in order, maintaining a list of intervals that are
-	// currently "open"
+	// We would like to flatten all coverings on the the single line next we sort it
+	// (which takes O(n*log(n))) time, we only need to remember which points are starting
+	// point of the interval and which are the end points. In addition we need to recognize
+	// empty sets that also need to be counted within resulted range. Once all intervals
+	// are flatten and sorted with iterate over to construct relevant ranges, iteration
+	// takes O(n) time hence total complexity now is O(n*log(n)).
+
+	var totalRange intervals
+	numsMap := map[string]struct{}{}
+	emptySets := map[string]struct{}{}
+	startKeys := map[string]markers{}
+	endKeys := map[string]markers{}
+
+	for i, covering := range coverings {
+		for _, r := range covering {
+			startKeys[string(r.Start)] = append(startKeys[string(r.Start)], marker{
+				Payload:       r.Payload,
+				CoveringIndex: i,
+			})
+			if _, exist := numsMap[string(r.Start)]; !exist {
+				totalRange = append(totalRange, r.Start)
+				numsMap[string(r.Start)] = struct{}{}
+			}
+			endKeys[string(r.End)] = append(endKeys[string(r.End)], marker{
+				Payload:       r.Payload,
+				CoveringIndex: i,
+			})
+
+			if _, exist := numsMap[string(r.End)]; !exist {
+				totalRange = append(totalRange, r.End)
+				numsMap[string(r.End)] = struct{}{}
+			}
+
+			// if start and end differs then it's normal interval and
+			// we can continue to the next one
+			if !bytes.Equal(r.Start, r.End) {
+				continue
+			}
+			// otherwise it is an empty interval and we need to remember it
+			if _, exists := emptySets[string(r.Start)]; !exists {
+				totalRange = append(totalRange, r.End)
+				emptySets[string(r.Start)] = struct{}{}
+			}
+		}
+	}
+	sort.Sort(totalRange)
+
+	var prev []byte
+	var payloadsMarkes markers
 	var ret []Range
-	var previousEndKey []byte
-	for {
-		// Find the start key of the next range. It will either be the end key
-		// of the range just added to the output or the minimum start key
-		// remaining in the coverings (if there is a gap).
-		var startKey []byte
-		startKeySet := false
-		for _, covering := range coverings {
-			if len(covering) == 0 {
-				continue
-			}
-			if !startKeySet || bytes.Compare(covering[0].Start, startKey) < 0 {
-				startKey = covering[0].Start
-				startKeySet = true
-			}
-		}
-		if !startKeySet {
-			break
-		}
-		if bytes.Compare(startKey, previousEndKey) < 0 {
-			startKey = previousEndKey
-		}
 
-		// Find the end key of the next range. It's the minimum of all end keys
-		// of ranges that intersect the start and all start keys of ranges after
-		// the end key of the range just added to the output.
-		var endKey []byte
-		endKeySet := false
-		for _, covering := range coverings {
-			if len(covering) == 0 {
-				continue
+	for _, next := range totalRange {
+		if len(prev) != 0 && len(payloadsMarkes) > 0 {
+			var payloads []interface{}
+			// make sure we preserve order of covers as we got them
+			sort.Sort(payloadsMarkes)
+
+			for _, marker := range payloadsMarkes {
+				payloads = append(payloads, marker.Payload)
 			}
 
-			if bytes.Compare(covering[0].Start, startKey) > 0 {
-				if !endKeySet || bytes.Compare(covering[0].Start, endKey) < 0 {
-					endKey = covering[0].Start
-					endKeySet = true
+			ret = append(ret, Range{
+				Start:   prev,
+				End:     next,
+				Payload: payloads,
+			})
+		}
+
+		if removeMarkers, ok := endKeys[string(next)]; ok {
+			for _, marker := range removeMarkers {
+				var index = -1
+				for i, p := range payloadsMarkes {
+					if reflect.DeepEqual(p.Payload, marker.Payload) {
+						index = i
+						break
+					}
+				}
+				if index != -1 { // if found remove
+					payloadsMarkes = append(payloadsMarkes[:index], payloadsMarkes[index+1:]...)
 				}
 			}
-			if !endKeySet || bytes.Compare(covering[0].End, endKey) < 0 {
-				endKey = covering[0].End
-				endKeySet = true
-			}
 		}
 
-		// Collect all payloads of ranges that intersect the start and end keys
-		// just selected. Also trim any ranges with an end key <= the one just
-		// selected, they will not be output after this.
-		var payloads []interface{}
-		for i := range coverings {
-			// Because of how we chose startKey and endKey, we know that
-			// coverings[i][0].End >= endKey and that coverings[i][0].Start is
-			// either <= startKey or >= endKey.
-
-			for len(coverings[i]) > 0 {
-				if bytes.Compare(coverings[i][0].Start, startKey) > 0 {
-					break
-				}
-				payloads = append(payloads, coverings[i][0].Payload)
-				if !bytes.Equal(coverings[i][0].End, endKey) {
-					break
-				}
-				coverings[i] = coverings[i][1:]
-			}
+		// we hit empty set, no need to add anything, since it was
+		// already added during previous iteration
+		if bytes.Equal(prev, next) {
+			continue
 		}
 
-		ret = append(ret, Range{
-			Start:   startKey,
-			End:     endKey,
-			Payload: payloads,
-		})
-		previousEndKey = endKey
+		if addMarkers, ok := startKeys[string(next)]; ok {
+			payloadsMarkes = append(payloadsMarkes, addMarkers...)
+		}
+
+		prev = next
 	}
 
 	return ret
