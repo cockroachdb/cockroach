@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -188,7 +190,7 @@ func createBenchmarkChangefeed(
 			StatementTimeName: tableDesc.Name,
 		}},
 		Opts: map[string]string{
-			optEnvelope: string(optEnvelopeRow),
+			changefeedbase.OptEnvelope: string(changefeedbase.OptEnvelopeRow),
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
@@ -200,32 +202,40 @@ func createBenchmarkChangefeed(
 
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(server.DefaultHistogramWindowInterval).(*Metrics)
-	buf := makeBuffer()
+	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 	mm := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 	)
-	poller := makePoller(
-		settings, s.DB(), feedClock, s.GossipI().(*gossip.Gossip), spans, details, initialHighWater, buf,
-		leaseMgr, metrics, &mm,
-	)
-
-	th := makeTableHistory(func(context.Context, *sqlbase.TableDescriptor) error { return nil }, initialHighWater)
-	thUpdater := &tableHistoryUpdater{
-		settings: settings,
-		db:       s.DB(),
-		targets:  details.Targets,
-		m:        th,
+	needsInitialScan := initialHighWater.IsEmpty()
+	if needsInitialScan {
+		initialHighWater = details.StatementTime
 	}
+	_, withDiff := details.Opts[changefeedbase.OptDiff]
+	kvfeedCfg := kvfeed.Config{
+		Settings:         settings,
+		DB:               s.DB(),
+		Clock:            feedClock,
+		Gossip:           s.GossipI().(*gossip.Gossip),
+		Spans:            spans,
+		Targets:          details.Targets,
+		Sink:             buf,
+		LeaseMgr:         leaseMgr,
+		Metrics:          &metrics.KVFeedMetrics,
+		MM:               &mm,
+		InitialHighWater: initialHighWater,
+		WithDiff:         withDiff,
+		NeedsInitialScan: needsInitialScan,
+	}
+
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
 	sf := span.MakeFrontier(spans...)
 	tickFn := emitEntries(
 		s.ClusterSettings(), details, sf, encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
-	go func() { _ = poller.RunUsingRangefeeds(ctx) }()
-	go func() { _ = thUpdater.PollTableDescs(ctx) }()
+	go func() { _ = kvfeed.Run(ctx, kvfeedCfg) }()
 
 	errCh := make(chan error, 1)
 	var wg sync.WaitGroup

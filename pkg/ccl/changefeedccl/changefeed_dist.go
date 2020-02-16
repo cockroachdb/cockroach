@@ -13,11 +13,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -190,6 +192,26 @@ func distChangefeedFlow(
 	evalCtxCopy := *evalCtx
 	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, finishedSetupFn)()
 	return resultRows.Err()
+}
+
+func fetchSpansForTargets(
+	ctx context.Context, db *client.DB, targets jobspb.ChangefeedTargets, ts hlc.Timestamp,
+) ([]roachpb.Span, error) {
+	var spans []roachpb.Span
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		spans = nil
+		txn.SetFixedTimestamp(ctx, ts)
+		// Note that all targets are currently guaranteed to be tables.
+		for tableID := range targets {
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			if err != nil {
+				return err
+			}
+			spans = append(spans, tableDesc.PrimaryIndexSpan())
+		}
+		return nil
+	})
+	return spans, err
 }
 
 // changefeedResultWriter implements the `rowexec.resultWriter` that sends

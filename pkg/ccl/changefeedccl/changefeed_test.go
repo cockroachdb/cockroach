@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1550,14 +1551,14 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `pq: column a: decimal with no precision`,
 		`EXPERIMENTAL CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
-		optFormatAvro, `bar`,
+		changefeedbase.OptFormatAvro, `bar`,
 	)
 	sqlDB.Exec(t, `CREATE TABLE "oid" (a OID PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO "oid" VALUES (3::OID)`)
 	sqlDB.ExpectErr(
 		t, `pq: column a: type OID not yet supported with avro`,
 		`EXPERIMENTAL CHANGEFEED FOR "oid" WITH format=$1, confluent_schema_registry=$2`,
-		optFormatAvro, `bar`,
+		changefeedbase.OptFormatAvro, `bar`,
 	)
 
 	// Check that confluent_schema_registry is only accepted if format is avro.
@@ -1738,7 +1739,7 @@ func TestChangefeedDescription(t *testing.T) {
 		s := f.Server()
 		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
-		sink.Scheme = sinkSchemeExperimentalSQL
+		sink.Scheme = changefeedbase.SinkSchemeExperimentalSQL
 		sink.Path = `d`
 
 		var jobID int64
