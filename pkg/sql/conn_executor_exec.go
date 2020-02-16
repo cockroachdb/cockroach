@@ -80,7 +80,7 @@ func (ex *connExecutor) execStmt(
 
 	switch ex.machine.CurState().(type) {
 	case stateNoTxn:
-		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
+		ev, payload = ex.execStmtInNoTxnState(ctx, stmt, res)
 	case stateOpen:
 		if ex.server.cfg.Settings.IsCPUProfiling() {
 			labels := pprof.Labels(
@@ -293,6 +293,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			},
 			typeHints,
 			PreparedStatementOriginSQL,
+			res,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -331,7 +332,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
-	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
+	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations, res)
 
 	if os.ImplicitTxn.Get() {
 		asOfTs, err := p.isAsOf(stmt.AST)
@@ -837,7 +838,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 // if the BeginTransaction statement has a non-nil AsOf clause expression. A
 // non-nil historicalTimestamp implies a ReadOnly rwMode.
 func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
-	ctx context.Context, s *tree.BeginTransaction,
+	ctx context.Context, s *tree.BeginTransaction, res RestrictedCommandResult,
 ) (
 	rwMode tree.ReadWriteMode,
 	txnSQLTimestamp time.Time,
@@ -851,7 +852,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	}
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
-	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime(), 0 /* numAnnotations */)
+	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime(), 0 /* numAnnotations */, res)
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
 	if err != nil {
 		return 0, time.Time{}, nil, err
@@ -877,7 +878,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 // the cursor is not advanced. This means that the statement will run again in
 // stateOpen, at each point its results will also be flushed.
 func (ex *connExecutor) execStmtInNoTxnState(
-	ctx context.Context, stmt Statement,
+	ctx context.Context, stmt Statement, res RestrictedCommandResult,
 ) (_ fsm.Event, payload fsm.EventPayload) {
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
@@ -891,7 +892,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
-		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s)
+		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s, res)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}

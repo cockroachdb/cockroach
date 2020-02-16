@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,10 +46,7 @@ type fileUploadMachine struct {
 }
 
 func newFileUploadMachine(
-	conn pgwirebase.Conn,
-	n *tree.CopyFrom,
-	execCfg *ExecutorConfig,
-	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time),
+	conn pgwirebase.Conn, n *tree.CopyFrom, execCfg *ExecutorConfig, resetPlanner resetPlannerFunc,
 ) (f *fileUploadMachine, retErr error) {
 	if len(n.Columns) != 0 {
 		return nil, errors.New("expected 0 columns specified for file uploads")
@@ -100,7 +96,13 @@ func newFileUploadMachine(
 		_ = localStorage.Delete(opts[copyOptionDest])
 	}
 
-	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
+	c.resetPlanner(
+		&c.p,
+		nil,         /* txn */
+		time.Time{}, /* txnTS */
+		time.Time{}, /* stmtTS */
+		&noopCommandResultCommBase{},
+	)
 	c.resultColumns = make(sqlbase.ResultColumns, 1)
 	c.resultColumns[0] = sqlbase.ResultColumn{Typ: types.Bytes}
 	c.parsingEvalCtx = c.p.EvalContext()

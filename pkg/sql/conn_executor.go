@@ -446,10 +446,10 @@ func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
 	}
 }
 
-// GetStatusParam retrieves the configured value of the session
+// GetParamStatus retrieves the configured value of the session
 // variable identified by varName. This is used for the initial
 // message sent to a client during a session set-up.
-func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) string {
+func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) string {
 	name := strings.ToLower(varName)
 	v, ok := varGen[name]
 	if !ok {
@@ -462,12 +462,6 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 		return ""
 	}
 	return defVal
-}
-
-// RegisterOnSessionDataChange adds a listener to execute when a change on the
-// given key is made using the mutator object.
-func (h ConnectionHandler) RegisterOnSessionDataChange(key string, f func(val string)) {
-	h.ex.dataMutator.RegisterOnSessionDataChange(key, f)
 }
 
 // ServeConn serves a client connection by reading commands from the stmtBuf
@@ -500,9 +494,10 @@ func (s *Server) makeSessionDataMutator(
 	sd *sessiondata.SessionData, defaults SessionDefaults,
 ) sessionDataMutator {
 	return sessionDataMutator{
-		data:     sd,
-		defaults: defaults,
-		settings: s.cfg.Settings,
+		data:              sd,
+		defaults:          defaults,
+		settings:          s.cfg.Settings,
+		commandResultComm: &noopCommandResultCommBase{},
 	}
 }
 
@@ -1453,7 +1448,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		ex.curStmt = tcmd.AST
 		res = ex.clientComm.CreatePrepareResult(pos)
 		stmtCtx := withStatement(ctx, ex.curStmt)
-		ev, payload = ex.execPrepare(stmtCtx, tcmd)
+		ev, payload = ex.execPrepare(stmtCtx, tcmd, res)
 	case DescribeStmt:
 		descRes := ex.clientComm.CreateDescribeResult(pos)
 		res = descRes
@@ -1486,7 +1481,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	case CopyIn:
 		res = ex.clientComm.CreateCopyInResult(pos)
 		var err error
-		ev, payload, err = ex.execCopyIn(ctx, tcmd)
+		ev, payload, err = ex.execCopyIn(ctx, tcmd, res)
 		if err != nil {
 			return err
 		}
@@ -1724,7 +1719,7 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 // connection any more until this returns. The copyMachine will to the reading
 // and writing up to the CommandComplete message.
 func (ex *connExecutor) execCopyIn(
-	ctx context.Context, cmd CopyIn,
+	ctx context.Context, cmd CopyIn, res CommandResultCommBase,
 ) (fsm.Event, fsm.EventPayload, error) {
 
 	// When we're done, unblock the network connection.
@@ -1766,7 +1761,13 @@ func (ex *connExecutor) execCopyIn(
 	}
 	var cm copyMachineInterface
 	var err error
-	resetPlanner := func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
+	resetPlanner := func(
+		p *planner,
+		txn *client.Txn,
+		txnTS time.Time,
+		stmtTS time.Time,
+		comm CommandResultCommBase,
+	) {
 		// HACK: We're reaching inside ex.state and changing sqlTimestamp by hand.
 		// It is used by resetPlanner. Normally sqlTimestamp is updated by the
 		// state machine, but the copyMachine manages its own transactions without
@@ -1775,7 +1776,7 @@ func (ex *connExecutor) execCopyIn(
 		ex.statsCollector = ex.newStatsCollector()
 		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 		ex.initPlanner(ctx, p)
-		ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
+		ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */, comm)
 	}
 	if table := cmd.Stmt.Table; table.Table() == fileUploadTable && table.Schema() == crdbInternalName {
 		cm, err = newFileUploadMachine(cmd.Conn, cmd.Stmt, ex.server.cfg, resetPlanner)
@@ -2065,12 +2066,21 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.optPlanningCtx.init(p)
 }
 
+type resetPlannerFunc func(
+	p *planner,
+	txn *client.Txn,
+	txnTS time.Time,
+	stmtTS time.Time,
+	comm CommandResultCommBase,
+)
+
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context,
 	p *planner,
 	txn *client.Txn,
 	stmtTS time.Time,
 	numAnnotations tree.AnnotationIdx,
+	res CommandResultCommBase,
 ) {
 	p.txn = txn
 	p.stmt = nil
@@ -2082,6 +2092,8 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil
 	p.semaCtx.Annotations = tree.MakeAnnotations(numAnnotations)
+
+	p.sessionDataMutator.commandResultComm = res
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 

@@ -632,6 +632,14 @@ type CommandResult interface {
 	CommandResultClose
 }
 
+// CommandResultCommBase represents communication with the client for
+// a given command result.
+type CommandResultCommBase interface {
+	// BufferParamStatus buffers any updates to a parameter status.
+	// This gets flushed only when the CommandResult is closed.
+	BufferParamStatus(string, string)
+}
+
 // CommandResultErrBase is the subset of CommandResult dealing with setting a
 // query execution error.
 type CommandResultErrBase interface {
@@ -649,6 +657,7 @@ type CommandResultErrBase interface {
 // ResultBase is the common interface implemented by all the different command
 // results.
 type ResultBase interface {
+	CommandResultCommBase
 	CommandResultErrBase
 	CommandResultClose
 }
@@ -679,6 +688,7 @@ type CommandResultClose interface {
 // RestrictedCommandResult is a subset of CommandResult meant to make it clear
 // that its clients don't close the CommandResult.
 type RestrictedCommandResult interface {
+	CommandResultCommBase
 	CommandResultErrBase
 
 	// SetColumns informs the client about the schema of the result. The columns
@@ -863,6 +873,11 @@ func (r *bufferedCommandResult) SetColumns(_ context.Context, cols sqlbase.Resul
 	r.cols = cols
 }
 
+// BufferParamStatus is part of the RestrictedCommandResult interface.
+func (r *bufferedCommandResult) BufferParamStatus(key string, val string) {
+	panic("unimplemented")
+}
+
 // ResetStmtType is part of the RestrictedCommandResult interface.
 func (r *bufferedCommandResult) ResetStmtType(stmt tree.Statement) {
 	panic("unimplemented")
@@ -930,4 +945,14 @@ func (r *bufferedCommandResult) SetPrepStmtOutput(context.Context, sqlbase.Resul
 func (r *bufferedCommandResult) SetPortalOutput(
 	context.Context, sqlbase.ResultColumns, []pgwirebase.FormatCode,
 ) {
+}
+
+// noopCommandResultCommBase implements the CommandResultCommBase interface.
+// It does not try any actual comm work.
+type noopCommandResultCommBase struct{}
+
+var _ CommandResultCommBase = &noopCommandResultCommBase{}
+
+// BufferParamStatus implements the CommandResultCommBase interface.
+func (c *noopCommandResultCommBase) BufferParamStatus(string, string) {
 }
