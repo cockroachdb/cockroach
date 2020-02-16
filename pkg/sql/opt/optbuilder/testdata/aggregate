@@ -2987,7 +2987,16 @@ scalar-group-by
 build
 SELECT string_agg(s, s) FROM kv
 ----
-error (0A000): unimplemented: aggregate functions with multiple non-constant expressions are not supported
+scalar-group-by
+ ├── columns: string_agg:5(string)
+ ├── project
+ │    ├── columns: s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── string-agg [type=string]
+           ├── variable: s [type=string]
+           └── variable: s [type=string]
 
 # Regression test for #26419
 build
