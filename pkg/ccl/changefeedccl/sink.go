@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -85,87 +86,87 @@ func getSink(
 	// all the parameter verification.
 	var makeSink func() (Sink, error)
 	switch {
-	case u.Scheme == sinkSchemeBuffer:
+	case u.Scheme == changefeedbase.SinkSchemeBuffer:
 		makeSink = func() (Sink, error) { return &bufferSink{}, nil }
-	case u.Scheme == sinkSchemeKafka:
+	case u.Scheme == changefeedbase.SinkSchemeKafka:
 		var cfg kafkaSinkConfig
-		cfg.kafkaTopicPrefix = q.Get(sinkParamTopicPrefix)
-		q.Del(sinkParamTopicPrefix)
-		if schemaTopic := q.Get(sinkParamSchemaTopic); schemaTopic != `` {
-			return nil, errors.Errorf(`%s is not yet supported`, sinkParamSchemaTopic)
+		cfg.kafkaTopicPrefix = q.Get(changefeedbase.SinkParamTopicPrefix)
+		q.Del(changefeedbase.SinkParamTopicPrefix)
+		if schemaTopic := q.Get(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
+			return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 		}
-		q.Del(sinkParamSchemaTopic)
-		if tlsBool := q.Get(sinkParamTLSEnabled); tlsBool != `` {
+		q.Del(changefeedbase.SinkParamSchemaTopic)
+		if tlsBool := q.Get(changefeedbase.SinkParamTLSEnabled); tlsBool != `` {
 			var err error
 			if cfg.tlsEnabled, err = strconv.ParseBool(tlsBool); err != nil {
-				return nil, errors.Errorf(`param %s must be a bool: %s`, sinkParamTLSEnabled, err)
+				return nil, errors.Errorf(`param %s must be a bool: %s`, changefeedbase.SinkParamTLSEnabled, err)
 			}
 		}
-		q.Del(sinkParamTLSEnabled)
-		if caCertHex := q.Get(sinkParamCACert); caCertHex != `` {
+		q.Del(changefeedbase.SinkParamTLSEnabled)
+		if caCertHex := q.Get(changefeedbase.SinkParamCACert); caCertHex != `` {
 			// TODO(dan): There's a straightforward and unambiguous transformation
 			// between the base 64 encoding defined in RFC 4648 and the URL variant
 			// defined in the same RFC: simply replace all `+` with `-` and `/` with
 			// `_`. Consider always doing this for the user and accepting either
 			// variant.
 			if cfg.caCert, err = base64.StdEncoding.DecodeString(caCertHex); err != nil {
-				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, sinkParamCACert, err)
+				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, changefeedbase.SinkParamCACert, err)
 			}
 		}
-		q.Del(sinkParamCACert)
-		if clientCertHex := q.Get(sinkParamClientCert); clientCertHex != `` {
+		q.Del(changefeedbase.SinkParamCACert)
+		if clientCertHex := q.Get(changefeedbase.SinkParamClientCert); clientCertHex != `` {
 			if cfg.clientCert, err = base64.StdEncoding.DecodeString(clientCertHex); err != nil {
-				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, sinkParamClientCert, err)
+				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, changefeedbase.SinkParamClientCert, err)
 			}
 		}
-		q.Del(sinkParamClientCert)
-		if clientKeyHex := q.Get(sinkParamClientKey); clientKeyHex != `` {
+		q.Del(changefeedbase.SinkParamClientCert)
+		if clientKeyHex := q.Get(changefeedbase.SinkParamClientKey); clientKeyHex != `` {
 			if cfg.clientKey, err = base64.StdEncoding.DecodeString(clientKeyHex); err != nil {
-				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, sinkParamClientKey, err)
+				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, changefeedbase.SinkParamClientKey, err)
 			}
 		}
-		q.Del(sinkParamClientKey)
+		q.Del(changefeedbase.SinkParamClientKey)
 
-		saslParam := q.Get(sinkParamSASLEnabled)
-		q.Del(sinkParamSASLEnabled)
+		saslParam := q.Get(changefeedbase.SinkParamSASLEnabled)
+		q.Del(changefeedbase.SinkParamSASLEnabled)
 		if saslParam != `` {
 			b, err := strconv.ParseBool(saslParam)
 			if err != nil {
-				return nil, errors.Wrapf(err, `param %s must be a bool:`, sinkParamSASLEnabled)
+				return nil, errors.Wrapf(err, `param %s must be a bool:`, changefeedbase.SinkParamSASLEnabled)
 			}
 			cfg.saslEnabled = b
 		}
-		handshakeParam := q.Get(sinkParamSASLHandshake)
-		q.Del(sinkParamSASLHandshake)
+		handshakeParam := q.Get(changefeedbase.SinkParamSASLHandshake)
+		q.Del(changefeedbase.SinkParamSASLHandshake)
 		if handshakeParam == `` {
 			cfg.saslHandshake = true
 		} else {
 			if !cfg.saslEnabled {
-				return nil, errors.Errorf(`%s must be enabled to configure SASL handshake behavior`, sinkParamSASLEnabled)
+				return nil, errors.Errorf(`%s must be enabled to configure SASL handshake behavior`, changefeedbase.SinkParamSASLEnabled)
 			}
 			b, err := strconv.ParseBool(handshakeParam)
 			if err != nil {
-				return nil, errors.Wrapf(err, `param %s must be a bool:`, sinkParamSASLHandshake)
+				return nil, errors.Wrapf(err, `param %s must be a bool:`, changefeedbase.SinkParamSASLHandshake)
 			}
 			cfg.saslHandshake = b
 		}
-		cfg.saslUser = q.Get(sinkParamSASLUser)
-		q.Del(sinkParamSASLUser)
-		cfg.saslPassword = q.Get(sinkParamSASLPassword)
-		q.Del(sinkParamSASLPassword)
+		cfg.saslUser = q.Get(changefeedbase.SinkParamSASLUser)
+		q.Del(changefeedbase.SinkParamSASLUser)
+		cfg.saslPassword = q.Get(changefeedbase.SinkParamSASLPassword)
+		q.Del(changefeedbase.SinkParamSASLPassword)
 		if cfg.saslEnabled {
 			if cfg.saslUser == `` {
-				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, sinkParamSASLUser)
+				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, changefeedbase.SinkParamSASLUser)
 			}
 			if cfg.saslPassword == `` {
-				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, sinkParamSASLPassword)
+				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, changefeedbase.SinkParamSASLPassword)
 			}
 		} else {
 			if cfg.saslUser != `` {
-				return nil, errors.Errorf(`%s must be enabled if a SASL user is provided`, sinkParamSASLEnabled)
+				return nil, errors.Errorf(`%s must be enabled if a SASL user is provided`, changefeedbase.SinkParamSASLEnabled)
 			}
 			if cfg.saslPassword != `` {
-				return nil, errors.Errorf(`%s must be enabled if a SASL password is provided`, sinkParamSASLEnabled)
+				return nil, errors.Errorf(`%s must be enabled if a SASL password is provided`, changefeedbase.SinkParamSASLEnabled)
 			}
 		}
 
@@ -173,8 +174,8 @@ func getSink(
 			return makeKafkaSink(cfg, u.Host, targets)
 		}
 	case isCloudStorageSink(u):
-		fileSizeParam := q.Get(sinkParamFileSize)
-		q.Del(sinkParamFileSize)
+		fileSizeParam := q.Get(changefeedbase.SinkParamFileSize)
+		q.Del(changefeedbase.SinkParamFileSize)
 		var fileSize int64 = 16 << 20 // 16MB
 		if fileSizeParam != `` {
 			if fileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
@@ -192,7 +193,7 @@ func getSink(
 				opts, timestampOracle, makeExternalStorageFromURI,
 			)
 		}
-	case u.Scheme == sinkSchemeExperimentalSQL:
+	case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
 		// expects.
 		u.Scheme = `postgres`
@@ -337,7 +338,7 @@ func makeKafkaSink(
 
 	if cfg.caCert != nil {
 		if !cfg.tlsEnabled {
-			return nil, errors.Errorf(`%s requires %s=true`, sinkParamCACert, sinkParamTLSEnabled)
+			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamCACert, changefeedbase.SinkParamTLSEnabled)
 		}
 		caCertPool := x509.NewCertPool()
 		caCertPool.AppendCertsFromPEM(cfg.caCert)
@@ -351,10 +352,10 @@ func makeKafkaSink(
 
 	if cfg.clientCert != nil {
 		if !cfg.tlsEnabled {
-			return nil, errors.Errorf(`%s requires %s=true`, sinkParamClientCert, sinkParamTLSEnabled)
+			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamTLSEnabled)
 		}
 		if cfg.clientKey == nil {
-			return nil, errors.Errorf(`%s requires %s to be set`, sinkParamClientCert, sinkParamClientKey)
+			return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamClientKey)
 		}
 		cert, err := tls.X509KeyPair(cfg.clientCert, cfg.clientKey)
 		if err != nil {
@@ -365,7 +366,7 @@ func makeKafkaSink(
 		}
 		config.Net.TLS.Config.Certificates = []tls.Certificate{cert}
 	} else if cfg.clientKey != nil {
-		return nil, errors.Errorf(`%s requires %s to be set`, sinkParamClientKey, sinkParamClientCert)
+		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientKey, changefeedbase.SinkParamClientCert)
 	}
 
 	if cfg.saslEnabled {

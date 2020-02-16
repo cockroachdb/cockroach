@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,7 +50,7 @@ type encodeRow struct {
 	// It's valid for interpreting the row at `updated`.
 	tableDesc *sqlbase.TableDescriptor
 	// prevDatums is the old value of a changed table row. The field is set
-	// to nil if the before value for changes was not requested (optDiff).
+	// to nil if the before value for changes was not requested (OptDiff).
 	prevDatums sqlbase.EncDatumRow
 	// prevDeleted is true if prevDatums is missing or is a deletion.
 	prevDeleted bool
@@ -78,13 +79,13 @@ type Encoder interface {
 }
 
 func getEncoder(opts map[string]string) (Encoder, error) {
-	switch formatType(opts[optFormat]) {
-	case ``, optFormatJSON:
+	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	case ``, changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts)
-	case optFormatAvro:
+	case changefeedbase.OptFormatAvro:
 		return newConfluentAvroEncoder(opts)
 	default:
-		return nil, errors.Errorf(`unknown %s: %s`, optFormat, opts[optFormat])
+		return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
 	}
 }
 
@@ -103,19 +104,19 @@ var _ Encoder = &jsonEncoder{}
 
 func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
 	e := &jsonEncoder{
-		keyOnly: envelopeType(opts[optEnvelope]) == optEnvelopeKeyOnly,
-		wrapped: envelopeType(opts[optEnvelope]) == optEnvelopeWrapped,
+		keyOnly: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
+		wrapped: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
 	}
-	_, e.updatedField = opts[optUpdatedTimestamps]
-	_, e.beforeField = opts[optDiff]
+	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
+	_, e.beforeField = opts[changefeedbase.OptDiff]
 	if e.beforeField && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
-			optDiff, optEnvelope, optEnvelopeWrapped)
+			changefeedbase.OptDiff, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
-	_, e.keyInValue = opts[optKeyInValue]
+	_, e.keyInValue = opts[changefeedbase.OptKeyInValue]
 	if e.keyInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
-			optKeyInValue, optEnvelope, optEnvelopeWrapped)
+			changefeedbase.OptKeyInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
 	return e, nil
 }
@@ -293,35 +294,35 @@ type confluentRegisteredEnvelopeSchema struct {
 var _ Encoder = &confluentAvroEncoder{}
 
 func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, error) {
-	e := &confluentAvroEncoder{registryURL: opts[optConfluentSchemaRegistry]}
+	e := &confluentAvroEncoder{registryURL: opts[changefeedbase.OptConfluentSchemaRegistry]}
 
-	switch opts[optEnvelope] {
-	case string(optEnvelopeKeyOnly):
+	switch opts[changefeedbase.OptEnvelope] {
+	case string(changefeedbase.OptEnvelopeKeyOnly):
 		e.keyOnly = true
-	case string(optEnvelopeWrapped):
+	case string(changefeedbase.OptEnvelopeWrapped):
 	default:
 		return nil, errors.Errorf(`%s=%s is not supported with %s=%s`,
-			optEnvelope, opts[optEnvelope], optFormat, optFormatAvro)
+			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope], changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-	_, e.updatedField = opts[optUpdatedTimestamps]
+	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
 	if e.updatedField && e.keyOnly {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
-			optUpdatedTimestamps, optEnvelope, optEnvelopeWrapped)
+			changefeedbase.OptUpdatedTimestamps, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
-	_, e.beforeField = opts[optDiff]
+	_, e.beforeField = opts[changefeedbase.OptDiff]
 	if e.beforeField && e.keyOnly {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
-			optDiff, optEnvelope, optEnvelopeWrapped)
+			changefeedbase.OptDiff, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
 
-	if _, ok := opts[optKeyInValue]; ok {
+	if _, ok := opts[changefeedbase.OptKeyInValue]; ok {
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
-			optKeyInValue, optFormat, optFormatAvro)
+			changefeedbase.OptKeyInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
 
 	if len(e.registryURL) == 0 {
 		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
-			optConfluentSchemaRegistry, optFormat, optFormatAvro)
+			changefeedbase.OptConfluentSchemaRegistry, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
 
 	e.keyCache = make(map[tableIDAndVersion]confluentRegisteredKeySchema)
