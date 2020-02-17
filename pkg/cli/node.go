@@ -493,18 +493,59 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	return printDecommissionStatus(*resp)
 }
 
+var drainNodeCmd = &cobra.Command{
+	Use:   "drain",
+	Short: "drain a node without shutting it down",
+	Long: `
+Prepare a server for shutting down. This stops accepting client
+connections, stops extant connections, and finally pushes range
+leases onto other nodes, subject to various timeout parameters
+configurable via cluster settings.
+
+See also 'cockroach quit' for draining and also stopping
+the server process.
+`,
+	Args: cobra.NoArgs,
+	RunE: MaybeDecorateGRPCError(runDrain),
+}
+
+// runNodeDrain calls the Drain RPC without the flag to stop the
+// server process.
+func runDrain(cmd *cobra.Command, args []string) (err error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// At the end, we'll report "ok" if there was no error.
+	defer func() {
+		if err == nil {
+			fmt.Println("ok")
+		}
+	}()
+
+	// Establish a RPC connection.
+	c, finish, err := getAdminClient(ctx, serverCfg)
+	if err != nil {
+		return err
+	}
+	defer finish()
+
+	_, err = doDrain(ctx, c)
+	return err
+}
+
 // Sub-commands for node command.
 var nodeCmds = []*cobra.Command{
 	lsNodesCmd,
 	statusNodeCmd,
 	decommissionNodeCmd,
 	recommissionNodeCmd,
+	drainNodeCmd,
 }
 
 var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
-	Short: "list, inspect or remove nodes",
-	Long:  "List, inspect or remove nodes.",
+	Short: "list, inspect, stop or remove nodes",
+	Long:  "List, inspect, stop or remove nodes.",
 	RunE:  usageAndErr,
 }
 
