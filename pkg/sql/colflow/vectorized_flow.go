@@ -35,13 +35,41 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 	opentracing "github.com/opentracing/opentracing-go"
 )
+
+// countingSemaphore is a semaphore that keeps track of the semaphore count from
+// its perspective.
+type countingSemaphore struct {
+	semaphore.Semaphore
+	count int64
+}
+
+func (s *countingSemaphore) Acquire(ctx context.Context, n int) error {
+	atomic.AddInt64(&s.count, int64(n))
+	return s.Semaphore.Acquire(ctx, n)
+}
+
+func (s *countingSemaphore) TryAcquire(n int) bool {
+	success := s.Semaphore.TryAcquire(n)
+	if success {
+		atomic.AddInt64(&s.count, int64(n))
+	}
+	return success
+}
+
+func (s *countingSemaphore) Release(n int) int {
+	atomic.AddInt64(&s.count, int64(-n))
+	return s.Semaphore.Release(n)
+}
 
 type vectorizedFlow struct {
 	*flowinfra.FlowBase
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
+
+	countingSemaphore *countingSemaphore
 
 	// streamingMemAccounts are the memory accounts that are tracking the static
 	// memory usage of the whole vectorized flow as well as all dynamic memory of
@@ -95,16 +123,7 @@ func (f *vectorizedFlow) Setup(
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
 	}
-	creator := newVectorizedFlowCreator(
-		helper,
-		vectorizedRemoteComponentCreator{},
-		recordingStats,
-		f.GetWaitGroup(),
-		f.GetSyncFlowConsumer(),
-		f.GetFlowCtx().Cfg.NodeDialer,
-		f.GetID(),
-		diskQueueCfg,
-	)
+	creator := newVectorizedFlowCreator(helper, vectorizedRemoteComponentCreator{}, recordingStats, f.GetWaitGroup(), f.GetSyncFlowConsumer(), f.GetFlowCtx().Cfg.NodeDialer, f.GetID(), diskQueueCfg, f.Cfg.VecFDSemaphore)
 	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
 	if err == nil {
 		f.operatorConcurrency = creator.operatorConcurrency
@@ -215,6 +234,10 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 			flowTempStoragePath,
 			err,
 		)
+	}
+	// Release any leftover temporary storage file descriptors from this flow.
+	if unreleased := atomic.LoadInt64(&f.countingSemaphore.count); unreleased > 0 {
+		f.Cfg.VecFDSemaphore.Release(int(unreleased))
 	}
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
@@ -371,6 +394,7 @@ type vectorizedFlowCreator struct {
 	bufferingMemAccounts []*mon.BoundAccount
 
 	diskQueueCfg colcontainer.DiskQueueCfg
+	fdSemaphore  semaphore.Semaphore
 }
 
 func newVectorizedFlowCreator(
@@ -382,6 +406,7 @@ func newVectorizedFlowCreator(
 	nodeDialer *nodedialer.Dialer,
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -395,6 +420,7 @@ func newVectorizedFlowCreator(
 		nodeDialer:                     nodeDialer,
 		flowID:                         flowID,
 		diskQueueCfg:                   diskQueueCfg,
+		fdSemaphore:                    fdSemaphore,
 	}
 }
 
@@ -490,7 +516,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 		allocators[i] = colexec.NewAllocator(ctx, &acc)
 		s.bufferingMemAccounts = append(s.bufferingMemAccounts, &acc)
 	}
-	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg)
+	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg, s.fdSemaphore)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
 	}
@@ -815,6 +841,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
 			ProcessorConstructor: rowexec.NewProcessor,
 			DiskQueueCfg:         s.diskQueueCfg,
+			FDSemaphore:          s.fdSemaphore,
 		}
 		result, err := colexec.NewColOperator(ctx, flowCtx, args)
 		// Even when err is non-nil, it is possible that the buffering memory
@@ -1029,10 +1056,7 @@ func SupportsVectorized(
 	if output == nil {
 		output = &execinfra.RowChannel{}
 	}
-	creator := newVectorizedFlowCreator(
-		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
-		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-	)
+	creator := newVectorizedFlowCreator(newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed

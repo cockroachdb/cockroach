@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/marusama/semaphore"
 )
 
 // externalSorterState indicates the current state of the external sorter.
@@ -119,6 +120,7 @@ func newExternalSorter(
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) Operator {
 	inputPartitioner := newInputPartitioningOperator(unlimitedAllocator, input, memoryLimit)
 	inMemSorter, err := newSorter(
@@ -132,7 +134,7 @@ func newExternalSorter(
 		OneInputNode:       NewOneInputNode(inMemSorter),
 		unlimitedAllocator: unlimitedAllocator,
 		inMemSorter:        inMemSorter,
-		partitioner:        colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg),
+		partitioner:        colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, fdSemaphore),
 		inputTypes:         inputTypes,
 		ordering:           ordering,
 	}
@@ -154,7 +156,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.state = externalSorterMerging
 				continue
 			}
-			if err := s.partitioner.Enqueue(s.numPartitions, b); err != nil {
+			if err := s.partitioner.Enqueue(ctx, s.numPartitions, b); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			s.state = externalSorterSpillPartition
@@ -170,7 +172,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.numPartitions++
 				continue
 			}
-			if err := s.partitioner.Enqueue(s.numPartitions, b); err != nil {
+			if err := s.partitioner.Enqueue(ctx, s.numPartitions, b); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			continue

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 )
 
 func checkNumIn(inputs []Operator, numIn int) error {
@@ -95,6 +96,7 @@ type NewColOperatorArgs struct {
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	DiskQueueCfg         colcontainer.DiskQueueCfg
+	FDSemaphore          semaphore.Semaphore
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
@@ -566,11 +568,7 @@ func NewColOperator(
 							ctx, result.createBufferingMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
-						return newExternalHashJoiner(
-							allocator, hjSpec,
-							inputOne, inputTwo,
-							args.DiskQueueCfg,
-						)
+						return newExternalHashJoiner(allocator, hjSpec, inputOne, inputTwo, args.DiskQueueCfg, args.FDSemaphore)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
@@ -746,7 +744,7 @@ func NewColOperator(
 							ctx, result.createBufferingUnlimitedMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
-						return newExternalSorter(unlimitedAllocator, input, inputTypes, core.Sorter.OutputOrdering, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg)
+						return newExternalSorter(unlimitedAllocator, input, inputTypes, core.Sorter.OutputOrdering, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg, args.FDSemaphore)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)

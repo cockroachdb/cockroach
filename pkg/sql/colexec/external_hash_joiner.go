@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/marusama/semaphore"
 )
 
 // externalHashJoinerState indicates the current state of the external hash
@@ -116,12 +117,13 @@ func newExternalHashJoiner(
 	spec hashJoinerSpec,
 	leftInput, rightInput Operator,
 	diskQueueCfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) Operator {
-	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg)
+	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg, fdSemaphore)
 	leftInMemHashJoinerInput := newPartitionerToOperator(
 		allocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
 	)
-	rightPartitioner := colcontainer.NewPartitionedDiskQueue(spec.right.sourceTypes, diskQueueCfg)
+	rightPartitioner := colcontainer.NewPartitionedDiskQueue(spec.right.sourceTypes, diskQueueCfg, fdSemaphore)
 	rightInMemHashJoinerInput := newPartitionerToOperator(
 		allocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
 	)
@@ -200,7 +202,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				}
 				scratchBatch.SetLength(uint16(len(sel)))
 			})
-			if err := partitioner.Enqueue(partitionIdx, scratchBatch); err != nil {
+			if err := partitioner.Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			hj.nonEmptyPartition[partitionIdx] = true
