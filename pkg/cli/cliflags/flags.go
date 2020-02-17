@@ -880,6 +880,22 @@ long and not particularly human-readable.`,
 		Description: `Deprecated: use 'node decommission' instead.`,
 	}
 
+	DrainWait = FlagInfo{
+		Name: "drain-wait",
+		Description: `
+When non-zero, wait for the specified amount of time for the node to
+drain all active client connections and migrate away range leases
+before proceeding with the request to shut down the server process.`,
+	}
+
+	OnlyDrain = FlagInfo{
+		Name: "only-drain",
+		Description: `
+When set, do not send a request to shut down the node after waiting
+for it to drain. This flag enables inspecting overall cluster health
+before the server process is shut down manually.`,
+	}
+
 	Wait = FlagInfo{
 		Name: "wait",
 		Description: `
