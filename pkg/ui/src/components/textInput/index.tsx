@@ -95,13 +95,16 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
           autoComplete="off"
         />
         {
-          !isValid &&
-          <Text
-            textType={TextTypes.Caption}
-            className="crl-text-input__error-message"
-          >
-            {validationMessage}
-          </Text>
+          !isValid && (
+            <div className="crl-text-input__validation-container">
+              <Text
+                textType={TextTypes.Caption}
+                className="crl-text-input__error-message"
+              >
+                {validationMessage}
+              </Text>
+            </div>
+          )
         }
       </div>
     );
