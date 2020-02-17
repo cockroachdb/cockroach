@@ -285,9 +285,9 @@ func (d *diskQueue) Close() error {
 			return err
 		}
 		d.readFile = nil
-		// The readFile will be removed below in RemoveAll.
+		// The readFile will be removed below in DeleteDirAndFiles.
 	}
-	if err := d.cfg.FS.DeleteDir(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
+	if err := d.cfg.FS.DeleteDirAndFiles(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
 		return err
 	}
 	return nil
