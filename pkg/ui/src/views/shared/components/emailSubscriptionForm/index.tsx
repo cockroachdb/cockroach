@@ -60,7 +60,7 @@ export class EmailSubscriptionForm extends React.Component<EmailSubscriptionForm
     if (isCorrectEmail || isEmpty) {
       return undefined;
     }
-    return "Email is invalid";
+    return "Invalid email address.";
   }
 
   render() {
