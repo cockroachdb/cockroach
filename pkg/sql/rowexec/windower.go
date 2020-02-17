@@ -214,7 +214,7 @@ func newWindower(
 				memRequiredByWindower, limit)
 		}
 	} else {
-		if limit < memRequiredByWindower {
+		if flowCtx.Cfg.TestingKnobs.ForceDiskSpill || limit < memRequiredByWindower {
 			// The limit is set very low by the tests, but the windower requires
 			// some amount of RAM, so we override the limit.
 			limit = memRequiredByWindower

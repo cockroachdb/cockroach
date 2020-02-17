@@ -1084,7 +1084,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		MetadataTestLevel: execinfra.Off, DeterministicStats: true,
 	}
 	if cfg.sqlExecUseDisk {
-		distSQLKnobs.MemoryLimitBytes = 1
+		distSQLKnobs.ForceDiskSpill = true
 	}
 	if cfg.distSQLMetadataTestEnabled {
 		distSQLKnobs.MetadataTestLevel = execinfra.On

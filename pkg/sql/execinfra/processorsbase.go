@@ -878,12 +878,16 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 
 // NewLimitedMonitor is a utility function used by processors to create a new
 // limited memory monitor with the given name and start it. The returned
-// monitor must be closed. The limit is determined by SettingWorkMemBytes
-// or config.TestingKnobs.MemoryLimitBytes.
+// monitor must be closed. The limit is determined by SettingWorkMemBytes but
+// overridden to 1 if config.TestingKnobs.ForceDiskSpill is set or
+// config.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
 	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
 ) *mon.BytesMonitor {
 	limit := GetWorkMemLimit(config)
+	if config.TestingKnobs.ForceDiskSpill {
+		limit = 1
+	}
 	limitedMon := mon.MakeMonitorInheritWithLimit(name, limit, parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
 	return &limitedMon

@@ -59,6 +59,7 @@ func (s *sorterBase) init(
 	}
 
 	useTempStorage := execinfra.SettingUseTempStorageSorts.Get(&flowCtx.Cfg.Settings.SV) ||
+		flowCtx.Cfg.TestingKnobs.ForceDiskSpill ||
 		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0
 	var memMonitor *mon.BytesMonitor
 	if useTempStorage {
