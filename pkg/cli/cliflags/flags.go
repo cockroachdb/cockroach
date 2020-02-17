@@ -840,7 +840,32 @@ long and not particularly human-readable.`,
 		Name: "decommission",
 		Description: `
 If specified, decommissions the node and waits for it to rebalance before
-shutting down the node.`,
+proceeding to drain and shut down the node.
+Consider using 'cockroach node decommission' instead for more control
+over which node gets decommissioned.`,
+	}
+
+	DrainWait = FlagInfo{
+		Name: "drain-wait",
+		Description: `
+When non-zero, wait for the specified amount of time for the node to
+drain all active client connections and migrate away range leases
+before proceeding with the request to shut down the server process.`,
+	}
+
+	OnlyDrain = FlagInfo{
+		Name: "only-drain",
+		Description: `
+When set, do not send a request to shut down the node after waiting
+for it to drain. This flag enables inspecting overall cluster health
+before the server process is shut down manually.`,
+	}
+
+	Undrain = FlagInfo{
+		Name: "undrain",
+		Description: `
+Cancel a previous --only-drain request, and make the server available
+again.`,
 	}
 
 	Wait = FlagInfo{
