@@ -95,7 +95,7 @@ query TTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
 ·                         distributed  false
-·                         vectorized   false
+·                         vectorized   true
 render                    ·            ·
  └── sort                 ·            ·
       │                   order        +variance,+k
@@ -109,7 +109,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
 ·                         distributed  false                                                                                                               ·                                                            ·
-·                         vectorized   false                                                                                                               ·                                                            ·
+·                         vectorized   true                                                                                                                ·                                                            ·
 render                    ·            ·                                                                                                                   (k int, stddev decimal)                                      ·
  │                        render 0     (k)[int]                                                                                                            ·                                                            ·
  │                        render 1     (stddev)[decimal]                                                                                                   ·                                                            ·
@@ -132,7 +132,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
 ·                              distributed  false                                                                                                               ·                                                            ·
-·                              vectorized   false                                                                                                               ·                                                            ·
+·                              vectorized   true                                                                                                                ·                                                            ·
 render                         ·            ·                                                                                                                   (k int, stddev decimal)                                      ·
  │                             render 0     (k)[int]                                                                                                            ·                                                            ·
  │                             render 1     (stddev)[decimal]                                                                                                   ·                                                            ·
@@ -156,7 +156,7 @@ query TTTTT
 EXPLAIN (TYPES,NONORMALIZE) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
 ----
 ·                    distributed  false                                                                                                             ·                                          ·
-·                    vectorized   false                                                                                                             ·                                          ·
+·                    vectorized   true                                                                                                              ·                                          ·
 sort                 ·            ·                                                                                                                 (k int, stddev decimal)                    +k
  │                   order        +k                                                                                                                ·                                          ·
  └── render          ·            ·                                                                                                                 (k int, stddev decimal)                    ·
@@ -173,7 +173,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
 ·                              distributed  false                                                                                                               ·                                                            ·
-·                              vectorized   false                                                                                                               ·                                                            ·
+·                              vectorized   true                                                                                                                ·                                                            ·
 render                         ·            ·                                                                                                                   (k int, "?column?" decimal)                                  ·
  │                             render 0     (k)[int]                                                                                                            ·                                                            ·
  │                             render 1     ("?column?")[decimal]                                                                                               ·                                                            ·
