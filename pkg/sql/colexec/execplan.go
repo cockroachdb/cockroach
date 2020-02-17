@@ -121,11 +121,17 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op                     Operator
-	ColumnTypes            []types.T
-	InternalMemUsage       int
-	MetadataSources        []execinfrapb.MetadataSource
-	IsStreaming            bool
+	Op               Operator
+	ColumnTypes      []types.T
+	InternalMemUsage int
+	MetadataSources  []execinfrapb.MetadataSource
+	IsStreaming      bool
+	// CanRunInAutoMode returns whether the result can be run in auto mode if
+	// IsStreaming is false. This applies to operators that can spill to disk, but
+	// also operators such as the hash aggregator that buffer, but not
+	// proportionally to the input size (in the hash aggregator's case, it is the
+	// number of distinct groups).
+	CanRunInAutoMode       bool
 	BufferingOpMemMonitors []*mon.BytesMonitor
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
@@ -192,6 +198,8 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.Sorter != nil:
+		// TODO(asubiotto): Do we have to add anything here regarding supporting the
+		//  interval type.
 		return true, nil
 
 	case core.Windower != nil:
@@ -687,6 +695,11 @@ func NewColOperator(
 			if err != nil {
 				return result, err
 			}
+			for _, t := range inputTypes {
+				if t == coltypes.Interval {
+					return result, errors.WithIssueLink(errors.Errorf("sort on interval type not supported"), errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
+				}
+			}
 			orderingCols := core.Sorter.OutputOrdering.Columns
 			matchLen := core.Sorter.OrderingMatchLen
 			if len(orderingCols) == int(matchLen) {
@@ -779,6 +792,9 @@ func NewColOperator(
 				)
 			}
 			result.ColumnTypes = spec.Input[0].ColumnTypes
+			// A sorter can run in auto mode because it falls back to disk if there
+			// is not enough memory available.
+			result.CanRunInAutoMode = true
 
 		case core.Windower != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
