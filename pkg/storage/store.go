@@ -131,6 +131,27 @@ var concurrentRangefeedItersLimit = settings.RegisterPositiveIntSetting(
 	64,
 )
 
+// raftLeadershipTransferTimeout limits the amount of time a drain command
+// waits for lease transfers.
+var raftLeadershipTransferWait = func() *settings.DurationSetting {
+	s := settings.RegisterValidatedDurationSetting(
+		raftLeadershipTransferWaitKey,
+		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process",
+		5*time.Second,
+		func(v time.Duration) error {
+			if v < 0 {
+				return errors.Errorf("cannot set %s to a negative duration: %s",
+					raftLeadershipTransferWaitKey, v)
+			}
+			return nil
+		},
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
+const raftLeadershipTransferWaitKey = "server.shutdown.lease_transfer_wait"
+
 // ExportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from RocksDB to a temp file and then uploads it to cloud
 // storage. In order to not exhaust the disk or memory, or saturate the network,
@@ -963,10 +984,6 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
-// The maximum amount of time waited for leadership shedding before commencing
-// to drain a store.
-const raftLeadershipTransferWait = 5 * time.Second
-
 // SetDraining (when called with 'true') causes incoming lease transfers to be
 // rejected, prevents all of the Store's Replicas from acquiring or extending
 // range leases, and attempts to transfer away any leases owned.
@@ -1088,7 +1105,9 @@ func (s *Store) SetDraining(drain bool) {
 
 	transferAllAway()
 
-	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", raftLeadershipTransferWait,
+	transferTimeout := raftLeadershipTransferWait.Get(&s.cfg.Settings.SV)
+
+	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", transferTimeout,
 		func(ctx context.Context) error {
 			opts := retry.Options{
 				InitialBackoff: 10 * time.Millisecond,
@@ -1110,7 +1129,7 @@ func (s *Store) SetDraining(drain bool) {
 		}); err != nil {
 		// You expect this message when shutting down a server in an unhealthy
 		// cluster. If we see it on healthy ones, there's likely something to fix.
-		log.Warningf(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %+v", raftLeadershipTransferWait, err)
+		log.Warningf(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %+v", transferTimeout, err)
 	}
 }
 
