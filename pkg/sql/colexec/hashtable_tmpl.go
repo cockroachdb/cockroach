@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/apd"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	// */}}
@@ -46,9 +45,6 @@ var _ bytes.Buffer
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
@@ -174,6 +170,9 @@ func _CHECK_COL_WITH_NULLS(
 func (ht *hashTable) checkCol(
 	probeType, buildType coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16,
 ) {
+	// In order to inline the templated code of overloads, we need to have a
+	// `decimalScratch` local variable of type `decimalOverloadScratch`.
+	decimalScratch := ht.decimalScratch
 	switch probeType {
 	// {{range $lTyp, $rTypToOverload := .}}
 	case _PROBE_TYPE:

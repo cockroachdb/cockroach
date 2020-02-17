@@ -1120,3 +1120,13 @@ CREATE TABLE t44822(c0 BYTES); CREATE VIEW v0(c0) AS SELECT min(t44822.c0) FROM 
 query T
 SELECT * FROM v0 WHERE v0.c0 NOT BETWEEN v0.c0 AND v0.c0
 ----
+
+# Regression test for #44935 (decimals with different number of trailing zeroes
+# hashing to different values).
+statement ok
+CREATE TABLE t44935 (x decimal); INSERT INTO t44935 VALUES (1.0), (1.00)
+
+query I
+SELECT count(*) FROM (SELECT DISTINCT x FROM t44935)
+----
+1

@@ -89,6 +89,12 @@ type _OP_CONST_NAME struct {
 }
 
 func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `decimalScratch` local variable of type `decimalOverloadScratch`.
+	decimalScratch := p.decimalScratch
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = decimalScratch
 	batch := p.input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
