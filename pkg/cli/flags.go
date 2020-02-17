@@ -557,6 +557,8 @@ func init() {
 		// TODO(knz): Remove in 20.2.
 		BoolFlag(f, &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
 		_ = f.MarkDeprecated(cliflags.Decommission.Name, `use 'cockroach node decommission' then 'cockroach quit' instead`)
+		DurationFlag(f, &quitCtx.drainWait, cliflags.DrainWait, quitCtx.drainWait)
+		BoolFlag(f, &quitCtx.onlyDrain, cliflags.OnlyDrain, quitCtx.onlyDrain)
 	}
 
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {

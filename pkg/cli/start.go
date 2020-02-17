@@ -1322,11 +1322,14 @@ func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClien
 // quitCmd command shuts down the node server.
 var quitCmd = &cobra.Command{
 	Use:   "quit",
-	Short: "drain and shutdown node\n",
+	Short: "drain and shut down a node\n",
 	Long: `
-Shutdown the server. The first stage is drain, where any new requests
-will be ignored by the server. When all extant requests have been
-completed, the server exits.
+Shut down the server. The first stage is drain, where the server
+stops accepting client connections, then stops extant
+connections, and finally pushes range leases onto other nodes,
+subject to various timeout parameters configurable via
+cluster settings. After the first stage completes,
+the server process is shut down, unless --only-drain was specified.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runQuit),
@@ -1363,7 +1366,15 @@ func checkNodeRunning(ctx context.Context, c serverpb.AdminClient) error {
 // onModes slice, it's a hard shutdown.
 //
 // errTryHardShutdown is returned if the caller should do a hard-shutdown.
-func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) error {
+func doShutdown(
+	ctx context.Context, c serverpb.AdminClient, onModes []int32, requestNodeShutdown bool,
+) error {
+	// If the caller is requesting node shutdown, then it's OK
+	// if the server closes the connection on us (we're expecting it).
+	// However, if the shutdown was not requested, then it's
+	// unexpected if the connectiond rops.
+	tolerateConnClosedByServer := requestNodeShutdown
+
 	// We want to distinguish between the case in which we can't even connect to
 	// the server (in which case we don't want our caller to try to come back with
 	// a hard retry) and the case in which an attempt to shut down fails (times
@@ -1373,35 +1384,46 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 		if server.IsWaitingForInit(err) {
 			return fmt.Errorf("node cannot be shut down before it has been initialized")
 		}
-		if grpcutil.IsClosedConnection(err) {
+		if tolerateConnClosedByServer && grpcutil.IsClosedConnection(err) {
 			return nil
 		}
 		return err
 	}
-	// Send a drain request and continue reading until the connection drops (which
-	// then counts as a success, for the connection dropping is likely the result
-	// of the Stopper having reached the final stages of shutdown).
+	// Send a drain request.
+	//
+	// If the node shutdown is requested too, then continue reading
+	// until the connection drops (which then counts as a success, for
+	// the connection dropping is likely the result of the Stopper
+	// having reached the final stages of shutdown).
 	stream, err := c.Drain(ctx, &serverpb.DrainRequest{
 		On:       onModes,
-		Shutdown: true,
+		Shutdown: requestNodeShutdown,
 	})
 	if err != nil {
 		//  This most likely means that we shut down successfully. Note that
 		//  sometimes the connection can be shut down even before a DrainResponse gets
 		//  sent back to us, so we don't require a response on the stream (see
 		//  #14184).
-		if grpcutil.IsClosedConnection(err) {
+		if tolerateConnClosedByServer && grpcutil.IsClosedConnection(err) {
 			return nil
 		}
-		return errors.Wrap(err, "Error sending drain request")
+		return errors.Wrap(err, "error sending drain request")
 	}
 	for {
 		if _, err := stream.Recv(); err != nil {
-			if grpcutil.IsClosedConnection(err) {
+			if tolerateConnClosedByServer && grpcutil.IsClosedConnection(err) {
 				return nil
 			}
 			// Unexpected error; the caller should try again (and harder).
 			return errTryHardShutdown{err}
+		}
+		if !requestNodeShutdown {
+			// When the node is *not* meant to shutdown, the drain stream
+			// will not be closed by the server and we're not expecting an
+			// io.EOF or some other form of conn-closed-by-server error.
+			// In that case, simply stop the request after
+			// receiving a valid drain response above.
+			return nil
 		}
 	}
 }
@@ -1413,51 +1435,78 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// At the end, we'll report "ok" if there was no error.
 	defer func() {
 		if err == nil {
 			fmt.Println("ok")
 		}
 	}()
-	onModes := make([]int32, len(server.GracefulDrainModes))
-	for i, m := range server.GracefulDrainModes {
-		onModes[i] = int32(m)
-	}
 
+	// Establish a RPC connection.
 	c, finish, err := getAdminClient(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
 	defer finish()
 
+	// modes is the set of drain flags to pass to the Drain() RPC.
+	modes := make([]int32, len(server.GracefulDrainModes))
+	for i, m := range server.GracefulDrainModes {
+		modes[i] = int32(m)
+	}
+
+	// If --decommission was passed, perform the decommission as first
+	// step.
 	if quitCtx.serverDecommission {
 		var myself []roachpb.NodeID // will remain empty, which means target yourself
 		if err := runDecommissionNodeImpl(ctx, c, nodeDecommissionWaitAll, myself); err != nil {
 			return err
 		}
 	}
+
+	// The next step is to drain. The timeout is configurable
+	// via --drain-wait.
+	var drainTimeoutCh <-chan time.Time
+	if quitCtx.drainWait > 0 {
+		drainTimeoutCh = time.After(quitCtx.drainWait)
+	}
+
+	// Perform the drain. We launch the drain asynchronously so we can
+	// wait the timeout in the main goroutine.
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- doShutdown(ctx, c, onModes)
+		errChan <- doShutdown(ctx, c, modes, false /*requestNodeShutdown*/)
 	}()
 	select {
-	case err := <-errChan:
+	case <-drainTimeoutCh:
+		err = errors.New("drain timeout")
+		log.Warningf(ctx, "drain timed out")
+
+	case err = <-errChan:
 		if err != nil {
 			if _, ok := err.(errTryHardShutdown); ok {
-				log.Warningf(ctx, "graceful shutdown failed: %s; proceeding with hard shutdown\n", err)
+				log.Warningf(ctx, "graceful shutdown failed: %v", err)
 				break
 			}
 			return err
 		}
-		return nil
-	case <-time.After(time.Minute):
-		log.Warningf(ctx, "timed out; proceeding with hard shutdown")
 	}
-	// Not passing drain modes tells the server to not bother and go
-	// straight to shutdown. We try two times just in case there is a transient error.
-	err = doShutdown(ctx, c, nil)
-	if err != nil {
-		log.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
-		err = doShutdown(ctx, c, nil)
+
+	if !quitCtx.onlyDrain {
+		if err != nil {
+			log.Warningf(ctx, "drain did not complete successfully; hard shutdown may cause disruption")
+		}
+		// We have already performed the drain above. We use a nil array
+		// of drain modes to indicate no further drain needs to be attempted
+		// and go straight to shutdown. We try two times just in case there
+		// is a transient error.
+		err = doShutdown(ctx, c, nil, true /*requestNodeShutdown*/)
+		if err != nil {
+			log.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
+			err = doShutdown(ctx, c, nil, true /*requestNodeShutdown*/)
+		}
+		err = errors.Wrap(err, "hard shutdown failed")
 	}
-	return errors.Wrap(doShutdown(ctx, c, nil), "hard shutdown failed")
+
+	return err
 }

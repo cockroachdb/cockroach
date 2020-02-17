@@ -129,6 +129,8 @@ func initCLIDefaults() {
 	startCtx.inBackground = false
 
 	quitCtx.serverDecommission = false
+	quitCtx.onlyDrain = false
+	quitCtx.drainWait = time.Minute
 
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
 	nodeCtx.statusShowRanges = false
@@ -329,7 +331,15 @@ var startCtx struct {
 // quitCtx captures the command-line parameters of the `quit` command.
 // Defaults set by InitCLIDefaults() above.
 var quitCtx struct {
+	// serverDecommission indicates the server should be decommissioned
+	// before it is drained.
 	serverDecommission bool
+	// drainWait is the amount of time to wait for the server
+	// to drain. Set to 0 to disable a timeout (let the server decide).
+	drainWait time.Duration
+	// onlyDrain, if set, indicates the server should not be shut
+	// down after it is drained.
+	onlyDrain bool
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
