@@ -903,6 +903,13 @@ long and not particularly human-readable.`,
 		Description: `Deprecated: use 'node decommission' instead.`,
 	}
 
+	DrainWait = FlagInfo{
+		Name: "drain-wait",
+		Description: `
+When non-zero, wait for the specified amount of time for the node to
+drain all active client connections and migrate away range leases.`,
+	}
+
 	Wait = FlagInfo{
 		Name: "wait",
 		Description: `
