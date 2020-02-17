@@ -194,10 +194,16 @@ type TestingKnobs struct {
 	// function returns an error, or if the table has already been dropped.
 	RunAfterBackfillChunk func()
 
+	// ForceDiskSpill forces any processors/operators that can fall back to disk
+	// to fall back to disk immediately.
+	ForceDiskSpill bool
+
 	// MemoryLimitBytes specifies a maximum amount of working memory that a
 	// processor that supports falling back to disk can use. Must be >= 1 to
-	// enable. Once this limit is hit, processors employ their on-disk
-	// implementation regardless of applicable cluster settings.
+	// enable. This is a more fine-grained knob than ForceDiskSpill when the
+	// available memory needs to be controlled. Once this limit is hit, processors
+	// employ their on-disk implementation regardless of applicable cluster
+	// settings.
 	MemoryLimitBytes int64
 
 	// DrainFast, if enabled, causes the server to not wait for any currently

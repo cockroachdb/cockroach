@@ -40,9 +40,8 @@ type verifyColOperatorArgs struct {
 	inputs         []sqlbase.EncDatumRows
 	outputTypes    []types.T
 	pspec          *execinfrapb.ProcessorSpec
-	// memoryLimit specifies the desired memory limit on the testing knob (in
-	// bytes). If it is 0, then the default limit of 64MiB will be used.
-	memoryLimit int64
+	// forceDiskSpill, if set, will force the operator to spill to disk.
+	forceDiskSpill bool
 }
 
 // verifyColOperator passes inputs through both the processor defined by pspec
@@ -76,7 +75,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 			DiskMonitor: diskMonitor,
 		},
 	}
-	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = args.memoryLimit
+	flowCtx.Cfg.TestingKnobs.ForceDiskSpill = args.forceDiskSpill
 
 	inputsProc := make([]execinfra.RowSource, len(args.inputs))
 	inputsColOp := make([]execinfra.RowSource, len(args.inputs))
@@ -116,7 +115,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		ProcessorConstructor: rowexec.NewProcessor,
 	}
 	var spilled bool
-	if args.memoryLimit > 0 {
+	if args.forceDiskSpill {
 		constructorArgs.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
 	}
 	result, err := colexec.NewColOperator(ctx, flowCtx, constructorArgs)
@@ -323,7 +322,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		}
 	}
 
-	if args.memoryLimit > 0 {
+	if args.forceDiskSpill {
 		// Check that the spilling did occur.
 		if !spilled {
 			return errors.Errorf("expected spilling to disk but it did *not* occur")

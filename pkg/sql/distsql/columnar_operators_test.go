@@ -275,12 +275,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	// Interesting memory limits:
-	// - 0 - the default 64MiB memory limit will be used, and the sorter will not
-	//   spill to disk.
-	// - 1 - the in-memory sorter will hit the memory limit after spooling one
-	//   batch, so the external sort will take over.
-	for _, memoryLimit := range []int64{0, 1} {
+	for _, spillForced := range []bool{false, true} {
 		for run := 0; run < nRuns; run++ {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				var (
@@ -307,14 +302,14 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 				}
 				args := verifyColOperatorArgs{
-					inputTypes:  [][]types.T{inputTypes},
-					inputs:      []sqlbase.EncDatumRows{rows},
-					outputTypes: inputTypes,
-					pspec:       pspec,
-					memoryLimit: memoryLimit,
+					inputTypes:     [][]types.T{inputTypes},
+					inputs:         []sqlbase.EncDatumRows{rows},
+					outputTypes:    inputTypes,
+					pspec:          pspec,
+					forceDiskSpill: spillForced,
 				}
 				if err := verifyColOperator(args); err != nil {
-					fmt.Printf("--- seed = %d memoryLimit = %d nCols = %d ---\n", seed, memoryLimit, nCols)
+					fmt.Printf("--- seed = %d spillForced = %t nCols = %d ---\n", seed, spillForced, nCols)
 					prettyPrintTypes(inputTypes, "t" /* tableName */)
 					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 					t.Fatal(err)
@@ -438,12 +433,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	// Interesting memory limits:
-	// - 0 - the default 64MiB memory limit will be used, and the hash joiner
-	//   will not spill to disk.
-	// - 1 - the in-memory hash joiner will hit the memory limit after buffering
-	//   one batch, so the external hash joiner will take over.
-	for _, memoryLimit := range []int64{0, 1} {
+	for _, spillForced := range []bool{false, true} {
 		for run := 0; run < nRuns; run++ {
 			for _, testSpec := range testSpecs {
 				for nCols := 1; nCols <= maxCols; nCols++ {
@@ -527,17 +517,17 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									},
 								}
 								args := verifyColOperatorArgs{
-									anyOrder:    true,
-									inputTypes:  [][]types.T{lInputTypes, rInputTypes},
-									inputs:      []sqlbase.EncDatumRows{lRows, rRows},
-									outputTypes: outputTypes,
-									pspec:       pspec,
-									memoryLimit: memoryLimit,
+									anyOrder:       true,
+									inputTypes:     [][]types.T{lInputTypes, rInputTypes},
+									inputs:         []sqlbase.EncDatumRows{lRows, rRows},
+									outputTypes:    outputTypes,
+									pspec:          pspec,
+									forceDiskSpill: spillForced,
 								}
 								if err := verifyColOperator(args); err != nil {
-									fmt.Printf("--- memory limit = %d join type = %s onExpr = %q"+
+									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
 										" filter = %q seed = %d run = %d ---\n",
-										memoryLimit, testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
+										spillForced, testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
 									fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
 									prettyPrintTypes(lInputTypes, "left_table" /* tableName */)
 									prettyPrintTypes(rInputTypes, "right_table" /* tableName */)
