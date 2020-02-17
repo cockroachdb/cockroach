@@ -186,6 +186,12 @@ func createDiskBackedHashJoiner(
 		Inputs:              inputs,
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
+		// The TestingSemaphore is created with a limit since the
+		// externalHashJoiner calculates the maximum number of partitions based on
+		// this.
+		// TODO(asubiotto): Assert a maximum number of open file descriptors when
+		//  we have recursive partitioning.
+		FDSemaphore: NewTestingSemaphore(256),
 	}
 	// We will not use streaming memory account for the external hash join so
 	// that the in-memory hash join operator could hit the memory limit set on
