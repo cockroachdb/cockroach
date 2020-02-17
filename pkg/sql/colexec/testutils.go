@@ -12,9 +12,12 @@ package colexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/errors"
 )
 
 // BatchBuffer exposes a buffer of coldata.Batches through an Operator
@@ -150,4 +153,68 @@ func (o *CallbackOperator) Init() {}
 // Next is part of the Operator interface.
 func (o *CallbackOperator) Next(ctx context.Context) coldata.Batch {
 	return o.NextCb(ctx)
+}
+
+// TestingSemaphore is a semaphore.Semaphore that never blocks and is always
+// successful. If the requested number of resources exceeds the given limit, an
+// error is returned. If too many resources are released, the semaphore panics.
+type TestingSemaphore struct {
+	count int
+	limit int
+}
+
+// NewTestingSemaphore initializes a new TestingSemaphore with the provided
+// limit. If limit is zero, there will be no limit. Can also use
+// &TestingSemaphore{} directly in this case.
+func NewTestingSemaphore(limit int) *TestingSemaphore {
+	return &TestingSemaphore{limit: limit}
+}
+
+// Acquire implements the semaphore.Semaphore interface.
+func (s *TestingSemaphore) Acquire(_ context.Context, n int) error {
+	if n < 0 {
+		return errors.New("acquiring a negative amount")
+	}
+	if s.limit != 0 && s.count+n > s.limit {
+		return errors.New("testing semaphore limit exceeded")
+	}
+	s.count += n
+	return nil
+}
+
+// TryAcquire implements the semaphore.Semaphore interface.
+func (s *TestingSemaphore) TryAcquire(n int) bool {
+	if s.limit != 0 && s.count+n > s.limit {
+		return false
+	}
+	s.count += n
+	return true
+}
+
+// Release implements the semaphore.Semaphore interface.
+func (s *TestingSemaphore) Release(n int) int {
+	if n < 0 {
+		execerror.VectorizedInternalPanic("releasing a negative amount")
+	}
+	if s.count-n < 0 {
+		execerror.VectorizedInternalPanic(fmt.Sprintf("testing semaphore too many resources released, releasing %d, have %d", n, s.count))
+	}
+	pre := s.count
+	s.count -= n
+	return pre
+}
+
+// SetLimit implements the semaphore.Semaphore interface.
+func (s *TestingSemaphore) SetLimit(n int) {
+	s.limit = n
+}
+
+// GetLimit implements the semaphore.Semaphore interface.
+func (s *TestingSemaphore) GetLimit() int {
+	return s.limit
+}
+
+// GetCount implements the semaphore.Semaphore interface.
+func (s *TestingSemaphore) GetCount() int {
+	return s.count
 }

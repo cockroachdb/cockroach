@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/marusama/semaphore"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -636,7 +637,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TempStorage:     tempEngine,
 		TempStoragePath: s.cfg.TempStorageConfig.Path,
 		TempFS:          tempFS,
-		DiskMonitor:     s.cfg.TempStorageConfig.Mon,
+		// COCKROACH_VEC_MAX_OPEN_FDS specifies the maximum number of open file
+		// descriptors that the vectorized execution engine may have open at any
+		// one time. This limit is implemented as a weighted semaphore acquired
+		// before opening files.
+		VecFDSemaphore: semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", 256)),
+		DiskMonitor:    s.cfg.TempStorageConfig.Mon,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		BulkAdder: func(

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/marusama/semaphore"
 )
 
 // spillingQueue is a Queue that uses a fixed-size in-memory circular buffer
@@ -48,6 +49,7 @@ type spillingQueue struct {
 
 	diskQueueCfg colcontainer.DiskQueueCfg
 	diskQueue    colcontainer.Queue
+	fdSemaphore  semaphore.Semaphore
 }
 
 // newSpillingQueue creates a new spillingQueue. An unlimited allocator must be
@@ -58,6 +60,7 @@ func newSpillingQueue(
 	typs []coltypes.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 	batchSize int,
 ) *spillingQueue {
 	// Reduce the memory limit by what the DiskQueue may need to buffer
@@ -80,10 +83,11 @@ func newSpillingQueue(
 		typs:               typs,
 		items:              make([]coldata.Batch, itemsLen),
 		diskQueueCfg:       cfg,
+		fdSemaphore:        fdSemaphore,
 	}
 }
 
-func (q *spillingQueue) enqueue(batch coldata.Batch) error {
+func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error {
 	if batch.Length() == 0 {
 		return nil
 	}
@@ -94,7 +98,7 @@ func (q *spillingQueue) enqueue(batch coldata.Batch) error {
 		// an initial estimate of how many batches would fit into the buffer, which
 		// might be wrong). The tail of the queue might also already be on disk, in
 		// which case that is where the batch must be enqueued to maintain order.
-		if err := q.maybeSpillToDisk(); err != nil {
+		if err := q.maybeSpillToDisk(ctx); err != nil {
 			return err
 		}
 		q.unlimitedAllocator.ReleaseBatch(batch)
@@ -165,11 +169,16 @@ func (q *spillingQueue) dequeue() (coldata.Batch, error) {
 	return res, nil
 }
 
-func (q *spillingQueue) maybeSpillToDisk() error {
+func (q *spillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	if q.diskQueue != nil {
 		return nil
 	}
-	log.VEvent(context.TODO(), 1, "spilled to disk")
+	// Acquire two file descriptors for the DiskQueue: one for the write file and
+	// one for the read file.
+	if err := q.fdSemaphore.Acquire(ctx, 2); err != nil {
+		return err
+	}
+	log.VEvent(ctx, 1, "spilled to disk")
 	diskQueue, err := colcontainer.NewDiskQueue(q.typs, q.diskQueueCfg)
 	if err != nil {
 		return err
@@ -189,6 +198,7 @@ func (q *spillingQueue) spilled() bool {
 
 func (q *spillingQueue) close() error {
 	if q.diskQueue != nil {
+		q.fdSemaphore.Release(2)
 		return q.diskQueue.Close()
 	}
 	return nil

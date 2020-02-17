@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/marusama/semaphore"
 )
 
 // Version identifies the distsql protocol version.
@@ -132,6 +133,10 @@ type ServerConfig struct {
 	// TempFS is used by the vectorized execution engine to store columns when the
 	// working set is larger than can be stored in memory.
 	TempFS fs.FS
+
+	// VecFDSemaphore is a weighted semaphore that restricts the number of open
+	// file descriptors in the vectorized engine.
+	VecFDSemaphore semaphore.Semaphore
 
 	// BulkAdder is used by some processors to bulk-ingest data as SSTs.
 	BulkAdder storagebase.BulkAdderFactory

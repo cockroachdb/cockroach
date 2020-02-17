@@ -27,6 +27,7 @@ type DistSQLMetrics struct {
 	QueueWaitHist *metric.Histogram
 	MaxBytesHist  *metric.Histogram
 	CurBytesCount *metric.Gauge
+	VecOpenFDs    *metric.Gauge
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -83,6 +84,12 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaVecOpenFDs = metric.Metadata{
+		Name:        "sql.distsql.vec.openfds",
+		Help:        "Current number of open file descriptors used by vectorized external storage",
+		Measurement: "Files",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // See pkg/sql/mem_metrics.go
@@ -100,6 +107,7 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		QueueWaitHist: metric.NewLatency(metaQueueWaitHist, histogramWindow),
 		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
+		VecOpenFDs:    metric.NewGauge(metaVecOpenFDs),
 	}
 }
 
