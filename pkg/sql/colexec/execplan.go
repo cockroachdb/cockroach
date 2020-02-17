@@ -123,6 +123,7 @@ type NewColOperatorResult struct {
 	InternalMemUsage       int
 	MetadataSources        []execinfrapb.MetadataSource
 	IsStreaming            bool
+	CanFallBackToDisk      bool
 	BufferingOpMemMonitors []*mon.BytesMonitor
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
