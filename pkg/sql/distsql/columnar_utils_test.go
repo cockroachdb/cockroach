@@ -116,6 +116,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		StreamingMemAccount:  &acc,
 		ProcessorConstructor: rowexec.NewProcessor,
 		DiskQueueCfg:         colcontainer.DiskQueueCfg{FS: tempFS},
+		FDSemaphore:          colexec.NewTestingSemaphore(256),
 	}
 	var spilled bool
 	if args.forceDiskSpill {

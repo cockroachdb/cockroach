@@ -140,15 +140,13 @@ func TestRouterOutputAddBatch(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 				// Clear the testAllocator for use.
 				testAllocator.Clear()
-				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-					testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, tc.blockedThreshold, tc.outputBatchSize,
-				)
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), tc.blockedThreshold, tc.outputBatchSize)
 				in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
 				out := newOpTestOutput(o, data[:len(tc.selection)])
 				in.Init()
 				for {
 					b := in.Next(ctx)
-					o.addBatch(b, tc.selection)
+					o.addBatch(ctx, b, tc.selection)
 					if b.Length() == 0 {
 						break
 					}
@@ -190,7 +188,7 @@ func TestRouterOutputNext(t *testing.T) {
 			unblockEvent: func(in Operator, o *routerOutputOp) {
 				for {
 					b := in.Next(ctx)
-					o.addBatch(b, fullSelection)
+					o.addBatch(ctx, b, fullSelection)
 					if b.Length() == 0 {
 						break
 					}
@@ -203,7 +201,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// ReaderWaitsForZeroBatch verifies that a reader blocking on Next will
 			// also get unblocked with no data other than the zero batch.
 			unblockEvent: func(_ Operator, o *routerOutputOp) {
-				o.addBatch(coldata.ZeroBatch, nil /* selection */)
+				o.addBatch(ctx, coldata.ZeroBatch, nil /* selection */)
 			},
 			expected: tuples{},
 			name:     "ReaderWaitsForZeroBatch",
@@ -235,7 +233,7 @@ func TestRouterOutputNext(t *testing.T) {
 				if queueCfg.FS == nil {
 					t.Fatal("FS was nil")
 				}
-				o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg)
+				o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2))
 				in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
 				in.Init()
 				wg.Add(1)
@@ -285,8 +283,8 @@ func TestRouterOutputNext(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("NextAfterZeroBatchDoesntBlock/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg)
-			o.addBatch(coldata.ZeroBatch, fullSelection)
+			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2))
+			o.addBatch(ctx, coldata.ZeroBatch, fullSelection)
 			o.Next(ctx)
 			o.Next(ctx)
 			select {
@@ -324,9 +322,7 @@ func TestRouterOutputNext(t *testing.T) {
 			}
 
 			ch := make(chan struct{}, 2)
-			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				testAllocator, []coltypes.T{coltypes.Int64}, ch, mtc.bytes, queueCfg, blockThreshold, int(coldata.BatchSize()),
-			)
+			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, ch, mtc.bytes, queueCfg, NewTestingSemaphore(2), blockThreshold, int(coldata.BatchSize()))
 			in := newOpTestInput(uint16(smallBatchSize), data, nil /* typs */)
 			out := newOpTestOutput(o, expected)
 			in.Init()
@@ -334,19 +330,19 @@ func TestRouterOutputNext(t *testing.T) {
 			b := in.Next(ctx)
 			// Make sure the output doesn't consider itself blocked. We're right at the
 			// limit but not over.
-			if o.addBatch(b, selection) {
+			if o.addBatch(ctx, b, selection) {
 				t.Fatal("unexpectedly blocked")
 			}
 			b = in.Next(ctx)
 			// This addBatch call should now block the output.
-			if !o.addBatch(b, selection) {
+			if !o.addBatch(ctx, b, selection) {
 				t.Fatal("unexpectedly still unblocked")
 			}
 
 			// Add the rest of the data.
 			for {
 				b = in.Next(ctx)
-				if o.addBatch(b, selection) {
+				if o.addBatch(ctx, b, selection) {
 					t.Fatal("should only return true when switching from unblocked to blocked")
 				}
 				if b.Length() == 0 {
@@ -400,9 +396,7 @@ func TestRouterOutputRandom(t *testing.T) {
 			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
 				var wg sync.WaitGroup
 				unblockedEventsChans := make(chan struct{}, 2)
-				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-					testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, blockedThreshold, outputSize,
-				)
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, NewTestingSemaphore(2), blockedThreshold, outputSize)
 				inputs[0].Init()
 
 				expected := make(tuples, 0, len(data))
@@ -427,7 +421,7 @@ func TestRouterOutputRandom(t *testing.T) {
 							}
 						}
 
-						if o.addBatch(b, selection) {
+						if o.addBatch(ctx, b, selection) {
 							if lastBlockedState {
 								// We might have missed an unblock event during the last loop.
 								select {
@@ -502,7 +496,9 @@ type callbackRouterOutput struct {
 
 var _ routerOutput = callbackRouterOutput{}
 
-func (o callbackRouterOutput) addBatch(batch coldata.Batch, selection []uint16) bool {
+func (o callbackRouterOutput) addBatch(
+	ctx context.Context, batch coldata.Batch, selection []uint16,
+) bool {
 	if o.addBatchCb != nil {
 		return o.addBatchCb(batch, selection)
 	}
@@ -712,7 +708,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 		t.Run(fmt.Sprintf("memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 			// Clear the testAllocator for use.
 			testAllocator.Clear()
-			r, routerOutputs := NewHashRouter([]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []uint32{0}, mtc.bytes, queueCfg)
+			r, routerOutputs := NewHashRouter([]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []uint32{0}, mtc.bytes, queueCfg, NewTestingSemaphore(2))
 
 			if len(routerOutputs) != 1 {
 				t.Fatalf("expected 1 router output but got %d", len(routerOutputs))
@@ -818,9 +814,7 @@ func TestHashRouterRandom(t *testing.T) {
 					// Create a separate allocator for each output as a single allocator
 					// may not be used concurrently.
 					allocator := NewAllocator(ctx, &acc)
-					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-						allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, blockedThreshold, outputSize,
-					)
+					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize)
 					outputs[i] = op
 					outputsAsOps[i] = op
 				}
@@ -923,7 +917,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					allocators[i] = NewAllocator(ctx, &acc)
 					defer acc.Close(ctx)
 				}
-				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20 /* 64 MiB */, queueCfg)
+				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &TestingSemaphore{})
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.

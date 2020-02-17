@@ -168,9 +168,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 					ctx, &execinfra.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
 						Cfg: &execinfra.ServerConfig{
-							DiskMonitor: &mon.BytesMonitor{},
-							Settings:    dsp.st,
-							ClusterID:   &dsp.rpcCtx.ClusterID,
+							DiskMonitor:    &mon.BytesMonitor{},
+							Settings:       dsp.st,
+							ClusterID:      &dsp.rpcCtx.ClusterID,
+							VecFDSemaphore: dsp.distSQLSrv.VecFDSemaphore,
 						},
 						NodeID: -1,
 					}, spec.Processors, fuseOpt, recv,
