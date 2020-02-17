@@ -59,6 +59,11 @@ type FS interface {
 	// DeleteDir removes the named dir.
 	DeleteDir(name string) error
 
+	// DeleteDirAndFiles deletes the directory and any files it contains but
+	// not subdirectories. If dir does not exist, DeleteDirAndFiles returns nil
+	// (no error).
+	DeleteDirAndFiles(dir string) error
+
 	// ListDir returns a listing of the given directory. The names returned are
 	// relative to the directory.
 	ListDir(name string) ([]string, error)
