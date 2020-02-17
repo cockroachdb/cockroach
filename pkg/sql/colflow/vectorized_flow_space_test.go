@@ -184,6 +184,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					},
 				},
 			},
+			spillingSupported: true,
 		},
 	}
 
@@ -199,9 +200,16 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					inputs = append(inputs, colexec.NewRepeatableBatchSource(testAllocator, batch))
 				}
 				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
-				if success {
+				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
+				if success || tc.spillingSupported {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-					flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+					if !success {
+						// These are the cases that we expect in-memory operators to hit a
+						// memory error. To enable testing this case, force disk spills. We
+						// Do this in this if branch to allow the external algorithms to use
+						// an unlimited monitor.
+						flowCtx.Cfg.TestingKnobs.ForceDiskSpill = true
+					}
 				} else {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 					flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 1
