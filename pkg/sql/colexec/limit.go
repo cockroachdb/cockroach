@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
@@ -61,4 +62,19 @@ func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	}
 	c.seen = newSeen
 	return bat
+}
+
+// Close is a temporary method to support the specific case in which an upstream
+// operator must be Closed (e.g. an external sorter) to assert a certain state
+// during tests.
+// TODO(asubiotto): This method only exists because an external sorter is
+//  wrapped with a limit op when doing a top K sort and some tests that don't
+//  exhaust the sorter (e.g. allNullsInjection) need to close the operator
+//  explicitly. This should be removed once we have a better way of closing
+//  operators even when they are not exhausted.
+func (c *limitOp) Close() error {
+	if closer, ok := c.input.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
 }

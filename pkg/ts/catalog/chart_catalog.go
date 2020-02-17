@@ -1395,6 +1395,10 @@ var charts = []sectionDescription{
 				Title:   "Total Queries",
 				Metrics: []string{"sql.distsql.queries.total"},
 			},
+			{
+				Title:   "Vectorized Temporary Storage Open File Descriptors",
+				Metrics: []string{"sql.distsql.vec.openfds"},
+			},
 		},
 	},
 	{
