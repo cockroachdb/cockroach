@@ -559,7 +559,7 @@ var (
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-vec",
-		"fakedist-vec-disk",
+		// TODO(asubiotto): Add "fakedist-vec-disk" to the default configs.
 		"fakedist-metadata",
 		"fakedist-disk",
 	}
