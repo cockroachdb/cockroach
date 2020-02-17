@@ -65,7 +65,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req1
+dequeue r=req1
 ----
 global: num=3
  lock: "a"

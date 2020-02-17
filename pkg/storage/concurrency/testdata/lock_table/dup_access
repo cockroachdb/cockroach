@@ -29,7 +29,7 @@ global: num=1
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req1
+dequeue r=req1
 ----
 global: num=1
  lock: "a"
@@ -68,7 +68,7 @@ guard-state r=req2
 ----
 new: state=doneWaiting
 
-done r=req2
+dequeue r=req2
 ----
 global: num=0
 local: num=0
@@ -110,7 +110,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req3
+dequeue r=req3
 ----
 global: num=3
  lock: "a"
@@ -270,7 +270,7 @@ global: num=3
   res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
 local: num=0
 
-done r=req4
+dequeue r=req4
 ----
 global: num=2
  lock: "b"
@@ -279,7 +279,7 @@ global: num=2
   res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
 local: num=0
 
-done r=req5
+dequeue r=req5
 ----
 global: num=0
 local: num=0
@@ -328,7 +328,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req6
+dequeue r=req6
 ----
 global: num=3
  lock: "a"
@@ -485,7 +485,7 @@ global: num=2
    distinguished req: 8
 local: num=0
 
-done r=req7
+dequeue r=req7
 ----
 global: num=1
  lock: "b"
@@ -495,7 +495,7 @@ global: num=1
    distinguished req: 8
 local: num=0
 
-done r=req8
+dequeue r=req8
 ----
 global: num=1
  lock: "b"
