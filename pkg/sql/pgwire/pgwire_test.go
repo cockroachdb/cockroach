@@ -279,7 +279,11 @@ func TestPGWireDrainClient(t *testing.T) {
 		}
 	}
 
-	if now := s.(*server.TestServer).Undrain(ctx, on); len(now) != 0 {
+	now, err := s.(*server.TestServer).Undrain(ctx, on)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
 	}
 }

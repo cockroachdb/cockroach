@@ -1814,11 +1814,11 @@ Available Commands:
   start       start a node
   init        initialize a cluster
   cert        create ca, node, and client certs
-  quit        drain and shutdown node
+  quit        drain and shut down a node
 
   sql         open a sql shell
   user        get, set, list and remove users
-  node        list, inspect or remove nodes
+  node        list, inspect, drain or remove nodes
   dump        dump sql tables
 
   demo        open a demo sql shell
