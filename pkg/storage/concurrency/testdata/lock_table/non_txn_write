@@ -1,17 +1,17 @@
-locktable maxlocks=10000
+new-lock-table maxlocks=10000
 ----
 
-txn txn=txn1 ts=10 epoch=0
+new-txn txn=txn1 ts=10 epoch=0
 ----
 
-txn txn=txn2 ts=10 epoch=0
+new-txn txn=txn2 ts=10 epoch=0
 ----
 
-txn txn=txn3 ts=10 epoch=0
+new-txn txn=txn3 ts=10 epoch=0
 ----
 
 # First locks at a, b, c are acquired by txn1
-request r=req1 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req1 txn=txn1 ts=10 spans=w@a+w@b+w@c
 ----
 
 scan r=req1
@@ -57,14 +57,14 @@ global: num=3
 local: num=0
 
 # Next, two different transactional requests wait at a and b.
-request r=req2 txn=txn2 ts=10 spans=w@a
+new-request r=req2 txn=txn2 ts=10 spans=w@a
 ----
 
 scan r=req2
 ----
 start-waiting: true
 
-request r=req3 txn=txn3 ts=10 spans=w@b
+new-request r=req3 txn=txn3 ts=10 spans=w@b
 ----
 
 scan r=req3
@@ -73,7 +73,7 @@ start-waiting: true
 
 # Next, a non-transactional request that wants to write a, b, c waits at a.
 
-request r=req4 txn=none ts=10 spans=w@a+w@b+w@c
+new-request r=req4 txn=none ts=10 spans=w@a+w@b+w@c
 ----
 
 scan r=req4
@@ -82,7 +82,7 @@ start-waiting: true
 
 # Next, a transactional request that arrives later than the non-transactional request waits at c
 
-request r=req5 txn=txn3 ts=10 spans=w@c
+new-request r=req5 txn=txn3 ts=10 spans=w@c
 ----
 
 scan r=req5
@@ -145,7 +145,7 @@ new: state=doneWaiting
 
 # Add another transactional request at a. It will wait behind the non-transactional request.
 
-request r=req6 txn=txn1 ts=10 spans=w@a
+new-request r=req6 txn=txn1 ts=10 spans=w@a
 ----
 
 scan r=req6
