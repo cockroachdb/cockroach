@@ -1471,23 +1471,47 @@ func (s *adminServer) QueryPlan(
 // Drain puts the node into the specified drain mode(s) and optionally
 // instructs the process to terminate.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
-	on := make([]serverpb.DrainMode, len(req.On))
-	for i := range req.On {
-		on[i] = serverpb.DrainMode(req.On[i])
-	}
-	off := make([]serverpb.DrainMode, len(req.Off))
-	for i := range req.Off {
-		off[i] = serverpb.DrainMode(req.Off[i])
-	}
+	// `cockroach quit` sends a probe to check that the server is able
+	// to process a Drain request, prior to sending an actual drain
+	// request.
+	isProbe := len(req.On) == 0 && len(req.Off) == 0 && !req.Shutdown
 
 	ctx := stream.Context()
-	_ = s.server.Undrain(ctx, off)
 
-	nowOn, err := s.server.Drain(ctx, on)
+	on := make([]serverpb.DrainMode, len(req.On))
+	off := make([]serverpb.DrainMode, len(req.Off))
+
+	if !isProbe {
+		var buf strings.Builder
+		comma := ""
+		for i := range req.On {
+			on[i] = serverpb.DrainMode(req.On[i])
+			fmt.Fprintf(&buf, "%sshutdown: %s", comma, on[i].String())
+			comma = ", "
+		}
+		for i := range req.Off {
+			off[i] = serverpb.DrainMode(req.Off[i])
+			fmt.Fprintf(&buf, "%sresume: %s", comma, off[i].String())
+			comma = ", "
+		}
+		// Report the event to the log file for troubleshootability.
+		log.Infof(ctx, "drain request received (%s), process shutdown: %v", buf.String(), req.Shutdown)
+	} else {
+		log.Infof(ctx, "received request for drain status")
+	}
+
+	nowOn, err := s.server.Undrain(ctx, off)
 	if err != nil {
 		return err
 	}
+	if len(on) > 0 {
+		nowOn, err = s.server.Drain(ctx, on)
+		if err != nil {
+			return err
+		}
+	}
 
+	// Report the current status to the client.
 	res := serverpb.DrainResponse{
 		On: make([]int32, len(nowOn)),
 	}
@@ -1499,6 +1523,10 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	}
 
 	if !req.Shutdown {
+		if !isProbe {
+			// We don't need an info message for just a probe.
+			log.Infof(ctx, "drain request completed without server shutdown")
+		}
 		return nil
 	}
 

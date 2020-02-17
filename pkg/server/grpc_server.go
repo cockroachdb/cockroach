@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -97,6 +98,6 @@ func (s *grpcServer) waitingForInitError(methodName string) error {
 // IsWaitingForInit checks whether the provided error is because the node is
 // still waiting for initialization.
 func IsWaitingForInit(err error) bool {
-	s, ok := grpcstatus.FromError(err)
+	s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 	return ok && s.Code() == codes.Unavailable && strings.Contains(err.Error(), "node waiting for init")
 }

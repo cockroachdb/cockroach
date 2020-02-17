@@ -1990,12 +1990,10 @@ func (s *Server) Drain(ctx context.Context, on []serverpb.DrainMode) ([]serverpb
 // Undrain idempotently deactivates the given DrainModes on the Server in the
 // order in which they are supplied.
 // On success, returns any remaining active drain modes.
-func (s *Server) Undrain(ctx context.Context, off []serverpb.DrainMode) []serverpb.DrainMode {
-	nowActive, err := s.doDrain(ctx, off, false)
-	if err != nil {
-		panic(fmt.Sprintf("error returned to Undrain: %s", err))
-	}
-	return nowActive
+func (s *Server) Undrain(
+	ctx context.Context, off []serverpb.DrainMode,
+) ([]serverpb.DrainMode, error) {
+	return s.doDrain(ctx, off, false /* setTo */)
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
