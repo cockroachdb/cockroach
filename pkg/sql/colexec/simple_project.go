@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
 // simpleProjectOp is an operator that implements "simple projection" - removal of
@@ -35,6 +34,9 @@ type projectingBatch struct {
 	coldata.Batch
 
 	projection []uint32
+	// colVecs is a lazily populated slice of coldata.Vecs to support returning
+	// these in ColVecs().
+	colVecs []coldata.Vec
 }
 
 func newProjectionBatch(projection []uint32) *projectingBatch {
@@ -48,9 +50,16 @@ func (b *projectingBatch) ColVec(i int) coldata.Vec {
 }
 
 func (b *projectingBatch) ColVecs() []coldata.Vec {
-	execerror.VectorizedInternalPanic("projectingBatch doesn't support ColVecs()")
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
+	if b.Batch == coldata.ZeroBatch {
+		return nil
+	}
+	if b.colVecs == nil {
+		b.colVecs = make([]coldata.Vec, len(b.projection))
+	}
+	for i := range b.colVecs {
+		b.colVecs[i] = b.Batch.ColVec(int(b.projection[i]))
+	}
+	return b.colVecs
 }
 
 func (b *projectingBatch) Width() int {

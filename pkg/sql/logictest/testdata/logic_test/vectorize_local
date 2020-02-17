@@ -1,0 +1,93 @@
+# LogicTest: local local-vec
+
+statement ok
+CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b))
+
+statement ok
+CREATE TABLE c (a INT, b INT, c INT, d INT, PRIMARY KEY (a, c), INDEX sec (b))
+
+statement ok
+CREATE TABLE d (a INT, b INT, PRIMARY KEY (b, a))
+
+statement ok
+INSERT INTO a SELECT g//2, g, g FROM generate_series(0,2000) g(g)
+
+statement ok
+INSERT INTO c VALUES (1, 1, 1, 0), (2, 1, 2, 0)
+
+statement ok
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+INSERT INTO d VALUES (1, 1), (1, 2)
+
+# Test that vectorized stats are collected correctly.
+statement ok
+SET vectorize = experimental_on
+
+statement ok
+SET distsql = on
+
+statement ok
+SET vectorize_row_count_threshold = 0
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT a FROM a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFO4zAQhu_7FNZ_2pW8kHACn1pBkCKFtjQ9AFUObjIqkdzY2BNEVeXdUeIe4IDEcb75Zux_TghvBgplVmS3G9F7I-7XywexzZ5WxTxfiPliXjy_ZOLvXV5uysfinzirOoq6gkRnG1roAwWoLVJUEs7bmkKwfkSnScibD6hEou1czyOuJGrrCeoEbtkQFDZ6Z2hNuiF_mUCiIdatmdY63x60P840JEqnu6DEf0gse1ZilkJip7l-pSBsz26EV5Dg3pmvKElGM5Chmtv3lo9KJBc31yNjbYzg9kBKJAHVIBGnzj8NrPcElQ7y92nWFJztAn0L8tPmZKgkqNlTvFiwva9p5W09PRPL5TQ3gYYCx24ai7yLraEa_nwGAAD__86elhA=
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c JOIN d ON d.b = c.b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykkk-P0zAQxe98itGcQDIl6dESUisoUlYhWdoegFUOrj1aDK4dPA50VeW7o_wRtEigRRz95r2Z-Y18Rv7qUOJuU25e7aGLDt5s67dwt3l_W66LCtbVuvzwcQNPXxe7_e5d-Qxmq16oyarhpi4qMFBXYBYHeAl6cWhQoA-GKnUkRnmHOTYC2xg0MYc4SOfRUJgTykyg9W2XBrkRqEMklGdMNjlCiXt1cLQlZSi-yFCgoaSsG9sy6ZVGgbtWeZbwHAXWXZKwysVqiQIPKulPxBC61A56jgJT17oLabAxOdLJfrPpQUK2yIYpnJRzkOyRJGSMTS9wisxbclL3hDLvxeNJboL1M0h-DdJGe1TxYWVQYBnCl66Fz8F6CF7CSDJj_R8TnUh3yQb_i0tgDN8ZIikz5665ByBDJ7hw5T_FR95o-S832hK3wTNd3edPnbO-EUjmnqYfxaGLmm5j0OOY6VmPuVEwxGmq5tOj8FNpWPAynP81vPwt3PRPfgQAAP__vR0M5w==
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8klFr2zAUhd_3Ky73qWVaartvgkLC5g2XxO6cPGwrflCku1SgWJ4kj5aQ_z4sF9aUbCVj9M06Op-kc6536H8Y5LjM5_n7FfTOwMe6WsBt_uVmPitKmJWz-ddvOZx9KJar5ef5OTxa5USMVglFWeY1LPL6Uw7XVVGCgqqMhitQk3WDDFurqBRb8shvMcWGYeesJO-tG6RdNBTqHnnCULddHwa5YSitI-Q7DDoYQo4rsTZUk1DkLhJkqCgIbeKxndNb4R6mEhkuO9F6Du-QYdUHDtMUGa5FkHfkwfahG8RBC31nnkgZMvRkSAb9U4cHDskkGa7xQRgDQW-JQ-Kx2TMckcdn-iA2hDzds3-Lkh6Poo5FyV4lSvbHKL8T9K11ihypg9c3A_mS5UgfC3Ibura6JXeRHfZh6Hs4m6Zvz6-c3tyNn_9rtHRPsg_ati93cnnKeGvynW09Pe_m6MnJUAipDY0Fe9s7STfOynjNuKwiFwVFPoy72bgo2rgV_7-ncHoCnD2Hs7_Clwdwsm_2b34FAAD__9y3YyI=
+
+statement ok
+RESET vectorize; RESET distsql; RESET vectorize_row_count_threshold
+
+statement ok
+SET tracing=off
+
+# Making sure that colBatchScan operator can parallelize scans.
+# This test is similar to that in testplannerlogic/select
+statement ok
+CREATE TABLE tpar (
+    a INT PRIMARY KEY, item STRING, price FLOAT, FAMILY (a, item, price),
+    UNIQUE INDEX item (item), UNIQUE INDEX p (price)
+)
+
+statement ok
+ALTER TABLE tpar SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM tpar
+
+# Make sure that the scan actually gets parallelized.
+statement ok
+SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+# Note that table ID here is hardcoded, so if a new table is created before
+# tpar, this query will need an adjustment.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
+    ('querying next range at /Table/56/1/0',
+     'querying next range at /Table/56/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/56/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/56/1/10
