@@ -22,6 +22,7 @@ import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import EmailSubscription from "src/views/dashboard/emailSubscription";
 import "./cluster.styl";
 
 // tslint:disable-next-line:variable-name
@@ -217,6 +218,7 @@ export default class ClusterOverview extends React.Component<any, any> {
     return (
       <div className="cluster-page">
         <Helmet title="Cluster Overview" />
+        <EmailSubscription />
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>
