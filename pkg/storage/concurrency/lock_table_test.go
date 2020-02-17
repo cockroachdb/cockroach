@@ -88,7 +88,7 @@ add-discovered r=<name> k=<key> txn=<name>
 
  Adds a discovered lock that is disovered by the named request.
 
-done r=<name>
+dequeue r=<name>
 ----
 <error string>
 
@@ -102,7 +102,7 @@ new|old: state=<state> [txn=<name> ts=<ts>]
   Calls lockTableGuard.NewStateChan() in a non-blocking manner, followed by
   CurState().
 
-guard-start-waiting r=<name>
+should-wait r=<name>
 ----
 <bool>
 
@@ -351,8 +351,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return lt.(*lockTableImpl).String()
 
-			case "done":
-				// TODO(nvanbenschoten): rename this command to dequeue.
+			case "dequeue":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
 				g := guardsByReqName[reqName]
@@ -364,8 +363,7 @@ func TestLockTableBasic(t *testing.T) {
 				delete(requestsByName, reqName)
 				return lt.(*lockTableImpl).String()
 
-			case "guard-start-waiting":
-				// TODO(nvanbenschoten): rename this command to should-wait.
+			case "should-wait":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
 				g := guardsByReqName[reqName]

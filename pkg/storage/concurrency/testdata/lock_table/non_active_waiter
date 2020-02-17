@@ -211,7 +211,7 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 
-done r=req1
+dequeue r=req1
 ----
 global: num=1
  lock: "c"
@@ -222,7 +222,7 @@ guard-state r=req2
 ----
 new: state=doneWaiting
 
-done r=req2
+dequeue r=req2
 ----
 global: num=0
 local: num=0
