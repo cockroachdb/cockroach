@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/marusama/semaphore"
 )
 
 // externalSorterState indicates the current state of the external sorter.
@@ -103,10 +104,10 @@ type externalSorter struct {
 	OneInputNode
 	NonExplainable
 
+	closed             bool
 	unlimitedAllocator *Allocator
 	memoryLimit        int64
 	state              externalSorterState
-	inputDone          bool
 	inputTypes         []coltypes.T
 	ordering           execinfrapb.Ordering
 	inMemSorter        resettableOperator
@@ -148,6 +149,7 @@ func newExternalSorter(
 	memoryLimit int64,
 	maxNumberPartitions int,
 	cfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) Operator {
 	inputPartitioner := newInputPartitioningOperator(standaloneAllocator, input, memoryLimit)
 	inMemSorter, err := newSorter(
@@ -178,7 +180,7 @@ func newExternalSorter(
 		unlimitedAllocator:  unlimitedAllocator,
 		memoryLimit:         memoryLimit,
 		inMemSorter:         inMemSorter,
-		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, cfg),
+		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, cfg, fdSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition),
 		inputTypes:          inputTypes,
 		ordering:            ordering,
 		maxNumberPartitions: maxNumberPartitions,
@@ -196,14 +198,15 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 		case externalSorterNewPartition:
 			b := s.input.Next(ctx)
 			if b.Length() == 0 {
-				// The input has been fully exhausted, so we transition to "merging
-				// partitions" state.
-				s.inputDone = true
-				s.state = externalSorterRepeatedMerging
+				// The input has been fully exhausted, and it is always the case that
+				// the number of partitions is less than the maximum number since
+				// externalSorterSpillPartition will check and re-merge if not.
+				// Proceed to the final merging state.
+				s.state = externalSorterFinalMerging
 				continue
 			}
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
-			if err := s.partitioner.Enqueue(newPartitionIdx, b); err != nil {
+			if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			s.state = externalSorterSpillPartition
@@ -226,43 +229,32 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.state = externalSorterNewPartition
 				continue
 			}
-			if err := s.partitioner.Enqueue(curPartitionIdx, b); err != nil {
+			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			continue
 		case externalSorterRepeatedMerging:
-			if s.numPartitions < 2 {
-				if s.inputDone {
-					s.state = externalSorterFinalMerging
-				} else {
-					s.state = externalSorterNewPartition
-				}
-				continue
-			}
-			numPartitionsToMerge := s.maxNumberPartitions
-			if numPartitionsToMerge > s.numPartitions {
-				numPartitionsToMerge = s.numPartitions
-			}
-			if numPartitionsToMerge == s.numPartitions && s.inputDone {
-				// The input has been fully consumed and we can merge all of the
-				// remaining partitions, so we transition to "final merging" state.
-				s.state = externalSorterFinalMerging
-				continue
-			}
 			// We will merge all partitions in range [s.firstPartitionIdx,
 			// s.firstPartitionIdx+numPartitionsToMerge) and will spill all the
 			// resulting batches into a new partition with the next available
 			// index.
-			merger := s.createMergerForPartitions(s.firstPartitionIdx, numPartitionsToMerge)
+			merger := s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
 			merger.Init()
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			for b := merger.Next(ctx); b.Length() > 0; b = merger.Next(ctx) {
-				if err := s.partitioner.Enqueue(newPartitionIdx, b); err != nil {
+				if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
 					execerror.VectorizedInternalPanic(err)
 				}
 			}
-			s.firstPartitionIdx += numPartitionsToMerge
-			s.numPartitions -= numPartitionsToMerge - 1
+			// Reclaim disk space by closing the inactive read partitions. Since the
+			// merger must have exhausted all inputs, this is all the partitions just
+			// read from.
+			if err := s.partitioner.CloseInactiveReadPartitions(); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
+			s.firstPartitionIdx += s.numPartitions
+			s.numPartitions = 1
+			s.state = externalSorterNewPartition
 			continue
 		case externalSorterFinalMerging:
 			if s.numPartitions == 0 {
@@ -286,7 +278,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return b
 		case externalSorterFinished:
-			if err := s.partitioner.Close(); err != nil {
+			if err := s.Close(); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -294,6 +286,14 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected externalSorterState %d", s.state))
 		}
 	}
+}
+
+func (s *externalSorter) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.partitioner.Close()
 }
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
@@ -384,8 +384,8 @@ var _ Operator = &partitionerToOperator{}
 
 func (p *partitionerToOperator) Init() {}
 
-func (p *partitionerToOperator) Next(context.Context) coldata.Batch {
-	if err := p.partitioner.Dequeue(p.partitionIdx, p.batch); err != nil {
+func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
+	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	return p.batch
