@@ -121,11 +121,17 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op                     Operator
-	ColumnTypes            []types.T
-	InternalMemUsage       int
-	MetadataSources        []execinfrapb.MetadataSource
-	IsStreaming            bool
+	Op               Operator
+	ColumnTypes      []types.T
+	InternalMemUsage int
+	MetadataSources  []execinfrapb.MetadataSource
+	IsStreaming      bool
+	// CanRunInAutoMode returns whether the result can be run in auto mode if
+	// IsStreaming is false. This applies to operators that can spill to disk, but
+	// also operators such as the hash aggregator that buffer, but not
+	// proportionally to the input size (in the hash aggregator's case, it is the
+	// number of distinct groups).
+	CanRunInAutoMode       bool
 	BufferingOpMemMonitors []*mon.BytesMonitor
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
@@ -779,6 +785,9 @@ func NewColOperator(
 				)
 			}
 			result.ColumnTypes = spec.Input[0].ColumnTypes
+			// A sorter can run in auto mode because it falls back to disk if there
+			// is not enough memory available.
+			result.CanRunInAutoMode = true
 
 		case core.Windower != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
