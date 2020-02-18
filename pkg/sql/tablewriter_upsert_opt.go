@@ -45,6 +45,8 @@ import (
 type optTableUpserter struct {
 	tableWriterBase
 
+	evalCtx *tree.EvalContext
+
 	ri    row.Inserter
 	alloc *sqlbase.DatumAlloc
 
@@ -367,7 +369,11 @@ func (tu *optTableUpserter) updateConflictingRow(
 	//   via GenerateInsertRow().
 	// - for the fetched part, we assume that the data in the table is
 	//   correct already.
-	if err := enforceLocalColumnConstraints(updateValues, tu.updateCols); err != nil {
+	if err := enforceLocalColumnConstraints(
+		tu.evalCtx,
+		updateValues,
+		tu.updateCols,
+	); err != nil {
 		return err
 	}
 
