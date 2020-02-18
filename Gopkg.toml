@@ -93,6 +93,11 @@ ignored = [
   branch = "master"
 
 [[constraint]]
+  name = "github.com/derekparker/trie"
+  source = "https://github.com/derekparker/trie"
+  branch = "master"
+
+[[constraint]]
   name = "github.com/abourget/teamcity"
   source = "https://github.com/cockroachdb/teamcity"
 
