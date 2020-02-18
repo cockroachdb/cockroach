@@ -432,9 +432,6 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	p, stopper := newTestProcessor(nil /* rtsIter */)
 	defer stopper.Stop(context.Background())
 
-	// Set the Processor's eventC timeout.
-	p.EventChanTimeout = 100 * time.Millisecond
-
 	// Add a registration.
 	r1Stream := newTestStream()
 	r1ErrC := make(chan *roachpb.Error, 1)
@@ -465,57 +462,56 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		)},
 		r1Stream.Events(),
 	)
+	require.Equal(t,
+		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			hlc.Timestamp{WallTime: 0},
+		)},
+		r2Stream.Events(),
+	)
 
-	// Block its Send method and fill up the processor's input channel.
+	// Block its Send method and fill up the registration's input channel.
 	unblock := r1Stream.BlockSend()
 	defer func() {
 		if unblock != nil {
 			unblock()
 		}
 	}()
-	fillEventC := func() {
-		// Need one more message to fill the channel because the first one
-		// will be Sent to the stream and block the processor goroutine.
-		toFill := testProcessorEventCCap + 1
-		for i := 0; i < toFill; i++ {
-			ts := hlc.Timestamp{WallTime: int64(i + 2)}
-			p.ConsumeLogicalOps(
-				writeValueOpWithKV(roachpb.Key("k"), ts, []byte("val")),
-			)
-		}
-	}
-	fillEventC()
-	p.syncEventC()
-
-	// Wait for just the unblocked registration to catch up. This prevents the
-	// race condition where this registration overflows anyway due to the rapid
-	// event consumption and small buffer size.
-	p.syncEventAndRegistrationSpan(spXY)
-
-	// Consume one more event. Should not block.
-	consumedC := make(chan struct{})
-	go func() {
+	// Need one more message to fill the channel because the first one will be
+	// sent to the stream and block the registration outputLoop goroutine.
+	toFill := testProcessorEventCCap + 1
+	for i := 0; i < toFill; i++ {
+		ts := hlc.Timestamp{WallTime: int64(i + 2)}
 		p.ConsumeLogicalOps(
-			writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 15}, []byte("val")),
+			writeValueOpWithKV(roachpb.Key("k"), ts, []byte("val")),
 		)
-		close(consumedC)
-	}()
-	<-consumedC
-	p.syncEventC()
+
+		// Wait for just the unblocked registration to catch up. This prevents
+		// the race condition where this registration overflows anyway due to
+		// the rapid event consumption and small buffer size.
+		p.syncEventAndRegistrationSpan(spXY)
+	}
+
+	// Consume one more event. Should not block, but should cause r1 to overflow
+	// its registration buffer and drop the event.
+	p.ConsumeLogicalOps(
+		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 18}, []byte("val")),
+	)
 
 	// Wait for just the unblocked registration to catch up.
 	p.syncEventAndRegistrationSpan(spXY)
-	events := r2Stream.Events()
-	require.Equal(t, testProcessorEventCCap+3, len(events))
+	require.Equal(t, toFill+1, len(r2Stream.Events()))
 	require.Equal(t, 2, p.reg.Len())
 
 	// Unblock the send channel. The events should quickly be consumed.
 	unblock()
 	unblock = nil
-	<-consumedC
 	p.syncEventAndRegistrations()
-	// One event was dropped due to overflow.
-	require.Equal(t, testProcessorEventCCap+1, len(r1Stream.Events()))
+	// At least one event should have been dropped due to overflow. We expect
+	// exactly one event to be dropped, but it is possible that multiple events
+	// were dropped due to rapid event consumption before the r1's outputLoop
+	// began consuming from its event buffer.
+	require.LessOrEqual(t, len(r1Stream.Events()), toFill)
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), (<-r1ErrC).GoError())
 	testutils.SucceedsSoon(t, func() error {
 		if act, exp := p.Len(), 1; exp != act {

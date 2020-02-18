@@ -71,8 +71,8 @@ func (t *btree) verifyCountAllowed(tt *testing.T) {
 
 func (n *node) verifyCountAllowed(t *testing.T, root bool) {
 	if !root {
-		require.True(t, n.count >= minItems, "latch count %d must be in range [%d,%d]", n.count, minItems, maxItems)
-		require.True(t, n.count <= maxItems, "latch count %d must be in range [%d,%d]", n.count, minItems, maxItems)
+		require.GreaterOrEqual(t, n.count, int16(minItems), "latch count %d must be in range [%d,%d]", n.count, minItems, maxItems)
+		require.LessOrEqual(t, n.count, int16(maxItems), "latch count %d must be in range [%d,%d]", n.count, minItems, maxItems)
 	}
 	for i, item := range n.items {
 		if i < int(n.count) {
@@ -101,15 +101,15 @@ func (t *btree) isSorted(tt *testing.T) {
 
 func (n *node) isSorted(t *testing.T) {
 	for i := int16(1); i < n.count; i++ {
-		require.True(t, cmp(n.items[i-1], n.items[i]) <= 0)
+		require.LessOrEqual(t, cmp(n.items[i-1], n.items[i]), 0)
 	}
 	if !n.leaf {
 		for i := int16(0); i < n.count; i++ {
 			prev := n.children[i]
 			next := n.children[i+1]
 
-			require.True(t, cmp(prev.items[prev.count-1], n.items[i]) <= 0)
-			require.True(t, cmp(n.items[i], next.items[0]) <= 0)
+			require.LessOrEqual(t, cmp(prev.items[prev.count-1], n.items[i]), 0)
+			require.LessOrEqual(t, cmp(n.items[i], next.items[0]), 0)
 		}
 	}
 	n.recurse(func(child *node, _ int16) {
@@ -124,12 +124,12 @@ func (t *btree) isUpperBoundCorrect(tt *testing.T) {
 func (n *node) isUpperBoundCorrect(t *testing.T) {
 	require.Equal(t, 0, n.findUpperBound().compare(n.max))
 	for i := int16(1); i < n.count; i++ {
-		require.True(t, upperBound(n.items[i]).compare(n.max) <= 0)
+		require.LessOrEqual(t, upperBound(n.items[i]).compare(n.max), 0)
 	}
 	if !n.leaf {
 		for i := int16(0); i <= n.count; i++ {
 			child := n.children[i]
-			require.True(t, child.max.compare(n.max) <= 0)
+			require.LessOrEqual(t, child.max.compare(n.max), 0)
 		}
 	}
 	n.recurse(func(child *node, _ int16) {

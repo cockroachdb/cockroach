@@ -188,7 +188,7 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 		}
 		require.NoError(t, rows.Err())
 	}
-	require.True(t, len(systemZoneIDs) > 0, "expected some system zones, got none")
+	require.Greater(t, len(systemZoneIDs), 0, "expected some system zones, got none")
 	// Remove the entries in systemZoneIDs that don't get critical locality reports.
 	i := 0
 	for j, zid := range systemZoneIDs {
@@ -395,7 +395,7 @@ func TestMeta2RangeIter(t *testing.T) {
 		}
 		numRanges++
 	}
-	require.True(t, numRanges > 20, "expected over 20 ranges, got: %d", numRanges)
+	require.Greater(t, numRanges, 20, "expected over 20 ranges, got: %d", numRanges)
 
 	// Now make an interator with a small page size and check that we get just as many ranges.
 	iter = makeMeta2RangeIter(db, 2 /* batch size */)
@@ -427,7 +427,7 @@ func TestRetriableErrorWhenGenerationReport(t *testing.T) {
 	realIter := makeMeta2RangeIter(db, 10000 /* batchSize */)
 	require.NoError(t, visitRanges(ctx, &realIter, cfg, &v))
 	expReport := v.report
-	require.True(t, len(expReport.stats) > 0, "unexpected empty report")
+	require.Greater(t, len(expReport.stats), 0, "unexpected empty report")
 
 	realIter = makeMeta2RangeIter(db, 10000 /* batchSize */)
 	errorIter := erroryRangeIterator{
@@ -436,7 +436,7 @@ func TestRetriableErrorWhenGenerationReport(t *testing.T) {
 	}
 	v = makeReplicationStatsVisitor(ctx, cfg, func(id roachpb.NodeID) bool { return true }, &saver)
 	require.NoError(t, visitRanges(ctx, &errorIter, cfg, &v))
-	require.True(t, len(v.report.stats) > 0, "unexpected empty report")
+	require.Greater(t, len(v.report.stats), 0, "unexpected empty report")
 	require.Equal(t, expReport, v.report)
 }
 
