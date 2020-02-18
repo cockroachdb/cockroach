@@ -260,7 +260,6 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
-
 	// The RETURNING clause of the Update can refer to the columns
 	// in any of the FROM tables. As a result, the Update may need
 	// to passthrough those columns so the projection above can use
@@ -268,9 +267,10 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	if upd.NeedResults() {
 		colList = appendColsWhenPresent(colList, upd.PassthroughCols)
 	}
-
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
-	input, err := b.buildMutationInput(upd.Input, colList, &upd.MutationPrivate)
+
+	inputExpr := b.tryApplyImplicitLockingToUpdateInput(upd)
+	input, err := b.buildMutationInput(inputExpr, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -348,7 +348,9 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		colList = append(colList, ups.CanaryCol)
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
-	input, err := b.buildMutationInput(ups.Input, colList, &ups.MutationPrivate)
+
+	inputExpr := b.tryApplyImplicitLockingToUpsertInput(ups)
+	input, err := b.buildMutationInput(inputExpr, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -409,7 +411,9 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	// Upgrade execution engine to not require this.
 	colList := make(opt.ColList, 0, len(del.FetchCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
-	input, err := b.buildMutationInput(del.Input, colList, &del.MutationPrivate)
+
+	inputExpr := b.tryApplyImplicitLockingToDeleteInput(del)
+	input, err := b.buildMutationInput(inputExpr, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -723,4 +727,85 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 	default:
 		return false
 	}
+}
+
+// forUpdateLocking is the row-level locking mode used by mutations during their
+// initial row scan, when such locking is deemed desirable. The locking mode is
+// equivalent that used by a SELECT ... FOR UPDATE statement.
+var forUpdateLocking = &tree.LockingItem{Strength: tree.ForUpdate}
+
+// tryApplyImplicitLockingToUpdateInput applies a FOR UPDATE row-level locking
+// mode to the initial row scan of an UPDATE statement.
+//
+// Conceptually, if we picture an UPDATE statement as the composition of a
+// SELECT statement and an INSERT statement (with loosened semantics around
+// existing rows) then this method performs the following transformation:
+//
+//   UPDATE t = SELECT FROM t + INSERT INTO t
+//   =>
+//   UPDATE t = SELECT FROM t FOR UPDATE + INSERT INTO t
+//
+// The transformation is conditional on the UPDATE expression tree matching a
+// pattern. Specifically, the FOR UPDATE locking mode is only used during the
+// initial row scan when all row filters have been pushed into the ScanExpr. If
+// the statement includes any filters that cannot be pushed into the scan then
+// no row-level locking mode is applied. The rationale here is that FOR UPDATE
+// locking is not necessary for correctness due to serializable isolation, so it
+// is strictly a performance optimization for contended writes. Therefore, it is
+// not worth risking the transformation being a pessimization, so it is only
+// applied when doing so does not risk creating artificial contention.
+func (b *Builder) tryApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) memo.RelExpr {
+	if !b.evalCtx.SessionData.ImplicitSelectForUpdate {
+		return upd.Input
+	}
+
+	// Try to match the pattern:
+	//
+	//  (Update
+	//  	$input:(Project
+	//  		(Scan $scanPrivate:*) & ^(IsLocking $scanPrivate)
+	//  		$projections:*
+	//  		$passthrough:*
+	//  	)
+	//  	$checks:*
+	//  	$mutationPrivate:*
+	//  )
+	//
+	// If we do, apply a locking clause to the ScanExpr.
+	proj, ok := upd.Input.(*memo.ProjectExpr)
+	if !ok {
+		return upd.Input
+	}
+	scan, ok := proj.Input.(*memo.ScanExpr)
+	if !ok {
+		return upd.Input
+	}
+	if scan.Locking != nil {
+		return upd.Input
+	}
+
+	// Update the expression tree, making sure to treat is as immutable.
+	newScan := *scan
+	newScan.Locking = forUpdateLocking
+	newProject := *proj
+	newProject.Input = &newScan
+	return &newProject
+}
+
+// tryApplyImplicitLockingToUpsertInput applies a FOR UPDATE row-level locking
+// mode to the initial row scan of an UPSERT statement.
+//
+// TODO(nvanbenschoten): implement this method to match on appropriate Upsert
+// expression trees and apply a row-level locking mode.
+func (b *Builder) tryApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) memo.RelExpr {
+	return ups.Input
+}
+
+// tryApplyImplicitLockingToDeleteInput applies a FOR UPDATE row-level locking
+// mode to the initial row scan of an DELETE statement.
+//
+// TODO(nvanbenschoten): implement this method to match on appropriate Delete
+// expression trees and apply a row-level locking mode.
+func (b *Builder) tryApplyImplicitLockingToDeleteInput(del *memo.DeleteExpr) memo.RelExpr {
+	return del.Input
 }
