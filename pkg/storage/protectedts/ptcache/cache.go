@@ -41,9 +41,12 @@ type Cache struct {
 
 		started bool
 
-		// updated in fetch()
-		lastUpdate  hlc.Timestamp
-		state       ptpb.State
+		// Updated in doUpdate().
+		lastUpdate hlc.Timestamp
+		state      ptpb.State
+
+		// Updated in doUpdate but mutable. The records in the map are not mutated
+		// and should not be by any client.
 		recordsByID map[uuid.UUID]*ptpb.Record
 
 		// TODO(ajwerner): add a more efficient lookup structure such as an
@@ -76,13 +79,15 @@ func (c *Cache) Iterate(
 	_ context.Context, from, to roachpb.Key, it protectedts.Iterator,
 ) (asOf hlc.Timestamp) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	state, lastUpdate := c.mu.state, c.mu.lastUpdate
+	c.mu.RUnlock()
+
 	sp := roachpb.Span{
 		Key:    from,
 		EndKey: to,
 	}
-	for i := range c.mu.state.Records {
-		r := &c.mu.state.Records[i]
+	for i := range state.Records {
+		r := &state.Records[i]
 		if !overlaps(r, sp) {
 			continue
 		}
@@ -90,7 +95,7 @@ func (c *Cache) Iterate(
 			break
 		}
 	}
-	return c.mu.lastUpdate
+	return lastUpdate
 }
 
 // QueryRecord is part of the protectedts.Cache interface.
