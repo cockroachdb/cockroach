@@ -1569,6 +1569,7 @@ default_tablespace                        ·                   NULL      NULL   
 default_transaction_isolation             serializable        NULL      NULL        NULL        string
 default_transaction_read_only             off                 NULL      NULL        NULL        string
 distsql                                   off                 NULL      NULL        NULL        string
+enable_implicit_select_for_update         on                  NULL      NULL        NULL        string
 enable_insert_fast_path                   on                  NULL      NULL        NULL        string
 enable_zigzag_join                        on                  NULL      NULL        NULL        string
 experimental_enable_hash_sharded_indexes  off                 NULL      NULL        NULL        string
@@ -1628,6 +1629,7 @@ default_tablespace                        ·                   NULL  user     NU
 default_transaction_isolation             serializable        NULL  user     NULL      default             default
 default_transaction_read_only             off                 NULL  user     NULL      off                 off
 distsql                                   off                 NULL  user     NULL      off                 off
+enable_implicit_select_for_update         on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                   on                  NULL  user     NULL      on                  on
 enable_zigzag_join                        on                  NULL  user     NULL      on                  on
 experimental_enable_hash_sharded_indexes  off                 NULL  user     NULL      off                 off
@@ -1683,6 +1685,7 @@ default_tablespace                        NULL    NULL     NULL     NULL        
 default_transaction_isolation             NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only             NULL    NULL     NULL     NULL        NULL
 distsql                                   NULL    NULL     NULL     NULL        NULL
+enable_implicit_select_for_update         NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                   NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                        NULL    NULL     NULL     NULL        NULL
 experimental_enable_hash_sharded_indexes  NULL    NULL     NULL     NULL        NULL

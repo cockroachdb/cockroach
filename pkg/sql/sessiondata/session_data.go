@@ -95,6 +95,9 @@ type SessionData struct {
 	TempTablesEnabled bool
 	// HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
 	HashShardedIndexesEnabled bool
+	// ImplicitSelectForUpdate is true if FOR UPDATE locking may be used during
+	// the row-fetch phase of mutation statements.
+	ImplicitSelectForUpdate bool
 	// InsertFastPath is true if the fast path for insert (with VALUES input) may
 	// be used.
 	InsertFastPath bool

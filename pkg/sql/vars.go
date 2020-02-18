@@ -485,6 +485,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_implicit_select_for_update`: {
+		GetStringVal: makeBoolGetStringValFn(`enable_implicit_select_for_update`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetImplicitSelectForUpdate(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ImplicitSelectForUpdate)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(implicitSelectForUpdateClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_insert_fast_path`: {
 		GetStringVal: makeBoolGetStringValFn(`enable_insert_fast_path`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
