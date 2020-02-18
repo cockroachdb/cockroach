@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -587,12 +588,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
 	s.protectedtsReconciler = ptreconcile.NewReconciler(ptreconcile.Config{
-		Settings:    s.st,
-		Stores:      s.node.stores,
-		DB:          s.db,
-		Storage:     s.protectedtsProvider,
-		Cache:       s.protectedtsProvider,
-		StatusFuncs: ptreconcile.StatusFuncs{},
+		Settings: s.st,
+		Stores:   s.node.stores,
+		DB:       s.db,
+		Storage:  s.protectedtsProvider,
+		Cache:    s.protectedtsProvider,
+		StatusFuncs: ptreconcile.StatusFuncs{
+			jobsprotectedts.MetaType: jobsprotectedts.MakeStatusFunc(s.jobRegistry),
+		},
 	})
 	s.registry.AddMetricStruct(s.protectedtsReconciler.Metrics())
 
