@@ -478,11 +478,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		)
 	}
 
-	s.protectedtsProvider = ptprovider.New(ptprovider.Config{
+	if s.protectedtsProvider, err = ptprovider.New(ptprovider.Config{
 		DB:               s.db,
 		InternalExecutor: internalExecutor,
 		Settings:         st,
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
