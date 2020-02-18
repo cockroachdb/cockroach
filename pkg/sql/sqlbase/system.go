@@ -241,6 +241,12 @@ CREATE TABLE system.protected_ts_records (
    verified  BOOL NOT NULL DEFAULT (false),
    FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified)
 );`
+
+	PGLocksTableSchema = `
+CREATE TABLE system.pg_locks (
+   id INT8 NOT NULL PRIMARY KEY
+);
+`
 )
 
 func pk(name string) IndexDescriptor {
@@ -289,6 +295,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.ReportsMetaTableID:                   privilege.ReadWriteData,
 	keys.ProtectedTimestampsMetaTableID:       privilege.ReadData,
 	keys.ProtectedTimestampsRecordsTableID:    privilege.ReadData,
+	keys.PGLocksTableID:                       privilege.ReadData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -1241,6 +1248,41 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	PGLocksTable = TableDescriptor{
+		Name:                    "pg_locks",
+		ID:                      keys.PGLocksTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: *types.Int},
+		},
+		NextColumnID: 2,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"id"},
+				ColumnIDs:   []ColumnID{1},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Version:     1,
+			Unique:      true,
+			ColumnNames: []string{"id"},
+			ColumnIDs:   []ColumnID{1},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC,
+			},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.PGLocksTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -1293,6 +1335,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationCriticalLocalitiesTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsMetaTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsRecordsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &PGLocksTable)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
