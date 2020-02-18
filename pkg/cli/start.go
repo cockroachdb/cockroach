@@ -407,7 +407,7 @@ func initTempStorageConfig(
 	return tempStorageConfig, nil
 }
 
-var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockrach start' instead")
+var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
 func runStartSingleNode(cmd *cobra.Command, args []string) error {
 	joinFlag := flagSetForCmd(cmd).Lookup(cliflags.Join.Name)
