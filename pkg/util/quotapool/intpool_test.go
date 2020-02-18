@@ -509,7 +509,7 @@ func TestIntpoolRelease(t *testing.T) {
 				if acq == nil {
 					continue
 				}
-				require.True(t, acq.q <= capacity)
+				require.LessOrEqual(t, acq.q, uint64(capacity))
 				alloc, err := pools[acq.pool].Acquire(ctx, acq.q)
 				require.NoError(t, err)
 				allocs[i] = alloc
