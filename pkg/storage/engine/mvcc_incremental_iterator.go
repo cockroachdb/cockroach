@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -54,9 +53,7 @@ type MVCCIncrementalIterator struct {
 
 	// fields used for a workaround for a bug in the time-bound iterator
 	// (#28358)
-	upperBound roachpb.Key
-	reader     Reader
-	sanityIter Iterator
+	timeBoundIter Iterator
 
 	startTime hlc.Timestamp
 	endTime   hlc.Timestamp
@@ -81,7 +78,8 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
-	var sanityIter Iterator
+	var iter Iterator
+	var timeBoundIter Iterator
 	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
 		// It is necessary for correctness that sanityIter be created before iter.
 		// This is because the provided Reader may not be a consistent snapshot, so
@@ -90,24 +88,40 @@ func NewMVCCIncrementalIterator(
 		// between the two iterators lead to intents and values falling outside of
 		// the timestamp range **from iter's perspective**. This allows us to simply
 		// ignore discrepancies that we notice in advance(). See #34819.
-		sanityIter = reader.NewIterator(IterOptions{
+		// TODO(pbardea): Update this comment.
+		// An iterator without the timestamp hints is created to ensure that the
+		// iterator visits every required version of every key that has changed.
+		iter = reader.NewIterator(IterOptions{
 			UpperBound: opts.IterOptions.UpperBound,
 		})
+		timeBoundIter = reader.NewIterator(opts.IterOptions)
+	}
+
+	if iter == nil {
+		iter = reader.NewIterator(opts.IterOptions)
 	}
 
 	return &MVCCIncrementalIterator{
-		reader:     reader,
-		upperBound: opts.IterOptions.UpperBound,
-		iter:       reader.NewIterator(opts.IterOptions),
-		startTime:  opts.StartTime,
-		endTime:    opts.EndTime,
-		sanityIter: sanityIter,
+		iter:          iter,
+		startTime:     opts.StartTime,
+		endTime:       opts.EndTime,
+		timeBoundIter: timeBoundIter,
 	}
 }
 
 // SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key.
 func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
+	if i.timeBoundIter != nil {
+		i.timeBoundIter.SeekGE(startKey)
+		tbiKey := i.timeBoundIter.Key().Key
+		// If the TBI knows it can jump further than a simple Seek, do it.
+		// TODO(pbardea): tbiKey should never be before iter.
+		if tbiKey.Compare(startKey.Key) > 0 {
+			// Seek to the first version of the key that TBI provided.
+			startKey = MakeMVCCMetadataKey(tbiKey)
+		}
+	}
 	i.iter.SeekGE(startKey)
 	i.err = nil
 	i.valid = true
@@ -117,8 +131,8 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 // Close frees up resources held by the iterator.
 func (i *MVCCIncrementalIterator) Close() {
 	i.iter.Close()
-	if i.sanityIter != nil {
-		i.sanityIter.Close()
+	if i.timeBoundIter != nil {
+		i.timeBoundIter.Close()
 	}
 }
 
@@ -139,6 +153,39 @@ func (i *MVCCIncrementalIterator) NextKey() {
 	i.advance()
 }
 
+func (i *MVCCIncrementalIterator) maybeSkipKeys() {
+	if i.timeBoundIter != nil {
+		// If we have a timeBoundIterator, see if we can skip any keys.
+		tbiKey := i.timeBoundIter.Key().Key
+		iterKey := i.iter.Key().Key
+		// TODO(pbardea): iterKey should always be >= iterKey at this point.
+		if iterKey.Compare(tbiKey) > 0 {
+			// If the iterKey got ahead of the TBI key, advance the TBI Key.
+			i.timeBoundIter.NextKey()
+			if ok, err := i.timeBoundIter.Valid(); !ok {
+				i.err = err
+				i.valid = false
+				return
+			}
+			tbiKey = i.timeBoundIter.Key().Key
+			// TODO(pbardea): tbiKey should always be >= iterKey at this point.
+			if iterKey.Compare(tbiKey) < 0 {
+				// If the tbiKey leapfrogged the iterKey, Seek the iterKey to catch
+				// up.
+				seekKey := MakeMVCCMetadataKey(tbiKey)
+				i.iter.SeekGE(seekKey)
+				if ok, err := i.iter.Valid(); !ok {
+					i.err = err
+					i.valid = false
+					return
+				}
+			}
+		}
+	}
+}
+
+// Advance
+// 	Pre: TBI and Iter are pointing to the same key, but perhaps different versions.
 func (i *MVCCIncrementalIterator) advance() {
 	for {
 		if !i.valid {
@@ -150,30 +197,17 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
+		i.maybeSkipKeys()
+		if !i.valid {
+			return
+		}
+
 		unsafeMetaKey := i.iter.UnsafeKey()
 		if unsafeMetaKey.IsValue() {
 			i.meta.Reset()
 			i.meta.Timestamp = hlc.LegacyTimestamp(unsafeMetaKey.Timestamp)
 		} else {
-			// HACK(dan): Work around a known bug in the time-bound iterator.
-			// For reasons described in #28358, a time-bound iterator will
-			// sometimes see an unresolved intent where there is none. A normal
-			// iterator doesn't have this problem, so we work around it by
-			// double checking all non-value keys. If sanityCheckMetadataKey
-			// returns false, then the intent was a phantom and we ignore it.
-			// NB: this could return a newer intent than the one the time-bound
-			// iterator saw; this is handled.
-			unsafeValueBytes, ok, err := i.sanityCheckMetadataKey()
-			if err != nil {
-				i.err = err
-				i.valid = false
-				return
-			} else if !ok {
-				i.iter.Next()
-				continue
-			}
-
-			if i.err = protoutil.Unmarshal(unsafeValueBytes, &i.meta); i.err != nil {
+			if i.err = i.iter.ValueProto(&i.meta); i.err != nil {
 				i.valid = false
 				return
 			}
@@ -214,28 +248,6 @@ func (i *MVCCIncrementalIterator) advance() {
 
 		break
 	}
-}
-
-// sanityCheckMetadataKey looks up the current `i.iter` key using a normal,
-// non-time-bound iterator and returns the value if the normal iterator also
-// sees that exact key. Otherwise, it returns false. It's used in the workaround
-// in `advance` for a time-bound iterator bug.
-func (i *MVCCIncrementalIterator) sanityCheckMetadataKey() ([]byte, bool, error) {
-	if i.sanityIter == nil {
-		// If sanityIter is not set, it's because we're not using time-bound
-		// iterator and we don't need the sanity check.
-		return i.iter.UnsafeValue(), true, nil
-	}
-	unsafeKey := i.iter.UnsafeKey()
-	i.sanityIter.SeekGE(unsafeKey)
-	if ok, err := i.sanityIter.Valid(); err != nil {
-		return nil, false, err
-	} else if !ok {
-		return nil, false, nil
-	} else if !i.sanityIter.UnsafeKey().Equal(unsafeKey) {
-		return nil, false, nil
-	}
-	return i.sanityIter.UnsafeValue(), true, nil
 }
 
 // Valid must be called after any call to Reset(), Next(), or similar methods.

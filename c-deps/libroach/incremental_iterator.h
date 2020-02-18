@@ -27,7 +27,7 @@ struct DBIncrementalIterator {
   const rocksdb::Slice value();
 
   std::unique_ptr<DBIterator> iter;
-  std::unique_ptr<DBIterator> sanity_iter;
+  std::unique_ptr<DBIterator> time_bound_iter;
 
   DBEngine* engine;
   DBIterOptions opts;
@@ -42,6 +42,8 @@ struct DBIncrementalIterator {
                              const cockroach::util::hlc::LegacyTimestamp& t2);
   DBIterState getState();
   void advanceKey();
+  void maybeSkipKeys();
+  std::string getKey(rocksdb::Slice mvcc_key);
 
   cockroach::util::hlc::LegacyTimestamp start_time;
   cockroach::util::hlc::LegacyTimestamp end_time;
