@@ -1210,7 +1210,7 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
-		if !g.ts.LessEq(newTs) {
+		if g.ts.Less(newTs) {
 			// Stop waiting.
 			l.waitingReaders.Remove(curr)
 			if g == l.distinguishedWaiter {
