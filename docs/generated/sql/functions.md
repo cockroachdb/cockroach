@@ -1170,6 +1170,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tbody>
 <tr><td><a name="format_type"></a><code>format_type(type_oid: oid, typemod: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the SQL name of a data type that is identified by its type OID and possibly a type modifier. Currently, the type modifier is ignored.</p>
 </span></td></tr>
+<tr><td><a name="getdatabaseencoding"></a><code>getdatabaseencoding() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current encoding name used by the database.</p>
+</span></td></tr>
 <tr><td><a name="has_any_column_privilege"></a><code>has_any_column_privilege(table: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for any column of table.</p>
 </span></td></tr>
 <tr><td><a name="has_any_column_privilege"></a><code>has_any_column_privilege(table: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for any column of table.</p>
