@@ -298,7 +298,8 @@ func (expr *AndExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	ops := BinOps[expr.Operator]
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, true, expr.Left, expr.Right)
+	//typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, true, expr.Left, expr.Right)
+	typedSubExprs, fns, err := pgUseOverload(ctx, ops, expr.Left, expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -352,6 +353,10 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = binOp
 	expr.typ = binOp.returnType()(typedSubExprs)
+	if desired != types.Any && desired.Oid() != expr.typ.Oid() {
+		// fmt.Printf("desired %s, found %s (impl: %s)\n", desired.String(), expr.typ.String(), expr.fn.Signature(true))
+		return NewTypedCastExpr(expr, desired)
+	}
 	return expr, nil
 }
 
@@ -835,7 +840,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		}
 	}
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
+	//	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
+	typedSubExprs, fns, err := pgUseOverload(ctx, def.Definition, expr.Exprs...)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"%s()", def.Name)
@@ -936,6 +942,10 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	}
 	if overloadImpl.counter != nil {
 		telemetry.Inc(overloadImpl.counter)
+	}
+	if desired != types.Any && desired.Oid() != expr.typ.Oid() {
+		// fmt.Printf("desired %s, found %s (impl: %s)\n", desired.String(), expr.typ.String(), expr.fn.Signature(true))
+		return NewTypedCastExpr(expr, desired)
 	}
 	return expr, nil
 }
@@ -1124,7 +1134,8 @@ func (expr *Subquery) TypeCheck(sc *SemaContext, _ *types.T) (TypedExpr, error) 
 func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	ops := UnaryOps[expr.Operator]
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, false, expr.Expr)
+	//typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, false, expr.Expr)
+	typedSubExprs, fns, err := pgUseOverload(ctx, ops, expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,6 +1178,10 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 	expr.Expr = exprTyped
 	expr.fn = unaryOp
 	expr.typ = unaryOp.returnType()(typedSubExprs)
+	if desired != types.Any && desired.Oid() != expr.typ.Oid() {
+		// fmt.Printf("desired %s, found %s (impl: %s)\n", desired.String(), expr.typ.String(), expr.fn.Signature(true))
+		return NewTypedCastExpr(expr, desired)
+	}
 	return expr, nil
 }
 
@@ -1700,9 +1715,10 @@ func typeCheckComparisonOp(
 	// defined to return NULL anyways. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(
-		ctx, types.Any, ops, true /* inBinOp */, foldedLeft, foldedRight,
-	)
+	//typedSubExprs, fns, err := typeCheckOverloadedExprs(
+	//	ctx, types.Any, ops, true /* inBinOp */, foldedLeft, foldedRight,
+	//)
+	typedSubExprs, fns, err := pgUseOverload(ctx, ops, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -1731,21 +1747,23 @@ func typeCheckComparisonOp(
 		}
 	}
 
-	// Throw a typing error if overload resolution found either no compatible candidates
-	// or if it found an ambiguity.
-	collationMismatch :=
-		leftReturn.Family() == types.CollatedStringFamily && !leftReturn.Equivalent(rightReturn)
-	if len(fns) != 1 || collationMismatch {
-		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
-		if len(fns) == 0 || collationMismatch {
-			return nil, nil, nil, false,
-				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
+	/*
+		// Throw a typing error if overload resolution found either no compatible candidates
+		// or if it found an ambiguity.
+		collationMismatch :=
+			leftReturn.Family() == types.CollatedStringFamily && !leftReturn.Equivalent(rightReturn)
+		if len(fns) != 1 || collationMismatch {
+			sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
+			if len(fns) == 0 || collationMismatch {
+				return nil, nil, nil, false,
+					pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
+			}
+			fnsStr := formatCandidates(op.String(), fns)
+			err = pgerror.Newf(pgcode.AmbiguousFunction, ambiguousCompErrFmt, sig)
+			err = errors.WithHintf(err, candidatesHintFmt, fnsStr)
+			return nil, nil, nil, false, err
 		}
-		fnsStr := formatCandidates(op.String(), fns)
-		err = pgerror.Newf(pgcode.AmbiguousFunction, ambiguousCompErrFmt, sig)
-		err = errors.WithHintf(err, candidatesHintFmt, fnsStr)
-		return nil, nil, nil, false, err
-	}
+	*/
 
 	return leftExpr, rightExpr, fns[0].(*CmpOp), false, nil
 }
