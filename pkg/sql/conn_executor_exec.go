@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -469,7 +471,7 @@ func (ex *connExecutor) execStmtInOpenState(
 // If this method succeeds it is the caller's responsibility to release the
 // executor's table leases after the txn commits so that schema changes can
 // proceed.
-func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
+func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) (err error) {
 	tables := ex.extraTxnState.tables.getTablesWithNewVersion()
 	if tables == nil {
 		return nil
@@ -478,6 +480,24 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
 	}
+	defer func() {
+		log.Infof(ctx, "checkTableTwoVersionInvariant %v %v %v", txn.IsCommitted(), txn.ID(), err)
+	}()
+	for _, t := range tables {
+		log.Infof(ctx, "acquiring exclusive lock for ", t)
+		k := encoding.EncodeUntaggedIntValue(nil, int64(t.id))
+		notifyKey := encoding.EncodeUntaggedIntValue(keys.MakeTablePrefix(keys.TableDescriptorSingleVersionLockNotifyTableID),
+			int64(t.id))
+		if _, err := ex.planner.execCfg.SingleVersionLeaseManager.AcquireExclusiveWithAction(ctx, txn, func(ctx context.Context) error {
+			return ex.planner.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				return txn.Put(ctx, notifyKey, []byte{'a'})
+			})
+		}, k); err != nil {
+			return err
+		}
+		log.Infof(ctx, "acquired exclusive lock for %v", t)
+	}
+	log.Infof(ctx, "moving to commit %v", txn.ID())
 
 	// We potentially hold leases for tables which we've modified which
 	// we need to drop. Say we're updating tables at version V. All leases

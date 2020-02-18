@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -572,6 +573,8 @@ type ExecutorConfig struct {
 	ProtectedTimestampProvider protectedts.Provider
 
 	LockManager pgadvisory.LockManager
+
+	SingleVersionLeaseManager *leasemanager.LeaseManager
 }
 
 // Organization returns the value of cluster.organization.

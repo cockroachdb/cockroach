@@ -284,7 +284,9 @@ func (ds *ServerImpl) setupFlow(
 				return ds.SessionBoundInternalExecutorFactory(ctx, sd)
 			},
 		}
-
+		if ds.ServerConfig.SingleVersionLeaseMananger == nil {
+			panic("WTF")
+		}
 		// It's important to populate evalCtx.Txn early. We'll write it again in the
 		// f.SetTxn() call below, but by then it will already have been captured by
 		// processors.
@@ -302,12 +304,13 @@ func (ds *ServerImpl) setupFlow(
 			Mon:         &monitor,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
-			Context:          ctx,
-			Planner:          &sqlbase.DummyEvalPlanner{},
-			SessionAccessor:  &sqlbase.DummySessionAccessor{},
-			Sequence:         &sqlbase.DummySequenceOperators{},
-			InternalExecutor: ie,
-			Txn:              leafTxn,
+			Context:                   ctx,
+			Planner:                   &sqlbase.DummyEvalPlanner{},
+			SessionAccessor:           &sqlbase.DummySessionAccessor{},
+			Sequence:                  &sqlbase.DummySequenceOperators{},
+			InternalExecutor:          ie,
+			Txn:                       leafTxn,
+			SingleVersionLeaseManager: ds.ServerConfig.SingleVersionLeaseMananger,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))

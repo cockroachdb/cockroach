@@ -209,6 +209,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		sql.LeaseManagerTestingKnobs{},
 		stopper,
 		cfg,
+		execCfg.SingleVersionLeaseManager,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.TODO())

@@ -272,7 +272,7 @@ func (p *planner) truncateTable(
 	}
 	newTableDesc.Mutations = nil
 	newTableDesc.GCMutations = nil
-	newTableDesc.ModificationTime = p.txn.CommitTimestamp()
+	// newTableDesc.ModificationTime = p.txn.CommitTimestamp()
 	if err := p.createDescriptorWithID(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err

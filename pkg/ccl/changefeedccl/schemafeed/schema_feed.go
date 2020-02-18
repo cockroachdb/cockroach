@@ -16,8 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -52,10 +54,13 @@ type FilterFunc func(context.Context, TableEvent) (shouldFilter bool, err error)
 
 // Config configures a SchemaFeed.
 type Config struct {
-	DB       *client.DB
-	Clock    *hlc.Clock
-	Settings *cluster.Settings
-	Targets  jobspb.ChangefeedTargets
+	DB         *client.DB
+	DistSender *kv.DistSender
+	Clock      *hlc.Clock
+	Settings   *cluster.Settings
+	Targets    jobspb.ChangefeedTargets
+
+	LockManager *leasemanager.LeaseManager
 
 	FilterFunc FilterFunc
 

@@ -46,26 +46,23 @@ func (lm *LeaseManager) AcquireShared(
 	ctx context.Context, txn *client.Txn, key []byte,
 ) (Lease, error) {
 	exKey, shKey := makeSharedKeys(lm.prefix, key, txn.ID())
-	var laidDownExKeyIntent bool
+	var mainTxnError error
 	err := lm.db.Txn(ctx, func(ctx context.Context, sideTxn *client.Txn) (err error) {
-		if laidDownExKeyIntent {
-			return errors.AssertionFailedf(
-				"should not be able to contend on shKey "+
-					"-- if there's a retryable error there then there's a programming bug: txn ID %v", txn.ID())
-		}
 		if err := sideTxn.Put(ctx, exKey, nil); err != nil {
 			return err
 		}
-		laidDownExKeyIntent = true
 		txn.PushTo(sideTxn.ProvisionalCommitTimestamp())
 		if err := txn.PutLease(ctx, shKey, nil); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err,
-				"should not be able to contend on shKey "+
-					"-- if there's a retryable error there then there's a programming bug: txn ID %v", txn.ID())
+			mainTxnError = err
+			return failedError
 		}
 		sideTxn.PushTo(txn.ProvisionalCommitTimestamp())
 		return nil
 	})
+	if err == failedError {
+		txn.CleanupOnError(ctx, mainTxnError)
+		return nil, mainTxnError
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +72,10 @@ func (lm *LeaseManager) AcquireShared(
 	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset(), startTime: txn.ProvisionalCommitTimestamp(), exclusive: false}, nil
 }
 
-func (lm *LeaseManager) AcquireExclusive(
-	ctx context.Context, txn *client.Txn, key []byte,
+var failedError = errors.New("failed")
+
+func (lm *LeaseManager) AcquireExclusiveWithAction(
+	ctx context.Context, txn *client.Txn, f func(ctx context.Context) error, key []byte,
 ) (Lease, error) {
 	// Here we want to write a delete to the constructed key for the name plus maybe a suffix
 	// then we're going to DeleteRange over the shared lock suffix.
@@ -84,7 +83,11 @@ func (lm *LeaseManager) AcquireExclusive(
 	if err := txn.PutLease(ctx, exKey, nil); err != nil {
 		return nil, err
 	}
-
+	if f != nil {
+		if err := f(ctx); err != nil {
+			return nil, err
+		}
+	}
 	var sideTxn *client.Txn
 	if err := lm.db.Txn(ctx, func(ctx context.Context, st *client.Txn) (err2 error) {
 		sideTxn = st
@@ -98,6 +101,12 @@ func (lm *LeaseManager) AcquireExclusive(
 		return nil, err
 	}
 	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset(), startTime: txn.ProvisionalCommitTimestamp(), exclusive: true}, nil
+}
+
+func (lm *LeaseManager) AcquireExclusive(
+	ctx context.Context, txn *client.Txn, key []byte,
+) (Lease, error) {
+	return lm.AcquireExclusiveWithAction(ctx, txn, nil, key)
 }
 
 // TODO(ajwerner): Optimize allocations here by allocating all of the keys from

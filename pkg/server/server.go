@@ -592,6 +592,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(distSQLMetrics)
 
 	// Set up Lease Manager
+	singleVersionLeaseTablePrefix := keys.MakeTablePrefix(keys.TableDescriptorSingleVersionLockTableID)
+	singleVersionLeaseManager := leasemanager.New(singleVersionLeaseTablePrefix, s.db)
 	var lmKnobs sql.LeaseManagerTestingKnobs
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
 		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
@@ -606,6 +608,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		lmKnobs,
 		s.stopper,
 		s.cfg.LeaseManagerConfig,
+		singleVersionLeaseManager,
 	)
 
 	// Set up the DistSQL server.
@@ -644,8 +647,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeDialer:   s.nodeDialer,
 		LeaseManager: s.leaseMgr,
 
-		ExternalStorage:        externalStorage,
-		ExternalStorageFromURI: externalStorageFromURI,
+		ExternalStorage:            externalStorage,
+		ExternalStorageFromURI:     externalStorageFromURI,
+		SingleVersionLeaseMananger: singleVersionLeaseManager,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
@@ -706,7 +710,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	loggerCtx, _ := s.stopper.WithCancelOnStop(ctx)
-
 	execCfg = sql.ExecutorConfig{
 		Settings:                s.st,
 		NodeInfo:                nodeInfo,
@@ -771,6 +774,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
 		ProtectedTimestampProvider: s.protectedtsProvider,
 		LockManager:                s.lockManager,
+		SingleVersionLeaseManager:  singleVersionLeaseManager,
 	}
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

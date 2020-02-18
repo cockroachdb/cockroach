@@ -372,6 +372,7 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 		// Note that we leave the transaction record that we wrote in the STAGING
 		// state, which is not ideal. But as long as we continue heartbeating the
 		// txn record, it being PENDING or STAGING does not make a difference.
+		log.Infof(context.TODO(), "after staging")
 		reason := roachpb.RETRY_SERIALIZABLE
 		if br.Txn.WriteTooOld {
 			reason = roachpb.RETRY_WRITE_TOO_OLD
