@@ -27,7 +27,31 @@ struct DBIncrementalIterator {
   const rocksdb::Slice value();
 
   std::unique_ptr<DBIterator> iter;
-  std::unique_ptr<DBIterator> sanity_iter;
+
+  // The time_bound_iter is used as a performance optimization to potentially
+  // allow skipping over a large amount of keys. The time bound iterator skips
+  // sstables which do not contain keys modified in a certain interval.
+  //
+  // A time-bound iterator cannot be used by itself due to a bug in the time-
+  // bound iterator (#28358). This was historically augmented with an iterator
+  // without the time-bound optimization to act as a sanity iterator, but
+  // issues remained (#43799), so now the iterator above is the main iterator
+  // the timeBoundIter is used to check if any keys can be skipped by the main
+  // iterator.
+  //
+  // Note regarding the correctness of the time-bound iterator optimization:
+  //
+  // When using (t_s, t_e], say there is a version (committed or provisional)
+  // k@t where t is in that interval, that is visible to iter. All sstables
+  // containing k@t will be included in timeBoundIter. Note that there may be
+  // multiple sequence numbers for the key k@t at the storage layer, say k@t#n1,
+  // k@t#n2, where n1 > n2, some of which may be deleted, but the latest
+  // sequence number will be visible using iter (since not being visible would be
+  // a contradiction of the initial assumption that k@t is visible to iter).
+  // Since there is no delete across all sstables that deletes k@t#n1, there is
+  // no delete in the subset of sstables used by timeBoundIter that deletes
+  // k@t#n1, so the timeBoundIter will see k@t.
+  std::unique_ptr<DBIterator> time_bound_iter;
 
   DBEngine* engine;
   DBIterOptions opts;
@@ -42,6 +66,8 @@ struct DBIncrementalIterator {
                              const cockroach::util::hlc::LegacyTimestamp& t2);
   DBIterState getState();
   void advanceKey();
+  void maybeSkipKeys();
+  std::string getKey(rocksdb::Slice mvcc_key);
 
   cockroach::util::hlc::LegacyTimestamp start_time;
   cockroach::util::hlc::LegacyTimestamp end_time;

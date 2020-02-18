@@ -47,16 +47,31 @@ import (
 //      ...
 //    }
 //
+// Note regarding the correctness of the time-bound iterator optimization:
+//
+// When using (t_s, t_e], say there is a version (committed or provisional)
+// k@t where t is in that interval, that is visible to iter. All sstables
+// containing k@t will be included in timeBoundIter. Note that there may be
+// multiple sequence numbers for the key k@t at the storage layer, say k@t#n1,
+// k@t#n2, where n1 > n2, some of which may be deleted, but the latest
+// sequence number will be visible using iter (since not being visible would be
+// a contradiction of the initial assumption that k@t is visible to iter).
+// Since there is no delete across all sstables that deletes k@t#n1, there is
+// no delete in the subset of sstables used by timeBoundIter that deletes
+// k@t#n1, so the timeBoundIter will see k@t.
+//
 // NOTE: This is not used by CockroachDB and has been preserved to serve as an
 // oracle to prove the correctness of the new export logic.
 type MVCCIncrementalIterator struct {
 	iter Iterator
 
-	// fields used for a workaround for a bug in the time-bound iterator
-	// (#28358)
-	upperBound roachpb.Key
-	reader     Reader
-	sanityIter Iterator
+	// A time-bound iterator cannot be used by itself due to a bug in the time-
+	// bound iterator (#28358). This was historically augmented with an iterator
+	// without the time-bound optimization to act as a sanity iterator, but
+	// issues remained (#43799), so now the iterator above is the main iterator
+	// the timeBoundIter is used to check if any keys can be skipped by the main
+	// iterator.
+	timeBoundIter Iterator
 
 	startTime hlc.Timestamp
 	endTime   hlc.Timestamp
@@ -81,33 +96,45 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
-	var sanityIter Iterator
+	var iter Iterator
+	var timeBoundIter Iterator
 	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
-		// It is necessary for correctness that sanityIter be created before iter.
-		// This is because the provided Reader may not be a consistent snapshot, so
-		// the two could end up observing different information. The hack around
-		// sanityCheckMetadataKey only works properly if all possible discrepancies
-		// between the two iterators lead to intents and values falling outside of
-		// the timestamp range **from iter's perspective**. This allows us to simply
-		// ignore discrepancies that we notice in advance(). See #34819.
-		sanityIter = reader.NewIterator(IterOptions{
+		// An iterator without the timestamp hints is created to ensure that the
+		// iterator visits every required version of every key that has changed.
+		iter = reader.NewIterator(IterOptions{
 			UpperBound: opts.IterOptions.UpperBound,
 		})
+		timeBoundIter = reader.NewIterator(opts.IterOptions)
+	} else {
+		iter = reader.NewIterator(opts.IterOptions)
 	}
 
 	return &MVCCIncrementalIterator{
-		reader:     reader,
-		upperBound: opts.IterOptions.UpperBound,
-		iter:       reader.NewIterator(opts.IterOptions),
-		startTime:  opts.StartTime,
-		endTime:    opts.EndTime,
-		sanityIter: sanityIter,
+		iter:          iter,
+		startTime:     opts.StartTime,
+		endTime:       opts.EndTime,
+		timeBoundIter: timeBoundIter,
 	}
 }
 
 // SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key.
 func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
+	if i.timeBoundIter != nil {
+		i.timeBoundIter.SeekGE(startKey)
+		if ok, err := i.timeBoundIter.Valid(); !ok {
+			i.err = err
+			i.valid = false
+			return
+		}
+		tbiKey := i.timeBoundIter.Key().Key
+		// The main iterator should jump to further of the start key and the first
+		// key seen by the TBI.
+		if tbiKey.Compare(startKey.Key) > 0 {
+			// Seek to the first version of the key that TBI provided.
+			startKey = MakeMVCCMetadataKey(tbiKey)
+		}
+	}
 	i.iter.SeekGE(startKey)
 	i.err = nil
 	i.valid = true
@@ -117,8 +144,8 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 // Close frees up resources held by the iterator.
 func (i *MVCCIncrementalIterator) Close() {
 	i.iter.Close()
-	if i.sanityIter != nil {
-		i.sanityIter.Close()
+	if i.timeBoundIter != nil {
+		i.timeBoundIter.Close()
 	}
 }
 
@@ -130,7 +157,7 @@ func (i *MVCCIncrementalIterator) Next() {
 	i.advance()
 }
 
-// NextKey advances the iterator to the next MVCC key. This operation is
+// NextKey advances the iterator to the next key. This operation is
 // distinct from Next which advances to the next version of the current key or
 // the next key if the iterator is currently located at the last version for a
 // key.
@@ -139,6 +166,63 @@ func (i *MVCCIncrementalIterator) NextKey() {
 	i.advance()
 }
 
+// maybeSkipKeys checks if any keys can be skipped by using a time-bound
+// iterator. If it can, the main iterator is advanced to the next key
+// that should be considered. The TBI will point to a key with the same
+// MVCC key.
+//
+// Pre: The TBI should be pointing to either the same key or the key prior
+// to the same key as the main iterator. This is enforced by a combination
+// of a) only updating the time-bound iterator from this method, and seeking
+// the main iterator to match and b) only calling Next/NextKey on the main
+// iterator once between invocations of this method.
+//
+// Post: If the main iterator was ahead of the TBI, the TBI will be advanced
+// and the main iterator will point to the same MVCC key as the TBI, but
+// possibly different timestamp.
+func (i *MVCCIncrementalIterator) maybeSkipKeys() {
+	if i.timeBoundIter != nil {
+		// If we have a time bound iterator, we should check if we should skip
+		// keys.
+		tbiKey := i.timeBoundIter.Key().Key
+		iterKey := i.iter.Key().Key
+		if iterKey.Compare(tbiKey) > 0 {
+			// If the iterKey got ahead of the TBI key, advance the TBI Key.
+			i.timeBoundIter.NextKey()
+			if ok, err := i.timeBoundIter.Valid(); !ok {
+				i.err = err
+				i.valid = false
+				return
+			}
+			tbiKey = i.timeBoundIter.Key().Key
+			// The fast-path is when the TBI and the main iterator are in lockstep.
+			// In this case, the main iterator was referencing the next key that
+			// would be visited by the TBI. Now they should be referencing the same
+			// MVCC key, so the if statement below will not be entered.
+			// This means that for the incremental iterator to perform a Next or
+			// NextKey in this case, it will require only 1 extra NextKey call to the
+			// TBI.
+			if iterKey.Compare(tbiKey) < 0 {
+				// In the case that the next MVCC key that the TBI observes is not the
+				// same as the main iterator, we may be able to skip over a large group
+				// of keys. The main iterator is seeked to the TBI in hopes that many
+				// keys were skipped. Note that a Seek is an order of magnitude more
+				// expensive than a Next call.
+				seekKey := MakeMVCCMetadataKey(tbiKey)
+				i.iter.SeekGE(seekKey)
+				if ok, err := i.iter.Valid(); !ok {
+					i.err = err
+					i.valid = false
+					return
+				}
+			}
+		}
+	}
+}
+
+// advance advances the main iterator until it is referencing a key within
+// (start_time, end_time]. It may return an error if it encounters an
+// unexpected key such as a key with an inline value.
 func (i *MVCCIncrementalIterator) advance() {
 	for {
 		if !i.valid {
@@ -150,30 +234,17 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
+		i.maybeSkipKeys()
+		if !i.valid {
+			return
+		}
+
 		unsafeMetaKey := i.iter.UnsafeKey()
 		if unsafeMetaKey.IsValue() {
 			i.meta.Reset()
 			i.meta.Timestamp = hlc.LegacyTimestamp(unsafeMetaKey.Timestamp)
 		} else {
-			// HACK(dan): Work around a known bug in the time-bound iterator.
-			// For reasons described in #28358, a time-bound iterator will
-			// sometimes see an unresolved intent where there is none. A normal
-			// iterator doesn't have this problem, so we work around it by
-			// double checking all non-value keys. If sanityCheckMetadataKey
-			// returns false, then the intent was a phantom and we ignore it.
-			// NB: this could return a newer intent than the one the time-bound
-			// iterator saw; this is handled.
-			unsafeValueBytes, ok, err := i.sanityCheckMetadataKey()
-			if err != nil {
-				i.err = err
-				i.valid = false
-				return
-			} else if !ok {
-				i.iter.Next()
-				continue
-			}
-
-			if i.err = protoutil.Unmarshal(unsafeValueBytes, &i.meta); i.err != nil {
+			if i.err = protoutil.Unmarshal(i.iter.UnsafeValue(), &i.meta); i.err != nil {
 				i.valid = false
 				return
 			}
@@ -203,6 +274,9 @@ func (i *MVCCIncrementalIterator) advance() {
 			continue
 		}
 
+		// Note that MVCC keys are sorted by key, then by _descending_ timestamp
+		// order with the exception of the metakey (timestamp 0) being sorted
+		// first. See mvcc.h for more information.
 		if i.endTime.Less(metaTimestamp) {
 			i.iter.Next()
 			continue
@@ -214,28 +288,6 @@ func (i *MVCCIncrementalIterator) advance() {
 
 		break
 	}
-}
-
-// sanityCheckMetadataKey looks up the current `i.iter` key using a normal,
-// non-time-bound iterator and returns the value if the normal iterator also
-// sees that exact key. Otherwise, it returns false. It's used in the workaround
-// in `advance` for a time-bound iterator bug.
-func (i *MVCCIncrementalIterator) sanityCheckMetadataKey() ([]byte, bool, error) {
-	if i.sanityIter == nil {
-		// If sanityIter is not set, it's because we're not using time-bound
-		// iterator and we don't need the sanity check.
-		return i.iter.UnsafeValue(), true, nil
-	}
-	unsafeKey := i.iter.UnsafeKey()
-	i.sanityIter.SeekGE(unsafeKey)
-	if ok, err := i.sanityIter.Valid(); err != nil {
-		return nil, false, err
-	} else if !ok {
-		return nil, false, nil
-	} else if !i.sanityIter.UnsafeKey().Equal(unsafeKey) {
-		return nil, false, nil
-	}
-	return i.sanityIter.UnsafeValue(), true, nil
 }
 
 // Valid must be called after any call to Reset(), Next(), or similar methods.
