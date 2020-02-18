@@ -19,7 +19,7 @@ import (
 	"strings"
 )
 
-var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ ]*) (?P<result>.*)$`)
+var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>.*)$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
