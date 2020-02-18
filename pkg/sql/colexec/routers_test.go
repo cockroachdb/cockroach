@@ -801,11 +801,12 @@ func TestHashRouterRandom(t *testing.T) {
 	// same data to the same number of outputs.
 	var expectedDistribution []int
 	for _, mtc := range memoryTestCases {
-		t.Run(testName, func(t *testing.T) {
+		t.Run(fmt.Sprintf(testName+"/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
 				unblockEventsChan := make(chan struct{}, 2*numOutputs)
 				outputs := make([]routerOutput, numOutputs)
 				outputsAsOps := make([]Operator, numOutputs)
+				memoryLimitPerOutput := mtc.bytes / int64(len(outputs))
 				for i := range outputs {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctx)
@@ -813,7 +814,7 @@ func TestHashRouterRandom(t *testing.T) {
 					// may not be used concurrently.
 					allocator := NewAllocator(ctx, &acc)
 					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-						allocator, typs, unblockEventsChan, mtc.bytes, queueCfg, blockedThreshold, outputSize,
+						allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, blockedThreshold, outputSize,
 					)
 					outputs[i] = op
 					outputsAsOps[i] = op
