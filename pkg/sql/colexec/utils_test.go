@@ -1042,6 +1042,9 @@ func TestRepeatableBatchSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batchLen := uint16(10)
+	if coldata.BatchSize() < batchLen {
+		batchLen = coldata.BatchSize()
+	}
 	batch.SetLength(batchLen)
 	input := NewRepeatableBatchSource(testAllocator, batch)
 
