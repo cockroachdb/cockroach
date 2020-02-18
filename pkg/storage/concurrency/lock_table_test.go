@@ -42,17 +42,17 @@ import (
 Test needs to handle caller constraints wrt latches being held. The datadriven
 test uses the following format:
 
-locktable maxlocks=<int>
+new-locktable maxlocks=<int>
 ----
 
   Creates a lockTable.
 
-txn txn=<name> ts=<int>[,<int>] epoch=<int>
+new-txn txn=<name> ts=<int>[,<int>] epoch=<int>
 ----
 
  Creates a TxnMeta.
 
-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+...
+new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+...
 ----
 
  Creates a Request.
@@ -88,7 +88,7 @@ add-discovered r=<name> k=<key> txn=<name>
 
  Adds a discovered lock that is disovered by the named request.
 
-done r=<name>
+dequeue r=<name>
 ----
 <error string>
 
@@ -102,7 +102,7 @@ new|old: state=<state> [txn=<name> ts=<ts>]
   Calls lockTableGuard.NewStateChan() in a non-blocking manner, followed by
   CurState().
 
-guard-start-waiting r=<name>
+should-wait r=<name>
 ----
 <bool>
 
@@ -192,13 +192,13 @@ func TestLockTableBasic(t *testing.T) {
 		guardsByReqName := make(map[string]lockTableGuard)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "locktable":
+			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
 				lt = newLockTable(int64(maxLocks))
 				return ""
 
-			case "txn":
+			case "new-txn":
 				// UUIDs for transactions are numbered from 1 by this test code and
 				// lockTableImpl.String() knows about UUIDs and not transaction names.
 				// Assigning txnNames of the form txn1, txn2, ... keeps the two in sync,
@@ -222,7 +222,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return ""
 
-			case "request":
+			case "new-request":
 				// Seqnums for requests are numbered from 1 by lockTableImpl and
 				// lockTableImpl.String() does not know about request names. Assigning
 				// request names of the form req1, req2, ... keeps the two in sync,
@@ -351,8 +351,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return lt.(*lockTableImpl).String()
 
-			case "done":
-				// TODO(nvanbenschoten): rename this command to dequeue.
+			case "dequeue":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
 				g := guardsByReqName[reqName]
@@ -364,8 +363,7 @@ func TestLockTableBasic(t *testing.T) {
 				delete(requestsByName, reqName)
 				return lt.(*lockTableImpl).String()
 
-			case "guard-start-waiting":
-				// TODO(nvanbenschoten): rename this command to should-wait.
+			case "should-wait":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
 				g := guardsByReqName[reqName]

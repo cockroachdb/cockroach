@@ -1,21 +1,21 @@
 # Tests where the same key is in both ReadWrite and ReadOnly spans.
 
-locktable maxlocks=10000
+new-lock-table maxlocks=10000
 ----
 
 # Test: req2 accesses "a" as both write and read. Once it has reservation for write
 # it does not wait at "a" for read.
 
-txn txn=txn1 ts=10 epoch=0
+new-txn txn=txn1 ts=10 epoch=0
 ----
 
-txn txn=txn2 ts=10 epoch=0
+new-txn txn=txn2 ts=10 epoch=0
 ----
 
-txn txn=txn3 ts=10 epoch=0
+new-txn txn=txn3 ts=10 epoch=0
 ----
 
-request r=req1 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req1 txn=txn1 ts=10 spans=w@a+w@b+w@c
 ----
 
 scan r=req1
@@ -29,14 +29,14 @@ global: num=1
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req1
+dequeue r=req1
 ----
 global: num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-request r=req2 txn=txn2 ts=10 spans=w@a+r@a
+new-request r=req2 txn=txn2 ts=10 spans=w@a+r@a
 ----
 
 scan r=req2
@@ -68,7 +68,7 @@ guard-state r=req2
 ----
 new: state=doneWaiting
 
-done r=req2
+dequeue r=req2
 ----
 global: num=0
 local: num=0
@@ -76,7 +76,7 @@ local: num=0
 # Test: req5 accesses "b" as both write and read. It has its reservation at "b" broken, but ignores
 # "b" when encounters it as reader.
 
-request r=req3 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req3 txn=txn1 ts=10 spans=w@a+w@b+w@c
 ----
 
 scan r=req3
@@ -110,7 +110,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req3
+dequeue r=req3
 ----
 global: num=3
  lock: "a"
@@ -121,7 +121,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-request r=req4 txn=txn2 ts=10 spans=w@a+w@b
+new-request r=req4 txn=txn2 ts=10 spans=w@a+w@b
 ----
 
 scan r=req4
@@ -132,7 +132,7 @@ guard-state r=req4
 ----
 new: state=waitForDistinguished txn=txn1 ts=10 key="a" held=true guard-access=write
 
-request r=req5 txn=txn3 ts=10 spans=w@b+w@c+r@b
+new-request r=req5 txn=txn3 ts=10 spans=w@b+w@c+r@b
 ----
 
 scan r=req5
@@ -270,7 +270,7 @@ global: num=3
   res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
 local: num=0
 
-done r=req4
+dequeue r=req4
 ----
 global: num=2
  lock: "b"
@@ -279,7 +279,7 @@ global: num=2
   res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
 local: num=0
 
-done r=req5
+dequeue r=req5
 ----
 global: num=0
 local: num=0
@@ -294,7 +294,7 @@ local: num=0
 # "b" when encountering it as a reader. This is the non-transactional request version of the
 # previous test.
 
-request r=req6 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req6 txn=txn1 ts=10 spans=w@a+w@b+w@c
 ----
 
 scan r=req6
@@ -328,7 +328,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req6
+dequeue r=req6
 ----
 global: num=3
  lock: "a"
@@ -339,7 +339,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-request r=req7 txn=txn2 ts=10 spans=w@a+w@b
+new-request r=req7 txn=txn2 ts=10 spans=w@a+w@b
 ----
 
 scan r=req7
@@ -350,7 +350,7 @@ guard-state r=req7
 ----
 new: state=waitForDistinguished txn=txn1 ts=10 key="a" held=true guard-access=write
 
-request r=req8 txn=none ts=10 spans=w@b+w@c+r@b
+new-request r=req8 txn=none ts=10 spans=w@b+w@c+r@b
 ----
 
 scan r=req8
@@ -485,7 +485,7 @@ global: num=2
    distinguished req: 8
 local: num=0
 
-done r=req7
+dequeue r=req7
 ----
 global: num=1
  lock: "b"
@@ -495,7 +495,7 @@ global: num=1
    distinguished req: 8
 local: num=0
 
-done r=req8
+dequeue r=req8
 ----
 global: num=1
  lock: "b"

@@ -6,16 +6,16 @@
 # - lock held replicated with no active waiter (lock "d"): not cleared and inactive waiter remains
 #   in queue. The next ScanAndEnqueue call makes it an active waiter.
 
-locktable maxlocks=4
+new-lock-table maxlocks=4
 ----
 
-txn txn=txn1 ts=10 epoch=0
+new-txn txn=txn1 ts=10 epoch=0
 ----
 
-txn txn=txn2 ts=10 epoch=0
+new-txn txn=txn2 ts=10 epoch=0
 ----
 
-request r=req1 txn=txn1 ts=10 spans=w@a,e
+new-request r=req1 txn=txn1 ts=10 spans=w@a,e
 ----
 
 scan r=req1
@@ -65,7 +65,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-done r=req1
+dequeue r=req1
 ----
 global: num=3
  lock: "a"
@@ -76,14 +76,14 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-request r=req2 txn=txn2 ts=10 spans=w@a,c
+new-request r=req2 txn=txn2 ts=10 spans=w@a,c
 ----
 
 scan r=req2
 ----
 start-waiting: true
 
-request r=req3 txn=txn2 ts=10 spans=w@a,c
+new-request r=req3 txn=txn2 ts=10 spans=w@a,c
 ----
 
 scan r=req3
@@ -142,28 +142,28 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-request r=req4 txn=txn2 ts=10 spans=r@b
+new-request r=req4 txn=txn2 ts=10 spans=r@b
 ----
 
 scan r=req4
 ----
 start-waiting: true
 
-request r=req5 txn=txn2 ts=10 spans=w@b
+new-request r=req5 txn=txn2 ts=10 spans=w@b
 ----
 
 scan r=req5
 ----
 start-waiting: true
 
-request r=req6 txn=txn2 ts=10 spans=w@c
+new-request r=req6 txn=txn2 ts=10 spans=w@c
 ----
 
 scan r=req6
 ----
 start-waiting: true
 
-request r=req7 txn=txn2 ts=10 spans=w@d
+new-request r=req7 txn=txn2 ts=10 spans=w@d
 ----
 
 scan r=req7
@@ -200,7 +200,7 @@ global: num=4
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000002
 local: num=0
 
-request r=req8 txn=txn2 ts=10 spans=w@e
+new-request r=req8 txn=txn2 ts=10 spans=w@e
 ----
 
 scan r=req8
