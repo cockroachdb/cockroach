@@ -695,12 +695,12 @@ func BenchmarkAggregator(b *testing.B) {
 					for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 2, int(coldata.BatchSize())} {
 						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
+								if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
+									typ = coltypes.Bool
+								}
 								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
 									groupSize, hasNulls, numInputBatches),
 									func(b *testing.B) {
-										if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
-											typ = coltypes.Bool
-										}
 										colTypes := []coltypes.T{coltypes.Int64, typ}
 										nTuples := numInputBatches * int(coldata.BatchSize())
 										cols := []coldata.Vec{
