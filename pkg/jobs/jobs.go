@@ -545,6 +545,25 @@ func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn
 	return j.registry.db.Txn(ctx, fn)
 }
 
+// JobNotFoundError is returned from load when the job does not exist.
+type JobNotFoundError struct {
+	jobID int64
+}
+
+// Error makes JobNotFoundError and error.
+func (e *JobNotFoundError) Error() string {
+	return fmt.Sprintf("job with ID %d does not exist", e.jobID)
+}
+
+// HasJobNotFoundError returns true if the error contains a JobNotFoundError.
+func HasJobNotFoundError(err error) bool {
+	_, hasJobNotFoundError := errors.If(err, func(err error) (interface{}, bool) {
+		_, isJobNotFoundError := err.(*JobNotFoundError)
+		return err, isJobNotFoundError
+	})
+	return hasJobNotFoundError
+}
+
 func (j *Job) load(ctx context.Context) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
@@ -557,7 +576,7 @@ func (j *Job) load(ctx context.Context) error {
 			return err
 		}
 		if row == nil {
-			return fmt.Errorf("job with ID %d does not exist", *j.ID())
+			return &JobNotFoundError{jobID: *j.ID()}
 		}
 		payload, err = UnmarshalPayload(row[0])
 		if err != nil {
