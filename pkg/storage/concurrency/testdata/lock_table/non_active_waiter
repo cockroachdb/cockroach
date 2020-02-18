@@ -1,15 +1,15 @@
 # Tests where a request is a non-active waiter.
 
-locktable maxlocks=10000
+new-lock-table maxlocks=10000
 ----
 
-txn txn=txn1 ts=10 epoch=0
+new-txn txn=txn1 ts=10 epoch=0
 ----
 
-txn txn=txn2 ts=10 epoch=0
+new-txn txn=txn2 ts=10 epoch=0
 ----
 
-request r=req1 txn=txn1 ts=10 spans=w@a+r@b+w@c
+new-request r=req1 txn=txn1 ts=10 spans=w@a+r@b+w@c
 ----
 
 scan r=req1
@@ -68,7 +68,7 @@ global: num=3
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 local: num=0
 
-request r=req2 txn=txn1 ts=10 spans=w@c
+new-request r=req2 txn=txn1 ts=10 spans=w@c
 ----
 
 scan r=req2
@@ -211,7 +211,7 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 
-done r=req1
+dequeue r=req1
 ----
 global: num=1
  lock: "c"
@@ -222,7 +222,7 @@ guard-state r=req2
 ----
 new: state=doneWaiting
 
-done r=req2
+dequeue r=req2
 ----
 global: num=0
 local: num=0
