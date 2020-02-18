@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -45,15 +46,11 @@ func TestExternalSort(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	// Interesting memory limits:
-	// 0 - the default 64MiB value is used, so we exercise that the disk spilling
-	//     machinery doesn't affect the correctness.
-	// 1 - this will force the in-memory sorter to hit the memory limit right
-	//     after it spools the first batch (i.e. it will buffer up a single batch
-	//     and then will hit OOM) which will trigger the external sort.
-	for _, memoryLimit := range []int64{0, 1} {
-		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-		t.Run(fmt.Sprintf("MemoryLimit=%d", memoryLimit), func(t *testing.T) {
+	// Test the case in which the default memory is used as well as the case in
+	// which the joiner spills to disk.
+	for _, spillForced := range []bool{false, true} {
+		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+		t.Run(fmt.Sprintf("spillForced=%t", spillForced), func(t *testing.T) {
 			for _, tc := range sortTestCases {
 				runTests(
 					t,
@@ -104,17 +101,20 @@ func TestExternalSortRandomized(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	// Interesting memory limits:
-	// 1 - this will force the in-memory sorter to hit the memory limit right
-	//     after it spools the first batch (i.e. it will buffer up a single batch
-	//     and then will hit OOM) which will trigger the external sort.
-	// 10240 (mon.DefaultPoolAllocationSize) - this will allow the in-memory sorter
-	//     to spool several batches before hitting the memory limit.
-	for _, memoryLimit := range []int64{1, mon.DefaultPoolAllocationSize} {
-		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+	// Interesting disk spilling scenarios:
+	// 1) The sorter is forced to spill to disk as soon as possible.
+	// 2) The memory limit is set to mon.DefaultPoolAllocationSize, this will
+	//    allow the in-memory sorter to spool several batches before hitting the
+	//    memory limit.
+	for _, tk := range []execinfra.TestingKnobs{{ForceDiskSpill: true}, {MemoryLimitBytes: mon.DefaultPoolAllocationSize}} {
+		flowCtx.Cfg.TestingKnobs = tk
 		for nCols := 1; nCols < maxCols; nCols++ {
 			for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-				name := fmt.Sprintf("MemoryLimit=%d/nCols=%d/nOrderingCols=%d", memoryLimit, nCols, nOrderingCols)
+				namePrefix := "MemoryLimit=" + humanizeutil.IBytes(tk.MemoryLimitBytes)
+				if tk.ForceDiskSpill {
+					namePrefix = "ForceDiskSpill=true"
+				}
+				name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d", namePrefix, nCols, nOrderingCols)
 				t.Run(name, func(t *testing.T) {
 					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
 					runTests(
@@ -162,10 +162,9 @@ func BenchmarkExternalSort(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			for _, memoryLimit := range []int64{0, 1} {
-				flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-				shouldSpill := memoryLimit > 0
-				name := fmt.Sprintf("rows=%d/cols=%d/spilled=%t", nBatches*int(coldata.BatchSize()), nCols, shouldSpill)
+			for _, spillForced := range []bool{false, true} {
+				flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+				name := fmt.Sprintf("rows=%d/cols=%d/spilled=%t", nBatches*int(coldata.BatchSize()), nCols, spillForced)
 				b.Run(name, func(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
@@ -202,8 +201,8 @@ func BenchmarkExternalSort(b *testing.B) {
 						sorter.Init()
 						for out := sorter.Next(ctx); out.Length() != 0; out = sorter.Next(ctx) {
 						}
-						require.Equal(b, shouldSpill, spilled, fmt.Sprintf(
-							"expected: spilled=%t\tactual: spilled=%t", shouldSpill, spilled,
+						require.Equal(b, spillForced, spilled, fmt.Sprintf(
+							"expected: spilled=%t\tactual: spilled=%t", spillForced, spilled,
 						))
 					}
 				})
