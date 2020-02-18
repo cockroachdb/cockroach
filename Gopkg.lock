@@ -548,6 +548,15 @@
   version = "v1.1.1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:ed968c62ba1d187aa1246762b224ff262a1b26fac9a0b6642be624843e64a89f"
+  name = "github.com/derekparker/trie"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "e66023ee76ebe0c4339a14a027dca540e15b6dd7"
+  source = "https://github.com/derekparker/trie"
+
+[[projects]]
   digest = "1:76dc72490af7174349349838f2fe118996381b31ea83243812a97e5a0fd5ed55"
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
@@ -2050,6 +2059,7 @@
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
     "github.com/codahale/hdrhistogram",
+    "github.com/derekparker/trie",
     "github.com/docker/distribution/reference",
     "github.com/docker/docker/api/types",
     "github.com/docker/docker/api/types/container",
