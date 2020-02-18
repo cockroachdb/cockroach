@@ -64,29 +64,30 @@ query TTT
 EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-·                                        distributed   false
-·                                        vectorized    false
-root                                     ·             ·
- ├── limit                               ·             ·
- │    │                                  count         1
- │    └── scan buffer node               ·             ·
- │                                       label         buffer 1 (a)
- └── subquery                            ·             ·
-      │                                  id            @S1
-      │                                  original sql  UPDATE t SET x = x + 1 RETURNING x
-      │                                  exec mode     all rows
-      └── buffer node                    ·             ·
-           │                             label         buffer 1 (a)
-           └── spool                     ·             ·
-                └── run                  ·             ·
-                     └── update          ·             ·
-                          │              table         t
-                          │              set           x
-                          │              strategy      updater
-                          └── render     ·             ·
-                               └── scan  ·             ·
-·                                        table         t@primary
-·                                        spans         ALL
+·                                        distributed       false
+·                                        vectorized        false
+root                                     ·                 ·
+ ├── limit                               ·                 ·
+ │    │                                  count             1
+ │    └── scan buffer node               ·                 ·
+ │                                       label             buffer 1 (a)
+ └── subquery                            ·                 ·
+      │                                  id                @S1
+      │                                  original sql      UPDATE t SET x = x + 1 RETURNING x
+      │                                  exec mode         all rows
+      └── buffer node                    ·                 ·
+           │                             label             buffer 1 (a)
+           └── spool                     ·                 ·
+                └── run                  ·                 ·
+                     └── update          ·                 ·
+                          │              table             t
+                          │              set               x
+                          │              strategy          updater
+                          └── render     ·                 ·
+                               └── scan  ·                 ·
+·                                        table             t@primary
+·                                        spans             ALL
+·                                        locking strength  for update
 
 query TTT
 EXPLAIN WITH a AS (UPSERT INTO t VALUES (2), (3) RETURNING x)
@@ -167,29 +168,30 @@ root                                ·             ·
 query TTT
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
 ----
-·                                        distributed   false
-·                                        vectorized    false
-root                                     ·             ·
- ├── limit                               ·             ·
- │    │                                  count         1
- │    └── scan buffer node               ·             ·
- │                                       label         buffer 1
- └── subquery                            ·             ·
-      │                                  id            @S1
-      │                                  original sql  UPDATE t SET x = x + 1 RETURNING x
-      │                                  exec mode     all rows
-      └── buffer node                    ·             ·
-           │                             label         buffer 1
-           └── spool                     ·             ·
-                └── run                  ·             ·
-                     └── update          ·             ·
-                          │              table         t
-                          │              set           x
-                          │              strategy      updater
-                          └── render     ·             ·
-                               └── scan  ·             ·
-·                                        table         t@primary
-·                                        spans         ALL
+·                                        distributed       false
+·                                        vectorized        false
+root                                     ·                 ·
+ ├── limit                               ·                 ·
+ │    │                                  count             1
+ │    └── scan buffer node               ·                 ·
+ │                                       label             buffer 1
+ └── subquery                            ·                 ·
+      │                                  id                @S1
+      │                                  original sql      UPDATE t SET x = x + 1 RETURNING x
+      │                                  exec mode         all rows
+      └── buffer node                    ·                 ·
+           │                             label             buffer 1
+           └── spool                     ·                 ·
+                └── run                  ·                 ·
+                     └── update          ·                 ·
+                          │              table             t
+                          │              set               x
+                          │              strategy          updater
+                          └── render     ·                 ·
+                               └── scan  ·                 ·
+·                                        table             t@primary
+·                                        spans             ALL
+·                                        locking strength  for update
 
 query TTT
 EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2), (3) RETURNING x] LIMIT 1

@@ -339,6 +339,7 @@ root                                       ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
  │                                         spans               ALL
+ │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
@@ -369,6 +370,7 @@ root                                       ·                      ·
  │                   └── scan              ·                      ·
  │                                         table                  child@primary
  │                                         spans                  /10-/10/#
+ │                                         locking strength       for update
  └── postquery                             ·                      ·
       └── error if rows                    ·                      ·
            └── lookup-join                 ·                      ·
@@ -398,6 +400,7 @@ root                                                      ·                   �
  │                   └── scan                             ·                   ·
  │                                                        table               parent@primary
  │                                                        spans               ALL
+ │                                                        locking strength    for update
  ├── postquery                                            ·                   ·
  │    └── error if rows                                   ·                   ·
  │         └── render                                     ·                   ·
@@ -446,48 +449,49 @@ root                                                      ·                   �
 query TTT
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
 ----
-·                                                    distributed  false
-·                                                    vectorized   false
-root                                                 ·            ·
- ├── count                                           ·            ·
- │    └── update                                     ·            ·
- │         │                                         table        parent
- │         │                                         set          p
- │         │                                         strategy     updater
- │         └── buffer node                           ·            ·
- │              │                                    label        buffer 1
- │              └── render                           ·            ·
- │                   └── scan                        ·            ·
- │                                                   table        parent@parent_other_key
- │                                                   spans        /10-/11
- ├── postquery                                       ·            ·
- │    └── error if rows                              ·            ·
- │         └── lookup-join                           ·            ·
- │              │                                    table        child@child_auto_index_fk_p_ref_parent
- │              │                                    type         semi
- │              │                                    equality     (p) = (p)
- │              └── render                           ·            ·
- │                   └── union                       ·            ·
- │                        ├── render                 ·            ·
- │                        │    └── scan buffer node  ·            ·
- │                        │                          label        buffer 1
- │                        └── render                 ·            ·
- │                             └── scan buffer node  ·            ·
- │                                                   label        buffer 1
- └── postquery                                       ·            ·
-      └── error if rows                              ·            ·
-           └── lookup-join                           ·            ·
-                │                                    table        child_nullable@child_nullable_auto_index_fk_p_ref_parent
-                │                                    type         semi
-                │                                    equality     (p) = (p)
-                └── render                           ·            ·
-                     └── union                       ·            ·
-                          ├── render                 ·            ·
-                          │    └── scan buffer node  ·            ·
-                          │                          label        buffer 1
-                          └── render                 ·            ·
-                               └── scan buffer node  ·            ·
-·                                                    label        buffer 1
+·                                                    distributed       false
+·                                                    vectorized        false
+root                                                 ·                 ·
+ ├── count                                           ·                 ·
+ │    └── update                                     ·                 ·
+ │         │                                         table             parent
+ │         │                                         set               p
+ │         │                                         strategy          updater
+ │         └── buffer node                           ·                 ·
+ │              │                                    label             buffer 1
+ │              └── render                           ·                 ·
+ │                   └── scan                        ·                 ·
+ │                                                   table             parent@parent_other_key
+ │                                                   spans             /10-/11
+ │                                                   locking strength  for update
+ ├── postquery                                       ·                 ·
+ │    └── error if rows                              ·                 ·
+ │         └── lookup-join                           ·                 ·
+ │              │                                    table             child@child_auto_index_fk_p_ref_parent
+ │              │                                    type              semi
+ │              │                                    equality          (p) = (p)
+ │              └── render                           ·                 ·
+ │                   └── union                       ·                 ·
+ │                        ├── render                 ·                 ·
+ │                        │    └── scan buffer node  ·                 ·
+ │                        │                          label             buffer 1
+ │                        └── render                 ·                 ·
+ │                             └── scan buffer node  ·                 ·
+ │                                                   label             buffer 1
+ └── postquery                                       ·                 ·
+      └── error if rows                              ·                 ·
+           └── lookup-join                           ·                 ·
+                │                                    table             child_nullable@child_nullable_auto_index_fk_p_ref_parent
+                │                                    type              semi
+                │                                    equality          (p) = (p)
+                └── render                           ·                 ·
+                     └── union                       ·                 ·
+                          ├── render                 ·                 ·
+                          │    └── scan buffer node  ·                 ·
+                          │                          label             buffer 1
+                          └── render                 ·                 ·
+                               └── scan buffer node  ·                 ·
+·                                                    label             buffer 1
 
 statement ok
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
@@ -509,6 +513,7 @@ root                                                      ·                   �
  │                   └── scan                             ·                   ·
  │                                                        table               child@primary
  │                                                        spans               ALL
+ │                                                        locking strength    for update
  └── postquery                                            ·                   ·
       └── error if rows                                   ·                   ·
            └── render                                     ·                   ·
@@ -550,6 +555,7 @@ root                                       ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
  │                                         spans               ALL
+ │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
@@ -580,6 +586,7 @@ root                                       ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
  │                                         spans               ALL
+ │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
@@ -610,6 +617,7 @@ root                                                      ·                   �
  │                   └── scan                             ·                   ·
  │                                                        table               child@primary
  │                                                        spans               ALL
+ │                                                        locking strength    for update
  ├── postquery                                            ·                   ·
  │    └── error if rows                                   ·                   ·
  │         └── hash-join                                  ·                   ·
@@ -666,6 +674,7 @@ root                                       ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
  │                                         spans               ALL
+ │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
@@ -699,6 +708,7 @@ root                                       ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               self@primary
  │                                         spans               ALL
+ │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
@@ -729,6 +739,7 @@ root                                                      ·                   �
  │                   └── scan                             ·                   ·
  │                                                        table               self@primary
  │                                                        spans               ALL
+ │                                                        locking strength    for update
  └── postquery                                            ·                   ·
       └── error if rows                                   ·                   ·
            └── render                                     ·                   ·

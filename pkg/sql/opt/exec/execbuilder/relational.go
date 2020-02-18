@@ -489,6 +489,11 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		hardLimit = 0
 	}
 
+	locking := scan.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
@@ -501,7 +506,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
 		rowCount,
-		scan.Locking,
+		locking,
 	)
 	if err != nil {
 		return execPlan{}, err

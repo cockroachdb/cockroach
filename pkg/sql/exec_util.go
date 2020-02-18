@@ -183,6 +183,12 @@ var optDrivenFKClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
+var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.implicit_select_for_update.enabled",
+	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
+	true,
+)
+
 var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.insert_fast_path.enabled",
 	"default value for enable_insert_fast_path session setting; enables a specialized insert path",
@@ -1880,6 +1886,10 @@ func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 
 func (m *sessionDataMutator) SetOptimizerFKs(val bool) {
 	m.data.OptimizerFKs = val
+}
+
+func (m *sessionDataMutator) SetImplicitSelectForUpdate(val bool) {
+	m.data.ImplicitSelectForUpdate = val
 }
 
 func (m *sessionDataMutator) SetInsertFastPath(val bool) {
