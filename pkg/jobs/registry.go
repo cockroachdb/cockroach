@@ -89,15 +89,16 @@ type NodeLiveness interface {
 // node simply behaves as though its leniency period is 0. Epoch-based
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
-	ac       log.AmbientContext
-	stopper  *stop.Stopper
-	db       *client.DB
-	ex       sqlutil.InternalExecutor
-	clock    *hlc.Clock
-	nodeID   *base.NodeIDContainer
-	settings *cluster.Settings
-	planFn   planHookMaker
-	metrics  Metrics
+	ac         log.AmbientContext
+	stopper    *stop.Stopper
+	db         *client.DB
+	ex         sqlutil.InternalExecutor
+	clock      *hlc.Clock
+	nodeID     *base.NodeIDContainer
+	settings   *cluster.Settings
+	planFn     planHookMaker
+	metrics    Metrics
+	adoptionCh chan struct{}
 
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile string
@@ -165,6 +166,7 @@ func MakeRegistry(
 		settings:            settings,
 		planFn:              planFn,
 		preventAdoptionFile: preventAdoptionFile,
+		adoptionCh:          make(chan struct{}),
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
@@ -263,6 +265,12 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 	log.Infof(ctx, "scheduled jobs %+v", jobs)
 	buf := bytes.Buffer{}
 	for i, id := range jobs {
+		select {
+		case r.adoptionCh <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
 		if i > 0 {
 			buf.WriteString(",")
 		}
@@ -393,19 +401,25 @@ func (r *Registry) Start(
 		}
 	})
 
+	maybeAdoptJobs := func(ctx context.Context) {
+		if r.adoptionDisabled(ctx) {
+			r.cancelAll(ctx)
+			return
+		}
+		if err := r.maybeAdoptJob(ctx, nl); err != nil {
+			log.Errorf(ctx, "error while adopting jobs: %s", err)
+		}
+	}
+
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for {
 			select {
 			case <-stopper.ShouldStop():
 				return
+			case <-r.adoptionCh:
+				maybeAdoptJobs(ctx)
 			case <-time.After(adoptInterval):
-				if r.adoptionDisabled(ctx) {
-					r.cancelAll(ctx)
-					continue
-				}
-				if err := r.maybeAdoptJob(ctx, nl); err != nil {
-					log.Errorf(ctx, "error while adopting jobs: %s", err)
-				}
+				maybeAdoptJobs(ctx)
 			}
 		}
 	})
