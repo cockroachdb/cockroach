@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -673,17 +674,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 		}
 		// Make the materializer, which will write to the given receiver.
 		columnTypes := s.syncFlowConsumer.Types()
-		converted, err := typeconv.FromColumnTypes(columnTypes)
-		if err != nil {
-			return errors.AssertionFailedf(
-				"unsupported types should have been caught in SupportsVectorized check\n%v", err)
-		}
-		for i, expColType := range converted {
-			if opOutputTypes[i] != expColType {
-				return errors.Errorf("mismatched physical types at index %d: expected %v\tactual %v ",
-					i, converted, opOutputTypes,
-				)
-			}
+		if err := assertTypesMatch(columnTypes, opOutputTypes); err != nil {
+			return err
 		}
 		var outputStatsToTrace func()
 		if s.recordingStats {
@@ -837,26 +829,31 @@ func (s *vectorizedFlowCreator) setupFlow(
 	NEXTOUTPUT:
 		for i := range pspec.Output {
 			for j := range pspec.Output[i].Streams {
-				stream := &pspec.Output[i].Streams[j]
-				if stream.Type != execinfrapb.StreamEndpointSpec_LOCAL {
+				outputStream := &pspec.Output[i].Streams[j]
+				if outputStream.Type != execinfrapb.StreamEndpointSpec_LOCAL {
 					continue
 				}
-				procIdx, ok := streamIDToSpecIdx[stream.StreamID]
+				procIdx, ok := streamIDToSpecIdx[outputStream.StreamID]
 				if !ok {
-					return nil, errors.Errorf("couldn't find stream %d", stream.StreamID)
+					return nil, errors.Errorf("couldn't find stream %d", outputStream.StreamID)
 				}
 				outputSpec := &processorSpecs[procIdx]
 				for k := range outputSpec.Input {
 					for l := range outputSpec.Input[k].Streams {
-						stream := outputSpec.Input[k].Streams[l]
-						if stream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
+						inputStream := outputSpec.Input[k].Streams[l]
+						if inputStream.StreamID == outputStream.StreamID {
+							if err := assertTypesMatch(outputSpec.Input[k].ColumnTypes, opOutputTypes); err != nil {
+								return nil, err
+							}
+						}
+						if inputStream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
 							// Remote streams are not present in streamIDToInputOp. The
 							// Inboxes that consume these streams are created at the same time
 							// as the operator that needs them, so skip the creation check for
 							// this input.
 							continue
 						}
-						if _, ok := s.streamIDToInputOp[stream.StreamID]; !ok {
+						if _, ok := s.streamIDToInputOp[inputStream.StreamID]; !ok {
 							continue NEXTOUTPUT
 						}
 					}
@@ -872,6 +869,23 @@ func (s *vectorizedFlowCreator) setupFlow(
 		execerror.VectorizedInternalPanic("not all vectorized stats collectors have been processed")
 	}
 	return s.leaves, nil
+}
+
+// assertTypesMatch checks whether expected logical types match with actual
+// physical types and returns an error if not.
+func assertTypesMatch(expected []types.T, actual []coltypes.T) error {
+	converted, err := typeconv.FromColumnTypes(expected)
+	if err != nil {
+		return err
+	}
+	for i := range converted {
+		if converted[i] != actual[i] {
+			return errors.Errorf("mismatched physical types at index %d: expected %v\tactual %v ",
+				i, converted, actual,
+			)
+		}
+	}
+	return nil
 }
 
 type vectorizedInboundStreamHandler struct {
