@@ -132,6 +132,61 @@ project
       └── null [type=bool]
 
 # --------------------------------------------------
+# FoldInEmpty
+# --------------------------------------------------
+norm expect=FoldInEmpty
+SELECT 1 IN ()
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
+norm expect=FoldInEmpty
+SELECT NULL IN ()
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
+norm expect=FoldInEmpty
+SELECT i FROM a WHERE i = ANY ARRAY[]
+----
+values
+ ├── columns: i:2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(2)
+
+# --------------------------------------------------
+# FoldNotInEmpty
+# --------------------------------------------------
+norm expect=FoldNotInEmpty
+SELECT 1 NOT IN ()
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+norm expect=FoldNotInEmpty
+SELECT NULL NOT IN ()
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+# --------------------------------------------------
 # FoldArray
 # --------------------------------------------------
 norm expect=FoldArray

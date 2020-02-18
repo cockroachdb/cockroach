@@ -13,7 +13,6 @@ package norm_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -48,24 +47,6 @@ func TestNormRules(t *testing.T) {
 			return tester.RunCommand(t, d)
 		})
 	})
-}
-
-// Test the FoldNullInEmpty rule. Can't create empty tuple on right side of
-// IN/NOT IN in SQL, so do it here.
-func TestRuleFoldNullInEmpty(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	var f norm.Factory
-	f.Init(&evalCtx, nil /* catalog */)
-
-	in := f.ConstructIn(memo.NullSingleton, memo.EmptyTuple)
-	if in.Op() != opt.FalseOp {
-		t.Errorf("expected NULL IN () to fold to False")
-	}
-
-	notIn := f.ConstructNotIn(memo.NullSingleton, memo.EmptyTuple)
-	if notIn.Op() != opt.TrueOp {
-		t.Errorf("expected NULL NOT IN () to fold to True")
-	}
 }
 
 // Ensure that every binary commutative operator overload can have its operands
