@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:08636edd4ac1b095a9689b7a07763aa70e035068e0ff0e9dbfe2b6299b98e498"
+  digest = "1:a3c285e3889a4a06eb1217c37e36458bb694b67fdbece6dd47996ead3110be15"
   name = "cloud.google.com/go"
   packages = [
     "compute/metadata",
@@ -11,6 +11,7 @@
     "internal/optional",
     "internal/trace",
     "internal/version",
+    "profiler",
     "storage",
   ]
   pruneopts = "UT"
@@ -1604,13 +1605,14 @@
   revision = "4a2b4c8f7e0a3754fdd5a3341a27c2431c2a5385"
 
 [[projects]]
-  digest = "1:3b5a3bc35810830ded5e26ef9516e933083a2380d8e57371fdfde3c70d7c6952"
+  digest = "1:381ccafa5e013a0e3f9b54604ae522a73b9533a375a6a714b483c634d5e927ab"
   name = "go.opencensus.io"
   packages = [
     ".",
     "exemplar",
     "internal",
     "internal/tagencoding",
+    "plugin/ocgrpc",
     "plugin/ochttp",
     "plugin/ochttp/propagation/b3",
     "stats",
@@ -1837,7 +1839,7 @@
   revision = "63859f3815cb436d25749575cb14aef1153e5634"
 
 [[projects]]
-  digest = "1:768c35ec83dd17029060ea581d6ca9fdcaef473ec87e93e4bb750949035f6070"
+  digest = "1:f74d790135904662a19e6624c5e33f1fb51ccf36f71011eed396472d8ce94fb4"
   name = "google.golang.org/api"
   packages = [
     "gensupport",
@@ -1848,6 +1850,7 @@
     "iterator",
     "option",
     "storage/v1",
+    "transport/grpc",
     "transport/http",
     "transport/http/internal/propagation",
   ]
@@ -1856,7 +1859,7 @@
   version = "v0.1.0"
 
 [[projects]]
-  digest = "1:7bc25c2efff76b31f146caf630c617be9b666c6164f0632050466fbec0500125"
+  digest = "1:f3eaad18c92a962f457bd8095a21c2b4aac494f1ea0b255a6ad60a871de2b13a"
   name = "google.golang.org/appengine"
   packages = [
     ".",
@@ -1868,7 +1871,9 @@
     "internal/log",
     "internal/modules",
     "internal/remote_api",
+    "internal/socket",
     "internal/urlfetch",
+    "socket",
     "urlfetch",
   ]
   pruneopts = "UT"
@@ -1877,19 +1882,22 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a7d48ca460ca1b4f6ccd8c95502443afa05df88aee84de7dbeb667a8754e8fa6"
+  digest = "1:41beb68c41015b038e613e6b442569d6a2982324ae100254a320e37b396adec6"
   name = "google.golang.org/genproto"
   packages = [
     "googleapis/api/annotations",
+    "googleapis/devtools/cloudprofiler/v2",
     "googleapis/iam/v1",
     "googleapis/rpc/code",
+    "googleapis/rpc/errdetails",
     "googleapis/rpc/status",
+    "protobuf/field_mask",
   ]
   pruneopts = "UT"
   revision = "db91494dd46c1fdcbbde05e5ff5eb56df8f7d79a"
 
 [[projects]]
-  digest = "1:1bdff737fd41a4c48d06265e782e38f7fddb2610ed6877095c42763b8767d195"
+  digest = "1:daa41388c18a300fc2b898d697357e7cba79bbb5bf46dee848cafaaef93d49c0"
   name = "google.golang.org/grpc"
   packages = [
     ".",
@@ -1901,6 +1909,7 @@
     "connectivity",
     "credentials",
     "credentials/internal",
+    "credentials/oauth",
     "encoding",
     "encoding/proto",
     "grpclog",
@@ -1995,6 +2004,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "cloud.google.com/go/profiler",
     "cloud.google.com/go/storage",
     "github.com/Azure/azure-sdk-for-go/profiles/latest/compute/mgmt/compute",
     "github.com/Azure/azure-sdk-for-go/profiles/latest/network/mgmt/network",
