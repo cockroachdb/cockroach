@@ -546,23 +546,13 @@ func NewColOperator(
 					hashJoinerMemMonitorName,
 					func(inputOne, inputTwo Operator) Operator {
 						monitorNamePrefix := "external-hash-joiner-"
-						// We need to create an allocator for external hash joiner to
-						// use, and the allocator needs to have some reasonable amount of
-						// memory to work with (because the external hash joiner creates
-						// several batches internally as well as uses an instance of
-						// in-memory hash joiner). We need to overwrite the testing
-						// memory limit before creating the memory account for the
-						// allocator because if we don't, the constructor below will
-						// result in an OOM panic or the internal in-memory hash joiner
-						// can hit the limit forcing us to do recursive partitioning
-						// (which is currently not supported).
-						defer func(oldLimit int64) {
-							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = oldLimit
-						}(flowCtx.Cfg.TestingKnobs.MemoryLimitBytes)
-						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
 						allocator := NewAllocator(
-							ctx, result.createBufferingMemAccount(
-								ctx, flowCtx, monitorNamePrefix,
+							// Pass in the default limit explicitly since we don't want to
+							// use the default memory limit of 1 if ForceDiskSpill is true, to
+							// allow for the external hash join to have a normal amount of
+							// memory (for initialization and internal joining).
+							ctx, result.createBufferingMemAccountWithLimit(
+								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							))
 						diskQueuesUnlimitedAllocator := NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
@@ -941,8 +931,8 @@ func (r *NewColOperatorResult) createBufferingUnlimitedMemMonitor(
 }
 
 // createBufferingMemAccount instantiates a memory monitor and a memory account
-// to be used with a buffering Operator. The receiver is updated to have
-// references to both objects.
+// to be used with a buffering Operator with the default memory limit. The
+// receiver is updated to have references to both objects.
 func (r *NewColOperatorResult) createBufferingMemAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
@@ -951,6 +941,21 @@ func (r *NewColOperatorResult) createBufferingMemAccount(
 	)
 	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
+	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
+	return &bufferingMemAccount
+}
+
+// createBufferingMemAccountWithLimit is identical to createBufferingMemAccount
+// although it creates a monitor with the provided limit, rather than using the
+// default limit. Only disk-aware operators should use this method, as it is
+// useful to enforce different limits in testing scenarios.
+func (r *NewColOperatorResult) createBufferingMemAccountWithLimit(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, limit int64,
+) *mon.BoundAccount {
+	limitedMon := mon.MakeMonitorInheritWithLimit(name+"-limited", limit, flowCtx.EvalCtx.Mon)
+	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, &limitedMon)
+	limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+	bufferingMemAccount := limitedMon.MakeBoundAccount()
 	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
 	return &bufferingMemAccount
 }

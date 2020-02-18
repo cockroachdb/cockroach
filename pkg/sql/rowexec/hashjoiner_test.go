@@ -531,10 +531,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	const numCols = 1
 	for _, spill := range []bool{true, false} {
-		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
-		if spill {
-			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 1
-		}
+		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spill
 		b.Run(fmt.Sprintf("spill=%t", spill), func(b *testing.B) {
 			for _, numRows := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 				if spill && numRows < 1<<8 {

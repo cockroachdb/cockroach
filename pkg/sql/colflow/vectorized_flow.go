@@ -456,7 +456,11 @@ func (s *vectorizedFlowCreator) setupRouter(
 		allocators[i] = colexec.NewAllocator(ctx, &acc)
 		s.bufferingMemAccounts = append(s.bufferingMemAccounts, &acc)
 	}
-	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg)
+	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
+		limit = 1
+	}
+	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
 	}

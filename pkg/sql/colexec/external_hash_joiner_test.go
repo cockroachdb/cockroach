@@ -43,16 +43,11 @@ func TestExternalHashJoiner(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	// Interesting memory limits:
-	// 0 - the default 64MiB value is used, so we exercise that the disk spilling
-	//     machinery doesn't affect the correctness.
-	// 1 - this will force the in-memory hash join operator to hit the memory
-	//     limit right after it buffers the first batch from the right (i.e. it
-	//     will buffer up a single batch and then will hit OOM) which will
-	//     trigger the external hash join.
-	for _, memoryLimit := range []int64{0, 1} {
-		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-		t.Run(fmt.Sprintf("MemoryLimit=%d", memoryLimit), func(t *testing.T) {
+	// Test the case in which the default memory is used as well as the case in
+	// which the joiner spills to disk.
+	for _, spillForced := range []bool{false, true} {
+		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+		t.Run(fmt.Sprintf("spillForced=%t", spillForced), func(t *testing.T) {
 			for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
 				for _, tc := range tcs {
 					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
@@ -121,12 +116,11 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		rightSource := newFiniteBatchSource(batch, 0)
 		for _, fullOuter := range []bool{false, true} {
 			for _, nBatches := range []int{1 << 2, 1 << 7} {
-				for _, memoryLimit := range []int64{0, 1} {
-					flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-					shouldSpill := memoryLimit > 0
+				for _, spillForced := range []bool{false, true} {
+					flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 					name := fmt.Sprintf(
-						"nulls=%t/fullOuter=%t/batches=%d/spilled=%t",
-						hasNulls, fullOuter, nBatches, shouldSpill)
+						"nulls=%t/fullOuter=%t/batches=%d/spillForced=%t",
+						hasNulls, fullOuter, nBatches, spillForced)
 					joinType := sqlbase.JoinType_INNER
 					if fullOuter {
 						joinType = sqlbase.JoinType_FULL_OUTER
