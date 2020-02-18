@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cloud.google.com/go/profiler"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -87,7 +88,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -1748,6 +1749,18 @@ func (s *Server) Start(ctx context.Context) error {
 			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
 		); err != nil {
 			return err
+		}
+	}
+
+	if s.cfg.StackdriverProfilingEnabled {
+		log.Infof(ctx, "starting stackdriver profiler agent")
+		if err := profiler.Start(profiler.Config{
+			Service:   "cockroach" + s.rpcContext.ClusterID.Get().String(),
+			// If empty, and if CRDB is running in GCP, the project CRDB is running in
+			// will be auto-detected and used.
+			ProjectID: s.cfg.StackdriverProfilingProjectID,
+		}); err != nil {
+			log.Fatal(ctx, errors.Wrapf(err, "couldn't start continuous profiler"))
 		}
 	}
 

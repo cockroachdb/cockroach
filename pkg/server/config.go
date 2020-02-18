@@ -268,6 +268,14 @@ type Config struct {
 	EnableWebSessionAuthentication bool
 
 	enginesCreated bool
+
+	// If true, CRDB will push profiles to stackdriver profler
+	// (https://cloud.google.com/profiler).
+	StackdriverProfilingEnabled bool
+	// The project ID of the project to send profiles to
+	// (https://cloud.google.com/profiler). If not set, the project in which CRDB
+	// is running in will be detected and used instead.
+	StackdriverProfilingProjectID string
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time

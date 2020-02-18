@@ -397,6 +397,9 @@ func init() {
 		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
 
 		VarFlag(f, serverCfg.SQLAuditLogDirName, cliflags.SQLAuditLogDirName)
+
+		BoolFlag(f, &serverCfg.StackdriverProfilingEnabled, cliflags.StackdriverProfilerEnabled, false)
+		StringFlag(f, &serverCfg.StackdriverProfilingProjectID, cliflags.StackdriverProfilerProjectID, "")
 	}
 
 	// Log flags.

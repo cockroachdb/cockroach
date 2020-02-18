@@ -1059,4 +1059,16 @@ Addresses for network benchmark.`,
 		Description: `
 Latency or throughput mode.`,
 	}
+
+	StackdriverProfilerEnabled = FlagInfo{
+		Name: "stackdriver-profiler-enabled",
+		Description: `
+If set, CRDB will push profiles to stackdriver profler (https://cloud.google.com/profiler).`,
+	}
+	StackdriverProfilerProjectID = FlagInfo{
+		Name: "stackdriver-profiler-project-id",
+		Description: `
+The project ID of the project to send profiles to (https://cloud.google.com/profiler).
+If not set, the project in which CRDB is running in will be detected and used instead.`,
+	}
 )
