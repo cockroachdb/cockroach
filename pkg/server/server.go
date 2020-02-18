@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptprovider"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/storage/reports"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -203,8 +204,9 @@ type Server struct {
 	internalMemMetrics  sql.MemoryMetrics
 	adminMemMetrics     sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
-	sqlMemMetrics       sql.MemoryMetrics
-	protectedtsProvider protectedts.Provider
+	sqlMemMetrics         sql.MemoryMetrics
+	protectedtsProvider   protectedts.Provider
+	protectedtsReconciler *ptreconcile.Reconciler
 }
 
 // NewServer creates a Server from a server.Config.
@@ -584,6 +586,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		jobAdoptionStopFile,
 	)
 	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
+	s.protectedtsReconciler = ptreconcile.NewReconciler(ptreconcile.Config{
+		Settings:    s.st,
+		Stores:      s.node.stores,
+		DB:          s.db,
+		Storage:     s.protectedtsProvider,
+		Cache:       s.protectedtsProvider,
+		StatusFuncs: ptreconcile.StatusFuncs{},
+	})
+	s.registry.AddMetricStruct(s.protectedtsReconciler.Metrics())
 
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
@@ -1619,7 +1630,11 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
 		return err
 	}
 
