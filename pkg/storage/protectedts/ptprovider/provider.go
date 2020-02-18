@@ -18,43 +18,63 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptcache"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 // Config configures the Provider.
 type Config struct {
-	Settings         *cluster.Settings
-	DB               *client.DB
-	InternalExecutor sqlutil.InternalExecutor
+	Settings             *cluster.Settings
+	DB                   *client.DB
+	Stores               *storage.Stores
+	ReconcileStatusFuncs ptreconcile.StatusFuncs
+	InternalExecutor     sqlutil.InternalExecutor
 }
 
 type provider struct {
 	protectedts.Storage
 	protectedts.Verifier
-
-	*ptcache.Cache
+	protectedts.Cache
 }
 
 // New creates a new protectedts.Provider.
-func New(config Config) protectedts.Provider {
-	storage := ptstorage.New(config.Settings, config.InternalExecutor)
-	verifier := ptverifier.New(config.DB, storage)
+func New(cfg Config) (protectedts.Provider, error) {
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
+	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor)
+	verifier := ptverifier.New(cfg.DB, storage)
 	cache := ptcache.New(ptcache.Config{
-		DB:       config.DB,
+		DB:       cfg.DB,
 		Storage:  storage,
-		Settings: config.Settings,
+		Settings: cfg.Settings,
 	})
 	return &provider{
 		Storage:  storage,
 		Cache:    cache,
 		Verifier: verifier,
+	}, nil
+}
+
+func validateConfig(cfg Config) error {
+	switch {
+	case cfg.Settings == nil:
+		return errors.Errorf("invalid nil Settings")
+	case cfg.DB == nil:
+		return errors.Errorf("invalid nil DB")
+	case cfg.InternalExecutor == nil:
+		return errors.Errorf("invalid nil InternalExecutor")
+	default:
+		return nil
 	}
 }
 
 func (p *provider) Start(ctx context.Context, stopper *stop.Stopper) error {
-	return p.Cache.Start(ctx, stopper)
+	return p.Cache.(*ptcache.Cache).Start(ctx, stopper)
 }
