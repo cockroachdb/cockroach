@@ -1148,11 +1148,12 @@ func (ef *execFactory) ConstructExplain(
 	switch options.Mode {
 	case tree.ExplainDistSQL:
 		return &explainDistSQLNode{
-			options:       options,
-			plan:          p.plan,
-			subqueryPlans: p.subqueryPlans,
-			analyze:       analyzeSet,
-			stmtType:      stmtType,
+			options:        options,
+			plan:           p.plan,
+			subqueryPlans:  p.subqueryPlans,
+			postqueryPlans: p.postqueryPlans,
+			analyze:        analyzeSet,
+			stmtType:       stmtType,
 		}, nil
 
 	case tree.ExplainVec:

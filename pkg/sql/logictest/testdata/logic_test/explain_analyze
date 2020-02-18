@@ -65,3 +65,11 @@ EXECUTE x(1, 1)
 # Regression test for #34927.
 statement ok
 EXPLAIN ANALYZE (DISTSQL) DELETE FROM a WHERE true
+
+# Regression test for #45099 (not running postqueries with EXPLAIN ANALYZE).
+statement ok
+CREATE TABLE p (p INT8 PRIMARY KEY);
+CREATE TABLE c (c INT8 PRIMARY KEY, p INT8 REFERENCES p (p))
+
+query error pgcode 23503 insert on table \"c\" violates foreign key constraint \"fk_p_ref_p\"
+EXPLAIN ANALYZE (DISTSQL) INSERT INTO c SELECT x, x + 1 FROM (VALUES (1), (2)) AS v (x)
