@@ -1078,9 +1078,11 @@ CREATE TABLE pg_catalog.pg_database (
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
-				defaultOid(db.ID),          // oid
-				tree.NewDName(db.Name),     // datname
-				tree.DNull,                 // datdba
+				defaultOid(db.ID),      // oid
+				tree.NewDName(db.Name), // datname
+				tree.DNull,             // datdba
+				// If there is a change in encoding value for the database we must update
+				// the definitions of getdatabaseencoding within pg_builtin.
 				builtins.DatEncodingUTFId,  // encoding
 				builtins.DatEncodingEnUTF8, // datcollate
 				builtins.DatEncodingEnUTF8, // datctype
