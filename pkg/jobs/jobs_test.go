@@ -1680,7 +1680,7 @@ func TestJobInTxn(t *testing.T) {
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+	jobs.DefaultAdoptInterval = 5 * time.Second
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1757,6 +1757,8 @@ func TestJobInTxn(t *testing.T) {
 	})
 
 	t.Run("rollback txn", func(t *testing.T) {
+		start := timeutil.Now()
+
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
 		_, err = txn.Exec("BACKUP tobeaborted TO doesnotmattter")
@@ -1773,9 +1775,13 @@ func TestJobInTxn(t *testing.T) {
 		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", *job.ID())
 		require.Equal(t, int32(0), atomic.LoadInt32(&hasRun),
 			"job has run in transaction before txn commit")
+
+		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
 	})
 
 	t.Run("normal success", func(t *testing.T) {
+		start := timeutil.Now()
+
 		// Now let's actually commit the transaction and check that the job ran.
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
@@ -1791,9 +1797,12 @@ func TestJobInTxn(t *testing.T) {
 		require.Equal(t, int32(1), atomic.LoadInt32(&hasRun),
 			"more than one job ran")
 		require.Equal(t, "", j.Payload().Error)
+
+		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
 	})
 
 	t.Run("one of the queued jobs fails", func(t *testing.T) {
+		start := timeutil.Now()
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
 
@@ -1807,5 +1816,6 @@ func TestJobInTxn(t *testing.T) {
 		// Now let's actually commit the transaction and check that there is a
 		// failure.
 		require.Error(t, txn.Commit())
+		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
 	})
 }
