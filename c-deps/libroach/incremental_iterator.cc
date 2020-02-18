@@ -25,7 +25,7 @@ DBIncrementalIterator::DBIncrementalIterator(DBEngine* engine, DBIterOptions opt
       end(end),
       write_intent(write_intent) {
 
-  sanity_iter.reset(NULL);
+  time_bound_iter.reset(NULL);
 
   start_time.set_wall_time(start.wall_time);
   start_time.set_logical(start.logical);
@@ -41,51 +41,18 @@ DBIncrementalIterator::DBIncrementalIterator(DBEngine* engine, DBIterOptions opt
   // discrepancies between the two iterators lead to intents and values falling
   // outside of the timestamp range **from iter's perspective**. This allows us
   // to simply ignore discrepancies that we notice in advance(). See #34819.
+  DBIterOptions iter_opts = opts;
   if (!EmptyTimestamp(opts.min_timestamp_hint) || !EmptyTimestamp(opts.max_timestamp_hint)) {
     assert(!EmptyTimestamp(opts.max_timestamp_hint));
     DBIterOptions nontimebound_opts = DBIterOptions();
     nontimebound_opts.upper_bound = opts.upper_bound;
-    sanity_iter.reset(DBNewIter(engine, nontimebound_opts));
+    iter_opts = nontimebound_opts;
+    time_bound_iter.reset(DBNewIter(engine, opts));
   }
-  iter.reset(DBNewIter(engine, opts));
+  iter.reset(DBNewIter(engine, iter_opts));
 }
 
 DBIncrementalIterator::~DBIncrementalIterator() {}
-
-// sanityCheckMetadataKey looks up the current `iter` key using a normal,
-// non-time-bound iterator and returns the value if the normal iterator also
-// sees that exact key. Otherwise, it returns false. It's used in the workaround
-// in `advanceKey` for a time-bound iterator bug.
-rocksdb::Slice DBIncrementalIterator::sanityCheckMetadataKey() {
-  // If sanityIter is not set, it's because we're not using time-bound
-  // iterator and we don't need the sanity check.
-  if (sanity_iter == NULL) {
-    valid = true;
-    status = ToDBStatus(rocksdb::Status::OK());
-    return iter.get()->rep->value();
-  }
-
-  auto sanity_iter_rep = sanity_iter->rep.get();
-  sanity_iter_rep->Seek(iter->rep->key());
-
-  if (!sanity_iter_rep->status().ok()) {
-    valid = false;
-    status = ToDBStatus(sanity_iter_rep->status());
-    return NULL;
-  } else if (!sanity_iter_rep->Valid()) {
-    valid = false;
-    status = ToDBStatus(rocksdb::Status::OK());
-    return NULL;
-  } else if (kComparator.Compare(sanity_iter_rep->key(), iter->rep->key()) != 0) {
-    valid = false;
-    status = ToDBStatus(rocksdb::Status::OK());
-    return NULL;
-  }
-
-  valid = true;
-  status = ToDBStatus(rocksdb::Status::OK());
-  return sanity_iter.get()->rep->value();
-}
 
 // legacyTimestampIsLess compares the timestamps t1 and t2, and returns a
 // boolean indicating whether t1 is less than t2.
@@ -93,6 +60,47 @@ bool DBIncrementalIterator::legacyTimestampIsLess(const cockroach::util::hlc::Le
                                                   const cockroach::util::hlc::LegacyTimestamp& t2) {
   return t1.wall_time() < t2.wall_time() ||
          (t1.wall_time() == t2.wall_time() && t1.logical() < t2.logical());
+}
+
+std::string DBIncrementalIterator::getKey(rocksdb::Slice mvcc_key) {
+  rocksdb::Slice key;
+  rocksdb::Slice ts;
+  // TODO(pbardea): Verify behavior when hitting an error.
+  if (!SplitKey(iter->rep->key(), &key, &ts)) {
+    valid = false;
+    status = FmtStatus("failed to split mvcc key");
+  }
+  return key.ToString();
+}
+
+void DBIncrementalIterator::maybeSkipKeys() {
+  if (time_bound_iter != nullptr) {
+    std::string tbi_key = getKey(time_bound_iter->rep->key());
+    std::string iter_key = getKey(iter->rep->key());
+    if (iter_key.compare(tbi_key) > 0) {
+      DBIterNext(time_bound_iter.get(), true /* skip_current_key_versions */);
+      if (!valid) {
+        return;
+      }
+      if (!time_bound_iter->rep->Valid()) {
+        status = ToDBStatus(time_bound_iter->rep->status());
+        valid = false;
+        return;
+      }
+
+      tbi_key = getKey(time_bound_iter->rep->key());
+      if (iter_key.compare(tbi_key) < 0) {
+        const auto seek_key = rocksdb::Slice(tbi_key);
+        auto iter_rep = iter->rep.get();
+        iter_rep->Seek(seek_key);
+        if (!iter_rep->status().ok()) {
+          valid = false;
+          status = ToDBStatus(iter_rep->status());
+          return;
+        }
+      }
+    }
+  }
 }
 
 // advanceKey finds the key and its appropriate version which lies in
@@ -106,6 +114,11 @@ void DBIncrementalIterator::advanceKey() {
     if (!iter.get()->rep->Valid()) {
       status = ToDBStatus(iter.get()->rep->status());
       valid = false;
+      return;
+    }
+
+    maybeSkipKeys();
+    if (!valid) {
       return;
     }
 
@@ -123,23 +136,7 @@ void DBIncrementalIterator::advanceKey() {
       meta.mutable_timestamp()->set_wall_time(wall_time);
       meta.mutable_timestamp()->set_logical(logical);
     } else {
-      // HACK(dan): Work around a known bug in the time-bound iterator.
-      // For reasons described in #28358, a time-bound iterator will
-      // sometimes see an unresolved intent where there is none. A normal
-      // iterator doesn't have this problem, so we work around it by
-      // double checking all non-value keys. If sanityCheckMetadataKey
-      // returns false, then the intent was a phantom and we ignore it.
-      // NB: this could return a older/newer intent than the one the time-bound
-      // iterator saw; this is handled.
-      auto value = sanityCheckMetadataKey();
-      if (status.data != NULL) {
-        return;
-      } else if (!valid) {
-        valid = true;
-        DBIterNext(iter.get(), false);
-        continue;
-      }
-
+      const auto value = iter->rep->value();
       if (!meta.ParseFromArray(value.data(), value.size())) {
         status = ToDBString("failed to parse meta");
         valid = false;
@@ -203,6 +200,9 @@ DBIterState DBIncrementalIterator::getState() {
 
 DBIterState DBIncrementalIterator::seek(DBKey key) {
   DBIterSeek(iter.get(), key);
+  if (time_bound_iter != nullptr) {
+    DBIterSeek(time_bound_iter.get(), key);
+  }
   advanceKey();
   return getState();
 }
