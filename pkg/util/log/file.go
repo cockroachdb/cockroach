@@ -270,7 +270,35 @@ func create(
 // ListLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
-	return mainLog.listLogFiles()
+	mainDir, isSet := mainLog.logDir.get()
+	if !isSet {
+		// Shortcut.
+		return nil, nil
+	}
+
+	logFiles, err := mainLog.listLogFiles()
+	if err != nil {
+		return nil, err
+	}
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for _, logger := range secondaryLogRegistry.mu.loggers {
+		// For now, only gather logs from the main log directory.
+		// This is because the other APIs don't yet understand
+		// secondary log directories, and we don't want
+		// to list a file that cannot be retrieved.
+		thisLogDir, isSet := logger.logger.logDir.get()
+		if !isSet || thisLogDir != mainDir {
+			continue
+		}
+
+		thisLoggerFiles, err := logger.logger.listLogFiles()
+		if err != nil {
+			return nil, err
+		}
+		logFiles = append(logFiles, thisLoggerFiles...)
+	}
+	return logFiles, nil
 }
 
 func (l *loggerT) listLogFiles() ([]FileInfo, error) {

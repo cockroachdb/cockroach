@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -111,5 +112,32 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	}
 	if strings.Contains(string(contents2), stderrText) {
 		t.Errorf("secondary log erronously contains stderr text\n%s", contents2)
+	}
+}
+
+func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+	setFlags()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Make a new logger, in the same directory.
+	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
+
+	// Emit some logging and ensure the files gets created.
+	l.Logf(ctx, "story time")
+	Flush()
+
+	expectedName := filepath.Base(l.logger.mu.file.(*syncBuffer).file.Name())
+
+	results, err := ListLogFiles()
+	if err != nil {
+		t.Fatalf("error in ListLogFiles: %v", err)
+	}
+
+	if len(results) != 1 || results[0].Name != expectedName {
+		t.Fatalf("unexpected results; expected file %q, got: %+v", expectedName, results)
 	}
 }
