@@ -1339,7 +1339,7 @@ pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/
 
 .PHONY: ui-test
 ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
-	@echo "would run this but this is skipped pending #42365:" $(NODE_RUN) -C pkg/ui $(KARMA) start
+	$(NODE_RUN) -C pkg/ui $(KARMA) start
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
