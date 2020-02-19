@@ -29,5 +29,12 @@ func Delete(
 	args := cArgs.Args.(*roachpb.DeleteRequest)
 	h := cArgs.Header
 
-	return result.Result{}, engine.MVCCDelete(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, h.Txn)
+	err := engine.MVCCDelete(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, h.Txn)
+	// NB: even if MVCC returns an error, it may still have written an intent
+	// into the batch. This allows callers to consume errors like WriteTooOld
+	// without re-evaluating the batch. This behavior isn't particularly
+	// desirable, but while it remains, we need to assume that an intent could
+	// have been written even when an error is returned. This is harmless if the
+	// error is not consumed by the caller because the result will be discarded.
+	return result.FromWrittenIntents(h.Txn, args.Key), err
 }

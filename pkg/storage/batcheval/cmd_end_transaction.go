@@ -225,7 +225,7 @@ func EndTxn(
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				desc := cArgs.EvalCtx.Desc()
-				externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+				resolvedIntents, externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 				if err != nil {
 					return result.Result{}, err
 				}
@@ -236,7 +236,9 @@ func EndTxn(
 				}
 				// Use alwaysReturn==true because the transaction is definitely
 				// aborted, no matter what happens to this command.
-				return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), nil
+				res := result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison)
+				res.Local.ResolvedIntents = resolvedIntents
+				return res, nil
 			}
 			// If the transaction was previously aborted by a concurrent writer's
 			// push, any intents written are still open. It's only now that we know
@@ -331,7 +333,7 @@ func EndTxn(
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve intents for this transaction in the future.
 	desc := cArgs.EvalCtx.Desc()
-	externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+	resolvedIntents, externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -375,6 +377,7 @@ func EndTxn(
 	// if the commit actually happens; otherwise, we risk losing writes.
 	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
 	intentsResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
+	intentsResult.Local.ResolvedIntents = resolvedIntents
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
 	}
@@ -437,14 +440,13 @@ func CanForwardCommitTimestampWithoutRefresh(
 
 const intentResolutionBatchSize = 500
 
-// resolveLocalIntents synchronously resolves any intents that are
-// local to this range in the same batch. The remainder are collected
-// and returned so that they can be handed off to asynchronous
-// processing. Note that there is a maximum intent resolution
-// allowance of intentResolutionBatchSize meant to avoid creating a
-// batch which is too large for Raft. Any local intents which exceed
-// the allowance are treated as external and are resolved
-// asynchronously with the external intents.
+// resolveLocalIntents synchronously resolves any intents that are local to this
+// range in the same batch and returns those intent spans. The remainder are
+// collected and returned so that they can be handed off to asynchronous
+// processing. Note that there is a maximum intent resolution allowance of
+// intentResolutionBatchSize meant to avoid creating a batch which is too large
+// for Raft. Any local intents which exceed the allowance are treated as
+// external and are resolved asynchronously with the external intents.
 func resolveLocalIntents(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -453,7 +455,7 @@ func resolveLocalIntents(
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
-) ([]roachpb.Span, error) {
+) (resolvedIntents []roachpb.LockUpdate, externalIntents []roachpb.Span, _ error) {
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which intents are local (note that for a split, we want to use the
@@ -467,7 +469,6 @@ func resolveLocalIntents(
 	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
-	var externalIntents []roachpb.Span
 	var resolveAllowance int64 = intentResolutionBatchSize
 	if args.InternalCommitTrigger != nil {
 		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
@@ -490,10 +491,14 @@ func resolveLocalIntents(
 				}
 				resolveMS := ms
 				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
+				if err != nil {
+					return err
+				}
 				if ok {
 					resolveAllowance--
 				}
-				return err
+				resolvedIntents = append(resolvedIntents, intent)
+				return nil
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
@@ -514,23 +519,25 @@ func resolveLocalIntents(
 					if resolveAllowance != 0 {
 						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", intent.Span, resolveAllowance)
 					}
+					intent.EndKey = resumeSpan.Key
 					externalIntents = append(externalIntents, *resumeSpan)
 				}
+				resolvedIntents = append(resolvedIntents, intent)
 				return nil
 			}
 			return nil
 		}(); err != nil {
-			return nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
+			return nil, nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
 		}
 	}
 
 	removedAny := resolveAllowance != intentResolutionBatchSize
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
 		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return externalIntents, nil
+	return resolvedIntents, externalIntents, nil
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status

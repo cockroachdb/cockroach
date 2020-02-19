@@ -90,6 +90,7 @@ func ResolveIntent(
 	}
 
 	var res result.Result
+	res.Local.ResolvedIntents = []roachpb.LockUpdate{update}
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, ok) {
