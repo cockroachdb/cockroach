@@ -83,6 +83,11 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
         icon={<Icon type={iconType} theme="filled" className="alert-massage__icon" />}
         closable
         onClose={dismiss}
+        closeText={
+          <div className="alert-massage__close-text">
+            &times;
+          </div>
+        }
         type={type} />
     );
   }
