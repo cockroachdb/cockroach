@@ -12,7 +12,6 @@ import { assert } from "chai";
 import {
   queryToString,
   queryByName,
-  queryToObj,
 } from "./query";
 import { Location } from "history";
 
@@ -34,18 +33,9 @@ describe("Query utils", () => {
   });
   describe("queryByName", () => {
     it("get key from query", () => {
-      assert.equal(queryByName(location, "start"), "1579014600");
+      assert.equal(queryByName(location, "start"), "1581478532");
       assert.equal(queryByName(location, "test"), null);
       assert.equal(queryByName(location, undefined), null);
-    });
-  });
-  describe("queryToObj", () => {
-    it("set/change value to/in query object", () => {
-      assert.deepEqual(queryToObj(location, "start", "test"), { start: "test" });
-      assert.deepEqual(queryToObj(location, undefined, "test"), {});
-      assert.deepEqual(queryToObj(location, "test", "test"), { test: "test" });
-      assert.deepEqual(queryToObj(location, "test", undefined), { test: undefined });
-      assert.deepEqual(queryToObj(location, undefined, undefined), {});
     });
   });
 });
