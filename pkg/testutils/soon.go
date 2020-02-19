@@ -43,6 +43,12 @@ func SucceedsSoon(t testing.TB, fn func() error) {
 // at first and then successively with an exponential backoff starting at 1ns
 // and ending at around 1s.
 func SucceedsSoonError(fn func() error) error {
+	return SucceedsSoonErrorWithMaxDuration(DefaultSucceedsSoonDuration, fn)
+}
+
+// SucceedsSoonErrorWithMaxDuration is like SucceedsSoonError but the
+// duration is customizable.
+func SucceedsSoonErrorWithMaxDuration(maxDur time.Duration, fn func() error) error {
 	tBegin := timeutil.Now()
 	wrappedFn := func() error {
 		err := fn()
@@ -51,5 +57,5 @@ func SucceedsSoonError(fn func() error) error {
 		}
 		return err
 	}
-	return retry.ForDuration(DefaultSucceedsSoonDuration, wrappedFn)
+	return retry.ForDuration(maxDur, wrappedFn)
 }

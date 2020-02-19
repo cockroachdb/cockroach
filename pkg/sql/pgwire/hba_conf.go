@@ -242,6 +242,13 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 	return conf, nil
 }
 
+var insecureEntry = hba.Entry{
+	ConnType: hba.ConnHostAny,
+	User:     []hba.String{{Value: "all", Quoted: false}},
+	Address:  hba.AnyAddr{},
+	Method:   hba.String{Value: "--insecure"},
+}
+
 var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []hba.String{{Value: security.RootUser, Quoted: false}},

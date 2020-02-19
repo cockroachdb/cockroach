@@ -780,6 +780,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			true /* enableGc */, false /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
+		// Note: the auth logger uses sync writes because we don't want an
+		// attacker to easily "erase their traces" after an attack by
+		// crashing the server before it has a chance to write the last
+		// few log lines to disk.
+		// TODO(knz): We could worry about disk I/O activity incurred
+		// by logging here; this would be a good reason to invest into
+		// a syslog sink for logs.
+		AuthLogger: log.NewSecondaryLogger(
+			loggerCtx, nil /* dirName */, "auth",
+			true /* enableGc */, true /*forceSyncWrites*/, true, /* enableMsgCount */
+		),
+
+		// AuditLogger syncs to disk for the same reason as AuthLogger.
 		AuditLogger: log.NewSecondaryLogger(
 			loggerCtx, s.cfg.SQLAuditLogDirName, "sql-audit",
 			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
@@ -797,6 +810,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.stopper.AddCloser(execCfg.ExecLogger)
 	s.stopper.AddCloser(execCfg.AuditLogger)
 	s.stopper.AddCloser(execCfg.SlowQueryLogger)
+	s.stopper.AddCloser(execCfg.AuthLogger)
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)

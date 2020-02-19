@@ -100,6 +100,9 @@ func authPassword(
 	if err != nil {
 		return nil, err
 	}
+	if len(hashedPassword) == 0 {
+		c.Logf(ctx, "user has no password defined")
+	}
 
 	return security.UserAuthPasswordHook(
 		false /*insecure*/, password, hashedPassword,
