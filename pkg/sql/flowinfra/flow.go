@@ -436,8 +436,12 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 	f.status = FlowFinished
 	f.ctxCancel()
-	f.doneFn()
-	sp.Finish()
+	if f.doneFn != nil {
+		f.doneFn()
+	}
+	if sp != nil {
+		sp.Finish()
+	}
 }
 
 // cancel iterates through all unconnected streams of this flow and marks them canceled.
