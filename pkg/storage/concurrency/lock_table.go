@@ -1076,11 +1076,11 @@ func (l *lockState) discoveredLock(
 }
 
 // Acquires l.mu.
-func (l *lockState) tryClearLock() bool {
+func (l *lockState) tryClearLock(force bool) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
-	if replicatedHeld && l.distinguishedWaiter == nil {
+	if replicatedHeld && l.distinguishedWaiter == nil && !force {
 		// Replicated lock is held and has no distinguished waiter.
 		return false
 	}
@@ -1088,7 +1088,7 @@ func (l *lockState) tryClearLock() bool {
 	// Remove unreplicated holder.
 	l.holder.holder[lock.Unreplicated] = lockHolderInfo{}
 	var waitState waitingState
-	if replicatedHeld {
+	if replicatedHeld && !force {
 		holderTxn, holderTs := l.getLockerInfo()
 		// Note that none of the current waiters can be requests
 		// from holderTxn.
@@ -1245,7 +1245,7 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
-		if !g.ts.LessEq(newTs) {
+		if g.ts.Less(newTs) {
 			// Stop waiting.
 			l.waitingReaders.Remove(curr)
 			if g == l.distinguishedWaiter {
@@ -1512,35 +1512,42 @@ func (t *lockTableImpl) AcquireLock(
 		totalLocks += atomic.LoadInt64(&t.locks[i].numLocks)
 	}
 	if totalLocks > t.maxLocks {
-		t.clearMostLocks()
+		t.tryClearLocks(false /* force */)
 	}
 	return err
 }
 
-// Removes all locks, except for those that are held with replicated
-// durability and have no distinguished waiter, and tells those waiters to
-// wait elsewhere or that they are done waiting. A replicated lock which has
-// been discovered by a request but no request is actively waiting on it will
-// be preserved since we need to tell that request who it is waiting for when
-// it next calls ScanAndEnqueue(). If we aggressively removed even these
+// If force is false, removes all locks, except for those that are held with
+// replicated durability and have no distinguished waiter, and tells those
+// waiters to wait elsewhere or that they are done waiting. A replicated lock
+// which has been discovered by a request but no request is actively waiting on
+// it will be preserved since we need to tell that request who it is waiting for
+// when it next calls ScanAndEnqueue(). If we aggressively removed even these
 // locks, the next ScanAndEnqueue() would not find the lock, the request would
-// evaluate again, again discover that lock and if clearMostLocks() keeps
-// getting called would be stuck in this loop without pushing.
-func (t *lockTableImpl) clearMostLocks() {
+// evaluate again, again discover that lock and if tryClearLocks() keeps getting
+// called would be stuck in this loop without pushing.
+//
+// If force is true, removes all locks and marks all guards as doneWaiting.
+func (t *lockTableImpl) tryClearLocks(force bool) {
 	for i := 0; i < int(spanset.NumSpanScope); i++ {
 		tree := &t.locks[i]
 		tree.mu.Lock()
 		var locksToClear []*lockState
 		tree.Ascend(func(it btree.Item) bool {
 			l := it.(*lockState)
-			if l.tryClearLock() {
+			if l.tryClearLock(force) {
 				locksToClear = append(locksToClear, l)
 			}
 			return true
 		})
 		atomic.AddInt64(&tree.numLocks, int64(-len(locksToClear)))
-		for _, l := range locksToClear {
-			tree.Delete(l)
+		if tree.Len() == len(locksToClear) {
+			// Fast-path full clear.
+			tree.Clear(true /* addNodesToFreelist */)
+		} else {
+			for _, l := range locksToClear {
+				tree.Delete(l)
+			}
 		}
 		tree.mu.Unlock()
 	}
@@ -1722,7 +1729,7 @@ func (t *lockTableImpl) findNextLockAfter(g *lockTableGuardImpl, notify bool) {
 }
 
 func (t *lockTableImpl) Clear() {
-	// TODO(nvanbenschoten): implement and test this.
+	t.tryClearLocks(true /* force */)
 }
 
 // For tests.

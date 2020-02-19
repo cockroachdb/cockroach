@@ -14,8 +14,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -92,94 +90,34 @@ dequeue r=<name>
 ----
 <error string>
 
- Calls lockTable.Dequeue() for the named request. The request and guard are
+ Calls lockTable.Dequeue for the named request. The request and guard are
  discarded after this.
 
 guard-state r=<name>
 ----
 new|old: state=<state> [txn=<name> ts=<ts>]
 
-  Calls lockTableGuard.NewStateChan() in a non-blocking manner, followed by
-  CurState().
+  Calls lockTableGuard.NewStateChan in a non-blocking manner, followed by
+  CurState.
 
 should-wait r=<name>
 ----
 <bool>
 
- Calls lockTableGuard.ShouldWait().
+ Calls lockTableGuard.ShouldWait.
+
+clear
+----
+<state of lock table>
+
+ Calls lockTable.Clear.
 
 print
 ----
 <state of lock table>
 
- Calls lockTable.String()
+ Calls lockTable.String.
 */
-
-func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
-	var ts hlc.Timestamp
-	var tsS string
-	d.ScanArgs(t, "ts", &tsS)
-	parts := strings.Split(tsS, ",")
-
-	// Find the wall time part.
-	tsW, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		d.Fatalf(t, "%v", err)
-	}
-	ts.WallTime = tsW
-
-	// Find the logical part, if there is one.
-	var tsL int64
-	if len(parts) > 1 {
-		tsL, err = strconv.ParseInt(parts[1], 10, 32)
-		if err != nil {
-			d.Fatalf(t, "%v", err)
-		}
-	}
-	ts.Logical = int32(tsL)
-	return ts
-}
-
-func nextUUID(counter *uint128.Uint128) uuid.UUID {
-	*counter = counter.Add(1)
-	return uuid.FromUint128(*counter)
-}
-
-func getSpan(t *testing.T, d *datadriven.TestData, str string) roachpb.Span {
-	parts := strings.Split(str, ",")
-	span := roachpb.Span{Key: roachpb.Key(parts[0])}
-	if len(parts) > 2 {
-		d.Fatalf(t, "incorrect span format: %s", str)
-	} else if len(parts) == 2 {
-		span.EndKey = roachpb.Key(parts[1])
-	}
-	return span
-}
-
-func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.SpanSet {
-	spans := &spanset.SpanSet{}
-	var spansStr string
-	d.ScanArgs(t, "spans", &spansStr)
-	parts := strings.Split(spansStr, "+")
-	for _, p := range parts {
-		if len(p) < 2 || p[1] != '@' {
-			d.Fatalf(t, "incorrect span with access format: %s", p)
-		}
-		c := p[0]
-		p = p[2:]
-		var sa spanset.SpanAccess
-		switch c {
-		case 'r':
-			sa = spanset.SpanReadOnly
-		case 'w':
-			sa = spanset.SpanReadWrite
-		default:
-			d.Fatalf(t, "incorrect span access: %c", c)
-		}
-		spans.AddMVCC(sa, getSpan(t, d, p), ts)
-	}
-	return spans
-}
 
 func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -417,6 +355,10 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return fmt.Sprintf("%sstate=%s txn=%s ts=%s key=%s held=%t guard-access=%s",
 					str, typeStr, txnS, tsS, state.key, state.held, state.guardAccess)
+
+			case "clear":
+				lt.Clear()
+				return lt.(*lockTableImpl).String()
 
 			case "print":
 				return lt.(*lockTableImpl).String()

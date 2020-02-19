@@ -132,6 +132,16 @@ func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp hlc.Ti
 	s.spans[access][scope] = append(s.spans[access][scope], Span{Span: span, Timestamp: timestamp})
 }
 
+// Merge merges all spans in s2 into s. s2 is not modified.
+func (s *SpanSet) Merge(s2 *SpanSet) {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			s.spans[sa][ss] = append(s.spans[sa][ss], s2.spans[sa][ss]...)
+		}
+	}
+	s.SortAndDedup()
+}
+
 // SortAndDedup sorts the spans in the SpanSet and removes any duplicates.
 func (s *SpanSet) SortAndDedup() {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {

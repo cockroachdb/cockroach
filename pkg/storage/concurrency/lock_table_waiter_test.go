@@ -27,20 +27,20 @@ import (
 )
 
 type mockIntentResolver struct {
-	pushTxn       func(*enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (roachpb.Transaction, *Error)
-	resolveIntent func(roachpb.Intent) *Error
+	pushTxn       func(context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (roachpb.Transaction, *Error)
+	resolveIntent func(context.Context, roachpb.Intent) *Error
 }
 
 func (m *mockIntentResolver) PushTransaction(
-	_ context.Context, txn *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
+	ctx context.Context, txn *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
 ) (roachpb.Transaction, *Error) {
-	return m.pushTxn(txn, h, pushType)
+	return m.pushTxn(ctx, txn, h, pushType)
 }
 
 func (m *mockIntentResolver) ResolveIntent(
-	_ context.Context, intent roachpb.Intent, _ intentresolver.ResolveOptions,
+	ctx context.Context, intent roachpb.Intent, _ intentresolver.ResolveOptions,
 ) *Error {
-	return m.resolveIntent(intent)
+	return m.resolveIntent(ctx, intent)
 }
 
 type mockLockTableGuard struct {
@@ -284,7 +284,10 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 
 			req := makeReq()
 			ir.pushTxn = func(
-				pusheeArg *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
+				_ context.Context,
+				pusheeArg *enginepb.TxnMeta,
+				h roachpb.Header,
+				pushType roachpb.PushTxnType,
 			) (roachpb.Transaction, *Error) {
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 				require.Equal(t, req.Txn, h.Txn)
@@ -301,7 +304,7 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 				// we know the holder is ABORTED. Otherwide, immediately
 				// tell the request to stop waiting.
 				if lockHeld {
-					ir.resolveIntent = func(intent roachpb.Intent) *Error {
+					ir.resolveIntent = func(_ context.Context, intent roachpb.Intent) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
@@ -354,7 +357,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	// Errors are propagated when observed while pushing transactions.
 	g.notify()
 	ir.pushTxn = func(
-		_ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
+		_ context.Context, _ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
 	) (roachpb.Transaction, *Error) {
 		return roachpb.Transaction{}, err1
 	}
@@ -364,11 +367,11 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	// Errors are propagated when observed while resolving intents.
 	g.notify()
 	ir.pushTxn = func(
-		_ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
+		_ context.Context, _ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
 	) (roachpb.Transaction, *Error) {
 		return roachpb.Transaction{}, nil
 	}
-	ir.resolveIntent = func(intent roachpb.Intent) *Error {
+	ir.resolveIntent = func(_ context.Context, intent roachpb.Intent) *Error {
 		return err2
 	}
 	err = w.WaitOn(ctx, req, g)

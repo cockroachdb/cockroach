@@ -2173,6 +2173,14 @@ func (s *Store) Metrics() *StoreMetrics {
 	return s.metrics
 }
 
+// NodeDescriptor returns the NodeDescriptor of the node that holds the Store.
+func (s *Store) NodeDescriptor() *roachpb.NodeDescriptor {
+	return s.nodeDesc
+}
+
+// Silence unused warning.
+var _ = (*Store).NodeDescriptor
+
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
 func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {
