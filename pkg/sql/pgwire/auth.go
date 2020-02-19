@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -86,26 +87,34 @@ func (c *conn) handleAuthentication(
 		ctx, authOpt.ie, c.sessionArgs.User,
 	)
 	if err != nil {
+		ac.Logf(ctx, "user retrieval failed for user=%q: %v", c.sessionArgs.User, err)
 		return sendError(err)
 	}
 	if !exists {
+		ac.Logf(ctx, "user does not exist: %q", c.sessionArgs.User)
 		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
 	}
 
 	// Retrieve the authentication method.
 	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
 	if err != nil {
+		ac.Logf(ctx, "auth method lookup failed: %v", err)
 		return sendError(err)
 	}
+	ac.Logf(ctx, "connection matches HBA rule: %s", hbaEntry.Input)
 
 	// Ask the method to authenticate.
 	authenticationHook, err := methodFn(ctx, ac, tlsState, pwRetrievalFn, execCfg, hbaEntry)
 	if err != nil {
+		ac.Logf(ctx, "authentication pre-hook failed: %v", err)
 		return sendError(err)
 	}
 	if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
+		ac.Logf(ctx, "authentication failed: %v", err)
 		return sendError(err)
 	}
+
+	ac.Logf(ctx, "authentication succeeded")
 
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
@@ -119,6 +128,7 @@ func (c *conn) findAuthenticationMethod(
 		// Insecure connections always use "trust" no matter what, and the
 		// remaining of the configuration is ignored.
 		methodFn = authTrust
+		hbaEntry = &insecureEntry
 		return
 	}
 
@@ -234,13 +244,17 @@ type AuthConn interface {
 	// authenticator.sendPwdData() calls fail. The error has already been written
 	// to the client connection.
 	AuthFail(err error)
+	// Logf logs a message on the authentication log, if auth logs
+	// are enabled.
+	Logf(ctx context.Context, format string, args ...interface{})
 }
 
 // authPipe is the implementation for the authenticator and AuthConn interfaces.
 // A single authPipe will serve as both an AuthConn and an authenticator; the
 // two represent the two "ends" of the pipe and we'll pass data between them.
 type authPipe struct {
-	c *conn // Only used for writing, not for reading.
+	c   *conn // Only used for writing, not for reading.
+	log *log.SecondaryLogger
 
 	ch chan []byte
 	// writerDone is a channel closed by noMorePwdData().
@@ -254,9 +268,10 @@ type authRes struct {
 	err      error
 }
 
-func newAuthPipe(c *conn) *authPipe {
+func newAuthPipe(c *conn, log *log.SecondaryLogger) *authPipe {
 	ap := &authPipe{
 		c:          c,
+		log:        log,
 		ch:         make(chan []byte),
 		writerDone: make(chan struct{}),
 		readerDone: make(chan authRes, 1),
@@ -302,6 +317,13 @@ func (p *authPipe) AuthOK(intSizer unqualifiedIntSizer) {
 
 func (p *authPipe) AuthFail(err error) {
 	p.readerDone <- authRes{err: err}
+}
+
+func (p *authPipe) Logf(ctx context.Context, format string, args ...interface{}) {
+	if p.log == nil {
+		return
+	}
+	p.log.Logf(ctx, format, args...)
 }
 
 // authResult is part of the authenticator interface.
