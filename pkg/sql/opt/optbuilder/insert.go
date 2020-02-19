@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -272,7 +273,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Wrap the input in one LEFT OUTER JOIN per UNIQUE index, and filter out
 		// rows that have conflicts. See the buildInputForDoNothing comment for
 		// more details.
-		mb.buildInputForDoNothing(inScope, ins.OnConflict)
+		conflictOrds := mb.mapColumnNamesToOrdinals(ins.OnConflict.Columns)
+		mb.buildInputForDoNothing(inScope, conflictOrds)
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
 		// insert rows that are not filtered.
@@ -289,7 +291,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		if mb.needExistingRows() {
 			// Left-join each input row to the target table, using conflict columns
 			// derived from the primary index as the join condition.
-			mb.buildInputForUpsert(inScope, mb.getPrimaryKeyColumnNames(), nil /* whereClause */)
+			primaryOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
+			mb.buildInputForUpsert(inScope, primaryOrds, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
 			// updated columns.
@@ -303,7 +306,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	default:
 		// Left-join each input row to the target table, using the conflict columns
 		// as the join condition.
-		mb.buildInputForUpsert(inScope, ins.OnConflict.Columns, ins.OnConflict.Where)
+		conflictOrds := mb.mapColumnNamesToOrdinals(ins.OnConflict.Columns)
+		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.Where)
 
 		// Derive the columns that will be updated from the SET expressions.
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
@@ -343,12 +347,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 	// values.
 	// TODO(andyk): This is not true in the case of composite key encodings. See
 	// issue #34518.
-	primary := mb.tab.Index(cat.PrimaryIndex)
-	var keyOrds util.FastIntSet
-	for i, n := 0, primary.LaxKeyColumnCount(); i < n; i++ {
-		keyOrds.Add(primary.Column(i).Ordinal)
-	}
-
+	keyOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
 	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
 		if keyOrds.Contains(i) {
 			// #1: Don't consider key columns.
@@ -630,15 +629,15 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 // filter that discards rows that have a conflict (by checking a not-null table
 // column to see if it was null-extended by the left join). See the comment
 // header for Builder.buildInsert for an example.
-func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tree.OnConflict) {
+func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds util.FastIntSet) {
 	// DO NOTHING clause does not require ON CONFLICT columns.
 	var conflictIndex cat.Index
-	if len(onConflict.Columns) != 0 {
+	if !conflictOrds.Empty() {
 		// Check that the ON CONFLICT columns reference at most one target row by
 		// ensuring they match columns of a UNIQUE index. Using LEFT OUTER JOIN
 		// to detect conflicts relies upon this being true (otherwise result
 		// cardinality could increase). This is also a Postgres requirement.
-		conflictIndex = mb.ensureUniqueConflictCols(onConflict.Columns)
+		conflictIndex = mb.ensureUniqueConflictCols(conflictOrds)
 	}
 
 	insertColSet := mb.outScope.expr.Relational().OutputCols
@@ -726,13 +725,13 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 // given insert row conflicts with an existing row in the table. If it is null,
 // then there is no conflict.
 func (mb *mutationBuilder) buildInputForUpsert(
-	inScope *scope, conflictCols tree.NameList, whereClause *tree.Where,
+	inScope *scope, conflictOrds util.FastIntSet, whereClause *tree.Where,
 ) {
 	// Check that the ON CONFLICT columns reference at most one target row.
 	// Using LEFT OUTER JOIN to detect conflicts relies upon this being true
 	// (otherwise result cardinality could increase). This is also a Postgres
 	// requirement.
-	mb.ensureUniqueConflictCols(conflictCols)
+	mb.ensureUniqueConflictCols(conflictOrds)
 
 	// Re-alias all INSERT columns so that they are accessible as if they were
 	// part of a special data source named "crdb_internal.excluded".
@@ -775,17 +774,14 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	//   ON ins.x = scan.a AND ins.y = scan.b
 	//
 	var on memo.FiltersExpr
-	for _, name := range conflictCols {
-		for i := range fetchScope.cols {
-			fetchCol := &fetchScope.cols[i]
-			if fetchCol.name == name {
-				condition := mb.b.factory.ConstructEq(
-					mb.b.factory.ConstructVariable(mb.insertColID(i)),
-					mb.b.factory.ConstructVariable(fetchCol.id),
-				)
-				on = append(on, mb.b.factory.ConstructFiltersItem(condition))
-				break
-			}
+	for i := range fetchScope.cols {
+		// Include fetch columns with ordinal positions in conflictOrds.
+		if conflictOrds.Contains(i) {
+			condition := mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(mb.insertColID(i)),
+				mb.b.factory.ConstructVariable(fetchScope.cols[i].id),
+			)
+			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
 		}
 	}
 
@@ -959,11 +955,11 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 	mb.outScope = projectionsScope
 }
 
-// ensureUniqueConflictCols tries to prove that the given list of column names
+// ensureUniqueConflictCols tries to prove that the given set of column ordinals
 // correspond to the columns of at least one UNIQUE index on the target table.
 // If true, then ensureUniqueConflictCols returns the matching index. Otherwise,
 // it reports an error.
-func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Index {
+func (mb *mutationBuilder) ensureUniqueConflictCols(conflictOrds util.FastIntSet) cat.Index {
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		index := mb.tab.Index(idx)
 
@@ -971,19 +967,13 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Inde
 		// the minimum columns that ensure uniqueness. Null values are considered
 		// to be *not* equal, but that's OK because the join condition rejects
 		// nulls anyway.
-		if !index.IsUnique() || index.LaxKeyColumnCount() != len(cols) {
+		if !index.IsUnique() || index.LaxKeyColumnCount() != conflictOrds.Len() {
 			continue
 		}
 
-		found := true
-		for col, colCount := 0, index.LaxKeyColumnCount(); col < colCount; col++ {
-			if cols[col] != index.Column(col).ColName() {
-				found = false
-				break
-			}
-		}
-
-		if found {
+		// Determine whether the conflict columns match the columns in the lax key.
+		indexOrds := getIndexLaxKeyOrdinals(index)
+		if indexOrds.Equals(conflictOrds) {
 			return index
 		}
 	}
@@ -991,13 +981,24 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Inde
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 }
 
-// getPrimaryKeyColumnNames returns the names of all primary key columns in the
-// target table.
-func (mb *mutationBuilder) getPrimaryKeyColumnNames() tree.NameList {
-	pkIndex := mb.tab.Index(cat.PrimaryIndex)
-	names := make(tree.NameList, pkIndex.KeyColumnCount())
-	for i, n := 0, pkIndex.KeyColumnCount(); i < n; i++ {
-		names[i] = pkIndex.Column(i).ColName()
+// mapColumnNamesToOrdinals returns the set of ordinal positions within the
+// target table that correspond to the given names.
+func (mb *mutationBuilder) mapColumnNamesToOrdinals(names tree.NameList) util.FastIntSet {
+	var ords util.FastIntSet
+	for _, name := range names {
+		found := false
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			tabCol := mb.tab.Column(i)
+			if tabCol.ColName() == name {
+				ords.Add(i)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			panic(sqlbase.NewUndefinedColumnError(string(name)))
+		}
 	}
-	return names
+	return ords
 }
