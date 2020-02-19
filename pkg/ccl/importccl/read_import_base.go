@@ -19,6 +19,8 @@ import (
 	"math"
 	"net/url"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -347,4 +349,230 @@ func wrapRowErr(err error, _ string, row int64, code, format string, args ...int
 		err = pgerror.WithCandidateCode(err, code)
 	}
 	return err
+}
+
+type namedInput struct {
+	reader *fileReader
+	name   string
+	idx    int32
+}
+
+// A scanner over avro input.
+type importRowStream interface {
+	// Input returns underlying input file.
+	Input() *namedInput
+
+	// Scan returns true if there is more data available.
+	// After Scan() returns false, the caller should verify
+	// that the scanner has not encountered an error (Err() == nil).
+	Scan() bool
+
+	// Err returns an error (if any) encountered when processing avro stream.
+	Err() error
+
+	// Skip, as the name implies, skips the current record in this stream.
+	Skip() error
+
+	// Row returns current row (record).
+	Row() (interface{}, error)
+
+	// HandleCorruptRow handles the input rows which resulted in some
+	// kind of an error. Returns true if the corrupt row has been
+	// successfully handled, and the import process should continue.
+	HandleCorruptRow(ctx context.Context, row interface{}, rowNum int64, err error) bool
+
+	// StreamProgress returns a fraction of the input
+	// that has been consumed so far
+	StreamProgress() float32
+
+	// FillDatums sends row data to the provide datum converter.
+	FillDatums(row interface{}, rowNum int64, conv *row.DatumRowConverter) error
+}
+
+// batch represents batch of data to convert.
+type batch struct {
+	data     []interface{}
+	startPos int64
+	progress float32
+}
+
+// parallelImporter is a helper to facilitate running input
+// conversion using parallel workers.
+type parallelImporter struct {
+	b        batch
+	recordCh chan batch
+}
+
+type datumConverterFactory = func(ctx context.Context) (*row.DatumRowConverter, error)
+
+type parallelImportOptions struct {
+	skip       int64 // Number of records to skip
+	walltime   int64 // Import time stamp.
+	numWorkers int   // Parallelism
+	batchSize  int   // Number of records to batch
+}
+
+func runParallelImport(
+	ctx context.Context,
+	opts parallelImportOptions,
+	producer importRowStream,
+	df datumConverterFactory,
+) error {
+	importer := &parallelImporter{
+		b:        batch{},
+		recordCh: make(chan batch),
+	}
+
+	group := ctxgroup.WithContext(ctx)
+
+	// Start consumers.
+	minEmited := make([]int64, opts.numWorkers)
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
+		defer tracing.FinishSpan(span)
+		return ctxgroup.GroupWorkers(ctx, opts.numWorkers, func(ctx context.Context, id int) error {
+			if conv, err := df(ctx); err == nil {
+				return importer.importWorker(ctx, id, producer, minEmited, opts.walltime, conv)
+			} else {
+				return err
+			}
+		})
+	})
+
+	// Read data from producer and send it to consumers.
+	group.GoCtx(func(ctx context.Context) error {
+		defer close(importer.recordCh)
+
+		var count int64
+		for {
+			// Scan more data, unless we're done.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				if !producer.Scan() {
+					if producer.Err() == nil {
+						return importer.flush()
+					}
+					return producer.Err()
+				}
+			}
+
+			// Skip rows if needed.
+			count++
+			if count <= opts.skip {
+				if err := producer.Skip(); err != nil {
+					return err
+				}
+				continue
+			}
+
+			// Batch parsed data.
+			data, err := producer.Row()
+			if err != nil {
+				err = wrapRowErr(err, producer.Input().name, count, pgcode.Syntax, "")
+				if producer.HandleCorruptRow(ctx, data, count, err) {
+					continue
+				}
+				return err
+			}
+
+			if err := importer.add(data, count, producer.StreamProgress); err != nil {
+				return err
+			}
+		}
+	})
+
+	return group.Wait()
+}
+
+// Adds data to the current batch, flushing batches as needed.
+func (p *parallelImporter) add(data interface{}, pos int64, progress func() float32) error {
+	if len(p.b.data) == 0 {
+		p.b.startPos = pos
+	}
+	p.b.data = append(p.b.data, data)
+
+	if len(p.b.data) == cap(p.b.data) {
+		p.b.progress = progress()
+		return p.flush()
+	}
+	return nil
+}
+
+// Flush flushes currently accumulated data.
+func (p *parallelImporter) flush() error {
+	// if the batch isn't empty, we need to flush it.
+	if len(p.b.data) > 0 {
+		p.recordCh <- p.b
+		p.b = batch{
+			data: make([]interface{}, 0, cap(p.b.data)),
+		}
+	}
+	return nil
+}
+
+func (p *parallelImporter) importWorker(
+	ctx context.Context,
+	workerID int,
+	stream importRowStream,
+	minEmitted []int64,
+	walltime int64,
+	conv *row.DatumRowConverter,
+) error {
+	if conv.EvalCtx.SessionData == nil {
+		panic("uninitialized session data")
+	}
+
+	conv.KvBatch.Source = stream.Input().idx
+
+	var rowNum int64
+	epoch := time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
+	const precision = uint64(10 * time.Microsecond)
+	timestamp := uint64(walltime-epoch) / precision
+
+	conv.CompletedRowFn = func() int64 {
+		m := emittedRowLowWatermark(workerID, rowNum, minEmitted)
+		return m
+	}
+
+	for batch := range p.recordCh {
+		conv.KvBatch.Progress = batch.progress
+		for batchIdx, record := range batch.data {
+			rowNum = batch.startPos + int64(batchIdx)
+			if err := stream.FillDatums(record, rowNum, conv); err != nil {
+				if stream.HandleCorruptRow(ctx, record, rowNum, err) {
+					continue
+				}
+				return err
+			}
+
+			rowIndex := int64(timestamp) + rowNum
+			if err := conv.Row(ctx, stream.Input().idx, rowIndex); err != nil {
+				err := wrapRowErr(err, stream.Input().name, rowNum, pgcode.Uncategorized, "")
+				if stream.HandleCorruptRow(ctx, record, rowNum, err) {
+					continue
+				}
+				return err
+			}
+		}
+	}
+	return conv.SendBatch(ctx)
+}
+
+// Updates emitted row for the specified worker and returns
+// low watermark for the emitted rows across all workers.
+func emittedRowLowWatermark(workerID int, emittedRow int64, minEmitted []int64) int64 {
+	atomic.StoreInt64(&minEmitted[workerID], emittedRow)
+
+	for i := 0; i < len(minEmitted); i++ {
+		if i != workerID {
+			w := atomic.LoadInt64(&minEmitted[i])
+			if w < emittedRow {
+				emittedRow = w
+			}
+		}
+	}
+
+	return emittedRow
 }

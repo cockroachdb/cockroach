@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestImportData(t *testing.T) {
@@ -2373,6 +2372,59 @@ func BenchmarkImport(b *testing.B) {
 		))
 }
 
+type csvBenchmarkStream struct {
+	n    int
+	pos  int
+	data [][]string
+}
+
+func (s *csvBenchmarkStream) HandleCorruptRow(
+	ctx context.Context, row interface{}, rowNum int64, err error,
+) bool {
+	return false
+}
+
+func (s *csvBenchmarkStream) Input() *namedInput {
+	return &namedInput{name: "benchmark"}
+}
+
+func (s *csvBenchmarkStream) Scan() bool {
+	s.pos++
+	return s.pos <= s.n
+}
+
+func (s *csvBenchmarkStream) Err() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Skip() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Row() (interface{}, error) {
+	return s.data[s.pos%len(s.data)], nil
+}
+
+func (s *csvBenchmarkStream) StreamProgress() float32 {
+	return 0.0
+}
+
+func (s *csvBenchmarkStream) FillDatums(
+	row interface{}, rowNum int64, conv *row.DatumRowConverter,
+) (err error) {
+	record := row.([]string)
+
+	for i, f := range record {
+		conv.Datums[i], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[i], f, conv.EvalCtx)
+		if err != nil {
+			break
+		}
+	}
+	return
+}
+
+var _ importRowStream = &csvBenchmarkStream{}
+
 func BenchmarkConvertRecord(b *testing.B) {
 	ctx := context.TODO()
 
@@ -2428,57 +2480,43 @@ func BenchmarkConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	recordCh := make(chan csvRecord)
-	kvCh := make(chan row.KVBatch)
-	group := errgroup.Group{}
 
+	kvCh := make(chan row.KVBatch)
 	// no-op drain kvs channel.
 	go func() {
 		for range kvCh {
 		}
 	}()
 
-	c := &csvInputReader{
-		evalCtx:   &evalCtx,
-		kvCh:      kvCh,
-		recordCh:  recordCh,
-		tableDesc: tableDesc.TableDesc(),
-	}
-	// start up workers.
 	numWorkers := runtime.NumCPU()
-	for i := 0; i < numWorkers; i++ {
-		workerID := i
-		group.Go(func() error {
-			return c.convertRecordWorker(ctx, workerID)
-		})
+	descr := tableDesc.TableDesc()
+	cols := make(tree.NameList, len(descr.Columns))
+	for i, col := range descr.Columns {
+		cols[i] = tree.Name(col.Name)
+	}
+	c := newCSVInputReader(kvCh, roachpb.CSVOptions{}, 0, numWorkers, descr, cols, &evalCtx)
+	producer := &csvBenchmarkStream{
+		n:    b.N,
+		pos:  0,
+		data: tpchLineItemDataRows,
 	}
 	const batchSize = 500
 
-	minEmitted := make([]int64, numWorkers)
-	batch := csvRecord{
-		file:       "some/path/to/some/file/of/csv/data.tbl",
-		rowOffset:  1,
-		r:          make([][]string, 0, batchSize),
-		minEmitted: &minEmitted,
-	}
-
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if len(batch.r) > batchSize {
-			recordCh <- batch
-			batch.r = make([][]string, 0, batchSize)
-			batch.rowOffset = int64(i)
-			minEmitted = make([]int64, numWorkers)
-		}
-
-		batch.r = append(batch.r, tpchLineItemDataRows[i%len(tpchLineItemDataRows)])
-	}
-	recordCh <- batch
-	close(recordCh)
-
-	if err := group.Wait(); err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(
+		b,
+		runParallelImport(
+			ctx,
+			parallelImportOptions{
+				numWorkers: numWorkers,
+				batchSize:  batchSize,
+			},
+			producer,
+			func(ctx context.Context) (*row.DatumRowConverter, error) {
+				return row.NewDatumRowConverter(ctx, c.tableDesc, c.targetCols, c.evalCtx.Copy(), c.kvCh)
+			},
+		),
+	)
 	close(kvCh)
 }
 
