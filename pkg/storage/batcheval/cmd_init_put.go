@@ -41,8 +41,14 @@ func InitPut(
 			defer readWriter.Close()
 		}
 	}
+	var err error
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+		err = engine.MVCCBlindInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	} else {
+		err = engine.MVCCInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
 	}
-	return result.Result{}, engine.MVCCInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	if err != nil {
+		return result.Result{}, err
+	}
+	return result.FromWrittenIntent(h.Txn, args.Key), nil
 }

@@ -33,6 +33,9 @@ func Increment(
 	reply := resp.(*roachpb.IncrementResponse)
 
 	newVal, err := engine.MVCCIncrement(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, h.Txn, args.Increment)
+	if err != nil {
+		return result.Result{}, err
+	}
 	reply.NewValue = newVal
-	return result.Result{}, err
+	return result.FromWrittenIntent(h.Txn, args.Key), nil
 }
