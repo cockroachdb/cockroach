@@ -132,8 +132,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 		execerror.VectorizedInternalPanic("spool() is called for the second time")
 	}
 	p.spooled = true
-	batch := p.input.Next(ctx)
-	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
+	for batch := p.input.Next(ctx); batch.Length() != 0; batch = p.input.Next(ctx) {
 		p.allocator.PerformOperation(p.bufferedTuples.colVecs, func() {
 			for i := 0; i < len(p.bufferedTuples.colVecs); i++ {
 				p.bufferedTuples.colVecs[i].Append(
@@ -173,6 +172,9 @@ func (p *allSpooler) getPartitionsCol() []bool {
 }
 
 func (p *allSpooler) getWindowedBatch(startIdx, endIdx uint64) coldata.Batch {
+	// We don't need to worry about selection vectors here because if these were
+	// present on the original input batches, they have been removed when we were
+	// buffering up tuples.
 	for i, t := range p.inputTypes {
 		window := p.bufferedTuples.colVecs[i].Window(t, startIdx, endIdx)
 		p.windowedBatch.ReplaceCol(window, i)
@@ -277,27 +279,24 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		}
 
 		p.resetOutput()
-		p.allocator.PerformOperation(p.output.ColVecs(), func() {
-			for j := 0; j < len(p.inputTypes); j++ {
-				// TODO(yuzefovich): at this point, we have already fully sorted the
-				// input. I think it is ok if we do this Copy outside of the Allocator -
-				// the work has been done, but theoretically it is possible to hit the
-				// limit here (mainly with variable-sized types like Bytes). Nonetheless,
-				// for performance reasons it would be sad to fallback to disk at this
-				// point.
-				p.output.ColVec(j).Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							ColType:     p.inputTypes[j],
-							Src:         p.input.getValues(j),
-							SrcStartIdx: p.emitted,
-							SrcEndIdx:   newEmitted,
-						},
-						Sel64: p.order,
+		for j := 0; j < len(p.inputTypes); j++ {
+			// At this point, we have already fully sorted the input. It is ok to do
+			// this Copy outside of the allocator - the work has been done, but
+			// theoretically it is possible to hit the limit here (mainly with
+			// variable-sized types like Bytes). Nonetheless, for performance reasons
+			// it would be sad to fallback to disk at this point.
+			p.output.ColVec(j).Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:     p.inputTypes[j],
+						Src:         p.input.getValues(j),
+						SrcStartIdx: p.emitted,
+						SrcEndIdx:   newEmitted,
 					},
-				)
-			}
-		})
+					Sel64: p.order,
+				},
+			)
+		}
 		p.output.SetLength(uint16(newEmitted - p.emitted))
 		p.emitted = newEmitted
 		return p.output

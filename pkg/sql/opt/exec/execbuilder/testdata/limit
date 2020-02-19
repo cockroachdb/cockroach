@@ -29,7 +29,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) 
 ----
 tree                      field        description  columns  ordering
 ·                         distributed  false        ·        ·
-·                         vectorized   true         ·        ·
+·                         vectorized   false        ·        ·
 limit                     ·            ·            (w)      +w
  │                        count        25           ·        ·
  └── distinct             ·            ·            (w)      +w
@@ -92,7 +92,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 ·                         distributed  false            ·                       ·
-·                         vectorized   true             ·                       ·
+·                         vectorized   false            ·                       ·
 render                    ·            ·                (sum)                   ·
  │                        render 0     sum              ·                       ·
  └── limit                ·            ·                (k, sum, any_not_null)  -any_not_null

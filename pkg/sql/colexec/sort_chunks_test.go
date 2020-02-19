@@ -18,35 +18,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestSortChunks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+var sortChunksTestCases []sortTestCase
 
-	tcs := []struct {
-		description string
-		tuples      tuples
-		expected    tuples
-		typ         []coltypes.T
-		ordCols     []execinfrapb.Ordering_Column
-		matchLen    int
-	}{
-		{
-			description: `tuples already ordered`,
-			tuples:      tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			expected:    tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typ:         []coltypes.T{coltypes.Int64},
-			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}},
-			matchLen:    1,
-		},
+func init() {
+	sortChunksTestCases = []sortTestCase{
 		{
 			description: `three chunks`,
 			tuples:      tuples{{1, 2}, {1, 2}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, 1}},
 			expected:    tuples{{1, 1}, {1, 2}, {1, 2}, {1, 3}, {5, 5}, {6, 1}, {6, 6}},
-			typ:         []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes:    []types.T{*types.Int, *types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -54,7 +41,7 @@ func TestSortChunks(t *testing.T) {
 			description: `simple nulls asc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, nil}, {1, 1}, {1, 2}, {1, 3}, {5, 5}, {6, nil}, {6, 6}},
-			typ:         []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes:    []types.T{*types.Int, *types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -62,7 +49,7 @@ func TestSortChunks(t *testing.T) {
 			description: `simple nulls desc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, 3}, {1, 2}, {1, 1}, {1, nil}, {5, 5}, {6, 6}, {6, nil}},
-			typ:         []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes:    []types.T{*types.Int, *types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 			matchLen:    1,
 		},
@@ -82,7 +69,7 @@ func TestSortChunks(t *testing.T) {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -102,7 +89,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -122,7 +109,7 @@ func TestSortChunks(t *testing.T) {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -142,7 +129,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -162,7 +149,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{0, 1, 2},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}, {ColIdx: 0}},
 			matchLen: 1,
 		},
@@ -186,14 +173,23 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 2},
 				{1, 2, 2},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 0}, {ColIdx: 1}},
 			matchLen: 2,
 		},
 	}
-	for _, tc := range tcs {
+}
+
+func TestSortChunks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range sortChunksTestCases {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
-			return NewSortChunks(testAllocator, input[0], tc.typ, tc.ordCols, tc.matchLen)
+			physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
+			if err != nil {
+				return nil, err
+			}
+			return NewSortChunks(testAllocator, input[0], physTypes, tc.ordCols, tc.matchLen)
 		})
 	}
 }
@@ -211,7 +207,7 @@ func TestSortChunksRandomized(t *testing.T) {
 
 	for nCols := 1; nCols < maxCols; nCols++ {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-			for matchLen := 1; matchLen <= nOrderingCols; matchLen++ {
+			for matchLen := 1; matchLen < nOrderingCols; matchLen++ {
 				ordCols := generateColumnOrdering(rng, nCols, nOrderingCols)
 				tups := make(tuples, nTups)
 				for i := range tups {
