@@ -938,11 +938,96 @@ SELECT description
 		},
 	),
 
+	"pg_advisory_lock": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{{"int", types.Int}},
+			// TODO(yuzefovich): Postgres returns VOID type.
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+				err := evalCtx.PGAdvisorySession.LockEx(evalCtx.Ctx(), id)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	"pg_advisory_lock_shared": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{{"int", types.Int}},
+			// TODO(yuzefovich): Postgres returns VOID type.
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+				err := evalCtx.PGAdvisorySession.LockSh(evalCtx.Ctx(), id)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	"pg_advisory_unlock": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+				res := evalCtx.PGAdvisorySession.UnlockEx(evalCtx.Ctx(), id)
+				return tree.MakeDBool(tree.DBool(res)), nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	"pg_advisory_unlock_shared": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"int", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+				res := evalCtx.PGAdvisorySession.UnlockSh(evalCtx.Ctx(), id)
+				return tree.MakeDBool(tree.DBool(res)), nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	// TODO(yuzefovich): pg_advisory_unlock_all.
+
+	"pg_advisory_xact_lock": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{{"int", types.Int}},
+			// TODO(yuzefovich): Postgres returns VOID type.
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+				err := evalCtx.PGAdvisorySession.TxnLockEx(evalCtx.Ctx(), evalCtx.Txn, id)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	"pg_advisory_xact_lock_shared": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{{"int", types.Int}},
+			// TODO(yuzefovich): Postgres returns VOID type.
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+				err := evalCtx.PGAdvisorySession.TxnLockSh(evalCtx.Ctx(), evalCtx.Txn, id)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
 				return tree.DBoolTrue, nil
 			},
 			Info: notUsableInfo,

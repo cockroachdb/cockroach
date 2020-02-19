@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgadvisory"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2810,6 +2811,8 @@ type EvalContext struct {
 	Txn *client.Txn
 	// A handle to the database.
 	DB *client.DB
+
+	PGAdvisorySession *pgadvisory.Session
 
 	ReCache *RegexpCache
 	tmpDec  apd.Decimal

@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/go-errors/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type Lock interface {
@@ -53,6 +53,14 @@ type Session struct {
 	manager LockManager
 	locks   map[int64]*lockWithRefCount
 	scratch []byte
+}
+
+func NewSession(db *client.DB, manager LockManager) *Session {
+	return &Session{
+		db:      db,
+		manager: manager,
+		locks:   make(map[int64]*lockWithRefCount),
+	}
 }
 
 // LockEx acquires an exclusive session-scoped lock for key 'id'.
