@@ -27,8 +27,13 @@ import (
 )
 
 func (b *Builder) buildMutationInput(
-	inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
+	mutExpr, inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
 ) (execPlan, error) {
+	if b.shouldApplyImplicitLockingToMutationInput(mutExpr) {
+		b.forceForUpdateLocking = true
+		defer func() { b.forceForUpdateLocking = false }()
+	}
+
 	input, err := b.buildRelational(inputExpr)
 	if err != nil {
 		return execPlan{}, err
@@ -51,37 +56,6 @@ func (b *Builder) buildMutationInput(
 	return input, nil
 }
 
-func (b *Builder) buildInsertInput(ins *memo.InsertExpr, colList opt.ColList) (execPlan, error) {
-	// Unlike with the other three mutation expressions, it never makes sense
-	// to apply implicit row-level locking to the input of an INSERT expression
-	// because any contention results in unique constraint violations.
-	return b.buildMutationInput(ins.Input, colList, &ins.MutationPrivate)
-}
-
-func (b *Builder) buildUpdateInput(upd *memo.UpdateExpr, colList opt.ColList) (execPlan, error) {
-	if b.shouldApplyImplicitLockingToUpdateInput(upd) {
-		b.forceForUpdateLocking = true
-		defer func() { b.forceForUpdateLocking = false }()
-	}
-	return b.buildMutationInput(upd.Input, colList, &upd.MutationPrivate)
-}
-
-func (b *Builder) buildUpsertInput(ups *memo.UpsertExpr, colList opt.ColList) (execPlan, error) {
-	if b.shouldApplyImplicitLockingToUpsertInput(ups) {
-		b.forceForUpdateLocking = true
-		defer func() { b.forceForUpdateLocking = false }()
-	}
-	return b.buildMutationInput(ups.Input, colList, &ups.MutationPrivate)
-}
-
-func (b *Builder) buildDeleteInput(del *memo.DeleteExpr, colList opt.ColList) (execPlan, error) {
-	if b.shouldApplyImplicitLockingToDeleteInput(del) {
-		b.forceForUpdateLocking = true
-		defer func() { b.forceForUpdateLocking = false }()
-	}
-	return b.buildMutationInput(del.Input, colList, &del.MutationPrivate)
-}
-
 func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	if ep, ok, err := b.tryBuildFastPathInsert(ins); err != nil || ok {
 		return ep, err
@@ -91,7 +65,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
-	input, err := b.buildInsertInput(ins, colList)
+	input, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -300,7 +274,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	}
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
 
-	input, err := b.buildUpdateInput(upd, colList)
+	input, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -379,7 +353,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
 
-	input, err := b.buildUpsertInput(ups, colList)
+	input, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -441,7 +415,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	colList := make(opt.ColList, 0, len(del.FetchCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
 
-	input, err := b.buildDeleteInput(del, colList)
+	input, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -761,6 +735,32 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 // initial row scan, when such locking is deemed desirable. The locking mode is
 // equivalent that used by a SELECT ... FOR UPDATE statement.
 var forUpdateLocking = &tree.LockingItem{Strength: tree.ForUpdate}
+
+// shouldApplyImplicitLockingToMutationInput determines whether or not the
+// builder should apply a FOR UPDATE row-level locking mode to the initial row
+// scan of a mutation expression.
+func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr) bool {
+	switch t := mutExpr.(type) {
+	case *memo.InsertExpr:
+		// Unlike with the other three mutation expressions, it never makes
+		// sense to apply implicit row-level locking to the input of an INSERT
+		// expression because any contention results in unique constraint
+		// violations.
+		return false
+
+	case *memo.UpdateExpr:
+		return b.shouldApplyImplicitLockingToUpdateInput(t)
+
+	case *memo.UpsertExpr:
+		return b.shouldApplyImplicitLockingToUpsertInput(t)
+
+	case *memo.DeleteExpr:
+		return b.shouldApplyImplicitLockingToDeleteInput(t)
+
+	default:
+		panic(errors.AssertionFailedf("unexpected mutation expression %T", t))
+	}
+}
 
 // shouldApplyImplicitLockingToUpdateInput determines whether or not the builder
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
