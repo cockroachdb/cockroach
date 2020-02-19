@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -474,7 +477,14 @@ func (s *vectorizedFlowCreator) setupRouter(
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
 	}
 
-	hashRouterMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, "hash-router")
+	// HashRouter memory monitor names are the concatenated output stream IDs.
+	streamIDs := make([]string, len(output.Streams))
+	for i, s := range output.Streams {
+		streamIDs[i] = strconv.Itoa(int(s.StreamID))
+	}
+	mmName := "hash-router-[" + strings.Join(streamIDs, ",") + "]"
+
+	hashRouterMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, mmName)
 	allocators := make([]*colexec.Allocator, len(output.Streams))
 	for i := range allocators {
 		acc := hashRouterMemMonitor.MakeBoundAccount()
@@ -487,6 +497,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
+		logtags.AddTag(ctx, "hashRouterID", mmName)
 		router.Run(ctx)
 	}
 	s.accumulateAsyncComponent(runRouter)

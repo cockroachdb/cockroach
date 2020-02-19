@@ -58,6 +58,35 @@ type routerOutputOp struct {
 
 	mu struct {
 		syncutil.Mutex
+		// unlimitedAllocator tracks the memory usage of this router output,
+		// providing a signal for when it should spill to disk.
+		// The memory lifecycle is as follows:
+		//
+		// o.mu.pendingBatch is allocated as a "staging" area. Tuples are copied
+		// into it in addBatch.
+		// A read may come in in this state, in which case pendingBatch is returned
+		// and references to it are removed. Since batches are unsafe for reuse,
+		// the batch is also manually released from the allocator.
+		// If a read does not come in and the batch becomes full of tuples, that
+		// batch is stored in o.mu.data, which is a queue with an in-memory circular
+		// buffer backed by disk. If the batch fits in memory, a reference to it
+		// is retained and a new pendingBatch is allocated.
+		//
+		// If a read comes in at this point, the batch is dequeued from o.mu.data
+		// and returned, but the memory is still accounted for. In fact, memory use
+		// increases up to when o.mu.data is full and must spill to disk.
+		// Once it spills to disk, the spillingQueue (o.mu.data), will release
+		// batches it spills to disk to stop accounting for them.
+		// The tricky part comes when o.mu.data is dequeued from. In this case, the
+		// reference for a previously-returned batch is overwritten with an on-disk
+		// batch, so the memory for the overwritten batch is released, while the
+		// new batch's memory is retained. Note that if batches are being dequeued
+		// from disk, it must be the case that the circular buffer is now empty,
+		// holding references to batches that have been previously returned.
+		//
+		// In short, batches whose references are retained are also retained in the
+		// allocator, but if any references are overwritten or lost, those batches
+		// are released.
 		unlimitedAllocator *Allocator
 		cond               *sync.Cond
 		done               bool
@@ -145,7 +174,7 @@ func (o *routerOutputOp) Init() {}
 // Next returns the next coldata.Batch from the routerOutputOp. Note that Next
 // is designed for only one concurrent caller and will block until data is
 // ready.
-func (o *routerOutputOp) Next(context.Context) coldata.Batch {
+func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.mu.done {
@@ -164,6 +193,7 @@ func (o *routerOutputOp) Next(context.Context) coldata.Batch {
 		// but there is a o.mu.pendingBatch that has not been flushed yet. Return
 		// this batch directly.
 		b = o.mu.pendingBatch
+		o.mu.unlimitedAllocator.ReleaseBatch(b)
 		o.mu.pendingBatch = nil
 	} else {
 		var err error
@@ -177,18 +207,15 @@ func (o *routerOutputOp) Next(context.Context) coldata.Batch {
 		o.maybeUnblockLocked()
 	}
 	if b.Length() == 0 {
-		// This is the last batch. Set done to protect against further calls to
-		// Next since this is allowed by the interface.
-		o.mu.done = true
+		// This is the last batch. closeLocked will set done to protect against
+		// further calls to Next since this is allowed by the interface as well as
+		// cleaning up and releasing possible disk infrastructure.
+		o.closeLocked(ctx)
 	}
 	return b
 }
 
-// cancel wakes up a reader in Next if there is one and results in the output
-// returning zero length batches for every Next call after cancel. Note that
-// all accumulated data that hasn't been read will not be returned.
-func (o *routerOutputOp) cancel(ctx context.Context) {
-	o.mu.Lock()
+func (o *routerOutputOp) closeLocked(ctx context.Context) {
 	o.mu.done = true
 	if err := o.mu.data.close(); err != nil {
 		// This log message is Info instead of Warning because the flow will also
@@ -196,6 +223,14 @@ func (o *routerOutputOp) cancel(ctx context.Context) {
 		// any effect.
 		log.Infof(ctx, "error closing vectorized hash router output, files may be left over: %s", err)
 	}
+}
+
+// cancel wakes up a reader in Next if there is one and results in the output
+// returning zero length batches for every Next call after cancel. Note that
+// all accumulated data that hasn't been read will not be returned.
+func (o *routerOutputOp) cancel(ctx context.Context) {
+	o.mu.Lock()
+	o.closeLocked(ctx)
 	// Some goroutine might be waiting on the condition variable, so wake it up.
 	// Note that read goroutines check o.mu.done, so won't wait on the condition
 	// variable after we unlock the mutex.
