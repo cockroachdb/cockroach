@@ -200,7 +200,7 @@ var operations = []mvccOp{
 			txn := args[3].(*roachpb.Transaction)
 			txn.Sequence++
 
-			err := engine.MVCCPut(ctx, writer, nil, key.Key, txn.WriteTimestamp, value, txn)
+			err := engine.MVCCPut(ctx, writer, nil, key.Key, txn.WriteTimestamp, value, txn, nil)
 			if err != nil {
 				return fmt.Sprintf("error: %s", err)
 			}

@@ -47,9 +47,10 @@ func ResolveIntentRange(
 	iterAndBuf := engine.GetIterAndBuf(readWriter, engine.IterOptions{UpperBound: args.EndKey})
 	defer iterAndBuf.Cleanup()
 
-	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, readWriter, iterAndBuf, ms, intent, cArgs.MaxKeys,
-	)
+	leasingIntentFunc := func(intent roachpb.Intent) {
+		// TODO(sbhola): update ts cache
+	}
+	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, cArgs.MaxKeys, leasingIntentFunc)
 	if err != nil {
 		return result.Result{}, err
 	}

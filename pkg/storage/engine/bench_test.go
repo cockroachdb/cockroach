@@ -128,7 +128,7 @@ func setupMVCCData(
 			txn.ReadTimestamp = ts
 			txn.WriteTimestamp = ts
 		}
-		if err := MVCCPut(ctx, batch, nil /* ms */, key, ts, value, txn); err != nil {
+		if err := MVCCPut(ctx, batch, nil, key, ts, value, txn, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -137,11 +137,11 @@ func setupMVCCData(
 		key := keys[idx]
 		txnMeta := txn.TxnMeta
 		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
-		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.Intent{
+		if _, err := MVCCResolveWriteIntent(ctx, batch, nil, roachpb.Intent{
 			Span:   roachpb.Span{Key: key},
 			Status: roachpb.COMMITTED,
 			Txn:    txnMeta,
-		}); err != nil {
+		}, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -307,7 +307,7 @@ func runMVCCPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize in
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCPut(ctx, eng, nil, key, ts, value, nil); err != nil {
+		if err := MVCCPut(ctx, eng, nil, key, ts, value, nil, nil); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -353,7 +353,7 @@ func runMVCCConditionalPut(
 		for i := 0; i < b.N; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, eng, nil, key, ts, value, nil); err != nil {
+			if err := MVCCPut(ctx, eng, nil, key, ts, value, nil, nil); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -461,7 +461,7 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+			if err := MVCCPut(ctx, batch, nil, key, ts, value, nil, nil); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -803,7 +803,7 @@ func runMVCCGarbageCollect(
 				})
 			}
 			for j := 0; j < opts.numVersions; j++ {
-				if err := MVCCPut(ctx, batch, nil /* ms */, key, ts.Add(0, int32(j)), val, nil); err != nil {
+				if err := MVCCPut(ctx, batch, nil, key, ts.Add(0, int32(j)), val, nil, nil); err != nil {
 					b.Fatal(err)
 				}
 			}

@@ -1014,6 +1014,8 @@ message ResolveIntentRequest {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "IgnoredSeqNums"
   ];
+
+  util.hlc.Timestamp heartbeat_timestamp = 6 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentResponse is the return value from the
@@ -1046,6 +1048,8 @@ message ResolveIntentRangeRequest {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "IgnoredSeqNums"
   ];
+
+  util.hlc.Timestamp heartbeat_timestamp = 7 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeResponse is the return value from the

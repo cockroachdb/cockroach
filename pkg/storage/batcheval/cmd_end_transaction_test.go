@@ -981,13 +981,13 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 1
-		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn, nil); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 2
-		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn, nil); err != nil {
 			t.Fatal(err)
 		}
 

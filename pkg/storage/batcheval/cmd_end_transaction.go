@@ -158,6 +158,12 @@ func declareKeysEndTxn(
 	}
 }
 
+// TODO(sbhola): is this path only taken when the transaction is itself
+// deciding to abort or commit? If yes, we can avoid doing anything with the
+// ts cache here under the assumption that the lease is held properly only
+// under two conditions (a) the transaction successfully commit, (b) the
+// (session lease holding) transaction is aborted by some other party.
+//
 // EndTxn either commits or aborts (rolls back) an extant transaction according
 // to the args.Commit parameter. Rolling back an already rolled-back txn is ok.
 // TODO(nvanbenschoten): rename this file to cmd_end_txn.go once some of andrei's
@@ -490,7 +496,7 @@ func resolveLocalIntents(
 					return nil
 				}
 				resolveMS := ms
-				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
+				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent, nil)
 				if ok {
 					resolveAllowance--
 				}
@@ -503,7 +509,7 @@ func resolveLocalIntents(
 			externalIntents = append(externalIntents, outSpans...)
 			if inSpan != nil {
 				intent.Span = *inSpan
-				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance)
+				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance, nil)
 				if err != nil {
 					return err
 				}

@@ -174,8 +174,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 				// Put a value so that the deletion below finds a value to seek
 				// to.
-				if err := MVCCPut(context.Background(), batch, nil, key, hlc.Timestamp{},
-					roachpb.MakeValueFromString("x"), nil); err != nil {
+				if err := MVCCPut(context.Background(), batch, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("x"), nil, nil); err != nil {
 					t.Fatal(err)
 				}
 

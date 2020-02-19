@@ -105,7 +105,7 @@ func createRangeData(
 
 	keys := []engine.MVCCKey{}
 	for _, keyTS := range keyTSs {
-		if err := engine.MVCCPut(context.Background(), eng, nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
+		if err := engine.MVCCPut(context.Background(), eng, nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil, nil); err != nil {
 			t.Fatal(err)
 		}
 		keys = append(keys, engine.MVCCKey{Key: keyTS.key, Timestamp: keyTS.ts})

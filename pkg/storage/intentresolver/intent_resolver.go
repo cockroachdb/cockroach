@@ -914,21 +914,23 @@ func (ir *IntentResolver) ResolveIntents(
 				resolveReq{
 					rangeID: ir.lookupRangeID(ctx, intent.Key),
 					req: &roachpb.ResolveIntentRequest{
-						RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
-						IntentTxn:      intent.Txn,
-						Status:         intent.Status,
-						Poison:         opts.Poison,
-						IgnoredSeqNums: intent.IgnoredSeqNums,
+						RequestHeader:      roachpb.RequestHeaderFromSpan(intent.Span),
+						IntentTxn:          intent.Txn,
+						Status:             intent.Status,
+						Poison:             opts.Poison,
+						IgnoredSeqNums:     intent.IgnoredSeqNums,
+						HeartbeatTimestamp: intent.HeartbeatTimestamp,
 					},
 				})
 		} else {
 			resolveRangeReqs = append(resolveRangeReqs, &roachpb.ResolveIntentRangeRequest{
-				RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:      intent.Txn,
-				Status:         intent.Status,
-				Poison:         opts.Poison,
-				MinTimestamp:   opts.MinTimestamp,
-				IgnoredSeqNums: intent.IgnoredSeqNums,
+				RequestHeader:      roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:          intent.Txn,
+				Status:             intent.Status,
+				Poison:             opts.Poison,
+				MinTimestamp:       opts.MinTimestamp,
+				IgnoredSeqNums:     intent.IgnoredSeqNums,
+				HeartbeatTimestamp: intent.HeartbeatTimestamp,
 			})
 		}
 	}

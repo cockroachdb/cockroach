@@ -82,7 +82,10 @@ func ResolveIntent(
 	}
 
 	intent := args.AsIntent()
-	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, intent)
+	leasingIntentFunc := func(intent roachpb.Intent) {
+		// TODO(sbhola): update ts cache
+	}
+	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, intent, leasingIntentFunc)
 	if err != nil {
 		return result.Result{}, err
 	}
