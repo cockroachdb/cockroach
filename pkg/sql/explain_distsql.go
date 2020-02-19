@@ -26,9 +26,10 @@ import (
 type explainDistSQLNode struct {
 	optColumnsSlot
 
-	options       *tree.ExplainOptions
-	plan          planNode
-	subqueryPlans []subquery
+	options        *tree.ExplainOptions
+	plan           planNode
+	subqueryPlans  []subquery
+	postqueryPlans []postquery
 
 	stmtType tree.StatementType
 
@@ -196,6 +197,45 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		diagram.AddSpans(spans)
 	}
 
+	if n.analyze && len(n.postqueryPlans) > 0 {
+		outerPostqueries := planCtx.planner.curPlan.postqueryPlans
+		defer func() {
+			planCtx.planner.curPlan.postqueryPlans = outerPostqueries
+		}()
+		planCtx.planner.curPlan.postqueryPlans = n.postqueryPlans
+
+		// Discard rows that are returned.
+		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+			return nil
+		})
+		execCfg := params.p.ExecCfg()
+		recv := MakeDistSQLReceiver(
+			planCtx.ctx,
+			rw,
+			tree.Rows,
+			execCfg.RangeDescriptorCache,
+			execCfg.LeaseHolderCache,
+			params.p.txn,
+			func(ts hlc.Timestamp) {
+				_ = execCfg.Clock.Update(ts)
+			},
+			params.extendedEvalCtx.Tracing,
+		)
+		if !distSQLPlanner.PlanAndRunPostqueries(
+			planCtx.ctx,
+			params.p,
+			params.extendedEvalCtx.copy,
+			n.postqueryPlans,
+			recv,
+			true,
+		) {
+			if err := rw.Err(); err != nil {
+				return err
+			}
+			return recv.commErr
+		}
+	}
+
 	planJSON, planURL, err := diagram.ToURL()
 	if err != nil {
 		return err
@@ -221,11 +261,17 @@ func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 	for i := range n.subqueryPlans {
-		// Once a subquery plan has been evaluated, it already closes its
-		// plan.
+		// Once a subquery plan has been evaluated, it already closes its plan.
 		if n.subqueryPlans[i].plan != nil {
 			n.subqueryPlans[i].plan.Close(ctx)
 			n.subqueryPlans[i].plan = nil
+		}
+	}
+	for i := range n.postqueryPlans {
+		// Once a postquery plan has been evaluated, it already closes its plan.
+		if n.postqueryPlans[i].plan != nil {
+			n.postqueryPlans[i].plan.Close(ctx)
+			n.postqueryPlans[i].plan = nil
 		}
 	}
 }

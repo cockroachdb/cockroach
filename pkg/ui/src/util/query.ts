@@ -15,6 +15,10 @@ interface ParamsObj {
   [key: string]: string;
 }
 
+interface URLSearchParamsWithKeys extends URLSearchParams {
+  keys: () => string;
+}
+
 /* eslint-disable no-prototype-builtins,no-restricted-syntax */
 export function queryToString(obj: any) {
   const str = [];
@@ -27,13 +31,12 @@ export function queryToString(obj: any) {
 }
 
 export function queryToObj(location: Location, key: string, value: string) {
-  const params = new URLSearchParams(location.search);
+  const params = new URLSearchParams(location.search) as URLSearchParamsWithKeys;
   const paramObj: ParamsObj = {};
-
-  params.forEach((paramValue, paramKey) => {
-    paramObj[paramKey] = paramValue;
-  });
-  if (key) {
+  for (const data of params.keys()) {
+    paramObj[data] = params.get(data);
+  }
+  if (key && value) {
     if (value.length > 0 || (typeof value === "number")) {
       paramObj[key] = value;
     } else {
