@@ -101,3 +101,5 @@
 - Version: 25 (MinAcceptedVersion: 24)
     - Add locking strength and wait policy fields to TableReader, JoinReader,
       IndexSkipTableReader, and InterleavedReaderJoiner spec.
+- Version: 26 (MinAcceptedVersion: 26)
+    - Change how datums are hashed for distinct and aggregation operations.

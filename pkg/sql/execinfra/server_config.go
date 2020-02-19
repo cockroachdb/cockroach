@@ -59,11 +59,11 @@ import (
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version execinfrapb.DistSQLVersion = 25
+const Version execinfrapb.DistSQLVersion = 26
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 24
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 26
 
 // SettingUseTempStorageJoins is a cluster setting that configures whether
 // joins are allowed to spill to disk.

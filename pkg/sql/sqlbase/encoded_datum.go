@@ -273,6 +273,28 @@ func (ed *EncDatum) Encode(
 	}
 }
 
+// Hash appends a unique hash of ed to the given slice. If datums are intended
+// to be deduplicated or grouped with hashes, this function should be used
+// instead of encode.
+func (ed *EncDatum) Hash(typ *types.T, a *DatumAlloc, appendTo []byte) ([]byte, error) {
+	if err := ed.EnsureDecoded(typ, a); err != nil {
+		return nil, err
+	}
+	switch typ.Family() {
+	case types.JsonFamily, types.ArrayFamily:
+		// We must use value encodings without a column ID even if the EncDatum already
+		// is encoded with the value encoding so that the hashes are indeed unique.
+		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
+	default:
+		// For values that are key encodable, using the ascending key.
+		// TODO (rohany): However, there should be a knob for the hasher that sees
+		//  what kind of encoding already exists on the enc datums incoming to the
+		//  DistSQL operators, and should use that encoding to avoid re-encoding
+		//  datums into different encoding types as much as possible.
+		return ed.Encode(typ, a, DatumEncoding_ASCENDING_KEY, appendTo)
+	}
+}
+
 // Compare returns:
 //    -1 if the receiver is less than rhs,
 //    0  if the receiver is equal to rhs,

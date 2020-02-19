@@ -153,15 +153,6 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeBitArrayAscending(b, t.BitArray), nil
 		}
 		return encoding.EncodeBitArrayDescending(b, t.BitArray), nil
-	case *tree.DArray:
-		for _, datum := range t.Array {
-			var err error
-			b, err = EncodeTableKey(b, datum, dir)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return b, nil
 	case *tree.DOid:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, int64(t.DInt)), nil
