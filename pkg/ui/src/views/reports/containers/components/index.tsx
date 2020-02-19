@@ -19,7 +19,8 @@ import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { RouterState } from "react-router";
+import { RouteComponentProps } from "react-router";
+import { withRouter} from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { getSampleTraces, getComponentTraces, getComponentTrace } from "src/util/api";
@@ -48,11 +49,12 @@ interface ComponentsOwnProps {
   state: ComponentsState;
 }
 
-type ComponentsProps = ComponentsOwnProps & RouterState;
+type ComponentsProps = ComponentsOwnProps & RouteComponentProps;
 
 function componentsRequestFromProps(props: ComponentsProps) {
+  // @ts-ignore
   return new protos.cockroach.server.serverpb.ComponentsRequest({
-    node_id: props.params[nodeIDAttr],
+    node_id: props.match.params[nodeIDAttr],
   });
 }
 
@@ -146,7 +148,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       return null;
     }
     if (!_.isNil(this.props.components.lastError)) {
-      if (_.isEmpty(this.props.params[nodeIDAttr])) {
+      if (_.isEmpty(this.props.match.params[nodeIDAttr])) {
         return (
           <div>
             <h2>Error loading data for system component activity</h2>
@@ -156,7 +158,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       } else {
         return (
           <div>
-            <h2>Error loading data for system component activity for node n{this.props.params[nodeIDAttr]}</h2>
+            <h2>Error loading data for system component activity for node n{this.props.match.params[nodeIDAttr]}</h2>
             {this.props.components.lastError.toString()}
           </div>
         );
@@ -167,10 +169,10 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       return _.isEmpty(d.error_message);
     }));
     if (nodeIDs.length === 0) {
-      if (_.isEmpty(this.props.params[nodeIDAttr])) {
+      if (_.isEmpty(this.props.match.params[nodeIDAttr])) {
         return <h2>No nodes returned any results</h2>;
       } else {
-        return <h2>No results reported for node n{this.props.params[nodeIDAttr]}</h2>;
+        return <h2>No results reported for node n{this.props.match.params[nodeIDAttr]}</h2>;
       }
     }
 
@@ -194,7 +196,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
   getSampleTraces = () => {
     this.setState({componentTraces: {active: true}});
     getSampleTraces(new protos.cockroach.server.serverpb.SampleTracesRequest({
-      node_id: this.props.params[nodeIDAttr],
+      node_id: this.props.match.params[nodeIDAttr],
       duration: this.state.sampleState.duration,
       target_count: this.state.sampleState.target_count,
     }), moment.duration(120, "s")).then((result) => {
@@ -247,7 +249,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     this.setState({expandedSample: {active: true, trace_id: trace_id, span_id: span_id}});
     // Fetch the requested component traces.
     getComponentTrace(new protos.cockroach.server.serverpb.ComponentTraceRequest({
-      node_id: this.props.params[nodeIDAttr],
+      node_id: this.props.match.params[nodeIDAttr],
       sample_traces_id: sample_traces_id,
       trace_id: trace_id
     })).then((result) => {
@@ -300,9 +302,6 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
   render() {
     return (
       <div className="section" style={{maxWidth: "100%"}}>
-        <Helmet>
-          <title>Component Activity | Debug</title>
-        </Helmet>
         <h1>System Component Activity</h1>
         <div style={{marginTop: "10px"}}>
           {this.renderReportBody()}
@@ -324,4 +323,4 @@ const actions = {
   refreshComponents,
 };
 
-export default connect(mapStateToProps, actions)(Components);
+export default withRouter(connect(mapStateToProps, actions)(Components));
