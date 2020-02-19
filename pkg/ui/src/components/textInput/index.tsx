@@ -31,6 +31,7 @@ interface TextInputState {
   isValid: boolean;
   isDirty: boolean;
   isTouched: boolean;
+  needValidation: boolean;
 }
 
 export class TextInput extends React.Component<TextInputProps, TextInputState> {
@@ -47,11 +48,25 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
       validationMessage: undefined,
       isDirty: false,
       isTouched: false,
+      needValidation: false,
     };
+  }
+
+  validateInput = (value: string) => {
+    const { validate } = this.props;
+    const validationMessage = validate(value);
+    this.setState({
+      isValid: !Boolean(validationMessage),
+      validationMessage,
+    });
   }
 
   handleOnTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
+    const { needValidation, isValid } = this.state;
+    if (needValidation && !isValid) {
+      this.validateInput(value);
+    }
     this.setState({
       isDirty: true,
     });
@@ -60,13 +75,10 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
 
   handleOnBlur = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
-    const { validate } = this.props;
-    const validationMessage = validate(value);
-
+    this.validateInput(value);
     this.setState({
-      isValid: !Boolean(validationMessage),
-      validationMessage,
       isTouched: true,
+      needValidation: true,
     });
   }
 
