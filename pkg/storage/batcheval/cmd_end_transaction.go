@@ -81,11 +81,7 @@ func declareKeysEndTxn(
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
 		for _, span := range et.IntentSpans {
-			if keys.IsLocal(span.Key) {
-				spans.AddNonMVCC(spanset.SpanReadWrite, span)
-			} else {
-				spans.AddMVCC(spanset.SpanReadWrite, span, header.Timestamp)
-			}
+			spans.AddMVCC(spanset.SpanReadWrite, span, header.Timestamp)
 		}
 
 		if et.InternalCommitTrigger != nil {

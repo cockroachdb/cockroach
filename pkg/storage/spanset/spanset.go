@@ -127,6 +127,7 @@ func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp hlc.Ti
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
 		scope = SpanLocal
+		timestamp = hlc.Timestamp{}
 	}
 
 	s.spans[access][scope] = append(s.spans[access][scope], Span{Span: span, Timestamp: timestamp})
