@@ -350,15 +350,9 @@ func (b *Builder) buildAggregation(having opt.ScalarExpr, fromScope *scope) (out
 		// except in the case of string_agg, where the second argument must be
 		// a constant expression.
 		args := make([]opt.ScalarExpr, 0, 2)
-		for i, arg := range agg.args {
-			// TODO(hueypark): We should be able to treat the first argument as a
-			// constant.
-			if i != 0 && memo.CanExtractConstDatum(arg) {
-				args = append(args, arg)
-			} else {
-				colID := argCols[0].id
-				args = append(args, b.factory.ConstructVariable(colID))
-			}
+		for range agg.args {
+			colID := argCols[0].id
+			args = append(args, b.factory.ConstructVariable(colID))
 
 			// Skip past argCols that have been handled. There may be variable
 			// number of them, so need to set up for next aggregate function.

@@ -589,7 +589,8 @@ project
       └── const: 1 [type=int]
 
 # Use with multi-argument aggregate function.
-norm expect=RejectNullsGroupBy
+# norm expect=RejectNullsGroupBy
+norm
 SELECT string_agg(s, ',')
 FROM (SELECT x FROM xy)
 LEFT JOIN (SELECT k, s FROM a)
@@ -601,33 +602,32 @@ project
  ├── columns: string_agg:8(string!null)
  ├── fd: ()-->(8)
  └── select
-      ├── columns: k:3(int!null) string_agg:8(string!null)
+      ├── columns: k:3(int) string_agg:8(string!null)
       ├── key: (3)
       ├── fd: ()-->(8)
       ├── group-by
-      │    ├── columns: k:3(int!null) string_agg:8(string)
-      │    ├── grouping columns: k:3(int!null)
+      │    ├── columns: k:3(int) string_agg:8(string)
+      │    ├── grouping columns: k:3(int)
       │    ├── key: (3)
       │    ├── fd: (3)-->(8)
-      │    ├── inner-join (cross)
-      │    │    ├── columns: k:3(int!null) s:6(string!null)
-      │    │    ├── fd: (3)-->(6)
-      │    │    ├── scan xy
-      │    │    ├── select
-      │    │    │    ├── columns: k:3(int!null) s:6(string!null)
-      │    │    │    ├── key: (3)
+      │    ├── project
+      │    │    ├── columns: column7:7(string!null) k:3(int) s:6(string)
+      │    │    ├── fd: ()-->(7), (3)-->(6)
+      │    │    ├── left-join (cross)
+      │    │    │    ├── columns: k:3(int) s:6(string)
       │    │    │    ├── fd: (3)-->(6)
+      │    │    │    ├── scan xy
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:3(int!null) s:6(string)
       │    │    │    │    ├── key: (3)
       │    │    │    │    └── fd: (3)-->(6)
-      │    │    │    └── filters
-      │    │    │         └── s IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
-      │    │    └── filters (true)
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── const: ',' [type=string]
       │    └── aggregations
-      │         └── string-agg [type=string, outer=(6)]
+      │         └── string-agg [type=string, outer=(6,7)]
       │              ├── variable: s [type=string]
-      │              └── const: ',' [type=string]
+      │              └── variable: column7 [type=string]
       └── filters
            └── string_agg = 'foo' [type=bool, outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
 

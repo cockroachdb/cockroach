@@ -2673,7 +2673,7 @@ scalar-group-by
       └── agg-filter [type=string]
            ├── string-agg [type=string]
            │    ├── variable: column4 [type=string]
-           │    └── const: 'foo' [type=string]
+           │    └── variable: column5 [type=string]
            └── variable: column6 [type=bool]
 
 build
@@ -2971,7 +2971,7 @@ scalar-group-by
  └── aggregations
       └── string-agg [type=string]
            ├── variable: s [type=string]
-           └── const: 'separator' [type=string]
+           └── variable: column5 [type=string]
 
 build
 SELECT string_agg(s) FROM kv
@@ -2998,7 +2998,7 @@ scalar-group-by
       └── agg-distinct [type=string]
            └── string-agg [type=string]
                 ├── variable: s [type=string]
-                └── const: 'separator' [type=string]
+                └── variable: column5 [type=string]
 
 build
 SELECT max(s), string_agg(s, 'sep1'), string_agg(s, 'sep2'), min(s) FROM kv
@@ -3017,10 +3017,10 @@ scalar-group-by
       │    └── variable: s [type=string]
       ├── string-agg [type=string]
       │    ├── variable: s [type=string]
-      │    └── const: 'sep1' [type=string]
+      │    └── variable: column6 [type=string]
       ├── string-agg [type=string]
       │    ├── variable: s [type=string]
-      │    └── const: 'sep2' [type=string]
+      │    └── variable: column8 [type=string]
       └── min [type=string]
            └── variable: s [type=string]
 
@@ -3040,7 +3040,7 @@ scalar-group-by
  └── aggregations
       └── string-agg [type=string]
            ├── variable: s [type=string]
-           └── const: 'abcxyz' [type=string]
+           └── variable: column5 [type=string]
 
 build
 SELECT string_agg(s, NULL) FROM kv
@@ -3056,7 +3056,7 @@ scalar-group-by
  └── aggregations
       └── string-agg [type=string]
            ├── variable: s [type=string]
-           └── null [type=unknown]
+           └── variable: column5 [type=unknown]
 
 build
 SELECT string_agg(s, s) FROM kv
