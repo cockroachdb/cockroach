@@ -288,7 +288,9 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 				return
 			}
 		case <-h.forceHeartbeatCh:
-			if !doHeartbeat() {
+			if succeededOnce {
+				h.heartbeatSuccessfulCh <- struct{}{}
+			} else if !doHeartbeat() {
 				return
 			}
 		case <-ctx.Done():
