@@ -735,6 +735,11 @@ func TestHashRouterOneOutput(t *testing.T) {
 				t.Fatal(err)
 			}
 			wg.Wait()
+			// Expect no metadata, this should be a successful run.
+			unexpectedMetadata := r.DrainMeta(ctx)
+			if len(unexpectedMetadata) != 0 {
+				t.Fatalf("unexpected metadata when draining HashRouter: %+v", unexpectedMetadata)
+			}
 			if !mtc.skipExpSpillCheck {
 				// If len(sel) == 0, no items will have been enqueued so override an
 				// expected spill if this is the case.
@@ -864,6 +869,11 @@ func TestHashRouterRandom(t *testing.T) {
 				// likely due to a cancellation bug.
 				wg.Wait()
 				if !cancel {
+					// Expect no metadata, this should be a successful run.
+					unexpectedMetadata := r.DrainMeta(ctx)
+					if len(unexpectedMetadata) != 0 {
+						t.Fatalf("unexpected metadata when draining HashRouter: %+v", unexpectedMetadata)
+					}
 					// Only do output verification if no cancellation happened.
 					if actualTotal := atomic.LoadUint64(&results); actualTotal != uint64(len(data)) {
 						t.Fatalf("unexpected number of results %d, expected %d", actualTotal, len(data))
