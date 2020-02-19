@@ -10,6 +10,8 @@
 
 @require '~src/components/core/index.styl'
 
+$text-width = 352px
+
 .crl-email-subscription
   border-radius 5px
   box-shadow: 0 0 1px 0 rgba(67, 90, 111, 0.41)
@@ -21,21 +23,31 @@
   background-color $colors--white
   background-image url("../../../assets/dashboard/email_signup_background.svg")
   background-repeat no-repeat
-  background-position center
-  padding-left $spacing-large
+  background-position-x $text-width
 
   &__text
     font-size $font-size--large
     font-family $font-family--base
     line-height 1.6
     letter-spacing -0.2px
-    color $colors--neutral-6
+    color $colors--white
     flex-grow 1
+    height inherit
+    border-radius inherit
     & > div
-      max-width 320px
+      max-width $text-width
+      background $colors--primary-green-3
+      padding-left $spacing-large
+      height inherit
+      border-bottom-left-radius: inherit;
+      border-top-left-radius: inherit;
+      display flex
+      align-items center
+
 
   &__controls
     flex-grow 0
+    margin-left $spacing-medium
 
   &__close-button
     flex-grow 0
@@ -48,7 +60,9 @@
     font-weight $font-weight--extra-bold
 
 
-  @media (max-width: 920px) {
+  @media (max-width: 1055px) {
+    background-position center
+
     .crl-email-subscription__text {
       font-size $font-size--tall
       font-family $font-family--base
@@ -56,7 +70,9 @@
     }
   }
 
-  @media (max-width: 800px) {
+  @media (max-width: 940px) {
+    background-position left
+
     .crl-email-subscription__text {
       display none
     }
