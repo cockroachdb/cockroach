@@ -2688,6 +2688,7 @@ func mvccResolveWriteIntent(
 	rw ReadWriter,
 	iter Iterator,
 	ms *enginepb.MVCCStats,
+	// TODO: need a way to update ts cache, perhaps via a func parameter.
 	intent roachpb.Intent,
 	buf *putBuffer,
 	forRange bool,
@@ -2831,6 +2832,10 @@ func mvccResolveWriteIntent(
 			pushed = false
 			inProgress = false
 		}
+	}
+
+	if !commit && !inProgress && (false) {
+		// updateTsCacheFunc(intent.Key)
 	}
 
 	// There's nothing to do if meta's epoch is greater than or equal txn's

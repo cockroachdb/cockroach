@@ -145,6 +145,10 @@ message PutRequest {
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
   bool blind = 4;
+  // NOTE: For internal use only! Indicates a leasing intent that
+  // should update the ts cache to the txn expiration time if
+  // removed due to abort.
+  bool leasing_intent = 5;
 }
 
 // A PutResponse is the return value from the Put() method.

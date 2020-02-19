@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -69,6 +71,9 @@ type txnHeartbeater struct {
 	// sends got through `wrapped`, not directly through `gatekeeper`.
 	gatekeeper lockedSender
 
+	forceHeartbeatCh      chan struct{}
+	heartbeatSuccessfulCh chan struct{}
+
 	// mu contains state protected by the TxnCoordSender's mutex.
 	mu struct {
 		sync.Locker
@@ -104,6 +109,8 @@ type txnHeartbeater struct {
 		// future requests sent though it (which indicates that the heartbeat
 		// loop did not race with an EndTxn request).
 		finalObservedStatus roachpb.TransactionStatus
+
+		expirationTimestamp hlc.Timestamp
 	}
 }
 
@@ -125,6 +132,8 @@ func (h *txnHeartbeater) init(
 	h.metrics = metrics
 	h.loopInterval = loopInterval
 	h.gatekeeper = gatekeeper
+	h.forceHeartbeatCh = make(chan struct{}, 1)
+	h.heartbeatSuccessfulCh = make(chan struct{}, 1)
 	h.mu.Locker = mu
 	h.mu.txn = txn
 }
@@ -225,6 +234,21 @@ func (h *txnHeartbeater) heartbeatLoopRunningLocked() bool {
 	return h.mu.loopCancel != nil
 }
 
+func (h *txnHeartbeater) forceHeartbeat() error {
+	h.forceHeartbeatCh <- struct{}{}
+	_, ok := <-h.heartbeatSuccessfulCh
+	if !ok {
+		return errors.Errorf("heartbeat unsuccessful")
+	}
+	return nil
+}
+
+func (h *txnHeartbeater) expiryTimestamp() hlc.Timestamp {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.expirationTimestamp
+}
+
 // heartbeatLoop periodically sends a HeartbeatTxn request to the transaction
 // record, stopping in the event the transaction is aborted or committed after
 // attempting to resolve the intents.
@@ -232,6 +256,7 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 	defer func() {
 		h.mu.Lock()
 		h.cancelHeartbeatLoopLocked()
+		close(h.heartbeatSuccessfulCh)
 		h.mu.Unlock()
 	}()
 
@@ -243,12 +268,27 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 	}
 
 	// Loop with ticker for periodic heartbeats.
+	succeededOnce := false
+	doHeartbeat := func() bool {
+		if !h.heartbeat(ctx) {
+			// The heartbeat noticed a finalized transaction,
+			// so shut down the heartbeat loop.
+			return false
+		}
+		if !succeededOnce {
+			h.heartbeatSuccessfulCh <- struct{}{}
+			succeededOnce = true
+		}
+		return true
+	}
 	for {
 		select {
 		case <-tickChan:
-			if !h.heartbeat(ctx) {
-				// The heartbeat noticed a finalized transaction,
-				// so shut down the heartbeat loop.
+			if !doHeartbeat() {
+				return
+			}
+		case <-h.forceHeartbeatCh:
+			if !doHeartbeat() {
 				return
 			}
 		case <-ctx.Done():
@@ -333,6 +373,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 		respTxn = pErr.GetTxn()
 	} else {
 		respTxn = br.Txn
+		h.mu.expirationTimestamp = respTxn.LastHeartbeat.Add(txnwait.TxnLivenessThreshold.Nanoseconds(), 0)
 	}
 
 	// Tear down the heartbeat loop if the response transaction is finalized.

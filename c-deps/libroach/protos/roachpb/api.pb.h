@@ -1409,6 +1409,12 @@ class PutRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   bool blind() const;
   void set_blind(bool value);
 
+  // bool leasing_intent = 5;
+  void clear_leasing_intent();
+  static const int kLeasingIntentFieldNumber = 5;
+  bool leasing_intent() const;
+  void set_leasing_intent(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.PutRequest)
  private:
 
@@ -1417,6 +1423,7 @@ class PutRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   ::cockroach::roachpb::Value* value_;
   bool inline__;
   bool blind_;
+  bool leasing_intent_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -17489,6 +17496,20 @@ inline void PutRequest::set_blind(bool value) {
   
   blind_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.PutRequest.blind)
+}
+
+// bool leasing_intent = 5;
+inline void PutRequest::clear_leasing_intent() {
+  leasing_intent_ = false;
+}
+inline bool PutRequest::leasing_intent() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.PutRequest.leasing_intent)
+  return leasing_intent_;
+}
+inline void PutRequest::set_leasing_intent(bool value) {
+  
+  leasing_intent_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.PutRequest.leasing_intent)
 }
 
 // -------------------------------------------------------------------

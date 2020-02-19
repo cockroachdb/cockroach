@@ -127,6 +127,14 @@ func (m *MockTransactionalSender) PushTo(ts hlc.Timestamp) {
 	panic("unimplemented")
 }
 
+func (m *MockTransactionalSender) ForceHeartbeat() error {
+	return errors.Errorf("unimplemented")
+}
+
+func (m *MockTransactionalSender) ExpiryTimestamp() hlc.Timestamp {
+	panic("caller violated invariant")
+}
+
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
 	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,

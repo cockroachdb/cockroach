@@ -4369,6 +4369,7 @@ const int PutRequest::kHeaderFieldNumber;
 const int PutRequest::kValueFieldNumber;
 const int PutRequest::kInlineFieldNumber;
 const int PutRequest::kBlindFieldNumber;
+const int PutRequest::kLeasingIntentFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 PutRequest::PutRequest()
@@ -4393,15 +4394,15 @@ PutRequest::PutRequest(const PutRequest& from)
     value_ = NULL;
   }
   ::memcpy(&inline__, &from.inline__,
-    static_cast<size_t>(reinterpret_cast<char*>(&blind_) -
-    reinterpret_cast<char*>(&inline__)) + sizeof(blind_));
+    static_cast<size_t>(reinterpret_cast<char*>(&leasing_intent_) -
+    reinterpret_cast<char*>(&inline__)) + sizeof(leasing_intent_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.PutRequest)
 }
 
 void PutRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&blind_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(blind_));
+      reinterpret_cast<char*>(&leasing_intent_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(leasing_intent_));
 }
 
 PutRequest::~PutRequest() {
@@ -4438,8 +4439,8 @@ void PutRequest::Clear() {
   }
   value_ = NULL;
   ::memset(&inline__, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&blind_) -
-      reinterpret_cast<char*>(&inline__)) + sizeof(blind_));
+      reinterpret_cast<char*>(&leasing_intent_) -
+      reinterpret_cast<char*>(&inline__)) + sizeof(leasing_intent_));
   _internal_metadata_.Clear();
 }
 
@@ -4509,6 +4510,20 @@ bool PutRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // bool leasing_intent = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(40u /* 40 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &leasing_intent_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -4555,6 +4570,11 @@ void PutRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->blind(), output);
   }
 
+  // bool leasing_intent = 5;
+  if (this->leasing_intent() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->leasing_intent(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.PutRequest)
@@ -4588,6 +4608,11 @@ size_t PutRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // bool leasing_intent = 5;
+  if (this->leasing_intent() != 0) {
+    total_size += 1 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -4617,6 +4642,9 @@ void PutRequest::MergeFrom(const PutRequest& from) {
   if (from.blind() != 0) {
     set_blind(from.blind());
   }
+  if (from.leasing_intent() != 0) {
+    set_leasing_intent(from.leasing_intent());
+  }
 }
 
 void PutRequest::CopyFrom(const PutRequest& from) {
@@ -4640,6 +4668,7 @@ void PutRequest::InternalSwap(PutRequest* other) {
   swap(value_, other->value_);
   swap(inline__, other->inline__);
   swap(blind_, other->blind_);
+  swap(leasing_intent_, other->leasing_intent_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
