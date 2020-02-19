@@ -475,4 +475,3 @@ CREATE TABLE t (x INT, y INT, PRIMARY KEY (x, y) USING HASH WITH BUCKET_COUNT = 
 
 statement error pq: interleaved indexes cannot also be hash sharded
 CREATE INDEX ON parent (x) USING HASH WITH BUCKET_COUNT = 10 INTERLEAVE IN PARENT parent(x)
-
