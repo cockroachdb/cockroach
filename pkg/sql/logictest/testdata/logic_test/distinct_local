@@ -1,0 +1,13 @@
+# LogicTest: local local-vec
+
+# This test is moved from the distinct logictest file because when processed
+# in a distributed setting, the distinct row returned is non-deterministic.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x DECIMAL);
+INSERT INTO t VALUES (1.0), (1.00), (1.000)
+
+query T
+SELECT DISTINCT (array[x]) FROM t
+----
+{1.0}

@@ -313,3 +313,33 @@ SELECT 1 FROM ((SELECT * FROM tab41973) UNION ALL (SELECT * FROM tab41973))
 1
 1
 1
+
+statement ok
+DROP TABLE IF EXISTS t1, t2;
+CREATE TABLE t1 (j JSONB);
+CREATE TABLE t2 (j JSONB);
+INSERT INTO t1 VALUES ('{"a": "b"}'), ('{"foo": "bar"}'), (NULL);
+INSERT INTO t2 VALUES ('{"c": "d"}'), ('{"foo": "bar"}'), (NULL);
+
+query T rowsort
+(SELECT j FROM t1) UNION (SELECT j FROM t2)
+----
+{"a": "b"}
+{"c": "d"}
+{"foo": "bar"}
+NULL
+
+statement ok
+DROP TABLE IF EXISTS t1, t2;
+CREATE TABLE t1 (a INT[]);
+CREATE TABLE t2 (b INT[]);
+INSERT INTO t1 VALUES (ARRAY[1]), (ARRAY[2]), (NULL);
+INSERT INTO t2 VALUES (ARRAY[2]), (ARRAY[3]), (NULL);
+
+query T rowsort
+(SELECT a FROM t1) UNION (SELECT b FROM t2)
+----
+{1}
+{2}
+NULL
+{3}
