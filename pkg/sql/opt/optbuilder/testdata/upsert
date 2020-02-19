@@ -573,6 +573,102 @@ upsert tab
                 │    └── variable: column7 [type=int]
                 └── variable: rowid [type=int]
 
+# Conflict columns are in different order than index key columns.
+build
+INSERT INTO abc (a, b)
+VALUES (1, 2)
+ON CONFLICT (c, b) DO
+UPDATE SET a=5
+----
+upsert abc
+ ├── columns: <none>
+ ├── canary column: 12
+ ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
+ ├── insert-mapping:
+ │    ├──  column1:5 => a:1
+ │    ├──  column2:6 => b:2
+ │    ├──  column8:8 => c:3
+ │    └──  column7:7 => rowid:4
+ ├── update-mapping:
+ │    ├──  upsert_a:15 => a:1
+ │    └──  upsert_c:17 => c:3
+ └── project
+      ├── columns: upsert_a:15(int!null) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int)
+      ├── project
+      │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null)
+      │    ├── project
+      │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── function: unique_rowid [type=int]
+      │    │    │    │    └── projections
+      │    │    │    │         └── plus [type=int]
+      │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    ├── scan abc
+      │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── c:11(int)
+      │    │    │    │              └── plus [type=int]
+      │    │    │    │                   ├── variable: b [type=int]
+      │    │    │    │                   └── const: 1 [type=int]
+      │    │    │    └── filters
+      │    │    │         ├── eq [type=bool]
+      │    │    │         │    ├── variable: column2 [type=int]
+      │    │    │         │    └── variable: b [type=int]
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: column8 [type=int]
+      │    │    │              └── variable: c [type=int]
+      │    │    └── projections
+      │    │         └── const: 5 [type=int]
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: b [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column1 [type=int]
+           │    └── variable: column13 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column2 [type=int]
+           │    └── variable: b [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column8 [type=int]
+           │    └── variable: column14 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: rowid [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column7 [type=int]
+                └── variable: rowid [type=int]
+
 # Conflict columns don't match unique index (too few columns).
 build
 INSERT INTO abc (a, b)
@@ -591,14 +687,14 @@ UPDATE SET a=5
 ----
 error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
 
-# Conflict columns don't match unique index (wrong order).
+# Conflict column not found.
 build
 INSERT INTO abc (a, b)
 VALUES (1, 2)
-ON CONFLICT (c, b) DO
+ON CONFLICT (a, unknown) DO
 UPDATE SET a=5
 ----
-error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+error (42703): column "unknown" does not exist
 
 # ------------------------------------------------------------------------------
 # Test DO NOTHING.
@@ -775,11 +871,11 @@ project
  │         │    │    │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
  │         │    │    │    └── filters
  │         │    │    │         ├── eq [type=bool]
- │         │    │    │         │    ├── variable: column3 [type=int]
- │         │    │    │         │    └── variable: z [type=int]
+ │         │    │    │         │    ├── variable: column2 [type=int]
+ │         │    │    │         │    └── variable: y [type=int]
  │         │    │    │         └── eq [type=bool]
- │         │    │    │              ├── variable: column2 [type=int]
- │         │    │    │              └── variable: y [type=int]
+ │         │    │    │              ├── variable: column3 [type=int]
+ │         │    │    │              └── variable: z [type=int]
  │         │    │    └── filters
  │         │    │         └── or [type=bool]
  │         │    │              ├── is [type=bool]
