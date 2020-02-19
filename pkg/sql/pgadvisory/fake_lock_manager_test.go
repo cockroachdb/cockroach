@@ -32,16 +32,16 @@ func TestFakeLockManager(t *testing.T) {
 
 	log.Info(ctx, "Start test")
 
-	fm := pgadvisory.FakeLockManager{}
+	fm := pgadvisory.NewFakeLockManager()
 	fm.Start(ctx, tc.Stopper())
 	txn1 := db0.NewTxn(ctx, "txn1")
 	log.Info(ctx, "First AcquireEx")
-	fm.AcquireSh(txn1, []byte("key1"))
-	fm.AcquireSh(txn1, []byte("key1"))
+	fm.AcquireSh(ctx, txn1, []byte("key1"))
+	fm.AcquireSh(ctx, txn1, []byte("key1"))
 	txn2 := db0.NewTxn(ctx, "txn2")
-	fm.AcquireSh(txn2, []byte("key1"))
+	fm.AcquireSh(ctx, txn2, []byte("key1"))
 	txn1.Commit(ctx)
 	log.Info(ctx, "Second AcquireEx")
-	fm.AcquireEx(txn2, []byte("key1"))
+	fm.AcquireEx(ctx, txn2, []byte("key1"))
 	txn2.Commit(ctx)
 }

@@ -12,27 +12,36 @@ package pgadvisory
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type FakeLock struct {
-	exclusive map[uuid.UUID]*client.Txn
-	shared    map[uuid.UUID]*client.Txn
-	key       []byte
-	mu        sync.RWMutex
+	exclusive   map[uuid.UUID]*client.Txn
+	shared      map[uuid.UUID]*client.Txn
+	key         []byte
+	txn         *client.Txn
+	mu          sync.RWMutex
+	isExclusive bool
 }
 
 type FakeLockManager struct {
 	locks map[string]*FakeLock
 }
 
+func NewFakeLockManager() *FakeLockManager {
+	return &FakeLockManager{
+		locks: make(map[string]*FakeLock),
+	}
+}
+
 func (fm *FakeLockManager) Start(ctx context.Context, stopper *stop.Stopper) error {
-	fm.locks = make(map[string]*FakeLock)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		for {
 			select {
@@ -47,11 +56,15 @@ func (fm *FakeLockManager) Start(ctx context.Context, stopper *stop.Stopper) err
 }
 
 func (l *FakeLock) Txn() *client.Txn {
-	return nil
+	return l.txn
 }
 
 func (l *FakeLock) Key() []byte {
 	return l.key
+}
+
+func (l *FakeLock) Exclusive() bool {
+	return l.isExclusive
 }
 
 func (fm *FakeLockManager) unlockFinalized() {
@@ -78,22 +91,40 @@ func (fm *FakeLockManager) upsertLock(txn *client.Txn, key []byte) *FakeLock {
 			exclusive: make(map[uuid.UUID]*client.Txn),
 			shared:    make(map[uuid.UUID]*client.Txn),
 			mu:        sync.RWMutex{},
-			key:       key,
 		}
 	}
+	storedLock.txn = txn
+	storedLock.key = key
 	return storedLock
 }
 
-func (fm *FakeLockManager) AcquireEx(txn *client.Txn, key []byte) error {
+func (fm *FakeLockManager) AcquireEx(ctx context.Context, txn *client.Txn, key []byte) (Lock, error) {
 	storedLock := fm.upsertLock(txn, key)
 	storedLock.exclusive[txn.ID()] = txn
+	storedLock.isExclusive = true
 	storedLock.mu.Lock()
-	return nil
+	return storedLock, nil
 }
 
-func (fm *FakeLockManager) AcquireSh(txn *client.Txn, key []byte) error {
+func (fm *FakeLockManager) AcquireSh(ctx context.Context, txn *client.Txn, key []byte) (Lock, error) {
 	storedLock := fm.upsertLock(txn, key)
 	storedLock.shared[txn.ID()] = txn
 	storedLock.mu.RLock()
-	return nil
+	return storedLock, nil
+}
+
+func (fm *FakeLockManager) TryAcquireEx(ctx context.Context, txn *client.Txn, key []byte) (lock Lock, err error) {
+	group := ctxgroup.WithContext(context.Background())
+	group.Go(func() error {
+		lock, err = fm.AcquireEx(ctx, txn, key)
+		return nil
+	})
+	group.Go(func() error {
+		<-time.After(time.Millisecond)
+		return errors.New("could not acquire lock")
+	})
+	if waitErr := group.Wait(); waitErr != nil {
+		return nil, waitErr
+	}
+	return
 }

@@ -31,17 +31,18 @@ func TestSession(t *testing.T) {
 	db0 := s0.DB()
 
 	log.Info(ctx, "Start test")
-
-	fm := pgadvisory.FakeLockManager{}
+	fm := pgadvisory.NewFakeLockManager()
 	fm.Start(ctx, tc.Stopper())
+	session := pgadvisory.NewSession(db0, fm)
+
 	txn1 := db0.NewTxn(ctx, "txn1")
 	log.Info(ctx, "First AcquireEx")
-	fm.AcquireSh(txn1, []byte("key1"))
-	fm.AcquireSh(txn1, []byte("key1"))
+	session.TxnLockSh(ctx, txn1, 1)
+	session.TxnLockSh(ctx, txn1, 1)
 	txn2 := db0.NewTxn(ctx, "txn2")
-	fm.AcquireSh(txn2, []byte("key1"))
+	session.TxnLockSh(ctx, txn2, 1)
 	txn1.Commit(ctx)
 	log.Info(ctx, "Second AcquireEx")
-	fm.AcquireEx(txn2, []byte("key1"))
+	session.TxnLockEx(ctx, txn2, 1)
 	txn2.Commit(ctx)
 }
