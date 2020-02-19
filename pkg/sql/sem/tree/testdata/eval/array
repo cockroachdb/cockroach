@@ -258,3 +258,13 @@ eval
 ARRAY[1,NULL] <@ ARRAY[1,NULL]
 ----
 false
+
+eval
+ARRAY[1] IS DISTINCT FROM NULL
+----
+true
+
+eval
+NULL IS DISTINCT FROM ARRAY[1]
+----
+true
