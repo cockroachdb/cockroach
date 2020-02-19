@@ -585,12 +585,8 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 			err := errors.Errorf("hash column %d, row with only %d columns", col, len(row))
 			return -1, err
 		}
-		// TODO(radu): we should choose an encoding that is already available as
-		// much as possible. However, we cannot decide this locally as multiple
-		// nodes may be doing the same hashing and the encodings need to match. The
-		// encoding needs to be determined at planning time. #13829
 		var err error
-		hr.buffer, err = row[col].Encode(&hr.types[col], &hr.alloc, flowinfra.PreferredEncoding, hr.buffer)
+		hr.buffer, err = row[col].Fingerprint(&hr.types[col], &hr.alloc, hr.buffer)
 		if err != nil {
 			return -1, err
 		}
