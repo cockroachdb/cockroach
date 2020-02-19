@@ -10,7 +10,10 @@
 
 package result
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
+)
 
 // FromEncounteredIntents creates a Result communicating that the intents were encountered
 // by the given request and should be handled.
@@ -20,6 +23,25 @@ func FromEncounteredIntents(intents []roachpb.Intent) Result {
 		return pd
 	}
 	pd.Local.EncounteredIntents = intents
+	return pd
+}
+
+// FromWrittenIntents creates a Result communicating that the intents were
+// written or re-written by the given request and should be handled.
+func FromWrittenIntents(txn *roachpb.Transaction, keys ...roachpb.Key) Result {
+	var pd Result
+	if txn == nil {
+		return pd
+	}
+	pd.Local.WrittenIntents = make([]roachpb.LockUpdate, len(keys))
+	for i := range pd.Local.WrittenIntents {
+		pd.Local.WrittenIntents[i] = roachpb.LockUpdate{
+			Span:       roachpb.Span{Key: keys[i]},
+			Txn:        txn.TxnMeta,
+			Status:     roachpb.PENDING,
+			Durability: lock.Replicated,
+		}
+	}
 	return pd
 }
 

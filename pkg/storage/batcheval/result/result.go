@@ -28,10 +28,17 @@ import (
 type LocalResult struct {
 	Reply *roachpb.BatchResponse
 
-	// EncounteredIntents stores any intents encountered but not conflicted
-	// with. They should be handed off to asynchronous intent processing on
-	// the proposer, so that an attempt to resolve them is made.
+	// EncounteredIntents stores any intents from other transactions that the
+	// request encountered but did not conflict with. They should be handed off
+	// to asynchronous intent processing on the proposer, so that an attempt to
+	// resolve them is made.
 	EncounteredIntents []roachpb.Intent
+	// WrittenIntents stores any newly written or re-written intents.
+	WrittenIntents []roachpb.LockUpdate
+	// ResolvedIntents stores any resolved intent spans, either with finalized
+	// or pending statuses. Unlike WrittenIntents and EncounteredIntents, values
+	// in this slice will represent spans of intents that were resolved.
+	ResolvedIntents []roachpb.LockUpdate
 	// UpdatedTxns stores transaction records that have been updated by
 	// calls to EndTxn, PushTxn, and RecoverTxn.
 	UpdatedTxns []*roachpb.Transaction
@@ -67,6 +74,8 @@ func (lResult *LocalResult) IsZero() bool {
 	// NB: keep in order.
 	return lResult.Reply == nil &&
 		lResult.EncounteredIntents == nil &&
+		lResult.WrittenIntents == nil &&
+		lResult.ResolvedIntents == nil &&
 		lResult.UpdatedTxns == nil &&
 		lResult.EndTxns == nil &&
 		!lResult.GossipFirstRange &&
@@ -80,11 +89,13 @@ func (lResult *LocalResult) String() string {
 	if lResult == nil {
 		return "LocalResult: nil"
 	}
-	return fmt.Sprintf("LocalResult (reply: %v, #encountered intents: %d, "+
+	return fmt.Sprintf("LocalResult (reply: %v, "+
+		"#encountered intents: %d, #written intents: %d, #resolved intents: %d"+
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
-		lResult.Reply, len(lResult.EncounteredIntents),
+		lResult.Reply,
+		len(lResult.EncounteredIntents), len(lResult.WrittenIntents), len(lResult.ResolvedIntents),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
 		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
@@ -283,6 +294,20 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		p.Local.EncounteredIntents = append(p.Local.EncounteredIntents, q.Local.EncounteredIntents...)
 	}
 	q.Local.EncounteredIntents = nil
+
+	if p.Local.WrittenIntents == nil {
+		p.Local.WrittenIntents = q.Local.WrittenIntents
+	} else {
+		p.Local.WrittenIntents = append(p.Local.WrittenIntents, q.Local.WrittenIntents...)
+	}
+	q.Local.WrittenIntents = nil
+
+	if p.Local.ResolvedIntents == nil {
+		p.Local.ResolvedIntents = q.Local.ResolvedIntents
+	} else {
+		p.Local.ResolvedIntents = append(p.Local.ResolvedIntents, q.Local.ResolvedIntents...)
+	}
+	q.Local.ResolvedIntents = nil
 
 	if p.Local.UpdatedTxns == nil {
 		p.Local.UpdatedTxns = q.Local.UpdatedTxns
