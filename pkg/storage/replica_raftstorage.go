@@ -612,7 +612,7 @@ func (r *Replica) append(
 			if !ok {
 				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
 			}
-			err = engine.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = engine.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil, nil)
 		}
 		if err != nil {
 			return 0, 0, 0, err

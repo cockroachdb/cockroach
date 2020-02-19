@@ -381,11 +381,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				ts,
 				base.DefaultMaxClockOffset.Nanoseconds(),
 			)
-			if err := engine.MVCCPut(
-				ctx, e, nil, []byte("i"), ts,
-				roachpb.MakeValueFromBytes([]byte("it")),
-				&txn,
-			); err != nil {
+			if err := engine.MVCCPut(ctx, e, nil, []byte("i"), ts, roachpb.MakeValueFromBytes([]byte("it")), &txn, nil); err != nil {
 				if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
 					t.Fatalf("%+v", err)
 				}
@@ -754,11 +750,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					ts,
 					base.DefaultMaxClockOffset.Nanoseconds(),
 				)
-				if err := engine.MVCCPut(
-					ctx, e, nil, []byte("t"), ts,
-					roachpb.MakeValueFromBytes([]byte("tt")),
-					&txn,
-				); err != nil {
+				if err := engine.MVCCPut(ctx, e, nil, []byte("t"), ts, roachpb.MakeValueFromBytes([]byte("tt")), &txn, nil); err != nil {
 					if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
 						t.Fatalf("%+v", err)
 					}
@@ -794,11 +786,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 				// Add in an inline value.
 				ts := hlc.Timestamp{}
-				if err := engine.MVCCPut(
-					ctx, e, nil, []byte("i"), ts,
-					roachpb.MakeValueFromBytes([]byte("i")),
-					nil,
-				); err != nil {
+				if err := engine.MVCCPut(ctx, e, nil, []byte("i"), ts, roachpb.MakeValueFromBytes([]byte("i")), nil, nil); err != nil {
 					t.Fatalf("%+v", err)
 				}
 

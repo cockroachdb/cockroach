@@ -245,7 +245,7 @@ func BenchmarkMVCCPutDelete_Pebble(b *testing.B) {
 		key := encoding.EncodeVarintAscending(nil, blockID)
 		key = encoding.EncodeVarintAscending(key, blockNum)
 
-		if err := MVCCPut(ctx, db, nil, key, hlc.Timestamp{}, value, nil /* txn */); err != nil {
+		if err := MVCCPut(ctx, db, nil, key, hlc.Timestamp{}, value, nil, nil); err != nil {
 			b.Fatal(err)
 		}
 		if err := MVCCDelete(ctx, db, nil, key, hlc.Timestamp{}, nil /* txn */); err != nil {

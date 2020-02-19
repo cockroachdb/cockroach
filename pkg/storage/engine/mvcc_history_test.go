@@ -505,7 +505,7 @@ func (e *evalCtx) resolveIntent(
 ) error {
 	intent := roachpb.MakeIntent(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
-	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent)
+	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent, nil)
 	return err
 }
 
@@ -669,7 +669,7 @@ func cmdPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw ReadWriter) error {
-		if err := MVCCPut(e.ctx, rw, nil, key, ts, val, txn); err != nil {
+		if err := MVCCPut(e.ctx, rw, nil, key, ts, val, txn, nil); err != nil {
 			return err
 		}
 		if resolve {

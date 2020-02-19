@@ -1275,10 +1275,11 @@ func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
 // AsIntent creates an intent corresponding to the given resolve intent request.
 func (rir *ResolveIntentRequest) AsIntent() Intent {
 	return Intent{
-		Span:           rir.Span(),
-		Txn:            rir.IntentTxn,
-		Status:         rir.Status,
-		IgnoredSeqNums: rir.IgnoredSeqNums,
+		Span:               rir.Span(),
+		Txn:                rir.IntentTxn,
+		Status:             rir.Status,
+		IgnoredSeqNums:     rir.IgnoredSeqNums,
+		HeartbeatTimestamp: rir.HeartbeatTimestamp,
 	}
 }
 
@@ -1286,9 +1287,10 @@ func (rir *ResolveIntentRequest) AsIntent() Intent {
 // intent range request.
 func (rirr *ResolveIntentRangeRequest) AsIntent() Intent {
 	return Intent{
-		Span:           rirr.Span(),
-		Txn:            rirr.IntentTxn,
-		Status:         rirr.Status,
-		IgnoredSeqNums: rirr.IgnoredSeqNums,
+		Span:               rirr.Span(),
+		Txn:                rirr.IntentTxn,
+		Status:             rirr.Status,
+		IgnoredSeqNums:     rirr.IgnoredSeqNums,
+		HeartbeatTimestamp: rirr.HeartbeatTimestamp,
 	}
 }

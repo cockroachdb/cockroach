@@ -187,7 +187,7 @@ func (cws *cachedWriteSimulator) multiKey(
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
 	key, value := []byte("multikey"), cws.value(size)
 	var eachMS enginepb.MVCCStats
-	if err := engine.MVCCPut(ctx, eng, &eachMS, key, ts, value, txn); err != nil {
+	if err := engine.MVCCPut(ctx, eng, &eachMS, key, ts, value, txn, nil); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < numOps; i++ {
@@ -216,7 +216,7 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 		for i := 0; i < qps; i++ {
 			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
 
-			if err := engine.MVCCPut(ctx, eng, ms, key, now, value, nil /* txn */); err != nil {
+			if err := engine.MVCCPut(ctx, eng, ms, key, now, value, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 			if len(firstSl) < cacheFirstLen {

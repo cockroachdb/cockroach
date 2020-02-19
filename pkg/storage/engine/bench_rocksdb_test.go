@@ -266,7 +266,7 @@ func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 		key := encoding.EncodeVarintAscending(nil, blockID)
 		key = encoding.EncodeVarintAscending(key, blockNum)
 
-		if err := MVCCPut(ctx, rocksdb, nil, key, hlc.Timestamp{}, value, nil /* txn */); err != nil {
+		if err := MVCCPut(ctx, rocksdb, nil, key, hlc.Timestamp{}, value, nil, nil); err != nil {
 			b.Fatal(err)
 		}
 		if err := MVCCDelete(ctx, rocksdb, nil, key, hlc.Timestamp{}, nil /* txn */); err != nil {

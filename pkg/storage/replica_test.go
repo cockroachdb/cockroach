@@ -1197,7 +1197,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
-	if err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, val, nil); err != nil {
+	if err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, val, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1938,8 +1938,7 @@ func TestOptimizePuts(t *testing.T) {
 
 	for i, c := range testCases {
 		if c.exKey != nil {
-			if err := engine.MVCCPut(context.Background(), tc.engine, nil, c.exKey,
-				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), nil); err != nil {
+			if err := engine.MVCCPut(context.Background(), tc.engine, nil, c.exKey, hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), nil, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -3149,7 +3148,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 
 	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
-	err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
+	err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -6783,8 +6782,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// there and verify that we can now load the data as expected.
 	v := roachpb.MakeValueFromString("foo")
 	testutils.SucceedsSoon(t, func() error {
-		if err := engine.MVCCPut(context.Background(), repl.store.Engine(), &enginepb.MVCCStats{},
-			keys.SystemConfigSpan.Key, repl.store.Clock().Now(), v, nil); err != nil {
+		if err := engine.MVCCPut(context.Background(), repl.store.Engine(), &enginepb.MVCCStats{}, keys.SystemConfigSpan.Key, repl.store.Clock().Now(), v, nil, nil); err != nil {
 			return err
 		}
 
@@ -10005,7 +10003,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// Write a value outside the transaction.
 	tc.manualClock.Increment(10)
 	ts2 := tc.Clock().Now()
-	if err := engine.MVCCPut(ctx, tc.engine, nil, k, ts2, roachpb.MakeValueFromString("one"), nil); err != nil {
+	if err := engine.MVCCPut(ctx, tc.engine, nil, k, ts2, roachpb.MakeValueFromString("one"), nil, nil); err != nil {
 		t.Fatalf("writing interfering value: %+v", err)
 	}
 

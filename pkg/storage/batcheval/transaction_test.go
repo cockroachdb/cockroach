@@ -62,7 +62,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	type evalFn func(engine.ReadWriter, EvalContext) error
 	addIntent := func(b engine.ReadWriter, _ EvalContext) error {
 		val := roachpb.MakeValueFromString("val")
-		return engine.MVCCPut(ctx, b, nil /* ms */, intentKey, txn.ReadTimestamp, val, &txn)
+		return engine.MVCCPut(ctx, b, nil, intentKey, txn.ReadTimestamp, val, &txn, nil)
 	}
 	addPrevAbortSpanEntry := func(b engine.ReadWriter, rec EvalContext) error {
 		return UpdateAbortSpan(ctx, rec, b, nil /* ms */, prevTxn.TxnMeta, true /* poison */)

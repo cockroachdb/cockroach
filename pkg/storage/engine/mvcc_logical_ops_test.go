@@ -37,20 +37,20 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			defer ol.Close()
 
 			// Write a value and an intent.
-			if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 			txn1ts := makeTxn(*txn1, hlc.Timestamp{Logical: 2})
-			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts, nil); err != nil {
 				t.Fatal(err)
 			}
 
 			// Write a value and an intent on local keys.
 			localKey := keys.MakeRangeIDPrefix(1)
-			if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+			if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 1}, value1, nil, nil); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -58,16 +58,16 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			olDist := ol.Distinct()
 			txn1ts.Sequence++
 			txn1ts.WriteTimestamp = hlc.Timestamp{Logical: 3}
-			if err := MVCCPut(ctx, olDist, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, olDist, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts, nil); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCPut(ctx, olDist, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, olDist, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts, nil); err != nil {
 				t.Fatal(err)
 			}
 			// Set the txn timestamp to a larger value than the intent.
 			txn1LargerTS := makeTxn(*txn1, hlc.Timestamp{Logical: 4})
 			txn1LargerTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
-			if err := MVCCPut(ctx, olDist, nil, testKey2, txn1LargerTS.ReadTimestamp, value3, txn1LargerTS); err != nil {
+			if err := MVCCPut(ctx, olDist, nil, testKey2, txn1LargerTS.ReadTimestamp, value3, txn1LargerTS, nil); err != nil {
 				t.Fatal(err)
 			}
 			olDist.Close()
@@ -92,21 +92,17 @@ func TestMVCCOpLogWriter(t *testing.T) {
 
 			// Write another intent, push it, then abort it.
 			txn2ts := makeTxn(*txn2, hlc.Timestamp{Logical: 5})
-			if err := MVCCPut(ctx, ol, nil, testKey3, txn2ts.ReadTimestamp, value4, txn2ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey3, txn2ts.ReadTimestamp, value4, txn2ts, nil); err != nil {
 				t.Fatal(err)
 			}
 			txn2Pushed := *txn2
 			txn2Pushed.WriteTimestamp = hlc.Timestamp{Logical: 6}
-			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
-				roachpb.MakeIntent(&txn2Pushed, roachpb.Span{Key: testKey3}),
-			); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.MakeIntent(&txn2Pushed, roachpb.Span{Key: testKey3}), nil); err != nil {
 				t.Fatal(err)
 			}
 			txn2Abort := txn2Pushed
 			txn2Abort.Status = roachpb.ABORTED
-			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
-				roachpb.MakeIntent(&txn2Abort, roachpb.Span{Key: testKey3}),
-			); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.MakeIntent(&txn2Abort, roachpb.Span{Key: testKey3}), nil); err != nil {
 				t.Fatal(err)
 			}
 

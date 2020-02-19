@@ -234,7 +234,7 @@ func (t *txnManager) close(op operand) {
 	for _, span := range txn.IntentSpans {
 		intent := roachpb.MakeIntent(txn, span)
 		intent.Status = roachpb.COMMITTED
-		_, err := engine.MVCCResolveWriteIntent(context.TODO(), t.testRunner.engine, nil, intent)
+		_, err := engine.MVCCResolveWriteIntent(context.TODO(), t.testRunner.engine, nil, intent, nil)
 		if err != nil {
 			panic(err)
 		}

@@ -59,8 +59,7 @@ func (ds dataDistribution) setupTest(
 			if txn.WriteTimestamp == (hlc.Timestamp{}) {
 				txn.WriteTimestamp = ts
 			}
-			err := engine.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,
-				roachpb.Value{RawBytes: kv.Value}, txn)
+			err := engine.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts, roachpb.Value{RawBytes: kv.Value}, txn, nil)
 			require.NoError(t, err)
 		}
 		if !kv.Key.Timestamp.Less(maxTs) {

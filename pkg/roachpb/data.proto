@@ -545,7 +545,8 @@ message TransactionRecord {
 // - on the return path of e.g. scans, to report the existence of a
 //    write intent on a key;
 // - as input argument to intent resolution, to pass the current txn status,
-//   timestamps and ignored seqnum ranges to the resolution algorithm.
+//   timestamps, ignored seqnum ranges, heartbeat timestamp to the resolution
+//   algorithm.
 // Only in the latter case are the TxnMeta, status and ignored seqnum
 // ranges guaranteed to be consistent with the latest txn's state.
 //
@@ -558,6 +559,7 @@ message Intent {
   storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+  util.hlc.Timestamp heartbeat_timestamp = 5 [(gogoproto.nullable) = false];
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
