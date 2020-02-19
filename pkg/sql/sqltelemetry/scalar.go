@@ -75,3 +75,27 @@ var LargeLShiftArgumentCounter = telemetry.GetCounterOnce("sql.large_lshift_argu
 // LargeRShiftArgumentCounter is to be incremented upon evaluating a scalar
 // expressions a >> b when b is larger than 64 or negative.
 var LargeRShiftArgumentCounter = telemetry.GetCounterOnce("sql.large_rshift_argument")
+
+// UnloggedConnections tracks the number of SQL client connections for which
+// audit logs were disabled.
+// TODO(knz): The original telemetry request was for a counter of how
+// many times the cluster setting for conn audit logging was
+// customized. However this was not implementable at the time. This
+// can be revisited if/when specific cluster setting changes are
+// brought under telemetry.
+var UnloggedConnections = telemetry.GetCounterOnce("auditing.connection.disabled")
+
+// LoggedConnections tracks the number of connections for which audit logs
+// were enabled.
+// TODO(knz): see TODO above.
+var LoggedConnections = telemetry.GetCounterOnce("auditing.connection.enabled")
+
+// UnloggedAuthAttempts tracks the number of authentication attempts
+// for which audit logs were disabled.
+// TODO(knz): see TODO above.
+var UnloggedAuthAttempts = telemetry.GetCounterOnce("auditing.authentication.disabled")
+
+// LoggedAuthAttempts tracks the number of authentication attempts for
+// which audit logs were enabled.
+// TODO(knz): see TODO above.
+var LoggedAuthAttempts = telemetry.GetCounterOnce("auditing.authentication.enabled")
