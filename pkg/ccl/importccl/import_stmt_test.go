@@ -18,7 +18,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -53,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestImportData(t *testing.T) {
@@ -2374,6 +2372,36 @@ func BenchmarkImport(b *testing.B) {
 		))
 }
 
+// a importRowProducer implementation that returns 'n' rows.
+type csvBenchmarkStream struct {
+	n    int
+	pos  int
+	data [][]string
+}
+
+func (s *csvBenchmarkStream) Progress() float32 {
+	return float32(s.pos) / float32(s.n)
+}
+
+func (s *csvBenchmarkStream) Scan() bool {
+	s.pos++
+	return s.pos <= s.n
+}
+
+func (s *csvBenchmarkStream) Err() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Skip() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Row() (interface{}, error) {
+	return s.data[s.pos%len(s.data)], nil
+}
+
+var _ importRowProducer = &csvBenchmarkStream{}
+
 func BenchmarkConvertRecord(b *testing.B) {
 	ctx := context.TODO()
 
@@ -2429,57 +2457,29 @@ func BenchmarkConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	recordCh := make(chan csvRecord)
-	kvCh := make(chan row.KVBatch)
-	group := errgroup.Group{}
 
+	kvCh := make(chan row.KVBatch)
 	// no-op drain kvs channel.
 	go func() {
 		for range kvCh {
 		}
 	}()
 
-	c := &csvInputReader{
+	descr := tableDesc.TableDesc()
+	importCtx := &parallelImportContext{
 		evalCtx:   &evalCtx,
+		tableDesc: descr,
 		kvCh:      kvCh,
-		recordCh:  recordCh,
-		tableDesc: tableDesc.TableDesc(),
-	}
-	// start up workers.
-	numWorkers := runtime.NumCPU()
-	for i := 0; i < numWorkers; i++ {
-		workerID := i
-		group.Go(func() error {
-			return c.convertRecordWorker(ctx, workerID)
-		})
-	}
-	const batchSize = 500
-
-	minEmitted := make([]int64, numWorkers)
-	batch := csvRecord{
-		file:       "some/path/to/some/file/of/csv/data.tbl",
-		rowOffset:  1,
-		r:          make([][]string, 0, batchSize),
-		minEmitted: &minEmitted,
 	}
 
+	producer := &csvBenchmarkStream{
+		n:    b.N,
+		pos:  0,
+		data: tpchLineItemDataRows,
+	}
+	consumer := &csvRowConsumer{importCtx: importCtx}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if len(batch.r) > batchSize {
-			recordCh <- batch
-			batch.r = make([][]string, 0, batchSize)
-			batch.rowOffset = int64(i)
-			minEmitted = make([]int64, numWorkers)
-		}
-
-		batch.r = append(batch.r, tpchLineItemDataRows[i%len(tpchLineItemDataRows)])
-	}
-	recordCh <- batch
-	close(recordCh)
-
-	if err := group.Wait(); err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, runParallelImport(ctx, importCtx, &importFileContext{}, producer, consumer))
 	close(kvCh)
 }
 
