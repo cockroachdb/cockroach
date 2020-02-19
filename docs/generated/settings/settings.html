@@ -41,6 +41,7 @@
 <tr><td><code>sql.distsql.max_running_flows</code></td><td>integer</td><td><code>500</code></td><td>maximum number of concurrent flows that can be run on a node</td></tr>
 <tr><td><code>sql.distsql.temp_storage.joins</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable use of disk for distributed sql joins. Note that disabling this can have negative impact on memory usage and performance.</td></tr>
 <tr><td><code>sql.distsql.temp_storage.sorts</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable use of disk for distributed sql sorts. Note that disabling this can have negative impact on memory usage and performance.</td></tr>
+<tr><td><code>sql.log.slow_query.latency_threshold</code></td><td>duration</td><td><code>0s</code></td><td>when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node</td></tr>
 <tr><td><code>sql.metrics.statement_details.dump_to_logs</code></td><td>boolean</td><td><code>false</code></td><td>dump collected statement statistics to node logs when periodically cleared</td></tr>
 <tr><td><code>sql.metrics.statement_details.enabled</code></td><td>boolean</td><td><code>true</code></td><td>collect per-statement query statistics</td></tr>
 <tr><td><code>sql.metrics.statement_details.plan_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>periodically save a logical plan for each fingerprint</td></tr>
