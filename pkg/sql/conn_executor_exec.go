@@ -713,7 +713,21 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagDistSQLLocal)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
+
 	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan, progAtomic)
+	if res.Err() == nil {
+		log.Infof(ctx, "Hello retry: %v / %d / %d", ex.sessionData.RetryErrorsEnabled, planner.Txn().Epoch(), ex.state.lastEpoch)
+		if ex.sessionData.RetryErrorsEnabled && stmt.AST.StatementTag() != "SET" {
+			if planner.Txn().Epoch() < ex.state.lastEpoch+3 {
+				retryErr := planner.Txn().GenerateForcedRetryableError(
+					ctx, "forced by executor")
+				res.SetError(retryErr)
+			} else {
+				ex.state.lastEpoch = planner.Txn().Epoch()
+			}
+		}
+	}
+
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 

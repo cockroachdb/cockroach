@@ -1808,7 +1808,11 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 			panic(fmt.Sprintf("retriable error in unexpected state: %#v",
 				ex.machine.CurState()))
 		}
-		rc, canAutoRetry := ex.getRewindTxnCapability()
+		var rc rewindCapability
+		var canAutoRetry bool
+		if ex.implicitTxn() || !ex.sessionData.RetryErrorsEnabled {
+			rc, canAutoRetry = ex.getRewindTxnCapability()
+		}
 		ev := eventRetriableErr{
 			IsCommit:     fsm.FromBool(isCommit(stmt)),
 			CanAutoRetry: fsm.FromBool(canAutoRetry),

@@ -1872,6 +1872,10 @@ func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {
 	m.data.RequireExplicitPrimaryKeys = val
 }
 
+func (m *sessionDataMutator) SetRetryErrorsEnabled(val bool) {
+	m.data.RetryErrorsEnabled = val
+}
+
 func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 	m.data.ReorderJoinsLimit = val
 }

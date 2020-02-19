@@ -406,6 +406,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`retry_errors_enabled`: {
+		GetStringVal: makeBoolGetStringValFn(`retry_errors_enabled`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetRetryErrorsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.RetryErrorsEnabled)
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`vectorize`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.VectorizeExecModeFromString(s)

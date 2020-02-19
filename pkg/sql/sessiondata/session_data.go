@@ -61,6 +61,10 @@ type SessionData struct {
 	// RequireExplicitPrimaryKeys indicates whether CREATE TABLE statements should
 	// error out if no primary key is provided.
 	RequireExplicitPrimaryKeys bool
+
+	// RetryErrorsEnabled .... some doc
+	RetryErrorsEnabled bool
+
 	// SequenceState gives access to the SQL sequences that have been manipulated
 	// by the session.
 	SequenceState *SequenceState
