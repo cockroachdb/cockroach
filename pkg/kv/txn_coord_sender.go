@@ -883,6 +883,14 @@ func (tc *TxnCoordSender) PushTo(ts hlc.Timestamp) {
 	}
 }
 
+func (tc *TxnCoordSender) ForceHeartbeat() error {
+	return tc.interceptorAlloc.txnHeartbeater.forceHeartbeat()
+}
+
+func (tc *TxnCoordSender) ExpiryTimestamp() hlc.Timestamp {
+	return tc.interceptorAlloc.txnHeartbeater.expiryTimestamp()
+}
+
 // SetFixedTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()

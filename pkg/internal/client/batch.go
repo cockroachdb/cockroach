@@ -357,7 +357,7 @@ func (b *Batch) Get(key interface{}) {
 	b.initResult(1, 1, notRaw, nil)
 }
 
-func (b *Batch) put(key, value interface{}, inline bool) {
+func (b *Batch) put(key, value interface{}, inline bool, leasingIntent bool) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -371,7 +371,9 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 	if inline {
 		b.appendReqs(roachpb.NewPutInline(k, v))
 	} else {
-		b.appendReqs(roachpb.NewPut(k, v))
+		putReq := roachpb.NewPut(k, v)
+		putReq.LeasingIntent = leasingIntent
+		b.appendReqs(putReq)
 	}
 	b.initResult(1, 1, notRaw, nil)
 }
@@ -384,7 +386,7 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) Put(key, value interface{}) {
-	b.put(key, value, false)
+	b.put(key, value, false, false)
 }
 
 // PutInline sets the value for a key, but does not maintain
@@ -398,7 +400,7 @@ func (b *Batch) Put(key, value interface{}) {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) PutInline(key, value interface{}) {
-	b.put(key, value, true)
+	b.put(key, value, true, false)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
