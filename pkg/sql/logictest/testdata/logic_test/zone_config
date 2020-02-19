@@ -7,8 +7,8 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
-   range_min_bytes = 16777216,
-   range_max_bytes = 67108864,
+   range_min_bytes = 134217728,
+   range_max_bytes = 536870912,
    gc.ttlseconds = 90000,
    num_replicas = 1,
    constraints = '[]',
@@ -23,8 +23,8 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
-   range_min_bytes = 16777216,
-   range_max_bytes = 67108864,
+   range_min_bytes = 134217728,
+   range_max_bytes = 536870912,
    gc.ttlseconds = 90000,
    num_replicas = 3,
    constraints = '[]',
@@ -45,7 +45,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
    range_min_bytes = 1234567,
-   range_max_bytes = 67108864,
+   range_max_bytes = 536870912,
    gc.ttlseconds = 90000,
    num_replicas = 3,
    constraints = '[]',
@@ -62,7 +62,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 53  ALTER TABLE a CONFIGURE ZONE USING
     range_min_bytes = 1234567,
-    range_max_bytes = 67108864,
+    range_max_bytes = 536870912,
     gc.ttlseconds = 90000,
     num_replicas = 3,
     constraints = '[]',
@@ -133,7 +133,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 53  ALTER TABLE a CONFIGURE ZONE USING
     range_min_bytes = 1234567,
-    range_max_bytes = 67108864,
+    range_max_bytes = 536870912,
     gc.ttlseconds = 90000,
     num_replicas = 3,
     constraints = '[]',

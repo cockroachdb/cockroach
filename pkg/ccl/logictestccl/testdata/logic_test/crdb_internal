@@ -79,29 +79,29 @@ SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] ORDER BY 1
 INDEX test.public.t4@myt4index  ALTER INDEX test.public.t4@myt4index CONFIGURE ZONE USING
                                 num_replicas = 5
 RANGE default                   ALTER RANGE default CONFIGURE ZONE USING
-                                range_min_bytes = 16777216,
-                                range_max_bytes = 67108864,
+                                range_min_bytes = 134217728,
+                                range_max_bytes = 536870912,
                                 gc.ttlseconds = 90000,
                                 num_replicas = 3,
                                 constraints = '[]',
                                 lease_preferences = '[]'
 RANGE liveness                  ALTER RANGE liveness CONFIGURE ZONE USING
-                                range_min_bytes = 16777216,
-                                range_max_bytes = 67108864,
+                                range_min_bytes = 137438953472,
+                                range_max_bytes = 549755813888,
                                 gc.ttlseconds = 600,
                                 num_replicas = 5,
                                 constraints = '[]',
                                 lease_preferences = '[]'
 RANGE meta                      ALTER RANGE meta CONFIGURE ZONE USING
-                                range_min_bytes = 16777216,
-                                range_max_bytes = 67108864,
+                                range_min_bytes = 137438953472,
+                                range_max_bytes = 549755813888,
                                 gc.ttlseconds = 3600,
                                 num_replicas = 5,
                                 constraints = '[]',
                                 lease_preferences = '[]'
 RANGE system                    ALTER RANGE system CONFIGURE ZONE USING
-                                range_min_bytes = 16777216,
-                                range_max_bytes = 67108864,
+                                range_min_bytes = 137438953472,
+                                range_max_bytes = 549755813888,
                                 gc.ttlseconds = 90000,
                                 num_replicas = 5,
                                 constraints = '[]',
@@ -125,8 +125,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX myt4index
 ----
 INDEX test.public.t4@myt4index  ALTER INDEX test.public.t4@myt4index CONFIGURE ZONE USING
-                                range_min_bytes = 16777216,
-                                range_max_bytes = 67108864,
+                                range_min_bytes = 134217728,
+                                range_max_bytes = 536870912,
                                 gc.ttlseconds = 90000,
                                 num_replicas = 5,
                                 constraints = '[]',
@@ -136,8 +136,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE t4
 ----
 TABLE t4  ALTER TABLE t4 CONFIGURE ZONE USING
-          range_min_bytes = 16777216,
-          range_max_bytes = 67108864,
+          range_min_bytes = 134217728,
+          range_max_bytes = 536870912,
           gc.ttlseconds = 90000,
           num_replicas = 7,
           constraints = '[]',
@@ -147,8 +147,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR RANGE default
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 16777216,
-               range_max_bytes = 67108864,
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
                gc.ttlseconds = 90000,
                num_replicas = 3,
                constraints = '[]',
