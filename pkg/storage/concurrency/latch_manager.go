@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 )
 
 // latchManagerImpl implements the latchManager interface.
@@ -32,4 +33,8 @@ func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard
 
 func (m *latchManagerImpl) Release(lg latchGuard) {
 	m.m.Release(lg.(*spanlatch.Guard))
+}
+
+func (m *latchManagerImpl) Info() (global, local storagepb.LatchManagerInfo) {
+	return m.m.Info()
 }
