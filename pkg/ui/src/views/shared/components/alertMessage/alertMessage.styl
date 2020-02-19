@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+@require '~src/components/core/index.styl'
+
 .alert-massage
   max-width 470px
   font-size 12px
@@ -32,6 +34,13 @@
     font-size 14px
     color #242a35
     font-weight 600
+
+  &__close-text
+    color $colors--neutral-7
+    margin $spacing-smaller 0
+    font-size $font-size--large
+    line-height $spacing-smaller
+    font-weight $font-weight--extra-bold
 
 .ant-alert-success .alert-massage__icon
   color #37a806
