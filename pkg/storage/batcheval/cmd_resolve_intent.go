@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -28,19 +29,20 @@ func init() {
 func declareKeysResolveIntentCombined(
 	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	// TODO(nvanbenschoten): declare this span at the txn's MinTimestamp. See
-	// lockTable.UpdateLocks for more.
-	DefaultDeclareKeys(desc, header, req, spans)
 	var status roachpb.TransactionStatus
 	var txnID uuid.UUID
+	var minTxnTS hlc.Timestamp
 	switch t := req.(type) {
 	case *roachpb.ResolveIntentRequest:
 		status = t.Status
 		txnID = t.IntentTxn.ID
+		minTxnTS = t.IntentTxn.MinTimestamp
 	case *roachpb.ResolveIntentRangeRequest:
 		status = t.Status
 		txnID = t.IntentTxn.ID
+		minTxnTS = t.IntentTxn.MinTimestamp
 	}
+	spans.AddMVCC(spanset.SpanReadWrite, req.Header().Span(), minTxnTS)
 	if status == roachpb.ABORTED {
 		// We don't always write to the abort span when resolving an ABORTED
 		// intent, but we can't tell whether we will or not ahead of time.
