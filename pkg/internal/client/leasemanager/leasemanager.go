@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -22,6 +23,10 @@ func New(prefix []byte, db *client.DB) *LeaseManager {
 	}
 }
 
+type Lease interface {
+	GetExpiration() hlc.Timestamp
+}
+
 // One thing to note about these leases is that there's no way to release them.
 // In practive there will be a way - rollback to savepoint but the better way is
 // to just hold the transaction open.
@@ -32,10 +37,12 @@ func New(prefix []byte, db *client.DB) *LeaseManager {
 //
 // When acquiring a shared, you need to read the write key. If it writes that key is there
 // a problem? It should need to read the key again. Okay cool.
-func (lm *LeaseManager) AcquireShared(ctx context.Context, txn *client.Txn, key []byte) error {
+func (lm *LeaseManager) AcquireShared(
+	ctx context.Context, txn *client.Txn, key []byte,
+) (Lease, error) {
 	exKey, shKey := makeSharedKeys(lm.prefix, key, txn.ID())
 	var laidDownExKeyIntent bool
-	return lm.db.Txn(ctx, func(ctx context.Context, sideTxn *client.Txn) (err error) {
+	err := lm.db.Txn(ctx, func(ctx context.Context, sideTxn *client.Txn) (err error) {
 		if laidDownExKeyIntent {
 			return errors.AssertionFailedf(
 				"should not be able to contend on shKey "+
@@ -46,7 +53,7 @@ func (lm *LeaseManager) AcquireShared(ctx context.Context, txn *client.Txn, key 
 		}
 		laidDownExKeyIntent = true
 		txn.PushTo(sideTxn.ProvisionalCommitTimestamp())
-		if err := txn.Put(ctx, shKey, nil); err != nil {
+		if err := txn.PutLease(ctx, shKey, nil); err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"should not be able to contend on shKey "+
 					"-- if there's a retryable error there then there's a programming bug: txn ID %v", txn.ID())
@@ -54,16 +61,23 @@ func (lm *LeaseManager) AcquireShared(ctx context.Context, txn *client.Txn, key 
 		sideTxn.PushTo(txn.ProvisionalCommitTimestamp())
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err = txn.ForceHeartbeat(); err != nil {
+		return nil, err
+	}
+	return &leaseImpl{txn: txn}, nil
 }
 
 func (lm *LeaseManager) AcquireExclusive(
 	ctx context.Context, txn *client.Txn, key []byte,
-) (err error) {
+) (Lease, error) {
 	// Here we want to write a delete to the constructed key for the name plus maybe a suffix
 	// then we're going to DeleteRange over the shared lock suffix.
 	exKey, shStart, shEnd := makeExclusiveKeys(lm.prefix, key)
-	if err := txn.Put(ctx, exKey, nil); err != nil {
-		return err
+	if err := txn.PutLease(ctx, exKey, nil); err != nil {
+		return nil, err
 	}
 
 	var sideTxn *client.Txn
@@ -72,10 +86,13 @@ func (lm *LeaseManager) AcquireExclusive(
 		sideTxn.PushTo(txn.ProvisionalCommitTimestamp())
 		return sideTxn.DelRange(ctx, shStart, shEnd)
 	}); err != nil {
-		return err
+		return nil, err
 	}
 	txn.PushTo(sideTxn.CommitTimestamp())
-	return nil
+	if err := txn.ForceHeartbeat(); err != nil {
+		return nil, err
+	}
+	return &leaseImpl{txn: txn}, nil
 }
 
 // TODO(ajwerner): Optimize allocations here by allocating all of the keys from
@@ -113,4 +130,12 @@ func makeSharedKeyRange(prefix, key []byte) (start, end roachpb.Key) {
 
 func makeSharedKey(prefix, key []byte, id uuid.UUID) roachpb.Key {
 	return encoding.EncodeBytesAscending(makeSharedKeyPrefix(prefix, key), []byte(id.String()))
+}
+
+type leaseImpl struct {
+	txn *client.Txn
+}
+
+func (l *leaseImpl) GetExpiration() hlc.Timestamp {
+	return l.txn.ExpiryTimestamp()
 }

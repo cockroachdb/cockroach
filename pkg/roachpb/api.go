@@ -891,7 +891,7 @@ func NewIncrement(key Key, increment int64) Request {
 }
 
 // NewPut returns a Request initialized to put the value at key.
-func NewPut(key Key, value Value) Request {
+func NewPut(key Key, value Value) *PutRequest {
 	value.InitChecksum(key)
 	return &PutRequest{
 		RequestHeader: RequestHeader{
