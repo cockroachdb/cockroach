@@ -451,6 +451,7 @@ func TestGCQueueProcess(t *testing.T) {
 				// Overwrite the timestamps set by newTransaction().
 				txn.ReadTimestamp = datum.ts
 				txn.WriteTimestamp = datum.ts
+				txn.MinTimestamp = datum.ts
 				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
@@ -468,6 +469,7 @@ func TestGCQueueProcess(t *testing.T) {
 				// Overwrite the timestamps set by newTransaction().
 				txn.ReadTimestamp = datum.ts
 				txn.WriteTimestamp = datum.ts
+				txn.MinTimestamp = datum.ts
 				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
 			}
