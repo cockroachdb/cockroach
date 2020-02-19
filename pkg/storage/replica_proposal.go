@@ -609,6 +609,16 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
 	}
 
+	if lResult.WrittenIntents != nil {
+		// TODO(nvanbenschoten): handle WrittenIntents.
+		lResult.WrittenIntents = nil
+	}
+
+	if lResult.ResolvedIntents != nil {
+		// TODO(nvanbenschoten): handle ResolvedIntents.
+		lResult.ResolvedIntents = nil
+	}
+
 	if lResult.UpdatedTxns != nil {
 		for _, txn := range lResult.UpdatedTxns {
 			r.txnWaitQueue.UpdateTxn(ctx, txn)

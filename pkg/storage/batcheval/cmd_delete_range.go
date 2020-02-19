@@ -50,10 +50,18 @@ func DeleteRange(
 	if !args.Inline {
 		timestamp = h.Timestamp
 	}
+	// NB: Even if args.ReturnKeys is false, we want to know which intents were
+	// written if we're evaluating the DeleteRange for a transaction so that we
+	// can update the Result's WrittenIntents field.
+	returnKeys := args.ReturnKeys || h.Txn != nil
 	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
-		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.MaxSpanRequestKeys, timestamp, h.Txn, args.ReturnKeys,
+		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.MaxSpanRequestKeys, timestamp, h.Txn, returnKeys,
 	)
-	if err == nil {
+	if err != nil {
+		return result.Result{}, err
+	}
+
+	if args.ReturnKeys {
 		reply.Keys = deleted
 	}
 	reply.NumKeys = num
@@ -61,5 +69,5 @@ func DeleteRange(
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
-	return result.Result{}, err
+	return result.FromWrittenIntents(h.Txn, deleted), nil
 }

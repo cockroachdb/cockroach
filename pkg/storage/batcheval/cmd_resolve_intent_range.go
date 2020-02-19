@@ -56,11 +56,13 @@ func ResolveIntentRange(
 	reply := resp.(*roachpb.ResolveIntentRangeResponse)
 	reply.NumKeys = numKeys
 	if resumeSpan != nil {
+		update.EndKey = resumeSpan.Key
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
 	var res result.Result
+	res.Local.ResolvedIntents = []roachpb.LockUpdate{update}
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, numKeys > 0) {

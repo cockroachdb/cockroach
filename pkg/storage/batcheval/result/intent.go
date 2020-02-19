@@ -23,6 +23,35 @@ func FromEncounteredIntents(intents []roachpb.Intent) Result {
 	return pd
 }
 
+// FromWrittenIntent creates a Result communicating that an intent was written
+// or re-written by the given request and should be handled.
+func FromWrittenIntent(txn *roachpb.Transaction, key roachpb.Key) Result {
+	var pd Result
+	if txn == nil {
+		return pd
+	}
+	pd.Local.WrittenIntents = []roachpb.LockUpdate{{
+		Span: roachpb.Span{Key: key}, Txn: txn.TxnMeta, Status: roachpb.PENDING,
+	}}
+	return pd
+}
+
+// FromWrittenIntents creates a Result communicating that the intents were
+// written or re-written by the given request and should be handled.
+func FromWrittenIntents(txn *roachpb.Transaction, keys []roachpb.Key) Result {
+	var pd Result
+	if txn == nil {
+		return pd
+	}
+	pd.Local.WrittenIntents = make([]roachpb.LockUpdate, len(keys))
+	for i := range pd.Local.WrittenIntents {
+		pd.Local.WrittenIntents[i] = roachpb.LockUpdate{
+			Span: roachpb.Span{Key: keys[i]}, Txn: txn.TxnMeta, Status: roachpb.PENDING,
+		}
+	}
+	return pd
+}
+
 // EndTxnIntents contains a finished transaction and a bool (Always),
 // which indicates whether the intents should be resolved whether or
 // not the command succeeds through Raft.

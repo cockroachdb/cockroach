@@ -41,8 +41,14 @@ func ConditionalPut(
 		}
 	}
 	handleMissing := engine.CPutMissingBehavior(args.AllowIfDoesNotExist)
+	var err error
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
+		err = engine.MVCCBlindConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
+	} else {
+		err = engine.MVCCConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
 	}
-	return result.Result{}, engine.MVCCConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
+	if err != nil {
+		return result.Result{}, err
+	}
+	return result.FromWrittenIntent(h.Txn, args.Key), nil
 }
