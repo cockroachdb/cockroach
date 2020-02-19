@@ -103,3 +103,5 @@
       IndexSkipTableReader, and InterleavedReaderJoiner spec.
 - Version: 26 (MinAcceptedVersion: 24)
     - Add the numeric tuple field accessor and the ByIndex field to ColumnAccessExpr.
+- Version: 27 (MinAcceptedVersion: 27)
+    - Change how DArray datums are hashed for distinct and aggregation operations.

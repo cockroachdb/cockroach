@@ -121,12 +121,7 @@ func encodeColumnsOfRow(
 		if row[colIdx].IsNull() && !encodeNull {
 			return nil, true, nil
 		}
-		// Note: we cannot compare VALUE encodings because they contain column IDs
-		// which can vary.
-		// TODO(radu): we should figure out what encoding is readily available and
-		// use that (though it needs to be consistent across all rows). We could add
-		// functionality to compare VALUE encodings ignoring the column ID.
-		appendTo, err = row[colIdx].Encode(&colTypes[i], da, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = row[colIdx].Fingerprint(&colTypes[i], da, appendTo)
 		if err != nil {
 			return appendTo, false, err
 		}
@@ -427,7 +422,7 @@ func (i *hashMemRowIterator) computeKey() error {
 	i.curKey = i.curKey[:0]
 	for _, col := range i.storedEqCols {
 		var err error
-		i.curKey, err = row[col].Encode(&i.types[col], &i.columnEncoder.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, i.curKey)
+		i.curKey, err = row[col].Fingerprint(&i.types[col], &i.columnEncoder.datumAlloc, i.curKey)
 		if err != nil {
 			return err
 		}

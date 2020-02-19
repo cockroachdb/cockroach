@@ -167,3 +167,46 @@ query I
 SELECT * FROM v0 WHERE v0.c0 IS NULL
 ----
 NULL
+
+# Regression test for #44079.
+statement ok
+CREATE TABLE t44079 (x INT[]);
+INSERT INTO t44079 VALUES (NULL), (ARRAY[NULL])
+
+query T rowsort
+SELECT DISTINCT * FROM t44079
+----
+NULL
+{NULL}
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x JSONB);
+INSERT INTO t VALUES
+  ('{"foo" : "bar"}'),
+  ('{"foo" : "bar"}'),
+  ('[1, 2]'),
+  ('[2, 1]'),
+  ('[1, 2]'),
+  ('{"foo": {"bar" : "baz"}}')
+
+query T rowsort
+SELECT DISTINCT (x) FROM t
+----
+[2, 1]
+[1, 2]
+{"foo": {"bar": "baz"}}
+{"foo": "bar"}
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x DECIMAL);
+INSERT INTO t VALUES (1.0), (1.00), (1.000)
+
+# We want to ensure that this only returns 1 element. We don't
+# check the element directly because it returns 1.0, 1.00, or
+# 1.000 non-deterministically in a distributed setting.
+query I
+SELECT COUNT (*) FROM (SELECT DISTINCT (array[x]) FROM t)
+----
+1
