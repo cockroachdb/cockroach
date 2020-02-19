@@ -11,12 +11,14 @@
 package colexec
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // spillingQueue is a Queue that uses a fixed-size in-memory circular buffer
@@ -167,6 +169,7 @@ func (q *spillingQueue) maybeSpillToDisk() error {
 	if q.diskQueue != nil {
 		return nil
 	}
+	log.VEvent(context.TODO(), 1, "spilled to disk")
 	diskQueue, err := colcontainer.NewDiskQueue(q.typs, q.diskQueueCfg)
 	if err != nil {
 		return err
