@@ -38,7 +38,7 @@ sequence req=req1
 [2] sequence req1: scanning lock table for conflicting locks
 [2] sequence req1: waiting in lock wait-queues
 [2] sequence req1: pushing txn 00000000-0000-0000-0000-000000000001
-[2] sequence req1: blocked on sync.Cond.Wait in concurrency.(*cluster).PushTransaction
+[2] sequence req1: blocked on sync.Cond.Wait in concurrency_test.(*cluster).PushTransaction
 
 on-txn-updated txn=txn1 status=aborted
 ----
