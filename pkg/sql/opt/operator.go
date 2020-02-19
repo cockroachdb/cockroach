@@ -179,6 +179,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	BoolOrOp:          "bool_or",
 	ConcatAggOp:       "concat_agg",
 	CountOp:           "count",
+	CorrOp:            "corr",
 	CountRowsOp:       "count_rows",
 	MaxOp:             "max",
 	MinOp:             "min",
@@ -251,12 +252,25 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 	return false
 }
 
-// AggregateIgnoresNulls returns true if the given aggregate operator has a
-// single input, and if it always evaluates to the same result regardless of
-// how many NULL values are included in that input, in any order.
+// AggregateIgnoresNulls returns true if the given aggregate operator ignores
+// rows where its first argument evaluates to NULL. In other words, it always
+// evaluates to the same result even if those rows are filtered. For example:
+//
+//   SELECT string_agg(x, y)
+//   FROM (VALUES ('foo', ','), ('bar', ','), (NULL, ',')) t(x, y)
+//
+// In this example, the NULL row can be removed from the input, and the
+// string_agg function still returns the same result. Contrast this to the
+// array_agg function:
+//
+//   SELECT array_agg(x)
+//   FROM (VALUES ('foo'), (NULL), ('bar')) t(x)
+//
+// If the NULL row is removed here, array_agg returns {foo,bar} instead of
+// {foo,NULL,bar}.
 func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
-	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp,
+	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CorrOp, CountOp, MaxOp, MinOp,
 		SumIntOp, SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
 		AnyNotNullAggOp, StringAggOp:
 		return true
@@ -264,14 +278,13 @@ func AggregateIgnoresNulls(op Operator) bool {
 	return false
 }
 
-// AggregateIsNullOnEmpty returns true if the given aggregate operator has a
-// single input, and if it returns NULL when the input set contains no values.
-// This group of aggregates overlaps considerably with the AggregateIgnoresNulls
-// group, with the notable exception of COUNT, which returns zero instead of
-// NULL when its input is empty.
+// AggregateIsNullOnEmpty returns true if the given aggregate operator returns
+// NULL when the input set contains no values. This group of aggregates overlaps
+// considerably with the AggregateIgnoresNulls group, with the notable exception
+// of COUNT, which returns zero instead of NULL when its input is empty.
 func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
-	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp,
+	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CorrOp, MaxOp, MinOp, SumIntOp,
 		SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
 		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp, StringAggOp:
 		return true
