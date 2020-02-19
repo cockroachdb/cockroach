@@ -78,7 +78,15 @@ func declareKeysPushTransaction(
 // activity and extend the waiting period until a transaction is
 // considered expired. This waiting period is a "courtesy" - if we
 // simply aborted txns right away then we would see worse performance
-// under contention, but everything would still be correct.
+// under contention, but everything would still be correct. Note that
+// for transactions containing "lease intents" this waiting is not a
+// courtesy -- a successful heartbeat is a guarantee that the
+// transaction will not be aborted before the expiry. The expiry
+// decision may be made at a node that is ahead of the node where
+// the intent is removed. So we subtract the max offset from
+// the promise made to the leaseholder and do the same when bumping
+// the ts cache (the latter is optional for correctness).
+
 //
 // Txn record not expired: If the pushee txn is not expired, its
 // priority is compared against the pusher's (see CanPushWithPriority).
