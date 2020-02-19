@@ -2,6 +2,7 @@ package leasemanager
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -67,7 +68,7 @@ func (lm *LeaseManager) AcquireShared(
 	if err = txn.ForceHeartbeat(); err != nil {
 		return nil, err
 	}
-	return &leaseImpl{txn: txn}, nil
+	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset()}, nil
 }
 
 func (lm *LeaseManager) AcquireExclusive(
@@ -92,7 +93,7 @@ func (lm *LeaseManager) AcquireExclusive(
 	if err := txn.ForceHeartbeat(); err != nil {
 		return nil, err
 	}
-	return &leaseImpl{txn: txn}, nil
+	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset()}, nil
 }
 
 // TODO(ajwerner): Optimize allocations here by allocating all of the keys from
@@ -133,9 +134,10 @@ func makeSharedKey(prefix, key []byte, id uuid.UUID) roachpb.Key {
 }
 
 type leaseImpl struct {
-	txn *client.Txn
+	txn       *client.Txn
+	maxOffset time.Duration
 }
 
 func (l *leaseImpl) GetExpiration() hlc.Timestamp {
-	return l.txn.ExpiryTimestamp()
+	return l.txn.ExpiryTimestamp().Add(-l.maxOffset.Nanoseconds(), 0)
 }

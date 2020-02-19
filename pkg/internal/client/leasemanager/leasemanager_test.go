@@ -71,7 +71,7 @@ func TestLeases(t *testing.T) {
 		}
 		txn := tc.Server(0).DB().NewTxn(ctx, "")
 
-		if err := acquire(ctx, txn, lockKeys[s.lock]); err != nil {
+		if _, err := acquire(ctx, txn, lockKeys[s.lock]); err != nil {
 			return err
 		}
 

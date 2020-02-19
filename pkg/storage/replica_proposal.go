@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -604,6 +605,10 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 	if lResult.EndTxns != nil {
 		log.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
+	}
+	for _, intent := range lResult.AbortedLeasingIntents {
+		expiryTs := intent.HeartbeatTimestamp.Add(txnwait.TxnLivenessThreshold.Nanoseconds()-r.Clock().MaxOffset().Nanoseconds(), 0)
+		r.store.tsCache.Add(intent.Key, nil, expiryTs, intent.Txn.ID)
 	}
 	if lResult.MaybeWatchForMerge {
 		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
