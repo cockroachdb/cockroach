@@ -242,14 +242,14 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 query T
 SELECT quote_literal(raw_config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
 ----
-e'range_min_bytes: 16777216\nrange_max_bytes: 67108864\ngc:\n  ttlseconds: 90000\nnum_replicas: 3\nconstraints: []\nlease_preferences: []\n'
+e'range_min_bytes: 134217728\nrange_max_bytes: 536870912\ngc:\n  ttlseconds: 90000\nnum_replicas: 3\nconstraints: []\nlease_preferences: []\n'
 
 query T
 SELECT raw_config_sql FROM crdb_internal.zones WHERE zone_id = 0
 ----
 ALTER RANGE default CONFIGURE ZONE USING
-  range_min_bytes = 16777216,
-  range_max_bytes = 67108864,
+  range_min_bytes = 134217728,
+  range_max_bytes = 536870912,
   gc.ttlseconds = 90000,
   num_replicas = 3,
   constraints = '[]',

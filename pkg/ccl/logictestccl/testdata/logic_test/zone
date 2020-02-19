@@ -482,8 +482,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION x1 OF TABLE t35756
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 16777216,
-               range_max_bytes = 67108864,
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
                gc.ttlseconds = 90000,
                num_replicas = 3,
                constraints = '[]',
@@ -512,8 +512,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION x1_idx OF INDEX t38391@foo
 ----
 PARTITION x1_idx OF INDEX t38391@foo  ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING
-                                      range_min_bytes = 16777216,
-                                      range_max_bytes = 67108864,
+                                      range_min_bytes = 134217728,
+                                      range_max_bytes = 536870912,
                                       gc.ttlseconds = 31337,
                                       num_replicas = 3,
                                       constraints = '[]',
@@ -863,20 +863,20 @@ query TTT
 SELECT table_name, index_name, full_config_sql FROM crdb_internal.zones WHERE
 table_name='t38074'
 ----
-t38074 NULL ALTER TABLE test.public.t38074 CONFIGURE ZONE USING
-                               range_min_bytes = 16777216,
-                               range_max_bytes = 67108864,
-                               gc.ttlseconds = 70000,
-                               num_replicas = 3,
-                               constraints = '[]',
-                               lease_preferences = '[]'
-t38074 i ALTER INDEX test.public.t38074@i CONFIGURE ZONE USING
-                               range_min_bytes = 16777216,
-                               range_max_bytes = 67108864,
-                               gc.ttlseconds = 80000,
-                               num_replicas = 3,
-                               constraints = '[]',
-                               lease_preferences = '[]'
+t38074  NULL  ALTER TABLE test.public.t38074 CONFIGURE ZONE USING
+        range_min_bytes = 134217728,
+        range_max_bytes = 536870912,
+        gc.ttlseconds = 70000,
+        num_replicas = 3,
+        constraints = '[]',
+        lease_preferences = '[]'
+t38074  i                         ALTER INDEX test.public.t38074@i CONFIGURE ZONE USING
+        range_min_bytes = 134217728,
+        range_max_bytes = 536870912,
+        gc.ttlseconds = 80000,
+        num_replicas = 3,
+        constraints = '[]',
+        lease_preferences = '[]'
 
 # Regression test for #39994: verify that certain fields have to be set in tandem in indexes and partitions.
 statement ok
