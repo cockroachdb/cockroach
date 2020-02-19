@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -54,6 +55,20 @@ type vectorizedFlow struct {
 	// bufferingMemAccounts are the memory accounts that are tracking the dynamic
 	// memory usage of the buffering components.
 	bufferingMemAccounts []*mon.BoundAccount
+
+	tempStorage struct {
+		// path is the path to this flow's temporary storage directory.
+		path string
+		// created is an atomic that is set to 1 when the flow's temporary storage
+		// directory has been created.
+		created int32
+	}
+
+	testingKnobs struct {
+		// onSetupFlow is a testing knob that is called before calling
+		// creator.setupFlow with the given creator.
+		onSetupFlow func(*vectorizedFlowCreator)
+	}
 }
 
 var _ flowinfra.Flow = &vectorizedFlow{}
@@ -86,13 +101,30 @@ func (f *vectorizedFlow) Setup(
 		recordingStats = true
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
-	// flowTempStoragePath is the directory to use for this flow's temporary
-	// storage.
-	flowTempStoragePath := filepath.Join(f.Cfg.TempStoragePath, f.GetID().String())
-	if err := f.Cfg.TempFS.CreateDir(flowTempStoragePath); err != nil {
-		return ctx, err
+	// Create a name for this flow's temporary directory. Note that this directory
+	// is lazily created when necessary and cleaned up in Cleanup(). The directory
+	// name is the flow's ID in most cases apart from when the flow's ID is unset
+	// (in the case of local flows). In this case the directory will be prefixed
+	// with "local-flow" and a uuid is generated on the spot to provide a unique
+	// name.
+	tempDirName := f.GetID().String()
+	if f.GetID().Equal(uuid.Nil) {
+		tempDirName = "local-flow" + uuid.FastMakeV4().String()
 	}
-	diskQueueCfg := colcontainer.DiskQueueCfg{FS: f.Cfg.TempFS, Path: flowTempStoragePath}
+	f.tempStorage.path = filepath.Join(f.Cfg.TempStoragePath, tempDirName)
+	diskQueueCfg := colcontainer.DiskQueueCfg{
+		FS:   f.Cfg.TempFS,
+		Path: f.tempStorage.path,
+		OnNewDiskQueueCb: func() {
+			if !atomic.CompareAndSwapInt32(&f.tempStorage.created, 0, 1) {
+				// The temporary storage directory has already been created.
+				return
+			}
+			if err := f.Cfg.TempFS.CreateDir(f.tempStorage.path); err != nil {
+				execerror.VectorizedInternalPanic(errors.Errorf("unable to create temporary storage directory: %v", err))
+			}
+		},
+	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
 	}
@@ -106,6 +138,9 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 	)
+	if f.testingKnobs.onSetupFlow != nil {
+		f.testingKnobs.onSetupFlow(creator)
+	}
 	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
 	if err == nil {
 		f.operatorConcurrency = creator.operatorConcurrency
@@ -114,17 +149,6 @@ func (f *vectorizedFlow) Setup(
 		f.bufferingMemAccounts = append(f.bufferingMemAccounts, creator.bufferingMemAccounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return ctx, nil
-	}
-	if err := f.Cfg.TempFS.DeleteDir(flowTempStoragePath); err != nil {
-		// Log error as a Warning but keep on going to close the memory
-		// infrastructure.
-		log.Warningf(
-			ctx,
-			"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
-			f.GetID().Short(),
-			flowTempStoragePath,
-			err,
-		)
 	}
 	// It is (theoretically) possible that some of the memory monitoring
 	// infrastructure was created even in case of an error, and we need to clean
@@ -170,17 +194,18 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	for _, memMonitor := range f.bufferingMemMonitors {
 		memMonitor.Stop(ctx)
 	}
-	flowTempStoragePath := filepath.Join(f.Cfg.TempStoragePath, f.GetID().String())
-	if err := f.Cfg.TempFS.DeleteDir(flowTempStoragePath); err != nil {
-		// Log error as a Warning but keep on going to close the memory
-		// infrastructure.
-		log.Warningf(
-			ctx,
-			"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
-			f.GetID().Short(),
-			flowTempStoragePath,
-			err,
-		)
+	if atomic.LoadInt32(&f.tempStorage.created) == 1 {
+		if err := f.Cfg.TempFS.DeleteDir(f.tempStorage.path); err != nil {
+			// Log error as a Warning but keep on going to close the memory
+			// infrastructure.
+			log.Warningf(
+				ctx,
+				"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
+				f.GetID().Short(),
+				f.tempStorage.path,
+				err,
+			)
+		}
 	}
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
