@@ -55,11 +55,14 @@ func (a *Allocator) NewMemBatch(types []coltypes.T) coldata.Batch {
 	return a.NewMemBatchWithSize(types, int(coldata.BatchSize()))
 }
 
+func (a *Allocator) selVectorSize(capacity int) int64 {
+	return int64(capacity * sizeOfUint16)
+}
+
 // NewMemBatchWithSize allocates a new in-memory coldata.Batch with the given
 // column size.
 func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Batch {
-	selVectorSize := size * sizeOfUint16
-	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes(types, size) + selVectorSize)
+	estimatedStaticMemoryUsage := a.selVectorSize(size) + int64(estimateBatchSizeBytes(types, size))
 	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
@@ -71,7 +74,7 @@ func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Ba
 // through PerformOperation. Use this if you want to explicitly manage the
 // memory accounted for.
 func (a *Allocator) RetainBatch(b coldata.Batch) {
-	if err := a.acc.Grow(a.ctx, getVecsSize(b.ColVecs())); err != nil {
+	if err := a.acc.Grow(a.ctx, a.selVectorSize(cap(b.Selection()))+getVecsSize(b.ColVecs())); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 }
@@ -81,7 +84,7 @@ func (a *Allocator) RetainBatch(b coldata.Batch) {
 // Flow.Cleanup. Use this if you want to explicitly manage the memory used. An
 // example of a use case is releasing a batch before writing it to disk.
 func (a *Allocator) ReleaseBatch(b coldata.Batch) {
-	a.acc.Shrink(a.ctx, getVecsSize(b.ColVecs()))
+	a.acc.Shrink(a.ctx, a.selVectorSize(cap(b.Selection()))+getVecsSize(b.ColVecs()))
 }
 
 // NewMemColumn returns a new coldata.Vec, initialized with a length.
@@ -154,8 +157,11 @@ func (a *Allocator) Used() int64 {
 }
 
 // Clear clears up the memory account of the allocator.
+// WARNING: usage of this method is *not* compatible with using
+// PerformOperation. Use this only in combination with RetainBatch /
+// ReleaseBatch.
 func (a *Allocator) Clear() {
-	a.acc.Clear(a.ctx)
+	a.acc.Shrink(a.ctx, a.acc.Used())
 }
 
 const (

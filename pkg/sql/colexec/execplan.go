@@ -17,6 +17,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -93,6 +94,7 @@ type NewColOperatorArgs struct {
 	Inputs               []Operator
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
+	DiskQueueCfg         colcontainer.DiskQueueCfg
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
@@ -108,6 +110,9 @@ type NewColOperatorArgs struct {
 		// DiskSpillingDisabled specifies whether only in-memory operators should
 		// be created.
 		DiskSpillingDisabled bool
+		// MaxNumberPartitions determines the maximum number of "active"
+		// partitions for Partitioner interface.
+		MaxNumberPartitions int
 	}
 }
 
@@ -762,15 +767,22 @@ func NewColOperator(
 							ctx, result.createBufferingUnlimitedMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
+						standaloneAllocator := NewAllocator(
+							ctx, result.createStandaloneMemAccount(
+								ctx, flowCtx, monitorNamePrefix,
+							))
 						diskQueuesUnlimitedAllocator := NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
 								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
 							))
 						return newExternalSorter(
 							unlimitedAllocator,
+							standaloneAllocator,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
+							args.TestingKnobs.MaxNumberPartitions,
 							diskQueuesUnlimitedAllocator,
+							args.DiskQueueCfg,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -994,6 +1006,31 @@ func (r *NewColOperatorResult) createBufferingUnlimitedMemAccount(
 	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
 	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
 	return &bufferingMemAccount
+}
+
+// createStandaloneMemAccount instantiates an unlimited memory monitor and a
+// memory account that have a standalone budget. This means that the memory
+// registered with these objects is *not* reported to the root monitor (i.e.
+// it will not count towards max-sql-memory). Use it only when the memory in
+// use is accounted for with a different memory monitor. The receiver is
+// updated to have references to both objects.
+func (r *NewColOperatorResult) createStandaloneMemAccount(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
+) *mon.BoundAccount {
+	standaloneMemMonitor := mon.MakeMonitor(
+		name+"-standalone",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment: use default increment */
+		math.MaxInt64, /* noteworthy */
+		flowCtx.Cfg.Settings,
+	)
+	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, &standaloneMemMonitor)
+	standaloneMemMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	standaloneMemAccount := standaloneMemMonitor.MakeBoundAccount()
+	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &standaloneMemAccount)
+	return &standaloneMemAccount
 }
 
 func (r *NewColOperatorResult) planFilterExpr(
