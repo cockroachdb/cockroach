@@ -285,17 +285,15 @@ func (m *managerImpl) HandleTransactionPushError(
 }
 
 // OnLockAcquired implements the LockManager interface.
-func (m *managerImpl) OnLockAcquired(ctx context.Context, in *roachpb.Intent) {
-	// TODO(nvanbenschoten): rename roachpb.Intent and add a lock.Durability
-	// field to it.
-	if err := m.lt.AcquireLock(&in.Txn, in.Key, lock.Exclusive, lock.Unreplicated); err != nil {
+func (m *managerImpl) OnLockAcquired(ctx context.Context, up *roachpb.LockUpdate) {
+	if err := m.lt.AcquireLock(&up.Txn, up.Key, lock.Exclusive, up.Durability); err != nil {
 		log.Fatal(ctx, errors.HandleAsAssertionFailure(err))
 	}
 }
 
 // OnLockUpdated implements the LockManager interface.
-func (m *managerImpl) OnLockUpdated(ctx context.Context, in *roachpb.Intent) {
-	if err := m.lt.UpdateLocks(in); err != nil {
+func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
+	if err := m.lt.UpdateLocks(up); err != nil {
 		log.Fatal(ctx, errors.HandleAsAssertionFailure(err))
 	}
 }

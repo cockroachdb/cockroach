@@ -83,7 +83,7 @@ func RefreshRange(
 		}
 		// Return an error if an intent was written to the span.
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
-			i.Span.Key, i.Txn.WriteTimestamp)
+			i.Key, i.Txn.WriteTimestamp)
 	}
 
 	return result.Result{}, nil

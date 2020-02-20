@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -137,10 +138,11 @@ func setupMVCCData(
 		key := keys[idx]
 		txnMeta := txn.TxnMeta
 		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
-		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.Intent{
-			Span:   roachpb.Span{Key: key},
-			Status: roachpb.COMMITTED,
-			Txn:    txnMeta,
+		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
+			Span:       roachpb.Span{Key: key},
+			Status:     roachpb.COMMITTED,
+			Txn:        txnMeta,
+			Durability: lock.Replicated,
 		}); err != nil {
 			b.Fatal(err)
 		}

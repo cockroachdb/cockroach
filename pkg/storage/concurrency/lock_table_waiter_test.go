@@ -28,7 +28,7 @@ import (
 
 type mockIntentResolver struct {
 	pushTxn       func(context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (roachpb.Transaction, *Error)
-	resolveIntent func(context.Context, roachpb.Intent) *Error
+	resolveIntent func(context.Context, roachpb.LockUpdate) *Error
 }
 
 func (m *mockIntentResolver) PushTransaction(
@@ -38,7 +38,7 @@ func (m *mockIntentResolver) PushTransaction(
 }
 
 func (m *mockIntentResolver) ResolveIntent(
-	ctx context.Context, intent roachpb.Intent, _ intentresolver.ResolveOptions,
+	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
 ) *Error {
 	return m.resolveIntent(ctx, intent)
 }
@@ -304,7 +304,7 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 				// we know the holder is ABORTED. Otherwide, immediately
 				// tell the request to stop waiting.
 				if lockHeld {
-					ir.resolveIntent = func(_ context.Context, intent roachpb.Intent) *Error {
+					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
@@ -371,7 +371,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	) (roachpb.Transaction, *Error) {
 		return roachpb.Transaction{}, nil
 	}
-	ir.resolveIntent = func(_ context.Context, intent roachpb.Intent) *Error {
+	ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 		return err2
 	}
 	err = w.WaitOn(ctx, req, g)

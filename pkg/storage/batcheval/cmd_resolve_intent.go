@@ -81,8 +81,8 @@ func ResolveIntent(
 		return result.Result{}, ErrTransactionUnsupported
 	}
 
-	intent := args.AsIntent()
-	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, intent)
+	update := args.AsLockUpdate()
+	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
 	if err != nil {
 		return result.Result{}, err
 	}

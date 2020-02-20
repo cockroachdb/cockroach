@@ -953,7 +953,7 @@ func mvccGetInternal(
 		// ignore the intent by insisting that the timestamp we're reading
 		// at is a historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve it.
-		intent := roachpb.MakePendingIntent(meta.Txn, roachpb.Span{Key: metaKey.Key})
+		intent := roachpb.MakeIntent(meta.Txn, metaKey.Key)
 		ignoredIntent = &intent
 		timestamp = metaTimestamp.Prev()
 	}
@@ -973,7 +973,7 @@ func mvccGetInternal(
 		if metaTimestamp.LessEq(maxVisibleTimestamp) {
 			return nil, nil, safeValue, &roachpb.WriteIntentError{
 				Intents: []roachpb.Intent{
-					roachpb.MakePendingIntent(meta.Txn, roachpb.Span{Key: metaKey.Key}),
+					roachpb.MakeIntent(meta.Txn, metaKey.Key),
 				},
 			}
 		}
@@ -1512,7 +1512,7 @@ func mvccPutInternal(
 				// The current Put operation does not come from the same
 				// transaction.
 				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{
-					roachpb.MakePendingIntent(meta.Txn, roachpb.Span{Key: key}),
+					roachpb.MakeIntent(meta.Txn, key),
 				}}
 			} else if txn.Epoch < meta.Txn.Epoch {
 				return errors.Errorf("put with epoch %d came after put with epoch %d in txn %s",
@@ -2208,7 +2208,7 @@ func MVCCClearTimeRange(
 			if meta.Txn != nil && startTime.Less(ts) && ts.LessEq(endTime) {
 				err := &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{
-						roachpb.MakePendingIntent(meta.Txn, roachpb.Span{Key: append([]byte{}, k.Key...)}),
+						roachpb.MakeIntent(meta.Txn, append([]byte{}, k.Key...)),
 					}}
 				return nil, err
 			}
@@ -2424,7 +2424,7 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 		if err := protoutil.Unmarshal(reader.Value(), &meta); err != nil {
 			return nil, err
 		}
-		intents = append(intents, roachpb.MakePendingIntent(meta.Txn, roachpb.Span{Key: key.Key}))
+		intents = append(intents, roachpb.MakeIntent(meta.Txn, key.Key))
 	}
 
 	if err := reader.Error(); err != nil {
@@ -2631,7 +2631,7 @@ func MVCCIterate(
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent,
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
 ) (bool, error) {
 	iterAndBuf := GetBufUsingIter(rw.NewIterator(IterOptions{Prefix: true}))
 	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
@@ -2647,7 +2647,7 @@ func MVCCResolveWriteIntentUsingIter(
 	rw ReadWriter,
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
-	intent roachpb.Intent,
+	intent roachpb.LockUpdate,
 ) (bool, error) {
 	if len(intent.Key) == 0 {
 		return false, emptyKeyError()
@@ -2688,7 +2688,7 @@ func mvccResolveWriteIntent(
 	rw ReadWriter,
 	iter Iterator,
 	ms *enginepb.MVCCStats,
-	intent roachpb.Intent,
+	intent roachpb.LockUpdate,
 	buf *putBuffer,
 	forRange bool,
 ) (bool, error) {
@@ -3083,9 +3083,9 @@ func (b IterAndBuf) Cleanup() {
 // txns. Returns the number of intents resolved and a resume span if
 // the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent, max int64,
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
 ) (int64, *roachpb.Span, error) {
-	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.Span.EndKey})
+	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
 	defer iterAndBuf.Cleanup()
 	return MVCCResolveWriteIntentRangeUsingIter(ctx, rw, iterAndBuf, ms, intent, max)
 }
@@ -3100,7 +3100,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	rw ReadWriter,
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
-	intent roachpb.Intent,
+	intent roachpb.LockUpdate,
 	max int64,
 ) (int64, *roachpb.Span, error) {
 	encKey := MakeMVCCMetadataKey(intent.Key)
@@ -3708,7 +3708,7 @@ func checkForKeyCollisionsGo(
 				// target key space, which will require appropriate resolution logic.
 				writeIntentErr := roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{
-						roachpb.MakePendingIntent(mvccMeta.Txn, roachpb.Span{Key: existingIter.Key().Key}),
+						roachpb.MakeIntent(mvccMeta.Txn, existingIter.Key().Key),
 					},
 				}
 

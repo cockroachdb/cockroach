@@ -161,7 +161,7 @@ void DBIncrementalIterator::advanceKey() {
           !legacyTimestampIsLess(end_time, meta.timestamp())) {
         cockroach::roachpb::WriteIntentError err;
         cockroach::roachpb::Intent* intent = err.add_intents();
-        intent->mutable_span()->set_key(key.data(), key.size());
+        intent->mutable_single_key_span()->set_key(key.data(), key.size());
         intent->mutable_txn()->CopyFrom(meta.txn());
 
         status = ToDBString("WriteIntentError");
