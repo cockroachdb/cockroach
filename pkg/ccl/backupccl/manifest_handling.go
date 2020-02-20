@@ -325,6 +325,7 @@ func resolveBackupManifests(
 	baseStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	from [][]string,
+	endTime hlc.Timestamp,
 	encryption *roachpb.FileEncryptionOptions,
 ) (
 	defaultURIs []string,
@@ -437,6 +438,57 @@ func resolveBackupManifests(
 			}
 		}
 	}
+
+	// Check that the requested target time, if specified, is valid for the list
+	// of incremental backups resolved, truncating the results to the backup that
+	// contains the target time.
+	if !endTime.IsEmpty() {
+		ok := false
+		for i, b := range mainBackupManifests {
+			// Find the backup that covers the requested time.
+			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
+				ok = true
+
+				mainBackupManifests = mainBackupManifests[:i+1]
+				defaultURIs = defaultURIs[:i+1]
+				localityInfo = localityInfo[:i+1]
+
+				// Ensure that the backup actually has revision history.
+				if !endTime.Equal(b.EndTime) {
+					if b.MVCCFilter != MVCCFilter_All {
+						const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
+						if i == 0 {
+							return nil, nil, nil, errors.Errorf(
+								errPrefix+" nearest backup time is %s", backupOptRevisionHistory, b.EndTime,
+							)
+						}
+						return nil, nil, nil, errors.Errorf(
+							errPrefix+" nearest BACKUP times are %s or %s",
+							backupOptRevisionHistory, mainBackupManifests[i-1].EndTime, b.EndTime,
+						)
+					}
+					// Ensure that the revision history actually covers the requested time -
+					// while the BACKUP's start and end might contain the requested time for
+					// example if start time is 0 (full backup), the revision history was
+					// only captured since the GC window. Note that the RevisionStartTime is
+					// the latest for ranges backed up.
+					if endTime.LessEq(b.RevisionStartTime) {
+						return nil, nil, nil, errors.Errorf(
+							"invalid RESTORE timestamp: BACKUP for requested time only has revision history from %v", b.RevisionStartTime,
+						)
+					}
+				}
+				break
+			}
+		}
+
+		if !ok {
+			return nil, nil, nil, errors.Errorf(
+				"invalid RESTORE timestamp: supplied backups do not cover requested time",
+			)
+		}
+	}
+
 	return defaultURIs, mainBackupManifests, localityInfo, nil
 }
 
