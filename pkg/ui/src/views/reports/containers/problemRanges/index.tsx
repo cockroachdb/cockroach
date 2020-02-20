@@ -196,7 +196,7 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     return (
       <div className="section">
         <Helmet title="Problem Ranges | Debug" />
-        <h1 className="base-heading">Problem Ranges Report</h1>
+        <h1 className="base-heading page-title">Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
           error={this.props.problemRanges && this.props.problemRanges.lastError}
