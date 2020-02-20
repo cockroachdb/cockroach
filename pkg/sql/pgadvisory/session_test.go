@@ -240,4 +240,18 @@ func TestSession(t *testing.T) {
 		session1.Exec(t, sessionUnlockAll)
 		wg.Wait()
 	})
+
+	t.Run("force retry with session lock", func(t *testing.T) {
+		session1.Exec(t, sessionLock)
+		session1.Exec(t, "SELECT crdb_internal.force_retry('1s':::INTERVAL), pg_advisory_lock(1);")
+		session1.Exec(t, sessionUnlock)
+		session1.Exec(t, sessionUnlock)
+		session2.Exec(t, sessionLock)
+		session2.Exec(t, sessionUnlock)
+
+		session1.Exec(t, "SELECT crdb_internal.force_retry('1s':::INTERVAL), pg_advisory_lock(1);")
+		session1.Exec(t, sessionUnlock)
+		session2.Exec(t, sessionLock)
+		session2.Exec(t, sessionUnlock)
+	})
 }

@@ -945,7 +945,7 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				ts, err := evalCtx.PGAdvisorySession.LockEx(evalCtx.Ctx(), id)
+				ts, err := evalCtx.PGAdvisorySession.LockEx(evalCtx.Ctx(), evalCtx.Txn, id)
 				if err != nil {
 					return tree.DBoolFalse, err
 				}
@@ -963,7 +963,7 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				ts, err := evalCtx.PGAdvisorySession.LockSh(evalCtx.Ctx(), id)
+				ts, err := evalCtx.PGAdvisorySession.LockSh(evalCtx.Ctx(), evalCtx.Txn, id)
 				if err != nil {
 					return tree.DBoolFalse, err
 				}
@@ -980,7 +980,7 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				res, err := evalCtx.PGAdvisorySession.UnlockEx(evalCtx.Ctx(), id, evalCtx.Txn.ProvisionalCommitTimestamp())
+				res, err := evalCtx.PGAdvisorySession.UnlockEx(evalCtx.Ctx(), evalCtx.Txn, id)
 				return tree.MakeDBool(tree.DBool(res)), err
 			},
 			Info: "Release an exclusive session level advisory lock",
@@ -1008,7 +1008,7 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				res, err := evalCtx.PGAdvisorySession.UnlockSh(evalCtx.Ctx(), id, evalCtx.Txn.ProvisionalCommitTimestamp())
+				res, err := evalCtx.PGAdvisorySession.UnlockSh(evalCtx.Ctx(), evalCtx.Txn, id)
 				return tree.MakeDBool(tree.DBool(res)), err
 			},
 			Info: "Release a shared session level advisory lock",

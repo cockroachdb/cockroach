@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,8 +39,12 @@ const (
 
 type leaseWithRefCount struct {
 	leasemanager.Lease
-	scope    leaseScope
-	refCount uint64
+	scope         leaseScope
+	totalRefCount uint64
+	// refCountByUserTxnID stores the number of references to this lease by the
+	// corresponding to the ID *user* txn. This will be used *only* for
+	// session-scoped leases.
+	refCountByUserTxnID map[uuid.UUID]uint64
 }
 
 type Session struct {
@@ -61,7 +66,9 @@ func NewSession(db *client.DB, manager LockManager) *Session {
 }
 
 // LockEx acquires an exclusive session-scoped lease for key 'id'.
-func (s *Session) LockEx(ctx context.Context, id int64) (hlc.Timestamp, error) {
+func (s *Session) LockEx(
+	ctx context.Context, userTxn *client.Txn, id int64,
+) (hlc.Timestamp, error) {
 	if lease, found := s.leases[id]; found {
 		if lease.scope != sessionScoped {
 			return hlc.Timestamp{}, errors.Errorf("txn-scoped lock already acquired")
@@ -69,7 +76,8 @@ func (s *Session) LockEx(ctx context.Context, id int64) (hlc.Timestamp, error) {
 		if !lease.Exclusive() {
 			return hlc.Timestamp{}, errors.Errorf("session-scoped ShareLock already acquired")
 		}
-		lease.refCount++
+		lease.totalRefCount++
+		lease.refCountByUserTxnID[userTxn.ID()]++
 		return lease.StartTime(), nil
 	}
 	s.scratch = encoding.EncodeVarintAscending(s.scratch[:0], id)
@@ -78,30 +86,50 @@ func (s *Session) LockEx(ctx context.Context, id int64) (hlc.Timestamp, error) {
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
-	s.leases[id] = &leaseWithRefCount{Lease: lease, scope: sessionScoped, refCount: 1}
+	s.leases[id] = &leaseWithRefCount{
+		Lease:               lease,
+		scope:               sessionScoped,
+		totalRefCount:       1,
+		refCountByUserTxnID: make(map[uuid.UUID]uint64),
+	}
+	s.leases[id].refCountByUserTxnID[userTxn.ID()]++
 	return lease.StartTime(), nil
 }
 
+// maybeCommitAuxiliaryTxn checks whether there are any references left to
+// lease, and if there are none, it commits the "auxiliary" txn that was
+// created by this session to support session-scoped lease and deletes the id
+// from the leases map.
+func (s *Session) maybeCommitAuxiliaryTxn(
+	ctx context.Context, id int64, lease *leaseWithRefCount, ts hlc.Timestamp,
+) error {
+	var err error
+	if lease.totalRefCount == 0 {
+		lease.Txn().PushTo(ts)
+		err = lease.Txn().Commit(ctx)
+		delete(s.leases, id)
+	}
+	return err
+}
+
 // UnlockEx releases an exclusive session-scoped lease for key 'id'.
-func (s *Session) UnlockEx(ctx context.Context, id int64, ts hlc.Timestamp) (bool, error) {
+func (s *Session) UnlockEx(ctx context.Context, userTxn *client.Txn, id int64) (bool, error) {
 	if lease, found := s.leases[id]; found {
 		if lease.scope != sessionScoped || !lease.Exclusive() {
 			return false, errors.Errorf("you don't own a lock of type ExclusiveLock")
 		}
-		lease.refCount--
-		var err error
-		if lease.refCount == 0 {
-			lease.Txn().PushTo(ts)
-			err = lease.Txn().Commit(ctx)
-			delete(s.leases, id)
-		}
+		lease.totalRefCount--
+		lease.refCountByUserTxnID[userTxn.ID()]--
+		err := s.maybeCommitAuxiliaryTxn(ctx, id, lease, userTxn.ProvisionalCommitTimestamp())
 		return true, err
 	}
 	return false, nil
 }
 
 // LockSh acquires a shared session-scoped lease for key 'id'.
-func (s *Session) LockSh(ctx context.Context, id int64) (hlc.Timestamp, error) {
+func (s *Session) LockSh(
+	ctx context.Context, userTxn *client.Txn, id int64,
+) (hlc.Timestamp, error) {
 	if lease, found := s.leases[id]; found {
 		if lease.scope != sessionScoped {
 			return hlc.Timestamp{}, errors.Errorf("txn-scoped lock already acquired")
@@ -109,7 +137,8 @@ func (s *Session) LockSh(ctx context.Context, id int64) (hlc.Timestamp, error) {
 		if lease.Exclusive() {
 			return hlc.Timestamp{}, errors.Errorf("session-scoped ExclusiveLock already acquired")
 		}
-		lease.refCount++
+		lease.totalRefCount++
+		lease.refCountByUserTxnID[userTxn.ID()]++
 		return lease.StartTime(), nil
 	}
 	s.scratch = encoding.EncodeVarintAscending(s.scratch[:0], id)
@@ -118,23 +147,25 @@ func (s *Session) LockSh(ctx context.Context, id int64) (hlc.Timestamp, error) {
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
-	s.leases[id] = &leaseWithRefCount{Lease: lease, scope: sessionScoped, refCount: 1}
+	s.leases[id] = &leaseWithRefCount{
+		Lease:               lease,
+		scope:               sessionScoped,
+		totalRefCount:       1,
+		refCountByUserTxnID: make(map[uuid.UUID]uint64),
+	}
+	s.leases[id].refCountByUserTxnID[userTxn.ID()]++
 	return lease.StartTime(), nil
 }
 
 // UnlockSh releases a shared session-scoped lease for key 'id'.
-func (s *Session) UnlockSh(ctx context.Context, id int64, ts hlc.Timestamp) (bool, error) {
+func (s *Session) UnlockSh(ctx context.Context, userTxn *client.Txn, id int64) (bool, error) {
 	if lease, found := s.leases[id]; found {
 		if lease.scope != sessionScoped || lease.Exclusive() {
 			return false, errors.Errorf("you don't own a lock of type ShareLock")
 		}
-		lease.refCount--
-		var err error
-		if lease.refCount == 0 {
-			lease.Txn().PushTo(ts)
-			err = lease.Txn().Commit(ctx)
-			delete(s.leases, id)
-		}
+		lease.totalRefCount--
+		lease.refCountByUserTxnID[userTxn.ID()]--
+		err := s.maybeCommitAuxiliaryTxn(ctx, id, lease, userTxn.ProvisionalCommitTimestamp())
 		return true, err
 	}
 	return false, nil
@@ -145,12 +176,11 @@ func (s *Session) UnlockAll(ctx context.Context, ts hlc.Timestamp) error {
 	var resErr error
 	for id, lease := range s.leases {
 		if lease.scope == sessionScoped {
-			lease.Txn().PushTo(ts)
-			err := lease.Txn().Commit(ctx)
+			lease.totalRefCount = 0
+			err := s.maybeCommitAuxiliaryTxn(ctx, id, lease, ts)
 			if err != nil && resErr == nil {
 				resErr = err
 			}
-			delete(s.leases, id)
 		}
 	}
 	return resErr
@@ -168,7 +198,7 @@ func (s *Session) TxnLockEx(ctx context.Context, txn *client.Txn, id int64) erro
 			return errors.Errorf("txn-scoped ShareLock already acquired")
 		}
 		if lease.Txn().ID() == txn.ID() {
-			lease.refCount++
+			lease.totalRefCount++
 			return nil
 		}
 	}
@@ -177,7 +207,7 @@ func (s *Session) TxnLockEx(ctx context.Context, txn *client.Txn, id int64) erro
 	if err != nil {
 		return err
 	}
-	s.leases[id] = &leaseWithRefCount{Lease: lease, scope: txnScoped, refCount: 1}
+	s.leases[id] = &leaseWithRefCount{Lease: lease, scope: txnScoped, totalRefCount: 1}
 	return nil
 }
 
@@ -192,7 +222,7 @@ func (s *Session) TxnLockSh(ctx context.Context, txn *client.Txn, id int64) erro
 		if lease.Exclusive() {
 			return errors.Errorf("txn-scoped ExclusiveLock already acquired")
 		}
-		lease.refCount++
+		lease.totalRefCount++
 		return nil
 	}
 	s.scratch = encoding.EncodeVarintAscending(s.scratch[:0], id)
@@ -200,7 +230,7 @@ func (s *Session) TxnLockSh(ctx context.Context, txn *client.Txn, id int64) erro
 	if err != nil {
 		return err
 	}
-	s.leases[id] = &leaseWithRefCount{Lease: lease, scope: txnScoped, refCount: 1}
+	s.leases[id] = &leaseWithRefCount{Lease: lease, scope: txnScoped, totalRefCount: 1}
 	return nil
 }
 
@@ -208,8 +238,26 @@ func (s *Session) TxnLockSh(ctx context.Context, txn *client.Txn, id int64) erro
 // statement. It takes in a current user txn and pushes all session-scoped
 // leases to the "write" timestamp of that txn. Also, all txn-scoped leases are
 // removed if the passed-in txn is different from the txn on the previous stmt.
-func (s *Session) PrepareForNextStmt(txn *client.Txn) {
-	if s.txn == nil || s.txn.ID() != txn.ID() {
+func (s *Session) PrepareForNextStmt(ctx context.Context, txn *client.Txn) error {
+	var resErr error
+	pcts := txn.ProvisionalCommitTimestamp()
+	if s.txn != nil && s.txn.Epoch() != txn.Epoch() {
+		// The txn has a different epoch, so SQL lever txn must have retried. We
+		// need to reduce the reference count on the session-scoped leases
+		// corresponding to the "old" txn.
+		for id, lease := range s.leases {
+			if lease.scope == sessionScoped {
+				if refCount, found := lease.refCountByUserTxnID[s.txn.ID()]; found {
+					lease.totalRefCount -= refCount
+					delete(lease.refCountByUserTxnID, s.txn.ID())
+					err := s.maybeCommitAuxiliaryTxn(ctx, id, lease, pcts)
+					if err != nil && resErr == nil {
+						resErr = err
+					}
+				}
+			}
+		}
+	} else if s.txn == nil || s.txn.ID() != txn.ID() {
 		for id, lease := range s.leases {
 			if lease.scope == txnScoped {
 				delete(s.leases, id)
@@ -217,12 +265,12 @@ func (s *Session) PrepareForNextStmt(txn *client.Txn) {
 		}
 	}
 	s.txn = txn
-	pcts := txn.ProvisionalCommitTimestamp()
 	for _, lease := range s.leases {
 		if lease.scope == sessionScoped {
 			lease.Txn().PushTo(pcts)
 		}
 	}
+	return resErr
 }
 
 // Close closes the session. It goes through all of the session-scoped leases
