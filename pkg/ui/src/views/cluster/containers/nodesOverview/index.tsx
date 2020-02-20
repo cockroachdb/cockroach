@@ -67,6 +67,7 @@ export interface NodeStatusRow {
   availableCapacity: number;
   usedMemory: number;
   availableMemory: number;
+  numCpus: number;
   version?: string;
   /*
   * status is a union of Node statuses and two artificial statuses
@@ -179,6 +180,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       sorter: true,
       className: "column--align-right",
       width: "10%",
+      ellipsis: true,
     },
     {
       key: "replicas",
@@ -207,11 +209,19 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       width: "10%",
     },
     {
+      key: "numCpus",
+      title: "cpus",
+      dataIndex: "numCpus",
+      sorter: true,
+      className: "column--align-right",
+      width: "8%",
+    },
+    {
       key: "version",
       dataIndex: "version",
       title: "version",
       sorter: true,
-      width: "10%",
+      width: "8%",
       ellipsis: true,
     },
     {
@@ -240,7 +250,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       },
       title: "status",
       sorter: (a, b) => a.status - b.status,
-      width: "15%",
+      width: "13%",
     },
     {
       key: "logs",
@@ -373,6 +383,7 @@ export const liveNodesTableDataSelector = createSelector(
             availableCapacity,
             usedMemory: ns.metrics[MetricConstants.rss],
             availableMemory: FixLong(ns.total_system_memory).toNumber(),
+            numCpus: ns.num_cpus,
             version: ns.build_info.tag,
             status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE,
           };
@@ -387,6 +398,7 @@ export const liveNodesTableDataSelector = createSelector(
           availableCapacity: _.sum(nestedRows.map(nr => nr.availableCapacity)),
           usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
           availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
+          numCpus: _.sum(nestedRows.map(nr => nr.numCpus)),
           status: nestedRows.every(nestedRow => nestedRow.status === LivenessStatus.LIVE) ?
             AggregatedNodeStatus.LIVE : AggregatedNodeStatus.WARNING,
           children: nestedRows,
