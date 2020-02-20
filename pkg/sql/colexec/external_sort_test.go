@@ -46,10 +46,19 @@ func TestExternalSort(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
+	const maxNumberPartitions = 2
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+		if spillForced {
+			// In order to increase test coverage of recursive merging, we have the
+			// lowest possible memory limit - this will force creating partitions
+			// consisting of a single batch.
+			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 1
+		} else {
+			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+		}
 		for _, tcs := range [][]sortTestCase{sortAllTestCases, topKSortTestCases, sortChunksTestCases} {
 			for _, tc := range tcs {
 				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
@@ -61,6 +70,7 @@ func TestExternalSort(t *testing.T) {
 						func(input []Operator) (Operator, error) {
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
+								maxNumberPartitions,
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -92,7 +102,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	}
 	rng, _ := randutil.NewPseudoRand()
 	nTups := int(coldata.BatchSize()*4 + 1)
-	maxCols := 3
+	maxCols := 2
 	// TODO(yuzefovich): randomize types as well.
 	logTypes := make([]types.T, maxCols)
 	for i := range logTypes {
@@ -103,6 +113,7 @@ func TestExternalSortRandomized(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
+	const maxNumberPartitions = 2
 	// Interesting disk spilling scenarios:
 	// 1) The sorter is forced to spill to disk as soon as possible.
 	// 2) The memory limit is set to mon.DefaultPoolAllocationSize, this will
@@ -110,7 +121,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	//    memory limit.
 	for _, tk := range []execinfra.TestingKnobs{{ForceDiskSpill: true}, {MemoryLimitBytes: mon.DefaultPoolAllocationSize}} {
 		flowCtx.Cfg.TestingKnobs = tk
-		for nCols := 1; nCols < maxCols; nCols++ {
+		for nCols := 1; nCols <= maxCols; nCols++ {
 			for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 				namePrefix := "MemoryLimit=" + humanizeutil.IBytes(tk.MemoryLimitBytes)
 				if tk.ForceDiskSpill {
@@ -128,6 +139,7 @@ func TestExternalSortRandomized(t *testing.T) {
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols,
 								0 /* matchLen */, 0 /* k */, func() {},
+								maxNumberPartitions,
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -193,9 +205,13 @@ func BenchmarkExternalSort(b *testing.B) {
 					for n := 0; n < b.N; n++ {
 						source := newFiniteBatchSource(batch, nBatches)
 						var spilled bool
+						// TODO(yuzefovich): do not specify maxNumberPartitions (let the
+						// external sorter figure out that number itself) once we pass in
+						// filled-in disk queue config.
 						sorter, accounts, monitors, err := createDiskBackedSorter(
 							ctx, flowCtx, []Operator{source}, logTypes, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
+							64, /* maxNumberPartitions */
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -235,6 +251,7 @@ func createDiskBackedSorter(
 	matchLen int,
 	k uint16,
 	spillingCallbackFn func(),
+	maxNumberPartitions int,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	sorterSpec := &execinfrapb.SorterSpec{
 		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
@@ -258,6 +275,7 @@ func createDiskBackedSorter(
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
+	args.TestingKnobs.MaxNumberPartitions = maxNumberPartitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }
