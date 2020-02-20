@@ -3612,7 +3612,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arg := args[0]
 				if arg == tree.DNull {
-					return tree.NewDInt(tree.DInt(1)), nil
+					return tree.DZero, nil
 				}
 				n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(arg).JSON)
 				if err != nil {
