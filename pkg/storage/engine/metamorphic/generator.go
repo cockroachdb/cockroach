@@ -75,20 +75,31 @@ var engineImplPebble = engineImpl{"pebble", createTestPebbleEngine}
 // Object to store info corresponding to one metamorphic test run. Responsible
 // for generating and executing operations.
 type metaTestRunner struct {
-	ctx         context.Context
-	w           io.Writer
-	t           *testing.T
-	rng         *rand.Rand
-	seed        int64
-	path        string
-	engineImpls []engineImpl
-	curEngine   int
-	restarts    bool
-	engine      engine.Engine
-	tsGenerator tsGenerator
-	managers    map[operandType]operandManager
-	nameToOp    map[string]*mvccOp
-	weights     []int
+	ctx             context.Context
+	w               io.Writer
+	t               *testing.T
+	rng             *rand.Rand
+	seed            int64
+	path            string
+	engineImpls     []engineImpl
+	curEngine       int
+	restarts        bool
+	engine          engine.Engine
+	tsGenerator     tsGenerator
+	opGenerators    map[operandType]operandGenerator
+	txnGenerator    *txnGenerator
+	rwGenerator     *readWriterGenerator
+	iterGenerator   *iteratorGenerator
+	keyGenerator    *keyGenerator
+	valueGenerator  *valueGenerator
+	pastTSGenerator *pastTSGenerator
+	nextTSGenerator *nextTSGenerator
+	openIters       map[iteratorID]iteratorInfo
+	openBatches     map[readWriterID]engine.ReadWriter
+	openTxns        map[txnID]*roachpb.Transaction
+	nameToGenerator map[string]*opGenerator
+	ops             []opRun
+	weights         []int
 }
 
 func (m *metaTestRunner) init() {
@@ -104,42 +115,71 @@ func (m *metaTestRunner) init() {
 		m.t.Fatal(err)
 	}
 
-	m.managers = map[operandType]operandManager{
-		operandTransaction: &txnManager{
+	// Initialize opGenerator structs. These retain all generation time
+	// state of open objects.
+	m.txnGenerator = &txnGenerator{
+		rng:         m.rng,
+		tsGenerator: &m.tsGenerator,
+		txnIDMap:    make(map[txnID]*roachpb.Transaction),
+		openBatches: make(map[txnID]map[readWriterID]struct{}),
+		testRunner:  m,
+	}
+	m.rwGenerator = &readWriterGenerator{
+		rng:        m.rng,
+		m:          m,
+		batchIDMap: make(map[readWriterID]engine.Batch),
+	}
+	m.iterGenerator = &iteratorGenerator{
+		rng:          m.rng,
+		readerToIter: make(map[readWriterID][]iteratorID),
+		iterInfo:     make(map[iteratorID]iteratorInfo),
+	}
+	m.keyGenerator = &keyGenerator{
+		rng:         m.rng,
+		tsGenerator: &m.tsGenerator,
+	}
+	m.valueGenerator = &valueGenerator{m.rng}
+	m.pastTSGenerator = &pastTSGenerator{
+		rng:         m.rng,
+		tsGenerator: &m.tsGenerator,
+	}
+	m.nextTSGenerator = &nextTSGenerator{
+		pastTSGenerator: pastTSGenerator{
 			rng:         m.rng,
 			tsGenerator: &m.tsGenerator,
-			txnIDMap:    make(map[string]*roachpb.Transaction),
-			openBatches: make(map[*roachpb.Transaction]map[engine.Batch]struct{}),
-			testRunner:  m,
-		},
-		operandReadWriter: &readWriterManager{
-			rng:          m.rng,
-			m:            m,
-			batchToIDMap: make(map[engine.Batch]int),
-		},
-		operandMVCCKey: &keyManager{
-			rng:         m.rng,
-			tsGenerator: &m.tsGenerator,
-		},
-		operandPastTS: &tsManager{
-			rng:         m.rng,
-			tsGenerator: &m.tsGenerator,
-		},
-		operandValue:      &valueManager{m.rng},
-		operandTestRunner: &testRunnerManager{m},
-		operandIterator: &iteratorManager{
-			rng:          m.rng,
-			readerToIter: make(map[engine.Reader][]engine.Iterator),
-			iterToInfo:   make(map[engine.Iterator]iteratorInfo),
-			iterCounter:  0,
 		},
 	}
 
-	m.nameToOp = make(map[string]*mvccOp)
-	m.weights = make([]int, len(operations))
-	for i := range operations {
-		m.weights[i] = operations[i].weight
-		m.nameToOp[operations[i].name] = &operations[i]
+	m.opGenerators = map[operandType]operandGenerator{
+		operandTransaction: m.txnGenerator,
+		operandReadWriter:  m.rwGenerator,
+		operandMVCCKey:     m.keyGenerator,
+		operandPastTS:      m.pastTSGenerator,
+		operandNextTS:      m.nextTSGenerator,
+		operandValue:       m.valueGenerator,
+		operandIterator:    m.iterGenerator,
+	}
+
+	m.nameToGenerator = make(map[string]*opGenerator)
+	m.weights = make([]int, len(opGenerators))
+	for i := range opGenerators {
+		m.weights[i] = opGenerators[i].weight
+		m.nameToGenerator[opGenerators[i].name] = &opGenerators[i]
+	}
+	m.ops = nil
+	m.openIters = make(map[iteratorID]iteratorInfo)
+	m.openBatches = make(map[readWriterID]engine.ReadWriter)
+	m.openTxns = make(map[txnID]*roachpb.Transaction)
+}
+
+func (m *metaTestRunner) closeGenerators() {
+	closingOrder := []operandGenerator{
+		m.iterGenerator,
+		m.rwGenerator,
+		m.txnGenerator,
+	}
+	for _, generator := range closingOrder {
+		generator.closeAll()
 	}
 }
 
@@ -150,17 +190,64 @@ func (m *metaTestRunner) closeAll() {
 		// Engine already closed; possibly running in a defer after a panic.
 		return
 	}
-	// Close all open objects. This should let the engine close cleanly.
-	closingOrder := []operandType{
-		operandIterator,
-		operandReadWriter,
-		operandTransaction,
+	// If there are any open objects, close them.
+	for _, iter := range m.openIters {
+		iter.iter.Close()
 	}
-	for _, operandType := range closingOrder {
-		m.managers[operandType].closeAll()
+	for _, batch := range m.openBatches {
+		batch.Close()
 	}
+	// TODO(itsbilal): Abort all txns.
+	m.openIters = make(map[iteratorID]iteratorInfo)
+	m.openBatches = make(map[readWriterID]engine.ReadWriter)
+	m.openTxns = make(map[txnID]*roachpb.Transaction)
 	m.engine.Close()
 	m.engine = nil
+}
+
+// Getters and setters for txns, batches, and iterators.
+func (m *metaTestRunner) getTxn(id txnID) *roachpb.Transaction {
+	txn, ok := m.openTxns[id]
+	if !ok {
+		panic(fmt.Sprintf("txn with id %s not found", string(id)))
+	}
+	return txn
+}
+
+func (m *metaTestRunner) setTxn(id txnID, txn *roachpb.Transaction) {
+	m.openTxns[id] = txn
+}
+
+func (m *metaTestRunner) getReadWriter(id readWriterID) engine.ReadWriter {
+	if id == "engine" {
+		return m.engine
+	}
+
+	batch, ok := m.openBatches[id]
+	if !ok {
+		panic(fmt.Sprintf("batch with id %s not found", string(id)))
+	}
+	return batch
+}
+
+func (m *metaTestRunner) setReadWriter(id readWriterID, rw engine.ReadWriter) {
+	if id == "engine" {
+		// no-op
+		return
+	}
+	m.openBatches[id] = rw
+}
+
+func (m *metaTestRunner) getIterInfo(id iteratorID) iteratorInfo {
+	iter, ok := m.openIters[id]
+	if !ok {
+		panic(fmt.Sprintf("iter with id %s not found", string(id)))
+	}
+	return iter
+}
+
+func (m *metaTestRunner) setIterInfo(id iteratorID, iterInfo iteratorInfo) {
+	m.openIters[id] = iterInfo
 }
 
 // generateAndRun generates n operations using a TPCC-style deck shuffle with
@@ -168,9 +255,15 @@ func (m *metaTestRunner) closeAll() {
 func (m *metaTestRunner) generateAndRun(n int) {
 	deck := newDeck(m.rng, m.weights...)
 	for i := 0; i < n; i++ {
-		op := &operations[deck.Int()]
+		op := &opGenerators[deck.Int()]
 
-		m.resolveAndRunOp(op)
+		m.resolveAndAddOp(op)
+	}
+
+	for i := range m.ops {
+		opRun := &m.ops[i]
+		output := opRun.op.run(m.ctx)
+		m.printOp(opRun.name, opRun.args, output)
 	}
 }
 
@@ -197,9 +290,8 @@ func (m *metaTestRunner) restart() (string, string) {
 
 func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 	reader := bufio.NewReader(f)
-	lineCount := 0
+	lineCount := uint64(0)
 	for {
-		var argList []operand
 		var opName, argListString, expectedOutput string
 		var firstByte byte
 		var err error
@@ -209,7 +301,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 		firstByte, err = reader.ReadByte()
 		if err != nil {
 			if err == io.EOF {
-				return
+				break
 			}
 			m.t.Fatal(err)
 		}
@@ -217,7 +309,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 			// Advance to the end of the line and continue.
 			if _, err := reader.ReadString('\n'); err != nil {
 				if err == io.EOF {
-					return
+					break
 				}
 				m.t.Fatal(err)
 			}
@@ -226,7 +318,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 
 		if opName, err = reader.ReadString('('); err != nil {
 			if err == io.EOF {
-				return
+				break
 			}
 			m.t.Fatal(err)
 		}
@@ -261,79 +353,85 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 		if expectedOutput, err = reader.ReadString('\n'); err != nil {
 			m.t.Fatal(err)
 		}
-
-		// Resolve args
-		op := m.nameToOp[opName]
-		for i, operandType := range op.operands {
-			operandInstance := m.managers[operandType].parse(argStrings[i])
-			argList = append(argList, operandInstance)
-		}
-
-		actualOutput := m.runOp(opRun{
-			op:   m.nameToOp[opName],
-			args: argList,
+		opGenerator := m.nameToGenerator[opName]
+		m.ops = append(m.ops, opRun{
+			name:           opGenerator.name,
+			op:             opGenerator.generate(m.ctx, m, argStrings...),
+			args:           argStrings,
+			lineNum:        lineCount,
+			expectedOutput: expectedOutput,
 		})
+	}
 
-		if strings.Compare(strings.TrimSpace(expectedOutput), strings.TrimSpace(actualOutput)) != 0 {
+	for i := range m.ops {
+		op := &m.ops[i]
+		actualOutput := op.op.run(m.ctx)
+		m.printOp(op.name, op.args, actualOutput)
+		if strings.Compare(strings.TrimSpace(op.expectedOutput), strings.TrimSpace(actualOutput)) != 0 {
 			// Error messages can sometimes mismatch. If both outputs contain "error",
 			// consider this a pass.
-			if strings.Contains(expectedOutput, "error") && strings.Contains(actualOutput, "error") {
+			if strings.Contains(op.expectedOutput, "error") && strings.Contains(actualOutput, "error") {
 				continue
 			}
-			m.t.Fatalf("mismatching output at line %d: expected %s, got %s", lineCount, expectedOutput, actualOutput)
+			m.t.Fatalf("mismatching output at line %d: expected %s, got %s", op.lineNum, op.expectedOutput, actualOutput)
 		}
 	}
 }
 
-func (m *metaTestRunner) runOp(run opRun) string {
-	op := run.op
+func (m *metaTestRunner) generateAndAddOp(run opReference) mvccOp {
+	opGenerator := run.generator
 
 	// This operation might require other operations to run before it runs. Call
 	// the dependentOps method to resolve these dependencies.
-	if op.dependentOps != nil {
-		for _, opRun := range op.dependentOps(m, run.args...) {
-			m.runOp(opRun)
+	if opGenerator.dependentOps != nil {
+		for _, opReference := range opGenerator.dependentOps(m, run.args...) {
+			m.generateAndAddOp(opReference)
 		}
 	}
 
-	// Running the operation could cause this operand to not exist. Build strings
-	// for arguments beforehand.
-	argStrings := make([]string, len(op.operands))
-	for i, arg := range run.args {
-		argStrings[i] = m.managers[op.operands[i]].toString(arg)
-	}
-
-	output := op.run(m.ctx, m, run.args...)
-	m.printOp(op, argStrings, output)
-	return output
+	op := opGenerator.generate(m.ctx, m, run.args...)
+	m.ops = append(m.ops, opRun{
+		name: opGenerator.name,
+		op:   op,
+		args: run.args,
+	})
+	return op
 }
 
-// Resolve all operands (including recursively running openers for operands as
-// necessary) and run the specified operation.
-func (m *metaTestRunner) resolveAndRunOp(op *mvccOp) {
-	operandInstances := make([]operand, len(op.operands))
+// Resolve all operands (including recursively queueing openers for operands as
+// necessary) and add the specified operation to the operations list.
+func (m *metaTestRunner) resolveAndAddOp(op *opGenerator) {
+	argStrings := make([]string, len(op.operands))
 
 	// Operation op depends on some operands to exist in an open state.
-	// If those operands' managers report a zero count for that object's open
-	// instances, recursively call addOp with that operand type's opener.
+	// If those operands' opGenerators report a zero count for that object's open
+	// instances, recursively call generateAndAddOp with that operand type's
+	// opener.
 	for i, operand := range op.operands {
-		opManager := m.managers[operand]
-		if opManager.count() == 0 {
-			// Add this operation to the list first, so that it creates the dependency.
-			m.resolveAndRunOp(m.nameToOp[opManager.opener()])
+		opGenerator := m.opGenerators[operand]
+		// Special case: if this is an opener operation, and the operand is the
+		// last one in the list of operands, call getNew() to get a new ID instead.
+		if i == len(op.operands)-1 && op.isOpener {
+			argStrings[i] = opGenerator.getNew()
+			continue
 		}
-		operandInstances[i] = opManager.get()
+		if opGenerator.count() == 0 {
+			// Add this operation to the list first, so that it creates the
+			// dependency.
+			m.resolveAndAddOp(m.nameToGenerator[opGenerator.opener()])
+		}
+		argStrings[i] = opGenerator.get()
 	}
 
-	m.runOp(opRun{
-		op:   op,
-		args: operandInstances,
+	m.generateAndAddOp(opReference{
+		generator: op,
+		args:      argStrings,
 	})
 }
 
 // Print passed-in operation, arguments and output string to output file.
-func (m *metaTestRunner) printOp(op *mvccOp, argStrings []string, output string) {
-	fmt.Fprintf(m.w, "%s(", op.name)
+func (m *metaTestRunner) printOp(opName string, argStrings []string, output string) {
+	fmt.Fprintf(m.w, "%s(", opName)
 	for i, arg := range argStrings {
 		if i > 0 {
 			fmt.Fprintf(m.w, ", ")
