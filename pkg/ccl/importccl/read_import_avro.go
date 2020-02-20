@@ -478,10 +478,21 @@ func (a *avroInputReader) readFile(
 		return err
 	}
 
-	var count int64
 	a.conv.KvBatch.Source = inputIdx
 	a.conv.FractionFn = input.ReadFraction
-	a.conv.CompletedRowFn = func() int64 {
+
+	return importAvro(ctx, stream, inputIdx, resumePos, a.conv)
+}
+
+func importAvro(
+	ctx context.Context,
+	stream avroRowStream,
+	inputIdx int32,
+	resumePos int64,
+	conv *row.DatumRowConverter,
+) error {
+	var count int64
+	conv.CompletedRowFn = func() int64 {
 		return count
 	}
 
@@ -501,7 +512,7 @@ func (a *avroInputReader) readFile(
 	}
 
 	if stream.Err() == nil {
-		return a.conv.SendBatch(ctx)
+		return conv.SendBatch(ctx)
 	}
 
 	return stream.Err()
