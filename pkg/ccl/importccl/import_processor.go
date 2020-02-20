@@ -150,9 +150,12 @@ func makeInputConverter(
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
-		return newAvroInputReader(ctx, kvCh, singleTable, spec.Format.Avro, evalCtx)
+		return newAvroInputReader(
+			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
+			int(spec.ReaderParallelism), evalCtx)
 	default:
-		return nil, errors.Errorf("Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
+		return nil, errors.Errorf(
+			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
 	}
 }
 

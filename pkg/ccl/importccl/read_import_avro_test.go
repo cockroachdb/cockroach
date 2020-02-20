@@ -142,6 +142,8 @@ type testHelper struct {
 	schemaTable *sqlbase.TableDescriptor
 	codec       *goavro.Codec
 	gens        []avroGen
+	settings    *cluster.Settings
+	evalCtx     tree.EvalContext
 }
 
 var defaultGens = []avroGen{
@@ -189,25 +191,42 @@ func newTestHelper(t *testing.T, gens ...avroGen) *testHelper {
 
 	codec, err := goavro.NewCodec(string(schemaJSON))
 	require.NoError(t, err)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 
 	return &testHelper{
 		schemaJSON:  string(schemaJSON),
 		schemaTable: descForTable(t, createStmt, 10, 20, NoFKs),
 		codec:       codec,
 		gens:        gens,
+		settings:    st,
+		evalCtx:     evalCtx,
 	}
+}
+
+type testRecordStream struct {
+	importRowStream
+	rowNum int64
+	conv   *row.DatumRowConverter
+}
+
+// Combine Row() with FillDatums for error checking.
+func (t *testRecordStream) Row() error {
+	r, err := t.importRowStream.Row()
+	if err == nil {
+		t.rowNum++
+		err = t.FillDatums(r, t.rowNum, t.conv)
+	}
+	return err
 }
 
 // Generates test data with the specified format and returns avroRowStream object.
 func (th *testHelper) newRecordStream(
 	t *testing.T, format roachpb.AvroOptions_Format, strict bool, numRecords int,
-) avroRowStream {
+) *testRecordStream {
 	// Ensure datum converter doesn't flush (since
 	// we're using nil kv channel for this test).
 	defer row.TestingSetDatumRowConverterBatchSize(numRecords + 1)()
-	evalCtx := tree.MakeTestingEvalContext(nil)
-	conv, err := row.NewDatumRowConverter(context.Background(), th.schemaTable, nil, &evalCtx, nil)
-	require.NoError(t, err)
 
 	opts := roachpb.AvroOptions{
 		Format:     format,
@@ -223,9 +242,20 @@ func (th *testHelper) newRecordStream(
 		th.genRecordsData(t, format, numRecords, opts.RecordSeparator, records)
 	}
 
-	stream, err := newRowStream(opts, conv, &fileReader{Reader: records})
+	stream, err := newRowStream(opts, &fileReader{Reader: records}, "test", 0, th.schemaTable, nil)
 	require.NoError(t, err)
-	return stream
+
+	visibleCols := make(tree.NameList, len(th.schemaTable.VisibleColumns()))
+	for i, col := range th.schemaTable.VisibleColumns() {
+		visibleCols[i] = tree.Name(col.Name)
+	}
+	conv, err := row.NewDatumRowConverter(
+		context.Background(), th.schemaTable, visibleCols, th.evalCtx.Copy(), nil)
+	require.NoError(t, err)
+	return &testRecordStream{
+		importRowStream: stream,
+		conv:            conv,
+	}
 }
 
 func (th *testHelper) genAvroRecord() interface{} {
@@ -297,7 +327,7 @@ func TestReadsAvroRecords(t *testing.T) {
 			for _, skip := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%v-%v-skip=%v", format, readSize, skip), func(t *testing.T) {
 					stream := th.newRecordStream(t, format, false, 10)
-					stream.(*avroRecordStream).readSize = readSize
+					stream.importRowStream.(*avroRecordStream).readSize = readSize
 
 					var rowIdx int64
 					for stream.Scan() {
@@ -305,7 +335,7 @@ func TestReadsAvroRecords(t *testing.T) {
 						if skip {
 							err = stream.Skip()
 						} else {
-							err = stream.Row(context.TODO(), 0, rowIdx)
+							err = stream.Row()
 						}
 						require.NoError(t, err)
 						rowIdx++
@@ -332,7 +362,7 @@ func TestReadsAvroOcf(t *testing.T) {
 				if skip {
 					err = stream.Skip()
 				} else {
-					err = stream.Row(context.TODO(), 0, rowIdx)
+					err = stream.Row()
 				}
 				require.NoError(t, err)
 				rowIdx++
@@ -376,7 +406,7 @@ func TestRelaxedAndStrictImport(t *testing.T) {
 				if !stream.Scan() {
 					t.Fatal("expected a record, found none")
 				}
-				err := stream.Row(context.TODO(), 0, 0)
+				err := stream.Row()
 				if test.strict && err == nil {
 					t.Fatal("expected to fail, but alas")
 				}
@@ -397,7 +427,7 @@ func TestHandlesArrayData(t *testing.T) {
 	stream := th.newRecordStream(t, roachpb.AvroOptions_OCF, false, 10)
 	var rowIdx int64
 	for stream.Scan() {
-		if err := stream.Row(context.TODO(), 0, rowIdx); err != nil {
+		if err := stream.Row(); err != nil {
 			t.Fatal(err)
 		}
 		rowIdx++
@@ -408,37 +438,64 @@ func TestHandlesArrayData(t *testing.T) {
 }
 
 type limitAvroStream struct {
-	limit    int
-	input    *os.File
-	avroOpts roachpb.AvroOptions
-	conv     *row.DatumRowConverter
-	stream   avroRowStream
-	err      error
+	importRowStream
+	limit int
+	// Scan and Row methods operate on this stream since
+	// we may need to reopen it to generate enough data.
+	// All other methods use importRowStream directly.
+	readStream importRowStream
+	input      *os.File
+	avroOpts   roachpb.AvroOptions
+	descr      *sqlbase.TableDescriptor
+	err        error
+}
+
+func newLimitAvroStream(
+	limit int, input *os.File, avroOpts roachpb.AvroOptions, descr *sqlbase.TableDescriptor,
+) (*limitAvroStream, error) {
+	baseStream, err := newRowStream(
+		avroOpts, &fileReader{Reader: input}, "benchmark", 0, descr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	stream := &limitAvroStream{
+		importRowStream: baseStream,
+		limit:           limit,
+		readStream:      nil,
+		input:           input,
+		avroOpts:        avroOpts,
+		descr:           descr,
+	}
+
+	return stream, nil
 }
 
 func (l *limitAvroStream) reopenStream() {
 	_, l.err = l.input.Seek(0, 0)
 	if l.err == nil {
-		l.stream, l.err = newRowStream(l.avroOpts, l.conv, &fileReader{Reader: l.input})
+		l.readStream, l.err = newRowStream(
+			l.avroOpts, &fileReader{Reader: l.input}, "benchmark", 0, l.descr, nil)
 	}
 }
 
 func (l *limitAvroStream) Scan() bool {
 	l.limit--
-	for l.limit > 0 {
-		if l.stream == nil {
+	for l.limit >= 0 && l.err == nil {
+		if l.readStream == nil {
 			l.reopenStream()
 			if l.err != nil {
 				return false
 			}
 		}
 
-		if l.stream.Scan() {
+		if l.readStream.Scan() {
 			return true
 		}
 
-		l.err = l.stream.Err()
-		l.stream = nil
+		// Force reopen the stream until we read enough data.
+		l.err = l.readStream.Err()
+		l.readStream = nil
 	}
 	return false
 }
@@ -447,20 +504,25 @@ func (l *limitAvroStream) Err() error {
 	return l.err
 }
 
-func (l *limitAvroStream) Skip() error {
-	return l.stream.Skip()
+func (l *limitAvroStream) Row() (interface{}, error) {
+	return l.readStream.Row()
 }
 
-func (l *limitAvroStream) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
-	return l.stream.Row(ctx, sourceID, rowIndex)
-}
-
-var _ avroRowStream = &limitAvroStream{}
+var _ importRowStream = &limitAvroStream{}
 
 // goos: darwin
 // goarch: amd64
 // pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
-// BenchmarkOCFImport-16    	  200000	     11698 ns/op	  10.26 MB/s
+// BenchmarkOCFImport-16    	  500000	      2612 ns/op	  45.93 MB/s
+// BenchmarkOCFImport-16    	  500000	      2607 ns/op	  46.03 MB/s
+// BenchmarkOCFImport-16    	  500000	      2719 ns/op	  44.13 MB/s
+// BenchmarkOCFImport-16    	  500000	      2825 ns/op	  42.47 MB/s
+// BenchmarkOCFImport-16    	  500000	      2924 ns/op	  41.03 MB/s
+// BenchmarkOCFImport-16    	  500000	      2917 ns/op	  41.14 MB/s
+// BenchmarkOCFImport-16    	  500000	      2926 ns/op	  41.01 MB/s
+// BenchmarkOCFImport-16    	  500000	      2954 ns/op	  40.61 MB/s
+// BenchmarkOCFImport-16    	  500000	      2942 ns/op	  40.78 MB/s
+// BenchmarkOCFImport-16    	  500000	      2987 ns/op	  40.17 MB/s
 func BenchmarkOCFImport(b *testing.B) {
 	benchmarkAvroImport(b, roachpb.AvroOptions{
 		Format: roachpb.AvroOptions_OCF,
@@ -470,7 +532,16 @@ func BenchmarkOCFImport(b *testing.B) {
 // goos: darwin
 // goarch: amd64
 // pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
-// BenchmarkBinaryJSONImport-16    	  200000	     11774 ns/op	  10.19 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3021 ns/op	  39.71 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      2991 ns/op	  40.11 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3056 ns/op	  39.26 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3075 ns/op	  39.02 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3052 ns/op	  39.31 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3101 ns/op	  38.69 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3119 ns/op	  38.47 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3237 ns/op	  37.06 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3215 ns/op	  37.32 MB/s
+// BenchmarkBinaryJSONImport-16    	  500000	      3235 ns/op	  37.09 MB/s
 func BenchmarkBinaryJSONImport(b *testing.B) {
 	schemaBytes, err := ioutil.ReadFile("testdata/avro/stock-schema.json")
 	require.NoError(b, err)
@@ -524,20 +595,14 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 		}
 	}()
 
-	conv, err := row.NewDatumRowConverter(ctx, tableDesc.TableDesc(), nil /* targetColNames */, &evalCtx, kvCh)
-	require.NoError(b, err)
-
 	input, err := os.Open(testData)
 	require.NoError(b, err)
 
-	limitStream := &limitAvroStream{
-		limit:    b.N,
-		input:    input,
-		avroOpts: avroOpts,
-		conv:     conv,
-	}
+	limitStream, err := newLimitAvroStream(b.N, input, avroOpts, tableDesc.TableDesc())
+	require.NoError(b, err)
+	avro, err := newAvroInputReader(kvCh, tableDesc.TableDesc(), avroOpts, 0, 0, &evalCtx)
+	require.NoError(b, err)
 
 	b.ResetTimer()
-	require.NoError(b, importAvro(ctx, limitStream, 0, 0, conv))
-	close(kvCh)
+	require.NoError(b, avro.importAvro(ctx, limitStream, 0))
 }
