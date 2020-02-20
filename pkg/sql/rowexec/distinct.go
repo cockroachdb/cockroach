@@ -127,6 +127,10 @@ func newDistinct(
 	}
 	d.lastGroupKey = d.Out.RowAlloc.AllocRow(len(d.types))
 	d.haveLastGroupKey = false
+	// If we set up the arena when d is created, the pointer to the memAcc
+	// will be changed because the sortedDistinct case makes a copy of d.
+	// So we have to set up the account here.
+	d.arena = stringarena.Make(&d.memAcc)
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		d.input = newInputStatCollector(d.input)
