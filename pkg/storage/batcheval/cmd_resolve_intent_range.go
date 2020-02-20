@@ -42,13 +42,13 @@ func ResolveIntentRange(
 		return result.Result{}, ErrTransactionUnsupported
 	}
 
-	intent := args.AsIntent()
+	update := args.AsLockUpdate()
 
 	iterAndBuf := engine.GetIterAndBuf(readWriter, engine.IterOptions{UpperBound: args.EndKey})
 	defer iterAndBuf.Cleanup()
 
 	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, readWriter, iterAndBuf, ms, intent, cArgs.MaxKeys,
+		ctx, readWriter, iterAndBuf, ms, update, cArgs.MaxKeys,
 	)
 	if err != nil {
 		return result.Result{}, err

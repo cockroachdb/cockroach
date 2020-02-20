@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,16 +77,16 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			txn1CommitTS := *txn1Commit
 			txn1CommitTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
 			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
-				roachpb.MakeIntent(
+				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
-					roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
+					roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}, lock.Replicated),
 				math.MaxInt64); err != nil {
 				t.Fatal(err)
 			}
 			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
-				roachpb.MakeIntent(
+				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
-					roachpb.Span{Key: localKey, EndKey: localKey.Next()}),
+					roachpb.Span{Key: localKey, EndKey: localKey.Next()}, lock.Replicated),
 				math.MaxInt64); err != nil {
 				t.Fatal(err)
 			}
@@ -98,14 +99,14 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			txn2Pushed := *txn2
 			txn2Pushed.WriteTimestamp = hlc.Timestamp{Logical: 6}
 			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
-				roachpb.MakeIntent(&txn2Pushed, roachpb.Span{Key: testKey3}),
+				roachpb.MakeLockUpdate(&txn2Pushed, roachpb.Span{Key: testKey3}, lock.Replicated),
 			); err != nil {
 				t.Fatal(err)
 			}
 			txn2Abort := txn2Pushed
 			txn2Abort.Status = roachpb.ABORTED
 			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
-				roachpb.MakeIntent(&txn2Abort, roachpb.Span{Key: testKey3}),
+				roachpb.MakeLockUpdate(&txn2Abort, roachpb.Span{Key: testKey3}, lock.Replicated),
 			); err != nil {
 				t.Fatal(err)
 			}

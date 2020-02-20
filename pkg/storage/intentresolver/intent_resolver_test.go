@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,45 +37,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
-
-// TestPushTransactionsWithNonPendingIntent verifies that maybePushIntents
-// returns an error when a non-pending intent is passed.
-func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := client.NewDB(log.AmbientContext{
-		Tracer: tracing.NewTracer(),
-	}, client.NonTransactionalFactoryFunc(func(context.Context, roachpb.BatchRequest) (
-		*roachpb.BatchResponse, *roachpb.Error) {
-		return nil, nil
-	}), clock)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	ir := New(Config{
-		Stopper: stopper,
-		DB:      db,
-		Clock:   clock,
-	})
-
-	testCases := [][]roachpb.Intent{
-		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
-			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.STAGING}},
-		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
-			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.ABORTED}},
-		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
-			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.COMMITTED}},
-	}
-	for _, intents := range testCases {
-		if _, pErr := ir.maybePushIntents(
-			context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true,
-		); !testutils.IsPError(pErr, "unexpected (STAGING|ABORTED|COMMITTED) intent") {
-			t.Errorf("expected error on non-pending intent, but got %s", pErr)
-		}
-		if cnt := len(ir.mu.inFlightPushes); cnt != 0 {
-			t.Errorf("expected no inflight pushes refcount map entries, found %d", cnt)
-		}
-	}
-}
 
 // TestCleanupTxnIntentsOnGCAsync exercises the code which is used to
 // asynchronously clean up transaction intents and then transaction records.
@@ -93,7 +55,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	}
 	type testCase struct {
 		txn           *roachpb.Transaction
-		intents       []roachpb.Intent
+		intents       []roachpb.LockUpdate
 		sendFuncs     *sendFuncs
 		expectPushed  bool
 		expectSucceed bool
@@ -147,9 +109,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// has been pushed but that the garbage collection was not successful.
 		{
 			txn: txn1,
-			intents: []roachpb.Intent{
-				roachpb.MakeIntent(txn1, roachpb.Span{Key: key}),
-				roachpb.MakeIntent(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intents: []roachpb.LockUpdate{
+				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key}, lock.Replicated),
+				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, lock.Replicated),
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
@@ -167,10 +129,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn1,
-			intents: []roachpb.Intent{
-				roachpb.MakeIntent(txn1, roachpb.Span{Key: key}),
-				roachpb.MakeIntent(txn1, roachpb.Span{Key: roachpb.Key("aa")}),
-				roachpb.MakeIntent(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intents: []roachpb.LockUpdate{
+				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key}, lock.Replicated),
+				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: roachpb.Key("aa")}, lock.Replicated),
+				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, lock.Replicated),
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -206,9 +168,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// has been pushed but that the garbage collection was not successful.
 		{
 			txn: txn3,
-			intents: []roachpb.Intent{
-				roachpb.MakeIntent(txn3, roachpb.Span{Key: key}),
-				roachpb.MakeIntent(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intents: []roachpb.LockUpdate{
+				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key}, lock.Replicated),
+				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, lock.Replicated),
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
@@ -226,10 +188,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn3,
-			intents: []roachpb.Intent{
-				roachpb.MakeIntent(txn3, roachpb.Span{Key: key}),
-				roachpb.MakeIntent(txn3, roachpb.Span{Key: roachpb.Key("aa")}),
-				roachpb.MakeIntent(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intents: []roachpb.LockUpdate{
+				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key}, lock.Replicated),
+				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: roachpb.Key("aa")}, lock.Replicated),
+				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, lock.Replicated),
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -248,7 +210,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// is no push but that the gc has occurred successfully.
 		{
 			txn:           txn4,
-			intents:       []roachpb.Intent{},
+			intents:       []roachpb.LockUpdate{},
 			sendFuncs:     newSendFuncs(t, gcSendFunc(t)),
 			expectSucceed: true,
 		},
@@ -574,7 +536,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	}
 	wg.Wait()
 	testIntents := []roachpb.Intent{
-		roachpb.MakeIntent(txn, roachpb.Span{Key: roachpb.Key("a")}),
+		roachpb.MakePendingIntent(&txn.TxnMeta, roachpb.Span{Key: roachpb.Key("a")}),
 	}
 	// Running with allowSyncProcessing = false should result in an error and no
 	// requests being sent.
@@ -599,7 +561,7 @@ func TestCleanupIntentsAsync(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	testIntents := []roachpb.Intent{
-		roachpb.MakeIntent(txn, roachpb.Span{Key: roachpb.Key("a")}),
+		roachpb.MakePendingIntent(&txn.TxnMeta, roachpb.Span{Key: roachpb.Key("a")}),
 	}
 	cases := []testCase{
 		{
@@ -991,7 +953,7 @@ func TestCleanupIntents(t *testing.T) {
 	// Set txn.ID to a very small value so it's sorted deterministically first.
 	txn.ID = uuid.UUID{15: 0x01}
 	testIntents := []roachpb.Intent{
-		roachpb.MakeIntent(txn, roachpb.Span{Key: roachpb.Key("a")}),
+		roachpb.MakePendingIntent(&txn.TxnMeta, roachpb.Span{Key: roachpb.Key("a")}),
 	}
 	type testCase struct {
 		intents     []roachpb.Intent
@@ -1075,7 +1037,7 @@ func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.In
 	for i := 0; i < numIntents; i++ {
 		txn := newTransaction("test", roachpb.Key("a"), 1, clock)
 		ret = append(ret,
-			roachpb.MakeIntent(txn, roachpb.Span{Key: txn.Key}))
+			roachpb.MakePendingIntent(&txn.TxnMeta, roachpb.Span{Key: txn.Key}))
 	}
 	return ret
 }

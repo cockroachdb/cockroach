@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -134,7 +135,7 @@ type CleanupIntentsFunc func(context.Context, []roachpb.Intent) error
 // transaction record, pushing the transaction first if it is
 // PENDING. Once all intents are resolved successfully, removes the
 // transaction record.
-type CleanupTxnIntentsAsyncFunc func(context.Context, *roachpb.Transaction, []roachpb.Intent) error
+type CleanupTxnIntentsAsyncFunc func(context.Context, *roachpb.Transaction, []roachpb.LockUpdate) error
 
 // Run runs garbage collection for the specified descriptor on the
 // provided Engine (which is not mutated). It uses the provided gcFn
@@ -199,7 +200,7 @@ func Run(
 	// Push transactions (if pending) and resolve intents.
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
-		intents = append(intents, roachpb.AsIntents(intentSpanMap[txnID], txn)...)
+		intents = append(intents, roachpb.AsPendingIntents(&txn.TxnMeta, intentSpanMap[txnID])...)
 	}
 	info.ResolveTotal += len(intents)
 	log.Eventf(ctx, "cleanup of %d intents", len(intents))
@@ -406,7 +407,7 @@ func processLocalKeyRange(
 		// If the transaction needs to be pushed or there are intents to
 		// resolve, invoke the cleanup function.
 		if !txn.Status.IsFinalized() || len(txn.IntentSpans) > 0 {
-			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsIntents(txn.IntentSpans, txn))
+			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsLockUpdates(txn, txn.IntentSpans, lock.Replicated))
 		}
 		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key}) // zero timestamp
 		return nil

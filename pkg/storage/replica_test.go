@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
@@ -4284,8 +4285,8 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			}
 
 			if pErr := tc.store.intentResolver.ResolveIntents(context.TODO(),
-				[]roachpb.Intent{
-					roachpb.MakeIntent(&txnRecord, roachpb.Span{Key: key}),
+				[]roachpb.LockUpdate{
+					roachpb.MakeLockUpdate(&txnRecord, roachpb.Span{Key: key}, lock.Replicated),
 				}, intentresolver.ResolveOptions{Wait: true, Poison: true}); pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -4981,8 +4982,8 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	txn := newTransaction("name", key, 1, tc.Clock())
 	txn.Status = roachpb.COMMITTED
 	if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
-		[]roachpb.Intent{
-			roachpb.MakeIntent(txn, roachpb.Span{Key: key}),
+		[]roachpb.LockUpdate{
+			roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}, lock.Replicated),
 		},
 		intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */},
 	); pErr != nil {

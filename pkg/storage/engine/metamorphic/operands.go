@@ -17,6 +17,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -232,7 +233,7 @@ func (t *txnManager) open() *roachpb.Transaction {
 func (t *txnManager) close(op operand) {
 	txn := op.(*roachpb.Transaction)
 	for _, span := range txn.IntentSpans {
-		intent := roachpb.MakeIntent(txn, span)
+		intent := roachpb.MakeLockUpdate(txn, span, lock.Replicated)
 		intent.Status = roachpb.COMMITTED
 		_, err := engine.MVCCResolveWriteIntent(context.TODO(), t.testRunner.engine, nil, intent)
 		if err != nil {

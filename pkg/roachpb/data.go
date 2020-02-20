@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -1782,15 +1783,49 @@ func (l *Lease) Equal(that interface{}) bool {
 	return true
 }
 
-// AsIntents takes a slice of spans and returns it as a slice of intents for
-// the given transaction.
-func AsIntents(spans []Span, txn *Transaction) []Intent {
+// MakePendingIntent makes an intent in the pending state with the
+// given span and txn. This is suitable for use when constructing
+// WriteIntentError.
+func MakePendingIntent(txn *enginepb.TxnMeta, span Span) Intent {
+	return Intent{
+		Span: span,
+		Txn:  *txn,
+	}
+}
+
+// AsPendingIntents takes a slice of spans and returns it as a slice of intents
+// for the given transaction.
+func AsPendingIntents(txn *enginepb.TxnMeta, spans []Span) []Intent {
 	ret := make([]Intent, len(spans))
 	for i := range spans {
-		ret[i] = Intent{Span: spans[i]}
-		ret[i].SetTxn(txn)
+		ret[i] = MakePendingIntent(txn, spans[i])
 	}
 	return ret
+}
+
+// MakeLockUpdate makes a lock update from the given span and txn.
+func MakeLockUpdate(txn *Transaction, span Span, dur lock.Durability) LockUpdate {
+	update := LockUpdate{Span: span}
+	update.SetTxn(txn)
+	update.Durability = dur
+	return update
+}
+
+// AsLockUpdates takes a slice of spans and returns it as a slice of lock updates
+// for the given transaction.
+func AsLockUpdates(txn *Transaction, spans []Span, dur lock.Durability) []LockUpdate {
+	ret := make([]LockUpdate, len(spans))
+	for i := range spans {
+		ret[i] = MakeLockUpdate(txn, spans[i], dur)
+	}
+	return ret
+}
+
+// SetTxn updates the transaction details in the lock update.
+func (u *LockUpdate) SetTxn(txn *Transaction) {
+	u.Txn = txn.TxnMeta
+	u.Status = txn.Status
+	u.IgnoredSeqNums = txn.IgnoredSeqNums
 }
 
 // EqualValue compares for equality.
@@ -2128,29 +2163,4 @@ func init() {
 	// Inject the format dependency into the enginepb package.
 	enginepb.FormatBytesAsKey = func(k []byte) string { return Key(k).String() }
 	enginepb.FormatBytesAsValue = func(v []byte) string { return Value{RawBytes: v}.PrettyPrint() }
-}
-
-// MakeIntent makes an intent from the given span and txn.
-func MakeIntent(txn *Transaction, span Span) Intent {
-	intent := Intent{Span: span}
-	intent.SetTxn(txn)
-	return intent
-}
-
-// MakePendingIntent makes an intent in the pending state with the
-// given span and txn. This is suitable for use when constructing
-// WriteIntentError.
-func MakePendingIntent(txn *enginepb.TxnMeta, span Span) Intent {
-	return Intent{
-		Span:   span,
-		Txn:    *txn,
-		Status: PENDING,
-	}
-}
-
-// SetTxn updates the transaction details in the intent.
-func (i *Intent) SetTxn(txn *Transaction) {
-	i.Txn = txn.TxnMeta
-	i.Status = txn.Status
-	i.IgnoredSeqNums = txn.IgnoredSeqNums
 }

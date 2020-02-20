@@ -426,7 +426,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 			}
 			return err
 		},
-		func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent) error {
+		func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
 			err := repl.store.intentResolver.
 				CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, intents, gcTimestamp,
 					func(pushed, succeeded bool) {

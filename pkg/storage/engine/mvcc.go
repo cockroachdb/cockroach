@@ -2631,7 +2631,7 @@ func MVCCIterate(
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent,
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
 ) (bool, error) {
 	iterAndBuf := GetBufUsingIter(rw.NewIterator(IterOptions{Prefix: true}))
 	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
@@ -2647,7 +2647,7 @@ func MVCCResolveWriteIntentUsingIter(
 	rw ReadWriter,
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
-	intent roachpb.Intent,
+	intent roachpb.LockUpdate,
 ) (bool, error) {
 	if len(intent.Key) == 0 {
 		return false, emptyKeyError()
@@ -2688,7 +2688,7 @@ func mvccResolveWriteIntent(
 	rw ReadWriter,
 	iter Iterator,
 	ms *enginepb.MVCCStats,
-	intent roachpb.Intent,
+	intent roachpb.LockUpdate,
 	buf *putBuffer,
 	forRange bool,
 ) (bool, error) {
@@ -3083,9 +3083,9 @@ func (b IterAndBuf) Cleanup() {
 // txns. Returns the number of intents resolved and a resume span if
 // the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent, max int64,
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
 ) (int64, *roachpb.Span, error) {
-	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.Span.EndKey})
+	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
 	defer iterAndBuf.Cleanup()
 	return MVCCResolveWriteIntentRangeUsingIter(ctx, rw, iterAndBuf, ms, intent, max)
 }
@@ -3100,7 +3100,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	rw ReadWriter,
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
-	intent roachpb.Intent,
+	intent roachpb.LockUpdate,
 	max int64,
 ) (int64, *roachpb.Span, error) {
 	encKey := MakeMVCCMetadataKey(intent.Key)

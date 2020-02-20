@@ -237,7 +237,7 @@ func runGCOld(
 	// Push transactions (if pending) and resolve intents.
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
-		intents = append(intents, roachpb.AsIntents(intentSpanMap[txnID], txn)...)
+		intents = append(intents, roachpb.AsPendingIntents(&txn.TxnMeta, intentSpanMap[txnID])...)
 	}
 	info.ResolveTotal += len(intents)
 	log.Eventf(ctx, "cleanup of %d intents", len(intents))

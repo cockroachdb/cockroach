@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -206,12 +207,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
 
-			intent1 := roachpb.MakeIntent(&txn1, roachpb.Span{Key: testKey1})
+			intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1}, lock.Replicated)
 			intent1.Status = roachpb.COMMITTED
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
 				t.Fatal(err)
 			}
-			intent2 := roachpb.MakeIntent(&txn2, roachpb.Span{Key: testKey2})
+			intent2 := roachpb.MakeLockUpdate(&txn2, roachpb.Span{Key: testKey2}, lock.Replicated)
 			intent2.Status = roachpb.ABORTED
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
@@ -296,12 +297,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
 
-			intent1 := roachpb.MakeIntent(&txn1, roachpb.Span{Key: testKey1})
+			intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1}, lock.Replicated)
 			intent1.Status = roachpb.COMMITTED
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
 				t.Fatal(err)
 			}
-			intent2 := roachpb.MakeIntent(&txn2, roachpb.Span{Key: testKey2})
+			intent2 := roachpb.MakeLockUpdate(&txn2, roachpb.Span{Key: testKey2}, lock.Replicated)
 			intent2.Status = roachpb.ABORTED
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
