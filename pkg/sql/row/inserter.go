@@ -158,7 +158,20 @@ func (ri *Inserter) InsertRow(
 		}
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
+	// We don't want to insert any empty k/v's, so set includeEmpty to false.
+	// Consider the following case:
+	// TABLE t (
+	//   x INT PRIMARY KEY, y INT, z INT, w INT,
+	//   INDEX (y) STORING (z, w),
+	//   FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (w)
+	//)
+	// If we are to insert row (1, 2, 3, NULL), the k/v pair for
+	// index i that encodes column w would have an empty value,
+	// because w is null, and the sole resident of that family.
+	// We don't want to insert empty k/v's like this, so we
+	// set includeEmpty to false.
+	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(
+		ri.InsertColIDtoRowIndex, values, false /* includeEmpty */)
 	if err != nil {
 		return err
 	}
