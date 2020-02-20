@@ -325,7 +325,7 @@ func (j *Job) resumed(ctx context.Context) error {
 		}
 		// We use the absence of error to determine what state we should
 		// resume into.
-		if md.Payload.Error == "" {
+		if md.Payload.FinalResumeError == nil {
 			ju.UpdateStatus(StatusRunning)
 		} else {
 			ju.UpdateStatus(StatusReverting)
@@ -351,8 +351,9 @@ func (j *Job) cancelRequested(
 		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
 			return nil
 		}
-		if md.Payload.Error != "" {
-			return fmt.Errorf("job with %s cannot be requested to be canceled", md.Payload.Error)
+		if md.Payload.FinalResumeError != nil {
+			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
+			return fmt.Errorf("job with error %s cannot be requested to be canceled", decodedErr.Error())
 		}
 		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
 			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
@@ -392,7 +393,9 @@ func (j *Job) pauseRequested(
 }
 
 // Reverted sets the status of the tracked job to reverted.
-func (j *Job) Reverted(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
+func (j *Job) Reverted(
+	ctx context.Context, err error, fn func(context.Context, *client.Txn) error,
+) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusReverting {
 			return nil
@@ -403,6 +406,17 @@ func (j *Job) Reverted(ctx context.Context, fn func(context.Context, *client.Txn
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
 				return err
+			}
+		}
+		if err != nil {
+			md.Payload.Error = err.Error()
+			encodedErr := errors.EncodeError(ctx, err)
+			md.Payload.FinalResumeError = &encodedErr
+			ju.UpdatePayload(md.Payload)
+		} else {
+			if md.Payload.FinalResumeError == nil {
+				return errors.AssertionFailedf(
+					"tried to mark job as reverting, but no error was provided or recorded")
 			}
 		}
 		ju.UpdateStatus(StatusReverting)
@@ -448,8 +462,6 @@ func (j *Job) Failed(
 		}
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
-		encodedErr := errors.EncodeError(ctx, err)
-		md.Payload.ResumeErrors = append(md.Payload.ResumeErrors, &encodedErr)
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
@@ -545,6 +557,25 @@ func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn
 	return j.registry.db.Txn(ctx, fn)
 }
 
+// JobNotFoundError is returned from load when the job does not exist.
+type JobNotFoundError struct {
+	jobID int64
+}
+
+// Error makes JobNotFoundError an error.
+func (e *JobNotFoundError) Error() string {
+	return fmt.Sprintf("job with ID %d does not exist", e.jobID)
+}
+
+// HasJobNotFoundError returns true if the error contains a JobNotFoundError.
+func HasJobNotFoundError(err error) bool {
+	_, hasJobNotFoundError := errors.If(err, func(err error) (interface{}, bool) {
+		_, isJobNotFoundError := err.(*JobNotFoundError)
+		return err, isJobNotFoundError
+	})
+	return hasJobNotFoundError
+}
+
 func (j *Job) load(ctx context.Context) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
@@ -557,7 +588,7 @@ func (j *Job) load(ctx context.Context) error {
 			return err
 		}
 		if row == nil {
-			return fmt.Errorf("job with ID %d does not exist", *j.ID())
+			return &JobNotFoundError{jobID: *j.ID()}
 		}
 		payload, err = UnmarshalPayload(row[0])
 		if err != nil {

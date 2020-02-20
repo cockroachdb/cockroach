@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -67,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptprovider"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/storage/reports"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -203,8 +205,9 @@ type Server struct {
 	internalMemMetrics  sql.MemoryMetrics
 	adminMemMetrics     sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
-	sqlMemMetrics       sql.MemoryMetrics
-	protectedtsProvider protectedts.Provider
+	sqlMemMetrics         sql.MemoryMetrics
+	protectedtsProvider   protectedts.Provider
+	protectedtsReconciler *ptreconcile.Reconciler
 }
 
 // NewServer creates a Server from a server.Config.
@@ -478,11 +481,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		)
 	}
 
-	s.protectedtsProvider = ptprovider.New(ptprovider.Config{
+	if s.protectedtsProvider, err = ptprovider.New(ptprovider.Config{
 		DB:               s.db,
 		InternalExecutor: internalExecutor,
 		Settings:         st,
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
@@ -522,7 +527,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// before this is ever called.
 			Refresh: func(rangeIDs ...roachpb.RangeID) {
 				for _, rangeID := range rangeIDs {
-					repl, err := s.node.stores.GetReplicaForRangeID(rangeID)
+					repl, _, err := s.node.stores.GetReplicaForRangeID(rangeID)
 					if err != nil || repl == nil {
 						continue
 					}
@@ -582,6 +587,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		jobAdoptionStopFile,
 	)
 	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
+	s.protectedtsReconciler = ptreconcile.NewReconciler(ptreconcile.Config{
+		Settings: s.st,
+		Stores:   s.node.stores,
+		DB:       s.db,
+		Storage:  s.protectedtsProvider,
+		Cache:    s.protectedtsProvider,
+		StatusFuncs: ptreconcile.StatusFuncs{
+			jobsprotectedts.MetaType: jobsprotectedts.MakeStatusFunc(s.jobRegistry),
+		},
+	})
+	s.registry.AddMetricStruct(s.protectedtsReconciler.Metrics())
 
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
@@ -1617,7 +1633,11 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
 		return err
 	}
 

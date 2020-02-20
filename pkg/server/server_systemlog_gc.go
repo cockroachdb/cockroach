@@ -70,7 +70,7 @@ func (s *Server) gcSystemLog(
 	ctx context.Context, table string, timestampLowerBound, timestampUpperBound time.Time,
 ) (time.Time, int64, error) {
 	var totalRowsAffected int64
-	repl, err := s.node.stores.GetReplicaForRangeID(roachpb.RangeID(1))
+	repl, _, err := s.node.stores.GetReplicaForRangeID(roachpb.RangeID(1))
 	if roachpb.IsRangeNotFoundError(err) {
 		return timestampLowerBound, 0, nil
 	}

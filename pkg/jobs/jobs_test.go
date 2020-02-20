@@ -1769,6 +1769,8 @@ func TestJobInTxn(t *testing.T) {
 		registry := s.JobRegistry().(*jobs.Registry)
 		_, err = registry.LoadJob(ctx, *job.ID())
 		require.Error(t, err, "the job should not exist after the txn is rolled back")
+		require.True(t, jobs.HasJobNotFoundError(err))
+
 		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 		// Just in case the job was scheduled let's wait for it to finish
 		// to avoid a race.

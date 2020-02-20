@@ -190,6 +190,32 @@ func TestRefresh(t *testing.T) {
 		defer st.setFilter(nil)
 		require.Regexp(t, "boom", c.Refresh(ctx, s.Clock().Now()).Error())
 	})
+	t.Run("Iterate does not hold mutex", func(t *testing.T) {
+		inIterate := make(chan chan struct{})
+		rec, createdAt := protect(t, s, p, metaTableSpan)
+		require.NoError(t, c.Refresh(ctx, createdAt))
+		go c.Iterate(ctx, keys.MinKey, keys.MaxKey, func(r *ptpb.Record) (wantMore bool) {
+			if r.ID != rec.ID {
+				return true
+			}
+			// Make sure we see the record we created and use it to signal the main
+			// goroutine.
+			waitUntil := make(chan struct{})
+			inIterate <- waitUntil
+			<-waitUntil
+			defer close(inIterate)
+			return false
+		})
+		// Wait until we get to the record in iteration and pause, perform an
+		// operation, amd then refresh after it. This will demonstrate that the
+		// iteration call does not block concurrent refreshes.
+		ch := <-inIterate
+		require.NoError(t, p.Release(ctx, nil /* txn */, rec.ID))
+		require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
+		// Signal the Iterate loop to exit and wait for it to close the channel.
+		close(ch)
+		<-inIterate
+	})
 }
 
 func TestStart(t *testing.T) {
