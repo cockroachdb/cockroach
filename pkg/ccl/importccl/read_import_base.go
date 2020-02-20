@@ -396,7 +396,7 @@ type importFileContext struct {
 func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error) error {
 	log.Error(ctx, err)
 
-	if rowErr, isRowErr := err.(*importRowError); isRowErr && fileCtx.rejected == nil {
+	if rowErr, isRowErr := err.(*importRowError); isRowErr && fileCtx.rejected != nil {
 		fileCtx.rejected <- rowErr.row + "\n"
 		return nil
 	}
@@ -418,7 +418,7 @@ func makeDatumConverter(
 // importRowProducer is producer of "rows" that must be imported.
 // Row is an opaque interface{} object which will be passed onto
 // the consumer implementation.
-// The implementations of this interface not not need to be thread safe.
+// The implementations of this interface need not need to be thread safe.
 // However, since the data returned by the Row() method may be
 // handled by a different go-routine, the data returned must not access,
 // or reference internal state in a thread-unsafe way.
@@ -428,7 +428,7 @@ type importRowProducer interface {
 	// that the scanner has not encountered an error (Err() == nil).
 	Scan() bool
 
-	// Err returns an error (if any) encountered when processing avro stream.
+	// Err returns an error (if any) encountered while processing rows.
 	Err() error
 
 	// Skip, as the name implies, skips the current record in this stream.
@@ -458,8 +458,9 @@ type batch struct {
 // parallelImporter is a helper to facilitate running input
 // conversion using parallel workers.
 type parallelImporter struct {
-	b        batch
-	recordCh chan batch
+	b         batch
+	batchSize int
+	recordCh  chan batch
 }
 
 var parallelImporterReaderBatchSize = 500
@@ -492,7 +493,8 @@ func runParallelImport(
 		b: batch{
 			data: make([]interface{}, 0, batchSize),
 		},
-		recordCh: make(chan batch),
+		batchSize: batchSize,
+		recordCh:  make(chan batch),
 	}
 
 	group := ctxgroup.WithContext(ctx)
@@ -517,20 +519,7 @@ func runParallelImport(
 		defer close(importer.recordCh)
 
 		var count int64
-		for {
-			// Scan more data, unless we're done.
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				if !producer.Scan() {
-					if producer.Err() == nil {
-						return importer.flush()
-					}
-					return producer.Err()
-				}
-			}
-
+		for producer.Scan() {
 			// Skip rows if needed.
 			count++
 			if count <= fileCtx.skip {
@@ -549,31 +538,44 @@ func runParallelImport(
 				continue
 			}
 
-			if err := importer.add(data, count, producer.Progress); err != nil {
+			if err := importer.add(ctx, data, count, producer.Progress); err != nil {
 				return err
 			}
 		}
+
+		if producer.Err() == nil {
+			return importer.flush(ctx)
+		}
+		return producer.Err()
 	})
 
 	return group.Wait()
 }
 
 // Adds data to the current batch, flushing batches as needed.
-func (p *parallelImporter) add(data interface{}, pos int64, progress func() float32) error {
+func (p *parallelImporter) add(
+	ctx context.Context, data interface{}, pos int64, progress func() float32,
+) error {
 	if len(p.b.data) == 0 {
 		p.b.startPos = pos
 	}
 	p.b.data = append(p.b.data, data)
 
-	if len(p.b.data) == cap(p.b.data) {
+	if len(p.b.data) == p.batchSize {
 		p.b.progress = progress()
-		return p.flush()
+		return p.flush(ctx)
 	}
 	return nil
 }
 
 // Flush flushes currently accumulated data.
-func (p *parallelImporter) flush() error {
+func (p *parallelImporter) flush(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// if the batch isn't empty, we need to flush it.
 	if len(p.b.data) > 0 {
 		p.recordCh <- p.b
