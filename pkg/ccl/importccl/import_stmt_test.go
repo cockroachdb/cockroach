@@ -2121,9 +2121,8 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
-		stripFilenameQuotes := strings.ReplaceAll(testFiles.files[0][1:len(testFiles.files[0])-1], "?", "\\?")
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("%s: row 1: expected 3 fields, got 2", stripFilenameQuotes),
+			t, "row 1: expected 3 fields, got 2",
 			fmt.Sprintf(`IMPORT INTO t (a, b, c) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -2134,9 +2133,8 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
-		stripFilenameQuotes := strings.ReplaceAll(testFiles.files[0][1:len(testFiles.files[0])-1], "?", "\\?")
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("%s: row 1: expected 1 fields, got 2", stripFilenameQuotes),
+			t, "row 1: expected 1 fields, got 2",
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -3556,8 +3554,11 @@ func TestImportAvro(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Play a bit with producer/consumer batch sizes.
+			defer TestingSetParallelImporterReaderBatchSize(13 * i)()
+
 			_, err := sqlDB.DB.ExecContext(context.Background(), `DROP TABLE IF EXISTS simple CASCADE`)
 			require.NoError(t, err)
 

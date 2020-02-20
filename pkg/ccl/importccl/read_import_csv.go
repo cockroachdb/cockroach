@@ -30,18 +30,6 @@ type csvInputReader struct {
 
 var _ inputConverter = &csvInputReader{}
 
-var inputReaderBatchSize = 500
-
-// TestingSetCsvInputReaderBatchSize is a testing knob to modify
-// csv input reader batch size.
-// Returns a function that resets the value back to the default.
-func TestingSetCsvInputReaderBatchSize(s int) func() {
-	inputReaderBatchSize = s
-	return func() {
-		inputReaderBatchSize = 500
-	}
-}
-
 func newCSVInputReader(
 	kvCh chan row.KVBatch,
 	opts roachpb.CSVOptions,
@@ -102,7 +90,9 @@ func (c *csvInputReader) readFile(
 
 type csvRowProducer struct {
 	importCtx *parallelImportContext
+	opts      *roachpb.CSVOptions
 	csv       *csv.Reader
+	rowNum    int64
 	err       error
 	record    []string
 	progress  func() float32
@@ -133,8 +123,17 @@ func (p *csvRowProducer) Skip() error {
 	return nil
 }
 
+func strRecord(record []string, sep rune) string {
+	csvSep := ","
+	if sep != 0 {
+		csvSep = string(sep)
+	}
+	return strings.Join(record, csvSep)
+}
+
 // Row() implements importRowProducer interface.
 func (p *csvRowProducer) Row() (interface{}, error) {
+	p.rowNum++
 	expectedCols := len(p.importCtx.tableDesc.VisibleColumns())
 	if len(p.record) == expectedCols {
 		// Expected number of columns.
@@ -142,7 +141,11 @@ func (p *csvRowProducer) Row() (interface{}, error) {
 		// Line has the optional trailing comma, ignore the empty field.
 		p.record = p.record[:expectedCols]
 	} else {
-		return nil, errors.Errorf("expected %d fields, got %d: %#v", expectedCols, len(p.record), p.record)
+		return nil, newImportRowError(
+			errors.Errorf("expected %d fields, got %d", expectedCols, len(p.record)),
+			strRecord(p.record, p.opts.Comma),
+			p.rowNum)
+
 	}
 	return p.record, nil
 }
@@ -166,13 +169,6 @@ func (c *csvRowConsumer) FillDatums(
 	record := row.([]string)
 	datumIdx := 0
 
-	csvSep := func() string {
-		if c.opts.Comma != 0 {
-			return string(c.opts.Comma)
-		}
-		return ""
-	}
-
 	for i, field := range record {
 		// Skip over record entries corresponding to columns not in the target
 		// columns specified by the user.
@@ -189,8 +185,9 @@ func (c *csvRowConsumer) FillDatums(
 			if err != nil {
 				col := conv.VisibleCols[i]
 				return newImportRowError(errors.Wrapf(
-					err, "parse %q as %q", col.Name, col.Type.SQLString()),
-					strings.Join(record, csvSep()),
+					err,
+					"parse %q as %s", col.Name, col.Type.SQLString()),
+					strRecord(record, c.opts.Comma),
 					rowNum)
 			}
 		}
@@ -210,6 +207,7 @@ func newCSVPipeline(c *csvInputReader, input *fileReader) (*csvRowProducer, *csv
 
 	producer := &csvRowProducer{
 		importCtx: c.importCtx,
+		opts:      &c.opts,
 		csv:       cr,
 		progress:  func() float32 { return input.ReadFraction() },
 	}
