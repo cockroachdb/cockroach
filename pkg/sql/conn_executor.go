@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgadvisory"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -568,6 +569,7 @@ func (s *Server) newConnExecutor(
 		ctxHolder:                 ctxHolder{connCtx: ctx},
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
+		pgadvisorySession:         pgadvisory.NewSession(s.cfg.DB, s.cfg.LockManager),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -817,6 +819,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
+	if err := ex.pgadvisorySession.Close(ctx); err != nil {
+		log.Warningf(ctx, "error while closing pgadvisory.Session: %s", err)
+	}
+
 	if closeType != panicClose {
 		// Close all statements and prepared portals.
 		ex.extraTxnState.prepStmtsNamespace.resetTo(ctx, prepStmtNamespace{})
@@ -1028,6 +1034,8 @@ type connExecutor struct {
 	// hasCreatedTemporarySchema is set if the executor has created a
 	// temporary schema, which requires special cleanup on close.
 	hasCreatedTemporarySchema bool
+
+	pgadvisorySession *pgadvisory.Session
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1905,23 +1913,24 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		ex.server.cfg.Settings,
 	)
 	ie.SetSessionData(ex.sessionData)
-
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Planner:            p,
-			Sequence:           p,
-			SessionData:        ex.sessionData,
-			SessionAccessor:    p,
-			PrivilegedAccessor: p,
-			Settings:           ex.server.cfg.Settings,
-			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,
-			ClusterID:          ex.server.cfg.ClusterID(),
-			ClusterName:        ex.server.cfg.RPCContext.ClusterName(),
-			NodeID:             ex.server.cfg.NodeID.Get(),
-			Locality:           ex.server.cfg.Locality,
-			ReCache:            ex.server.reCache,
-			InternalExecutor:   &ie,
-			DB:                 ex.server.cfg.DB,
+			Planner:                   p,
+			Sequence:                  p,
+			SessionData:               ex.sessionData,
+			SessionAccessor:           p,
+			PrivilegedAccessor:        p,
+			Settings:                  ex.server.cfg.Settings,
+			TestingKnobs:              ex.server.cfg.EvalContextTestingKnobs,
+			ClusterID:                 ex.server.cfg.ClusterID(),
+			ClusterName:               ex.server.cfg.RPCContext.ClusterName(),
+			NodeID:                    ex.server.cfg.NodeID.Get(),
+			Locality:                  ex.server.cfg.Locality,
+			ReCache:                   ex.server.reCache,
+			InternalExecutor:          &ie,
+			DB:                        ex.server.cfg.DB,
+			PGAdvisorySession:         ex.pgadvisorySession,
+			SingleVersionLeaseManager: ex.server.cfg.SingleVersionLeaseManager,
 		},
 		SessionMutator:    ex.dataMutator,
 		VirtualSchemas:    ex.server.cfg.VirtualSchemas,

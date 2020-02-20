@@ -158,6 +158,12 @@ func declareKeysEndTxn(
 	}
 }
 
+// TODO(sbhola): is this path only taken when the transaction is itself
+// deciding to abort or commit? If yes, we can avoid doing anything with the
+// ts cache here under the assumption that the lease is held properly only
+// under two conditions (a) the transaction successfully commit, (b) the
+// (session lease holding) transaction is aborted by some other party.
+//
 // EndTxn either commits or aborts (rolls back) an extant transaction according
 // to the args.Commit parameter. Rolling back an already rolled-back txn is ok.
 // TODO(nvanbenschoten): rename this file to cmd_end_txn.go once some of andrei's
@@ -226,7 +232,7 @@ func EndTxn(
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				desc := cArgs.EvalCtx.Desc()
-				externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+				externalIntents, abortedIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 				if err != nil {
 					return result.Result{}, err
 				}
@@ -235,9 +241,11 @@ func EndTxn(
 				); err != nil {
 					return result.Result{}, err
 				}
+				res := result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison)
+				res.Local.AbortedLeasingIntents = abortedIntents
 				// Use alwaysReturn==true because the transaction is definitely
 				// aborted, no matter what happens to this command.
-				return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), nil
+				return res, nil
 			}
 			// If the transaction was previously aborted by a concurrent writer's
 			// push, any intents written are still open. It's only now that we know
@@ -332,7 +340,7 @@ func EndTxn(
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve intents for this transaction in the future.
 	desc := cArgs.EvalCtx.Desc()
-	externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+	externalIntents, abortedIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -376,6 +384,7 @@ func EndTxn(
 	// if the commit actually happens; otherwise, we risk losing writes.
 	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
 	intentsResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
+	intentsResult.Local.AbortedLeasingIntents = abortedIntents
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
 	}
@@ -454,7 +463,7 @@ func resolveLocalIntents(
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
-) ([]roachpb.Span, error) {
+) ([]roachpb.Span, []roachpb.Intent, error) {
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which intents are local (note that for a split, we want to use the
@@ -475,6 +484,10 @@ func resolveLocalIntents(
 		// These transactions rely on having their intents resolved synchronously.
 		resolveAllowance = math.MaxInt64
 	}
+	var abortedLeasingIntents []roachpb.Intent
+	leasingIntentFunc := func(intent roachpb.Intent) {
+		abortedLeasingIntents = append(abortedLeasingIntents, intent)
+	}
 	for _, span := range args.IntentSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
@@ -490,7 +503,7 @@ func resolveLocalIntents(
 					return nil
 				}
 				resolveMS := ms
-				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
+				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent, leasingIntentFunc)
 				if ok {
 					resolveAllowance--
 				}
@@ -503,7 +516,7 @@ func resolveLocalIntents(
 			externalIntents = append(externalIntents, outSpans...)
 			if inSpan != nil {
 				intent.Span = *inSpan
-				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance)
+				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance, leasingIntentFunc)
 				if err != nil {
 					return err
 				}
@@ -521,17 +534,17 @@ func resolveLocalIntents(
 			}
 			return nil
 		}(); err != nil {
-			return nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
+			return nil, nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
 		}
 	}
 
 	removedAny := resolveAllowance != intentResolutionBatchSize
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
 		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return externalIntents, nil
+	return externalIntents, abortedLeasingIntents, nil
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status

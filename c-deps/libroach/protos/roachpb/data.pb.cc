@@ -362,11 +362,12 @@ static void InitDefaultsIntent() {
   ::cockroach::roachpb::Intent::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<3> scc_info_Intent =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsIntent}, {
+::google::protobuf::internal::SCCInfo<4> scc_info_Intent =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsIntent}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsSequencedWrite() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -4470,6 +4471,8 @@ void Intent::InitAsDefaultInstance() {
       ::cockroach::roachpb::Span::internal_default_instance());
   ::cockroach::roachpb::_Intent_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
       ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_Intent_default_instance_._instance.get_mutable()->heartbeat_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 void Intent::clear_txn() {
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
@@ -4480,11 +4483,18 @@ void Intent::clear_txn() {
 void Intent::clear_ignored_seqnums() {
   ignored_seqnums_.Clear();
 }
+void Intent::clear_heartbeat_timestamp() {
+  if (GetArenaNoVirtual() == NULL && heartbeat_timestamp_ != NULL) {
+    delete heartbeat_timestamp_;
+  }
+  heartbeat_timestamp_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Intent::kSpanFieldNumber;
 const int Intent::kTxnFieldNumber;
 const int Intent::kStatusFieldNumber;
 const int Intent::kIgnoredSeqnumsFieldNumber;
+const int Intent::kHeartbeatTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Intent::Intent()
@@ -4509,6 +4519,11 @@ Intent::Intent(const Intent& from)
   } else {
     txn_ = NULL;
   }
+  if (from.has_heartbeat_timestamp()) {
+    heartbeat_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.heartbeat_timestamp_);
+  } else {
+    heartbeat_timestamp_ = NULL;
+  }
   status_ = from.status_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Intent)
 }
@@ -4527,6 +4542,7 @@ Intent::~Intent() {
 void Intent::SharedDtor() {
   if (this != internal_default_instance()) delete span_;
   if (this != internal_default_instance()) delete txn_;
+  if (this != internal_default_instance()) delete heartbeat_timestamp_;
 }
 
 void Intent::SetCachedSize(int size) const {
@@ -4553,6 +4569,10 @@ void Intent::Clear() {
     delete txn_;
   }
   txn_ = NULL;
+  if (GetArenaNoVirtual() == NULL && heartbeat_timestamp_ != NULL) {
+    delete heartbeat_timestamp_;
+  }
+  heartbeat_timestamp_ = NULL;
   status_ = 0;
   _internal_metadata_.Clear();
 }
@@ -4621,6 +4641,17 @@ bool Intent::MergePartialFromCodedStream(
         break;
       }
 
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_heartbeat_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -4671,6 +4702,11 @@ void Intent::SerializeWithCachedSizes(
       output);
   }
 
+  if (this->has_heartbeat_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, this->_internal_heartbeat_timestamp(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Intent)
@@ -4704,6 +4740,12 @@ size_t Intent::ByteSizeLong() const {
         *txn_);
   }
 
+  if (this->has_heartbeat_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *heartbeat_timestamp_);
+  }
+
   // .cockroach.roachpb.TransactionStatus status = 3;
   if (this->status() != 0) {
     total_size += 1 +
@@ -4734,6 +4776,9 @@ void Intent::MergeFrom(const Intent& from) {
   if (from.has_txn()) {
     mutable_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.txn());
   }
+  if (from.has_heartbeat_timestamp()) {
+    mutable_heartbeat_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.heartbeat_timestamp());
+  }
   if (from.status() != 0) {
     set_status(from.status());
   }
@@ -4759,6 +4804,7 @@ void Intent::InternalSwap(Intent* other) {
   CastToBase(&ignored_seqnums_)->InternalSwap(CastToBase(&other->ignored_seqnums_));
   swap(span_, other->span_);
   swap(txn_, other->txn_);
+  swap(heartbeat_timestamp_, other->heartbeat_timestamp_);
   swap(status_, other->status_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

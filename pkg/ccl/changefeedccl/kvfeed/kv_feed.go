@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,17 +33,19 @@ import (
 
 // Config configures a kvfeed.
 type Config struct {
-	Settings *cluster.Settings
-	DB       *client.DB
-	Clock    *hlc.Clock
-	Gossip   *gossip.Gossip
-	Spans    []roachpb.Span
-	Targets  jobspb.ChangefeedTargets
-	Sink     EventBufferWriter
-	LeaseMgr *sql.LeaseManager
-	Metrics  *Metrics
-	MM       *mon.BytesMonitor
-	WithDiff bool
+	Settings                  *cluster.Settings
+	DistSender                *kv.DistSender
+	DB                        *client.DB
+	Clock                     *hlc.Clock
+	Gossip                    *gossip.Gossip
+	Spans                     []roachpb.Span
+	Targets                   jobspb.ChangefeedTargets
+	SingleVersionLeaseManager *leasemanager.LeaseManager
+	Sink                      EventBufferWriter
+	LeaseMgr                  *sql.LeaseManager
+	Metrics                   *Metrics
+	MM                        *mon.BytesMonitor
+	WithDiff                  bool
 
 	// InitialHighWater is the timestamp from which new events are guaranteed to
 	// be produced.
@@ -61,7 +64,7 @@ func Run(ctx context.Context, cfg Config) error {
 	g := ctxgroup.WithContext(ctx)
 	var sf schemaFeed
 	{
-		rawSF := schemafeed.New(makeTablefeedConfig(cfg))
+		rawSF := schemafeed.NewLeasedSchemaFeed(makeTablefeedConfig(cfg))
 		// Start polling the schemafeed, which must be done concurrently with
 		// the individual rangefeed routines.
 		g.GoCtx(rawSF.Run)
@@ -77,9 +80,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	var pff physicalFeedFactory
 	{
-		sender := cfg.DB.NonTransactionalSender()
-		distSender := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
-		pff = rangefeedFactory(distSender.RangeFeed)
+		pff = rangefeedFactory(cfg.DistSender.RangeFeed)
 	}
 	bf := func() EventBuffer {
 		return makeMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
@@ -344,10 +345,12 @@ func copyFromSourceToSinkUntilTableEvent(
 func makeTablefeedConfig(cfg Config) schemafeed.Config {
 	return schemafeed.Config{
 		DB:               cfg.DB,
+		DistSender:       cfg.DistSender,
 		Clock:            cfg.Clock,
 		Settings:         cfg.Settings,
 		Targets:          cfg.Targets,
 		LeaseManager:     cfg.LeaseMgr,
+		LockManager:      cfg.SingleVersionLeaseManager,
 		FilterFunc:       defaultBackfillPolicy.ShouldFilter,
 		InitialHighWater: cfg.InitialHighWater,
 	}

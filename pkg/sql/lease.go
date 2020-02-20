@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -162,6 +164,8 @@ type LeaseStore struct {
 	leaseRenewalTimeout time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
+
+	singleVersionLeaseManager *leasemanager.LeaseManager
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
@@ -354,6 +358,7 @@ func (s LeaseStore) PublishMultiple(
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+		log.Infof(ctx, "publish multiple ", tableIDs)
 		// Wait until there are no unexpired leases on the previous versions
 		// of the tables.
 		expectedVersions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
@@ -422,6 +427,22 @@ func (s LeaseStore) PublishMultiple(
 					return err
 				}
 			}
+			for tid := range tableDescs {
+				log.Infof(ctx, "acquiring exclusive lock for %v", tid)
+				k := encoding.EncodeUntaggedIntValue(nil, int64(tid))
+				notifyKey := encoding.EncodeUntaggedIntValue(keys.MakeTablePrefix(keys.TableDescriptorSingleVersionLockNotifyTableID),
+					int64(tid))
+				l, err := s.singleVersionLeaseManager.AcquireExclusiveWithAction(ctx, txn, func(ctx context.Context) error {
+					return s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+						return txn.Put(ctx, notifyKey, []byte{'a'})
+					})
+				}, k)
+				if err != nil {
+					return err
+				}
+				log.Infof(ctx, "acquired exclusive lock for %v@%v", tid, l.StartTime())
+			}
+
 			if logEvent != nil {
 				// If an event log is required for this update, ensure that the
 				// descriptor change occurs first in the transaction. This is
@@ -1412,19 +1433,21 @@ func NewLeaseManager(
 	testingKnobs LeaseManagerTestingKnobs,
 	stopper *stop.Stopper,
 	cfg *base.LeaseManagerConfig,
+	singleVersionLeaseMananger *leasemanager.LeaseManager,
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			nodeIDContainer:     nodeIDContainer,
-			db:                  db,
-			clock:               clock,
-			internalExecutor:    internalExecutor,
-			settings:            settings,
-			group:               &singleflight.Group{},
-			leaseDuration:       cfg.TableDescriptorLeaseDuration,
-			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
-			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
-			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
+			nodeIDContainer:           nodeIDContainer,
+			db:                        db,
+			clock:                     clock,
+			internalExecutor:          internalExecutor,
+			settings:                  settings,
+			group:                     &singleflight.Group{},
+			leaseDuration:             cfg.TableDescriptorLeaseDuration,
+			leaseJitterFraction:       cfg.TableDescriptorLeaseJitterFraction,
+			leaseRenewalTimeout:       cfg.TableDescriptorLeaseRenewalTimeout,
+			testingKnobs:              testingKnobs.LeaseStoreTestingKnobs,
+			singleVersionLeaseManager: singleVersionLeaseMananger,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{

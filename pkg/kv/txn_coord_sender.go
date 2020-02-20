@@ -875,6 +875,22 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 	return tc.mu.txn.CommitTimestampFixed
 }
 
+func (tc *TxnCoordSender) PushTo(ts hlc.Timestamp) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txn.WriteTimestamp.Less(ts) {
+		tc.mu.txn.WriteTimestamp = ts
+	}
+}
+
+func (tc *TxnCoordSender) ForceHeartbeat() error {
+	return tc.interceptorAlloc.txnHeartbeater.forceHeartbeat()
+}
+
+func (tc *TxnCoordSender) ExpiryTimestamp() hlc.Timestamp {
+	return tc.interceptorAlloc.txnHeartbeater.expiryTimestamp()
+}
+
 // SetFixedTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()

@@ -210,6 +210,7 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			t.cfg,
+			cfgCpy.SingleVersionLeaseManager,
 		)
 		mgr.PeriodicallyRefreshSomeLeases()
 		t.nodes[nodeID] = mgr

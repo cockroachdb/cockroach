@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgadvisory"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2811,6 +2813,8 @@ type EvalContext struct {
 	// A handle to the database.
 	DB *client.DB
 
+	PGAdvisorySession *pgadvisory.Session
+
 	ReCache *RegexpCache
 	tmpDec  apd.Decimal
 
@@ -2828,6 +2832,8 @@ type EvalContext struct {
 	TestingKnobs EvalContextTestingKnobs
 
 	Mon *mon.BytesMonitor
+
+	SingleVersionLeaseManager *leasemanager.LeaseManager
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

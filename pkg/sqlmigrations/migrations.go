@@ -289,6 +289,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              migrateSystemNamespace,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
 	},
+	{
+		// Introduced in v20.1.
+		// TODO(yuzefovich): Bake this migration into v20.2.
+		name:                "create system.pg_locks table",
+		workFn:              createPGLocksTable,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionPGLocks),
+		newDescriptorIDs:    staticIDs(keys.PGLocksTableID),
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -796,6 +804,10 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 
 func createReportsMetaTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.ReportsMetaTable)
+}
+
+func createPGLocksTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.PGLocksTable)
 }
 
 // SettingsDefaultOverrides documents the effect of several migrations that add

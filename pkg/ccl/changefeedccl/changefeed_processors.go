@@ -16,8 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -214,20 +216,23 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*sql.LeaseManager)
+	distSender := ca.flowCtx.Cfg.DB.NonTransactionalSender().(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := kvfeed.Config{
-		Sink:             buf,
-		Settings:         ca.flowCtx.Cfg.Settings,
-		DB:               ca.flowCtx.Cfg.DB,
-		Clock:            ca.flowCtx.Cfg.DB.Clock(),
-		Gossip:           ca.flowCtx.Cfg.Gossip,
-		Spans:            spans,
-		Targets:          ca.spec.Feed.Targets,
-		LeaseMgr:         leaseMgr,
-		Metrics:          &metrics.KVFeedMetrics,
-		MM:               ca.kvFeedMemMon,
-		InitialHighWater: initialHighWater,
-		WithDiff:         withDiff,
+		Sink:                      buf,
+		Settings:                  ca.flowCtx.Cfg.Settings,
+		DistSender:                distSender,
+		DB:                        ca.flowCtx.Cfg.DB,
+		Clock:                     ca.flowCtx.Cfg.DB.Clock(),
+		Gossip:                    ca.flowCtx.Cfg.Gossip,
+		SingleVersionLeaseManager: ca.flowCtx.EvalCtx.SingleVersionLeaseManager,
+		Spans:                     spans,
+		Targets:                   ca.spec.Feed.Targets,
+		LeaseMgr:                  leaseMgr,
+		Metrics:                   &metrics.KVFeedMetrics,
+		MM:                        ca.kvFeedMemMon,
+		InitialHighWater:          initialHighWater,
+		WithDiff:                  withDiff,
 	}
 	// The initial scan semantics are currently defined by whether this is the
 	// first run of a changefeed which did not specify a cursor.

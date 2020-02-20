@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgadvisory"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -205,6 +207,7 @@ type Server struct {
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics       sql.MemoryMetrics
 	protectedtsProvider protectedts.Provider
+	lockManager         pgadvisory.LockManager
 }
 
 // NewServer creates a Server from a server.Config.
@@ -484,6 +487,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Settings:         st,
 	})
 
+	s.lockManager = leasemanager.New(keys.MakeTablePrefix(keys.PGLocksTableID), s.db)
+
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
 
@@ -587,6 +592,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(distSQLMetrics)
 
 	// Set up Lease Manager
+	singleVersionLeaseTablePrefix := keys.MakeTablePrefix(keys.TableDescriptorSingleVersionLockTableID)
+	singleVersionLeaseManager := leasemanager.New(singleVersionLeaseTablePrefix, s.db)
 	var lmKnobs sql.LeaseManagerTestingKnobs
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
 		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
@@ -601,6 +608,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		lmKnobs,
 		s.stopper,
 		s.cfg.LeaseManagerConfig,
+		singleVersionLeaseManager,
 	)
 
 	// Set up the DistSQL server.
@@ -639,8 +647,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeDialer:   s.nodeDialer,
 		LeaseManager: s.leaseMgr,
 
-		ExternalStorage:        externalStorage,
-		ExternalStorageFromURI: externalStorageFromURI,
+		ExternalStorage:            externalStorage,
+		ExternalStorageFromURI:     externalStorageFromURI,
+		SingleVersionLeaseMananger: singleVersionLeaseManager,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
@@ -701,7 +710,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	loggerCtx, _ := s.stopper.WithCancelOnStop(ctx)
-
 	execCfg = sql.ExecutorConfig{
 		Settings:                s.st,
 		NodeInfo:                nodeInfo,
@@ -765,6 +773,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
 		ProtectedTimestampProvider: s.protectedtsProvider,
+		LockManager:                s.lockManager,
+		SingleVersionLeaseManager:  singleVersionLeaseManager,
 	}
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

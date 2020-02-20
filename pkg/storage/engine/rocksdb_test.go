@@ -61,7 +61,7 @@ func TestBatchReadLaterWrite(t *testing.T) {
 
 	v := roachpb.MakeValueFromString("foo")
 
-	if err := MVCCPut(ctx, eng, nil, key, hlc.Timestamp{}, v, nil); err != nil {
+	if err := MVCCPut(ctx, eng, nil, key, hlc.Timestamp{}, v, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -492,7 +492,7 @@ func TestRocksDBApproximateDiskBytes(t *testing.T) {
 		key = append(key, []byte(fmt.Sprintf("#%d", i))...) // make unique
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 1<<20))
 		value.InitChecksum(key)
-		if err := MVCCPut(context.Background(), rocksdb, nil, key, ts, value, nil); err != nil {
+		if err := MVCCPut(context.Background(), rocksdb, nil, key, ts, value, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := rocksdb.Flush(); err != nil {

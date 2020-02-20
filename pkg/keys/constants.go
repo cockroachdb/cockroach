@@ -360,6 +360,10 @@ const (
 
 	ProtectedTimestampsMetaTableID    = 31
 	ProtectedTimestampsRecordsTableID = 32
+	PGLocksTableID                    = 33
+
+	TableDescriptorSingleVersionLockTableID       = 34
+	TableDescriptorSingleVersionLockNotifyTableID = 35
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

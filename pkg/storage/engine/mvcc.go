@@ -656,7 +656,7 @@ func MVCCPutProto(
 		return err
 	}
 	value.InitChecksum(key)
-	return MVCCPut(ctx, rw, ms, key, timestamp, value, txn)
+	return MVCCPut(ctx, rw, ms, key, timestamp, value, txn, nil)
 }
 
 // MVCCBlindPutProto sets the given key to the protobuf-serialized byte string
@@ -1137,6 +1137,17 @@ func (b *putBuffer) putMeta(
 	return int64(key.EncodedSize()), int64(len(bytes)), nil
 }
 
+type PutOptions struct {
+	LeasingIntent bool
+}
+
+func (o *PutOptions) isLeasingIntent() bool {
+	if o == nil {
+		return false
+	}
+	return o.LeasingIntent
+}
+
 // MVCCPut sets the value for a specified key. It will save the value
 // with different versions according to its timestamp and update the
 // key metadata. The timestamp must be passed as a parameter; using
@@ -1161,6 +1172,7 @@ func MVCCPut(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
+	options *PutOptions,
 ) error {
 	// If we're not tracking stats for the key and we're writing a non-versioned
 	// key we can utilize a blind put to avoid reading any existing value.
@@ -1170,7 +1182,7 @@ func MVCCPut(
 		iter = rw.NewIterator(IterOptions{Prefix: true})
 		defer iter.Close()
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, value, txn, nil, options)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -1192,7 +1204,7 @@ func MVCCBlindPut(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(ctx, writer, nil, ms, key, timestamp, value, txn, nil /* valueFn */)
+	return mvccPutUsingIter(ctx, writer, nil, ms, key, timestamp, value, txn, nil, nil)
 }
 
 // MVCCDelete marks the key deleted so that it will not be returned in
@@ -1212,7 +1224,7 @@ func MVCCDelete(
 	iter := rw.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, nil, nil)
 }
 
 var noValue = roachpb.Value{}
@@ -1231,6 +1243,7 @@ func mvccPutUsingIter(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(*roachpb.Value) ([]byte, error),
+	options *PutOptions,
 ) error {
 	var rawBytes []byte
 	if valueFn == nil {
@@ -1242,8 +1255,7 @@ func mvccPutUsingIter(
 
 	buf := newPutBuffer()
 
-	err := mvccPutInternal(ctx, writer, iter, ms, key, timestamp, rawBytes,
-		txn, buf, valueFn)
+	err := mvccPutInternal(ctx, writer, iter, ms, key, timestamp, rawBytes, txn, buf, valueFn, options)
 
 	// Using defer would be more convenient, but it is measurably slower.
 	buf.release()
@@ -1418,6 +1430,7 @@ func mvccPutInternal(
 	txn *roachpb.Transaction,
 	buf *putBuffer,
 	valueFn func(*roachpb.Value) ([]byte, error),
+	options *PutOptions,
 ) error {
 	if len(key) == 0 {
 		return emptyKeyError()
@@ -1729,6 +1742,10 @@ func mvccPutInternal(
 		}
 		buf.newMeta.Txn = txnMeta
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(writeTimestamp)
+		if options.isLeasingIntent() {
+			buf.newMeta.LeasingIntent = new(bool)
+			*buf.newMeta.LeasingIntent = true
+		}
 	}
 	newMeta := &buf.newMeta
 
@@ -1835,7 +1852,7 @@ func MVCCIncrement(
 		newValue.SetInt(newInt64Val)
 		newValue.InitChecksum(key)
 		return newValue.RawBytes, nil
-	})
+	}, nil)
 
 	return newInt64Val, err
 }
@@ -1914,23 +1931,21 @@ func mvccConditionalPutUsingIter(
 	allowNoExisting CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(
-		ctx, writer, iter, ms, key, timestamp, noValue, txn,
-		func(existVal *roachpb.Value) ([]byte, error) {
-			if expValPresent, existValPresent := expVal != nil, existVal.IsPresent(); expValPresent && existValPresent {
-				// Every type flows through here, so we can't use the typed getters.
-				if !expVal.EqualData(*existVal) {
-					return nil, &roachpb.ConditionFailedError{
-						ActualValue: existVal.ShallowClone(),
-					}
-				}
-			} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
+	return mvccPutUsingIter(ctx, writer, iter, ms, key, timestamp, noValue, txn, func(existVal *roachpb.Value) ([]byte, error) {
+		if expValPresent, existValPresent := expVal != nil, existVal.IsPresent(); expValPresent && existValPresent {
+			// Every type flows through here, so we can't use the typed getters.
+			if !expVal.EqualData(*existVal) {
 				return nil, &roachpb.ConditionFailedError{
 					ActualValue: existVal.ShallowClone(),
 				}
 			}
-			return value.RawBytes, nil
-		})
+		} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
+			return nil, &roachpb.ConditionFailedError{
+				ActualValue: existVal.ShallowClone(),
+			}
+		}
+		return value.RawBytes, nil
+	}, nil)
 }
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
@@ -1989,21 +2004,19 @@ func mvccInitPutUsingIter(
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(
-		ctx, rw, iter, ms, key, timestamp, noValue, txn,
-		func(existVal *roachpb.Value) ([]byte, error) {
-			if failOnTombstones && existVal != nil && len(existVal.RawBytes) == 0 {
-				// We found a tombstone and failOnTombstones is true: fail.
-				return nil, &roachpb.ConditionFailedError{ActualValue: existVal.ShallowClone()}
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, func(existVal *roachpb.Value) ([]byte, error) {
+		if failOnTombstones && existVal != nil && len(existVal.RawBytes) == 0 {
+			// We found a tombstone and failOnTombstones is true: fail.
+			return nil, &roachpb.ConditionFailedError{ActualValue: existVal.ShallowClone()}
+		}
+		if existVal.IsPresent() && !existVal.EqualData(value) {
+			// The existing value does not match the supplied value.
+			return nil, &roachpb.ConditionFailedError{
+				ActualValue: existVal.ShallowClone(),
 			}
-			if existVal.IsPresent() && !existVal.EqualData(value) {
-				// The existing value does not match the supplied value.
-				return nil, &roachpb.ConditionFailedError{
-					ActualValue: existVal.ShallowClone(),
-				}
-			}
-			return value.RawBytes, nil
-		})
+		}
+		return value.RawBytes, nil
+	}, nil)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
@@ -2282,8 +2295,7 @@ func MVCCDeleteRange(
 	iter := rw.NewIterator(IterOptions{Prefix: true})
 
 	for i := range res.KVs {
-		err = mvccPutInternal(
-			ctx, rw, iter, ms, res.KVs[i].Key, timestamp, nil, txn, buf, nil)
+		err = mvccPutInternal(ctx, rw, iter, ms, res.KVs[i].Key, timestamp, nil, txn, buf, nil, nil)
 		if err != nil {
 			break
 		}
@@ -2631,10 +2643,14 @@ func MVCCIterate(
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent,
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	intent roachpb.Intent,
+	leasingIntentFunc func(intent roachpb.Intent),
 ) (bool, error) {
 	iterAndBuf := GetBufUsingIter(rw.NewIterator(IterOptions{Prefix: true}))
-	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
+	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent, leasingIntentFunc)
 	// Using defer would be more convenient, but it is measurably slower.
 	iterAndBuf.Cleanup()
 	return ok, err
@@ -2648,6 +2664,7 @@ func MVCCResolveWriteIntentUsingIter(
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
+	leasingIntentFunc func(intent roachpb.Intent),
 ) (bool, error) {
 	if len(intent.Key) == 0 {
 		return false, emptyKeyError()
@@ -2655,9 +2672,7 @@ func MVCCResolveWriteIntentUsingIter(
 	if len(intent.EndKey) > 0 {
 		return false, errors.Errorf("can't resolve range intent as point intent")
 	}
-	return mvccResolveWriteIntent(
-		ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf, false, /* forRange */
-	)
+	return mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf, false, leasingIntentFunc)
 }
 
 // unsafeNextVersion positions the iterator at the successor to latestKey. If this value
@@ -2691,6 +2706,7 @@ func mvccResolveWriteIntent(
 	intent roachpb.Intent,
 	buf *putBuffer,
 	forRange bool,
+	leasingIntentFunc func(intent roachpb.Intent),
 ) (bool, error) {
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
@@ -2831,6 +2847,13 @@ func mvccResolveWriteIntent(
 			pushed = false
 			inProgress = false
 		}
+	}
+
+	if !commit && !inProgress && (meta.LeasingIntent != nil && *meta.LeasingIntent) {
+		if leasingIntentFunc == nil {
+			panic("expected leasingIntentFunc with a leasing intent")
+		}
+		leasingIntentFunc(intent)
 	}
 
 	// There's nothing to do if meta's epoch is greater than or equal txn's
@@ -3087,7 +3110,7 @@ func MVCCResolveWriteIntentRange(
 ) (int64, *roachpb.Span, error) {
 	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.Span.EndKey})
 	defer iterAndBuf.Cleanup()
-	return MVCCResolveWriteIntentRangeUsingIter(ctx, rw, iterAndBuf, ms, intent, max)
+	return MVCCResolveWriteIntentRangeUsingIter(ctx, rw, iterAndBuf, ms, intent, max, nil)
 }
 
 // MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back)
@@ -3102,6 +3125,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
 	max int64,
+	leasingIntentFunc func(intent roachpb.Intent),
 ) (int64, *roachpb.Span, error) {
 	encKey := MakeMVCCMetadataKey(intent.Key)
 	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
@@ -3135,8 +3159,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 		if !key.IsValue() {
 			intent.Key = key.Key
 			ok, err = mvccResolveWriteIntent(
-				ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf, true, /* forRange */
-			)
+				ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf, true, leasingIntentFunc)
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", key.Key, err)

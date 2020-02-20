@@ -53,6 +53,7 @@ const (
 	VersionRootPassword
 	VersionNoExplicitForeignKeyIndexIDs
 	VersionHashShardedIndexes
+	VersionPGLocks
 
 	// Add new versions here (step one of two).
 )
@@ -349,7 +350,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// timestamps subsystem.
 		//
 		// In this version and later the system.protected_ts_meta and
-		// system.protected_ts_records tables are part of the system bootstap
+		// system.protected_ts_records tables are part of the system bootstrap
 		// schema.
 		Key:     VersionProtectedTimestamps,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
@@ -407,6 +408,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// ranges with said shard column.
 		Key:     VersionHashShardedIndexes,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
+	},
+	{
+		// VersionPGLocks introduces the system table for the pg_advisory_locks
+		// subsystem.
+		//
+		// In this version and later the system.pg_locks table is part of the
+		// system bootstrap schema.
+		Key:     VersionPGLocks,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 0},
 	},
 
 	// Add new versions here (step two of two).

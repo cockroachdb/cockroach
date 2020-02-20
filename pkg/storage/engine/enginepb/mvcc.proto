@@ -72,6 +72,8 @@ message MVCCMetadata {
   // This provides a measure of protection against replays caused by
   // Raft duplicating merge commands.
   optional util.hlc.LegacyTimestamp merge_timestamp = 7;
+
+  optional bool leasing_intent = 9;
 }
 
 // MVCCStats tracks byte and instance counts for various groups of keys,

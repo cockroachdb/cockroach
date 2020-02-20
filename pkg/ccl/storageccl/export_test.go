@@ -532,7 +532,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 		value.InitChecksum(key)
-		if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+		if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -543,7 +543,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 			ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
 			value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 			value.InitChecksum(key)
-			if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+			if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 		}

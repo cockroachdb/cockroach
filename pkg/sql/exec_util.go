@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgadvisory"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -569,6 +571,10 @@ type ExecutorConfig struct {
 
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
+
+	LockManager pgadvisory.LockManager
+
+	SingleVersionLeaseManager *leasemanager.LeaseManager
 }
 
 // Organization returns the value of cluster.organization.

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -168,6 +169,8 @@ type ServerConfig struct {
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
+
+	SingleVersionLeaseMananger *leasemanager.LeaseManager
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

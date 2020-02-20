@@ -66,10 +66,10 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 		},
 		ReadTimestamp: ts1,
 	}
-	if err := engine.MVCCPut(ctx, db, nil, k, txn.ReadTimestamp, v, txn); err != nil {
+	if err := engine.MVCCPut(ctx, db, nil, k, txn.ReadTimestamp, v, txn, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused1"), ts4, v, nil); err != nil {
+	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused1"), ts4, v, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Flush(); err != nil {
@@ -85,10 +85,10 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// would not have any timestamp bounds and would be selected for every read.
 	intent := roachpb.MakeIntent(txn, roachpb.Span{Key: k})
 	intent.Status = roachpb.COMMITTED
-	if _, err := engine.MVCCResolveWriteIntent(ctx, db, nil, intent); err != nil {
+	if _, err := engine.MVCCResolveWriteIntent(ctx, db, nil, intent, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused2"), ts1, v, nil); err != nil {
+	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused2"), ts1, v, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Flush(); err != nil {
