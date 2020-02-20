@@ -373,17 +373,15 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeStart = true
 		rts.check(t, jobs.StatusRunning)
 		rts.sqlDB.Exec(t, "CANCEL JOB $1", *job.ID())
-		// Test for a canceled error message.
-		if err := job.CheckStatus(rts.ctx); !testutils.IsError(err, "cannot update progress") {
-			t.Fatalf("unexpected %v", err)
-		}
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
+		// Test for Reverting status.
 		rts.check(t, jobs.StatusReverting)
 		rts.mu.e.OnFailOrCancelExit++
 		rts.failOrCancelCh <- nil
 		rts.mu.e.Terminal++
 		rts.termCh <- struct{}{}
+		// Test for Canceled status.
 		rts.check(t, jobs.StatusCanceled)
 	})
 
