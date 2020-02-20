@@ -273,6 +273,13 @@ type RangeStateListener interface {
 // MetricExporter is concerned with providing observability into the state of
 // the concurrency manager. It is one of the roles of Manager.
 type MetricExporter interface {
+	// LatchMetrics returns information about the state of the latchManager.
+	LatchMetrics() (global, local storagepb.LatchManagerInfo)
+
+	// LockTableDebug returns a debug string representing the state of the
+	// lockTable.
+	LockTableDebug() string
+
 	// TODO(nvanbenschoten): fill out this interface to provide observability
 	// into the state of the concurrency manager.
 	// LatchMetrics()
@@ -509,6 +516,9 @@ type lockTable interface {
 
 	// Clear removes all locks and lock wait-queues from the lockTable.
 	Clear()
+
+	// String returns a debug string representing the state of the lockTable.
+	String() string
 }
 
 // lockTableGuard is a handle to a request as it waits on conflicting locks in a

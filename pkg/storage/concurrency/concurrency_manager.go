@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -337,6 +338,16 @@ func (m *managerImpl) OnSplit() {
 func (m *managerImpl) OnMerge() {
 	m.lt.Clear()
 	m.twq.Clear(true /* disable */)
+}
+
+// LatchMetrics implements the MetricExporter interface.
+func (m *managerImpl) LatchMetrics() (global, local storagepb.LatchManagerInfo) {
+	return m.lm.Info()
+}
+
+// LockTableDebug implements the MetricExporter interface.
+func (m *managerImpl) LockTableDebug() string {
+	return m.lt.String()
 }
 
 // ContainsKey implements the txnwait.ReplicaInterface interface.
