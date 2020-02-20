@@ -857,9 +857,11 @@ func EncodeInvertedIndexKeys(
 // concatenates it with `inKey`and returns a list of buffers per
 // path. The encoded values is guaranteed to be lexicographically
 // sortable, but not guaranteed to be round-trippable during decoding.
+// A (SQL) NULL input Datum produces no keys, because inverted indexes
+// cannot and do not need to satisfy the predicate col IS NULL.
 func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
 	if val == tree.DNull {
-		return [][]byte{encoding.EncodeNullAscending(inKey)}, nil
+		return nil, nil
 	}
 	switch t := tree.UnwrapDatum(nil, val).(type) {
 	case *tree.DJSON:
