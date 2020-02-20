@@ -325,7 +325,7 @@ func (j *Job) resumed(ctx context.Context) error {
 		}
 		// We use the absence of error to determine what state we should
 		// resume into.
-		if md.Payload.Error == "" {
+		if md.Payload.Error == "" || md.Payload.FinalResumeError != nil {
 			ju.UpdateStatus(StatusRunning)
 		} else {
 			ju.UpdateStatus(StatusReverting)
@@ -392,7 +392,12 @@ func (j *Job) pauseRequested(
 }
 
 // Reverted sets the status of the tracked job to reverted.
-func (j *Job) Reverted(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
+func (j *Job) Reverted(
+	ctx context.Context, err error, fn func(context.Context, *client.Txn) error,
+) error {
+	if err == nil {
+		return errors.AssertionFailedf("tried to mark job as reverting, but no error is reported")
+	}
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusReverting {
 			return nil
@@ -406,6 +411,9 @@ func (j *Job) Reverted(ctx context.Context, fn func(context.Context, *client.Txn
 			}
 		}
 		ju.UpdateStatus(StatusReverting)
+		encodedErr := errors.EncodeError(ctx, err)
+		md.Payload.FinalResumeError = &encodedErr
+		ju.UpdatePayload(md.Payload)
 		return nil
 	})
 }
@@ -448,8 +456,6 @@ func (j *Job) Failed(
 		}
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
-		encodedErr := errors.EncodeError(ctx, err)
-		md.Payload.ResumeErrors = append(md.Payload.ResumeErrors, &encodedErr)
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
