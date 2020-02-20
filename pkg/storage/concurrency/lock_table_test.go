@@ -646,8 +646,9 @@ func (e *workloadExecutor) tryFinishTxn(
 // respected since requests may be waiting for locks to be released. The
 // executor waits for a tiny interval when concurrency is >= L and if
 // no request completes it starts another request. Just for our curiosity
-// these "concurrency violations" are tracked in a counter.
-func (e *workloadExecutor) execute(strict bool) error {
+// these "concurrency violations" are tracked in a counter. The amount of
+// concurrency in this non-strict mode is bounded by maxNonStrictConcurrency.
+func (e *workloadExecutor) execute(strict bool, maxNonStrictConcurrency int) error {
 	numOutstanding := 0
 	i := 0
 	group, ctx := errgroup.WithContext(context.TODO())
@@ -673,6 +674,8 @@ L:
 				if strictIter {
 					err = errors.Errorf("timer expired with lock table: %v", e.lt)
 					break L
+				} else if numOutstanding > maxNonStrictConcurrency {
+					continue
 				} else {
 					e.numConcViolations++
 				}
@@ -804,7 +807,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	for _, c := range concurrency {
 		t.Run(fmt.Sprintf("concurrency %d", c), func(t *testing.T) {
 			exec := newWorkLoadExecutor(items, c)
-			if err := exec.execute(true); err != nil {
+			if err := exec.execute(true, 0); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -898,7 +901,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	for _, c := range concurrency {
 		t.Run(fmt.Sprintf("concurrency %d", c), func(t *testing.T) {
 			exec := newWorkLoadExecutor(items, c)
-			if err := exec.execute(false); err != nil {
+			if err := exec.execute(false, 2000); err != nil {
 				t.Fatal(err)
 			}
 		})
