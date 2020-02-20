@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package concurrency
+package concurrency_test
 
 import (
 	"strconv"
@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -51,42 +50,6 @@ func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
 	}
 	ts.Logical = int32(tsL)
 	return ts
-}
-
-func getSpan(t *testing.T, d *datadriven.TestData, str string) roachpb.Span {
-	parts := strings.Split(str, ",")
-	span := roachpb.Span{Key: roachpb.Key(parts[0])}
-	if len(parts) > 2 {
-		d.Fatalf(t, "incorrect span format: %s", str)
-	} else if len(parts) == 2 {
-		span.EndKey = roachpb.Key(parts[1])
-	}
-	return span
-}
-
-func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.SpanSet {
-	spans := &spanset.SpanSet{}
-	var spansStr string
-	d.ScanArgs(t, "spans", &spansStr)
-	parts := strings.Split(spansStr, "+")
-	for _, p := range parts {
-		if len(p) < 2 || p[1] != '@' {
-			d.Fatalf(t, "incorrect span with access format: %s", p)
-		}
-		c := p[0]
-		p = p[2:]
-		var sa spanset.SpanAccess
-		switch c {
-		case 'r':
-			sa = spanset.SpanReadOnly
-		case 'w':
-			sa = spanset.SpanReadWrite
-		default:
-			d.Fatalf(t, "incorrect span access: %c", c)
-		}
-		spans.AddMVCC(sa, getSpan(t, d, p), ts)
-	}
-	return spans
 }
 
 func scanSingleRequest(t *testing.T, d *datadriven.TestData, line string) roachpb.Request {

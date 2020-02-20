@@ -106,7 +106,7 @@ sequence req=req3
 [1] sequence req3: scanning lock table for conflicting locks
 [1] sequence req3: waiting in lock wait-queues
 [1] sequence req3: pushing txn 00000000-0000-0000-0000-000000000002
-[1] sequence req3: blocked on sync.Cond.Wait in concurrency.(*cluster).PushTransaction
+[1] sequence req3: blocked on sync.Cond.Wait in concurrency_test.(*cluster).PushTransaction
 
 on-txn-updated txn=txn2 status=committed
 ----
@@ -175,7 +175,7 @@ sequence req=req5
 [1] sequence req5: scanning lock table for conflicting locks
 [1] sequence req5: waiting in lock wait-queues
 [1] sequence req5: pushing txn 00000000-0000-0000-0000-000000000002
-[1] sequence req5: blocked on sync.Cond.Wait in concurrency.(*cluster).PushTransaction
+[1] sequence req5: blocked on sync.Cond.Wait in concurrency_test.(*cluster).PushTransaction
 
 new-request name=req6 txn=none ts=16,1
   scan key=c endkey=z
@@ -220,7 +220,7 @@ finish req=req6
 [3] sequence req7: scanning lock table for conflicting locks
 [3] sequence req7: waiting in lock wait-queues
 [3] sequence req7: pushing txn 00000000-0000-0000-0000-000000000002
-[3] sequence req7: blocked on sync.Cond.Wait in concurrency.(*cluster).PushTransaction
+[3] sequence req7: blocked on sync.Cond.Wait in concurrency_test.(*cluster).PushTransaction
 
 on-txn-updated txn=txn2 status=committed
 ----

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package concurrency
+package concurrency_test
 
 import (
 	"bytes"
@@ -23,10 +23,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -78,7 +80,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
 		c := newCluster()
-		m := NewManager(c, c.rangeDesc)
+		m := concurrency.NewManager(c, c.rangeDesc)
 		c.m = m
 		mon := newMonitor()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -148,7 +150,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				spans := c.collectSpans(t, txn, ts, reqs)
 
-				c.requestsByName[reqName] = Request{
+				c.requestsByName[reqName] = concurrency.Request{
 					Txn:       txn,
 					Timestamp: ts,
 					// TODO(nvanbenschoten): test Priority
@@ -295,7 +297,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return mon.waitAndCollect(t)
 
 			case "debug-latch-manager":
-				global, local := m.(*managerImpl).lm.Info()
+				global, local := m.LatchMetrics()
 				output := []string{
 					fmt.Sprintf("write count: %d", global.WriteCount+local.WriteCount),
 					fmt.Sprintf(" read count: %d", global.ReadCount+local.ReadCount),
@@ -303,7 +305,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return strings.Join(output, "\n")
 
 			case "debug-lock-table":
-				return c.lockTable().String()
+				return m.LockTableDebug()
 
 			case "reset":
 				if n := mon.numMonitored(); n > 0 {
@@ -330,16 +332,16 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 type cluster struct {
 	nodeDesc  *roachpb.NodeDescriptor
 	rangeDesc *roachpb.RangeDescriptor
-	m         Manager
+	m         concurrency.Manager
 
 	// Definitions.
 	txnCounter     uint128.Uint128
 	txnsByName     map[string]*roachpb.Transaction
-	requestsByName map[string]Request
+	requestsByName map[string]concurrency.Request
 
 	// Request state. Cleared on reset.
 	mu              syncutil.Mutex
-	guardsByReqName map[string]*Guard
+	guardsByReqName map[string]*concurrency.Guard
 	txnRecords      map[uuid.UUID]*txnRecord
 }
 
@@ -357,28 +359,28 @@ func newCluster() *cluster {
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
-		requestsByName:  make(map[string]Request),
-		guardsByReqName: make(map[string]*Guard),
+		requestsByName:  make(map[string]concurrency.Request),
+		guardsByReqName: make(map[string]*concurrency.Guard),
 		txnRecords:      make(map[uuid.UUID]*txnRecord),
 	}
 }
 
 // cluster implements the Store interface. Many of these methods are only used
 // by the txnWaitQueue, whose functionality is fully mocked out in this test by
-// cluster's implementation of IntentResolver.
-func (c *cluster) NodeDescriptor() *roachpb.NodeDescriptor { return c.nodeDesc }
-func (c *cluster) DB() *client.DB                          { return nil }
-func (c *cluster) Clock() *hlc.Clock                       { return nil }
-func (c *cluster) Stopper() *stop.Stopper                  { return nil }
-func (c *cluster) IntentResolver() IntentResolver          { return c }
-func (c *cluster) GetTxnWaitKnobs() txnwait.TestingKnobs   { return txnwait.TestingKnobs{} }
-func (c *cluster) GetTxnWaitMetrics() *txnwait.Metrics     { return nil }
-func (c *cluster) GetSlowLatchGauge() *metric.Gauge        { return nil }
+// cluster's implementation of concurrency.IntentResolver.
+func (c *cluster) NodeDescriptor() *roachpb.NodeDescriptor    { return c.nodeDesc }
+func (c *cluster) DB() *client.DB                             { return nil }
+func (c *cluster) Clock() *hlc.Clock                          { return nil }
+func (c *cluster) Stopper() *stop.Stopper                     { return nil }
+func (c *cluster) IntentResolver() concurrency.IntentResolver { return c }
+func (c *cluster) GetTxnWaitKnobs() txnwait.TestingKnobs      { return txnwait.TestingKnobs{} }
+func (c *cluster) GetTxnWaitMetrics() *txnwait.Metrics        { return txnwait.NewMetrics(time.Minute) }
+func (c *cluster) GetSlowLatchGauge() *metric.Gauge           { return nil }
 
-// PushTransaction implements the IntentResolver interface.
+// PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
-) (roachpb.Transaction, *Error) {
+) (roachpb.Transaction, *roachpb.Error) {
 	log.Eventf(ctx, "pushing txn %s", pushee.ID)
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
@@ -405,19 +407,14 @@ func (c *cluster) PushTransaction(
 	}
 }
 
-// ResolveIntent implements the IntentResolver interface.
+// ResolveIntent implements the concurrency.IntentResolver interface.
 func (c *cluster) ResolveIntent(
 	ctx context.Context, intent roachpb.Intent, _ intentresolver.ResolveOptions,
-) *Error {
+) *roachpb.Error {
 	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID, intent.Status)
 	c.m.OnLockUpdated(ctx, &intent)
 	return nil
 }
-
-// TODO(nvanbenschoten): remove the following methods once all their uses are
-// possible through the external interface of the concurrency Manager.
-func (c *cluster) latchManager() *latchManagerImpl { return c.m.(*managerImpl).lm.(*latchManagerImpl) }
-func (c *cluster) lockTable() *lockTableImpl       { return c.m.(*managerImpl).lt.(*lockTableImpl) }
 
 func (c *cluster) newTxnID() uuid.UUID {
 	c.mu.Lock()
@@ -489,14 +486,13 @@ func (c *cluster) reset() error {
 		return errors.Errorf("unfinished guard for request: %s", name)
 	}
 	// There should be no outstanding latches.
-	lm := c.latchManager()
-	global, local := lm.Info()
+	global, local := c.m.LatchMetrics()
 	if global.ReadCount > 0 || global.WriteCount > 0 ||
 		local.ReadCount > 0 || local.WriteCount > 0 {
 		return errors.Errorf("outstanding latches")
 	}
-	// Clear the lock table.
-	c.lockTable().Clear()
+	// Clear the lock table by marking the range as merged.
+	c.m.OnMerge()
 	return nil
 }
 
