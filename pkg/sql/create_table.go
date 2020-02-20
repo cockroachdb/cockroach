@@ -1636,7 +1636,10 @@ func makeTableDesc(
 		if !ok {
 			continue
 		}
-		telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(d.Type.TelemetryName()))
+		// Do not include virtual tables in these statistics.
+		if !sqlbase.IsVirtualTable(id) {
+			telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(d.Type.TelemetryName()))
+		}
 		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &n.Table)
 		if err != nil {
 			return ret, err
