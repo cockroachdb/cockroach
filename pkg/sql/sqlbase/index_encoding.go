@@ -831,8 +831,7 @@ func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 
 // EncodeInvertedIndexKeys creates a list of inverted index keys by
 // concatenating keyPrefix with the encodings of the column in the
-// index. Returns the key and whether any of the encoded values were
-// NULLs.
+// index.
 func EncodeInvertedIndexKeys(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -1194,21 +1193,19 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 ) ([]IndexEntry, error) {
-	if len(secondaryIndexEntries) != len(indexes) {
-		panic("Length of secondaryIndexEntries is not equal to the number of indexes.")
+	if len(secondaryIndexEntries) > 0 {
+		panic("Length of secondaryIndexEntries was non-zero")
 	}
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}
-		secondaryIndexEntries[i] = entries[0]
-
-		// This is specifically for inverted indexes which can have more than one entry
-		// associated with them, or secondary indexes which store columns from
-		// multiple column families.
-		if len(entries) > 1 {
-			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
+		for i := range entries {
+			// Normally, each index will have exactly one entry. Inverted indexes can
+			// have 0 or >1 entries, though, as well as secondary indexes which store
+			// columns from multiple column families.
+			secondaryIndexEntries = append(secondaryIndexEntries, entries[i])
 		}
 	}
 	return secondaryIndexEntries, nil
