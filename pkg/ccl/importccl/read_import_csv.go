@@ -30,18 +30,6 @@ type csvInputReader struct {
 
 var _ inputConverter = &csvInputReader{}
 
-var inputReaderBatchSize = 500
-
-// TestingSetCsvInputReaderBatchSize is a testing knob to modify
-// csv input reader batch size.
-// Returns a function that resets the value back to the default.
-func TestingSetCsvInputReaderBatchSize(s int) func() {
-	inputReaderBatchSize = s
-	return func() {
-		inputReaderBatchSize = 500
-	}
-}
-
 func newCSVInputReader(
 	kvCh chan row.KVBatch,
 	opts roachpb.CSVOptions,
