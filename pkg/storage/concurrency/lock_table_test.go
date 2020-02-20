@@ -239,7 +239,7 @@ func TestLockTableBasic(t *testing.T) {
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
 				// TODO(sbhola): also test ABORTED.
-				intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
+				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
@@ -263,7 +263,7 @@ func TestLockTableBasic(t *testing.T) {
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
 				// TODO(sbhola): also test STAGING.
-				intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
+				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
@@ -284,9 +284,8 @@ func TestLockTableBasic(t *testing.T) {
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
-				span := roachpb.Span{Key: roachpb.Key(key)}
-				intent := &roachpb.Intent{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
-				if err := lt.AddDiscoveredLock(intent, g); err != nil {
+				intent := roachpb.MakeIntent(txnMeta, roachpb.Key(key))
+				if err := lt.AddDiscoveredLock(&intent, g); err != nil {
 					return err.Error()
 				}
 				return lt.(*lockTableImpl).String()
@@ -446,7 +445,7 @@ type workItem struct {
 	locksToAcquire []roachpb.Key
 
 	// Update locks.
-	intents []roachpb.Intent
+	intents []roachpb.LockUpdate
 }
 
 func (w *workItem) getRequestTxnID() uuid.UUID {
@@ -573,7 +572,7 @@ type transactionState struct {
 func makeWorkItemFinishTxn(tstate *transactionState) workItem {
 	wItem := workItem{}
 	for i := range tstate.acquiredLocks {
-		wItem.intents = append(wItem.intents, roachpb.Intent{
+		wItem.intents = append(wItem.intents, roachpb.LockUpdate{
 			Span:   roachpb.Span{Key: tstate.acquiredLocks[i]},
 			Txn:    *tstate.txn,
 			Status: roachpb.COMMITTED,
@@ -1041,7 +1040,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	for _, k := range item.locksToAcquire {
-		intent := roachpb.Intent{
+		intent := roachpb.LockUpdate{
 			Span:   roachpb.Span{Key: k},
 			Txn:    item.Request.Txn.TxnMeta,
 			Status: roachpb.COMMITTED,

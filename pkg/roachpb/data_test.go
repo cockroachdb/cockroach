@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1895,9 +1896,9 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 	}
 }
 
-// TestAsIntents verifies that AsIntents propagates all the important
+// TestAsLockUpdates verifies that AsLockUpdates propagates all the important
 // fields from a txn to each intent.
-func TestAsIntents(t *testing.T) {
+func TestAsLockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ts := hlc.Timestamp{WallTime: 1}
@@ -1906,10 +1907,12 @@ func TestAsIntents(t *testing.T) {
 	txn.Status = COMMITTED
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}
 
+	dur := lock.Unreplicated
 	spans := []Span{{Key: Key("a"), EndKey: Key("b")}}
-	for _, intent := range AsIntents(spans, &txn) {
-		require.Equal(t, intent.Status, txn.Status)
-		require.Equal(t, intent.IgnoredSeqNums, txn.IgnoredSeqNums)
-		require.Equal(t, intent.Txn, txn.TxnMeta)
+	for _, intent := range AsLockUpdates(&txn, spans, dur) {
+		require.Equal(t, txn.Status, intent.Status)
+		require.Equal(t, txn.IgnoredSeqNums, intent.IgnoredSeqNums)
+		require.Equal(t, txn.TxnMeta, intent.Txn)
+		require.Equal(t, dur, intent.Durability)
 	}
 }

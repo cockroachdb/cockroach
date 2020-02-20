@@ -159,7 +159,7 @@ func (cq *contentionQueue) add(
 		return nil, wiErr, false, nil
 	}
 	intent := wiErr.Intents[0]
-	key := string(intent.Span.Key)
+	key := string(intent.Key)
 	curPusher := newPusher(h.Txn)
 	log.VEventf(ctx, 3, "adding %s to contention queue on intent %s @%s", txnID(h.Txn), intent.Key, intent.Txn.ID.Short())
 
@@ -221,7 +221,7 @@ func (cq *contentionQueue) add(
 					log.VEventf(ctx, 3, "%s exiting contention queue to push %s", txnID(curPusher.txn), txnMeta.ID.Short())
 					wiErrCopy := *wiErr
 					wiErrCopy.Intents = []roachpb.Intent{
-						roachpb.MakePendingIntent(txnMeta, intent.Span),
+						roachpb.MakeIntent(txnMeta, intent.Key),
 					}
 					wiErr = &wiErrCopy
 				} else {
@@ -319,7 +319,7 @@ func (cq *contentionQueue) add(
 			// make sure that we don't pollute the old contendedKey with any
 			// new information.
 			if newWIErr != nil {
-				sameKey := len(newWIErr.Intents) == 1 && newWIErr.Intents[0].Span.Equal(intent.Span)
+				sameKey := len(newWIErr.Intents) == 1 && newWIErr.Intents[0].Key.Equal(intent.Key)
 				if sameKey {
 					newIntentTxn = &newWIErr.Intents[0].Txn
 				} else {
