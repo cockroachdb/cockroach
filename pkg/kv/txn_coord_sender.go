@@ -200,6 +200,7 @@ func newRootTxnCoordSender(
 	tcs := &TxnCoordSender{
 		typ:                   client.RootTxn,
 		TxnCoordSenderFactory: tcf,
+		tracer:                tcf.Tracer,
 	}
 	tcs.mu.txnState = txnPending
 	tcs.mu.userPriority = pri
@@ -330,6 +331,7 @@ func newLeafTxnCoordSender(
 	tcs := &TxnCoordSender{
 		typ:                   client.LeafTxn,
 		TxnCoordSenderFactory: tcf,
+		tracer:                tcf.Tracer,
 	}
 	tcs.mu.txnState = txnPending
 	// No need to initialize tcs.mu.userPriority here,
