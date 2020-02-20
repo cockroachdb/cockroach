@@ -412,6 +412,21 @@ type parallelImportOptions struct {
 	batchSize  int   // Number of records to batch
 }
 
+var parallelImporterReaderBatchSize = 500
+
+// TestingSetParallelImporterReaderBatchSize is a testing knob to modify
+// csv input reader batch size.
+// Returns a function that resets the value back to the default.
+func TestingSetParallelImporterReaderBatchSize(s int) func() {
+	parallelImporterReaderBatchSize = s
+	return func() {
+		parallelImporterReaderBatchSize = 500
+	}
+}
+
+// runParallelImport reads the data produced by 'producer' and sends
+// the data to a set of workers responsible for converting this data to the
+// appropriate key/values.
 func runParallelImport(
 	ctx context.Context,
 	opts parallelImportOptions,
@@ -419,7 +434,9 @@ func runParallelImport(
 	df datumConverterFactory,
 ) error {
 	importer := &parallelImporter{
-		b:        batch{},
+		b: batch{
+			data: make([]interface{}, 0, opts.batchSize),
+		},
 		recordCh: make(chan batch),
 	}
 
@@ -431,11 +448,12 @@ func runParallelImport(
 		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
 		defer tracing.FinishSpan(span)
 		return ctxgroup.GroupWorkers(ctx, opts.numWorkers, func(ctx context.Context, id int) error {
-			if conv, err := df(ctx); err == nil {
-				return importer.importWorker(ctx, id, producer, minEmited, opts.walltime, conv)
-			} else {
+			conv, err := df(ctx)
+			if err != nil {
 				return err
 			}
+			return importer.importWorker(ctx, id, producer, minEmited, opts.walltime, conv)
+
 		})
 	})
 

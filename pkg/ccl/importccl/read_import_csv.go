@@ -36,22 +36,9 @@ type csvInputReader struct {
 	targetCols   tree.NameList
 	expectedCols int
 	parallelism  int
-	rejected     chan string
 }
 
 var _ inputConverter = &csvInputReader{}
-
-var inputReaderBatchSize = 500
-
-// TestingSetCsvInputReaderBatchSize is a testing knob to modify
-// csv input reader batch size.
-// Returns a function that resets the value back to the default.
-func TestingSetCsvInputReaderBatchSize(s int) func() {
-	inputReaderBatchSize = s
-	return func() {
-		inputReaderBatchSize = 500
-	}
-}
 
 func newCSVInputReader(
 	kvCh chan row.KVBatch,
@@ -74,7 +61,7 @@ func newCSVInputReader(
 		expectedCols: len(tableDesc.VisibleColumns()),
 		tableDesc:    tableDesc,
 		targetCols:   targetCols,
-		batchSize:    inputReaderBatchSize,
+		batchSize:    parallelImporterReaderBatchSize,
 		parallelism:  parallelism,
 	}
 }
