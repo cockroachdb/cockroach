@@ -12,6 +12,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -24,6 +26,20 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	ctx := context.Background()
 	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
+	descKVs := func(descs []*sqlbase.TableDescriptor) []roachpb.KeyValue {
+		var kvs []roachpb.KeyValue
+		for _, desc := range descs {
+			kv := roachpb.KeyValue{
+				Key:   sqlbase.MakeDescMetadataKey(desc.ID),
+				Value: roachpb.Value{Timestamp: desc.ModificationTime},
+			}
+			descNoTime := *desc
+			descNoTime.ModificationTime = hlc.Timestamp{}
+			kv.Value.SetProto(sqlbase.WrapDescriptor(&descNoTime))
+			kvs = append(kvs, kv)
+		}
+		return kvs
+	}
 	validateFn := func(_ context.Context, desc *sqlbase.TableDescriptor) error {
 		if desc.Name != `` {
 			return errors.New(desc.Name)
@@ -39,7 +55,9 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 		}
 	}
 
-	m := SchemaFeed{}
+	m := SchemaFeed{
+		targets: jobspb.ChangefeedTargets{1: {}},
+	}
 	m.mu.highWater = ts(0)
 
 	require.Equal(t, ts(0), m.highWater())
@@ -66,9 +84,9 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.Equal(t, ts(3), m.highWater())
 
 	// validates
-	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []*sqlbase.TableDescriptor{
-		{ID: 0},
-	}, validateFn))
+	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), descKVs([]*sqlbase.TableDescriptor{
+		{ID: 1, ModificationTime: ts(4)},
+	}), validateFn))
 	require.Equal(t, ts(4), m.highWater())
 
 	// high-water already high enough. fast-path
@@ -106,9 +124,9 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, <-errCh8, `context canceled`)
 
 	// does not validate, high-water does not change
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []*sqlbase.TableDescriptor{
-		{ID: 0, Name: `whoops!`},
-	}, validateFn), `whoops!`)
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), descKVs([]*sqlbase.TableDescriptor{
+		{ID: 1, Name: `whoops!`, ModificationTime: ts(10)},
+	}), validateFn), `whoops!`)
 	require.Equal(t, ts(7), m.highWater())
 
 	// ts 10 has errored, so validate can return its error without blocking
@@ -123,9 +141,9 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	requireChannelEmpty(t, errCh9)
 
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []*sqlbase.TableDescriptor{
-		{ID: 0, Name: `oh no!`},
-	}, validateFn), `oh no!`)
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), descKVs([]*sqlbase.TableDescriptor{
+		{ID: 1, Name: `oh no!`, ModificationTime: ts(9)},
+	}), validateFn), `oh no!`)
 	require.Equal(t, ts(7), m.highWater())
 	require.EqualError(t, <-errCh9, `oh no!`)
 
