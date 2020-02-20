@@ -139,8 +139,9 @@ func (rd *Deleter) DeleteRow(
 
 	// Delete the row from any secondary indices.
 	for i := range rd.Helper.Indexes {
+		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
 		entries, err := sqlbase.EncodeSecondaryIndex(
-			rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i], rd.FetchColIDtoRowIndex, values)
+			rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i], rd.FetchColIDtoRowIndex, values, true /* includeEmpty */)
 		if err != nil {
 			return err
 		}
@@ -212,8 +213,9 @@ func (rd *Deleter) DeleteIndexRow(
 			return err
 		}
 	}
+	// We want to include empty k/v pairs because we want to delete all k/v's for this row.
 	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
-		rd.Helper.TableDesc.TableDesc(), idx, rd.FetchColIDtoRowIndex, values)
+		rd.Helper.TableDesc.TableDesc(), idx, rd.FetchColIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		return err
 	}

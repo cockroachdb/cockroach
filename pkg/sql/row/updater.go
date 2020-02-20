@@ -319,7 +319,7 @@ func (ru *Updater) UpdateRow(
 	}
 	var deleteOldSecondaryIndexEntries []sqlbase.IndexEntry
 	if ru.DeleteHelper != nil {
-		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues)
+		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues, true /* includeEmpty */)
 		if err != nil {
 			return nil, err
 		}
@@ -352,15 +352,24 @@ func (ru *Updater) UpdateRow(
 	}
 
 	for i := range ru.Helper.Indexes {
-		// TODO (rohany): include a version of sqlbase.EncodeSecondaryIndex that allocates index entries
-		//  into an argument list.
+		// We don't want to write k/v's that have empty values, so don't include empty k/v's here.
 		ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, oldValues)
+			ru.Helper.TableDesc.TableDesc(),
+			&ru.Helper.Indexes[i],
+			ru.FetchColIDtoRowIndex,
+			oldValues,
+			false, /* includeEmpty */
+		)
 		if err != nil {
 			return nil, err
 		}
 		ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, ru.newValues)
+			ru.Helper.TableDesc.TableDesc(),
+			&ru.Helper.Indexes[i],
+			ru.FetchColIDtoRowIndex,
+			ru.newValues,
+			false, /* includeEmpty */
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -436,35 +445,59 @@ func (ru *Updater) UpdateRow(
 	for i := range ru.Helper.Indexes {
 		index := &ru.Helper.Indexes[i]
 		if index.Type == sqlbase.IndexDescriptor_FORWARD {
-			if len(ru.oldIndexEntries[i]) != len(ru.newIndexEntries[i]) {
-				panic("expected same number of index entries for old and new values")
-			}
-			for j := range ru.oldIndexEntries[i] {
-				oldEntry := &ru.oldIndexEntries[i][j]
-				newEntry := &ru.newIndexEntries[i][j]
-				var expValue *roachpb.Value
-				if !bytes.Equal(oldEntry.Key, newEntry.Key) {
-					// TODO (rohany): this check is duplicated here and above, is there a reason?
-					ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
-					if traceKV {
-						log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
-					}
-					batch.Del(oldEntry.Key)
-				} else if !newEntry.Value.EqualData(oldEntry.Value) {
-					expValue = &oldEntry.Value
-				} else {
-					continue
-				}
-				if traceKV {
-					k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-					v := newEntry.Value.PrettyPrint()
-					if expValue != nil {
-						log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
+			oldIdx, newIdx := 0, 0
+			for oldIdx < len(ru.oldIndexEntries[i]) && newIdx < len(ru.newIndexEntries[i]) {
+				oldEntry, newEntry := &ru.oldIndexEntries[i][oldIdx], &ru.newIndexEntries[i][newIdx]
+				if oldEntry.Family == newEntry.Family {
+					oldIdx++
+					newIdx++
+					var expValue *roachpb.Value
+					if !bytes.Equal(oldEntry.Key, newEntry.Key) {
+						ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
+						if traceKV {
+							log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
+						}
+						batch.Del(oldEntry.Key)
+					} else if !newEntry.Value.EqualData(oldEntry.Value) {
+						expValue = &oldEntry.Value
 					} else {
-						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+						continue
 					}
+					if traceKV {
+						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+						v := newEntry.Value.PrettyPrint()
+						if expValue != nil {
+							log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
+						} else {
+							log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+						}
+					}
+					batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
+				} else if oldEntry.Family < newEntry.Family {
+					// TODO (rohany): add assertion failures if oldEntry.Family == 0
+
+					// In this case, the index has a k/v for a family that does not exist in
+					// the new set of k/v's for the row. So, we need to delete the old k/v.
+					batch.Del(oldEntry.Key)
+					oldIdx++
+				} else {
+					// TODO (rohany): add assertion failures if newEntry.Family == 0
+
+					// In this case, the index now has a k/v that did not exist in the
+					// old row, so we should expect to not see a value for the new
+					// key, and put the new key in place.
+					batch.CPut(newEntry.Key, &newEntry.Value, nil)
+					newIdx++
 				}
-				batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
+			}
+			for oldIdx < len(ru.oldIndexEntries[i]) {
+				batch.Del(ru.oldIndexEntries[i][oldIdx].Key)
+				oldIdx++
+			}
+			for newIdx < len(ru.newIndexEntries[i]) {
+				newEntry := &ru.newIndexEntries[i][newIdx]
+				batch.CPut(newEntry.Key, &newEntry.Value, nil)
+				newIdx++
 			}
 		} else {
 			// Remove all inverted index entries, and re-add them.

@@ -56,13 +56,13 @@ func newRowHelper(
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
+	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum, includeEmpty bool,
 ) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(colIDtoRowIndex, values)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(colIDtoRowIndex, values, includeEmpty)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -86,13 +86,13 @@ func (rh *rowHelper) encodePrimaryIndex(
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeSecondaryIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
+	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum, includeEmpty bool,
 ) (secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	if len(rh.indexEntries) != len(rh.Indexes) {
 		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.Indexes))
 	}
 	rh.indexEntries, err = sqlbase.EncodeSecondaryIndexes(
-		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries)
+		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries, includeEmpty)
 	if err != nil {
 		return nil, err
 	}

@@ -158,7 +158,9 @@ func (ri *Inserter) InsertRow(
 		}
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
+	// We don't want to insert any empty k/v's, so set includeEmpty to false.
+	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(
+		ri.InsertColIDtoRowIndex, values, false /* includeEmpty */)
 	if err != nil {
 		return err
 	}
