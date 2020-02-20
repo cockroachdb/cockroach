@@ -154,22 +154,11 @@ func (a *Allocator) Used() int64 {
 }
 
 // Clear clears up the memory account of the allocator.
+// WARNING: usage of this method is *not* compatible with using
+// PerformOperation. Use this only in combination with RetainBatch /
+// ReleaseBatch.
 func (a *Allocator) Clear() {
-	// TODO(yuzefovich): usage of a.acc.Clear method is not compatible with our
-	// PerformOperation. Consider the following scenario:
-	// 1. we allocate []int64 Vec with 1024 capacity, this memory is registered
-	// with the allocator (8192 bytes).
-	// 2. then we Clear() the allocator, now the memory account says that we use
-	// 0 bytes, but the actual memory is not released.
-	// 3. we reuse the Vec and append into it 1024 int64 values. Because there
-	// was enough capacity to accommodate it, no new memory is allocated.
-	// 4. when we called PerformOperation to account for that memory, we computed
-	// "before" and "after" memory estimates, and in both cases they equal 8192
-	// bytes, so "delta" is 0, and the allocator continues to think that 0 bytes
-	// have been registered with it, but it is not the case.
-	// I think "adding disk queue to hash router" PR has more fine-grained
-	// methods for working with memory. Consider reusing them here.
-	a.acc.Clear(a.ctx)
+	a.acc.Shrink(a.ctx, a.acc.Used())
 }
 
 const (
