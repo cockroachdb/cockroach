@@ -305,6 +305,10 @@ func (s *Builder) encodeConstraintKey(
 			if err != nil {
 				return nil, false, err
 			}
+			if len(keys) == 0 {
+				err := errors.AssertionFailedf("trying to use null key in index lookup")
+				return nil, false, err
+			}
 			if len(keys) > 1 {
 				err := errors.AssertionFailedf("trying to use multiple keys in index lookup")
 				return nil, false, err
