@@ -140,6 +140,22 @@ func (s *Session) UnlockSh(ctx context.Context, id int64, ts hlc.Timestamp) (boo
 	return false, nil
 }
 
+// UnlockAll releases all session-scoped leases.
+func (s *Session) UnlockAll(ctx context.Context, ts hlc.Timestamp) error {
+	var resErr error
+	for id, lease := range s.leases {
+		if lease.scope == sessionScoped {
+			lease.Txn().PushTo(ts)
+			err := lease.Txn().Commit(ctx)
+			if err != nil && resErr == nil {
+				resErr = err
+			}
+			delete(s.leases, id)
+		}
+	}
+	return resErr
+}
+
 // TxnLockEx acquires an exclusive txn-scoped lease for key 'id'. Note that
 // there is no corresponding "unlock" method because such lease is released when
 // txn commits or aborts.

@@ -952,7 +952,7 @@ SELECT description
 				evalCtx.Txn.PushTo(ts)
 				return tree.DBoolTrue, nil
 			},
-			Info: notUsableInfo,
+			Info: "Obtain exclusive session level advisory lock",
 		},
 	),
 
@@ -970,7 +970,7 @@ SELECT description
 				evalCtx.Txn.PushTo(ts)
 				return tree.DBoolTrue, nil
 			},
-			Info: notUsableInfo,
+			Info: "Obtain shared session level advisory lock",
 		},
 	),
 
@@ -983,7 +983,22 @@ SELECT description
 				res, err := evalCtx.PGAdvisorySession.UnlockEx(evalCtx.Ctx(), id, evalCtx.Txn.ProvisionalCommitTimestamp())
 				return tree.MakeDBool(tree.DBool(res)), err
 			},
-			Info: notUsableInfo,
+			Info: "Release an exclusive session level advisory lock",
+		},
+	),
+
+	"pg_advisory_unlock_all": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				err := evalCtx.PGAdvisorySession.UnlockAll(evalCtx.Ctx(), evalCtx.Txn.ProvisionalCommitTimestamp())
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: "Release all session level advisory locks held by the current session",
 		},
 	),
 
@@ -996,11 +1011,9 @@ SELECT description
 				res, err := evalCtx.PGAdvisorySession.UnlockSh(evalCtx.Ctx(), id, evalCtx.Txn.ProvisionalCommitTimestamp())
 				return tree.MakeDBool(tree.DBool(res)), err
 			},
-			Info: notUsableInfo,
+			Info: "Release a shared session level advisory lock",
 		},
 	),
-
-	// TODO(yuzefovich): pg_advisory_unlock_all.
 
 	"pg_advisory_xact_lock": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
@@ -1015,7 +1028,7 @@ SELECT description
 				}
 				return tree.DBoolTrue, nil
 			},
-			Info: notUsableInfo,
+			Info: "Obtain exclusive transaction level advisory lock",
 		},
 	),
 
@@ -1032,7 +1045,7 @@ SELECT description
 				}
 				return tree.DBoolTrue, nil
 			},
-			Info: notUsableInfo,
+			Info: "Obtain shared transaction level advisory lock",
 		},
 	),
 

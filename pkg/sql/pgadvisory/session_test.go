@@ -210,4 +210,34 @@ func TestSession(t *testing.T) {
 		session1.Exec(t, sessionUnlockShared)
 		wg.Wait()
 	})
+
+	t.Run("unlock all session-scoped locks", func(t *testing.T) {
+		var wg sync.WaitGroup
+		var (
+			session1Locked1 int32
+			session1Locked2 int32
+		)
+		const (
+			sessionLock2     = "SELECT pg_advisory_lock(2);"
+			sessionUnlockAll = "SELECT pg_advisory_unlock_all();"
+		)
+		atomic.StoreInt32(&session1Locked1, locked)
+		session1.Exec(t, sessionLock)
+		atomic.StoreInt32(&session1Locked2, locked)
+		session1.Exec(t, sessionLock2)
+		go func() {
+			session2.Exec(t, sessionLock)
+			require.True(t, atomic.LoadInt32(&session1Locked1) == unlocked, "first session should have unlocked 1")
+			session2.Exec(t, sessionLock2)
+			require.True(t, atomic.LoadInt32(&session1Locked2) == unlocked, "first session should have unlocked 2")
+			session2.Exec(t, sessionUnlockAll)
+			wg.Done()
+		}()
+		wg.Add(1)
+		sleep()
+		atomic.StoreInt32(&session1Locked1, unlocked)
+		atomic.StoreInt32(&session1Locked2, unlocked)
+		session1.Exec(t, sessionUnlockAll)
+		wg.Wait()
+	})
 }
