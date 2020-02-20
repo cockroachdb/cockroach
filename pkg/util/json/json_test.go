@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 )
 
 func eachPair(a, b JSON, f func(a, b JSON)) {
@@ -1274,6 +1275,11 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Make sure that the expected encoding slice is sorted, as well as the
+		// output of the function under test, because the function under test can
+		// reorder the keys it's returning if there are arrays inside.
+		enc = unique.UniquifyByteSlices(enc)
+		c.expEnc = unique.UniquifyByteSlices(c.expEnc)
 		for j, path := range enc {
 			if !bytes.Equal(path, c.expEnc[j]) {
 				t.Errorf("unexpected encoding mismatch for %v. expected [%#v], got [%#v]",
