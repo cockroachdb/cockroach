@@ -141,6 +141,12 @@ var _ Operator = &externalSorter{}
 // from an unlimited memory monitor. It will be used by several internal
 // components of the external sort which is responsible for making sure that
 // the components stay within the memory limit.
+// - standaloneAllocator must have been created with a memory account derived
+// from an unlimited memory monitor with a standalone budget. It will be used
+// by inputPartitioningOperator to "partition" the input according to memory
+// limit. The budget *must* be standalone because we don't want to double
+// count the memory (the memory under the batches will be accounted for with
+// the unlimitedAllocator).
 // - diskQueuesUnlimitedAllocator is a (temporary) unlimited allocator that
 // will be used to create dummy queues and will be removed once we have actual
 // disk-backed queues.
@@ -149,6 +155,7 @@ var _ Operator = &externalSorter{}
 // non-zero only in tests.
 func newExternalSorter(
 	unlimitedAllocator *Allocator,
+	standaloneAllocator *Allocator,
 	input Operator,
 	inputTypes []coltypes.T,
 	ordering execinfrapb.Ordering,
@@ -158,7 +165,7 @@ func newExternalSorter(
 	diskQueuesUnlimitedAllocator *Allocator,
 	cfg colcontainer.DiskQueueCfg,
 ) Operator {
-	inputPartitioner := newInputPartitioningOperator(unlimitedAllocator, input, memoryLimit)
+	inputPartitioner := newInputPartitioningOperator(standaloneAllocator, input, memoryLimit)
 	inMemSorter, err := newSorter(
 		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
 		inputTypes, ordering.Columns,
@@ -273,7 +280,6 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			s.firstPartitionIdx += numPartitionsToMerge
 			s.numPartitions -= numPartitionsToMerge - 1
-			s.unlimitedAllocator.Clear()
 			continue
 		case externalSorterFinalMerging:
 			if s.numPartitions == 0 {
@@ -325,25 +331,24 @@ func (s *externalSorter) createMergerForPartitions(firstIdx, numPartitions int) 
 }
 
 func newInputPartitioningOperator(
-	unlimitedAllocator *Allocator, input Operator, memoryLimit int64,
+	standaloneAllocator *Allocator, input Operator, memoryLimit int64,
 ) resettableOperator {
 	return &inputPartitioningOperator{
-		OneInputNode:       NewOneInputNode(input),
-		unlimitedAllocator: unlimitedAllocator,
-		memoryLimit:        memoryLimit,
+		OneInputNode:        NewOneInputNode(input),
+		standaloneAllocator: standaloneAllocator,
+		memoryLimit:         memoryLimit,
 	}
 }
 
 // inputPartitioningOperator is an operator that returns the batches from its
-// input until the unlimited allocator (which the output operator must be
-// using) reaches the memory limit. From that point, the operator returns a
-// zero-length batch (until it is reset).
+// input until the standalone allocator reaches the memory limit. From that
+// point, the operator returns a zero-length batch (until it is reset).
 type inputPartitioningOperator struct {
 	OneInputNode
 	NonExplainable
 
-	unlimitedAllocator *Allocator
-	memoryLimit        int64
+	standaloneAllocator *Allocator
+	memoryLimit         int64
 }
 
 var _ resettableOperator = &inputPartitioningOperator{}
@@ -353,14 +358,16 @@ func (o *inputPartitioningOperator) Init() {
 }
 
 func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
-	if o.unlimitedAllocator.Used() >= o.memoryLimit {
+	if o.standaloneAllocator.Used() >= o.memoryLimit {
 		return coldata.ZeroBatch
 	}
-	return o.input.Next(ctx)
+	b := o.input.Next(ctx)
+	o.standaloneAllocator.RetainBatch(b)
+	return b
 }
 
 func (o *inputPartitioningOperator) reset() {
-	o.unlimitedAllocator.Clear()
+	o.standaloneAllocator.Clear()
 }
 
 func newPartitionerToOperator(
