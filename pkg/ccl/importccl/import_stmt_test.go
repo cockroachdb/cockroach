@@ -3556,8 +3556,11 @@ func TestImportAvro(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Play a bit with producer/consumer batch sizes.
+			defer TestingSetParallelImporterReaderBatchSize(13 * i)()
+
 			_, err := sqlDB.DB.ExecContext(context.Background(), `DROP TABLE IF EXISTS simple CASCADE`)
 			require.NoError(t, err)
 
