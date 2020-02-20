@@ -472,6 +472,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	// Verify that pause and cancel in a rollback do nothing.
 	t.Run("rollback", func(t *testing.T) {
+		t.Skip()
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
