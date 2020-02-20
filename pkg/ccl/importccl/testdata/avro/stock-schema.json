@@ -1,0 +1,23 @@
+{ "type": "record",
+  "name": "stock",
+  "fields":
+    [
+      { "name": "s_i_id",       "type": "int" },
+      { "name": "s_w_id",       "type": "int" },
+      { "name": "s_quantity",   "type": ["null", "int"] },
+      { "name": "s_dist_01",    "type": {"type": "fixed", "size": 24, "name": "s_dist_01"}},
+      { "name": "s_dist_02",    "type": {"type": "fixed", "size": 24, "name": "s_dist_02"}},
+      { "name": "s_dist_03",    "type": {"type": "fixed", "size": 24, "name": "s_dist_03"}},
+      { "name": "s_dist_04",    "type": {"type": "fixed", "size": 24, "name": "s_dist_04"}},
+      { "name": "s_dist_05",    "type": {"type": "fixed", "size": 24, "name": "s_dist_05"}},
+      { "name": "s_dist_06",    "type": {"type": "fixed", "size": 24, "name": "s_dist_06"}},
+      { "name": "s_dist_07",    "type": {"type": "fixed", "size": 24, "name": "s_dist_07"}},
+      { "name": "s_dist_08",    "type": {"type": "fixed", "size": 24, "name": "s_dist_08"}},
+      { "name": "s_dist_09",    "type": {"type": "fixed", "size": 24, "name": "s_dist_09"}},
+      { "name": "s_dist_10",    "type": {"type": "fixed", "size": 24, "name": "s_dist_10"}},
+      { "name": "s_ytd",        "type": ["null", "int"] },
+      { "name": "s_order_cnt",  "type": ["null", "int"] },
+      { "name": "s_remote_cnt", "type": ["null", "int"] },
+      { "name": "s_data",       "type": ["null", "bytes"] }
+    ]
+}
