@@ -938,61 +938,63 @@ SELECT description
 		},
 	),
 
-	"pg_advisory_lock": makeBuiltin(defProps(),
+	"pg_advisory_lock": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
 			Types: tree.ArgTypes{{"int", types.Int}},
 			// TODO(yuzefovich): Postgres returns VOID type.
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				err := evalCtx.PGAdvisorySession.LockEx(evalCtx.Ctx(), id)
+				ts, err := evalCtx.PGAdvisorySession.LockEx(evalCtx.Ctx(), id)
 				if err != nil {
 					return tree.DBoolFalse, err
 				}
+				evalCtx.Txn.PushTo(ts)
 				return tree.DBoolTrue, nil
 			},
 			Info: notUsableInfo,
 		},
 	),
 
-	"pg_advisory_lock_shared": makeBuiltin(defProps(),
+	"pg_advisory_lock_shared": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
 			Types: tree.ArgTypes{{"int", types.Int}},
 			// TODO(yuzefovich): Postgres returns VOID type.
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				err := evalCtx.PGAdvisorySession.LockSh(evalCtx.Ctx(), id)
+				ts, err := evalCtx.PGAdvisorySession.LockSh(evalCtx.Ctx(), id)
 				if err != nil {
 					return tree.DBoolFalse, err
 				}
+				evalCtx.Txn.PushTo(ts)
 				return tree.DBoolTrue, nil
 			},
 			Info: notUsableInfo,
 		},
 	),
 
-	"pg_advisory_unlock": makeBuiltin(defProps(),
+	"pg_advisory_unlock": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				res := evalCtx.PGAdvisorySession.UnlockEx(evalCtx.Ctx(), id)
-				return tree.MakeDBool(tree.DBool(res)), nil
+				res, err := evalCtx.PGAdvisorySession.UnlockEx(evalCtx.Ctx(), id, evalCtx.Txn.ProvisionalCommitTimestamp())
+				return tree.MakeDBool(tree.DBool(res)), err
 			},
 			Info: notUsableInfo,
 		},
 	),
 
-	"pg_advisory_unlock_shared": makeBuiltin(defProps(),
+	"pg_advisory_unlock_shared": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
-				res := evalCtx.PGAdvisorySession.UnlockSh(evalCtx.Ctx(), id)
-				return tree.MakeDBool(tree.DBool(res)), nil
+				res, err := evalCtx.PGAdvisorySession.UnlockSh(evalCtx.Ctx(), id, evalCtx.Txn.ProvisionalCommitTimestamp())
+				return tree.MakeDBool(tree.DBool(res)), err
 			},
 			Info: notUsableInfo,
 		},
@@ -1000,7 +1002,7 @@ SELECT description
 
 	// TODO(yuzefovich): pg_advisory_unlock_all.
 
-	"pg_advisory_xact_lock": makeBuiltin(defProps(),
+	"pg_advisory_xact_lock": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
 			Types: tree.ArgTypes{{"int", types.Int}},
 			// TODO(yuzefovich): Postgres returns VOID type.
@@ -1017,7 +1019,7 @@ SELECT description
 		},
 	),
 
-	"pg_advisory_xact_lock_shared": makeBuiltin(defProps(),
+	"pg_advisory_xact_lock_shared": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
 			Types: tree.ArgTypes{{"int", types.Int}},
 			// TODO(yuzefovich): Postgres returns VOID type.

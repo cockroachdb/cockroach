@@ -569,8 +569,7 @@ func (s *Server) newConnExecutor(
 		ctxHolder:                 ctxHolder{connCtx: ctx},
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
-		// TODO(yuzefovich): pass in actual LockManager.
-		pgadvisorySession: pgadvisory.NewSession(s.cfg.DB, nil),
+		pgadvisorySession:         pgadvisory.NewSession(s.cfg.DB, s.cfg.LockManager),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -818,6 +817,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	if err := ex.resetExtraTxnState(ctx, ex.server.dbCache, ev); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
+	}
+
+	if err := ex.pgadvisorySession.Close(ctx); err != nil {
+		log.Warningf(ctx, "error while closing pgadvisory.Session: %s", err)
 	}
 
 	if closeType != panicClose {

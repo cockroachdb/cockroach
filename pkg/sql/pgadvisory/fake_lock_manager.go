@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -30,6 +32,8 @@ type FakeLock struct {
 	mu          sync.RWMutex
 	isExclusive bool
 }
+
+var _ leasemanager.Lease = &FakeLock{}
 
 type FakeLockManager struct {
 	locks map[string]*FakeLock
@@ -67,6 +71,14 @@ func (l *FakeLock) Exclusive() bool {
 	return l.isExclusive
 }
 
+func (l *FakeLock) GetExpiration() hlc.Timestamp {
+	return hlc.Timestamp{}
+}
+
+func (l *FakeLock) StartTime() hlc.Timestamp {
+	return hlc.Timestamp{}
+}
+
 func (fm *FakeLockManager) unlockFinalized() {
 	for _, lock := range fm.locks {
 		for _, txn := range lock.exclusive {
@@ -98,7 +110,9 @@ func (fm *FakeLockManager) upsertLock(txn *client.Txn, key []byte) *FakeLock {
 	return storedLock
 }
 
-func (fm *FakeLockManager) AcquireEx(ctx context.Context, txn *client.Txn, key []byte) (Lock, error) {
+func (fm *FakeLockManager) AcquireExclusive(
+	ctx context.Context, txn *client.Txn, key []byte,
+) (leasemanager.Lease, error) {
 	storedLock := fm.upsertLock(txn, key)
 	storedLock.exclusive[txn.ID()] = txn
 	storedLock.isExclusive = true
@@ -106,17 +120,21 @@ func (fm *FakeLockManager) AcquireEx(ctx context.Context, txn *client.Txn, key [
 	return storedLock, nil
 }
 
-func (fm *FakeLockManager) AcquireSh(ctx context.Context, txn *client.Txn, key []byte) (Lock, error) {
+func (fm *FakeLockManager) AcquireShared(
+	ctx context.Context, txn *client.Txn, key []byte,
+) (leasemanager.Lease, error) {
 	storedLock := fm.upsertLock(txn, key)
 	storedLock.shared[txn.ID()] = txn
 	storedLock.mu.RLock()
 	return storedLock, nil
 }
 
-func (fm *FakeLockManager) TryAcquireEx(ctx context.Context, txn *client.Txn, key []byte) (lock Lock, err error) {
+func (fm *FakeLockManager) TryAcquireEx(
+	ctx context.Context, txn *client.Txn, key []byte,
+) (lock leasemanager.Lease, err error) {
 	group := ctxgroup.WithContext(context.Background())
 	group.Go(func() error {
-		lock, err = fm.AcquireEx(ctx, txn, key)
+		lock, err = fm.AcquireExclusive(ctx, txn, key)
 		return nil
 	})
 	group.Go(func() error {

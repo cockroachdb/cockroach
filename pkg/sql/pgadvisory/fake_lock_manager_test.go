@@ -15,10 +15,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgadvisory"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestFakeLockManager(t *testing.T) {
@@ -35,13 +35,13 @@ func TestFakeLockManager(t *testing.T) {
 	fm := pgadvisory.NewFakeLockManager()
 	fm.Start(ctx, tc.Stopper())
 	txn1 := db0.NewTxn(ctx, "txn1")
-	log.Info(ctx, "First AcquireEx")
-	fm.AcquireSh(ctx, txn1, []byte("key1"))
-	fm.AcquireSh(ctx, txn1, []byte("key1"))
+	log.Info(ctx, "First AcquireExclusive")
+	fm.AcquireShared(ctx, txn1, []byte("key1"))
+	fm.AcquireShared(ctx, txn1, []byte("key1"))
 	txn2 := db0.NewTxn(ctx, "txn2")
-	fm.AcquireSh(ctx, txn2, []byte("key1"))
+	fm.AcquireShared(ctx, txn2, []byte("key1"))
 	txn1.Commit(ctx)
-	log.Info(ctx, "Second AcquireEx")
-	fm.AcquireEx(ctx, txn2, []byte("key1"))
+	log.Info(ctx, "Second AcquireExclusive")
+	fm.AcquireExclusive(ctx, txn2, []byte("key1"))
 	txn2.Commit(ctx)
 }

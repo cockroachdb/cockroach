@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgadvisory"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -205,6 +207,7 @@ type Server struct {
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics       sql.MemoryMetrics
 	protectedtsProvider protectedts.Provider
+	lockManager         pgadvisory.LockManager
 }
 
 // NewServer creates a Server from a server.Config.
@@ -483,6 +486,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		InternalExecutor: internalExecutor,
 		Settings:         st,
 	})
+
+	s.lockManager = leasemanager.New(keys.MakeTablePrefix(keys.PGLocksTableID), s.db)
 
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
@@ -765,6 +770,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
 		ProtectedTimestampProvider: s.protectedtsProvider,
+		LockManager:                s.lockManager,
 	}
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

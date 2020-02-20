@@ -25,7 +25,11 @@ func New(prefix []byte, db *client.DB) *LeaseManager {
 }
 
 type Lease interface {
+	Txn() *client.Txn
+	Key() []byte
+	Exclusive() bool
 	GetExpiration() hlc.Timestamp
+	StartTime() hlc.Timestamp
 }
 
 // One thing to note about these leases is that there's no way to release them.
@@ -68,7 +72,7 @@ func (lm *LeaseManager) AcquireShared(
 	if err = txn.ForceHeartbeat(); err != nil {
 		return nil, err
 	}
-	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset()}, nil
+	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset(), startTime: txn.ProvisionalCommitTimestamp(), exclusive: false}, nil
 }
 
 func (lm *LeaseManager) AcquireExclusive(
@@ -93,7 +97,7 @@ func (lm *LeaseManager) AcquireExclusive(
 	if err := txn.ForceHeartbeat(); err != nil {
 		return nil, err
 	}
-	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset()}, nil
+	return &leaseImpl{txn: txn, maxOffset: lm.db.Clock().MaxOffset(), startTime: txn.ProvisionalCommitTimestamp(), exclusive: true}, nil
 }
 
 // TODO(ajwerner): Optimize allocations here by allocating all of the keys from
@@ -135,9 +139,28 @@ func makeSharedKey(prefix, key []byte, id uuid.UUID) roachpb.Key {
 
 type leaseImpl struct {
 	txn       *client.Txn
+	key       []byte
+	exclusive bool
+	startTime hlc.Timestamp
 	maxOffset time.Duration
 }
 
 func (l *leaseImpl) GetExpiration() hlc.Timestamp {
 	return l.txn.ExpiryTimestamp().Add(-l.maxOffset.Nanoseconds(), 0)
+}
+
+func (l *leaseImpl) Txn() *client.Txn {
+	return l.txn
+}
+
+func (l *leaseImpl) Exclusive() bool {
+	return l.exclusive
+}
+
+func (l *leaseImpl) Key() []byte {
+	return l.key
+}
+
+func (l *leaseImpl) StartTime() hlc.Timestamp {
+	return l.startTime
 }
