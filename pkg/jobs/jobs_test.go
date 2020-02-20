@@ -1689,6 +1689,8 @@ func TestJobInTxn(t *testing.T) {
 	// Accessed atomically.
 	var hasRun int32
 	var job *jobs.Job
+
+	defer sql.ClearPlanHooks()
 	// Piggy back on BACKUP to be able to create a succeeding test job.
 	sql.AddPlanHook(
 		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
@@ -1754,7 +1756,7 @@ func TestJobInTxn(t *testing.T) {
 		}
 	})
 
-	t.Run("normal success", func(t *testing.T) {
+	t.Run("rollback txn", func(t *testing.T) {
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
 		_, err = txn.Exec("BACKUP tobeaborted TO doesnotmattter")
@@ -1765,21 +1767,23 @@ func TestJobInTxn(t *testing.T) {
 		registry := s.JobRegistry().(*jobs.Registry)
 		_, err = registry.LoadJob(ctx, *job.ID())
 		require.Error(t, err, "the job should not exist after the txn is rolled back")
-
 		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 		// Just in case the job was scheduled let's wait for it to finish
 		// to avoid a race.
 		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", *job.ID())
 		require.Equal(t, int32(0), atomic.LoadInt32(&hasRun),
 			"job has run in transaction before txn commit")
+	})
 
+	t.Run("normal success", func(t *testing.T) {
 		// Now let's actually commit the transaction and check that the job ran.
-		txn, err = sqlDB.Begin()
+		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
 		_, err = txn.Exec("BACKUP tocommit TO foo")
 		require.NoError(t, err)
 		// Committing will block and wait for all jobs to run.
 		require.NoError(t, txn.Commit())
+		registry := s.JobRegistry().(*jobs.Registry)
 		j, err := registry.LoadJob(ctx, *job.ID())
 		require.NoError(t, err, "queued job not found")
 		require.NotEqual(t, int32(0), atomic.LoadInt32(&hasRun),
@@ -1804,5 +1808,4 @@ func TestJobInTxn(t *testing.T) {
 		// failure.
 		require.Error(t, txn.Commit())
 	})
-
 }
