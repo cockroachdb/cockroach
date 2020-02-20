@@ -111,6 +111,12 @@ func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
 }
 
+// ClearPlanHooks is used by tests to clear out any mocked out plan hooks that
+// were registered.
+func ClearPlanHooks() {
+	planHooks = nil
+}
+
 // AddWrappedPlanHook adds a hook used to short-circuit creating a planNode from a
 // tree.Statement. If the returned plan is non-nil, it is used directly by the planner.
 //
