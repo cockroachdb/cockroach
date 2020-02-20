@@ -573,3 +573,15 @@ query III
 SELECT * FROM t@i
 ----
 1 2 3
+
+# Regression for old primary key not using PrimaryIndexEncoding as its encoding type.
+subtest encoding_bug
+
+# This test ensures that while the old primary key is in the mutations list it is
+# able to be updated and deleted with the primary index encoding.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y, z));
+INSERT INTO t VALUES (1, 2, 3);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (z);
+UPDATE t SET y = 3 WHERE z = 3

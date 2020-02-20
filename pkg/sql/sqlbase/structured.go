@@ -2987,13 +2987,33 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 				return 0, errors.New("index was not in list of indexes")
 			}
 
-			// Actually write the new primary index into the descriptor, and remove it from the indexes list.
-			// Additionally, schedule the old primary index for deletion. Note that if needed, a copy of the primary index
-			// that doesn't store any columns was created at the beginning of the primary key change operation.
+			// Update the old primary index's descriptor to denote that it uses the primary
+			// index encoding and stores all columns. This ensures that it will be properly
+			// encoded and decoded when it is accessed after it is no longer the primary key
+			// but before it is dropped entirely during the index drop process.
 			primaryIndexCopy := protoutil.Clone(&desc.PrimaryIndex).(*IndexDescriptor)
+			primaryIndexCopy.EncodingType = PrimaryIndexEncoding
+			for _, col := range desc.Columns {
+				containsCol := false
+				for _, colID := range primaryIndexCopy.ColumnIDs {
+					if colID == col.ID {
+						containsCol = true
+						break
+					}
+				}
+				if !containsCol {
+					primaryIndexCopy.StoreColumnIDs = append(primaryIndexCopy.StoreColumnIDs, col.ID)
+					primaryIndexCopy.StoreColumnNames = append(primaryIndexCopy.StoreColumnNames, col.Name)
+				}
+			}
+			// Move the old primary index from the table descriptor into the mutations queue
+			// to schedule it for deletion.
 			if err := desc.AddIndexMutation(primaryIndexCopy, DescriptorMutation_DROP); err != nil {
 				return err
 			}
+
+			// Promote the new primary index into the primary index position on the descriptor,
+			// and remove it from the secondary indexes list.
 			newIndex, err := desc.FindIndexByID(args.NewPrimaryIndexId)
 			if err != nil {
 				return err

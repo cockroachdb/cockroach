@@ -260,6 +260,12 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			args = append(args, strings.Split(expandedArg, " ")...)
 		}
 
+		// For a one-node cluster, use start-single-node to disable replication.
+		startCmd := "start"
+		if len(c.VMs) == 1 && vers.AtLeast(version.MustParse("v19.2.0")) {
+			startCmd = "start-single-node"
+		}
+
 		binary := cockroachNodeBinary(c, nodes[i])
 		// NB: this is awkward as when the process fails, the test runner will show an
 		// unhelpful empty error (since everything has been redirected away). This is
@@ -280,7 +286,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			// https://github.com/cockroachdb/cockroach/issues/37815#issuecomment-545650087
 			//
 			// "COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
-			env + " " + binary + " start " + strings.Join(args, " ") +
+			env + " " + binary + " " + startCmd + " " + strings.Join(args, " ") +
 			" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
 			" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
 		if out, err := sess.CombinedOutput(cmd); err != nil {
