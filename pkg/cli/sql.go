@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/derekparker/trie"
 	readline "github.com/knz/go-libedit"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -161,6 +163,17 @@ type cliState struct {
 	// autoTrace, when non-empty, encloses the executed statements
 	// by suitable SET TRACING and SHOW TRACE FOR SESSION statements.
 	autoTrace string
+
+	// The different tries below maintain state used by tab completion
+	// to suggest completions to users.
+	//
+	// keywordTrie holds all SQL keywords.
+	keywordTrie *trie.Trie
+	// sessionVarTrie holds all session variables that can be set.
+	sessionVarTrie *trie.Trie
+	// identTrie holds all in scope identifiers, including database,
+	// table, index and column names.
+	identTrie *trie.Trie
 }
 
 // cliStateEnum drives the CLI state machine in runInteractive().
@@ -675,7 +688,15 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		// even when %/ appears before %x in the prompt format.
 		// This is because the database name should not be queried during
 		// some transaction phases.
-		dbName = c.refreshDatabaseName()
+		var err error
+		dbName, err = c.refreshDatabaseName()
+		if err != nil {
+			c.exitErr = err
+			cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			if c.errExit {
+				return cliStop
+			}
+		}
 	}
 
 	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.customPromptPattern, func(m string) string {
@@ -758,16 +779,16 @@ func (c *cliState) refreshTransactionStatus() {
 // refreshDatabaseName retrieves the current database name from the server.
 // The database name is only queried if there is no transaction ongoing,
 // or the transaction is fully open.
-func (c *cliState) refreshDatabaseName() string {
+func (c *cliState) refreshDatabaseName() (string, error) {
 	if !(c.lastKnownTxnStatus == "" /*NoTxn*/ ||
 		c.lastKnownTxnStatus == "  OPEN" ||
 		c.lastKnownTxnStatus == unknownTxnStatus) {
-		return unknownDbName
+		return unknownDbName, nil
 	}
 
 	dbVal, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
-		return unknownDbName
+		return unknownDbName, nil
 	}
 
 	if dbVal == "" {
@@ -779,10 +800,18 @@ func (c *cliState) refreshDatabaseName() string {
 	dbName := formatVal(dbVal.(string),
 		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
+	// If the database name is changing, update the identifier pool with
+	// new identifiers in scope.
+	if c.conn.dbName != dbName {
+		if err := c.initOrRefreshIdentTrie(dbName); err != nil {
+			return "", err
+		}
+	}
+
 	// Preserve the current database name in case of reconnects.
 	c.conn.dbName = dbName
 
-	return dbName
+	return dbName, nil
 }
 
 // endsWithIncompleteTxn returns true if and only if its
@@ -803,14 +832,51 @@ func endsWithIncompleteTxn(stmts []string) bool {
 
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachsql_history")
 
+// getLastWordFromStmt takes a SQL statement and extracts the last "word" from it.
+// For example:
+// * getLastWordFromStmt("SELECT * FRO") -> "FRO"
+// * getLastWordFromStmt("SELECT * FROM movr.rid") -> "rid"
+// * getLastWordFromStmt("SELECT * FROM t@prim") -> "prim"
+func getLastWordFromStmt(stmt string) string {
+	words := strings.Split(stmt, " ")
+	lastWord := words[len(words)-1]
+	for i := len(lastWord) - 1; i >= 0; i-- {
+		switch lastWord[i] {
+		case '[', ']', '@', '(', ')', '.':
+			return lastWord[i+1:]
+		}
+	}
+	return lastWord
+}
+
+// getCompletionsForWord takes a word and returns possible completions for it
+// using the current cliState. Currently, it uses the following heuristic:
+// * find all matches for w in the keyword, sessionvar and identifier tries.
+// * return matches in order of smallest match to largest.
+func (c *cliState) getCompletionsForWord(w string) []string {
+	candidates := c.keywordTrie.PrefixSearch(w)
+	candidates = append(candidates, c.sessionVarTrie.PrefixSearch(w)...)
+	candidates = append(candidates, c.identTrie.PrefixSearch(w)...)
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i] < candidates[j]
+	})
+	return candidates
+}
+
 // GetCompletions implements the readline.CompletionGenerator interface.
 func (c *cliState) GetCompletions(_ string) []string {
-	sql, _ := c.ins.GetLineInfo()
-
-	if !strings.HasSuffix(sql, "??") {
-		fmt.Fprintf(c.ins.Stdout(),
-			"\ntab completion not supported; append '??' and press tab for contextual help\n\n")
+	// During standard invocations, we can use c.ins.GetLineInfo(). However,
+	// during tests c.ins is not set up, so we have to use c.lastInputLine.
+	var sql string
+	if c.hasEditor() {
+		sql, _ = c.ins.GetLineInfo()
 	} else {
+		sql = c.lastInputLine
+	}
+
+	// If the input string ends with ??, display help text for the current query.
+	// Otherwise, attempt to complete the current word of the query.
+	if strings.HasSuffix(sql, "??") {
 		_, helpText, err := c.serverSideParse(sql)
 		if helpText != "" {
 			// We have a completion suggestion. Use that.
@@ -820,11 +886,15 @@ func (c *cliState) GetCompletions(_ string) []string {
 			fmt.Fprintln(c.ins.Stdout())
 			cliOutputError(c.ins.Stdout(), err, true /*showSeverity*/, false /*verbose*/)
 		}
+		// After the suggestion, re-display the prompt and current entry.
+		fmt.Fprint(c.ins.Stdout(), c.currentPrompt, sql)
+		return nil
 	}
-
-	// After the suggestion or error, re-display the prompt and current entry.
-	fmt.Fprint(c.ins.Stdout(), c.currentPrompt, sql)
-	return nil
+	lastWord := getLastWordFromStmt(sql)
+	if len(lastWord) == 0 {
+		return nil
+	}
+	return c.getCompletionsForWord(lastWord)
 }
 
 func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
@@ -1227,6 +1297,20 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	return nextState
 }
 
+var metaKeys = []string{"ALTER", "CREATE", "DROP", "COMMIT", "ROLLBACK"}
+
+// queryChangesMeta performs a simple check to see if executing a query
+// would change global schema state, such as adding a table, column etc.
+func queryChangesMeta(query string) bool {
+	queryUpper := strings.ToUpper(query)
+	for _, k := range metaKeys {
+		if strings.Contains(queryUpper, k) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
@@ -1294,6 +1378,14 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 		return cliStop
 	}
 
+	// If the query could change any schema state in the system, refresh all identifiers.
+	if queryChangesMeta(c.concatLines) {
+		if err := c.initOrRefreshIdentTrie(c.conn.dbName); err != nil {
+			c.exitErr = err
+			cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
+		}
+	}
+
 	return nextState
 }
 
@@ -1309,10 +1401,95 @@ func (c *cliState) doDecidePath() cliStateEnum {
 	return cliPrepareStatementLine
 }
 
+// initAllTries initializes all tries used for tab completion.
+func (c *cliState) initAllTries() error {
+	// Initialize the keyword trie.
+	c.keywordTrie = trie.New()
+	for _, k := range lex.KeywordNames {
+		// This trie library doesn't have a case-insensitive match,
+		// so add all keywords as both lower and upper case so
+		// that we can match both.
+		c.keywordTrie.Add(strings.ToLower(k), nil)
+		c.keywordTrie.Add(strings.ToUpper(k), nil)
+	}
+	// Initialize the session variable trie.
+	c.sessionVarTrie = trie.New()
+	for k := range delegate.ValidVars {
+		c.sessionVarTrie.Add(k, nil)
+	}
+	return c.initOrRefreshIdentTrie(c.conn.dbName)
+}
+
+// initOrRefreshIdentTrie collects all identifiers in scope of
+// database dbName and adds these identifiers to the identifier trie.
+func (c *cliState) initOrRefreshIdentTrie(dbName string) error {
+	c.identTrie = trie.New()
+
+	// runAndAddResultsToTrie runs the given query, and adds the rows
+	// returned to the identTrie. It additionally returns the list of
+	// keys inserted into the trie.
+	runAndAddResultsToTrie := func(query string) (result []string, _ error) {
+		prevEcho := sqlCtx.echo
+		sqlCtx.echo = false
+		defer func() { sqlCtx.echo = prevEcho }()
+		res, err := c.conn.Query(query, nil)
+		if err != nil {
+			return result, errors.Wrap(err, "unexpected error while initializing indentifier trie")
+		}
+		_, rows, err := sqlRowsToStrings(res, true)
+		if err != nil {
+			return result, errors.Wrap(err, "unexpected error while intiializing identifier trie")
+		}
+		for _, r := range rows {
+			c.identTrie.Add(r[0], nil)
+			result = append(result, r[0])
+		}
+		return result, nil
+	}
+
+	// Get all databases.
+	dbs, err := runAndAddResultsToTrie("SHOW DATABASES")
+	if err != nil {
+		return err
+	}
+
+	// See if the current dbName is a valid database. We can only get more
+	// identifiers (tables, indexes, columns) if it is.
+	isValidDB := false
+	for _, db := range dbs {
+		if db == dbName {
+			isValidDB = true
+			break
+		}
+	}
+	if isValidDB {
+		// Get all tables in scope.
+		if _, err := runAndAddResultsToTrie("SHOW TABLES"); err != nil {
+			return err
+		}
+		// Get all indexes in scope.
+		indexQuery := fmt.Sprintf("SELECT DISTINCT(index_name) FROM [SHOW INDEXES FROM DATABASE %s]", dbName)
+		if _, err := runAndAddResultsToTrie(indexQuery); err != nil {
+			return err
+		}
+		// Get all columns in scope.
+		columnsQuery := fmt.Sprintf("SELECT DISTINCT(column_name) FROM %s.crdb_internal.table_columns", dbName)
+		if _, err := runAndAddResultsToTrie(columnsQuery); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(conn *sqlConn) (exitErr error) {
 	c := cliState{conn: conn}
+
+	// Set up all tries for tab completion.
+	if err := c.initAllTries(); err != nil {
+		return err
+	}
 
 	state := cliStart
 	for {

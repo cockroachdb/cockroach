@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
@@ -185,6 +187,117 @@ func TestIsEndOfStatement(t *testing.T) {
 		if isEnd != test.isEnd {
 			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
 		}
+	}
+}
+
+func TestTabCompletion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	c := newCLITest(cliTestParams{insecure: true})
+	setCLIDefaultsForTests()
+	defer c.cleanup()
+
+	conn := makeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
+		security.RootUser, c.ServingSQLAddr()))
+	defer conn.Close()
+
+	// Set up some initial state in the database.
+	if err := conn.Exec(`
+CREATE DATABASE test_database;
+USE test_database;
+CREATE TABLE test_table_1 (test_column_1 INT);
+CREATE TABLE test_table_2 (test_column_2 INT);
+CREATE INDEX test_index_1 ON test_table_1 (test_column_1);
+`, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// We need a temporary file to send input to the CLI.
+	f, err := ioutil.TempFile("", "input")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Get the name and close it.
+	fname := f.Name()
+	f.Close()
+
+	// At every point below, when t.Fatal is called we should ensure the
+	// file is closed and removed.
+	f = nil
+	defer func() {
+		if f != nil {
+			f.Close()
+		}
+		_ = os.Remove(fname)
+		stdin = os.Stdin
+	}()
+
+	completionTests := []struct {
+		stmtSoFar           string
+		expectedCompletions []string
+	}{
+		{
+			"creat", []string{"create"},
+		},
+		{
+			"CREAT", []string{"CREATE"},
+		},
+		{
+			"USE test_databa", []string{"test_database"},
+		},
+		{
+			"SET crdb_ver", []string{"crdb_version"},
+		},
+		{
+			"SELECT * FROM test_table_", []string{"test_table_1", "test_table_2"},
+		},
+		{
+			"SELECT * FROM test_table_1@test_ind", []string{"test_index_1"},
+		},
+		{
+			"SELECT test_colum", []string{"test_column_1", "test_column_2"},
+		},
+	}
+
+	for _, test := range completionTests {
+		// Populate test input.
+		if f, err = os.OpenFile(fname, os.O_WRONLY, 0644); err != nil {
+			t.Fatal(err)
+		}
+		// Remove writes to the file from previous iterations and seek back the beginning.
+		if err := f.Truncate(0); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.Seek(0, 0); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString(test.stmtSoFar); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		// Make it available for reading.
+		if f, err = os.Open(fname); err != nil {
+			t.Fatal(err)
+		}
+
+		// Override the standard input.
+		stdin = f
+
+		cs := cliState{conn: conn}
+		if _, err := cs.refreshDatabaseName(); err != nil {
+			t.Fatal(err)
+		}
+		if err := cs.initAllTries(); err != nil {
+			t.Fatal(err)
+		}
+		cs.ins = noLineEditor
+		cs.buf = bufio.NewReader(stdin)
+
+		cs.doReadLine(cliStart)
+		if cs.exitErr != nil {
+			t.Fatal(cs.exitErr)
+		}
+
+		require.Equal(t, test.expectedCompletions, cs.GetCompletions(""))
 	}
 }
 
