@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -186,24 +187,28 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	tf.mu.Lock()
 	initialTableDescTs := tf.mu.highWater
 	tf.mu.Unlock()
-	var initialDescs []*sqlbase.TableDescriptor
-	initialTableDescsFn := func(ctx context.Context, txn *client.Txn) error {
-		initialDescs = initialDescs[:0]
+	var initialDescKVs []roachpb.KeyValue
+	initialTableDescKVsFn := func(ctx context.Context, txn *client.Txn) error {
+		initialDescKVs = initialDescKVs[:0]
 		txn.SetFixedTimestamp(ctx, initialTableDescTs)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range tf.targets {
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			descKV, err := txn.Get(ctx, sqlbase.MakeDescMetadataKey(tableID))
 			if err != nil {
 				return err
 			}
-			initialDescs = append(initialDescs, tableDesc)
+			value := roachpb.Value{Timestamp: initialTableDescTs}
+			if descKV.Value != nil {
+				value = *descKV.Value
+			}
+			initialDescKVs = append(initialDescKVs, roachpb.KeyValue{Key: descKV.Key, Value: value})
 		}
 		return nil
 	}
-	if err := tf.db.Txn(ctx, initialTableDescsFn); err != nil {
+	if err := tf.db.Txn(ctx, initialTableDescKVsFn); err != nil {
 		return err
 	}
-	return tf.ingestDescriptors(ctx, hlc.Timestamp{}, initialTableDescTs, initialDescs, tf.validateTable)
+	return tf.ingestDescriptors(ctx, hlc.Timestamp{}, initialTableDescTs, initialDescKVs, tf.validateTable)
 }
 
 func (tf *SchemaFeed) pollTableHistory(ctx context.Context) error {
@@ -225,11 +230,11 @@ func (tf *SchemaFeed) updateTableHistory(ctx context.Context, endTS hlc.Timestam
 	if endTS.LessEq(startTS) {
 		return nil
 	}
-	descs, err := fetchTableDescriptorVersions(ctx, tf.db, startTS, endTS, tf.targets)
+	descKVs, err := fetchTableDescriptorVersionKVs(ctx, tf.db, startTS, endTS)
 	if err != nil {
 		return err
 	}
-	return tf.ingestDescriptors(ctx, startTS, endTS, descs, tf.validateTable)
+	return tf.ingestDescriptors(ctx, startTS, endTS, descKVs, tf.validateTable)
 }
 
 // Peek returns all events which have not been popped which happen at or
@@ -329,6 +334,13 @@ func descLess(a, b *sqlbase.TableDescriptor) bool {
 	return a.ModificationTime.Less(b.ModificationTime)
 }
 
+func descKVLess(a, b roachpb.KeyValue) bool {
+	if a.Value.Timestamp.Equal(b.Value.Timestamp) {
+		return a.Key.Compare(b.Key) < 0
+	}
+	return a.Value.Timestamp.Less(b.Value.Timestamp)
+}
+
 // ingestDescriptors checks the given descriptors against the invariant check
 // function and adjusts the high-water or error timestamp appropriately. It is
 // required that the descriptors represent a transactional kv read between the
@@ -338,13 +350,13 @@ func descLess(a, b *sqlbase.TableDescriptor) bool {
 func (tf *SchemaFeed) ingestDescriptors(
 	ctx context.Context,
 	startTS, endTS hlc.Timestamp,
-	descs []*sqlbase.TableDescriptor,
+	descKVs []roachpb.KeyValue,
 	validateFn func(ctx context.Context, desc *sqlbase.TableDescriptor) error,
 ) error {
-	sort.Slice(descs, func(i, j int) bool { return descLess(descs[i], descs[j]) })
+	sort.Slice(descKVs, func(i, j int) bool { return descKVLess(descKVs[i], descKVs[j]) })
 	var validateErr error
-	for _, desc := range descs {
-		if err := validateFn(ctx, desc); validateErr == nil {
+	for _, descKV := range descKVs {
+		if err := validateKV(ctx, descKV, tf.targets, validateFn); validateErr == nil {
 			validateErr = err
 		}
 	}
@@ -353,32 +365,48 @@ func (tf *SchemaFeed) ingestDescriptors(
 
 // adjustTimestamps adjusts the high-water or error timestamp appropriately.
 func (tf *SchemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr error) error {
-	tf.mu.Lock()
-	defer tf.mu.Unlock()
-
 	if validateErr != nil {
 		// don't care about startTS in the invalid case
-		if tf.mu.errTS == (hlc.Timestamp{}) || endTS.Less(tf.mu.errTS) {
-			tf.mu.errTS = endTS
-			tf.mu.err = validateErr
-			newWaiters := make([]tableHistoryWaiter, 0, len(tf.mu.waiters))
-			for _, w := range tf.mu.waiters {
-				if w.ts.Less(tf.mu.errTS) {
-					newWaiters = append(newWaiters, w)
-					continue
-				}
-				w.errCh <- validateErr
-			}
-			tf.mu.waiters = newWaiters
-		}
+		tf.handleValidationError(validateErr, endTS)
 		return validateErr
 	}
 
+	tf.mu.Lock()
+	defer tf.mu.Unlock()
 	if tf.mu.highWater.Less(startTS) {
 		return errors.Errorf(`gap between %s and %s`, tf.mu.highWater, startTS)
 	}
-	if tf.mu.highWater.Less(endTS) {
-		tf.mu.highWater = endTS
+	tf.handleNewHighWaterLocked(endTS)
+	return nil
+}
+
+func (tf *SchemaFeed) handleValidationError(validateErr error, errTS hlc.Timestamp) {
+	tf.mu.Lock()
+	defer tf.mu.Unlock()
+	if tf.mu.errTS == (hlc.Timestamp{}) || errTS.Less(tf.mu.errTS) {
+		tf.mu.errTS = errTS
+		tf.mu.err = validateErr
+		newWaiters := make([]tableHistoryWaiter, 0, len(tf.mu.waiters))
+		for _, w := range tf.mu.waiters {
+			if w.ts.Less(tf.mu.errTS) {
+				newWaiters = append(newWaiters, w)
+				continue
+			}
+			w.errCh <- validateErr
+		}
+		tf.mu.waiters = newWaiters
+	}
+}
+
+func (tf *SchemaFeed) handleNewHighWater(newHighWater hlc.Timestamp) {
+	tf.mu.Lock()
+	defer tf.mu.Unlock()
+	tf.handleNewHighWaterLocked(newHighWater)
+}
+
+func (tf *SchemaFeed) handleNewHighWaterLocked(newHighWater hlc.Timestamp) {
+	if tf.mu.highWater.Less(newHighWater) {
+		tf.mu.highWater = newHighWater
 		newWaiters := make([]tableHistoryWaiter, 0, len(tf.mu.waiters))
 		for _, w := range tf.mu.waiters {
 			if tf.mu.highWater.Less(w.ts) {
@@ -389,8 +417,8 @@ func (tf *SchemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr
 		}
 		tf.mu.waiters = newWaiters
 	}
-	return nil
 }
+
 func (e TableEvent) String() string {
 	return formatEvent(e)
 }
@@ -403,13 +431,45 @@ func formatEvent(e TableEvent) string {
 	return fmt.Sprintf("%v->%v", formatDesc(e.Before), formatDesc(e.After))
 }
 
+func validateKV(
+	ctx context.Context,
+	kv roachpb.KeyValue,
+	targets jobspb.ChangefeedTargets,
+	validateFn func(context.Context, *sqlbase.TableDescriptor) error,
+) error {
+	remaining, _, _, err := sqlbase.DecodeTableIDIndexID(kv.Key)
+	if err != nil {
+		return err
+	}
+	_, tableID, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return err
+	}
+	origName, ok := targets[sqlbase.ID(tableID)]
+	if !ok {
+		// Uninteresting table.
+		return nil
+	}
+	if kv.Value.RawBytes == nil {
+		return errors.Errorf(`"%v" was dropped or truncated`, origName)
+	}
+	var desc sqlbase.Descriptor
+	if err := kv.Value.GetProto(&desc); err != nil {
+		return err
+	}
+	tableDesc := desc.Table(kv.Value.Timestamp)
+	if tableDesc == nil {
+		return nil
+	}
+	return validateFn(ctx, tableDesc)
+}
+
 func (tf *SchemaFeed) validateTable(ctx context.Context, desc *sqlbase.TableDescriptor) error {
 	if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 		return err
 	}
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
-	log.Infof(ctx, "validate %v", formatDesc(desc))
 	if lastVersion, ok := tf.mu.previousTableVersion[desc.ID]; ok {
 		// NB: Writes can occur to a table
 		if desc.ModificationTime.LessEq(lastVersion.ModificationTime) {
@@ -432,7 +492,6 @@ func (tf *SchemaFeed) validateTable(ctx context.Context, desc *sqlbase.TableDesc
 			After:  desc,
 		}
 		shouldFilter, err := tf.filterFn(ctx, e)
-		log.Infof(ctx, "validate shouldFilter %v %v", formatEvent(e), shouldFilter)
 		if err != nil {
 			return err
 		}
@@ -447,12 +506,9 @@ func (tf *SchemaFeed) validateTable(ctx context.Context, desc *sqlbase.TableDesc
 	return nil
 }
 
-func fetchTableDescriptorVersions(
-	ctx context.Context,
-	db *client.DB,
-	startTS, endTS hlc.Timestamp,
-	targets jobspb.ChangefeedTargets,
-) ([]*sqlbase.TableDescriptor, error) {
+func fetchTableDescriptorVersionKVs(
+	ctx context.Context, db *client.DB, startTS, endTS hlc.Timestamp,
+) ([]roachpb.KeyValue, error) {
 	if log.V(2) {
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
@@ -476,7 +532,8 @@ func fetchTableDescriptorVersions(
 		return nil, errors.Wrapf(err, `fetching changes for %s`, span)
 	}
 
-	var tableDescs []*sqlbase.TableDescriptor
+	var b bufalloc.ByteAllocator
+	var tableDescKVs []roachpb.KeyValue
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := engine.NewMemSSTIterator(file.SST, false /* verify */)
@@ -490,36 +547,18 @@ func fetchTableDescriptorVersions(
 				} else if !ok {
 					return nil
 				}
-				k := it.UnsafeKey()
-				remaining, _, _, err := sqlbase.DecodeTableIDIndexID(k.Key)
-				if err != nil {
-					return err
-				}
-				_, tableID, err := encoding.DecodeUvarintAscending(remaining)
-				if err != nil {
-					return err
-				}
-				origName, ok := targets[sqlbase.ID(tableID)]
-				if !ok {
-					// Uninteresting table.
-					continue
-				}
-				unsafeValue := it.UnsafeValue()
-				if unsafeValue == nil {
-					return errors.Errorf(`"%v" was dropped or truncated`, origName)
-				}
-				value := roachpb.Value{RawBytes: unsafeValue}
-				var desc sqlbase.Descriptor
-				if err := value.GetProto(&desc); err != nil {
-					return err
-				}
-				if tableDesc := desc.Table(k.Timestamp); tableDesc != nil {
-					tableDescs = append(tableDescs, tableDesc)
-				}
+				unsafeKey, unsafeValue := it.UnsafeKey(), it.UnsafeValue()
+				var keyCopy, valueCopy []byte
+				keyCopy, b = b.Copy(unsafeKey.Key, 0 /* extraCap */)
+				valueCopy, b = b.Copy(unsafeValue, 0 /* extraCap */)
+				tableDescKVs = append(tableDescKVs, roachpb.KeyValue{
+					Key:   roachpb.Key(keyCopy),
+					Value: roachpb.Value{Timestamp: unsafeKey.Timestamp, RawBytes: valueCopy},
+				})
 			}
 		}(); err != nil {
 			return nil, err
 		}
 	}
-	return tableDescs, nil
+	return tableDescKVs, nil
 }
