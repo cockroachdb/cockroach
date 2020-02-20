@@ -812,6 +812,8 @@ func ExtractIndexKey(
 type IndexEntry struct {
 	Key   roachpb.Key
 	Value roachpb.Value
+	// Only used for forward indexes.
+	Family FamilyID
 }
 
 // valueEncodedColumn represents a composite or stored column of a secondary
@@ -870,12 +872,20 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 	return nil, errors.AssertionFailedf("trying to apply inverted index to non JSON type")
 }
 
-// EncodePrimaryIndex constructs a list of k/v pairs for a row encoded as a primary index.
-// This function mirrors the encoding logic in prepareInsertOrUpdateBatch in pkg/sql/row/writer.go.
-// It is somewhat duplicated here due to the different arguments that prepareOrInsertUpdateBatch needs
-// and uses to generate the k/v's for the row it inserts.
+// EncodePrimaryIndex constructs a list of k/v pairs for a
+// row encoded as a primary index. This function mirrors the encoding
+// logic in prepareInsertOrUpdateBatch in pkg/sql/row/writer.go.
+// It is somewhat duplicated here due to the different arguments
+// that prepareOrInsertUpdateBatch needs and uses to generate
+// the k/v's for the row it inserts. includeEmpty controls
+// whether or not k/v's with empty values should be returned.
+// It returns indexEntries in family sorted order.
 func EncodePrimaryIndex(
-	tableDesc *TableDescriptor, index *IndexDescriptor, colMap map[ColumnID]int, values []tree.Datum,
+	tableDesc *TableDescriptor,
+	index *IndexDescriptor,
+	colMap map[ColumnID]int,
+	values []tree.Datum,
+	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	keyPrefix := MakeIndexKeyPrefix(tableDesc, index.ID)
 	indexKey, _, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
@@ -890,6 +900,7 @@ func EncodePrimaryIndex(
 	var entryValue []byte
 	indexEntries := make([]IndexEntry, 0, len(tableDesc.Families))
 	var columnsToEncode []valueEncodedColumn
+
 	for i := range tableDesc.Families {
 		var err error
 		family := &tableDesc.Families[i]
@@ -902,8 +913,10 @@ func EncodePrimaryIndex(
 		// The decoders expect that column family 0 is encoded with a TUPLE value tag, so we
 		// don't want to use the untagged value encoding.
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
-			datum := values[colMap[family.DefaultColumnID]]
-			if datum != tree.DNull {
+			datum := findColumnValue(family.DefaultColumnID, colMap, values)
+			// We want to include this column if its value is non-null or
+			// we were requested to include all of the columns.
+			if datum != tree.DNull || includeEmpty {
 				col, err := tableDesc.FindColumnByID(family.DefaultColumnID)
 				if err != nil {
 					return nil, err
@@ -912,7 +925,7 @@ func EncodePrimaryIndex(
 				if err != nil {
 					return nil, err
 				}
-				indexEntries = append(indexEntries, IndexEntry{Key: familyKey, Value: value})
+				indexEntries = append(indexEntries, IndexEntry{Key: familyKey, Value: value, Family: family.ID})
 			}
 			continue
 		}
@@ -934,10 +947,10 @@ func EncodePrimaryIndex(
 		if err != nil {
 			return nil, err
 		}
-		if family.ID != 0 && len(entryValue) == 0 {
+		if family.ID != 0 && len(entryValue) == 0 && !includeEmpty {
 			continue
 		}
-		entry := IndexEntry{Key: familyKey}
+		entry := IndexEntry{Key: familyKey, Family: family.ID}
 		entry.Value.SetTuple(entryValue)
 		indexEntries = append(indexEntries, entry)
 	}
@@ -946,19 +959,22 @@ func EncodePrimaryIndex(
 
 // EncodeSecondaryIndex encodes key/values for a secondary
 // index. colMap maps ColumnIDs to indices in `values`. This returns a
-// slice of IndexEntry. Forward indexes will return one value, while
-// inverted indices can return multiple values.
+// slice of IndexEntry. includeEmpty controls whether or not
+// EncodeSecondaryIndex should return k/v's that contain
+// empty values. For forward indexes the returned list of
+// index entries is in family sorted order.
 func EncodeSecondaryIndex(
 	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []tree.Datum,
+	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
 
 	// Use the primary key encoding for covering indexes.
 	if secondaryIndex.GetEncodingType(tableDesc.PrimaryIndex.ID) == PrimaryIndexEncoding {
-		return EncodePrimaryIndex(tableDesc, secondaryIndex, colMap, values)
+		return EncodePrimaryIndex(tableDesc, secondaryIndex, colMap, values, includeEmpty)
 	}
 
 	var containsNull = false
@@ -1033,7 +1049,8 @@ func EncodeSecondaryIndex(
 					}
 				}
 			}
-			entries, err = encodeSecondaryIndexWithFamilies(familyToColumns, secondaryIndex, colMap, key, values, extraKey, entries)
+			entries, err = encodeSecondaryIndexWithFamilies(
+				familyToColumns, secondaryIndex, colMap, key, values, extraKey, entries, includeEmpty)
 			if err != nil {
 				return []IndexEntry{}, err
 			}
@@ -1042,8 +1059,11 @@ func EncodeSecondaryIndex(
 	return entries, nil
 }
 
-// encodeSecondaryIndexWithFamilies generates a k/v pair for each family/column pair in familyMap.
-// The row parameter will be modified by the function, so copy it before using.
+// encodeSecondaryIndexWithFamilies generates a k/v pair for
+// each family/column pair in familyMap. The row parameter will be
+// modified by the function, so copy it before using. includeEmpty
+// controls whether or not k/v's with empty values will be returned.
+// The returned indexEntries are in family sorted order.
 func encodeSecondaryIndexWithFamilies(
 	familyMap map[FamilyID][]valueEncodedColumn,
 	index *IndexDescriptor,
@@ -1052,6 +1072,7 @@ func encodeSecondaryIndexWithFamilies(
 	row []tree.Datum,
 	extraKeyCols []byte,
 	results []IndexEntry,
+	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	var (
 		value []byte
@@ -1099,7 +1120,12 @@ func encodeSecondaryIndexWithFamilies(
 		if err != nil {
 			return []IndexEntry{}, err
 		}
-		entry := IndexEntry{Key: key}
+		entry := IndexEntry{Key: key, Family: FamilyID(familyID)}
+		// If we aren't looking at family 0 and don't have a value,
+		// don't include an entry for this k/v.
+		if familyID != 0 && len(value) == 0 && !includeEmpty {
+			continue
+		}
 		// If we are looking at family 0, encode the data as BYTES, as it might
 		// include encoded primary key columns. For other families, use the
 		// tuple encoding for the value.
@@ -1113,9 +1139,12 @@ func encodeSecondaryIndexWithFamilies(
 	return results, nil
 }
 
-// encodeSecondaryIndexNoFamilies takes a mostly constructed secondary index key (without the family/sentinel at
-// the end), and appends the 0 family sentinel to it, and constructs the value portion of the index. This function
-// performs the index encoding version before column families were introduced onto secondary indexes.
+// encodeSecondaryIndexNoFamilies takes a mostly constructed
+// secondary index key (without the family/sentinel at
+// the end), and appends the 0 family sentinel to it, and
+// constructs the value portion of the index. This function
+// performs the index encoding version before column
+// families were introduced onto secondary indexes.
 func encodeSecondaryIndexNoFamilies(
 	index *IndexDescriptor,
 	colMap map[ColumnID]int,
@@ -1154,7 +1183,7 @@ func encodeSecondaryIndexNoFamilies(
 	if err != nil {
 		return IndexEntry{}, err
 	}
-	entry := IndexEntry{Key: key}
+	entry := IndexEntry{Key: key, Family: 0}
 	entry.Value.SetBytes(value)
 	return entry, nil
 }
@@ -1194,12 +1223,13 @@ func EncodeSecondaryIndexes(
 	colMap map[ColumnID]int,
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
+	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	if len(secondaryIndexEntries) > 0 {
 		panic("Length of secondaryIndexEntries was non-zero")
 	}
 	for i := range indexes {
-		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
+		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values, includeEmpty)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}

@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // asyncSchemaChangerDisabled can be used to disable asynchronous processing
@@ -2561,6 +2562,168 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		// be using k as the primary key, we disable the UPSERT statements in the test.
 		false,
 	)
+}
+
+// TestPrimaryKeyChangeKVOps tests sequences of k/v operations
+// on the new primary index while it is staged as a special
+// secondary index. We cannot test this in a standard logic
+// test because we only have control over stopping the backfill
+// process in a unit test like this. This test is essentially
+// a heavy-weight poor man's logic tests, but there doesn't
+// seem to be a better way to achieve what is needed here.
+func TestPrimaryKeyChangeKVOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	backfillNotification := make(chan struct{})
+	waitBeforeContinuing := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
+				backfillNotification <- struct{}{}
+				<-waitBeforeContinuing
+				return nil
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+SET experimental_enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.test (
+	x INT PRIMARY KEY, 
+	y INT NOT NULL, 
+	z INT, 
+	a INT, 
+	b INT, 
+	c INT,
+	FAMILY (x), FAMILY (y), FAMILY (z, a), FAMILY (b), FAMILY (c)
+)
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (y)`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	// Wait for the new primary index to move to the DELETE_AND_WRITE_ONLY
+	// state, which happens right before backfilling of the index begins.
+	<-backfillNotification
+
+	scanToArray := func(rows *gosql.Rows) []string {
+		var found []string
+		for rows.Next() {
+			var message string
+			if err := rows.Scan(&message); err != nil {
+				t.Fatal(err)
+			}
+			found = append(found, message)
+		}
+		return found
+	}
+
+	// Test that we only insert the necessary k/v's.
+	rows, err := sqlDB.Query(`
+	SET TRACING=on,kv,results;
+	INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6);
+	SET TRACING=off;
+	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+		message LIKE 'InitPut /Table/53/2%' ORDER BY message;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []string{
+		"InitPut /Table/53/2/2/0 -> /TUPLE/1:1:Int/1",
+		// TODO (rohany): this k/v is spurious and should be removed
+		//  when #45343 is fixed.
+		"InitPut /Table/53/2/2/1/1 -> /INT/2",
+		"InitPut /Table/53/2/2/2/1 -> /TUPLE/3:3:Int/3",
+		"InitPut /Table/53/2/2/4/1 -> /INT/6",
+	}
+	require.Equal(t, expected, scanToArray(rows))
+
+	// Test that we remove all families when deleting.
+	rows, err = sqlDB.Query(`
+	SET TRACING=on, kv, results;
+	DELETE FROM t.test WHERE y = 2;
+	SET TRACING=off;
+	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+		message LIKE 'Del /Table/53/2%' ORDER BY message;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = []string{
+		"Del /Table/53/2/2/0",
+		"Del /Table/53/2/2/1/1",
+		"Del /Table/53/2/2/2/1",
+		"Del /Table/53/2/2/3/1",
+		"Del /Table/53/2/2/4/1",
+	}
+	require.Equal(t, expected, scanToArray(rows))
+
+	// Test that we update all families when the key changes.
+	rows, err = sqlDB.Query(`
+	INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6);
+	SET TRACING=on, kv, results;
+	UPDATE t.test SET y = 3 WHERE y = 2;
+	SET TRACING=off;
+	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+		message LIKE 'Put /Table/53/2%' OR
+		message LIKE 'Del /Table/53/2%' OR
+		message LIKE 'CPut /Table/53/2%';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = []string{
+		"Del /Table/53/2/2/0",
+		"CPut /Table/53/2/3/0 -> /TUPLE/1:1:Int/1 (expecting does not exist)",
+		// TODO (rohany): this k/v is spurious and should be removed
+		//  when #45343 is fixed.
+		"Del /Table/53/2/2/1/1",
+		"CPut /Table/53/2/3/1/1 -> /INT/3 (expecting does not exist)",
+		"Del /Table/53/2/2/2/1",
+		"CPut /Table/53/2/3/2/1 -> /TUPLE/3:3:Int/3 (expecting does not exist)",
+		"Del /Table/53/2/2/4/1",
+		"CPut /Table/53/2/3/4/1 -> /INT/6 (expecting does not exist)",
+	}
+	require.Equal(t, expected, scanToArray(rows))
+
+	// Test that we only update necessary families when the key doesn't change.
+	rows, err = sqlDB.Query(`
+	SET TRACING=on, kv, results;
+	UPDATE t.test SET z = NULL, b = 5, c = NULL WHERE y = 3;
+	SET TRACING=off;
+	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+		message LIKE 'Put /Table/53/2%' OR
+		message LIKE 'Del /Table/53/2%' OR
+		message LIKE 'CPut /Table/53/2%';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = []string{
+		"Del /Table/53/2/3/2/1",
+		"CPut /Table/53/2/3/3/1 -> /INT/5 (expecting does not exist)",
+		"Del /Table/53/2/3/4/1",
+	}
+	require.Equal(t, expected, scanToArray(rows))
+
+	waitBeforeContinuing <- struct{}{}
+
+	wg.Wait()
 }
 
 // TestPrimaryKeyIndexRewritesGetRemoved ensures that the old versions of
