@@ -18,19 +18,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+var schemaPush = envutil.EnvOrDefaultBool("COCKROACH_CHANGEFEED_SCHEMA_PUSH", false)
 
 // TODO(ajwerner): Ideally we could have a centralized worker which reads the
 // table descriptors instead of polling from each changefeed. This wouldn't be
@@ -167,6 +173,17 @@ func (tf *SchemaFeed) Run(ctx context.Context) error {
 	if err := tf.primeInitialTableDescs(ctx); err != nil {
 		return err
 	}
+	if schemaPush {
+		// If enabled, use RangeFeed to get schema updates pushed to us instead of
+		// polling for them. This is not enabled in 20.1 for two reasons: (1) it
+		// needs more testing and (2) until we have the single version schema
+		// leasing this introduces more latency in commit-to-emit for every row
+		// (closed timestamp interval vs 1s). Once we have single version schema
+		// leasing, (2) will only apply for rows emitted around an actual schema
+		// change, which flips the cost/benefit in favor of this over the polling
+		// below.
+		return tf.watchTableHistory(ctx)
+	}
 	// We want to initialize the table history which will pull the initial version
 	// and then begin polling.
 	//
@@ -207,6 +224,47 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		return err
 	}
 	return tf.ingestDescriptors(ctx, hlc.Timestamp{}, initialTableDescTs, initialDescKVs, tf.validateTable)
+}
+
+func (tf *SchemaFeed) watchTableHistory(ctx context.Context) error {
+	descsPrefix := roachpb.Key(keys.DescMetadataPrefix())
+	descsSpan := roachpb.Span{Key: descsPrefix, EndKey: descsPrefix.PrefixEnd()}
+	initialTableDescTs := tf.highWater()
+	eventC := make(chan *roachpb.RangeFeedEvent, 128)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		sender := tf.db.NonTransactionalSender()
+		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+		return distSender.RangeFeed(ctx, descsSpan, initialTableDescTs, false /* withDiff */, eventC)
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		frontier := span.MakeFrontier(descsSpan)
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case e := <-eventC:
+				switch t := e.GetValue().(type) {
+				case *roachpb.RangeFeedValue:
+					kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
+					validateErr := validateKV(ctx, kv, tf.targets, tf.validateTable)
+					if validateErr != nil {
+						tf.handleValidationError(validateErr, t.Value.Timestamp)
+						return validateErr
+					}
+				case *roachpb.RangeFeedCheckpoint:
+					forwarded := frontier.Forward(t.Span, t.ResolvedTS)
+					if forwarded {
+						tf.handleNewHighWater(frontier.Frontier())
+					}
+				default:
+					log.Fatalf(ctx, "unexpected RangeFeedEvent variant %v", t)
+				}
+			}
+		}
+	})
+	return g.Wait()
 }
 
 func (tf *SchemaFeed) pollTableHistory(ctx context.Context) error {

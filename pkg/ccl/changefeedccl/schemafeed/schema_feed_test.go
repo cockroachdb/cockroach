@@ -35,7 +35,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 			}
 			descNoTime := *desc
 			descNoTime.ModificationTime = hlc.Timestamp{}
-			kv.Value.SetProto(sqlbase.WrapDescriptor(&descNoTime))
+			require.NoError(t, kv.Value.SetProto(sqlbase.WrapDescriptor(&descNoTime)))
 			kvs = append(kvs, kv)
 		}
 		return kvs
