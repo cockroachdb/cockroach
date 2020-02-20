@@ -176,6 +176,8 @@ message SchemaChangeDetails {
     (gogoproto.customname) = "DroppedDatabaseID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
+  uint32 table_id = 5 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  uint32 mutation_id = 6 [(gogoproto.customname) = "MutationID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.MutationID"];
 }
 
 message SchemaChangeProgress {
