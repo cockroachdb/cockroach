@@ -739,7 +739,7 @@ func (r *Registry) stepThroughStateMachine(
 		resumer.OnTerminal(ctx, status, resultsCh)
 		return nil
 	case StatusReverting:
-		if err := job.Reverted(ctx, nil); err != nil {
+		if err := job.Reverted(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
@@ -922,10 +922,6 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			log.Warningf(ctx, "job %d predates cluster upgrade and must be re-run", id)
 			versionErr := errors.New("job predates cluster upgrade and must be re-run")
 			payload.Error = versionErr.Error()
-			encodedErr := errors.EncodeError(ctx, versionErr)
-			// Technically this error isn't an error from the resumer, but this is the
-			// only place to put it.
-			payload.ResumeErrors = append(payload.ResumeErrors, &encodedErr)
 			payloadBytes, err := protoutil.Marshal(payload)
 			if err != nil {
 				return err
@@ -996,7 +992,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 				}
 				continue
 			}
-			if err := job.Reverted(ctx, func(context.Context, *client.Txn) error {
+			if err := job.Reverted(ctx, err, func(context.Context, *client.Txn) error {
 				r.unregister(*id)
 				return nil
 			}); err != nil {

@@ -280,6 +280,10 @@ message Payload {
   string error = 8;
   repeated errorspb.EncodedError resume_errors = 17;
   repeated errorspb.EncodedError cleanup_errors = 18;
+  // FinalResumeError is set when an error occurs that requires the job to be
+  // reverted. The error is recorded so it can be handled while reverting, if
+  // needed.
+  errorspb.EncodedError final_resume_error = 19;
   Lease lease = 9;
   oneof details {
     BackupDetails backup = 10;
