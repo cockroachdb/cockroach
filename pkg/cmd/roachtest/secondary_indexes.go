@@ -66,16 +66,13 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 		if _, err := conn.Exec(`INSERT INTO t VALUES (13, 14, 15, 16)`); err != nil {
 			t.Fatal(err)
 		}
-		verifyTable := func(conn *gosql.DB) {
+		if _, err := conn.Exec(`UPDATE t SET w = 17 WHERE y = 14`); err != nil {
+			t.Fatal(err)
+		}
+		verifyTable := func(conn *gosql.DB, expected [][]int) {
 			rows, err := conn.Query(`SELECT y, z, w FROM t@i ORDER BY y`)
 			if err != nil {
 				t.Fatal(err)
-			}
-			expected := [][]int{
-				{2, 3, 4},
-				{6, 7, 8},
-				{10, 11, 12},
-				{14, 15, 16},
 			}
 			var y, z, w int
 			count := 0
@@ -87,8 +84,14 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 				require.Equal(t, found, expected[count])
 			}
 		}
+		expected := [][]int{
+			{2, 3, 4},
+			{6, 7, 8},
+			{10, 11, 12},
+			{14, 15, 17},
+		}
 		for i := 1; i <= c.spec.NodeCount; i++ {
-			verifyTable(c.Conn(ctx, i))
+			verifyTable(c.Conn(ctx, i), expected)
 		}
 		t.Status("mixed version cluster passed test")
 
@@ -96,8 +99,25 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 		for i := 2; i <= c.spec.NodeCount; i++ {
 			upgradeNode(i)
 		}
+
+		conn = c.Conn(ctx, 1)
+
+		if _, err := conn.Exec(`INSERT INTO t VALUES (20, 21, 22, 23)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conn.Exec(`UPDATE t SET w = 25, z = 25 WHERE y = 21`); err != nil {
+			t.Fatal(err)
+		}
+
+		expected = [][]int{
+			{2, 3, 4},
+			{6, 7, 8},
+			{10, 11, 12},
+			{14, 15, 17},
+			{21, 25, 25},
+		}
 		for i := 1; i <= c.spec.NodeCount; i++ {
-			verifyTable(c.Conn(ctx, i))
+			verifyTable(c.Conn(ctx, i), expected)
 		}
 		t.Status("passed on fully upgraded cluster")
 	}
