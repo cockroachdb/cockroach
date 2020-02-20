@@ -645,7 +645,7 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	payload := job.Payload()
 	fn := constructors[payload.Type()]
 	if fn == nil {
-		return nil, errors.Errorf("no resumer are available for %s", payload.Type())
+		return nil, errors.Errorf("no resumer is available for %s", payload.Type())
 	}
 	if wrapper := r.TestingResumerCreationKnobs[payload.Type()]; wrapper != nil {
 		return wrapper(fn(job, settings)), nil
@@ -819,7 +819,7 @@ func (r *Registry) resume(
 			if err != nil {
 				log.Errorf(ctx, "job %d: failed querying status: %v", *job.ID(), err)
 			} else {
-				log.Errorf(ctx, "job %d: status %s after adoption finished", *job.ID(), status)
+				log.Infof(ctx, "job %d: status %s after adoption finished", *job.ID(), status)
 			}
 		}
 		r.unregister(*job.ID())
