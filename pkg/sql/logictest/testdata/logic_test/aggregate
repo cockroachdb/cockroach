@@ -1277,10 +1277,16 @@ INSERT INTO string_agg_test VALUES
   (9, 3, 'C'),
   (10, 2, 'B')
 
-query error pq: unimplemented: aggregate functions with multiple non-constant expressions are not supported
+# This is a bit strange but the same behavior as PostgreSQL.
+query IT rowsort
 SELECT company_id, string_agg(employee, employee)
 FROM string_agg_test
 GROUP BY company_id;
+----
+1           A
+2           BBB
+3           CCCCC
+4           DDDDDDD
 
 query IT colnames
 SELECT company_id, string_agg(employee, ',')
@@ -1688,6 +1694,12 @@ ORDER BY company_id, id;
 
 query error pq: unknown signature: string_agg\(string\)
 SELECT company_id, string_agg(employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query error pq: unknown signature: string_agg\(string, string, string, string\)
+SELECT company_id, string_agg(employee, 'foo', employee, 'bar')
 OVER (PARTITION BY company_id)
 FROM string_agg_test
 ORDER BY company_id, id;
