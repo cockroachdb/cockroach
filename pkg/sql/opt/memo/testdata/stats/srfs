@@ -23,13 +23,11 @@ inner-join (cross)
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── stats: [rows=1]
  │    │    │    ├── key: ()
- │    │    │    └── tuple [type=tuple]
+ │    │    │    └── () [type=tuple]
  │    │    └── zip
- │    │         ├── const: 'DEF' [type=string]
- │    │         ├── function: generate_series [type=int, side-effects]
- │    │         │    ├── const: 1 [type=int]
- │    │         │    └── const: 3 [type=int]
- │    │         └── const: 'GHI' [type=string]
+ │    │         ├── 'DEF' [type=string]
+ │    │         ├── generate_series(1, 3) [type=int, side-effects]
+ │    │         └── 'GHI' [type=string]
  │    ├── project-set
  │    │    ├── columns: upper:1(string)
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
@@ -37,9 +35,9 @@ inner-join (cross)
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── stats: [rows=1]
  │    │    │    ├── key: ()
- │    │    │    └── tuple [type=tuple]
+ │    │    │    └── () [type=tuple]
  │    │    └── zip
- │    │         └── const: 'ABC' [type=string]
+ │    │         └── 'ABC' [type=string]
  │    └── filters (true)
  ├── project-set
  │    ├── columns: generate_series:5(int)
@@ -49,11 +47,9 @@ inner-join (cross)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── stats: [rows=1]
  │    │    ├── key: ()
- │    │    └── tuple [type=tuple]
+ │    │    └── () [type=tuple]
  │    └── zip
- │         └── function: generate_series [type=int, side-effects]
- │              ├── const: 1 [type=int]
- │              └── const: 4 [type=int]
+ │         └── generate_series(1, 4) [type=int, side-effects]
  └── filters (true)
 
 opt
@@ -77,11 +73,9 @@ distinct-on
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── stats: [rows=1]
       │    │    ├── key: ()
-      │    │    └── tuple [type=tuple]
+      │    │    └── () [type=tuple]
       │    └── zip
-      │         └── function: generate_series [type=int, side-effects]
-      │              ├── const: 1 [type=int]
-      │              └── const: 2 [type=int]
+      │         └── generate_series(1, 2) [type=int, side-effects]
       ├── project-set
       │    ├── columns: upper:1(string)
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
@@ -89,9 +83,9 @@ distinct-on
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── stats: [rows=1]
       │    │    ├── key: ()
-      │    │    └── tuple [type=tuple]
+      │    │    └── () [type=tuple]
       │    └── zip
-      │         └── const: 'ABC' [type=string]
+      │         └── 'ABC' [type=string]
       └── filters (true)
 
 opt colstat=3 colstat=(1,2,3)
@@ -112,8 +106,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── zip
-           └── function: unnest [type=int, outer=(1,2), side-effects]
-                └── ARRAY[x, y] [type=int[]]
+           └── unnest(ARRAY[x:1, y:2]) [type=int, outer=(1,2), side-effects]
 
 opt colstat=3 colstat=4 colstat=(3, 4) colstat=(1, 3) colstat=(2, 4)
 SELECT xy.*, generate_series(x, y), generate_series(0, 1) FROM xy
@@ -129,12 +122,8 @@ project-set
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── zip
-      ├── function: generate_series [type=int, outer=(1,2), side-effects]
-      │    ├── variable: x [type=int]
-      │    └── variable: y [type=int]
-      └── function: generate_series [type=int, side-effects]
-           ├── const: 0 [type=int]
-           └── const: 1 [type=int]
+      ├── generate_series(x:1, y:2) [type=int, outer=(1,2), side-effects]
+      └── generate_series(0, 1) [type=int, side-effects]
 
 exec-ddl
 CREATE TABLE articles (
@@ -187,16 +176,12 @@ distinct-on
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4,6)
       │    └── zip
-      │         ├── function: upper [type=string, outer=(4)]
-      │         │    └── variable: title [type=string]
-      │         ├── function: unnest [type=string, outer=(6), side-effects]
-      │         │    └── variable: tag_list [type=string[]]
-      │         ├── function: generate_series [type=int, side-effects]
-      │         │    ├── const: 0 [type=int]
-      │         │    └── const: 1 [type=int]
-      │         └── const: 'abc' [type=string]
+      │         ├── upper(title:4) [type=string, outer=(4)]
+      │         ├── unnest(tag_list:6) [type=string, outer=(6), side-effects]
+      │         ├── generate_series(0, 1) [type=int, side-effects]
+      │         └── 'abc' [type=string]
       └── filters
-           └── title = upper [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+           └── title:4 = upper:10 [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
 
 opt
 SELECT id FROM articles WHERE title = ANY(
@@ -225,16 +210,12 @@ distinct-on
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4,6)
       │    └── zip
-      │         ├── function: upper [type=string, outer=(4)]
-      │         │    └── variable: title [type=string]
-      │         ├── function: unnest [type=string, outer=(6), side-effects]
-      │         │    └── variable: tag_list [type=string[]]
-      │         ├── function: generate_series [type=int, side-effects]
-      │         │    ├── const: 0 [type=int]
-      │         │    └── const: 1 [type=int]
-      │         └── const: 'abc' [type=string]
+      │         ├── upper(title:4) [type=string, outer=(4)]
+      │         ├── unnest(tag_list:6) [type=string, outer=(6), side-effects]
+      │         ├── generate_series(0, 1) [type=int, side-effects]
+      │         └── 'abc' [type=string]
       └── filters
-           └── title = unnest [type=bool, outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
+           └── title:4 = unnest:11 [type=bool, outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
 
 opt
 SELECT id FROM articles WHERE id = ANY(
@@ -263,16 +244,12 @@ distinct-on
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4,6)
       │    └── zip
-      │         ├── function: upper [type=string, outer=(4)]
-      │         │    └── variable: title [type=string]
-      │         ├── function: unnest [type=string, outer=(6), side-effects]
-      │         │    └── variable: tag_list [type=string[]]
-      │         ├── function: generate_series [type=int, side-effects]
-      │         │    ├── const: 0 [type=int]
-      │         │    └── const: 1 [type=int]
-      │         └── const: 'abc' [type=string]
+      │         ├── upper(title:4) [type=string, outer=(4)]
+      │         ├── unnest(tag_list:6) [type=string, outer=(6), side-effects]
+      │         ├── generate_series(0, 1) [type=int, side-effects]
+      │         └── 'abc' [type=string]
       └── filters
-           └── id = generate_series [type=bool, outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+           └── id:1 = generate_series:12 [type=bool, outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
 
 opt
 SELECT id FROM articles WHERE title = ANY(
@@ -301,13 +278,9 @@ distinct-on
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4,6)
       │    └── zip
-      │         ├── function: upper [type=string, outer=(4)]
-      │         │    └── variable: title [type=string]
-      │         ├── function: unnest [type=string, outer=(6), side-effects]
-      │         │    └── variable: tag_list [type=string[]]
-      │         ├── function: generate_series [type=int, side-effects]
-      │         │    ├── const: 0 [type=int]
-      │         │    └── const: 1 [type=int]
-      │         └── const: 'abc' [type=string]
+      │         ├── upper(title:4) [type=string, outer=(4)]
+      │         ├── unnest(tag_list:6) [type=string, outer=(6), side-effects]
+      │         ├── generate_series(0, 1) [type=int, side-effects]
+      │         └── 'abc' [type=string]
       └── filters
-           └── title = lower [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]
+           └── title:4 = lower:13 [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]

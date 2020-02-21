@@ -17,116 +17,112 @@ build
 SELECT y, z FROM xyz
 ----
 project
- ├── columns: y:2(int) z:3(float)
+ ├── columns: y:2 z:3
  └── scan xyz
-      └── columns: x:1(int!null) y:2(int) z:3(float)
+      └── columns: x:1!null y:2 z:3
 
 build
 SELECT DISTINCT y, z FROM xyz
 ----
 distinct-on
- ├── columns: y:2(int) z:3(float)
- ├── grouping columns: y:2(int) z:3(float)
+ ├── columns: y:2 z:3
+ ├── grouping columns: y:2 z:3
  └── project
-      ├── columns: y:2(int) z:3(float)
+      ├── columns: y:2 z:3
       └── scan xyz
-           └── columns: x:1(int!null) y:2(int) z:3(float)
+           └── columns: x:1!null y:2 z:3
 
 build
 SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
 ----
 project
- ├── columns: y:2(int)
+ ├── columns: y:2
  └── distinct-on
-      ├── columns: y:2(int) z:3(float)
-      ├── grouping columns: y:2(int) z:3(float)
+      ├── columns: y:2 z:3
+      ├── grouping columns: y:2 z:3
       └── project
-           ├── columns: y:2(int) z:3(float)
+           ├── columns: y:2 z:3
            └── scan xyz
-                └── columns: x:1(int!null) y:2(int) z:3(float)
+                └── columns: x:1!null y:2 z:3
 
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 distinct-on
- ├── columns: y:2(int) z:3(float)
- ├── grouping columns: y:2(int) z:3(float)
+ ├── columns: y:2 z:3
+ ├── grouping columns: y:2 z:3
  ├── ordering: +3
  └── sort
-      ├── columns: y:2(int) z:3(float)
+      ├── columns: y:2 z:3
       ├── ordering: +3
       └── project
-           ├── columns: y:2(int) z:3(float)
+           ├── columns: y:2 z:3
            └── scan xyz
-                └── columns: x:1(int!null) y:2(int) z:3(float)
+                └── columns: x:1!null y:2 z:3
 
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
 distinct-on
- ├── columns: y:2(int) z:3(float)
- ├── grouping columns: y:2(int) z:3(float)
+ ├── columns: y:2 z:3
+ ├── grouping columns: y:2 z:3
  ├── ordering: +2
  └── sort
-      ├── columns: y:2(int) z:3(float)
+      ├── columns: y:2 z:3
       ├── ordering: +2
       └── project
-           ├── columns: y:2(int) z:3(float)
+           ├── columns: y:2 z:3
            └── scan xyz
-                └── columns: x:1(int!null) y:2(int) z:3(float)
+                └── columns: x:1!null y:2 z:3
 
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
 distinct-on
- ├── columns: y:2(int) z:3(float)
- ├── grouping columns: y:2(int) z:3(float)
+ ├── columns: y:2 z:3
+ ├── grouping columns: y:2 z:3
  ├── ordering: +2,+3
  └── sort
-      ├── columns: y:2(int) z:3(float)
+      ├── columns: y:2 z:3
       ├── ordering: +2,+3
       └── project
-           ├── columns: y:2(int) z:3(float)
+           ├── columns: y:2 z:3
            └── scan xyz
-                └── columns: x:1(int!null) y:2(int) z:3(float)
+                └── columns: x:1!null y:2 z:3
 
 build
 SELECT DISTINCT y + x AS r FROM xyz ORDER by (y + x)
 ----
 distinct-on
- ├── columns: r:4(int)
- ├── grouping columns: r:4(int)
+ ├── columns: r:4
+ ├── grouping columns: r:4
  ├── ordering: +4
  └── sort
-      ├── columns: r:4(int)
+      ├── columns: r:4
       ├── ordering: +4
       └── project
-           ├── columns: r:4(int)
+           ├── columns: r:4
            ├── scan xyz
-           │    └── columns: x:1(int!null) y:2(int) z:3(float)
+           │    └── columns: x:1!null y:2 z:3
            └── projections
-                └── plus [type=int]
-                     ├── variable: y [type=int]
-                     └── variable: x [type=int]
+                └── y:2 + x:1 [as=r:4]
 
 build
 SELECT DISTINCT y + x AS r FROM xyz ORDER BY y + x
 ----
 distinct-on
- ├── columns: r:4(int)
- ├── grouping columns: r:4(int)
+ ├── columns: r:4
+ ├── grouping columns: r:4
  ├── ordering: +4
  └── sort
-      ├── columns: r:4(int)
+      ├── columns: r:4
       ├── ordering: +4
       └── project
-           ├── columns: r:4(int)
+           ├── columns: r:4
            ├── scan xyz
-           │    └── columns: x:1(int!null) y:2(int) z:3(float)
+           │    └── columns: x:1!null y:2 z:3
            └── projections
-                └── plus [type=int]
-                     ├── variable: y [type=int]
-                     └── variable: x [type=int]
+                └── y:2 + x:1 [as=r:4]
 
 build
 SELECT DISTINCT y + z FROM xyz ORDER BY y + z
@@ -146,168 +142,156 @@ build
 SELECT DISTINCT y AS w FROM xyz ORDER by y
 ----
 sort
- ├── columns: w:2(int)
+ ├── columns: w:2
  ├── ordering: +2
  └── distinct-on
-      ├── columns: y:2(int)
-      ├── grouping columns: y:2(int)
+      ├── columns: y:2
+      ├── grouping columns: y:2
       └── project
-           ├── columns: y:2(int)
+           ├── columns: y:2
            └── scan xyz
-                └── columns: x:1(int!null) y:2(int) z:3(float)
+                └── columns: x:1!null y:2 z:3
 
 build
 SELECT DISTINCT (y,z) AS r FROM xyz
 ----
 distinct-on
- ├── columns: r:4(tuple{int, float})
- ├── grouping columns: r:4(tuple{int, float})
+ ├── columns: r:4
+ ├── grouping columns: r:4
  └── project
-      ├── columns: r:4(tuple{int, float})
+      ├── columns: r:4
       ├── scan xyz
-      │    └── columns: x:1(int!null) y:2(int) z:3(float)
+      │    └── columns: x:1!null y:2 z:3
       └── projections
-           └── tuple [type=tuple{int, float}]
-                ├── variable: y [type=int]
-                └── variable: z [type=float]
+           └── (y:2, z:3) [as=r:4]
 
 build
 SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
 ----
 scalar-group-by
- ├── columns: count:4(int!null)
+ ├── columns: count:4!null
  ├── project
  │    └── distinct-on
- │         ├── columns: y:2(int)
- │         ├── grouping columns: y:2(int)
+ │         ├── columns: y:2
+ │         ├── grouping columns: y:2
  │         └── project
- │              ├── columns: y:2(int)
+ │              ├── columns: y:2
  │              └── scan xyz
- │                   └── columns: x:1(int!null) y:2(int) z:3(float)
+ │                   └── columns: x:1!null y:2 z:3
  └── aggregations
-      └── count-rows [type=int]
+      └── count-rows [as=count_rows:4]
 
 build
 SELECT DISTINCT x FROM xyz WHERE x > 0
 ----
 distinct-on
- ├── columns: x:1(int!null)
- ├── grouping columns: x:1(int!null)
+ ├── columns: x:1!null
+ ├── grouping columns: x:1!null
  └── project
-      ├── columns: x:1(int!null)
+      ├── columns: x:1!null
       └── select
-           ├── columns: x:1(int!null) y:2(int) z:3(float)
+           ├── columns: x:1!null y:2 z:3
            ├── scan xyz
-           │    └── columns: x:1(int!null) y:2(int) z:3(float)
+           │    └── columns: x:1!null y:2 z:3
            └── filters
-                └── gt [type=bool]
-                     ├── variable: x [type=int]
-                     └── const: 0 [type=int]
+                └── x:1 > 0
 
 build
 SELECT DISTINCT z FROM xyz WHERE x > 0
 ----
 distinct-on
- ├── columns: z:3(float)
- ├── grouping columns: z:3(float)
+ ├── columns: z:3
+ ├── grouping columns: z:3
  └── project
-      ├── columns: z:3(float)
+      ├── columns: z:3
       └── select
-           ├── columns: x:1(int!null) y:2(int) z:3(float)
+           ├── columns: x:1!null y:2 z:3
            ├── scan xyz
-           │    └── columns: x:1(int!null) y:2(int) z:3(float)
+           │    └── columns: x:1!null y:2 z:3
            └── filters
-                └── gt [type=bool]
-                     ├── variable: x [type=int]
-                     └── const: 0 [type=int]
+                └── x:1 > 0
 
 build
 SELECT DISTINCT max(x) FROM xyz GROUP BY x
 ----
 distinct-on
- ├── columns: max:4(int!null)
- ├── grouping columns: max:4(int!null)
+ ├── columns: max:4!null
+ ├── grouping columns: max:4!null
  └── project
-      ├── columns: max:4(int!null)
+      ├── columns: max:4!null
       └── group-by
-           ├── columns: x:1(int!null) max:4(int!null)
-           ├── grouping columns: x:1(int!null)
+           ├── columns: x:1!null max:4!null
+           ├── grouping columns: x:1!null
            ├── project
-           │    ├── columns: x:1(int!null)
+           │    ├── columns: x:1!null
            │    └── scan xyz
-           │         └── columns: x:1(int!null) y:2(int) z:3(float)
+           │         └── columns: x:1!null y:2 z:3
            └── aggregations
-                └── max [type=int]
-                     └── variable: x [type=int]
+                └── max [as=max:4]
+                     └── x:1
 
 build
 SELECT DISTINCT x+y AS r FROM xyz
 ----
 distinct-on
- ├── columns: r:4(int)
- ├── grouping columns: r:4(int)
+ ├── columns: r:4
+ ├── grouping columns: r:4
  └── project
-      ├── columns: r:4(int)
+      ├── columns: r:4
       ├── scan xyz
-      │    └── columns: x:1(int!null) y:2(int) z:3(float)
+      │    └── columns: x:1!null y:2 z:3
       └── projections
-           └── plus [type=int]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 + y:2 [as=r:4]
 
 build
 SELECT DISTINCT 3 r FROM xyz
 ----
 distinct-on
- ├── columns: r:4(int!null)
- ├── grouping columns: r:4(int!null)
+ ├── columns: r:4!null
+ ├── grouping columns: r:4!null
  └── project
-      ├── columns: r:4(int!null)
+      ├── columns: r:4!null
       ├── scan xyz
-      │    └── columns: x:1(int!null) y:2(int) z:3(float)
+      │    └── columns: x:1!null y:2 z:3
       └── projections
-           └── const: 3 [type=int]
+           └── 3 [as=r:4]
 
 build
 SELECT DISTINCT 3 r
 ----
 distinct-on
- ├── columns: r:1(int!null)
- ├── grouping columns: r:1(int!null)
+ ├── columns: r:1!null
+ ├── grouping columns: r:1!null
  └── project
-      ├── columns: r:1(int!null)
+      ├── columns: r:1!null
       ├── values
-      │    └── tuple [type=tuple]
+      │    └── ()
       └── projections
-           └── const: 3 [type=int]
+           └── 3 [as=r:1]
 
 build
 SELECT DISTINCT max(z), x+y AS r, 3 AS s FROM xyz GROUP BY x, y HAVING y > 4
 ----
 distinct-on
- ├── columns: max:4(float) r:5(int!null) s:6(int!null)
- ├── grouping columns: max:4(float) r:5(int!null) s:6(int!null)
+ ├── columns: max:4 r:5!null s:6!null
+ ├── grouping columns: max:4 r:5!null s:6!null
  └── project
-      ├── columns: r:5(int!null) s:6(int!null) max:4(float)
+      ├── columns: r:5!null s:6!null max:4
       ├── select
-      │    ├── columns: x:1(int!null) y:2(int!null) max:4(float)
+      │    ├── columns: x:1!null y:2!null max:4
       │    ├── group-by
-      │    │    ├── columns: x:1(int!null) y:2(int) max:4(float)
-      │    │    ├── grouping columns: x:1(int!null) y:2(int)
+      │    │    ├── columns: x:1!null y:2 max:4
+      │    │    ├── grouping columns: x:1!null y:2
       │    │    ├── scan xyz
-      │    │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
+      │    │    │    └── columns: x:1!null y:2 z:3
       │    │    └── aggregations
-      │    │         └── max [type=float]
-      │    │              └── variable: z [type=float]
+      │    │         └── max [as=max:4]
+      │    │              └── z:3
       │    └── filters
-      │         └── gt [type=bool]
-      │              ├── variable: y [type=int]
-      │              └── const: 4 [type=int]
+      │         └── y:2 > 4
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
-           └── const: 3 [type=int]
+           ├── x:1 + y:2 [as=r:5]
+           └── 3 [as=s:6]
 
 exec-ddl
 CREATE TABLE abcd (
@@ -324,15 +308,15 @@ build
 SELECT DISTINCT 1 AS x, d, b FROM abcd ORDER BY d, b
 ----
 distinct-on
- ├── columns: x:5(int!null) d:4(int!null) b:2(int!null)
- ├── grouping columns: b:2(int!null) d:4(int!null) x:5(int!null)
+ ├── columns: x:5!null d:4!null b:2!null
+ ├── grouping columns: b:2!null d:4!null x:5!null
  ├── ordering: +4,+2
  └── sort
-      ├── columns: b:2(int!null) d:4(int!null) x:5(int!null)
+      ├── columns: b:2!null d:4!null x:5!null
       ├── ordering: +4,+2 opt(5)
       └── project
-           ├── columns: x:5(int!null) b:2(int!null) d:4(int!null)
+           ├── columns: x:5!null b:2!null d:4!null
            ├── scan abcd
-           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+           │    └── columns: a:1!null b:2!null c:3!null d:4!null
            └── projections
-                └── const: 1 [type=int]
+                └── 1 [as=x:5]

@@ -48,7 +48,7 @@ with &1
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
  │    ├── fetch columns: xyz.x:4(string) xyz.y:5(int) xyz.z:6(float)
  │    ├── update-mapping:
- │    │    └──  column7:7 => xyz.y:2
+ │    │    └── column7:7 => xyz.y:2
  │    ├── side-effects, mutations
  │    ├── stats: [rows=10]
  │    ├── key: (1)
@@ -69,9 +69,9 @@ with &1
  │         │    │    ├── key: (4)
  │         │    │    └── fd: (4)-->(5,6)
  │         │    └── filters
- │         │         └── xyz.z = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
+ │         │         └── xyz.z:6 = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
  │         └── projections
- │              └── const: 5 [type=int]
+ │              └── 5 [as=column7:7, type=int]
  └── select
       ├── columns: x:8(string!null) y:9(int!null) z:10(float!null)
       ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0]
@@ -87,7 +87,7 @@ with &1
       │    ├── key: (8)
       │    └── fd: ()-->(9,10)
       └── filters
-           └── x > 'foo' [type=bool, outer=(8), constraints=(/8: [/e'foo\x00' - ]; tight)]
+           └── x:8 > 'foo' [type=bool, outer=(8), constraints=(/8: [/e'foo\x00' - ]; tight)]
 
 # Cardinality is zero.
 build
@@ -97,7 +97,7 @@ update xyz
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── fetch columns: x:4(string) y:5(int) z:6(float)
  ├── update-mapping:
- │    └──  column7:7 => x:1
+ │    └── column7:7 => x:1
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]
@@ -122,4 +122,4 @@ update xyz
       │    └── filters
       │         └── false [type=bool]
       └── projections
-           └── const: 'foo' [type=string]
+           └── 'foo' [as=column7:7, type=string]

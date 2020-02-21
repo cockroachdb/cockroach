@@ -158,7 +158,7 @@ sort
       │    │    │    │    │    │    │    │    │    │    │    │    ├── fd: (58)-->(59)
       │    │    │    │    │    │    │    │    │    │    │    │    └── ordering: +58 opt(59) [actual: +58]
       │    │    │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │    │    │         └── r_name = 'AMERICA' [type=bool, outer=(59), constraints=(/59: [/'AMERICA' - /'AMERICA']; tight), fd=()-->(59)]
+      │    │    │    │    │    │    │    │    │    │    │         └── r_name:59 = 'AMERICA' [type=bool, outer=(59), constraints=(/59: [/'AMERICA' - /'AMERICA']; tight), fd=()-->(59)]
       │    │    │    │    │    │    │    │    │    │    ├── scan n1@n_rk
       │    │    │    │    │    │    │    │    │    │    │    ├── save-table-name: q8_scan_16
       │    │    │    │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null)
@@ -202,11 +202,11 @@ sort
       │    │    │    │    │    │    │    │    │    ├── key: (33)
       │    │    │    │    │    │    │    │    │    └── fd: (33)-->(34,37)
       │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │         └── (o_orderdate >= '1995-01-01') AND (o_orderdate <= '1996-12-31') [type=bool, outer=(37), constraints=(/37: [/'1995-01-01' - /'1996-12-31']; tight)]
+      │    │    │    │    │    │    │    │         └── (o_orderdate:37 >= '1995-01-01') AND (o_orderdate:37 <= '1996-12-31') [type=bool, outer=(37), constraints=(/37: [/'1995-01-01' - /'1996-12-31']; tight)]
       │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── o_custkey = c_custkey [type=bool, outer=(34,42), constraints=(/34: (/NULL - ]; /42: (/NULL - ]), fd=(34)==(42), (42)==(34)]
+      │    │    │    │    │    │    │         └── o_custkey:34 = c_custkey:42 [type=bool, outer=(34,42), constraints=(/34: (/NULL - ]; /42: (/NULL - ]), fd=(34)==(42), (42)==(34)]
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── l_orderkey = o_orderkey [type=bool, outer=(17,33), constraints=(/17: (/NULL - ]; /33: (/NULL - ]), fd=(17)==(33), (33)==(17)]
+      │    │    │    │    │    │         └── l_orderkey:17 = o_orderkey:33 [type=bool, outer=(17,33), constraints=(/17: (/NULL - ]; /33: (/NULL - ]), fd=(17)==(33), (33)==(17)]
       │    │    │    │    │    ├── scan supplier@s_nk
       │    │    │    │    │    │    ├── save-table-name: q8_scan_20
       │    │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null)
@@ -218,8 +218,8 @@ sort
       │    │    │    │    │    │    ├── key: (10)
       │    │    │    │    │    │    └── fd: (10)-->(13)
       │    │    │    │    │    └── filters
-      │    │    │    │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
-      │    │    │    │    │         └── s_nationkey = n2.n_nationkey [type=bool, outer=(13,54), constraints=(/13: (/NULL - ]; /54: (/NULL - ]), fd=(13)==(54), (54)==(13)]
+      │    │    │    │    │         ├── s_suppkey:10 = l_suppkey:19 [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
+      │    │    │    │    │         └── s_nationkey:13 = n2.n_nationkey:54 [type=bool, outer=(13,54), constraints=(/13: (/NULL - ]; /54: (/NULL - ]), fd=(13)==(54), (54)==(13)]
       │    │    │    │    ├── select
       │    │    │    │    │    ├── save-table-name: q8_select_21
       │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null)
@@ -235,21 +235,21 @@ sort
       │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    └── fd: (1)-->(5)
       │    │    │    │    │    └── filters
-      │    │    │    │    │         └── p_type = 'ECONOMY ANODIZED STEEL' [type=bool, outer=(5), constraints=(/5: [/'ECONOMY ANODIZED STEEL' - /'ECONOMY ANODIZED STEEL']; tight), fd=()-->(5)]
+      │    │    │    │    │         └── p_type:5 = 'ECONOMY ANODIZED STEEL' [type=bool, outer=(5), constraints=(/5: [/'ECONOMY ANODIZED STEEL' - /'ECONOMY ANODIZED STEEL']; tight), fd=()-->(5)]
       │    │    │    │    └── filters
-      │    │    │    │         └── p_partkey = l_partkey [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+      │    │    │    │         └── p_partkey:1 = l_partkey:18 [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │    │    │    └── projections
-      │    │    │         ├── extract('year', o_orderdate) [type=float, outer=(37)]
-      │    │    │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(22,23)]
+      │    │    │         ├── extract('year', o_orderdate:37) [as=o_year:61, type=float, outer=(37)]
+      │    │    │         └── l_extendedprice:22 * (1.0 - l_discount:23) [as=volume:62, type=float, outer=(22,23)]
       │    │    └── projections
-      │    │         └── CASE WHEN n2.n_name = 'BRAZIL' THEN volume ELSE 0.0 END [type=float, outer=(55,62)]
+      │    │         └── CASE WHEN n2.n_name:55 = 'BRAZIL' THEN volume:62 ELSE 0.0 END [as=column63:63, type=float, outer=(55,62)]
       │    └── aggregations
-      │         ├── sum [type=float, outer=(63)]
-      │         │    └── variable: column63 [type=float]
-      │         └── sum [type=float, outer=(62)]
-      │              └── variable: volume [type=float]
+      │         ├── sum [as=sum:64, type=float, outer=(63)]
+      │         │    └── column63:63 [type=float]
+      │         └── sum [as=sum:65, type=float, outer=(62)]
+      │              └── volume:62 [type=float]
       └── projections
-           └── sum / sum [type=float, outer=(64,65), side-effects]
+           └── sum:64 / sum:65 [as=mkt_share:66, type=float, outer=(64,65), side-effects]
 
 
 stats table=q8_sort_1

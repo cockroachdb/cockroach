@@ -62,6 +62,22 @@ var (
 		"pgurl", "postgresql://localhost:26257/?sslmode=disable&user=root",
 		"the database url to connect to",
 	)
+
+	formatFlags = map[string]memo.ExprFmtFlags{
+		"miscprops":   memo.ExprFmtHideMiscProps,
+		"constraints": memo.ExprFmtHideConstraints,
+		"funcdeps":    memo.ExprFmtHideFuncDeps,
+		"ruleprops":   memo.ExprFmtHideRuleProps,
+		"stats":       memo.ExprFmtHideStats,
+		"cost":        memo.ExprFmtHideCost,
+		"qual":        memo.ExprFmtHideQualifications,
+		"scalars":     memo.ExprFmtHideScalars,
+		"physprops":   memo.ExprFmtHidePhysProps,
+		"types":       memo.ExprFmtHideTypes,
+		"notnull":     memo.ExprFmtHideNotNull,
+		"columns":     memo.ExprFmtHideColumns,
+		"all":         memo.ExprFmtHideAll,
+	}
 )
 
 // RuleSet efficiently stores an unordered set of RuleNames.
@@ -270,10 +286,10 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
-//    optsteps commands. Possible values: show-all, hide-all, or any combination
-//    of hide-cost, hide-stats, hide-constraints, hide-scalars, hide-qual.
-//    For example:
-//      build format=(hide-cost,hide-stats)
+//    optsteps commands. Format flags are of the form
+//      (show|hide)-(all|miscprops|constraints|scalars|types|...)
+//    See formatFlags for all flags. Multiple flags can be specified; each flag
+//    modifies the existing set of the flags.
 //
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
@@ -542,30 +558,22 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 func (f *Flags) Set(arg datadriven.CmdArg) error {
 	switch arg.Key {
 	case "format":
-		f.ExprFormat = 0
 		if len(arg.Vals) == 0 {
 			return fmt.Errorf("format flag requires value(s)")
 		}
 		for _, v := range arg.Vals {
-			m := map[string]memo.ExprFmtFlags{
-				"show-all":         memo.ExprFmtShowAll,
-				"hide-miscprops":   memo.ExprFmtHideMiscProps,
-				"hide-constraints": memo.ExprFmtHideConstraints,
-				"hide-funcdeps":    memo.ExprFmtHideFuncDeps,
-				"hide-ruleprops":   memo.ExprFmtHideRuleProps,
-				"hide-stats":       memo.ExprFmtHideStats,
-				"hide-cost":        memo.ExprFmtHideCost,
-				"hide-qual":        memo.ExprFmtHideQualifications,
-				"hide-scalars":     memo.ExprFmtHideScalars,
-				"hide-physprops":   memo.ExprFmtHidePhysProps,
-				"hide-types":       memo.ExprFmtHideTypes,
-				"hide-columns":     memo.ExprFmtHideColumns,
-				"hide-all":         memo.ExprFmtHideAll,
-			}
-			if val, ok := m[v]; ok {
-				f.ExprFormat |= val
-			} else {
+			// Format values are of the form (hide|show)-(flag). These flags modify
+			// the default flags for the test and multiple flags are applied in order.
+			parts := strings.SplitN(v, "-", 2)
+			if len(parts) != 2 ||
+				(parts[0] != "show" && parts[0] != "hide") ||
+				formatFlags[parts[1]] == 0 {
 				return fmt.Errorf("unknown format value %s", v)
+			}
+			if parts[0] == "hide" {
+				f.ExprFormat |= formatFlags[parts[1]]
+			} else {
+				f.ExprFormat &= ^formatFlags[parts[1]]
 			}
 		}
 

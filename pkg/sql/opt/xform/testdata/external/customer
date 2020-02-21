@@ -37,16 +37,16 @@ opt
 select nodes.id,dst from nodes join edges on edges.dst=nodes.id
 ----
 inner-join (merge)
- ├── columns: id:1(int!null) dst:4(int!null)
+ ├── columns: id:1!null dst:4!null
  ├── left ordering: +1
  ├── right ordering: +4
  ├── fd: (1)==(4), (4)==(1)
  ├── scan nodes
- │    ├── columns: id:1(int!null)
+ │    ├── columns: id:1!null
  │    ├── key: (1)
  │    └── ordering: +1
  ├── scan edges@edges_auto_index_fk_dst_ref_nodes
- │    ├── columns: dst:4(int!null)
+ │    ├── columns: dst:4!null
  │    └── ordering: +4
  └── filters (true)
 
@@ -81,40 +81,40 @@ FROM article
 WHERE NOT read and id > 0 order by id limit 50
 ----
 project
- ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) date:10(timestamptz)
+ ├── columns: id:1!null feed:2!null folder:3!null title:5 summary:6 content:7 link:8 date:10
  ├── cardinality: [0 - 50]
  ├── key: (1)
  ├── fd: (1)-->(2,3,5-8,10)
  ├── ordering: +1
  └── limit
-      ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      ├── columns: id:1!null feed:2!null folder:3!null title:5 summary:6 content:7 link:8 read:9!null date:10
       ├── internal-ordering: +1 opt(9)
       ├── cardinality: [0 - 50]
       ├── key: (1)
       ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       ├── ordering: +1 opt(9) [actual: +1]
       ├── index-join article
-      │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      │    ├── columns: id:1!null feed:2!null folder:3!null title:5 summary:6 content:7 link:8 read:9!null date:10
       │    ├── key: (1)
       │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       │    ├── ordering: +1 opt(9) [actual: +1]
       │    ├── limit hint: 50.00
       │    └── select
-      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
+      │         ├── columns: id:1!null feed:2!null folder:3!null read:9!null
       │         ├── key: (1)
       │         ├── fd: ()-->(9), (1)-->(2,3)
       │         ├── ordering: +1 opt(9) [actual: +1]
       │         ├── limit hint: 50.00
       │         ├── scan article@article_idx_read_key
-      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
+      │         │    ├── columns: id:1!null feed:2!null folder:3!null read:9
       │         │    ├── constraint: /1: [/1 - ]
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2,3,9)
       │         │    ├── ordering: +1 opt(9) [actual: +1]
       │         │    └── limit hint: 101.01
       │         └── filters
-      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
-      └── const: 50 [type=int]
+      │              └── NOT read:9 [outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+      └── 50
 
 # Check that forcing the index works as well.
 opt
@@ -123,32 +123,32 @@ FROM article@article_idx_read_key
 WHERE NOT read and id > 0 order by id limit 50
 ----
 project
- ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) date:10(timestamptz)
+ ├── columns: id:1!null feed:2!null folder:3!null title:5 summary:6 content:7 link:8 date:10
  ├── cardinality: [0 - 50]
  ├── key: (1)
  ├── fd: (1)-->(2,3,5-8,10)
  ├── ordering: +1
  └── limit
-      ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      ├── columns: id:1!null feed:2!null folder:3!null title:5 summary:6 content:7 link:8 read:9!null date:10
       ├── internal-ordering: +1 opt(9)
       ├── cardinality: [0 - 50]
       ├── key: (1)
       ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       ├── ordering: +1 opt(9) [actual: +1]
       ├── index-join article
-      │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      │    ├── columns: id:1!null feed:2!null folder:3!null title:5 summary:6 content:7 link:8 read:9!null date:10
       │    ├── key: (1)
       │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       │    ├── ordering: +1 opt(9) [actual: +1]
       │    ├── limit hint: 50.00
       │    └── select
-      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
+      │         ├── columns: id:1!null feed:2!null folder:3!null read:9!null
       │         ├── key: (1)
       │         ├── fd: ()-->(9), (1)-->(2,3)
       │         ├── ordering: +1 opt(9) [actual: +1]
       │         ├── limit hint: 50.00
       │         ├── scan article@article_idx_read_key
-      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
+      │         │    ├── columns: id:1!null feed:2!null folder:3!null read:9
       │         │    ├── constraint: /1: [/1 - ]
       │         │    ├── flags: force-index=article_idx_read_key
       │         │    ├── key: (1)
@@ -156,36 +156,36 @@ project
       │         │    ├── ordering: +1 opt(9) [actual: +1]
       │         │    └── limit hint: 101.01
       │         └── filters
-      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
-      └── const: 50 [type=int]
+      │              └── NOT read:9 [outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+      └── 50
 
 # Use only columns covered by the index.
 opt
 SELECT id, read FROM article WHERE NOT read and id > 0 order by id limit 5
 ----
 limit
- ├── columns: id:1(int!null) read:9(bool!null)
+ ├── columns: id:1!null read:9!null
  ├── internal-ordering: +1 opt(9)
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: ()-->(9)
  ├── ordering: +1 opt(9) [actual: +1]
  ├── select
- │    ├── columns: id:1(int!null) read:9(bool!null)
+ │    ├── columns: id:1!null read:9!null
  │    ├── key: (1)
  │    ├── fd: ()-->(9)
  │    ├── ordering: +1 opt(9) [actual: +1]
  │    ├── limit hint: 5.00
  │    ├── scan article@article_idx_read_key
- │    │    ├── columns: id:1(int!null) read:9(bool)
+ │    │    ├── columns: id:1!null read:9
  │    │    ├── constraint: /1: [/1 - ]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
  │    │    ├── ordering: +1 opt(9) [actual: +1]
  │    │    └── limit hint: 10.10
  │    └── filters
- │         └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
- └── const: 5 [type=int]
+ │         └── NOT read:9 [outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+ └── 5
 
 # ------------------------------------------------------------------------------
 # Github Issue 14241: Ensure that optimizer uses a reverse scan over test_idx
@@ -230,12 +230,12 @@ ORDER BY score desc, updated_at_inverse DESC
 LIMIT 50
 ----
 project
- ├── columns: score:9(int!null) expires_at:15(int!null)  [hidden: updated_at_inverse:14(int!null)]
+ ├── columns: score:9!null expires_at:15!null  [hidden: updated_at_inverse:14!null]
  ├── cardinality: [0 - 50]
  ├── fd: ()-->(15)
  ├── ordering: -9,-14 opt(15) [actual: -9,-14]
  └── scan leaderboard_record@test_idx,rev
-      ├── columns: id:1(bytes!null) leaderboard_id:2(bytes!null) score:9(int!null) updated_at_inverse:14(int!null) expires_at:15(int!null)
+      ├── columns: id:1!null leaderboard_id:2!null score:9!null updated_at_inverse:14!null expires_at:15!null
       ├── constraint: /2/15/9/14/1/3: [/'\x74657374'/0 - /'\x74657374'/0/100/500/'\x736f6d655f6964')
       ├── limit: 50(rev)
       ├── key: (1)
@@ -282,24 +282,24 @@ opt
 select v.owner_id, count(*) from rides r, vehicles v where v.id = r.vehicle_id group by v.owner_id
 ----
 group-by
- ├── columns: owner_id:12(uuid) count:16(int!null)
- ├── grouping columns: owner_id:12(uuid)
+ ├── columns: owner_id:12 count:16!null
+ ├── grouping columns: owner_id:12
  ├── key: (12)
  ├── fd: (12)-->(16)
  ├── inner-join (merge)
- │    ├── columns: vehicle_id:3(uuid!null) v.id:9(uuid!null) owner_id:12(uuid)
+ │    ├── columns: vehicle_id:3!null v.id:9!null owner_id:12
  │    ├── left ordering: +3
  │    ├── right ordering: +9
  │    ├── fd: (3)==(9), (9)==(3)
  │    ├── scan r@rides_vehicle_id_idx
- │    │    ├── columns: vehicle_id:3(uuid)
+ │    │    ├── columns: vehicle_id:3
  │    │    └── ordering: +3
  │    ├── scan v@vehicles_id_idx
- │    │    ├── columns: v.id:9(uuid!null) owner_id:12(uuid)
+ │    │    ├── columns: v.id:9!null owner_id:12
  │    │    └── ordering: +9
  │    └── filters (true)
  └── aggregations
-      └── count-rows [type=int]
+      └── count-rows [as=count_rows:16]
 
 # ------------------------------------------------------------------------------
 # Github Issue 24415: Ensure the optimizer uses the covering index.
@@ -326,17 +326,17 @@ opt
 SELECT id, sum(value) FROM data GROUP BY id
 ----
 group-by
- ├── columns: id:1(uuid) sum:14(decimal)
- ├── grouping columns: id:1(uuid)
+ ├── columns: id:1 sum:14
+ ├── grouping columns: id:1
  ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(14)
  ├── scan data@foo
- │    ├── columns: id:1(uuid) value:2(int)
+ │    ├── columns: id:1 value:2
  │    └── ordering: +1
  └── aggregations
-      └── sum [type=decimal, outer=(2)]
-           └── variable: value [type=int]
+      └── sum [as=sum:14, outer=(2)]
+           └── value:2
 
 # ------------------------------------------------------------------------------
 # Github Issue 24297: Ensure the optimizer chooses the more selective secondary
@@ -377,34 +377,34 @@ ORDER BY last_sync_id ASC
 LIMIT 50
 ----
 limit
- ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
  ├── internal-ordering: +4 opt(3,5)
  ├── cardinality: [0 - 50]
  ├── key: (1)
  ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
  ├── ordering: +4 opt(3,5) [actual: +4]
  ├── sort
- │    ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ │    ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
  │    ├── key: (1)
  │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
  │    ├── ordering: +4 opt(3,5) [actual: +4]
  │    ├── limit hint: 50.00
  │    └── select
- │         ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ │         ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
  │         ├── key: (1)
  │         ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
  │         ├── index-join t_sync_data
- │         │    ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ │         │    ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
  │         │    ├── key: (1)
  │         │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
  │         │    └── scan t_sync_data@t_sync_data_user_id_data_type_idx
- │         │         ├── columns: remote_id:1(uuid!null) user_id:3(uuid!null) data_type:5(string!null)
+ │         │         ├── columns: remote_id:1!null user_id:3!null data_type:5!null
  │         │         ├── constraint: /3/5/1: [/'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01' - /'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01']
  │         │         ├── key: (1)
  │         │         └── fd: ()-->(3,5)
  │         └── filters
- │              └── last_sync_id > 0 [type=bool, outer=(4), constraints=(/4: [/1 - ]; tight)]
- └── const: 50 [type=int]
+ │              └── last_sync_id:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+ └── 50
 
 # ------------------------------------------------------------------------------
 # Github Issue 15649: Use order-matching index even with a high offset/limit.
@@ -424,19 +424,19 @@ opt
 EXPLAIN SELECT id FROM test ORDER BY id asc LIMIT 10 offset 10000;
 ----
 explain
- ├── columns: tree:4(string) field:5(string) description:6(string)
+ ├── columns: tree:4 field:5 description:6
  └── offset
-      ├── columns: id:1(int!null)
+      ├── columns: id:1!null
       ├── internal-ordering: +1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── ordering: +1
       ├── scan test
-      │    ├── columns: id:1(int!null)
+      │    ├── columns: id:1!null
       │    ├── limit: 10010
       │    ├── key: (1)
       │    └── ordering: +1
-      └── const: 10000 [type=int]
+      └── 10000
 
 # ------------------------------------------------------------------------------
 # Github Issue 17270: Use the o_ok index rather than the primary index, since
@@ -494,26 +494,26 @@ opt
 SELECT count(l_orderkey) FROM orders, lineitem WHERE orders.o_orderkey = lineitem.l_orderkey
 ----
 scalar-group-by
- ├── columns: count:28(int!null)
+ ├── columns: count:28!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(28)
  ├── inner-join (merge)
- │    ├── columns: o_orderkey:1(int!null) l_orderkey:11(int!null)
+ │    ├── columns: o_orderkey:1!null l_orderkey:11!null
  │    ├── left ordering: +1
  │    ├── right ordering: +11
  │    ├── fd: (1)==(11), (11)==(1)
  │    ├── scan orders@o_ok
- │    │    ├── columns: o_orderkey:1(int!null)
+ │    │    ├── columns: o_orderkey:1!null
  │    │    ├── key: (1)
  │    │    └── ordering: +1
  │    ├── scan lineitem@l_ok
- │    │    ├── columns: l_orderkey:11(int!null)
+ │    │    ├── columns: l_orderkey:11!null
  │    │    └── ordering: +11
  │    └── filters (true)
  └── aggregations
-      └── count [type=int, outer=(11)]
-           └── variable: l_orderkey [type=int]
+      └── count [as=count:28, outer=(11)]
+           └── l_orderkey:11
 
 # ------------------------------------------------------------------------------
 # Ensure we do a lookup join when one side comes from an SRF.
@@ -542,37 +542,36 @@ WHERE
   secondary_id = (elem->>'secondary_id')::UUID
 ----
 project
- ├── columns: secondary_id:6(string) "?column?":7(jsonb)
+ ├── columns: secondary_id:6 "?column?":7
  ├── side-effects
  ├── inner-join (lookup idtable)
- │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) data:3(jsonb!null) value:4(jsonb) column5:5(uuid!null)
+ │    ├── columns: primary_id:1!null idtable.secondary_id:2!null data:3!null value:4 column5:5!null
  │    ├── key columns: [1] = [1]
  │    ├── lookup columns are key
  │    ├── side-effects
  │    ├── fd: (1)-->(2,3), (4)-->(5), (2)==(5), (5)==(2)
  │    ├── inner-join (lookup idtable@secondary_id)
- │    │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) value:4(jsonb) column5:5(uuid!null)
+ │    │    ├── columns: primary_id:1!null idtable.secondary_id:2!null value:4 column5:5!null
  │    │    ├── key columns: [5] = [2]
  │    │    ├── side-effects
  │    │    ├── fd: (4)-->(5), (1)-->(2), (2)==(5), (5)==(2)
  │    │    ├── project
- │    │    │    ├── columns: column5:5(uuid) value:4(jsonb)
+ │    │    │    ├── columns: column5:5 value:4
  │    │    │    ├── side-effects
  │    │    │    ├── fd: (4)-->(5)
  │    │    │    ├── project-set
- │    │    │    │    ├── columns: value:4(jsonb)
+ │    │    │    │    ├── columns: value:4
  │    │    │    │    ├── side-effects
  │    │    │    │    ├── values
  │    │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── tuple [type=tuple]
+ │    │    │    │    │    └── ()
  │    │    │    │    └── zip
- │    │    │    │         └── function: json_array_elements [type=jsonb, side-effects]
- │    │    │    │              └── const: '[{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}, {"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}]' [type=jsonb]
+ │    │    │    │         └── json_array_elements('[{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}, {"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}]') [side-effects]
  │    │    │    └── projections
- │    │    │         └── (value->>'secondary_id')::UUID [type=uuid, outer=(4)]
+ │    │    │         └── (value:4->>'secondary_id')::UUID [as=column5:5, outer=(4)]
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      ├── value->>'secondary_id' [type=string, outer=(4)]
-      └── data || jsonb_build_object('primary_id', primary_id) [type=jsonb, outer=(1,3)]
+      ├── value:4->>'secondary_id' [as=secondary_id:6, outer=(4)]
+      └── data:3 || jsonb_build_object('primary_id', primary_id:1) [as="?column?":7, outer=(1,3)]

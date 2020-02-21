@@ -20,7 +20,7 @@ Source expression:
    │    └── fd: (1)-->(2)
    └── filters
         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-             ├── variable: b [type=int]
+             ├── variable: b:2 [type=int]
              └── const: 1 [type=int]
 
 New expression 1 of 1:
@@ -34,7 +34,7 @@ New expression 1 of 1:
    │    └── fd: (1)-->(2)
    └── filters
         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-             ├── variable: b [type=int]
+             ├── variable: b:2 [type=int]
              └── const: 1 [type=int]
 
 ================================================================================
@@ -51,7 +51,7 @@ Source expression:
    │    └── fd: (1)-->(2)
    └── filters
         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-             ├── variable: b [type=int]
+             ├── variable: b:2 [type=int]
              └── const: 1 [type=int]
 
 No new expressions.
@@ -70,7 +70,7 @@ Source expression:
    │    └── fd: (1)-->(2)
    └── filters
         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-             ├── variable: b [type=int]
+             ├── variable: b:2 [type=int]
              └── const: 1 [type=int]
 
 New expression 1 of 1:
