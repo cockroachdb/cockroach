@@ -356,10 +356,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Ensure that there is not another primary key change attempted within this transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
 			for i := range n.tableDesc.Mutations {
-				if desc := n.tableDesc.Mutations[i].GetPrimaryKeySwap(); desc != nil &&
-					n.tableDesc.Mutations[i].MutationID == currentMutationID {
-					return unimplemented.NewWithIssue(
-						43376, "multiple primary key changes in the same transaction are unsupported")
+				if desc := n.tableDesc.Mutations[i].GetPrimaryKeySwap(); desc != nil {
+					if n.tableDesc.Mutations[i].MutationID == currentMutationID {
+						return unimplemented.NewWithIssue(
+							43376, "multiple primary key changes in the same transaction are unsupported")
+					}
+					if n.tableDesc.Mutations[i].MutationID < currentMutationID {
+						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+							"table %s is currently undergoing a primary key change", n.tableDesc.Name)
+					}
 				}
 			}
 
@@ -499,6 +504,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for i := range n.tableDesc.Indexes {
 				idx := &n.tableDesc.Indexes[i]
 				if idx.ID != newPrimaryIndexDesc.ID && shouldRewriteIndex(idx) {
+					indexesToRewrite = append(indexesToRewrite, idx)
+				}
+			}
+
+			for i := range n.tableDesc.Mutations {
+				mut := &n.tableDesc.Mutations[i]
+				// TODO (rohany): It's unclear about what to do if there are other mutations within
+				//  this transaction too.
+				// If there is an index that is getting built right now that started in a previous txn, we
+				// need to potentially rebuild that index as well.
+				if idx := mut.GetIndex(); mut.MutationID < currentMutationID && idx != nil &&
+					mut.Direction == sqlbase.DescriptorMutation_ADD && shouldRewriteIndex(idx) {
 					indexesToRewrite = append(indexesToRewrite, idx)
 				}
 			}

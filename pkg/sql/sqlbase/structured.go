@@ -3019,7 +3019,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 				return err
 			}
 			newIndex.Name = "primary"
-			desc.PrimaryIndex = *newIndex
+			desc.PrimaryIndex = *protoutil.Clone(newIndex).(*IndexDescriptor)
 			idx, err := getIndexIdxByID(newIndex.ID)
 			if err != nil {
 				return err

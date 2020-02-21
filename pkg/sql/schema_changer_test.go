@@ -2332,6 +2332,157 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	}
 }
 
+// TestPrimaryKeyChangeWithPrecedingIndexCreation tests that a primary key change
+// successfully rewrites indexes that are being created while the primary key change starts.
+func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	var chunkSize int64 = 100
+	var maxValue = 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		maxValue = 200
+		chunkSize = 5
+	}
+
+	// Protects backfillNotification.
+	var mu syncutil.Mutex
+	var backfillNotification chan struct{}
+	// We have to have initBackfillNotification return the new
+	// channel rather than having later users read the original
+	// backfillNotification to make the race detector happy.
+	initBackfillNotification := func() chan struct{} {
+		mu.Lock()
+		defer mu.Unlock()
+		backfillNotification = make(chan struct{})
+		return backfillNotification
+	}
+	notifyBackfill := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if backfillNotification != nil {
+			close(backfillNotification)
+			backfillNotification = nil
+		}
+	}
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+			AsyncExecQuickly:  true,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
+				notifyBackfill()
+				return nil
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	t.Run("create-index-before", func(t *testing.T) {
+		if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT NOT NULL, v INT);
+`); err != nil {
+			t.Fatal(err)
+		}
+		if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+			t.Fatal(err)
+		}
+
+		backfillNotif := initBackfillNotification()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		// Create an index on the table that will need to get rewritten.
+		go func() {
+			if _, err := sqlDB.Exec(`CREATE INDEX i ON t.test (v)`); err != nil {
+				t.Error(err)
+			}
+			wg.Done()
+		}()
+
+		// Wait until the create index mutation has progressed before starting the alter primary key.
+		<-backfillNotif
+
+		if _, err := sqlDB.Exec(`
+SET experimental_enable_primary_key_changes = true;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+			t.Fatal(err)
+		}
+
+		wg.Wait()
+
+		// There should be 4 k/v pairs per row:
+		// * the original rowid index.
+		// * the old index on v.
+		// * the new primary key on k.
+		// * the new index for v with k as the unique column.
+		testutils.SucceedsSoon(t, func() error {
+			return checkTableKeyCount(ctx, kvDB, 4, maxValue)
+		})
+	})
+
+	// Repeat the prior process but with a primary key change before.
+	t.Run("pk-change-before", func(t *testing.T) {
+		var wg sync.WaitGroup
+		if _, err := sqlDB.Exec(`
+DROP TABLE IF EXISTS t.test;
+CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
+			t.Fatal(err)
+		}
+		backfillNotif := initBackfillNotification()
+		// Can't use bulkInsertIntoTable here because that only works with 2 columns.
+		inserts := make([]string, maxValue+1)
+		for i := 0; i < maxValue+1; i++ {
+			inserts[i] = fmt.Sprintf(`(%d, %d, %d)`, i, maxValue-i, i)
+		}
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ` + strings.Join(inserts, ",")); err != nil {
+			t.Fatal(err)
+		}
+		wg.Add(1)
+		// Alter the primary key of the table.
+		go func() {
+			if _, err := sqlDB.Exec(`
+SET experimental_enable_primary_key_changes = true;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
+				t.Error(err)
+			}
+			wg.Done()
+		}()
+
+		<-backfillNotif
+
+		// This must be rejected, because there is a primary key change already in progress.
+		_, err := sqlDB.Exec(`
+SET experimental_enable_primary_key_changes = true;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+		if !testutils.IsError(err, "pq: table test is currently undergoing a primary key change") {
+			t.Errorf("expected to concurrent primary key change to error, but got %+v", err)
+		}
+
+		wg.Wait()
+
+		// After the first primary key change is done, the follow up primary key change should succeed.
+		if _, err := sqlDB.Exec(`
+SET experimental_enable_primary_key_changes = true;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+			t.Fatal(err)
+		}
+
+		// There should be 4 k/v pairs per row:
+		// * the original rowid index.
+		// * the new primary index on v2.
+		// * the new primary index on k.
+		// * the rewritten demoted index on v2.
+		testutils.SucceedsSoon(t, func() error {
+			return checkTableKeyCount(ctx, kvDB, 4, maxValue)
+		})
+	})
+}
+
 // TestPrimaryKeyChangeWithOperations ensures that different operations succeed
 // while a primary key change is happening.
 func TestPrimaryKeyChangeWithOperations(t *testing.T) {
