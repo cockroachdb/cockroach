@@ -47,7 +47,7 @@ new-locktable maxlocks=<int>
 
   Creates a lockTable.
 
-new-txn txn=<name> ts=<int>[,<int>] epoch=<int>
+new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 ----
 
  Creates a TxnMeta.
@@ -148,6 +148,10 @@ func TestLockTableBasic(t *testing.T) {
 				ts := scanTimestamp(t, d)
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
+				var seq int
+				if d.HasArg("seq") {
+					d.ScanArgs(t, "seq", &seq)
+				}
 				txnMeta, ok := txnsByName[txnName]
 				var id uuid.UUID
 				if ok {
@@ -158,6 +162,7 @@ func TestLockTableBasic(t *testing.T) {
 				txnsByName[txnName] = &enginepb.TxnMeta{
 					ID:             id,
 					Epoch:          enginepb.TxnEpoch(epoch),
+					Sequence:       enginepb.TxnSeq(seq),
 					WriteTimestamp: ts,
 				}
 				return ""
