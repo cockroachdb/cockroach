@@ -22,7 +22,7 @@ import { cockroach } from "src/js/protos";
 import { CachedDataReducerState, jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
-import { formatDuration, JOB_STATUS_CANCELED, JOB_STATUS_FAILED, JOB_STATUS_PAUSED, JOB_STATUS_PENDING, JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED, showSetting, statusSetting, typeSetting } from ".";
+import { formatDuration, showSetting, statusSetting, typeSetting } from ".";
 import Loading from "../shared/components/loading";
 import SqlBox from "../shared/components/sql/box";
 import { SummaryCard } from "../shared/components/summaryCard";
@@ -30,7 +30,13 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import {renamedStatuses} from "src/views/jobs/jobStatusOptions";
+import {
+  JOB_STATUS_CANCELED, JOB_STATUS_FAILED,
+  JOB_STATUS_PAUSED,
+  JOB_STATUS_PENDING,
+  JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED,
+  renamedStatuses,
+} from "src/views/jobs/jobStatusOptions";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
