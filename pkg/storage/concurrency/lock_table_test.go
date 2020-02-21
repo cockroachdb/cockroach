@@ -135,7 +135,7 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				lt = newLockTable(int64(maxLocks))
+				lt = &lockTableImpl{maxLocks: int64(maxLocks)}
 				return ""
 
 			case "new-txn":
@@ -607,7 +607,7 @@ type workloadExecutor struct {
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
-		lt:           newLockTable(1000),
+		lt:           &lockTableImpl{maxLocks: 1000},
 		items:        items,
 		transactions: make(map[uuid.UUID]*transactionState),
 		doneWork:     make(chan *workItem),
@@ -1153,7 +1153,7 @@ func BenchmarkLockTable(b *testing.B) {
 						var numScanCalls uint64
 						env := benchEnv{
 							lm:                &spanlatch.Manager{},
-							lt:                newLockTable(100000),
+							lt:                &lockTableImpl{maxLocks: 100000},
 							numRequestsWaited: &numRequestsWaited,
 							numScanCalls:      &numScanCalls,
 						}

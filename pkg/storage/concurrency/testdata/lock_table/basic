@@ -1160,28 +1160,46 @@ global: num=1
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
 
-new-request r=req21 txn=txn2 ts=10 spans=w@c+w@d
+new-request r=req21 txn=txn1 ts=10 spans=w@d
 ----
 
 scan r=req21
 ----
-start-waiting: true
+start-waiting: false
 
-new-request r=req22 txn=txn1 ts=10 spans=w@d
+acquire r=req21 k=d durability=u
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+dequeue r=req21
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+new-request r=req22 txn=txn2 ts=10 spans=w@c+w@d
 ----
 
 scan r=req22
 ----
-start-waiting: false
+start-waiting: true
 
-acquire r=req22 k=d durability=u
+print
 ----
 global: num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:
-    active: true req: 21, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 21
+    active: true req: 22, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 22
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
@@ -1199,8 +1217,8 @@ global: num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:
-    active: true req: 21, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 21
+    active: true req: 22, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 22
  lock: "d"
   res: req: 23, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
 local: num=0
@@ -1214,7 +1232,7 @@ scan r=req23
 start-waiting: false
 
 # holds latch on d and proceeds to evaluation, but lock on c
-# is released concurrently allowing req21 to break the reservation
+# is released concurrently allowing req22 to break the reservation
 # at d. Note that reservation breaking is not constrained
 # by latches.
 
@@ -1222,12 +1240,12 @@ release txn=txn1 span=c
 ----
 global: num=2
  lock: "c"
-  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
  lock: "d"
   res: req: 23, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
 local: num=0
 
-guard-state r=req21
+guard-state r=req22
 ----
 new: state=doneWaiting
 
@@ -1235,9 +1253,9 @@ print
 ----
 global: num=2
  lock: "c"
-  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
  lock: "d"
-  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
    queued writers:
     active: false req: 23, txn: 00000000-0000-0000-0000-000000000003
 local: num=0
@@ -1246,14 +1264,21 @@ acquire r=req23 k=d durability=u
 ----
 global: num=2
  lock: "c"
-  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
    queued writers:
-    active: false req: 21, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 22, txn: 00000000-0000-0000-0000-000000000002
 local: num=0
 
-dequeue r=req21
+dequeue r=req22
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+dequeue r=req23
 ----
 global: num=1
  lock: "d"
