@@ -7,45 +7,41 @@ CANCEL JOBS SELECT 1
 ----
 control-jobs (CANCEL)
  └── project
-      ├── columns: "?column?":1(int!null)
+      ├── columns: "?column?":1!null
       ├── values
-      │    └── tuple [type=tuple]
+      │    └── ()
       └── projections
-           └── const: 1 [type=int]
+           └── 1 [as="?column?":1]
 
 build
 RESUME JOBS VALUES (1), (2), (3)
 ----
 control-jobs (RESUME)
  └── values
-      ├── columns: column1:1(int!null)
-      ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
-      ├── tuple [type=tuple{int}]
-      │    └── const: 2 [type=int]
-      └── tuple [type=tuple{int}]
-           └── const: 3 [type=int]
+      ├── columns: column1:1!null
+      ├── (1,)
+      ├── (2,)
+      └── (3,)
 
 build
 PAUSE JOBS SELECT a FROM ab ORDER BY b
 ----
 control-jobs (PAUSE)
  └── sort
-      ├── columns: a:1(int)  [hidden: b:2(string)]
+      ├── columns: a:1  [hidden: b:2]
       ├── ordering: +2
       └── project
-           ├── columns: a:1(int) b:2(string)
+           ├── columns: a:1 b:2
            └── scan ab
-                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+                └── columns: a:1 b:2 rowid:3!null
 
 build
 PAUSE JOB 1
 ----
 control-jobs (PAUSE)
  └── values
-      ├── columns: column1:1(int!null)
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+      ├── columns: column1:1!null
+      └── (1,)
 
 build
 PAUSE JOBS SELECT 1.1
@@ -62,32 +58,29 @@ CANCEL SESSION 'foo'
 ----
 cancel-sessions
  └── values
-      ├── columns: column1:1(string!null)
-      └── tuple [type=tuple{string}]
-           └── const: 'foo' [type=string]
+      ├── columns: column1:1!null
+      └── ('foo',)
 
 build
 CANCEL SESSIONS VALUES ('foo'), ('bar')
 ----
 cancel-sessions
  └── values
-      ├── columns: column1:1(string!null)
-      ├── tuple [type=tuple{string}]
-      │    └── const: 'foo' [type=string]
-      └── tuple [type=tuple{string}]
-           └── const: 'bar' [type=string]
+      ├── columns: column1:1!null
+      ├── ('foo',)
+      └── ('bar',)
 
 build
 CANCEL SESSIONS SELECT b FROM ab ORDER BY a
 ----
 cancel-sessions
  └── sort
-      ├── columns: b:2(string)  [hidden: a:1(int)]
+      ├── columns: b:2  [hidden: a:1]
       ├── ordering: +1
       └── project
-           ├── columns: a:1(int) b:2(string)
+           ├── columns: a:1 b:2
            └── scan ab
-                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+                └── columns: a:1 b:2 rowid:3!null
 
 build
 CANCEL SESSION 1
@@ -104,32 +97,29 @@ CANCEL QUERY 'foo'
 ----
 cancel-queries
  └── values
-      ├── columns: column1:1(string!null)
-      └── tuple [type=tuple{string}]
-           └── const: 'foo' [type=string]
+      ├── columns: column1:1!null
+      └── ('foo',)
 
 build
 CANCEL QUERIES VALUES ('foo'), ('bar')
 ----
 cancel-queries
  └── values
-      ├── columns: column1:1(string!null)
-      ├── tuple [type=tuple{string}]
-      │    └── const: 'foo' [type=string]
-      └── tuple [type=tuple{string}]
-           └── const: 'bar' [type=string]
+      ├── columns: column1:1!null
+      ├── ('foo',)
+      └── ('bar',)
 
 build
 CANCEL QUERIES SELECT b FROM ab ORDER BY a
 ----
 cancel-queries
  └── sort
-      ├── columns: b:2(string)  [hidden: a:1(int)]
+      ├── columns: b:2  [hidden: a:1]
       ├── ordering: +1
       └── project
-           ├── columns: a:1(int) b:2(string)
+           ├── columns: a:1 b:2
            └── scan ab
-                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+                └── columns: a:1 b:2 rowid:3!null
 
 build
 CANCEL QUERY 1
@@ -145,42 +135,42 @@ build
 EXPORT INTO CSV 'nodelocal://foo' FROM SELECT * FROM ab
 ----
 export
- ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── columns: filename:4 rows:5 bytes:6
  ├── format: CSV
  ├── project
- │    ├── columns: a:1(int) b:2(string)
+ │    ├── columns: a:1 b:2
  │    └── scan ab
- │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
- └── const: 'nodelocal://foo' [type=string]
+ │         └── columns: a:1 b:2 rowid:3!null
+ └── 'nodelocal://foo'
 
 build
 EXPORT INTO CSV 'nodelocal://foo' WITH 'foo', 'bar'='baz' FROM SELECT * FROM ab
 ----
 export
- ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── columns: filename:4 rows:5 bytes:6
  ├── format: CSV
  ├── project
- │    ├── columns: a:1(int) b:2(string)
+ │    ├── columns: a:1 b:2
  │    └── scan ab
- │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
- ├── const: 'nodelocal://foo' [type=string]
+ │         └── columns: a:1 b:2 rowid:3!null
+ ├── 'nodelocal://foo'
  └── k-v-options
       ├── k-v-options-item foo
-      │    └── null [type=string]
+      │    └── CAST(NULL AS STRING)
       └── k-v-options-item bar
-           └── const: 'baz' [type=string]
+           └── 'baz'
 
 build
 EXPORT INTO CSV 'nodelocal://foo' WITH 'foo' = $1 FROM SELECT * FROM ab
 ----
 export
- ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── columns: filename:4 rows:5 bytes:6
  ├── format: CSV
  ├── project
- │    ├── columns: a:1(int) b:2(string)
+ │    ├── columns: a:1 b:2
  │    └── scan ab
- │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
- ├── const: 'nodelocal://foo' [type=string]
+ │         └── columns: a:1 b:2 rowid:3!null
+ ├── 'nodelocal://foo'
  └── k-v-options
       └── k-v-options-item foo
-           └── placeholder: $1 [type=string]
+           └── $1

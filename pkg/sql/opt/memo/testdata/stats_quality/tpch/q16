@@ -104,7 +104,7 @@ sort
       │    │    │    │    ├── fd: (15)-->(21)
       │    │    │    │    └── ordering: +15
       │    │    │    └── filters
-      │    │    │         └── s_comment LIKE '%Customer%Complaints%' [type=bool, outer=(21), constraints=(/21: (/NULL - ])]
+      │    │    │         └── s_comment:21 LIKE '%Customer%Complaints%' [type=bool, outer=(21), constraints=(/21: (/NULL - ])]
       │    │    └── filters (true)
       │    ├── select
       │    │    ├── save-table-name: q16_select_8
@@ -121,15 +121,15 @@ sort
       │    │    │    ├── key: (6)
       │    │    │    └── fd: (6)-->(9-11)
       │    │    └── filters
-      │    │         ├── p_brand != 'Brand#45' [type=bool, outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
-      │    │         ├── p_type NOT LIKE 'MEDIUM POLISHED %' [type=bool, outer=(10), constraints=(/10: (/NULL - ])]
-      │    │         └── p_size IN (3, 9, 14, 19, 23, 36, 45, 49) [type=bool, outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
+      │    │         ├── p_brand:9 != 'Brand#45' [type=bool, outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
+      │    │         ├── p_type:10 NOT LIKE 'MEDIUM POLISHED %' [type=bool, outer=(10), constraints=(/10: (/NULL - ])]
+      │    │         └── p_size:11 IN (3, 9, 14, 19, 23, 36, 45, 49) [type=bool, outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
       │    └── filters
-      │         └── p_partkey = ps_partkey [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │         └── p_partkey:6 = ps_partkey:1 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── aggregations
-           └── agg-distinct [type=int, outer=(2)]
+           └── agg-distinct [as=count:22, type=int, outer=(2)]
                 └── count [type=int]
-                     └── variable: ps_suppkey [type=int]
+                     └── ps_suppkey:2 [type=int]
 
 stats table=q16_sort_1
 ----

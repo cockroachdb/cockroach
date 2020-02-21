@@ -4,23 +4,16 @@ build
 VALUES (1)
 ----
 values
- ├── columns: column1:1(int!null)
- └── tuple [type=tuple{int}]
-      └── const: 1 [type=int]
+ ├── columns: column1:1!null
+ └── (1,)
 
 build
 VALUES (1, 2, 3), (4, 5, 6)
 ----
 values
- ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
- ├── tuple [type=tuple{int, int, int}]
- │    ├── const: 1 [type=int]
- │    ├── const: 2 [type=int]
- │    └── const: 3 [type=int]
- └── tuple [type=tuple{int, int, int}]
-      ├── const: 4 [type=int]
-      ├── const: 5 [type=int]
-      └── const: 6 [type=int]
+ ├── columns: column1:1!null column2:2!null column3:3!null
+ ├── (1, 2, 3)
+ └── (4, 5, 6)
 
 build
 VALUES (1), (2, 3)
@@ -31,24 +24,20 @@ build
 VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
 ----
 limit
- ├── columns: column1:1(int!null)
+ ├── columns: column1:1!null
  ├── internal-ordering: -1
  ├── ordering: -1
  ├── sort
- │    ├── columns: column1:1(int!null)
+ │    ├── columns: column1:1!null
  │    ├── ordering: -1
  │    ├── limit hint: 3.00
  │    └── values
- │         ├── columns: column1:1(int!null)
- │         ├── tuple [type=tuple{int}]
- │         │    └── const: 1 [type=int]
- │         ├── tuple [type=tuple{int}]
- │         │    └── const: 1 [type=int]
- │         ├── tuple [type=tuple{int}]
- │         │    └── const: 2 [type=int]
- │         └── tuple [type=tuple{int}]
- │              └── const: 3 [type=int]
- └── const: 3 [type=int]
+ │         ├── columns: column1:1!null
+ │         ├── (1,)
+ │         ├── (1,)
+ │         ├── (2,)
+ │         └── (3,)
+ └── 3
 
 build
 VALUES (1), (1), (2), (3) ORDER BY z
@@ -64,72 +53,48 @@ build
 VALUES ('one', 1, 1.0), ('two', 2, 2.0)
 ----
 values
- ├── columns: column1:1(string!null) column2:2(int!null) column3:3(decimal!null)
- ├── tuple [type=tuple{string, int, decimal}]
- │    ├── const: 'one' [type=string]
- │    ├── const: 1 [type=int]
- │    └── const: 1.0 [type=decimal]
- └── tuple [type=tuple{string, int, decimal}]
-      ├── const: 'two' [type=string]
-      ├── const: 2 [type=int]
-      └── const: 2.0 [type=decimal]
+ ├── columns: column1:1!null column2:2!null column3:3!null
+ ├── ('one', 1, 1.0)
+ └── ('two', 2, 2.0)
 
 build
 VALUES (true), (true), (false)
 ----
 values
- ├── columns: column1:1(bool!null)
- ├── tuple [type=tuple{bool}]
- │    └── true [type=bool]
- ├── tuple [type=tuple{bool}]
- │    └── true [type=bool]
- └── tuple [type=tuple{bool}]
-      └── false [type=bool]
+ ├── columns: column1:1!null
+ ├── (true,)
+ ├── (true,)
+ └── (false,)
 
 build
 VALUES (NULL)
 ----
 values
- ├── columns: column1:1(unknown)
- └── tuple [type=tuple{unknown}]
-      └── null [type=unknown]
+ ├── columns: column1:1
+ └── (NULL,)
 
 build
 VALUES (NULL, 1)
 ----
 values
- ├── columns: column1:1(unknown) column2:2(int!null)
- └── tuple [type=tuple{unknown, int}]
-      ├── null [type=unknown]
-      └── const: 1 [type=int]
+ ├── columns: column1:1 column2:2!null
+ └── (NULL, 1)
 
 build
 VALUES (NULL, 1), (2, NULL)
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
- ├── tuple [type=tuple{int, int}]
- │    ├── cast: INT8 [type=int]
- │    │    └── null [type=unknown]
- │    └── const: 1 [type=int]
- └── tuple [type=tuple{int, int}]
-      ├── const: 2 [type=int]
-      └── cast: INT8 [type=int]
-           └── null [type=unknown]
+ ├── columns: column1:1 column2:2
+ ├── (NULL::INT8, 1)
+ └── (2, NULL::INT8)
 
 build
 VALUES (NULL, 1), (2, NULL)
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
- ├── tuple [type=tuple{int, int}]
- │    ├── cast: INT8 [type=int]
- │    │    └── null [type=unknown]
- │    └── const: 1 [type=int]
- └── tuple [type=tuple{int, int}]
-      ├── const: 2 [type=int]
-      └── cast: INT8 [type=int]
-           └── null [type=unknown]
+ ├── columns: column1:1 column2:2
+ ├── (NULL::INT8, 1)
+ └── (2, NULL::INT8)
 
 build
 VALUES (NULL, 1), (2, NULL), (NULL, 'a')
@@ -140,71 +105,56 @@ build
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
 project
- ├── columns: coalesce:3(int)
+ ├── columns: coalesce:3
  ├── values
- │    ├── columns: column1:1(int) column2:2(int)
- │    ├── tuple [type=tuple{int, int}]
- │    │    ├── const: 1 [type=int]
- │    │    └── const: 2 [type=int]
- │    ├── tuple [type=tuple{int, int}]
- │    │    ├── const: 3 [type=int]
- │    │    └── cast: INT8 [type=int]
- │    │         └── null [type=unknown]
- │    ├── tuple [type=tuple{int, int}]
- │    │    ├── cast: INT8 [type=int]
- │    │    │    └── null [type=unknown]
- │    │    └── const: 4 [type=int]
- │    └── tuple [type=tuple{int, int}]
- │         ├── cast: INT8 [type=int]
- │         │    └── null [type=unknown]
- │         └── cast: INT8 [type=int]
- │              └── null [type=unknown]
+ │    ├── columns: column1:1 column2:2
+ │    ├── (1, 2)
+ │    ├── (3, NULL::INT8)
+ │    ├── (NULL::INT8, 4)
+ │    └── (NULL::INT8, NULL::INT8)
  └── projections
-      └── coalesce [type=int]
-           ├── variable: column1 [type=int]
-           └── variable: column2 [type=int]
+      └── COALESCE(column1:1, column2:2) [as=coalesce:3]
 
 # subqueries can be evaluated in VALUES
 build
 VALUES ((SELECT 1 a)), ((SELECT 2 b))
 ----
 values
- ├── columns: column1:3(int)
- ├── tuple [type=tuple{int}]
- │    └── subquery [type=int]
+ ├── columns: column1:3
+ ├── tuple
+ │    └── subquery
  │         └── max1-row
- │              ├── columns: a:1(int!null)
+ │              ├── columns: a:1!null
  │              └── project
- │                   ├── columns: a:1(int!null)
+ │                   ├── columns: a:1!null
  │                   ├── values
- │                   │    └── tuple [type=tuple]
+ │                   │    └── ()
  │                   └── projections
- │                        └── const: 1 [type=int]
- └── tuple [type=tuple{int}]
-      └── subquery [type=int]
+ │                        └── 1 [as=a:1]
+ └── tuple
+      └── subquery
            └── max1-row
-                ├── columns: b:2(int!null)
+                ├── columns: b:2!null
                 └── project
-                     ├── columns: b:2(int!null)
+                     ├── columns: b:2!null
                      ├── values
-                     │    └── tuple [type=tuple]
+                     │    └── ()
                      └── projections
-                          └── const: 2 [type=int]
+                          └── 2 [as=b:2]
 
 build
 VALUES (1), ((SELECT 2 a))
 ----
 values
- ├── columns: column1:2(int)
- ├── tuple [type=tuple{int}]
- │    └── const: 1 [type=int]
- └── tuple [type=tuple{int}]
-      └── subquery [type=int]
+ ├── columns: column1:2
+ ├── (1,)
+ └── tuple
+      └── subquery
            └── max1-row
-                ├── columns: a:1(int!null)
+                ├── columns: a:1!null
                 └── project
-                     ├── columns: a:1(int!null)
+                     ├── columns: a:1!null
                      ├── values
-                     │    └── tuple [type=tuple]
+                     │    └── ()
                      └── projections
-                          └── const: 2 [type=int]
+                          └── 2 [as=a:1]

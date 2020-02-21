@@ -53,7 +53,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("after memo cannot be the same as the detached memo")
 	}
 
-	if !strings.Contains(after.RootExpr().String(), "variable: a [type=int]") {
+	if !strings.Contains(after.RootExpr().String(), "variable: a:1 [type=int]") {
 		t.Error("after memo did not contain expected operator")
 	}
 
@@ -69,7 +69,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("detached memo expression does not reference the detached memo")
 	}
 
-	if !strings.Contains(before.RootExpr().String(), "variable: c [type=string]") {
+	if !strings.Contains(before.RootExpr().String(), "variable: c:3 [type=string]") {
 		t.Error("detached memo did not contain expected operator")
 	}
 }
@@ -134,7 +134,8 @@ func TestCoster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runDataDrivenTest(
 		t, "testdata/coster/",
-		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
+		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|
+			memo.ExprFmtHideTypes,
 	)
 }
 
@@ -151,7 +152,8 @@ func TestPhysicalProps(t *testing.T) {
 			memo.ExprFmtHideStats|
 			memo.ExprFmtHideCost|
 			memo.ExprFmtHideQualifications|
-			memo.ExprFmtHideScalars,
+			memo.ExprFmtHideScalars|
+			memo.ExprFmtHideTypes,
 	)
 }
 
@@ -165,7 +167,7 @@ func TestRuleProps(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			tester := opttester.New(catalog, d.Input)
 			tester.Flags.ExprFormat = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
-				memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
+				memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
 			return tester.RunCommand(t, d)
 		})
 	})
@@ -181,7 +183,7 @@ func TestRules(t *testing.T) {
 		t,
 		"testdata/rules/",
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
 	)
 }
 
@@ -206,7 +208,7 @@ func TestExternal(t *testing.T) {
 		t,
 		*externalTestData,
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
 	)
 }
 

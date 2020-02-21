@@ -22,29 +22,29 @@ opt
 SELECT k,f FROM a ORDER BY f DESC, k ASC LIMIT 10
 ----
 limit
- ├── columns: k:1(int!null) f:3(float)
+ ├── columns: k:1!null f:3
  ├── internal-ordering: -3,+1
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── ordering: -3,+1
  ├── sort
- │    ├── columns: k:1(int!null) f:3(float)
+ │    ├── columns: k:1!null f:3
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    ├── ordering: -3,+1
  │    ├── limit hint: 10.00
  │    └── scan a@s_idx
- │         ├── columns: k:1(int!null) f:3(float)
+ │         ├── columns: k:1!null f:3
  │         ├── key: (1)
  │         └── fd: (1)-->(3)
- └── const: 10 [type=int]
+ └── 10
 
 opt
 SELECT k,f from a ORDER BY k DESC LIMIT 10
 ----
 scan a,rev
- ├── columns: k:1(int!null) f:3(float)
+ ├── columns: k:1!null f:3
  ├── limit: 10(rev)
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -75,7 +75,7 @@ opt
 SELECT s FROM a ORDER BY k DESC
 ----
 scan a,rev
- ├── columns: s:4(string)  [hidden: k:1(int!null)]
+ ├── columns: s:4  [hidden: k:1!null]
  ├── key: (1)
  ├── fd: (1)-->(4)
  └── ordering: -1
@@ -84,7 +84,7 @@ opt
 SELECT k FROM a ORDER BY k ASC
 ----
 scan a
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── ordering: +1
 
@@ -92,7 +92,7 @@ opt
 SELECT k FROM a ORDER BY k DESC
 ----
 scan a,rev
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── ordering: -1
 
@@ -100,7 +100,7 @@ opt
 SELECT s,i,k,j FROM a ORDER BY s DESC, i DESC, k ASC
 ----
 scan a@si_idx
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  └── ordering: -4,-2,+1
@@ -111,12 +111,12 @@ opt
 SELECT s,i,k,j FROM a ORDER BY s DESC, i DESC, k DESC
 ----
 sort (segmented)
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  ├── ordering: -4,-2,-1
  └── scan a@si_idx
-      ├── columns: k:1(int!null) i:2(int) s:4(string) j:5(jsonb)
+      ├── columns: k:1!null i:2 s:4 j:5
       ├── key: (1)
       ├── fd: (1)-->(2,4,5)
       └── ordering: -4,-2
@@ -127,12 +127,12 @@ opt
 SELECT s,i,k,j FROM a ORDER BY s DESC, i ASC, k DESC
 ----
 sort (segmented)
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  ├── ordering: -4,+2,-1
  └── scan a@si_idx
-      ├── columns: k:1(int!null) i:2(int) s:4(string) j:5(jsonb)
+      ├── columns: k:1!null i:2 s:4 j:5
       ├── key: (1)
       ├── fd: (1)-->(2,4,5)
       └── ordering: -4
@@ -141,7 +141,7 @@ opt
 SELECT s,i,k,j FROM a ORDER BY s ASC, i ASC, k DESC
 ----
 scan a@si_idx,rev
- ├── columns: s:4(string) i:2(int) k:1(int!null) j:5(jsonb)
+ ├── columns: s:4 i:2 k:1!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2,4,5)
  └── ordering: +4,+2,-1
@@ -163,7 +163,7 @@ opt
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
 scan a@s_idx
- ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
+ ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: +4,+1
@@ -190,18 +190,18 @@ GenerateIndexScans
 ================================================================================
 Source expression:
   sort
-   ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
+   ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: (1)-->(2-4)
    ├── ordering: +4,+1
    └── scan a
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+        ├── columns: k:1!null i:2 f:3 s:4
         ├── key: (1)
         └── fd: (1)-->(2-4)
 
 New expression 1 of 1:
   scan a@s_idx
-   ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
+   ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: (1)-->(2-4)
    └── ordering: +4,+1
@@ -222,21 +222,21 @@ GenerateConstrainedScans
 ================================================================================
 Source expression:
   select
-   ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
    ├── ordering: +1 opt(4) [actual: +1]
    ├── scan a@s_idx
-   │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+   │    ├── columns: k:1!null i:2 f:3 s:4
    │    ├── key: (1)
    │    ├── fd: (1)-->(2-4)
    │    └── ordering: +1 opt(4) [actual: +4,+1]
    └── filters
-        └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+        └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 New expression 1 of 2:
   scan a@s_idx
-   ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
    ├── constraint: /4/1: [/'foo' - /'foo']
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
@@ -244,16 +244,16 @@ New expression 1 of 2:
 
 New expression 2 of 2:
   sort
-   ├── columns: s:4(string!null) i:2(int) f:3(float)  [hidden: k:1(int!null)]
+   ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
    ├── ordering: +1 opt(4) [actual: +1]
    └── index-join a
-        ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null)
+        ├── columns: k:1!null i:2 f:3 s:4!null
         ├── key: (1)
         ├── fd: ()-->(4), (1)-->(2,3)
         └── scan a@si_idx
-             ├── columns: k:1(int!null) i:2(int) s:4(string!null)
+             ├── columns: k:1!null i:2 s:4!null
              ├── constraint: /-4/-2/1: [/'foo' - /'foo']
              ├── key: (1)
              └── fd: ()-->(4), (1)-->(2)
@@ -322,11 +322,11 @@ opt
 SELECT * FROM a@si_idx
 ----
 index-join a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── scan a@si_idx
-      ├── columns: k:1(int!null) i:2(int) s:4(string) j:5(jsonb)
+      ├── columns: k:1!null i:2 s:4 j:5
       ├── flags: force-index=si_idx
       ├── key: (1)
       └── fd: (1)-->(2,4,5)
@@ -396,7 +396,7 @@ opt
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
 scan a
- ├── columns: s:4(string) i:2(int) f:3(float)  [hidden: k:1(int!null)]
+ ├── columns: s:4 i:2 f:3  [hidden: k:1!null]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: +1
@@ -418,7 +418,7 @@ opt
 SELECT s, j FROM a ORDER BY s
 ----
 scan a@si_idx,rev
- ├── columns: s:4(string) j:5(jsonb)
+ ├── columns: s:4 j:5
  └── ordering: +4
 
 memo
@@ -438,12 +438,12 @@ opt
 SELECT i, k FROM a ORDER BY s DESC, i, k
 ----
 sort (segmented)
- ├── columns: i:2(int) k:1(int!null)  [hidden: s:4(string)]
+ ├── columns: i:2 k:1!null  [hidden: s:4]
  ├── key: (1)
  ├── fd: (1)-->(2,4)
  ├── ordering: -4,+2,+1
  └── scan a@si_idx
-      ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── columns: k:1!null i:2 s:4
       ├── key: (1)
       ├── fd: (1)-->(2,4)
       └── ordering: -4
@@ -490,7 +490,7 @@ opt
 SELECT s, i, f FROM a ORDER BY s FOR UPDATE
 ----
 scan a@s_idx
- ├── columns: s:4(string) i:2(int) f:3(float)
+ ├── columns: s:4 i:2 f:3
  ├── locking: for-update
  └── ordering: +4
 
@@ -503,7 +503,7 @@ opt
 SELECT s FROM x WHERE s < 'hello' COLLATE en_u_ks_level1
 ----
 scan x
- ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ ├── columns: s:1!null
  ├── constraint: /1: [ - /'hello' COLLATE en_u_ks_level1)
  └── key: (1)
 
@@ -511,7 +511,7 @@ opt
 SELECT s FROM x WHERE s = 'hello' COLLATE en_u_ks_level1
 ----
 scan x
- ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ ├── columns: s:1!null
  ├── constraint: /1: [/'hello' COLLATE en_u_ks_level1 - /'hello' COLLATE en_u_ks_level1]
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -522,13 +522,13 @@ opt
 SELECT s FROM x WHERE s COLLATE en = 'hello' COLLATE en
 ----
 select
- ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ ├── columns: s:1!null
  ├── key: (1)
  ├── scan x
- │    ├── columns: s:1(collatedstring{en_u_ks_level1}!null)
+ │    ├── columns: s:1!null
  │    └── key: (1)
  └── filters
-      └── s COLLATE en = 'hello' COLLATE en [type=bool, outer=(1)]
+      └── s:1 COLLATE en = 'hello' COLLATE en [outer=(1)]
 
 # Realistic example where using constraints as filters help.
 # An even more realistic exmple would have a creation timestamp instead of a
@@ -582,19 +582,19 @@ opt
 SELECT sum(total) FROM "orders" WHERE seq_num >= 100 AND seq_num < 200
 ----
 scalar-group-by
- ├── columns: sum:5(decimal)
+ ├── columns: sum:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan orders@orders_by_seq_num
- │    ├── columns: total:3(decimal!null) seq_num:4(int!null)
+ │    ├── columns: total:3!null seq_num:4!null
  │    └── constraint: /1/4/2
  │         ├── [/'europe-west2'/100 - /'europe-west2'/199]
  │         ├── [/'us-east1'/100 - /'us-east1'/199]
  │         └── [/'us-west1'/100 - /'us-west1'/199]
  └── aggregations
-      └── sum [type=decimal, outer=(3)]
-           └── variable: total [type=decimal]
+      └── sum [as=sum:5, outer=(3)]
+           └── total:3
 
 exec-ddl
 CREATE TABLE xyz (
@@ -612,18 +612,18 @@ opt
 SELECT x, y  FROM xyz WHERE x > 5
 ----
 select
- ├── columns: x:1(int!null) y:2(int!null)
+ ├── columns: x:1!null y:2!null
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan xyz@tertiary
- │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── columns: x:1!null y:2!null
  │    ├── constraint: /3/2/1
  │    │    ├── [/'first'/2/6 - /'first'/9/9]
  │    │    └── [/'second'/2/6 - /'second'/9/9]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
-      └── x > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 # TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
 #  would be used here. But it isn't the plan being picked. Curious.
@@ -631,18 +631,18 @@ opt
 SELECT * FROM xyz WHERE x > 5
 ----
 select
- ├── columns: x:1(int!null) y:2(int!null) z:3(string!null)
+ ├── columns: x:1!null y:2!null z:3!null
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── scan xyz@tertiary
- │    ├── columns: x:1(int!null) y:2(int!null) z:3(string!null)
+ │    ├── columns: x:1!null y:2!null z:3!null
  │    ├── constraint: /3/2/1
  │    │    ├── [/'first'/2/6 - /'first'/9/9]
  │    │    └── [/'second'/2/6 - /'second'/9/9]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters
-      └── x > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 # Check constraint used only for the non nullable column. Constraints on x are ignored.
 exec-ddl
@@ -658,12 +658,12 @@ opt
 SELECT x, y FROM xy WHERE x > 5
 ----
 select
- ├── columns: x:1(int!null) y:2(int!null)
+ ├── columns: x:1!null y:2!null
  ├── scan xy@secondary
- │    ├── columns: x:1(int) y:2(int!null)
+ │    ├── columns: x:1 y:2!null
  │    └── constraint: /2/1/3: [/2/6 - /9]
  └── filters
-      └── x > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 # Check constraints that can evaluate to NULL are ignored.
 exec-ddl
@@ -677,7 +677,7 @@ opt
 SELECT y FROM null_constraint WHERE y > 0
 ----
 scan null_constraint@index_1
- ├── columns: y:1(int!null)
+ ├── columns: y:1!null
  └── constraint: /1/2: [/1 - ]
 
 exec-ddl
@@ -692,7 +692,7 @@ opt
 SELECT y FROM null_constraint_2 WHERE y > 0
 ----
 scan null_constraint_2@index_1
- ├── columns: y:1(int!null)
+ ├── columns: y:1!null
  └── constraint: /1/2: [/1 - /14]
 
 # Unvalidated constraints are ignored.
@@ -708,5 +708,5 @@ opt
 SELECT * FROM check_constraint_validity WHERE a > 6
 ----
 scan check_constraint_validity@secondary
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── constraint: /1/2: [/7 - /19]

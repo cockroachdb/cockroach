@@ -50,7 +50,7 @@ with &1 (foo)
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── div [type=decimal, side-effects]
+ │         └── div [as="?column?":1, type=decimal, side-effects]
  │              ├── const: 1 [type=int]
  │              └── const: 0 [type=int]
  └── with-scan &1 (foo)
@@ -85,7 +85,7 @@ with &1 (foo)
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── const: 1 [type=int]
+ │         └── const: 1 [as="?column?":1, type=int]
  └── project
       ├── columns: "?column?":3(decimal!null)
       ├── cardinality: [1 - 1]
@@ -104,7 +104,7 @@ with &1 (foo)
       │    ├── prune: (2)
       │    └── cte-uses: map[1:1]
       └── projections
-           └── div [type=decimal, side-effects]
+           └── div [as="?column?":3, type=decimal, side-effects]
                 ├── const: 1 [type=int]
                 └── const: 0 [type=int]
 
@@ -130,7 +130,7 @@ with &1 (foo)
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── cast: INT8 [type=int]
+ │         └── cast: INT8 [as=int8:1, type=int]
  │              └── placeholder: $1 [type=string]
  └── project
       ├── columns: "?column?":3(int!null)
@@ -149,7 +149,7 @@ with &1 (foo)
       │    ├── prune: (2)
       │    └── cte-uses: map[1:1]
       └── projections
-           └── const: 1 [type=int]
+           └── const: 1 [as="?column?":3, type=int]
 
 # WithScan should not have outer columns.
 build
@@ -192,7 +192,7 @@ project
  │    ├── scan tab_10102
  │    └── filters (true)
  └── projections
-      └── null [type=unknown]
+      └── null [as="?column?":7, type=unknown]
 
 build
 SELECT

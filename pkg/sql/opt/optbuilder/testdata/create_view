@@ -16,7 +16,7 @@ CREATE VIEW v1 AS VALUES (1)
 ----
 create-view t.public.v1
  ├── VALUES (1)
- ├── columns: column1:1(int)
+ ├── columns: column1:1
  └── dependencies
 
 build
@@ -24,7 +24,7 @@ CREATE VIEW v1 AS SELECT a FROM ab
 ----
 create-view t.public.v1
  ├── SELECT a FROM t.public.ab
- ├── columns: a:1(int)
+ ├── columns: a:1
  └── dependencies
       └── ab [columns: (0,1)]
 
@@ -34,7 +34,7 @@ CREATE VIEW v1 AS SELECT a FROM ab@idx
 ----
 create-view t.public.v1
  ├── SELECT a FROM t.public.ab@idx
- ├── columns: a:1(int)
+ ├── columns: a:1
  └── dependencies
       └── ab@idx [columns: (0,1)]
 
@@ -43,7 +43,7 @@ CREATE VIEW v1 AS SELECT a FROM ab@primary
 ----
 create-view t.public.v1
  ├── SELECT a FROM t.public.ab@primary
- ├── columns: a:1(int)
+ ├── columns: a:1
  └── dependencies
       └── ab@primary [columns: (0,1)]
 
@@ -57,7 +57,7 @@ CREATE VIEW v1 AS SELECT a FROM av
 ----
 create-view t.public.v1
  ├── SELECT a FROM t.public.av
- ├── columns: a:1(int)
+ ├── columns: a:1
  └── dependencies
       └── av [columns: (0)]
 
@@ -66,7 +66,7 @@ CREATE VIEW v1 AS SELECT av.a, ab.a FROM av, ab
 ----
 create-view t.public.v1
  ├── SELECT av.a, ab.a FROM t.public.av, t.public.ab
- ├── columns: a:1(int) a:3(int)
+ ├── columns: a:1 a:3
  └── dependencies
       ├── av [columns: (0)]
       └── ab [columns: (0,1)]
@@ -77,7 +77,7 @@ CREATE VIEW v1 AS SELECT a, table_schema FROM ab, information_schema.columns
 ----
 create-view t.public.v1
  ├── SELECT a, table_schema FROM t.public.ab, "".information_schema.columns
- ├── columns: a:1(int) table_schema:4(string)
+ ├── columns: a:1 table_schema:4
  └── dependencies
       └── ab [columns: (0,1)]
 
@@ -87,7 +87,7 @@ CREATE VIEW v2 (x) AS SELECT ab.a FROM ab, ab AS ab2, cd
 ----
 create-view t.public.v2
  ├── SELECT ab.a FROM t.public.ab, t.public.ab AS ab2, t.public.cd
- ├── columns: x:1(int)
+ ├── columns: x:1
  └── dependencies
       ├── ab [columns: (0,1)]
       ├── ab [columns: (0,1)]
@@ -114,7 +114,7 @@ CREATE VIEW v5 AS SELECT a FROM [53 AS t]
 ----
 create-view t.public.v5
  ├── SELECT a FROM [53 AS t]
- ├── columns: a:1(int)
+ ├── columns: a:1
  └── dependencies
       └── ab [columns: (0,1)]
 
@@ -124,7 +124,7 @@ CREATE VIEW v6 AS SELECT a FROM [53(1) AS t]
 ----
 create-view t.public.v6
  ├── SELECT a FROM [53(1) AS t]
- ├── columns: a:1(int)
+ ├── columns: a:1
  └── dependencies
       └── ab [columns: (0)]
 
@@ -134,7 +134,7 @@ CREATE VIEW v7 AS SELECT last_value FROM s
 ----
 create-view t.public.v7
  ├── SELECT last_value FROM t.public.s
- ├── columns: last_value:1(int)
+ ├── columns: last_value:1
  └── dependencies
       └── s
 
@@ -146,7 +146,7 @@ WITH cd AS (SELECT a, b FROM ab)
 ----
 create-view t.public.v8
  ├── WITH cd AS (SELECT a, b FROM t.public.ab) SELECT a + b FROM cd
- ├── columns: "?column?":5(int)
+ ├── columns: "?column?":5
  └── dependencies
       └── ab [columns: (0,1)]
 

@@ -9,53 +9,45 @@ build
 SELECT a+b, a+b FROM ab
 ----
 project
- ├── columns: "?column?":4(float) "?column?":4(float)
+ ├── columns: "?column?":4 "?column?":4
  ├── scan ab
- │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ │    └── columns: a:1 b:2 rowid:3!null
  └── projections
-      └── plus [type=float]
-           ├── variable: a [type=float]
-           └── variable: b [type=float]
+      └── a:1 + b:2 [as="?column?":4]
 
 # Ensure whitespace differences don't prevent deduplication.
 build
 SELECT a+b, a + b FROM ab
 ----
 project
- ├── columns: "?column?":4(float) "?column?":4(float)
+ ├── columns: "?column?":4 "?column?":4
  ├── scan ab
- │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ │    └── columns: a:1 b:2 rowid:3!null
  └── projections
-      └── plus [type=float]
-           ├── variable: a [type=float]
-           └── variable: b [type=float]
+      └── a:1 + b:2 [as="?column?":4]
 
 # Side-effecting expressions are not deduplicated.
 build
 SELECT a/b, a/b FROM ab
 ----
 project
- ├── columns: "?column?":4(float) "?column?":5(float)
+ ├── columns: "?column?":4 "?column?":5
  ├── scan ab
- │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ │    └── columns: a:1 b:2 rowid:3!null
  └── projections
-      ├── div [type=float]
-      │    ├── variable: a [type=float]
-      │    └── variable: b [type=float]
-      └── div [type=float]
-           ├── variable: a [type=float]
-           └── variable: b [type=float]
+      ├── a:1 / b:2 [as="?column?":4]
+      └── a:1 / b:2 [as="?column?":5]
 
 build
 SELECT random(), random() FROM ab
 ----
 project
- ├── columns: random:4(float) random:5(float)
+ ├── columns: random:4 random:5
  ├── scan ab
- │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+ │    └── columns: a:1 b:2 rowid:3!null
  └── projections
-      ├── function: random [type=float]
-      └── function: random [type=float]
+      ├── random() [as=random:4]
+      └── random() [as=random:5]
 
 # ORDER BY does not add a new projection if the same expression is projected
 # already, regardless of side-effects.
@@ -63,15 +55,15 @@ build
 SELECT a, b, random(), random() FROM ab ORDER BY random()
 ----
 sort
- ├── columns: a:1(float) b:2(float) random:4(float) random:5(float)
+ ├── columns: a:1 b:2 random:4 random:5
  ├── ordering: +4
  └── project
-      ├── columns: random:4(float) random:5(float) a:1(float) b:2(float)
+      ├── columns: random:4 random:5 a:1 b:2
       ├── scan ab
-      │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+      │    └── columns: a:1 b:2 rowid:3!null
       └── projections
-           ├── function: random [type=float]
-           └── function: random [type=float]
+           ├── random() [as=random:4]
+           └── random() [as=random:5]
 
 # With GROUP BY, expressions identical to a grouping column are always
 # collapsed into a single value.
@@ -79,14 +71,14 @@ build
 SELECT random(), random() FROM ab GROUP BY random()
 ----
 group-by
- ├── columns: random:4(float) random:4(float)
- ├── grouping columns: column4:4(float)
+ ├── columns: random:4 random:4
+ ├── grouping columns: column4:4
  └── project
-      ├── columns: column4:4(float)
+      ├── columns: column4:4
       ├── scan ab
-      │    └── columns: a:1(float) b:2(float) rowid:3(int!null)
+      │    └── columns: a:1 b:2 rowid:3!null
       └── projections
-           └── function: random [type=float]
+           └── random() [as=column4:4]
 
 build
 INSERT INTO ab VALUES (random(), random())
@@ -94,18 +86,16 @@ INSERT INTO ab VALUES (random(), random())
 insert ab
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:4 => a:1
- │    ├──  column2:5 => b:2
- │    └──  column6:6 => rowid:3
+ │    ├── column1:4 => a:1
+ │    ├── column2:5 => b:2
+ │    └── column6:6 => rowid:3
  └── project
-      ├── columns: column6:6(int) column1:4(float) column2:5(float)
+      ├── columns: column6:6 column1:4 column2:5
       ├── values
-      │    ├── columns: column1:4(float) column2:5(float)
-      │    └── tuple [type=tuple{float, float}]
-      │         ├── function: random [type=float]
-      │         └── function: random [type=float]
+      │    ├── columns: column1:4 column2:5
+      │    └── (random(), random())
       └── projections
-           └── function: unique_rowid [type=int]
+           └── unique_rowid() [as=column6:6]
 
 # Make sure impure default expressions are not deduplicated.
 exec-ddl
@@ -118,22 +108,20 @@ INSERT INTO abcd VALUES (1, 1)
 insert abcd
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:6 => a:1
- │    ├──  column2:7 => b:2
- │    ├──  column8:8 => c:3
- │    ├──  column9:9 => d:4
- │    └──  column10:10 => rowid:5
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column8:8 => c:3
+ │    ├── column9:9 => d:4
+ │    └── column10:10 => rowid:5
  └── project
-      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float!null) column2:7(float!null)
+      ├── columns: column8:8 column9:9 column10:10 column1:6!null column2:7!null
       ├── values
-      │    ├── columns: column1:6(float!null) column2:7(float!null)
-      │    └── tuple [type=tuple{float, float}]
-      │         ├── const: 1.0 [type=float]
-      │         └── const: 1.0 [type=float]
+      │    ├── columns: column1:6!null column2:7!null
+      │    └── (1.0, 1.0)
       └── projections
-           ├── function: random [type=float]
-           ├── function: random [type=float]
-           └── function: unique_rowid [type=int]
+           ├── random() [as=column8:8]
+           ├── random() [as=column9:9]
+           └── unique_rowid() [as=column10:10]
 
 build
 INSERT INTO abcd VALUES (random(), random())
@@ -141,22 +129,20 @@ INSERT INTO abcd VALUES (random(), random())
 insert abcd
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:6 => a:1
- │    ├──  column2:7 => b:2
- │    ├──  column8:8 => c:3
- │    ├──  column9:9 => d:4
- │    └──  column10:10 => rowid:5
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column8:8 => c:3
+ │    ├── column9:9 => d:4
+ │    └── column10:10 => rowid:5
  └── project
-      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float) column2:7(float)
+      ├── columns: column8:8 column9:9 column10:10 column1:6 column2:7
       ├── values
-      │    ├── columns: column1:6(float) column2:7(float)
-      │    └── tuple [type=tuple{float, float}]
-      │         ├── function: random [type=float]
-      │         └── function: random [type=float]
+      │    ├── columns: column1:6 column2:7
+      │    └── (random(), random())
       └── projections
-           ├── function: random [type=float]
-           ├── function: random [type=float]
-           └── function: unique_rowid [type=int]
+           ├── random() [as=column8:8]
+           ├── random() [as=column9:9]
+           └── unique_rowid() [as=column10:10]
 
 build
 UPSERT INTO abcd VALUES (1, 1)
@@ -164,22 +150,20 @@ UPSERT INTO abcd VALUES (1, 1)
 upsert abcd
  ├── columns: <none>
  ├── upsert-mapping:
- │    ├──  column1:6 => a:1
- │    ├──  column2:7 => b:2
- │    ├──  column8:8 => c:3
- │    ├──  column9:9 => d:4
- │    └──  column10:10 => rowid:5
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column8:8 => c:3
+ │    ├── column9:9 => d:4
+ │    └── column10:10 => rowid:5
  └── project
-      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float!null) column2:7(float!null)
+      ├── columns: column8:8 column9:9 column10:10 column1:6!null column2:7!null
       ├── values
-      │    ├── columns: column1:6(float!null) column2:7(float!null)
-      │    └── tuple [type=tuple{float, float}]
-      │         ├── const: 1.0 [type=float]
-      │         └── const: 1.0 [type=float]
+      │    ├── columns: column1:6!null column2:7!null
+      │    └── (1.0, 1.0)
       └── projections
-           ├── function: random [type=float]
-           ├── function: random [type=float]
-           └── function: unique_rowid [type=int]
+           ├── random() [as=column8:8]
+           ├── random() [as=column9:9]
+           └── unique_rowid() [as=column10:10]
 
 build
 UPSERT INTO abcd VALUES (random(), random())
@@ -187,42 +171,38 @@ UPSERT INTO abcd VALUES (random(), random())
 upsert abcd
  ├── columns: <none>
  ├── upsert-mapping:
- │    ├──  column1:6 => a:1
- │    ├──  column2:7 => b:2
- │    ├──  column8:8 => c:3
- │    ├──  column9:9 => d:4
- │    └──  column10:10 => rowid:5
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column8:8 => c:3
+ │    ├── column9:9 => d:4
+ │    └── column10:10 => rowid:5
  └── project
-      ├── columns: column8:8(float) column9:9(float) column10:10(int) column1:6(float) column2:7(float)
+      ├── columns: column8:8 column9:9 column10:10 column1:6 column2:7
       ├── values
-      │    ├── columns: column1:6(float) column2:7(float)
-      │    └── tuple [type=tuple{float, float}]
-      │         ├── function: random [type=float]
-      │         └── function: random [type=float]
+      │    ├── columns: column1:6 column2:7
+      │    └── (random(), random())
       └── projections
-           ├── function: random [type=float]
-           ├── function: random [type=float]
-           └── function: unique_rowid [type=int]
+           ├── random() [as=column8:8]
+           ├── random() [as=column9:9]
+           └── unique_rowid() [as=column10:10]
 
 build
 UPDATE abcd SET a = random(), b = random() WHERE a=1
 ----
 update abcd
  ├── columns: <none>
- ├── fetch columns: a:6(float) b:7(float) c:8(float) d:9(float) rowid:10(int)
+ ├── fetch columns: a:6 b:7 c:8 d:9 rowid:10
  ├── update-mapping:
- │    ├──  column11:11 => a:1
- │    └──  column12:12 => b:2
+ │    ├── column11:11 => a:1
+ │    └── column12:12 => b:2
  └── project
-      ├── columns: column11:11(float) column12:12(float) a:6(float!null) b:7(float) c:8(float) d:9(float) rowid:10(int!null)
+      ├── columns: column11:11 column12:12 a:6!null b:7 c:8 d:9 rowid:10!null
       ├── select
-      │    ├── columns: a:6(float!null) b:7(float) c:8(float) d:9(float) rowid:10(int!null)
+      │    ├── columns: a:6!null b:7 c:8 d:9 rowid:10!null
       │    ├── scan abcd
-      │    │    └── columns: a:6(float) b:7(float) c:8(float) d:9(float) rowid:10(int!null)
+      │    │    └── columns: a:6 b:7 c:8 d:9 rowid:10!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: a [type=float]
-      │              └── const: 1.0 [type=float]
+      │         └── a:6 = 1.0
       └── projections
-           ├── function: random [type=float]
-           └── function: random [type=float]
+           ├── random() [as=column11:11]
+           └── random() [as=column12:12]

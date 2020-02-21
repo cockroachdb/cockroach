@@ -14,81 +14,75 @@ build
 SELECT 3 r FROM kv HAVING TRUE
 ----
 project
- ├── columns: r:5(int!null)
+ ├── columns: r:5!null
  ├── select
  │    ├── scalar-group-by
  │    │    └── project
  │    │         └── scan kv
- │    │              └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │              └── columns: k:1!null v:2 w:3 s:4
  │    └── filters
- │         └── true [type=bool]
+ │         └── true
  └── projections
-      └── const: 3 [type=int]
+      └── 3 [as=r:5]
 
 build
 SELECT s, count(*) FROM kv GROUP BY s HAVING count(*) > 1
 ----
 select
- ├── columns: s:4(string) count:5(int!null)
+ ├── columns: s:4 count:5!null
  ├── group-by
- │    ├── columns: s:4(string) count_rows:5(int!null)
- │    ├── grouping columns: s:4(string)
+ │    ├── columns: s:4 count_rows:5!null
+ │    ├── grouping columns: s:4
  │    ├── project
- │    │    ├── columns: s:4(string)
+ │    │    ├── columns: s:4
  │    │    └── scan kv
- │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │         └── columns: k:1!null v:2 w:3 s:4
  │    └── aggregations
- │         └── count-rows [type=int]
+ │         └── count-rows [as=count_rows:5]
  └── filters
-      └── gt [type=bool]
-           ├── variable: count_rows [type=int]
-           └── const: 1 [type=int]
+      └── count_rows:5 > 1
 
 build
 SELECT max(k), min(v) FROM kv HAVING min(v) > 2
 ----
 select
- ├── columns: max:5(int) min:6(int!null)
+ ├── columns: max:5 min:6!null
  ├── scalar-group-by
- │    ├── columns: max:5(int) min:6(int)
+ │    ├── columns: max:5 min:6
  │    ├── project
- │    │    ├── columns: k:1(int!null) v:2(int)
+ │    │    ├── columns: k:1!null v:2
  │    │    └── scan kv
- │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │         └── columns: k:1!null v:2 w:3 s:4
  │    └── aggregations
- │         ├── max [type=int]
- │         │    └── variable: k [type=int]
- │         └── min [type=int]
- │              └── variable: v [type=int]
+ │         ├── max [as=max:5]
+ │         │    └── k:1
+ │         └── min [as=min:6]
+ │              └── v:2
  └── filters
-      └── gt [type=bool]
-           ├── variable: min [type=int]
-           └── const: 2 [type=int]
+      └── min:6 > 2
 
 build
 SELECT max(k), min(v) FROM kv HAVING max(v) > 2
 ----
 project
- ├── columns: max:5(int) min:6(int)
+ ├── columns: max:5 min:6
  └── select
-      ├── columns: max:5(int) min:6(int) max:7(int!null)
+      ├── columns: max:5 min:6 max:7!null
       ├── scalar-group-by
-      │    ├── columns: max:5(int) min:6(int) max:7(int)
+      │    ├── columns: max:5 min:6 max:7
       │    ├── project
-      │    │    ├── columns: k:1(int!null) v:2(int)
+      │    │    ├── columns: k:1!null v:2
       │    │    └── scan kv
-      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    │         └── columns: k:1!null v:2 w:3 s:4
       │    └── aggregations
-      │         ├── max [type=int]
-      │         │    └── variable: k [type=int]
-      │         ├── min [type=int]
-      │         │    └── variable: v [type=int]
-      │         └── max [type=int]
-      │              └── variable: v [type=int]
+      │         ├── max [as=max:5]
+      │         │    └── k:1
+      │         ├── min [as=min:6]
+      │         │    └── v:2
+      │         └── max [as=max:7]
+      │              └── v:2
       └── filters
-           └── gt [type=bool]
-                ├── variable: max [type=int]
-                └── const: 2 [type=int]
+           └── max:7 > 2
 
 build
 SELECT max(k), min(v) FROM kv HAVING max(min(v)) > 2
@@ -111,22 +105,20 @@ build
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
 ----
 project
- ├── columns: "?column?":5(int!null)
+ ├── columns: "?column?":5!null
  ├── select
- │    ├── columns: k:1(int!null) v:2(int!null)
+ │    ├── columns: k:1!null v:2!null
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) v:2(int)
- │    │    ├── grouping columns: k:1(int!null) v:2(int)
+ │    │    ├── columns: k:1!null v:2
+ │    │    ├── grouping columns: k:1!null v:2
  │    │    └── project
- │    │         ├── columns: k:1(int!null) v:2(int)
+ │    │         ├── columns: k:1!null v:2
  │    │         └── scan kv
- │    │              └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │              └── columns: k:1!null v:2 w:3 s:4
  │    └── filters
- │         └── gt [type=bool]
- │              ├── variable: v [type=int]
- │              └── const: 2 [type=int]
+ │         └── v:2 > 2
  └── projections
-      └── const: 3 [type=int]
+      └── 3 [as="?column?":5]
 
 build
 SELECT k FROM kv HAVING k > 7
@@ -137,24 +129,20 @@ build
 SELECT count(*), k+w AS r FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
 select
- ├── columns: count:5(int!null) r:6(int!null)
+ ├── columns: count:5!null r:6!null
  ├── group-by
- │    ├── columns: count_rows:5(int!null) column6:6(int)
- │    ├── grouping columns: column6:6(int)
+ │    ├── columns: count_rows:5!null column6:6
+ │    ├── grouping columns: column6:6
  │    ├── project
- │    │    ├── columns: column6:6(int)
+ │    │    ├── columns: column6:6
  │    │    ├── scan kv
- │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    │    └── columns: k:1!null v:2 w:3 s:4
  │    │    └── projections
- │    │         └── plus [type=int]
- │    │              ├── variable: k [type=int]
- │    │              └── variable: w [type=int]
+ │    │         └── k:1 + w:3 [as=column6:6]
  │    └── aggregations
- │         └── count-rows [type=int]
+ │         └── count-rows [as=count_rows:5]
  └── filters
-      └── gt [type=bool]
-           ├── variable: column6 [type=int]
-           └── const: 5 [type=int]
+      └── column6:6 > 5
 
 build
 SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+v) > 5
@@ -166,99 +154,84 @@ build
 SELECT max(kv.v) FROM kv GROUP BY v HAVING kv.v > 5
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5
  └── select
-      ├── columns: v:2(int!null) max:5(int)
+      ├── columns: v:2!null max:5
       ├── group-by
-      │    ├── columns: v:2(int) max:5(int)
-      │    ├── grouping columns: v:2(int)
+      │    ├── columns: v:2 max:5
+      │    ├── grouping columns: v:2
       │    ├── project
-      │    │    ├── columns: v:2(int)
+      │    │    ├── columns: v:2
       │    │    └── scan kv
-      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    │         └── columns: k:1!null v:2 w:3 s:4
       │    └── aggregations
-      │         └── max [type=int]
-      │              └── variable: v [type=int]
+      │         └── max [as=max:5]
+      │              └── v:2
       └── filters
-           └── gt [type=bool]
-                ├── variable: v [type=int]
-                └── const: 5 [type=int]
+           └── v:2 > 5
 
 build
 SELECT sum(kv.w) FROM kv GROUP BY lower(s) HAVING lower(kv.s) LIKE 'test%'
 ----
 project
- ├── columns: sum:5(decimal)
+ ├── columns: sum:5
  └── select
-      ├── columns: sum:5(decimal) column6:6(string!null)
+      ├── columns: sum:5 column6:6!null
       ├── group-by
-      │    ├── columns: sum:5(decimal) column6:6(string)
-      │    ├── grouping columns: column6:6(string)
+      │    ├── columns: sum:5 column6:6
+      │    ├── grouping columns: column6:6
       │    ├── project
-      │    │    ├── columns: column6:6(string) w:3(int)
+      │    │    ├── columns: column6:6 w:3
       │    │    ├── scan kv
-      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    │    │    └── columns: k:1!null v:2 w:3 s:4
       │    │    └── projections
-      │    │         └── function: lower [type=string]
-      │    │              └── variable: s [type=string]
+      │    │         └── lower(s:4) [as=column6:6]
       │    └── aggregations
-      │         └── sum [type=decimal]
-      │              └── variable: w [type=int]
+      │         └── sum [as=sum:5]
+      │              └── w:3
       └── filters
-           └── like [type=bool]
-                ├── variable: column6 [type=string]
-                └── const: 'test%' [type=string]
+           └── column6:6 LIKE 'test%'
 
 build
 SELECT sum(kv.w) FROM kv GROUP BY lower(s) HAVING sum(w) IN (4, 5, 6)
 ----
 project
- ├── columns: sum:5(decimal!null)
+ ├── columns: sum:5!null
  └── select
-      ├── columns: sum:5(decimal!null) column6:6(string)
+      ├── columns: sum:5!null column6:6
       ├── group-by
-      │    ├── columns: sum:5(decimal) column6:6(string)
-      │    ├── grouping columns: column6:6(string)
+      │    ├── columns: sum:5 column6:6
+      │    ├── grouping columns: column6:6
       │    ├── project
-      │    │    ├── columns: column6:6(string) w:3(int)
+      │    │    ├── columns: column6:6 w:3
       │    │    ├── scan kv
-      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    │    │    └── columns: k:1!null v:2 w:3 s:4
       │    │    └── projections
-      │    │         └── function: lower [type=string]
-      │    │              └── variable: s [type=string]
+      │    │         └── lower(s:4) [as=column6:6]
       │    └── aggregations
-      │         └── sum [type=decimal]
-      │              └── variable: w [type=int]
+      │         └── sum [as=sum:5]
+      │              └── w:3
       └── filters
-           └── in [type=bool]
-                ├── variable: sum [type=decimal]
-                └── tuple [type=tuple{decimal, decimal, decimal}]
-                     ├── const: 4 [type=decimal]
-                     ├── const: 5 [type=decimal]
-                     └── const: 6 [type=decimal]
+           └── sum:5 IN (4, 5, 6)
 
 build fully-qualify-names
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING k * kv.w > 5
 ----
 project
- ├── columns: v:2(int)
+ ├── columns: v:2
  └── select
-      ├── columns: t.public.kv.v:2(int) column5:5(int!null)
+      ├── columns: t.public.kv.v:2 column5:5!null
       ├── group-by
-      │    ├── columns: t.public.kv.v:2(int) column5:5(int)
-      │    ├── grouping columns: t.public.kv.v:2(int) column5:5(int)
+      │    ├── columns: t.public.kv.v:2 column5:5
+      │    ├── grouping columns: t.public.kv.v:2 column5:5
       │    └── project
-      │         ├── columns: column5:5(int) t.public.kv.v:2(int)
+      │         ├── columns: column5:5 t.public.kv.v:2
       │         ├── scan t.public.kv
-      │         │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
+      │         │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4
       │         └── projections
-      │              └── mult [type=int]
-      │                   ├── variable: t.public.kv.k [type=int]
-      │                   └── variable: t.public.kv.w [type=int]
+      │              └── t.public.kv.k:1 * t.public.kv.w:3 [as=column5:5]
       └── filters
-           └── gt [type=bool]
-                ├── variable: column5 [type=int]
-                └── const: 5 [type=int]
+           └── column5:5 > 5
 
 build fully-qualify-names
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
@@ -269,149 +242,136 @@ build fully-qualify-names
 SELECT upper(s), count(s), count(upper(s)) FROM t.kv GROUP BY upper(s) HAVING count(s) > 1
 ----
 select
- ├── columns: upper:6(string) count:5(int!null) count:7(int!null)
+ ├── columns: upper:6 count:5!null count:7!null
  ├── group-by
- │    ├── columns: count:5(int!null) column6:6(string) count:7(int!null)
- │    ├── grouping columns: column6:6(string)
+ │    ├── columns: count:5!null column6:6 count:7!null
+ │    ├── grouping columns: column6:6
  │    ├── project
- │    │    ├── columns: column6:6(string) t.public.kv.s:4(string)
+ │    │    ├── columns: column6:6 t.public.kv.s:4
  │    │    ├── scan t.public.kv
- │    │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
+ │    │    │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4
  │    │    └── projections
- │    │         └── function: upper [type=string]
- │    │              └── variable: t.public.kv.s [type=string]
+ │    │         └── upper(t.public.kv.s:4) [as=column6:6]
  │    └── aggregations
- │         ├── count [type=int]
- │         │    └── variable: t.public.kv.s [type=string]
- │         └── count [type=int]
- │              └── variable: column6 [type=string]
+ │         ├── count [as=count:5]
+ │         │    └── t.public.kv.s:4
+ │         └── count [as=count:7]
+ │              └── column6:6
  └── filters
-      └── gt [type=bool]
-           ├── variable: count [type=int]
-           └── const: 1 [type=int]
+      └── count:5 > 1
 
 # Check that ordering by an alias of an aggregate works when HAVING is present.
 build
 SELECT sum(k) AS mk FROM kv GROUP BY v HAVING sum(k)=10 ORDER BY mk
 ----
 project
- ├── columns: mk:5(decimal!null)
+ ├── columns: mk:5!null
  ├── ordering: +5
  └── select
-      ├── columns: v:2(int) sum:5(decimal!null)
+      ├── columns: v:2 sum:5!null
       ├── group-by
-      │    ├── columns: v:2(int) sum:5(decimal!null)
-      │    ├── grouping columns: v:2(int)
+      │    ├── columns: v:2 sum:5!null
+      │    ├── grouping columns: v:2
       │    ├── project
-      │    │    ├── columns: k:1(int!null) v:2(int)
+      │    │    ├── columns: k:1!null v:2
       │    │    └── scan kv
-      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    │         └── columns: k:1!null v:2 w:3 s:4
       │    └── aggregations
-      │         └── sum [type=decimal]
-      │              └── variable: k [type=int]
+      │         └── sum [as=sum:5]
+      │              └── k:1
       └── filters
-           └── eq [type=bool]
-                ├── variable: sum [type=decimal]
-                └── const: 10 [type=decimal]
+           └── sum:5 = 10
 
 build
 SELECT sum(k) AS mk FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk
 ----
 sort
- ├── columns: mk:5(decimal!null)
+ ├── columns: mk:5!null
  ├── ordering: +5
  └── project
-      ├── columns: sum:5(decimal!null)
+      ├── columns: sum:5!null
       └── select
-           ├── columns: v:2(int) sum:5(decimal!null) max:6(int!null)
+           ├── columns: v:2 sum:5!null max:6!null
            ├── group-by
-           │    ├── columns: v:2(int) sum:5(decimal!null) max:6(int!null)
-           │    ├── grouping columns: v:2(int)
+           │    ├── columns: v:2 sum:5!null max:6!null
+           │    ├── grouping columns: v:2
            │    ├── project
-           │    │    ├── columns: k:1(int!null) v:2(int)
+           │    │    ├── columns: k:1!null v:2
            │    │    └── scan kv
-           │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+           │    │         └── columns: k:1!null v:2 w:3 s:4
            │    └── aggregations
-           │         ├── sum [type=decimal]
-           │         │    └── variable: k [type=int]
-           │         └── max [type=int]
-           │              └── variable: k [type=int]
+           │         ├── sum [as=sum:5]
+           │         │    └── k:1
+           │         └── max [as=max:6]
+           │              └── k:1
            └── filters
-                └── gt [type=bool]
-                     ├── variable: max [type=int]
-                     └── const: 10 [type=int]
+                └── max:6 > 10
 
 build
 SELECT sum(k) AS mk FROM kv GROUP BY v HAVING v > 10 ORDER BY mk
 ----
 sort
- ├── columns: mk:5(decimal!null)
+ ├── columns: mk:5!null
  ├── ordering: +5
  └── project
-      ├── columns: sum:5(decimal!null)
+      ├── columns: sum:5!null
       └── select
-           ├── columns: v:2(int!null) sum:5(decimal!null)
+           ├── columns: v:2!null sum:5!null
            ├── group-by
-           │    ├── columns: v:2(int) sum:5(decimal!null)
-           │    ├── grouping columns: v:2(int)
+           │    ├── columns: v:2 sum:5!null
+           │    ├── grouping columns: v:2
            │    ├── project
-           │    │    ├── columns: k:1(int!null) v:2(int)
+           │    │    ├── columns: k:1!null v:2
            │    │    └── scan kv
-           │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+           │    │         └── columns: k:1!null v:2 w:3 s:4
            │    └── aggregations
-           │         └── sum [type=decimal]
-           │              └── variable: k [type=int]
+           │         └── sum [as=sum:5]
+           │              └── k:1
            └── filters
-                └── gt [type=bool]
-                     ├── variable: v [type=int]
-                     └── const: 10 [type=int]
+                └── v:2 > 10
 
 build
 SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk1
 ----
 sort
- ├── columns: mk1:5(int!null) mk2:5(int!null)
+ ├── columns: mk1:5!null mk2:5!null
  ├── ordering: +5
  └── project
-      ├── columns: max:5(int!null)
+      ├── columns: max:5!null
       └── select
-           ├── columns: v:2(int) max:5(int!null)
+           ├── columns: v:2 max:5!null
            ├── group-by
-           │    ├── columns: v:2(int) max:5(int!null)
-           │    ├── grouping columns: v:2(int)
+           │    ├── columns: v:2 max:5!null
+           │    ├── grouping columns: v:2
            │    ├── project
-           │    │    ├── columns: k:1(int!null) v:2(int)
+           │    │    ├── columns: k:1!null v:2
            │    │    └── scan kv
-           │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+           │    │         └── columns: k:1!null v:2 w:3 s:4
            │    └── aggregations
-           │         └── max [type=int]
-           │              └── variable: k [type=int]
+           │         └── max [as=max:5]
+           │              └── k:1
            └── filters
-                └── gt [type=bool]
-                     ├── variable: max [type=int]
-                     └── const: 10 [type=int]
+                └── max:5 > 10
 
 build
 SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk2
 ----
 sort
- ├── columns: mk1:5(int!null) mk2:5(int!null)
+ ├── columns: mk1:5!null mk2:5!null
  ├── ordering: +5
  └── project
-      ├── columns: max:5(int!null)
+      ├── columns: max:5!null
       └── select
-           ├── columns: v:2(int) max:5(int!null)
+           ├── columns: v:2 max:5!null
            ├── group-by
-           │    ├── columns: v:2(int) max:5(int!null)
-           │    ├── grouping columns: v:2(int)
+           │    ├── columns: v:2 max:5!null
+           │    ├── grouping columns: v:2
            │    ├── project
-           │    │    ├── columns: k:1(int!null) v:2(int)
+           │    │    ├── columns: k:1!null v:2
            │    │    └── scan kv
-           │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+           │    │         └── columns: k:1!null v:2 w:3 s:4
            │    └── aggregations
-           │         └── max [type=int]
-           │              └── variable: k [type=int]
+           │         └── max [as=max:5]
+           │              └── k:1
            └── filters
-                └── gt [type=bool]
-                     ├── variable: max [type=int]
-                     └── const: 10 [type=int]
+                └── max:5 > 10

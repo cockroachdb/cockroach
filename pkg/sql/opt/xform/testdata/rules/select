@@ -30,7 +30,7 @@ opt
 SELECT k FROM a WHERE k = 1
 ----
 scan a
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── constraint: /1: [/1 - /1]
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -57,10 +57,10 @@ opt
 SELECT k FROM a WHERE v > 1
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── scan a@v
-      ├── columns: k:1(int!null) v:3(int!null)
+      ├── columns: k:1!null v:3!null
       ├── constraint: /3: [/2 - ]
       ├── key: (1)
       └── fd: (1)-->(3), (3)-->(1)
@@ -91,12 +91,12 @@ opt
 SELECT k FROM a WHERE u = 1 AND k = 5
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
  └── scan a@u
-      ├── columns: k:1(int!null) u:2(int!null)
+      ├── columns: k:1!null u:2!null
       ├── constraint: /2/1: [/1/5 - /1/5]
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -137,12 +137,12 @@ opt
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
  └── scan a@u
-      ├── columns: k:1(int!null) u:2(int!null)
+      ├── columns: k:1!null u:2!null
       ├── constraint: /2/1: [/1/0 - /1/0]
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -182,23 +182,23 @@ opt
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
  └── select
-      ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+      ├── columns: k:1!null u:2!null v:3!null
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── scan a@v
-      │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+      │    ├── columns: k:1!null u:2 v:3!null
       │    ├── constraint: /3: [/5 - /5]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(1-3)
       └── filters
-           └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+           └── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -240,53 +240,53 @@ opt
 SELECT k FROM a WHERE u=v
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+      ├── columns: k:1!null u:2!null v:3!null
       ├── key: (1)
       ├── fd: (1)-->(2,3), (3)-->(1), (2)==(3), (3)==(2)
       ├── scan a@u
-      │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+      │    ├── columns: k:1!null u:2!null v:3
       │    ├── constraint: /2/1: (/NULL - ]
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3), (3)~~>(1,2)
       └── filters
-           └── u = v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+           └── u:2 = v:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
 
 # Don't push constraint into already limited scan.
 opt
 SELECT k FROM (SELECT k FROM a ORDER BY u LIMIT 1) a WHERE k = 1
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
  └── select
-      ├── columns: k:1(int!null) u:2(int)
+      ├── columns: k:1!null u:2
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,2)
       ├── scan a@u
-      │    ├── columns: k:1(int!null) u:2(int)
+      │    ├── columns: k:1!null u:2
       │    ├── limit: 1
       │    ├── key: ()
       │    └── fd: ()-->(1,2)
       └── filters
-           └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
 
 # Constraint + index-join, with no remainder filter.
 opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
 index-join b
- ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  └── scan b@v
-      ├── columns: k:1(int!null) v:3(int!null)
+      ├── columns: k:1!null v:3!null
       ├── constraint: /3: [/1 - /10]
       ├── cardinality: [0 - 10]
       ├── key: (1)
@@ -322,37 +322,37 @@ opt
 SELECT * FROM b WHERE v > 1
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3!null j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── scan b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── v > 1 [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
+      └── v:3 > 1 [outer=(3), constraints=(/3: [/2 - ]; tight)]
 
 opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
 index-join b
- ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  └── select
-      ├── columns: k:1(int!null) v:3(int!null)
+      ├── columns: k:1!null v:3!null
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(3), (3)-->(1)
       ├── scan b@v
-      │    ├── columns: k:1(int!null) v:3(int!null)
+      │    ├── columns: k:1!null v:3!null
       │    ├── constraint: /3: [/1 - /10]
       │    ├── cardinality: [0 - 10]
       │    ├── key: (1)
       │    └── fd: (1)-->(3), (3)-->(1)
       └── filters
-           └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+           └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
@@ -403,25 +403,25 @@ GenerateConstrainedScans
 ================================================================================
 Source expression:
   project
-   ├── columns: k:1(int!null)
+   ├── columns: k:1!null
    ├── key: (1)
    └── select
-        ├── columns: k:1(int!null) u:2(int!null)
+        ├── columns: k:1!null u:2!null
         ├── key: (1)
         ├── fd: ()-->(2)
         ├── scan a
-        │    ├── columns: k:1(int!null) u:2(int)
+        │    ├── columns: k:1!null u:2
         │    ├── key: (1)
         │    └── fd: (1)-->(2)
         └── filters
-             └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             └── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 New expression 1 of 1:
   project
-   ├── columns: k:1(int!null)
+   ├── columns: k:1!null
    ├── key: (1)
    └── scan a@u
-        ├── columns: k:1(int!null) u:2(int!null)
+        ├── columns: k:1!null u:2!null
         ├── constraint: /2/1: [/1 - /1]
         ├── key: (1)
         └── fd: ()-->(2)
@@ -433,23 +433,23 @@ opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── index-join b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── cardinality: [0 - 10]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)-->(1), (3)~~>(1,2,4)
  │    └── scan b@v
- │         ├── columns: k:1(int!null) v:3(int!null)
+ │         ├── columns: k:1!null v:3!null
  │         ├── constraint: /3: [/1 - /10]
  │         ├── cardinality: [0 - 10]
  │         ├── key: (1)
  │         └── fd: (1)-->(3), (3)-->(1)
  └── filters
-      └── (k + u) = 1 [type=bool, outer=(1,2)]
+      └── (k:1 + u:2) = 1 [outer=(1,2)]
 
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
@@ -489,30 +489,30 @@ opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── index-join b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── cardinality: [0 - 10]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)-->(1), (3)~~>(1,2,4)
  │    └── select
- │         ├── columns: k:1(int!null) v:3(int!null)
+ │         ├── columns: k:1!null v:3!null
  │         ├── cardinality: [0 - 10]
  │         ├── key: (1)
  │         ├── fd: (1)-->(3), (3)-->(1)
  │         ├── scan b@v
- │         │    ├── columns: k:1(int!null) v:3(int!null)
+ │         │    ├── columns: k:1!null v:3!null
  │         │    ├── constraint: /3: [/1 - /10]
  │         │    ├── cardinality: [0 - 10]
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3), (3)-->(1)
  │         └── filters
- │              └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+ │              └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
  └── filters
-      └── (k + u) = 1 [type=bool, outer=(1,2)]
+      └── (k:1 + u:2) = 1 [outer=(1,2)]
 
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
@@ -565,21 +565,21 @@ opt
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
 ----
 select
- ├── columns: k:1(int!null) u:2(int!null) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2!null v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── index-join b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  │    └── scan b@u
- │         ├── columns: k:1(int!null) u:2(int!null)
+ │         ├── columns: k:1!null u:2!null
  │         ├── constraint: /2/1: [/1/2 - /8/9]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
-      ├── (u, k, v) > (1, 2, 3) [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - ]; tight)]
-      └── (u, k, v) < (8, 9, 10) [type=bool, outer=(1-3), constraints=(/2/1/3: (/NULL - /8/9/9]; tight)]
+      ├── (u:2, k:1, v:3) > (1, 2, 3) [outer=(1-3), constraints=(/2/1/3: [/1/2/4 - ]; tight)]
+      └── (u:2, k:1, v:3) < (8, 9, 10) [outer=(1-3), constraints=(/2/1/3: (/NULL - /8/9/9]; tight)]
 
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
@@ -625,7 +625,7 @@ opt
 SELECT k FROM a WHERE k = 1 FOR UPDATE
 ----
 scan a
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── constraint: /1: [/1 - /1]
  ├── locking: for-update
  ├── cardinality: [0 - 1]
@@ -636,12 +636,12 @@ opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 FOR UPDATE
 ----
 index-join b
- ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  └── scan b@v
-      ├── columns: k:1(int!null) v:3(int!null)
+      ├── columns: k:1!null v:3!null
       ├── constraint: /3: [/1 - /10]
       ├── locking: for-update
       ├── cardinality: [0 - 10]
@@ -652,24 +652,24 @@ opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 FOR UPDATE
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── index-join b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── cardinality: [0 - 10]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)-->(1), (3)~~>(1,2,4)
  │    └── scan b@v
- │         ├── columns: k:1(int!null) v:3(int!null)
+ │         ├── columns: k:1!null v:3!null
  │         ├── constraint: /3: [/1 - /10]
  │         ├── locking: for-update
  │         ├── cardinality: [0 - 10]
  │         ├── key: (1)
  │         └── fd: (1)-->(3), (3)-->(1)
  └── filters
-      └── (k + u) = 1 [type=bool, outer=(1,2)]
+      └── (k:1 + u:2) = 1 [outer=(1,2)]
 
 # --------------------------------------------------
 # GenerateInvertedIndexScans
@@ -680,14 +680,14 @@ opt
 SELECT k FROM b WHERE j @> '{"a": "b"}'
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── index-join b
-      ├── columns: k:1(int!null) j:4(jsonb)
+      ├── columns: k:1!null j:4
       ├── key: (1)
       ├── fd: (1)-->(4)
       └── scan b@inv_idx
-           ├── columns: k:1(int!null)
+           ├── columns: k:1!null
            ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
            └── key: (1)
 
@@ -723,37 +723,37 @@ opt
 SELECT k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── inner-join (lookup b)
-      ├── columns: k:1(int!null) j:4(jsonb)
+      ├── columns: k:1!null j:4
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── inner-join (zigzag b@inv_idx b@inv_idx)
-      │    ├── columns: k:1(int!null)
+      │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
       │    ├── left fixed columns: [4] = ['{"a": "b"}']
       │    ├── right fixed columns: [4] = ['{"c": "d"}']
       │    └── filters (true)
       └── filters
-           └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
+           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4)]
 
 # Query requiring an index join with no remaining filter.
 opt
 SELECT u, k FROM b WHERE j @> '{"a": "b"}'
 ----
 project
- ├── columns: u:2(int) k:1(int!null)
+ ├── columns: u:2 k:1!null
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── index-join b
-      ├── columns: k:1(int!null) u:2(int) j:4(jsonb)
+      ├── columns: k:1!null u:2 j:4
       ├── key: (1)
       ├── fd: (1)-->(2,4)
       └── scan b@inv_idx
-           ├── columns: k:1(int!null)
+           ├── columns: k:1!null
            ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
            └── key: (1)
 
@@ -761,11 +761,11 @@ opt
 SELECT j, k FROM b WHERE j @> '{"a": "b"}'
 ----
 index-join b
- ├── columns: j:4(jsonb) k:1(int!null)
+ ├── columns: j:4 k:1!null
  ├── key: (1)
  ├── fd: (1)-->(4)
  └── scan b@inv_idx
-      ├── columns: k:1(int!null)
+      ├── columns: k:1!null
       ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
       └── key: (1)
 
@@ -773,11 +773,11 @@ opt
 SELECT * FROM b WHERE j @> '{"a": "b"}'
 ----
 index-join b
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── scan b@inv_idx
-      ├── columns: k:1(int!null)
+      ├── columns: k:1!null
       ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
       └── key: (1)
 
@@ -787,75 +787,75 @@ opt
 SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 inner-join (lookup b)
- ├── columns: j:4(jsonb) k:1(int!null)
+ ├── columns: j:4 k:1!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── inner-join (zigzag b@inv_idx b@inv_idx)
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [4] = ['{"a": "b"}']
  │    ├── right fixed columns: [4] = ['{"c": "d"}']
  │    └── filters (true)
  └── filters
-      └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
+      └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 inner-join (lookup b)
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── inner-join (zigzag b@inv_idx b@inv_idx)
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [4] = ['{"a": {"b": "c"}}']
  │    ├── right fixed columns: [4] = ['{"a": {"d": "e"}}']
  │    └── filters (true)
  └── filters
-      └── j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(4)]
+      └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '{}'
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── scan b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j @> '{}' [type=bool, outer=(4)]
+      └── j:4 @> '{}' [outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '[]'
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── scan b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j @> '[]' [type=bool, outer=(4)]
+      └── j:4 @> '[]' [outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '2'
 ----
 index-join b
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── scan b@inv_idx
-      ├── columns: k:1(int!null)
+      ├── columns: k:1!null
       ├── constraint: /4/1
       │    ├── [/'2' - /'2']
       │    └── [/'[2]' - /'[2]']
@@ -865,57 +865,57 @@ opt
 SELECT * FROM b WHERE j @> '[{}]'
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── scan b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j @> '[{}]' [type=bool, outer=(4)]
+      └── j:4 @> '[{}]' [outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": {}}'
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── scan b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j @> '{"a": {}}' [type=bool, outer=(4)]
+      └── j:4 @> '{"a": {}}' [outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": []}'
 ----
 select
- ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ ├── columns: k:1!null u:2 v:3 j:4
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── scan b
- │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j @> '{"a": []}' [type=bool, outer=(4)]
+      └── j:4 @> '{"a": []}' [outer=(4)]
 
 # GenerateInvertedIndexScans propagates row-level locking information.
 opt
 SELECT k FROM b WHERE j @> '{"a": "b"}' FOR UPDATE
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── key: (1)
  └── index-join b
-      ├── columns: k:1(int!null) j:4(jsonb)
+      ├── columns: k:1!null j:4
       ├── key: (1)
       ├── fd: (1)-->(4)
       └── scan b@inv_idx
-           ├── columns: k:1(int!null)
+           ├── columns: k:1!null
            ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
            ├── locking: for-update
            └── key: (1)

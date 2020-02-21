@@ -58,7 +58,7 @@ intersect
       │    └── interesting orderings: (+5)
       └── filters
            └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-                ├── variable: u [type=int]
+                ├── variable: u:3 [type=int]
                 └── const: 1 [type=int]
 
 build
@@ -93,7 +93,7 @@ except
            │    └── interesting orderings: (+5)
            └── filters
                 └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-                     ├── variable: u [type=int]
+                     ├── variable: u:3 [type=int]
                      └── const: 1 [type=int]
 
 # Propagate outer columns.
@@ -143,7 +143,7 @@ select
            │              │    │    │    ├── prune: (3-5)
            │              │    │    │    └── interesting orderings: (+5)
            │              │    │    └── projections
-           │              │    │         └── variable: xy.x [type=int, outer=(1)]
+           │              │    │         └── variable: xy.x:1 [as=x:6, type=int, outer=(1)]
            │              │    └── project
            │              │         ├── columns: y:10(int) v:8(int!null)
            │              │         ├── outer: (2)
@@ -156,11 +156,11 @@ select
            │              │         │    ├── prune: (7-9)
            │              │         │    └── interesting orderings: (+9)
            │              │         └── projections
-           │              │              └── variable: xy.y [type=int, outer=(2)]
+           │              │              └── variable: xy.y:2 [as=y:10, type=int, outer=(2)]
            │              └── projections
-           │                   └── tuple [type=tuple{int, int}, outer=(11,12)]
-           │                        ├── variable: x [type=int]
-           │                        └── variable: u [type=int]
+           │                   └── tuple [as=column13:13, type=tuple{int, int}, outer=(11,12)]
+           │                        ├── variable: x:11 [type=int]
+           │                        └── variable: u:12 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]

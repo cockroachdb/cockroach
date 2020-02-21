@@ -117,13 +117,13 @@ project
       │         │    │    │         ├── key: (8,11)
       │         │    │    │         └── fd: (8,11)-->(18)
       │         │    │    └── projections
-      │         │    │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(13,14)]
+      │         │    │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=column24:24, type=float, outer=(13,14)]
       │         │    └── aggregations
-      │         │         └── sum [type=float, outer=(24)]
-      │         │              └── variable: column24 [type=float]
+      │         │         └── sum [as=sum:25, type=float, outer=(24)]
+      │         │              └── column24:24 [type=float]
       │         └── filters
       │              └── eq [type=bool, outer=(25), subquery, constraints=(/25: (/NULL - ])]
-      │                   ├── variable: sum [type=float]
+      │                   ├── sum:25 [type=float]
       │                   └── subquery [type=float]
       │                        └── scalar-group-by
       │                             ├── save-table-name: q15_scalar_group_by_10
@@ -161,13 +161,13 @@ project
       │                             │    │    │         ├── key: (26,29)
       │                             │    │    │         └── fd: (26,29)-->(36)
       │                             │    │    └── projections
-      │                             │    │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(31,32)]
+      │                             │    │         └── l_extendedprice:31 * (1.0 - l_discount:32) [as=column42:42, type=float, outer=(31,32)]
       │                             │    └── aggregations
-      │                             │         └── sum [type=float, outer=(42)]
-      │                             │              └── variable: column42 [type=float]
+      │                             │         └── sum [as=sum:43, type=float, outer=(42)]
+      │                             │              └── column42:42 [type=float]
       │                             └── aggregations
-      │                                  └── max [type=float, outer=(43)]
-      │                                       └── variable: sum [type=float]
+      │                                  └── max [as=max:44, type=float, outer=(43)]
+      │                                       └── sum:43 [type=float]
       └── filters (true)
 
 stats table=q15_project_1

@@ -80,8 +80,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── max [type=int, outer=(2)]
-                └── variable: y [type=int]
+           └── max [as=max:5, type=int, outer=(2)]
+                └── y:2 [type=int]
 
 # Group by non-key.
 build
@@ -102,8 +102,8 @@ group-by
  │         ├── key: (1)
  │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── aggregations
-      └── sum [type=float, outer=(3)]
-           └── variable: z [type=float]
+      └── sum [as=sum:5, type=float, outer=(3)]
+           └── z:3 [type=float]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s
@@ -123,8 +123,8 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── max [type=int, outer=(1)]
-                └── variable: x [type=int]
+           └── max [as=max:5, type=int, outer=(1)]
+                └── x:1 [type=int]
 
 build
 SELECT min(x) FROM a GROUP BY y, z
@@ -149,8 +149,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── min [type=int, outer=(1)]
-                └── variable: x [type=int]
+           └── min [as=min:5, type=int, outer=(1)]
+                └── x:1 [type=int]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
@@ -175,10 +175,10 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── aggregations
-      │         └── max [type=int, outer=(1)]
-      │              └── variable: x [type=int]
+      │         └── max [as=max:5, type=int, outer=(1)]
+      │              └── x:1 [type=int]
       └── filters
-           └── s IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+           └── s:4 IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
 
 # Estimate the distinct count for an aggregate column.
 build
@@ -206,10 +206,10 @@ select
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── aggregations
- │         └── sum [type=decimal, outer=(1)]
- │              └── variable: x [type=int]
+ │         └── sum [as=sum:5, type=decimal, outer=(1)]
+ │              └── x:1 [type=int]
  └── filters
-      └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      └── sum:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
 
 # Scalar GroupBy.
 build
@@ -236,12 +236,12 @@ select
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── aggregations
- │         ├── max [type=int, outer=(2)]
- │         │    └── variable: y [type=int]
- │         └── sum [type=float, outer=(3)]
- │              └── variable: z [type=float]
+ │         ├── max [as=max:5, type=int, outer=(2)]
+ │         │    └── y:2 [type=int]
+ │         └── sum [as=sum:6, type=float, outer=(3)]
+ │              └── z:3 [type=float]
  └── filters
-      └── sum = 5.0 [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight), fd=()-->(6)]
+      └── sum:6 = 5.0 [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight), fd=()-->(6)]
 
 # Bump up null counts.
 exec-ddl
@@ -325,8 +325,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── max [type=int, outer=(2)]
-                └── variable: y [type=int]
+           └── max [as=max:5, type=int, outer=(2)]
+                └── y:2 [type=int]
 
 # Group by non-key.
 build
@@ -347,8 +347,8 @@ group-by
  │         ├── key: (1)
  │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── aggregations
-      └── sum [type=float, outer=(3)]
-           └── variable: z [type=float]
+      └── sum [as=sum:5, type=float, outer=(3)]
+           └── z:3 [type=float]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s
@@ -368,8 +368,8 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── max [type=int, outer=(1)]
-                └── variable: x [type=int]
+           └── max [as=max:5, type=int, outer=(1)]
+                └── x:1 [type=int]
 
 build
 SELECT min(x) FROM a GROUP BY y, z
@@ -394,8 +394,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── min [type=int, outer=(1)]
-                └── variable: x [type=int]
+           └── min [as=min:5, type=int, outer=(1)]
+                └── x:1 [type=int]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
@@ -420,10 +420,10 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── aggregations
-      │         └── max [type=int, outer=(1)]
-      │              └── variable: x [type=int]
+      │         └── max [as=max:5, type=int, outer=(1)]
+      │              └── x:1 [type=int]
       └── filters
-           └── s IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+           └── s:4 IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
 
 # Estimate the null count for an aggregate column.
 build
@@ -451,10 +451,10 @@ select
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── aggregations
- │         └── sum [type=decimal, outer=(1)]
- │              └── variable: x [type=int]
+ │         └── sum [as=sum:5, type=decimal, outer=(1)]
+ │              └── x:1 [type=int]
  └── filters
-      └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      └── sum:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
 
 # Regression test for #36442.
 norm
@@ -501,14 +501,14 @@ project
  │    │    │    │    │    ├── (false, NULL) [type=tuple{bool, int}]
  │    │    │    │    │    └── (true, 5) [type=tuple{bool, int}]
  │    │    │    │    └── filters
- │    │    │    │         └── variable: column1 [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+ │    │    │    │         └── column1:1 [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
  │    │    │    └── projections
- │    │    │         ├── variable: column1 [type=bool, outer=(1)]
- │    │    │         └── variable: column2 [type=int, outer=(2)]
+ │    │    │         ├── column1:1 [as=a:3, type=bool, outer=(1)]
+ │    │    │         └── column2:2 [as=b:4, type=int, outer=(2)]
  │    │    └── aggregations
- │    │         └── bool-or [type=bool, outer=(3)]
- │    │              └── variable: a [type=bool]
+ │    │         └── bool-or [as=bool_or:5, type=bool, outer=(3)]
+ │    │              └── a:3 [type=bool]
  │    └── filters
- │         └── variable: bool_or [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ │         └── bool_or:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as="?column?":6, type=int]

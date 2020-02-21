@@ -18,56 +18,56 @@ build
 SELECT * FROM t FOR UPDATE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-update
 
 build
 SELECT * FROM t FOR NO KEY UPDATE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-no-key-update
 
 build
 SELECT * FROM t FOR SHARE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-share
 
 build
 SELECT * FROM t FOR KEY SHARE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-key-share
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-share
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-no-key-update
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-update
 
 build
 SELECT * FROM t FOR UPDATE OF t
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-update
 
 build
@@ -79,12 +79,12 @@ build
 SELECT 1 FROM t FOR UPDATE OF t
 ----
 project
- ├── columns: "?column?":3(int!null)
+ ├── columns: "?column?":3!null
  ├── scan t
- │    ├── columns: a:1(int!null) b:2(int)
+ │    ├── columns: a:1!null b:2
  │    └── locking: for-update
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as="?column?":3]
 
 # ------------------------------------------------------------------------------
 # Tests with table aliases.
@@ -94,7 +94,7 @@ build
 SELECT * FROM t AS t2 FOR UPDATE
 ----
 scan t2
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-update
 
 build
@@ -106,7 +106,7 @@ build
 SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
 scan t2
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-update
 
 # ------------------------------------------------------------------------------
@@ -118,14 +118,14 @@ build
 SELECT * FROM [53 AS t] FOR UPDATE
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-update
 
 build
 SELECT * FROM [53 AS t] FOR UPDATE OF t
 ----
 scan t
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  └── locking: for-update
 
 build
@@ -141,18 +141,18 @@ build
 SELECT * FROM v FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
 SELECT * FROM v FOR UPDATE OF v
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
@@ -178,9 +178,9 @@ build
 SELECT * FROM v AS v2 FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
@@ -192,9 +192,9 @@ build
 SELECT * FROM v AS v2 FOR UPDATE OF v2
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 # ------------------------------------------------------------------------------
@@ -209,36 +209,36 @@ build
 SELECT * FROM (SELECT a FROM t) FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
 SELECT * FROM (SELECT a FROM t FOR UPDATE)
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
 SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-no-key-update
 
 build
 SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-no-key-update
 
 build
@@ -250,27 +250,27 @@ build
 SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
 SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
 SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
@@ -282,42 +282,42 @@ build
 SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1!null b:2
       └── locking: for-update
 
 build
 SELECT (SELECT a FROM t) FOR UPDATE
 ----
 project
- ├── columns: a:3(int)
+ ├── columns: a:3
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── subquery [type=int]
+      └── subquery [as=a:3]
            └── max1-row
-                ├── columns: t.a:1(int!null)
+                ├── columns: t.a:1!null
                 └── project
-                     ├── columns: t.a:1(int!null)
+                     ├── columns: t.a:1!null
                      └── scan t
-                          └── columns: t.a:1(int!null) b:2(int)
+                          └── columns: t.a:1!null b:2
 
 build
 SELECT (SELECT a FROM t FOR UPDATE)
 ----
 project
- ├── columns: a:3(int)
+ ├── columns: a:3
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── subquery [type=int]
+      └── subquery [as=a:3]
            └── max1-row
-                ├── columns: t.a:1(int!null)
+                ├── columns: t.a:1!null
                 └── project
-                     ├── columns: t.a:1(int!null)
+                     ├── columns: t.a:1!null
                      └── scan t
-                          ├── columns: t.a:1(int!null) b:2(int)
+                          ├── columns: t.a:1!null b:2
                           └── locking: for-update
 
 build
@@ -329,50 +329,50 @@ build
 SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
 project
- ├── columns: a:3(int)
+ ├── columns: a:3
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── subquery [type=int]
+      └── subquery [as=a:3]
            └── max1-row
-                ├── columns: t.a:1(int!null)
+                ├── columns: t.a:1!null
                 └── project
-                     ├── columns: t.a:1(int!null)
+                     ├── columns: t.a:1!null
                      └── scan t
-                          ├── columns: t.a:1(int!null) b:2(int)
+                          ├── columns: t.a:1!null b:2
                           └── locking: for-update
 
 build
 SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
 project
- ├── columns: r:3(int)
+ ├── columns: r:3
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── subquery [type=int]
+      └── subquery [as=r:3]
            └── max1-row
-                ├── columns: a:1(int!null)
+                ├── columns: a:1!null
                 └── project
-                     ├── columns: a:1(int!null)
+                     ├── columns: a:1!null
                      └── scan t
-                          └── columns: a:1(int!null) b:2(int)
+                          └── columns: a:1!null b:2
 
 build
 SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
 project
- ├── columns: r:3(int)
+ ├── columns: r:3
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── subquery [type=int]
+      └── subquery [as=r:3]
            └── max1-row
-                ├── columns: a:1(int!null)
+                ├── columns: a:1!null
                 └── project
-                     ├── columns: a:1(int!null)
+                     ├── columns: a:1!null
                      └── scan t
-                          ├── columns: a:1(int!null) b:2(int)
+                          ├── columns: a:1!null b:2
                           └── locking: for-update
 
 build
@@ -384,82 +384,82 @@ build
 SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 project
- ├── columns: r:3(int)
+ ├── columns: r:3
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── subquery [type=int]
+      └── subquery [as=r:3]
            └── max1-row
-                ├── columns: a:1(int!null)
+                ├── columns: a:1!null
                 └── project
-                     ├── columns: a:1(int!null)
+                     ├── columns: a:1!null
                      └── scan t
-                          ├── columns: a:1(int!null) b:2(int)
+                          ├── columns: a:1!null b:2
                           └── locking: for-update
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
 ----
 select
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  ├── scan t
- │    ├── columns: a:1(int!null) b:2(int)
+ │    ├── columns: a:1!null b:2
  │    └── locking: for-update
  └── filters
-      └── any: eq [type=bool]
+      └── any: eq
            ├── project
-           │    ├── columns: a:3(int!null)
+           │    ├── columns: a:3!null
            │    └── scan t
-           │         └── columns: a:3(int!null) b:4(int)
-           └── variable: a [type=int]
+           │         └── columns: a:3!null b:4
+           └── a:1
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
 ----
 select
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  ├── scan t
- │    └── columns: a:1(int!null) b:2(int)
+ │    └── columns: a:1!null b:2
  └── filters
-      └── any: eq [type=bool]
+      └── any: eq
            ├── project
-           │    ├── columns: a:3(int!null)
+           │    ├── columns: a:3!null
            │    └── scan t
-           │         ├── columns: a:3(int!null) b:4(int)
+           │         ├── columns: a:3!null b:4
            │         └── locking: for-update
-           └── variable: a [type=int]
+           └── a:1
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
 ----
 select
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  ├── scan t
- │    ├── columns: a:1(int!null) b:2(int)
+ │    ├── columns: a:1!null b:2
  │    └── locking: for-update
  └── filters
-      └── any: eq [type=bool]
+      └── any: eq
            ├── project
-           │    ├── columns: a:3(int!null)
+           │    ├── columns: a:3!null
            │    └── scan t
-           │         └── columns: a:3(int!null) b:4(int)
-           └── variable: a [type=int]
+           │         └── columns: a:3!null b:4
+           └── a:1
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
 ----
 select
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1!null b:2
  ├── scan t
- │    └── columns: a:1(int!null) b:2(int)
+ │    └── columns: a:1!null b:2
  └── filters
-      └── any: eq [type=bool]
+      └── any: eq
            ├── project
-           │    ├── columns: a:3(int!null)
+           │    ├── columns: a:3!null
            │    └── scan t
-           │         ├── columns: a:3(int!null) b:4(int)
+           │         ├── columns: a:3!null b:4
            │         └── locking: for-update
-           └── variable: a [type=int]
+           └── a:1
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
@@ -473,59 +473,59 @@ build
 SELECT * FROM [SELECT a FROM t] FOR UPDATE
 ----
 with &1
- ├── columns: a:3(int!null)
+ ├── columns: a:3!null
  ├── project
- │    ├── columns: t.a:1(int!null)
+ │    ├── columns: t.a:1!null
  │    └── scan t
- │         └── columns: t.a:1(int!null) b:2(int)
+ │         └── columns: t.a:1!null b:2
  └── with-scan &1
-      ├── columns: a:3(int!null)
+      ├── columns: a:3!null
       └── mapping:
-           └──  t.a:1(int) => a:3(int)
+           └──  t.a:1 => a:3
 
 build
 WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 ----
 with &1 (cte)
- ├── columns: a:3(int!null)
+ ├── columns: a:3!null
  ├── project
- │    ├── columns: t.a:1(int!null)
+ │    ├── columns: t.a:1!null
  │    └── scan t
- │         └── columns: t.a:1(int!null) b:2(int)
+ │         └── columns: t.a:1!null b:2
  └── with-scan &1 (cte)
-      ├── columns: a:3(int!null)
+      ├── columns: a:3!null
       └── mapping:
-           └──  t.a:1(int) => a:3(int)
+           └──  t.a:1 => a:3
 
 build
 SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
 with &1
- ├── columns: a:3(int!null)
+ ├── columns: a:3!null
  ├── project
- │    ├── columns: t.a:1(int!null)
+ │    ├── columns: t.a:1!null
  │    └── scan t
- │         ├── columns: t.a:1(int!null) b:2(int)
+ │         ├── columns: t.a:1!null b:2
  │         └── locking: for-update
  └── with-scan &1
-      ├── columns: a:3(int!null)
+      ├── columns: a:3!null
       └── mapping:
-           └──  t.a:1(int) => a:3(int)
+           └──  t.a:1 => a:3
 
 build
 WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
 with &1 (cte)
- ├── columns: a:3(int!null)
+ ├── columns: a:3!null
  ├── project
- │    ├── columns: t.a:1(int!null)
+ │    ├── columns: t.a:1!null
  │    └── scan t
- │         ├── columns: t.a:1(int!null) b:2(int)
+ │         ├── columns: t.a:1!null b:2
  │         └── locking: for-update
  └── with-scan &1 (cte)
-      ├── columns: a:3(int!null)
+      ├── columns: a:3!null
       └── mapping:
-           └──  t.a:1(int) => a:3(int)
+           └──  t.a:1 => a:3
 
 # ------------------------------------------------------------------------------
 # Tests with joins.
@@ -535,89 +535,79 @@ build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    ├── columns: u.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-update
       ├── scan u
-      │    └── columns: u.a:3(int!null) c:4(int)
+      │    └── columns: u.a:3!null c:4
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    └── columns: t.a:1(int!null) b:2(int)
+      │    └── columns: t.a:1!null b:2
       ├── scan u
-      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    ├── columns: u.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    ├── columns: u.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    ├── columns: u.a:3!null c:4
       │    └── locking: for-share
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
@@ -628,73 +618,65 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
       ├── scan t2
-      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    ├── columns: t2.a:1!null b:2
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    ├── columns: u2.a:3!null c:4
       │    └── locking: for-share
       └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+           └── t2.a:1 = u2.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    ├── columns: u.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-no-key-update
       ├── scan u
-      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    ├── columns: u.a:3!null c:4
       │    └── locking: for-key-share
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 build
 SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-no-key-update
       ├── scan u
-      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    ├── columns: u.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+           └── t.a:1 = u.a:3
 
 # ------------------------------------------------------------------------------
 # Tests with joins of aliased tables and aliased joins.
@@ -704,19 +686,17 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
       ├── scan t2
-      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    ├── columns: t2.a:1!null b:2
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    ├── columns: u2.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+           └── t2.a:1 = u2.a:3
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
@@ -737,53 +717,47 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
       ├── scan t2
-      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    ├── columns: t2.a:1!null b:2
       │    └── locking: for-update
       ├── scan u2
-      │    └── columns: u2.a:3(int!null) c:4(int)
+      │    └── columns: u2.a:3!null c:4
       └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+           └── t2.a:1 = u2.a:3
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
       ├── scan t2
-      │    └── columns: t2.a:1(int!null) b:2(int)
+      │    └── columns: t2.a:1!null b:2
       ├── scan u2
-      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    ├── columns: u2.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+           └── t2.a:1 = u2.a:3
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
       ├── scan t2
-      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    ├── columns: t2.a:1!null b:2
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    ├── columns: u2.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+           └── t2.a:1 = u2.a:3
 
 
 # Postgres doesn't support applying locking clauses to joins. The following
@@ -794,19 +768,17 @@ build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u2.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    ├── columns: u2.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u2.a [type=int]
+           └── t.a:1 = u2.a:3
 
 build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
@@ -827,19 +799,17 @@ build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
+ ├── columns: a:1!null b:2 c:4
  └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── columns: t.a:1!null b:2 u2.a:3!null c:4
       ├── scan t
-      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    ├── columns: t.a:1!null b:2
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    ├── columns: u2.a:3!null c:4
       │    └── locking: for-update
       └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u2.a [type=int]
+           └── t.a:1 = u2.a:3
 
 # ------------------------------------------------------------------------------
 # Tests with lateral joins.
@@ -849,12 +819,12 @@ build
 SELECT * FROM t, u FOR UPDATE
 ----
 inner-join (cross)
- ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── columns: a:1!null b:2 a:3!null c:4
  ├── scan t
- │    ├── columns: t.a:1(int!null) b:2(int)
+ │    ├── columns: t.a:1!null b:2
  │    └── locking: for-update
  ├── scan u
- │    ├── columns: u.a:3(int!null) c:4(int)
+ │    ├── columns: u.a:3!null c:4
  │    └── locking: for-update
  └── filters (true)
 
@@ -862,24 +832,24 @@ build
 SELECT * FROM t, u FOR UPDATE OF t
 ----
 inner-join (cross)
- ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── columns: a:1!null b:2 a:3!null c:4
  ├── scan t
- │    ├── columns: t.a:1(int!null) b:2(int)
+ │    ├── columns: t.a:1!null b:2
  │    └── locking: for-update
  ├── scan u
- │    └── columns: u.a:3(int!null) c:4(int)
+ │    └── columns: u.a:3!null c:4
  └── filters (true)
 
 build
 SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
 inner-join (cross)
- ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── columns: a:1!null b:2 a:3!null c:4
  ├── scan t
- │    ├── columns: t.a:1(int!null) b:2(int)
+ │    ├── columns: t.a:1!null b:2
  │    └── locking: for-share
  ├── scan u
- │    ├── columns: u.a:3(int!null) c:4(int)
+ │    ├── columns: u.a:3!null c:4
  │    └── locking: for-update
  └── filters (true)
 
@@ -887,12 +857,12 @@ build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
 inner-join-apply
- ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── columns: a:1!null b:2 a:3!null c:4
  ├── scan t
- │    ├── columns: t.a:1(int!null) b:2(int)
+ │    ├── columns: t.a:1!null b:2
  │    └── locking: for-update
  ├── scan sub
- │    ├── columns: sub.a:3(int!null) c:4(int)
+ │    ├── columns: sub.a:3!null c:4
  │    └── locking: for-update
  └── filters (true)
 
@@ -905,11 +875,11 @@ build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
 inner-join-apply
- ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── columns: a:1!null b:2 a:3!null c:4
  ├── scan t
- │    └── columns: t.a:1(int!null) b:2(int)
+ │    └── columns: t.a:1!null b:2
  ├── scan sub
- │    ├── columns: sub.a:3(int!null) c:4(int)
+ │    ├── columns: sub.a:3!null c:4
  │    └── locking: for-update
  └── filters (true)
 

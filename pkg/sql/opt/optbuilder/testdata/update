@@ -63,40 +63,30 @@ UPDATE abcde SET a=2 WHERE a=1
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column14:14 => d:4
- │    └──  column13:13 => e:5
+ │    ├── column13:13 => a:1
+ │    ├── column14:14 => d:4
+ │    └── column13:13 => e:5
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
       ├── project
-      │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── select
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    ├── scan abcde
-      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │    └── computed column expressions
-      │    │    │         ├── d:10(int)
-      │    │    │         │    └── plus [type=int]
-      │    │    │         │         ├── plus [type=int]
-      │    │    │         │         │    ├── variable: b [type=int]
-      │    │    │         │         │    └── variable: c [type=int]
-      │    │    │         │         └── const: 1 [type=int]
-      │    │    │         └── e:11(int)
-      │    │    │              └── variable: a [type=int]
+      │    │    │         ├── d:10
+      │    │    │         │    └── (b:8 + c:9) + 1
+      │    │    │         └── e:11
+      │    │    │              └── a:7
       │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: a [type=int]
-      │    │              └── const: 1 [type=int]
+      │    │         └── a:7 = 1
       │    └── projections
-      │         └── const: 2 [type=int]
+      │         └── 2 [as=column13:13]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: b [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (b:8 + c:9) + 1 [as=column14:14]
 
 # Set all non-computed columns.
 build
@@ -104,40 +94,32 @@ UPDATE abcde SET a=1, b=2, c=3, rowid=4
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column14:14 => b:2
- │    ├──  column15:15 => c:3
- │    ├──  column17:17 => d:4
- │    ├──  column13:13 => e:5
- │    └──  column16:16 => rowid:6
+ │    ├── column13:13 => a:1
+ │    ├── column14:14 => b:2
+ │    ├── column15:15 => c:3
+ │    ├── column17:17 => d:4
+ │    ├── column13:13 => e:5
+ │    └── column16:16 => rowid:6
  └── project
-      ├── columns: column17:17(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
+      ├── columns: column17:17!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null column14:14!null column15:15!null column16:16!null
       ├── project
-      │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         ├── const: 2 [type=int]
-      │         ├── const: 3 [type=int]
-      │         └── const: 4 [type=int]
+      │         ├── 1 [as=column13:13]
+      │         ├── 2 [as=column14:14]
+      │         ├── 3 [as=column15:15]
+      │         └── 4 [as=column16:16]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column14 [type=int]
-                │    └── variable: column15 [type=int]
-                └── const: 1 [type=int]
+           └── (column14:14 + column15:15) + 1 [as=column17:17]
 
 # Set all non-computed columns in reverse order.
 build
@@ -145,40 +127,32 @@ UPDATE abcde SET rowid=1, c=2, b=3, a=4
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column16:16 => a:1
- │    ├──  column15:15 => b:2
- │    ├──  column14:14 => c:3
- │    ├──  column17:17 => d:4
- │    ├──  column16:16 => e:5
- │    └──  column13:13 => rowid:6
+ │    ├── column16:16 => a:1
+ │    ├── column15:15 => b:2
+ │    ├── column14:14 => c:3
+ │    ├── column17:17 => d:4
+ │    ├── column16:16 => e:5
+ │    └── column13:13 => rowid:6
  └── project
-      ├── columns: column17:17(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
+      ├── columns: column17:17!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null column14:14!null column15:15!null column16:16!null
       ├── project
-      │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         ├── const: 2 [type=int]
-      │         ├── const: 3 [type=int]
-      │         └── const: 4 [type=int]
+      │         ├── 1 [as=column13:13]
+      │         ├── 2 [as=column14:14]
+      │         ├── 3 [as=column15:15]
+      │         └── 4 [as=column16:16]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column15 [type=int]
-                │    └── variable: column14 [type=int]
-                └── const: 1 [type=int]
+           └── (column15:15 + column14:14) + 1 [as=column17:17]
 
 # Set all non-computed columns to NULL.
 build
@@ -186,38 +160,29 @@ UPDATE abcde SET a=NULL, b=NULL, c=NULL, rowid=NULL
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column13:13 => b:2
- │    ├──  column13:13 => c:3
- │    ├──  column14:14 => d:4
- │    ├──  column13:13 => e:5
- │    └──  column13:13 => rowid:6
+ │    ├── column13:13 => a:1
+ │    ├── column13:13 => b:2
+ │    ├── column13:13 => c:3
+ │    ├── column14:14 => d:4
+ │    ├── column13:13 => e:5
+ │    └── column13:13 => rowid:6
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13
       ├── project
-      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         └── cast: INT8 [type=int]
-      │              └── null [type=unknown]
+      │         └── NULL::INT8 [as=column13:13]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column13 [type=int]
-                │    └── variable: column13 [type=int]
-                └── const: 1 [type=int]
+           └── (column13:13 + column13:13) + 1 [as=column14:14]
 
 # Set columns using variable expressions.
 build
@@ -225,46 +190,32 @@ UPDATE abcde SET a=a+1, b=b*c WHERE b>e
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column14:14 => b:2
- │    ├──  column15:15 => d:4
- │    └──  column13:13 => e:5
+ │    ├── column13:13 => a:1
+ │    ├── column14:14 => b:2
+ │    ├── column15:15 => d:4
+ │    └── column13:13 => e:5
  └── project
-      ├── columns: column15:15(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null) column13:13(int!null) column14:14(int)
+      ├── columns: column15:15 a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null column13:13!null column14:14
       ├── project
-      │    ├── columns: column13:13(int!null) column14:14(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
+      │    ├── columns: column13:13!null column14:14 a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null
       │    ├── select
-      │    │    ├── columns: a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8!null c:9 d:10 e:11!null rowid:12!null
       │    │    ├── scan abcde
-      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │    └── computed column expressions
-      │    │    │         ├── d:10(int)
-      │    │    │         │    └── plus [type=int]
-      │    │    │         │         ├── plus [type=int]
-      │    │    │         │         │    ├── variable: b [type=int]
-      │    │    │         │         │    └── variable: c [type=int]
-      │    │    │         │         └── const: 1 [type=int]
-      │    │    │         └── e:11(int)
-      │    │    │              └── variable: a [type=int]
+      │    │    │         ├── d:10
+      │    │    │         │    └── (b:8 + c:9) + 1
+      │    │    │         └── e:11
+      │    │    │              └── a:7
       │    │    └── filters
-      │    │         └── gt [type=bool]
-      │    │              ├── variable: b [type=int]
-      │    │              └── variable: e [type=int]
+      │    │         └── b:8 > e:11
       │    └── projections
-      │         ├── plus [type=int]
-      │         │    ├── variable: a [type=int]
-      │         │    └── const: 1 [type=int]
-      │         └── mult [type=int]
-      │              ├── variable: b [type=int]
-      │              └── variable: c [type=int]
+      │         ├── a:7 + 1 [as=column13:13]
+      │         └── b:8 * c:9 [as=column14:14]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column14 [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (column14:14 + c:9) + 1 [as=column15:15]
 
 # Set columns using aliased expressions.
 build
@@ -272,31 +223,23 @@ UPDATE abcde AS foo SET a=foo.b, b=foo.c
 ----
 update foo
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  b:8 => a:1
- │    ├──  c:9 => b:2
- │    ├──  column13:13 => d:4
- │    └──  b:8 => e:5
+ │    ├── b:8 => a:1
+ │    ├── c:9 => b:2
+ │    ├── column13:13 => d:4
+ │    └── b:8 => e:5
  └── project
-      ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: column13:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       ├── scan foo
-      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    └── computed column expressions
-      │         ├── d:10(int)
-      │         │    └── plus [type=int]
-      │         │         ├── plus [type=int]
-      │         │         │    ├── variable: b [type=int]
-      │         │         │    └── variable: c [type=int]
-      │         │         └── const: 1 [type=int]
-      │         └── e:11(int)
-      │              └── variable: a [type=int]
+      │         ├── d:10
+      │         │    └── (b:8 + c:9) + 1
+      │         └── e:11
+      │              └── a:7
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: c [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (c:9 + c:9) + 1 [as=column13:13]
 
 # Use WHERE, ORDER BY, LIMIT.
 build
@@ -304,48 +247,38 @@ UPDATE abcde SET b=1 WHERE a>0 ORDER BY a LIMIT 10
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => b:2
- │    ├──  column14:14 => d:4
- │    └──  a:7 => e:5
+ │    ├── column13:13 => b:2
+ │    ├── column14:14 => d:4
+ │    └── a:7 => e:5
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
       ├── project
-      │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── limit
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    ├── internal-ordering: +7
       │    │    ├── sort
-      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │    ├── ordering: +7
       │    │    │    ├── limit hint: 10.00
       │    │    │    └── select
-      │    │    │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │         ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │         ├── scan abcde
-      │    │    │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │         │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │         │    └── computed column expressions
-      │    │    │         │         ├── d:10(int)
-      │    │    │         │         │    └── plus [type=int]
-      │    │    │         │         │         ├── plus [type=int]
-      │    │    │         │         │         │    ├── variable: b [type=int]
-      │    │    │         │         │         │    └── variable: c [type=int]
-      │    │    │         │         │         └── const: 1 [type=int]
-      │    │    │         │         └── e:11(int)
-      │    │    │         │              └── variable: a [type=int]
+      │    │    │         │         ├── d:10
+      │    │    │         │         │    └── (b:8 + c:9) + 1
+      │    │    │         │         └── e:11
+      │    │    │         │              └── a:7
       │    │    │         └── filters
-      │    │    │              └── gt [type=bool]
-      │    │    │                   ├── variable: a [type=int]
-      │    │    │                   └── const: 0 [type=int]
-      │    │    └── const: 10 [type=int]
+      │    │    │              └── a:7 > 0
+      │    │    └── 10
       │    └── projections
-      │         └── const: 1 [type=int]
+      │         └── 1 [as=column13:13]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column13 [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (column13:13 + c:9) + 1 [as=column14:14]
 
 # UPDATE with index hints.
 exec-ddl
@@ -363,110 +296,100 @@ UPDATE xyzw@primary SET x=2 WHERE z=1
 ----
 update xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └──  column9:9 => x:1
+ │    └── column9:9 => x:1
  └── project
-      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
       ├── select
-      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
-      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    ├── columns: x:5!null y:6 z:7 w:8
       │    │    └── flags: force-index=primary
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: z [type=int]
-      │              └── const: 1 [type=int]
+      │         └── z:7 = 1
       └── projections
-           └── const: 2 [type=int]
+           └── 2 [as=column9:9]
 
 build
 UPDATE xyzw@foo SET x=2 WHERE z=1
 ----
 update xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └──  column9:9 => x:1
+ │    └── column9:9 => x:1
  └── project
-      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
       ├── select
-      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
-      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    ├── columns: x:5!null y:6 z:7 w:8
       │    │    └── flags: force-index=foo
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: z [type=int]
-      │              └── const: 1 [type=int]
+      │         └── z:7 = 1
       └── projections
-           └── const: 2 [type=int]
+           └── 2 [as=column9:9]
 
 build
 UPDATE xyzw@{FORCE_INDEX=foo,ASC} SET x=2 WHERE z=1
 ----
 update xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └──  column9:9 => x:1
+ │    └── column9:9 => x:1
  └── project
-      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
       ├── select
-      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
-      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    ├── columns: x:5!null y:6 z:7 w:8
       │    │    └── flags: force-index=foo,fwd
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: z [type=int]
-      │              └── const: 1 [type=int]
+      │         └── z:7 = 1
       └── projections
-           └── const: 2 [type=int]
+           └── 2 [as=column9:9]
 
 build
 UPDATE xyzw@{FORCE_INDEX=foo,DESC} SET x=2 WHERE z=1
 ----
 update xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └──  column9:9 => x:1
+ │    └── column9:9 => x:1
  └── project
-      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
       ├── select
-      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw,rev
-      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    ├── columns: x:5!null y:6 z:7 w:8
       │    │    └── flags: force-index=foo,rev
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: z [type=int]
-      │              └── const: 1 [type=int]
+      │         └── z:7 = 1
       └── projections
-           └── const: 2 [type=int]
+           └── 2 [as=column9:9]
 
 build
 UPDATE xyzw@{NO_INDEX_JOIN} SET x=2 WHERE z=1
 ----
 update xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  ├── update-mapping:
- │    └──  column9:9 => x:1
+ │    └── column9:9 => x:1
  └── project
-      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── columns: column9:9!null x:5!null y:6 z:7!null w:8
       ├── select
-      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── columns: x:5!null y:6 z:7!null w:8
       │    ├── scan xyzw
-      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    ├── columns: x:5!null y:6 z:7 w:8
       │    │    └── flags: no-index-join
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: z [type=int]
-      │              └── const: 1 [type=int]
+      │         └── z:7 = 1
       └── projections
-           └── const: 2 [type=int]
+           └── 2 [as=column9:9]
 
 build
 UPDATE xyzw@bad_idx SET x=2 WHERE z=1
@@ -480,17 +403,17 @@ UPDATE xyz SET y=1, z=1
 ----
 update xyz
  ├── columns: <none>
- ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── fetch columns: x:4 y:5 z:6
  ├── update-mapping:
- │    ├──  column7:7 => y:2
- │    └──  column8:8 => z:3
+ │    ├── column7:7 => y:2
+ │    └── column8:8 => z:3
  └── project
-      ├── columns: column7:7(int!null) column8:8(float!null) x:4(string!null) y:5(int) z:6(float)
+      ├── columns: column7:7!null column8:8!null x:4!null y:5 z:6
       ├── scan xyz
-      │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      │    └── columns: x:4!null y:5 z:6
       └── projections
-           ├── const: 1 [type=int]
-           └── const: 1.0 [type=float]
+           ├── 1 [as=column7:7]
+           └── 1.0 [as=column8:8]
 
 # Use placeholders.
 build
@@ -498,19 +421,19 @@ UPDATE xyz SET x=$1, y=$2, z=$3
 ----
 update xyz
  ├── columns: <none>
- ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── fetch columns: x:4 y:5 z:6
  ├── update-mapping:
- │    ├──  column7:7 => x:1
- │    ├──  column8:8 => y:2
- │    └──  column9:9 => z:3
+ │    ├── column7:7 => x:1
+ │    ├── column8:8 => y:2
+ │    └── column9:9 => z:3
  └── project
-      ├── columns: column7:7(string) column8:8(int) column9:9(float) x:4(string!null) y:5(int) z:6(float)
+      ├── columns: column7:7 column8:8 column9:9 x:4!null y:5 z:6
       ├── scan xyz
-      │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      │    └── columns: x:4!null y:5 z:6
       └── projections
-           ├── placeholder: $1 [type=string]
-           ├── placeholder: $2 [type=int]
-           └── placeholder: $3 [type=float]
+           ├── $1 [as=column7:7]
+           ├── $2 [as=column8:8]
+           └── $3 [as=column9:9]
 
 # Duplicate expressions with placeholders.
 build
@@ -518,43 +441,31 @@ UPDATE abcde SET a=$1 + 1, b=$1 + 1 WHERE c=10
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column13:13 => b:2
- │    ├──  column14:14 => d:4
- │    └──  column13:13 => e:5
+ │    ├── column13:13 => a:1
+ │    ├── column13:13 => b:2
+ │    ├── column14:14 => d:4
+ │    └── column13:13 => e:5
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+      ├── columns: column14:14 a:7!null b:8 c:9!null d:10 e:11 rowid:12!null column13:13
       ├── project
-      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13 a:7!null b:8 c:9!null d:10 e:11 rowid:12!null
       │    ├── select
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9!null d:10 e:11 rowid:12!null
       │    │    ├── scan abcde
-      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │    └── computed column expressions
-      │    │    │         ├── d:10(int)
-      │    │    │         │    └── plus [type=int]
-      │    │    │         │         ├── plus [type=int]
-      │    │    │         │         │    ├── variable: b [type=int]
-      │    │    │         │         │    └── variable: c [type=int]
-      │    │    │         │         └── const: 1 [type=int]
-      │    │    │         └── e:11(int)
-      │    │    │              └── variable: a [type=int]
+      │    │    │         ├── d:10
+      │    │    │         │    └── (b:8 + c:9) + 1
+      │    │    │         └── e:11
+      │    │    │              └── a:7
       │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: c [type=int]
-      │    │              └── const: 10 [type=int]
+      │    │         └── c:9 = 10
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── placeholder: $1 [type=int]
-      │              └── const: 1 [type=int]
+      │         └── $1 + 1 [as=column13:13]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column13 [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (column13:13 + c:9) + 1 [as=column14:14]
 
 
 # Unknown target table.
@@ -587,70 +498,54 @@ WITH cte AS (SELECT b FROM [UPDATE abcde SET a=b RETURNING *]) UPDATE abcde SET 
 ----
 with &1
  ├── project
- │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int)
+ │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5
  │    └── update abcde
- │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int) rowid:6(int!null)
- │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
+ │         ├── fetch columns: abcde.a:7 abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12
  │         ├── update-mapping:
- │         │    ├──  abcde.b:8 => abcde.a:1
- │         │    ├──  column13:13 => abcde.d:4
- │         │    └──  abcde.b:8 => abcde.e:5
+ │         │    ├── abcde.b:8 => abcde.a:1
+ │         │    ├── column13:13 => abcde.d:4
+ │         │    └── abcde.b:8 => abcde.e:5
  │         └── project
- │              ├── columns: column13:13(int) abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              ├── columns: column13:13 abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              ├── scan abcde
- │              │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    └── computed column expressions
- │              │         ├── abcde.d:10(int)
- │              │         │    └── plus [type=int]
- │              │         │         ├── plus [type=int]
- │              │         │         │    ├── variable: abcde.b [type=int]
- │              │         │         │    └── variable: abcde.c [type=int]
- │              │         │         └── const: 1 [type=int]
- │              │         └── abcde.e:11(int)
- │              │              └── variable: abcde.a [type=int]
+ │              │         ├── abcde.d:10
+ │              │         │    └── (abcde.b:8 + abcde.c:9) + 1
+ │              │         └── abcde.e:11
+ │              │              └── abcde.a:7
  │              └── projections
- │                   └── plus [type=int]
- │                        ├── plus [type=int]
- │                        │    ├── variable: abcde.b [type=int]
- │                        │    └── variable: abcde.c [type=int]
- │                        └── const: 1 [type=int]
+ │                   └── (abcde.b:8 + abcde.c:9) + 1 [as=column13:13]
  └── with &2 (cte)
       ├── project
-      │    ├── columns: b:15(int)
+      │    ├── columns: b:15
       │    └── with-scan &1
-      │         ├── columns: a:14(int!null) b:15(int) c:16(int) d:17(int) e:18(int)
+      │         ├── columns: a:14!null b:15 c:16 d:17 e:18
       │         └── mapping:
-      │              ├──  abcde.a:1(int) => a:14(int)
-      │              ├──  abcde.b:2(int) => b:15(int)
-      │              ├──  abcde.c:3(int) => c:16(int)
-      │              ├──  abcde.d:4(int) => d:17(int)
-      │              └──  abcde.e:5(int) => e:18(int)
+      │              ├──  abcde.a:1 => a:14
+      │              ├──  abcde.b:2 => b:15
+      │              ├──  abcde.c:3 => c:16
+      │              ├──  abcde.d:4 => d:17
+      │              └──  abcde.e:5 => e:18
       └── update abcde
            ├── columns: <none>
-           ├── fetch columns: abcde.a:25(int) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int)
+           ├── fetch columns: abcde.a:25 abcde.b:26 abcde.c:27 abcde.d:28 abcde.e:29 rowid:30
            ├── update-mapping:
-           │    ├──  abcde.b:26 => abcde.a:19
-           │    ├──  column31:31 => abcde.d:22
-           │    └──  abcde.b:26 => abcde.e:23
+           │    ├── abcde.b:26 => abcde.a:19
+           │    ├── column31:31 => abcde.d:22
+           │    └── abcde.b:26 => abcde.e:23
            └── project
-                ├── columns: column31:31(int) abcde.a:25(int!null) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int!null)
+                ├── columns: column31:31 abcde.a:25!null abcde.b:26 abcde.c:27 abcde.d:28 abcde.e:29 rowid:30!null
                 ├── scan abcde
-                │    ├── columns: abcde.a:25(int!null) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int!null)
+                │    ├── columns: abcde.a:25!null abcde.b:26 abcde.c:27 abcde.d:28 abcde.e:29 rowid:30!null
                 │    └── computed column expressions
-                │         ├── abcde.d:28(int)
-                │         │    └── plus [type=int]
-                │         │         ├── plus [type=int]
-                │         │         │    ├── variable: abcde.b [type=int]
-                │         │         │    └── variable: abcde.c [type=int]
-                │         │         └── const: 1 [type=int]
-                │         └── abcde.e:29(int)
-                │              └── variable: abcde.a [type=int]
+                │         ├── abcde.d:28
+                │         │    └── (abcde.b:26 + abcde.c:27) + 1
+                │         └── abcde.e:29
+                │              └── abcde.a:25
                 └── projections
-                     └── plus [type=int]
-                          ├── plus [type=int]
-                          │    ├── variable: abcde.b [type=int]
-                          │    └── variable: abcde.c [type=int]
-                          └── const: 1 [type=int]
+                     └── (abcde.b:26 + abcde.c:27) + 1 [as=column31:31]
 
 # With alias, original table name should be inaccessible.
 build
@@ -673,195 +568,151 @@ build
 UPDATE abcde SET a=2 WHERE a=1 RETURNING *
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5!null
  └── update abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
-      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+      ├── columns: a:1!null b:2 c:3 d:4 e:5!null rowid:6!null
+      ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
       ├── update-mapping:
-      │    ├──  column13:13 => a:1
-      │    ├──  column14:14 => d:4
-      │    └──  column13:13 => e:5
+      │    ├── column13:13 => a:1
+      │    ├── column14:14 => d:4
+      │    └── column13:13 => e:5
       └── project
-           ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+           ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
            ├── project
-           │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    ├── select
-           │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    │    ├── scan abcde
-           │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    │    │    └── computed column expressions
-           │    │    │         ├── d:10(int)
-           │    │    │         │    └── plus [type=int]
-           │    │    │         │         ├── plus [type=int]
-           │    │    │         │         │    ├── variable: b [type=int]
-           │    │    │         │         │    └── variable: c [type=int]
-           │    │    │         │         └── const: 1 [type=int]
-           │    │    │         └── e:11(int)
-           │    │    │              └── variable: a [type=int]
+           │    │    │         ├── d:10
+           │    │    │         │    └── (b:8 + c:9) + 1
+           │    │    │         └── e:11
+           │    │    │              └── a:7
            │    │    └── filters
-           │    │         └── eq [type=bool]
-           │    │              ├── variable: a [type=int]
-           │    │              └── const: 1 [type=int]
+           │    │         └── a:7 = 1
            │    └── projections
-           │         └── const: 2 [type=int]
+           │         └── 2 [as=column13:13]
            └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: b [type=int]
-                     │    └── variable: c [type=int]
-                     └── const: 1 [type=int]
+                └── (b:8 + c:9) + 1 [as=column14:14]
 
 # Return values from aliased table.
 build
 UPDATE abcde AS foo SET a=2 WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 ----
 project
- ├── columns: "?column?":15(int!null) "?column?":16(int)
+ ├── columns: "?column?":15!null "?column?":16
  ├── update foo
- │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
- │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ │    ├── columns: a:1!null b:2 c:3 d:4 e:5!null rowid:6!null
+ │    ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  │    ├── update-mapping:
- │    │    ├──  column13:13 => a:1
- │    │    ├──  column14:14 => d:4
- │    │    └──  column13:13 => e:5
+ │    │    ├── column13:13 => a:1
+ │    │    ├── column14:14 => d:4
+ │    │    └── column13:13 => e:5
  │    └── project
- │         ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+ │         ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
  │         ├── project
- │         │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
  │         │    ├── select
- │         │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
  │         │    │    ├── scan foo
- │         │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
  │         │    │    │    └── computed column expressions
- │         │    │    │         ├── d:10(int)
- │         │    │    │         │    └── plus [type=int]
- │         │    │    │         │         ├── plus [type=int]
- │         │    │    │         │         │    ├── variable: b [type=int]
- │         │    │    │         │         │    └── variable: c [type=int]
- │         │    │    │         │         └── const: 1 [type=int]
- │         │    │    │         └── e:11(int)
- │         │    │    │              └── variable: a [type=int]
+ │         │    │    │         ├── d:10
+ │         │    │    │         │    └── (b:8 + c:9) + 1
+ │         │    │    │         └── e:11
+ │         │    │    │              └── a:7
  │         │    │    └── filters
- │         │    │         └── eq [type=bool]
- │         │    │              ├── variable: a [type=int]
- │         │    │              └── const: 1 [type=int]
+ │         │    │         └── a:7 = 1
  │         │    └── projections
- │         │         └── const: 2 [type=int]
+ │         │         └── 2 [as=column13:13]
  │         └── projections
- │              └── plus [type=int]
- │                   ├── plus [type=int]
- │                   │    ├── variable: b [type=int]
- │                   │    └── variable: c [type=int]
- │                   └── const: 1 [type=int]
+ │              └── (b:8 + c:9) + 1 [as=column14:14]
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: a [type=int]
-      │    └── const: 1 [type=int]
-      └── mult [type=int]
-           ├── variable: b [type=int]
-           └── variable: d [type=int]
+      ├── a:1 + 1 [as="?column?":15]
+      └── b:2 * d:4 [as="?column?":16]
 
 # Use returning UPDATE as a FROM expression.
 build
 SELECT a, d FROM [UPDATE abcde SET a=2 WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
 ----
 with &1
- ├── columns: a:15(int!null) d:18(int)
+ ├── columns: a:15!null d:18
  ├── project
- │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int!null)
+ │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5!null
  │    └── update abcde
- │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int!null) rowid:6(int!null)
- │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5!null rowid:6!null
+ │         ├── fetch columns: abcde.a:7 abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12
  │         ├── update-mapping:
- │         │    ├──  column13:13 => abcde.a:1
- │         │    ├──  column14:14 => abcde.d:4
- │         │    └──  column13:13 => abcde.e:5
+ │         │    ├── column13:13 => abcde.a:1
+ │         │    ├── column14:14 => abcde.d:4
+ │         │    └── column13:13 => abcde.e:5
  │         └── project
- │              ├── columns: column14:14(int) abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null) column13:13(int!null)
+ │              ├── columns: column14:14 abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null column13:13!null
  │              ├── project
- │              │    ├── columns: column13:13(int!null) abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── columns: column13:13!null abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    ├── limit
- │              │    │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    │    ├── internal-ordering: +8
  │              │    │    ├── sort
- │              │    │    │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    │    │    ├── ordering: +8
  │              │    │    │    ├── limit hint: 10.00
  │              │    │    │    └── select
- │              │    │    │         ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    │    │         ├── scan abcde
- │              │    │    │         │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │         │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    │    │         │    └── computed column expressions
- │              │    │    │         │         ├── abcde.d:10(int)
- │              │    │    │         │         │    └── plus [type=int]
- │              │    │    │         │         │         ├── plus [type=int]
- │              │    │    │         │         │         │    ├── variable: abcde.b [type=int]
- │              │    │    │         │         │         │    └── variable: abcde.c [type=int]
- │              │    │    │         │         │         └── const: 1 [type=int]
- │              │    │    │         │         └── abcde.e:11(int)
- │              │    │    │         │              └── variable: abcde.a [type=int]
+ │              │    │    │         │         ├── abcde.d:10
+ │              │    │    │         │         │    └── (abcde.b:8 + abcde.c:9) + 1
+ │              │    │    │         │         └── abcde.e:11
+ │              │    │    │         │              └── abcde.a:7
  │              │    │    │         └── filters
- │              │    │    │              └── gt [type=bool]
- │              │    │    │                   ├── variable: abcde.a [type=int]
- │              │    │    │                   └── const: 0 [type=int]
- │              │    │    └── const: 10 [type=int]
+ │              │    │    │              └── abcde.a:7 > 0
+ │              │    │    └── 10
  │              │    └── projections
- │              │         └── const: 2 [type=int]
+ │              │         └── 2 [as=column13:13]
  │              └── projections
- │                   └── plus [type=int]
- │                        ├── plus [type=int]
- │                        │    ├── variable: abcde.b [type=int]
- │                        │    └── variable: abcde.c [type=int]
- │                        └── const: 1 [type=int]
+ │                   └── (abcde.b:8 + abcde.c:9) + 1 [as=column14:14]
  └── project
-      ├── columns: a:15(int!null) d:18(int)
+      ├── columns: a:15!null d:18
       └── with-scan &1
-           ├── columns: a:15(int!null) b:16(int) c:17(int) d:18(int) e:19(int!null)
+           ├── columns: a:15!null b:16 c:17 d:18 e:19!null
            └── mapping:
-                ├──  abcde.a:1(int) => a:15(int)
-                ├──  abcde.b:2(int) => b:16(int)
-                ├──  abcde.c:3(int) => c:17(int)
-                ├──  abcde.d:4(int) => d:18(int)
-                └──  abcde.e:5(int) => e:19(int)
+                ├──  abcde.a:1 => a:15
+                ├──  abcde.b:2 => b:16
+                ├──  abcde.c:3 => c:17
+                ├──  abcde.d:4 => d:18
+                └──  abcde.e:5 => e:19
 
 # Return hidden column.
 build
 UPDATE abcde SET rowid=rowid+1 RETURNING rowid
 ----
 project
- ├── columns: rowid:6(int!null)
+ ├── columns: rowid:6!null
  └── update abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
-      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+      ├── columns: a:1!null b:2 c:3 d:4 e:5!null rowid:6!null
+      ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
       ├── update-mapping:
-      │    ├──  column14:14 => d:4
-      │    ├──  a:7 => e:5
-      │    └──  column13:13 => rowid:6
+      │    ├── column14:14 => d:4
+      │    ├── a:7 => e:5
+      │    └── column13:13 => rowid:6
       └── project
-           ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
+           ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null
            ├── project
-           │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    ├── columns: column13:13!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    ├── scan abcde
-           │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    │    └── computed column expressions
-           │    │         ├── d:10(int)
-           │    │         │    └── plus [type=int]
-           │    │         │         ├── plus [type=int]
-           │    │         │         │    ├── variable: b [type=int]
-           │    │         │         │    └── variable: c [type=int]
-           │    │         │         └── const: 1 [type=int]
-           │    │         └── e:11(int)
-           │    │              └── variable: a [type=int]
+           │    │         ├── d:10
+           │    │         │    └── (b:8 + c:9) + 1
+           │    │         └── e:11
+           │    │              └── a:7
            │    └── projections
-           │         └── plus [type=int]
-           │              ├── variable: rowid [type=int]
-           │              └── const: 1 [type=int]
+           │         └── rowid:12 + 1 [as=column13:13]
            └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: b [type=int]
-                     │    └── variable: c [type=int]
-                     └── const: 1 [type=int]
+                └── (b:8 + c:9) + 1 [as=column14:14]
 
 # Try to use aggregate function in RETURNING clause.
 build
@@ -885,37 +736,28 @@ UPDATE abcde SET b=DEFAULT, c=DEFAULT
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => b:2
- │    ├──  column14:14 => c:3
- │    ├──  column15:15 => d:4
- │    └──  a:7 => e:5
+ │    ├── column13:13 => b:2
+ │    ├── column14:14 => c:3
+ │    ├── column15:15 => d:4
+ │    └── a:7 => e:5
  └── project
-      ├── columns: column15:15(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int) column14:14(int!null)
+      ├── columns: column15:15 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13 column14:14!null
       ├── project
-      │    ├── columns: column13:13(int) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13 column14:14!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         ├── cast: INT8 [type=int]
-      │         │    └── null [type=unknown]
-      │         └── const: 10 [type=int]
+      │         ├── NULL::INT8 [as=column13:13]
+      │         └── 10 [as=column14:14]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column13 [type=int]
-                │    └── variable: column14 [type=int]
-                └── const: 1 [type=int]
+           └── (column13:13 + column14:14) + 1 [as=column15:15]
 
 # Allow not-null column to be updated with NULL DEFAULT value (would fail at
 # runtime if there are any rows to update).
@@ -924,35 +766,26 @@ UPDATE abcde SET a=DEFAULT
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column14:14 => d:4
- │    └──  column13:13 => e:5
+ │    ├── column13:13 => a:1
+ │    ├── column14:14 => d:4
+ │    └── column13:13 => e:5
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13
       ├── project
-      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         └── cast: INT8 [type=int]
-      │              └── null [type=unknown]
+      │         └── NULL::INT8 [as=column13:13]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: b [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (b:8 + c:9) + 1 [as=column14:14]
 
 build
 UPDATE abcde SET c=1+DEFAULT
@@ -968,77 +801,60 @@ UPDATE abcde SET (a, b, c) = (1, 2, 3)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column14:14 => b:2
- │    ├──  column15:15 => c:3
- │    ├──  column16:16 => d:4
- │    └──  column13:13 => e:5
+ │    ├── column13:13 => a:1
+ │    ├── column14:14 => b:2
+ │    ├── column15:15 => c:3
+ │    ├── column16:16 => d:4
+ │    └── column13:13 => e:5
  └── project
-      ├── columns: column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null)
+      ├── columns: column16:16!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13!null column14:14!null column15:15!null
       ├── project
-      │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13!null column14:14!null column15:15!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         ├── const: 2 [type=int]
-      │         └── const: 3 [type=int]
+      │         ├── 1 [as=column13:13]
+      │         ├── 2 [as=column14:14]
+      │         └── 3 [as=column15:15]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column14 [type=int]
-                │    └── variable: column15 [type=int]
-                └── const: 1 [type=int]
+           └── (column14:14 + column15:15) + 1 [as=column16:16]
 
 build
 UPDATE abcde SET (c) = (NULL), (b, a) = (1, 2)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column15:15 => a:1
- │    ├──  column14:14 => b:2
- │    ├──  column13:13 => c:3
- │    ├──  column16:16 => d:4
- │    └──  column15:15 => e:5
+ │    ├── column15:15 => a:1
+ │    ├── column14:14 => b:2
+ │    ├── column13:13 => c:3
+ │    ├── column16:16 => d:4
+ │    └── column15:15 => e:5
  └── project
-      ├── columns: column16:16(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int) column14:14(int!null) column15:15(int!null)
+      ├── columns: column16:16 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13 column14:14!null column15:15!null
       ├── project
-      │    ├── columns: column13:13(int) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13 column14:14!null column15:15!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         ├── cast: INT8 [type=int]
-      │         │    └── null [type=unknown]
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
+      │         ├── NULL::INT8 [as=column13:13]
+      │         ├── 1 [as=column14:14]
+      │         └── 2 [as=column15:15]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column14 [type=int]
-                │    └── variable: column13 [type=int]
-                └── const: 1 [type=int]
+           └── (column14:14 + column13:13) + 1 [as=column16:16]
 
 # Tuples + DEFAULT.
 build
@@ -1046,37 +862,28 @@ UPDATE abcde SET (b, c)=(DEFAULT, DEFAULT)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => b:2
- │    ├──  column14:14 => c:3
- │    ├──  column15:15 => d:4
- │    └──  a:7 => e:5
+ │    ├── column13:13 => b:2
+ │    ├── column14:14 => c:3
+ │    ├── column15:15 => d:4
+ │    └── a:7 => e:5
  └── project
-      ├── columns: column15:15(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int) column14:14(int!null)
+      ├── columns: column15:15 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13 column14:14!null
       ├── project
-      │    ├── columns: column13:13(int) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13 column14:14!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         ├── cast: INT8 [type=int]
-      │         │    └── null [type=unknown]
-      │         └── const: 10 [type=int]
+      │         ├── NULL::INT8 [as=column13:13]
+      │         └── 10 [as=column14:14]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column13 [type=int]
-                │    └── variable: column14 [type=int]
-                └── const: 1 [type=int]
+           └── (column13:13 + column14:14) + 1 [as=column15:15]
 
 # Tuples + non-null DEFAULT.
 build
@@ -1084,36 +891,27 @@ UPDATE abcde SET (a, b)=(DEFAULT, DEFAULT)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column13:13 => b:2
- │    ├──  column14:14 => d:4
- │    └──  column13:13 => e:5
+ │    ├── column13:13 => a:1
+ │    ├── column13:13 => b:2
+ │    ├── column14:14 => d:4
+ │    └── column13:13 => e:5
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null column13:13
       ├── project
-      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13 a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    └── projections
-      │         └── cast: INT8 [type=int]
-      │              └── null [type=unknown]
+      │         └── NULL::INT8 [as=column13:13]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column13 [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (column13:13 + c:9) + 1 [as=column14:14]
 
 build
 UPDATE abcde SET (a, b)=(1, 2, 3)
@@ -1145,41 +943,33 @@ UPDATE abcde SET (a)=(SELECT 1 AS one)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  one:13 => a:1
- │    ├──  column14:14 => d:4
- │    └──  one:13 => e:5
+ │    ├── one:13 => a:1
+ │    ├── column14:14 => d:4
+ │    └── one:13 => e:5
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) one:13(int)
+      ├── columns: column14:14 a:7!null b:8 c:9 d:10 e:11 rowid:12!null one:13
       ├── left-join-apply
-      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) one:13(int)
+      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null one:13
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    ├── max1-row
-      │    │    ├── columns: one:13(int!null)
+      │    │    ├── columns: one:13!null
       │    │    └── project
-      │    │         ├── columns: one:13(int!null)
+      │    │         ├── columns: one:13!null
       │    │         ├── values
-      │    │         │    └── tuple [type=tuple]
+      │    │         │    └── ()
       │    │         └── projections
-      │    │              └── const: 1 [type=int]
+      │    │              └── 1 [as=one:13]
       │    └── filters (true)
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: b [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+           └── (b:8 + c:9) + 1 [as=column14:14]
 
 # Update all updatable columns.
 build
@@ -1187,50 +977,38 @@ UPDATE abcde SET (a, b, c, rowid)=(SELECT x::int, y, z::int, y+1 AS y1 FROM xyz)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  x:16 => a:1
- │    ├──  y:14 => b:2
- │    ├──  z:17 => c:3
- │    ├──  column19:19 => d:4
- │    ├──  x:16 => e:5
- │    └──  y1:18 => rowid:6
+ │    ├── x:16 => a:1
+ │    ├── y:14 => b:2
+ │    ├── z:17 => c:3
+ │    ├── column19:19 => d:4
+ │    ├── x:16 => e:5
+ │    └── y1:18 => rowid:6
  └── project
-      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) x:16(int) z:17(int) y1:18(int)
+      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 x:16 z:17 y1:18
       ├── left-join-apply
-      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) x:16(int) z:17(int) y1:18(int)
+      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 x:16 z:17 y1:18
       │    ├── scan abcde
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    └── computed column expressions
-      │    │         ├── d:10(int)
-      │    │         │    └── plus [type=int]
-      │    │         │         ├── plus [type=int]
-      │    │         │         │    ├── variable: b [type=int]
-      │    │         │         │    └── variable: c [type=int]
-      │    │         │         └── const: 1 [type=int]
-      │    │         └── e:11(int)
-      │    │              └── variable: a [type=int]
+      │    │         ├── d:10
+      │    │         │    └── (b:8 + c:9) + 1
+      │    │         └── e:11
+      │    │              └── a:7
       │    ├── max1-row
-      │    │    ├── columns: y:14(int) x:16(int!null) z:17(int) y1:18(int)
+      │    │    ├── columns: y:14 x:16!null z:17 y1:18
       │    │    └── project
-      │    │         ├── columns: x:16(int!null) z:17(int) y1:18(int) y:14(int)
+      │    │         ├── columns: x:16!null z:17 y1:18 y:14
       │    │         ├── scan xyz
-      │    │         │    └── columns: xyz.x:13(string!null) y:14(int) xyz.z:15(float)
+      │    │         │    └── columns: xyz.x:13!null y:14 xyz.z:15
       │    │         └── projections
-      │    │              ├── cast: INT8 [type=int]
-      │    │              │    └── variable: xyz.x [type=string]
-      │    │              ├── cast: INT8 [type=int]
-      │    │              │    └── variable: xyz.z [type=float]
-      │    │              └── plus [type=int]
-      │    │                   ├── variable: y [type=int]
-      │    │                   └── const: 1 [type=int]
+      │    │              ├── xyz.x:13::INT8 [as=x:16]
+      │    │              ├── xyz.z:15::INT8 [as=z:17]
+      │    │              └── y:14 + 1 [as=y1:18]
       │    └── filters (true)
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: y [type=int]
-                │    └── variable: z [type=int]
-                └── const: 1 [type=int]
+           └── (y:14 + z:17) + 1 [as=column19:19]
 
 # Update using combination of subquery and tuple SET expressions.
 build
@@ -1238,51 +1016,41 @@ UPDATE abcde SET (a, b)=(SELECT y, y+1 AS y1 FROM xyz), (c, rowid)=(1, 2)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  y:14 => a:1
- │    ├──  y1:16 => b:2
- │    ├──  column17:17 => c:3
- │    ├──  column19:19 => d:4
- │    ├──  y:14 => e:5
- │    └──  column18:18 => rowid:6
+ │    ├── y:14 => a:1
+ │    ├── y1:16 => b:2
+ │    ├── column17:17 => c:3
+ │    ├── column19:19 => d:4
+ │    ├── y:14 => e:5
+ │    └── column18:18 => rowid:6
  └── project
-      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) column17:17(int!null) column18:18(int!null)
+      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 column17:17!null column18:18!null
       ├── project
-      │    ├── columns: column17:17(int!null) column18:18(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    ├── columns: column17:17!null column18:18!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    ├── left-join-apply
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    │    ├── scan abcde
-      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │    └── computed column expressions
-      │    │    │         ├── d:10(int)
-      │    │    │         │    └── plus [type=int]
-      │    │    │         │         ├── plus [type=int]
-      │    │    │         │         │    ├── variable: b [type=int]
-      │    │    │         │         │    └── variable: c [type=int]
-      │    │    │         │         └── const: 1 [type=int]
-      │    │    │         └── e:11(int)
-      │    │    │              └── variable: a [type=int]
+      │    │    │         ├── d:10
+      │    │    │         │    └── (b:8 + c:9) + 1
+      │    │    │         └── e:11
+      │    │    │              └── a:7
       │    │    ├── max1-row
-      │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    ├── columns: y:14 y1:16
       │    │    │    └── project
-      │    │    │         ├── columns: y1:16(int) y:14(int)
+      │    │    │         ├── columns: y1:16 y:14
       │    │    │         ├── scan xyz
-      │    │    │         │    └── columns: x:13(string!null) y:14(int) z:15(float)
+      │    │    │         │    └── columns: x:13!null y:14 z:15
       │    │    │         └── projections
-      │    │    │              └── plus [type=int]
-      │    │    │                   ├── variable: y [type=int]
-      │    │    │                   └── const: 1 [type=int]
+      │    │    │              └── y:14 + 1 [as=y1:16]
       │    │    └── filters (true)
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
+      │         ├── 1 [as=column17:17]
+      │         └── 2 [as=column18:18]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: y1 [type=int]
-                │    └── variable: column17 [type=int]
-                └── const: 1 [type=int]
+           └── (y1:16 + column17:17) + 1 [as=column19:19]
 
 # Use subquery SET expression after other expressions.
 build
@@ -1290,51 +1058,41 @@ UPDATE abcde SET a=1, (b)=(2), (c, rowid)=(SELECT y, y+1 AS y1 FROM xyz)
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  column17:17 => a:1
- │    ├──  column18:18 => b:2
- │    ├──  y:14 => c:3
- │    ├──  column19:19 => d:4
- │    ├──  column17:17 => e:5
- │    └──  y1:16 => rowid:6
+ │    ├── column17:17 => a:1
+ │    ├── column18:18 => b:2
+ │    ├── y:14 => c:3
+ │    ├── column19:19 => d:4
+ │    ├── column17:17 => e:5
+ │    └── y1:16 => rowid:6
  └── project
-      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) column17:17(int!null) column18:18(int!null)
+      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 column17:17!null column18:18!null
       ├── project
-      │    ├── columns: column17:17(int!null) column18:18(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    ├── columns: column17:17!null column18:18!null a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    ├── left-join-apply
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    │    ├── scan abcde
-      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │    └── computed column expressions
-      │    │    │         ├── d:10(int)
-      │    │    │         │    └── plus [type=int]
-      │    │    │         │         ├── plus [type=int]
-      │    │    │         │         │    ├── variable: b [type=int]
-      │    │    │         │         │    └── variable: c [type=int]
-      │    │    │         │         └── const: 1 [type=int]
-      │    │    │         └── e:11(int)
-      │    │    │              └── variable: a [type=int]
+      │    │    │         ├── d:10
+      │    │    │         │    └── (b:8 + c:9) + 1
+      │    │    │         └── e:11
+      │    │    │              └── a:7
       │    │    ├── max1-row
-      │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    ├── columns: y:14 y1:16
       │    │    │    └── project
-      │    │    │         ├── columns: y1:16(int) y:14(int)
+      │    │    │         ├── columns: y1:16 y:14
       │    │    │         ├── scan xyz
-      │    │    │         │    └── columns: x:13(string!null) y:14(int) z:15(float)
+      │    │    │         │    └── columns: x:13!null y:14 z:15
       │    │    │         └── projections
-      │    │    │              └── plus [type=int]
-      │    │    │                   ├── variable: y [type=int]
-      │    │    │                   └── const: 1 [type=int]
+      │    │    │              └── y:14 + 1 [as=y1:16]
       │    │    └── filters (true)
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
+      │         ├── 1 [as=column17:17]
+      │         └── 2 [as=column18:18]
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: column18 [type=int]
-                │    └── variable: y [type=int]
-                └── const: 1 [type=int]
+           └── (column18:18 + y:14) + 1 [as=column19:19]
 
 # Multiple subqueries in SET expressions.
 build
@@ -1342,58 +1100,48 @@ UPDATE abcde SET (b, a)=(SELECT y, y+1 AS y1 FROM xyz), (c, rowid)=(SELECT 1 AS 
 ----
 update abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  ├── update-mapping:
- │    ├──  y1:16 => a:1
- │    ├──  y:14 => b:2
- │    ├──  one:17 => c:3
- │    ├──  column19:19 => d:4
- │    ├──  y1:16 => e:5
- │    └──  two:18 => rowid:6
+ │    ├── y1:16 => a:1
+ │    ├── y:14 => b:2
+ │    ├── one:17 => c:3
+ │    ├── column19:19 => d:4
+ │    ├── y1:16 => e:5
+ │    └── two:18 => rowid:6
  └── project
-      ├── columns: column19:19(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) one:17(int) two:18(int)
+      ├── columns: column19:19 a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 one:17 two:18
       ├── left-join-apply
-      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int) one:17(int) two:18(int)
+      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16 one:17 two:18
       │    ├── left-join-apply
-      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
+      │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null y:14 y1:16
       │    │    ├── scan abcde
-      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    │    │    └── computed column expressions
-      │    │    │         ├── d:10(int)
-      │    │    │         │    └── plus [type=int]
-      │    │    │         │         ├── plus [type=int]
-      │    │    │         │         │    ├── variable: b [type=int]
-      │    │    │         │         │    └── variable: c [type=int]
-      │    │    │         │         └── const: 1 [type=int]
-      │    │    │         └── e:11(int)
-      │    │    │              └── variable: a [type=int]
+      │    │    │         ├── d:10
+      │    │    │         │    └── (b:8 + c:9) + 1
+      │    │    │         └── e:11
+      │    │    │              └── a:7
       │    │    ├── max1-row
-      │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    ├── columns: y:14 y1:16
       │    │    │    └── project
-      │    │    │         ├── columns: y1:16(int) y:14(int)
+      │    │    │         ├── columns: y1:16 y:14
       │    │    │         ├── scan xyz
-      │    │    │         │    └── columns: x:13(string!null) y:14(int) z:15(float)
+      │    │    │         │    └── columns: x:13!null y:14 z:15
       │    │    │         └── projections
-      │    │    │              └── plus [type=int]
-      │    │    │                   ├── variable: y [type=int]
-      │    │    │                   └── const: 1 [type=int]
+      │    │    │              └── y:14 + 1 [as=y1:16]
       │    │    └── filters (true)
       │    ├── max1-row
-      │    │    ├── columns: one:17(int!null) two:18(int!null)
+      │    │    ├── columns: one:17!null two:18!null
       │    │    └── project
-      │    │         ├── columns: one:17(int!null) two:18(int!null)
+      │    │         ├── columns: one:17!null two:18!null
       │    │         ├── values
-      │    │         │    └── tuple [type=tuple]
+      │    │         │    └── ()
       │    │         └── projections
-      │    │              ├── const: 1 [type=int]
-      │    │              └── const: 2 [type=int]
+      │    │              ├── 1 [as=one:17]
+      │    │              └── 2 [as=two:18]
       │    └── filters (true)
       └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: y [type=int]
-                │    └── variable: one [type=int]
-                └── const: 1 [type=int]
+           └── (y:14 + one:17) + 1 [as=column19:19]
 
 # Incorporate desired types when compiling subquery.
 build
@@ -1401,87 +1149,73 @@ UPDATE xyz SET x='foo', (z, y)=(SELECT 2 AS two, 3 AS three)
 ----
 update xyz
  ├── columns: <none>
- ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── fetch columns: x:4 y:5 z:6
  ├── update-mapping:
- │    ├──  column9:9 => x:1
- │    ├──  three:8 => y:2
- │    └──  two:7 => z:3
+ │    ├── column9:9 => x:1
+ │    ├── three:8 => y:2
+ │    └── two:7 => z:3
  └── project
-      ├── columns: column9:9(string!null) x:4(string!null) y:5(int) z:6(float) two:7(float) three:8(int)
+      ├── columns: column9:9!null x:4!null y:5 z:6 two:7 three:8
       ├── left-join-apply
-      │    ├── columns: x:4(string!null) y:5(int) z:6(float) two:7(float) three:8(int)
+      │    ├── columns: x:4!null y:5 z:6 two:7 three:8
       │    ├── scan xyz
-      │    │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      │    │    └── columns: x:4!null y:5 z:6
       │    ├── max1-row
-      │    │    ├── columns: two:7(float!null) three:8(int!null)
+      │    │    ├── columns: two:7!null three:8!null
       │    │    └── project
-      │    │         ├── columns: two:7(float!null) three:8(int!null)
+      │    │         ├── columns: two:7!null three:8!null
       │    │         ├── values
-      │    │         │    └── tuple [type=tuple]
+      │    │         │    └── ()
       │    │         └── projections
-      │    │              ├── const: 2.0 [type=float]
-      │    │              └── const: 3 [type=int]
+      │    │              ├── 2.0 [as=two:7]
+      │    │              └── 3 [as=three:8]
       │    └── filters (true)
       └── projections
-           └── const: 'foo' [type=string]
+           └── 'foo' [as=column9:9]
 
 # SET expression contains correlated subquery + alias.
 build
 UPDATE abcde AS abcde1 SET b=(SELECT b FROM abcde AS abcde2 WHERE abcde2.rowid=abcde1.a) RETURNING *
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5!null
  └── update abcde1
-      ├── columns: abcde1.a:1(int!null) abcde1.b:2(int) abcde1.c:3(int) abcde1.d:4(int) abcde1.e:5(int!null) abcde1.rowid:6(int!null)
-      ├── fetch columns: abcde1.a:7(int) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int)
+      ├── columns: abcde1.a:1!null abcde1.b:2 abcde1.c:3 abcde1.d:4 abcde1.e:5!null abcde1.rowid:6!null
+      ├── fetch columns: abcde1.a:7 abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12
       ├── update-mapping:
-      │    ├──  column19:19 => abcde1.b:2
-      │    ├──  column20:20 => abcde1.d:4
-      │    └──  abcde1.a:7 => abcde1.e:5
+      │    ├── column19:19 => abcde1.b:2
+      │    ├── column20:20 => abcde1.d:4
+      │    └── abcde1.a:7 => abcde1.e:5
       └── project
-           ├── columns: column20:20(int) abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null) column19:19(int)
+           ├── columns: column20:20 abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null column19:19
            ├── project
-           │    ├── columns: column19:19(int) abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null)
+           │    ├── columns: column19:19 abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null
            │    ├── scan abcde1
-           │    │    ├── columns: abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null)
+           │    │    ├── columns: abcde1.a:7!null abcde1.b:8 abcde1.c:9 abcde1.d:10 abcde1.e:11 abcde1.rowid:12!null
            │    │    └── computed column expressions
-           │    │         ├── abcde1.d:10(int)
-           │    │         │    └── plus [type=int]
-           │    │         │         ├── plus [type=int]
-           │    │         │         │    ├── variable: abcde1.b [type=int]
-           │    │         │         │    └── variable: abcde1.c [type=int]
-           │    │         │         └── const: 1 [type=int]
-           │    │         └── abcde1.e:11(int)
-           │    │              └── variable: abcde1.a [type=int]
+           │    │         ├── abcde1.d:10
+           │    │         │    └── (abcde1.b:8 + abcde1.c:9) + 1
+           │    │         └── abcde1.e:11
+           │    │              └── abcde1.a:7
            │    └── projections
-           │         └── subquery [type=int]
+           │         └── subquery [as=column19:19]
            │              └── max1-row
-           │                   ├── columns: abcde2.b:14(int)
+           │                   ├── columns: abcde2.b:14
            │                   └── project
-           │                        ├── columns: abcde2.b:14(int)
+           │                        ├── columns: abcde2.b:14
            │                        └── select
-           │                             ├── columns: abcde2.a:13(int!null) abcde2.b:14(int) abcde2.c:15(int) abcde2.d:16(int) abcde2.e:17(int) abcde2.rowid:18(int!null)
+           │                             ├── columns: abcde2.a:13!null abcde2.b:14 abcde2.c:15 abcde2.d:16 abcde2.e:17 abcde2.rowid:18!null
            │                             ├── scan abcde2
-           │                             │    ├── columns: abcde2.a:13(int!null) abcde2.b:14(int) abcde2.c:15(int) abcde2.d:16(int) abcde2.e:17(int) abcde2.rowid:18(int!null)
+           │                             │    ├── columns: abcde2.a:13!null abcde2.b:14 abcde2.c:15 abcde2.d:16 abcde2.e:17 abcde2.rowid:18!null
            │                             │    └── computed column expressions
-           │                             │         ├── abcde2.d:16(int)
-           │                             │         │    └── plus [type=int]
-           │                             │         │         ├── plus [type=int]
-           │                             │         │         │    ├── variable: abcde2.b [type=int]
-           │                             │         │         │    └── variable: abcde2.c [type=int]
-           │                             │         │         └── const: 1 [type=int]
-           │                             │         └── abcde2.e:17(int)
-           │                             │              └── variable: abcde2.a [type=int]
+           │                             │         ├── abcde2.d:16
+           │                             │         │    └── (abcde2.b:14 + abcde2.c:15) + 1
+           │                             │         └── abcde2.e:17
+           │                             │              └── abcde2.a:13
            │                             └── filters
-           │                                  └── eq [type=bool]
-           │                                       ├── variable: abcde2.rowid [type=int]
-           │                                       └── variable: abcde1.a [type=int]
+           │                                  └── abcde2.rowid:18 = abcde1.a:7
            └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: column19 [type=int]
-                     │    └── variable: abcde1.c [type=int]
-                     └── const: 1 [type=int]
+                └── (column19:19 + abcde1.c:9) + 1 [as=column20:20]
 
 # Too many values.
 build
@@ -1517,43 +1251,35 @@ WITH cte AS (SELECT x FROM xyz) UPDATE abcde SET a=b WHERE EXISTS(SELECT * FROM 
 ----
 with &1 (cte)
  ├── project
- │    ├── columns: xyz.x:1(string!null)
+ │    ├── columns: xyz.x:1!null
  │    └── scan xyz
- │         └── columns: xyz.x:1(string!null) y:2(int) z:3(float)
+ │         └── columns: xyz.x:1!null y:2 z:3
  └── update abcde
       ├── columns: <none>
-      ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
+      ├── fetch columns: a:10 b:11 c:12 d:13 e:14 rowid:15
       ├── update-mapping:
-      │    ├──  b:11 => a:4
-      │    ├──  column17:17 => d:7
-      │    └──  b:11 => e:8
+      │    ├── b:11 => a:4
+      │    ├── column17:17 => d:7
+      │    └── b:11 => e:8
       └── project
-           ├── columns: column17:17(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           ├── columns: column17:17 a:10!null b:11 c:12 d:13 e:14 rowid:15!null
            ├── select
-           │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    ├── columns: a:10!null b:11 c:12 d:13 e:14 rowid:15!null
            │    ├── scan abcde
-           │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    │    ├── columns: a:10!null b:11 c:12 d:13 e:14 rowid:15!null
            │    │    └── computed column expressions
-           │    │         ├── d:13(int)
-           │    │         │    └── plus [type=int]
-           │    │         │         ├── plus [type=int]
-           │    │         │         │    ├── variable: b [type=int]
-           │    │         │         │    └── variable: c [type=int]
-           │    │         │         └── const: 1 [type=int]
-           │    │         └── e:14(int)
-           │    │              └── variable: a [type=int]
+           │    │         ├── d:13
+           │    │         │    └── (b:11 + c:12) + 1
+           │    │         └── e:14
+           │    │              └── a:10
            │    └── filters
-           │         └── exists [type=bool]
+           │         └── exists
            │              └── with-scan &1 (cte)
-           │                   ├── columns: x:16(string!null)
+           │                   ├── columns: x:16!null
            │                   └── mapping:
-           │                        └──  xyz.x:1(string) => x:16(string)
+           │                        └──  xyz.x:1 => x:16
            └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: b [type=int]
-                     │    └── variable: c [type=int]
-                     └── const: 1 [type=int]
+                └── (b:11 + c:12) + 1 [as=column17:17]
 
 # Use CTE within SET expression.
 build
@@ -1561,50 +1287,40 @@ WITH a AS (SELECT y, y+1 AS y1 FROM xyz) UPDATE abcde SET (a, b) = (SELECT * FRO
 ----
 with &1 (a)
  ├── project
- │    ├── columns: y1:4(int) xyz.y:2(int)
+ │    ├── columns: y1:4 xyz.y:2
  │    ├── scan xyz
- │    │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
+ │    │    └── columns: x:1!null xyz.y:2 z:3
  │    └── projections
- │         └── plus [type=int]
- │              ├── variable: xyz.y [type=int]
- │              └── const: 1 [type=int]
+ │         └── xyz.y:2 + 1 [as=y1:4]
  └── update abcde
       ├── columns: <none>
-      ├── fetch columns: a:11(int) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int)
+      ├── fetch columns: a:11 b:12 c:13 d:14 e:15 rowid:16
       ├── update-mapping:
-      │    ├──  y:17 => a:5
-      │    ├──  y1:18 => b:6
-      │    ├──  column19:19 => d:8
-      │    └──  y:17 => e:9
+      │    ├── y:17 => a:5
+      │    ├── y1:18 => b:6
+      │    ├── column19:19 => d:8
+      │    └── y:17 => e:9
       └── project
-           ├── columns: column19:19(int) a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null) y:17(int) y1:18(int)
+           ├── columns: column19:19 a:11!null b:12 c:13 d:14 e:15 rowid:16!null y:17 y1:18
            ├── left-join-apply
-           │    ├── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null) y:17(int) y1:18(int)
+           │    ├── columns: a:11!null b:12 c:13 d:14 e:15 rowid:16!null y:17 y1:18
            │    ├── scan abcde
-           │    │    ├── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
+           │    │    ├── columns: a:11!null b:12 c:13 d:14 e:15 rowid:16!null
            │    │    └── computed column expressions
-           │    │         ├── d:14(int)
-           │    │         │    └── plus [type=int]
-           │    │         │         ├── plus [type=int]
-           │    │         │         │    ├── variable: b [type=int]
-           │    │         │         │    └── variable: c [type=int]
-           │    │         │         └── const: 1 [type=int]
-           │    │         └── e:15(int)
-           │    │              └── variable: a [type=int]
+           │    │         ├── d:14
+           │    │         │    └── (b:12 + c:13) + 1
+           │    │         └── e:15
+           │    │              └── a:11
            │    ├── max1-row
-           │    │    ├── columns: y:17(int) y1:18(int)
+           │    │    ├── columns: y:17 y1:18
            │    │    └── with-scan &1 (a)
-           │    │         ├── columns: y:17(int) y1:18(int)
+           │    │         ├── columns: y:17 y1:18
            │    │         └── mapping:
-           │    │              ├──  xyz.y:2(int) => y:17(int)
-           │    │              └──  y1:4(int) => y1:18(int)
+           │    │              ├──  xyz.y:2 => y:17
+           │    │              └──  y1:4 => y1:18
            │    └── filters (true)
            └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: y1 [type=int]
-                     │    └── variable: c [type=int]
-                     └── const: 1 [type=int]
+                └── (y1:18 + c:13) + 1 [as=column19:19]
 
 # ------------------------------------------------------------------------------
 # Tests with mutations.
@@ -1616,33 +1332,27 @@ UPDATE mutation SET m=1
 ----
 update mutation
  ├── columns: <none>
- ├── fetch columns: m:6(int) n:7(int) o:8(int) p:9(int) q:10(int)
+ ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
- │    ├──  column11:11 => m:1
- │    └──  column12:12 => p:4
- ├── check columns: check1:13(bool)
+ │    ├── column11:11 => m:1
+ │    └── column12:12 => p:4
+ ├── check columns: check1:13
  └── project
-      ├── columns: check1:13(bool!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
+      ├── columns: check1:13!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12
       ├── project
-      │    ├── columns: column12:12(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null)
+      │    ├── columns: column12:12 m:6!null n:7 o:8 p:9 q:10 column11:11!null
       │    ├── project
-      │    │    ├── columns: column11:11(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
       │    │    ├── scan mutation
-      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    └── check constraint expressions
-      │    │    │         └── gt [type=bool]
-      │    │    │              ├── variable: m [type=int]
-      │    │    │              └── const: 0 [type=int]
+      │    │    │         └── m:6 > 0
       │    │    └── projections
-      │    │         └── const: 1 [type=int]
+      │    │         └── 1 [as=column11:11]
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: o [type=int]
-      │              └── variable: n [type=int]
+      │         └── o:8 + n:7 [as=column12:12]
       └── projections
-           └── gt [type=bool]
-                ├── variable: column11 [type=int]
-                └── const: 0 [type=int]
+           └── column11:11 > 0 [as=check1:13]
 
 # Test update that requires computed mutation column to be recalculated.
 build
@@ -1650,35 +1360,29 @@ UPDATE mutation SET m=1, n=2
 ----
 update mutation
  ├── columns: <none>
- ├── fetch columns: m:6(int) n:7(int) o:8(int) p:9(int) q:10(int)
+ ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
- │    ├──  column11:11 => m:1
- │    ├──  column12:12 => n:2
- │    └──  column13:13 => p:4
- ├── check columns: check1:14(bool)
+ │    ├── column11:11 => m:1
+ │    ├── column12:12 => n:2
+ │    └── column13:13 => p:4
+ ├── check columns: check1:14
  └── project
-      ├── columns: check1:14(bool!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int!null) column13:13(int)
+      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13
       ├── project
-      │    ├── columns: column13:13(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int!null)
+      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
       │    ├── project
-      │    │    ├── columns: column11:11(int!null) column12:12(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    ├── columns: column11:11!null column12:12!null m:6!null n:7 o:8 p:9 q:10
       │    │    ├── scan mutation
-      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    └── check constraint expressions
-      │    │    │         └── gt [type=bool]
-      │    │    │              ├── variable: m [type=int]
-      │    │    │              └── const: 0 [type=int]
+      │    │    │         └── m:6 > 0
       │    │    └── projections
-      │    │         ├── const: 1 [type=int]
-      │    │         └── const: 2 [type=int]
+      │    │         ├── 1 [as=column11:11]
+      │    │         └── 2 [as=column12:12]
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: o [type=int]
-      │              └── variable: column12 [type=int]
+      │         └── o:8 + column12:12 [as=column13:13]
       └── projections
-           └── gt [type=bool]
-                ├── variable: column11 [type=int]
-                └── const: 0 [type=int]
+           └── column11:11 > 0 [as=check1:14]
 
 # Ensure that ORDER BY wildcard does not select mutation columns.
 build
@@ -1686,42 +1390,36 @@ UPDATE mutation SET m=1 ORDER BY mutation.* LIMIT 10
 ----
 update mutation
  ├── columns: <none>
- ├── fetch columns: m:6(int) n:7(int) o:8(int) p:9(int) q:10(int)
+ ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
- │    ├──  column11:11 => m:1
- │    └──  column12:12 => p:4
- ├── check columns: check1:13(bool)
+ │    ├── column11:11 => m:1
+ │    └── column12:12 => p:4
+ ├── check columns: check1:13
  └── project
-      ├── columns: check1:13(bool!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
+      ├── columns: check1:13!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12
       ├── project
-      │    ├── columns: column12:12(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null)
+      │    ├── columns: column12:12 m:6!null n:7 o:8 p:9 q:10 column11:11!null
       │    ├── project
-      │    │    ├── columns: column11:11(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
       │    │    ├── limit
-      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    ├── internal-ordering: +6,+7
       │    │    │    ├── sort (segmented)
-      │    │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    │    ├── ordering: +6,+7
       │    │    │    │    ├── limit hint: 10.00
       │    │    │    │    └── scan mutation
-      │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    │         ├── columns: m:6!null n:7 o:8 p:9 q:10
       │    │    │    │         ├── check constraint expressions
-      │    │    │    │         │    └── gt [type=bool]
-      │    │    │    │         │         ├── variable: m [type=int]
-      │    │    │    │         │         └── const: 0 [type=int]
+      │    │    │    │         │    └── m:6 > 0
       │    │    │    │         └── ordering: +6
-      │    │    │    └── const: 10 [type=int]
+      │    │    │    └── 10
       │    │    └── projections
-      │    │         └── const: 1 [type=int]
+      │    │         └── 1 [as=column11:11]
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: o [type=int]
-      │              └── variable: n [type=int]
+      │         └── o:8 + n:7 [as=column12:12]
       └── projections
-           └── gt [type=bool]
-                ├── variable: column11 [type=int]
-                └── const: 0 [type=int]
+           └── column11:11 > 0 [as=check1:13]
 
 # Try to return a mutation column.
 build
@@ -1763,48 +1461,36 @@ UPDATE checks SET a=1, b=2, c=3
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: a:5(int) b:6(int) c:7(int) d:8(int)
+ ├── fetch columns: a:5 b:6 c:7 d:8
  ├── update-mapping:
- │    ├──  column9:9 => a:1
- │    ├──  column10:10 => b:2
- │    ├──  column11:11 => c:3
- │    └──  column12:12 => d:4
- ├── check columns: check1:13(bool) check2:14(bool)
+ │    ├── column9:9 => a:1
+ │    ├── column10:10 => b:2
+ │    ├── column11:11 => c:3
+ │    └── column12:12 => d:4
+ ├── check columns: check1:13 check2:14
  └── project
-      ├── columns: check1:13(bool!null) check2:14(bool!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null) column12:12(int!null)
+      ├── columns: check1:13!null check2:14!null a:5!null b:6 c:7 d:8 column9:9!null column10:10!null column11:11!null column12:12!null
       ├── project
-      │    ├── columns: column12:12(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null)
+      │    ├── columns: column12:12!null a:5!null b:6 c:7 d:8 column9:9!null column10:10!null column11:11!null
       │    ├── project
-      │    │    ├── columns: column9:9(int!null) column10:10(int!null) column11:11(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    ├── columns: column9:9!null column10:10!null column11:11!null a:5!null b:6 c:7 d:8
       │    │    ├── scan checks
-      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── lt [type=bool]
-      │    │    │    │    │    ├── variable: b [type=int]
-      │    │    │    │    │    └── variable: d [type=int]
-      │    │    │    │    └── gt [type=bool]
-      │    │    │    │         ├── variable: a [type=int]
-      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    │    ├── b:6 < d:8
+      │    │    │    │    └── a:5 > 0
       │    │    │    └── computed column expressions
-      │    │    │         └── d:8(int)
-      │    │    │              └── plus [type=int]
-      │    │    │                   ├── variable: c [type=int]
-      │    │    │                   └── const: 1 [type=int]
+      │    │    │         └── d:8
+      │    │    │              └── c:7 + 1
       │    │    └── projections
-      │    │         ├── const: 1 [type=int]
-      │    │         ├── const: 2 [type=int]
-      │    │         └── const: 3 [type=int]
+      │    │         ├── 1 [as=column9:9]
+      │    │         ├── 2 [as=column10:10]
+      │    │         └── 3 [as=column11:11]
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: column11 [type=int]
-      │              └── const: 1 [type=int]
+      │         └── column11:11 + 1 [as=column12:12]
       └── projections
-           ├── lt [type=bool]
-           │    ├── variable: column10 [type=int]
-           │    └── variable: column12 [type=int]
-           └── gt [type=bool]
-                ├── variable: column9 [type=int]
-                └── const: 0 [type=int]
+           ├── column10:10 < column12:12 [as=check1:13]
+           └── column9:9 > 0 [as=check2:14]
 
 # Do not update columns for one of the constraints.
 build
@@ -1812,44 +1498,32 @@ UPDATE checks SET a=1
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: a:5(int) b:6(int) c:7(int) d:8(int)
+ ├── fetch columns: a:5 b:6 c:7 d:8
  ├── update-mapping:
- │    ├──  column9:9 => a:1
- │    └──  column10:10 => d:4
- ├── check columns: check1:11(bool) check2:12(bool)
+ │    ├── column9:9 => a:1
+ │    └── column10:10 => d:4
+ ├── check columns: check1:11 check2:12
  └── project
-      ├── columns: check1:11(bool) check2:12(bool!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
+      ├── columns: check1:11 check2:12!null a:5!null b:6 c:7 d:8 column9:9!null column10:10
       ├── project
-      │    ├── columns: column10:10(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null)
+      │    ├── columns: column10:10 a:5!null b:6 c:7 d:8 column9:9!null
       │    ├── project
-      │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    ├── columns: column9:9!null a:5!null b:6 c:7 d:8
       │    │    ├── scan checks
-      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── lt [type=bool]
-      │    │    │    │    │    ├── variable: b [type=int]
-      │    │    │    │    │    └── variable: d [type=int]
-      │    │    │    │    └── gt [type=bool]
-      │    │    │    │         ├── variable: a [type=int]
-      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    │    ├── b:6 < d:8
+      │    │    │    │    └── a:5 > 0
       │    │    │    └── computed column expressions
-      │    │    │         └── d:8(int)
-      │    │    │              └── plus [type=int]
-      │    │    │                   ├── variable: c [type=int]
-      │    │    │                   └── const: 1 [type=int]
+      │    │    │         └── d:8
+      │    │    │              └── c:7 + 1
       │    │    └── projections
-      │    │         └── const: 1 [type=int]
+      │    │         └── 1 [as=column9:9]
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: c [type=int]
-      │              └── const: 1 [type=int]
+      │         └── c:7 + 1 [as=column10:10]
       └── projections
-           ├── lt [type=bool]
-           │    ├── variable: b [type=int]
-           │    └── variable: column10 [type=int]
-           └── gt [type=bool]
-                ├── variable: column9 [type=int]
-                └── const: 0 [type=int]
+           ├── b:6 < column10:10 [as=check1:11]
+           └── column9:9 > 0 [as=check2:12]
 
 # Update one column in constraint, but not the other.
 build
@@ -1857,44 +1531,32 @@ UPDATE checks SET b=2
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: a:5(int) b:6(int) c:7(int) d:8(int)
+ ├── fetch columns: a:5 b:6 c:7 d:8
  ├── update-mapping:
- │    ├──  column9:9 => b:2
- │    └──  column10:10 => d:4
- ├── check columns: check1:11(bool) check2:12(bool)
+ │    ├── column9:9 => b:2
+ │    └── column10:10 => d:4
+ ├── check columns: check1:11 check2:12
  └── project
-      ├── columns: check1:11(bool) check2:12(bool!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
+      ├── columns: check1:11 check2:12!null a:5!null b:6 c:7 d:8 column9:9!null column10:10
       ├── project
-      │    ├── columns: column10:10(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null)
+      │    ├── columns: column10:10 a:5!null b:6 c:7 d:8 column9:9!null
       │    ├── project
-      │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    ├── columns: column9:9!null a:5!null b:6 c:7 d:8
       │    │    ├── scan checks
-      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── lt [type=bool]
-      │    │    │    │    │    ├── variable: b [type=int]
-      │    │    │    │    │    └── variable: d [type=int]
-      │    │    │    │    └── gt [type=bool]
-      │    │    │    │         ├── variable: a [type=int]
-      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    │    ├── b:6 < d:8
+      │    │    │    │    └── a:5 > 0
       │    │    │    └── computed column expressions
-      │    │    │         └── d:8(int)
-      │    │    │              └── plus [type=int]
-      │    │    │                   ├── variable: c [type=int]
-      │    │    │                   └── const: 1 [type=int]
+      │    │    │         └── d:8
+      │    │    │              └── c:7 + 1
       │    │    └── projections
-      │    │         └── const: 2 [type=int]
+      │    │         └── 2 [as=column9:9]
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: c [type=int]
-      │              └── const: 1 [type=int]
+      │         └── c:7 + 1 [as=column10:10]
       └── projections
-           ├── lt [type=bool]
-           │    ├── variable: column9 [type=int]
-           │    └── variable: column10 [type=int]
-           └── gt [type=bool]
-                ├── variable: a [type=int]
-                └── const: 0 [type=int]
+           ├── column9:9 < column10:10 [as=check1:11]
+           └── a:5 > 0 [as=check2:12]
 
 # Update using tuple and subquery.
 build
@@ -1902,65 +1564,47 @@ UPDATE checks SET (a, b)=(SELECT a, b FROM abcde WHERE abcde.a=checks.a)
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: checks.a:5(int) checks.b:6(int) checks.c:7(int) checks.d:8(int)
+ ├── fetch columns: checks.a:5 checks.b:6 checks.c:7 checks.d:8
  ├── update-mapping:
- │    ├──  abcde.a:9 => checks.a:1
- │    ├──  abcde.b:10 => checks.b:2
- │    └──  column15:15 => checks.d:4
- ├── check columns: check1:16(bool) check2:17(bool)
+ │    ├── abcde.a:9 => checks.a:1
+ │    ├── abcde.b:10 => checks.b:2
+ │    └── column15:15 => checks.d:4
+ ├── check columns: check1:16 check2:17
  └── project
-      ├── columns: check1:16(bool) check2:17(bool) checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int) column15:15(int)
+      ├── columns: check1:16 check2:17 checks.a:5!null checks.b:6 checks.c:7 checks.d:8 abcde.a:9 abcde.b:10 column15:15
       ├── project
-      │    ├── columns: column15:15(int) checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int)
+      │    ├── columns: column15:15 checks.a:5!null checks.b:6 checks.c:7 checks.d:8 abcde.a:9 abcde.b:10
       │    ├── left-join-apply
-      │    │    ├── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int)
+      │    │    ├── columns: checks.a:5!null checks.b:6 checks.c:7 checks.d:8 abcde.a:9 abcde.b:10
       │    │    ├── scan checks
-      │    │    │    ├── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int)
+      │    │    │    ├── columns: checks.a:5!null checks.b:6 checks.c:7 checks.d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── lt [type=bool]
-      │    │    │    │    │    ├── variable: checks.b [type=int]
-      │    │    │    │    │    └── variable: checks.d [type=int]
-      │    │    │    │    └── gt [type=bool]
-      │    │    │    │         ├── variable: checks.a [type=int]
-      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    │    ├── checks.b:6 < checks.d:8
+      │    │    │    │    └── checks.a:5 > 0
       │    │    │    └── computed column expressions
-      │    │    │         └── checks.d:8(int)
-      │    │    │              └── plus [type=int]
-      │    │    │                   ├── variable: checks.c [type=int]
-      │    │    │                   └── const: 1 [type=int]
+      │    │    │         └── checks.d:8
+      │    │    │              └── checks.c:7 + 1
       │    │    ├── max1-row
-      │    │    │    ├── columns: abcde.a:9(int!null) abcde.b:10(int)
+      │    │    │    ├── columns: abcde.a:9!null abcde.b:10
       │    │    │    └── project
-      │    │    │         ├── columns: abcde.a:9(int!null) abcde.b:10(int)
+      │    │    │         ├── columns: abcde.a:9!null abcde.b:10
       │    │    │         └── select
-      │    │    │              ├── columns: abcde.a:9(int!null) abcde.b:10(int) abcde.c:11(int) abcde.d:12(int) e:13(int) rowid:14(int!null)
+      │    │    │              ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 e:13 rowid:14!null
       │    │    │              ├── scan abcde
-      │    │    │              │    ├── columns: abcde.a:9(int!null) abcde.b:10(int) abcde.c:11(int) abcde.d:12(int) e:13(int) rowid:14(int!null)
+      │    │    │              │    ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 e:13 rowid:14!null
       │    │    │              │    └── computed column expressions
-      │    │    │              │         ├── abcde.d:12(int)
-      │    │    │              │         │    └── plus [type=int]
-      │    │    │              │         │         ├── plus [type=int]
-      │    │    │              │         │         │    ├── variable: abcde.b [type=int]
-      │    │    │              │         │         │    └── variable: abcde.c [type=int]
-      │    │    │              │         │         └── const: 1 [type=int]
-      │    │    │              │         └── e:13(int)
-      │    │    │              │              └── variable: abcde.a [type=int]
+      │    │    │              │         ├── abcde.d:12
+      │    │    │              │         │    └── (abcde.b:10 + abcde.c:11) + 1
+      │    │    │              │         └── e:13
+      │    │    │              │              └── abcde.a:9
       │    │    │              └── filters
-      │    │    │                   └── eq [type=bool]
-      │    │    │                        ├── variable: abcde.a [type=int]
-      │    │    │                        └── variable: checks.a [type=int]
+      │    │    │                   └── abcde.a:9 = checks.a:5
       │    │    └── filters (true)
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: checks.c [type=int]
-      │              └── const: 1 [type=int]
+      │         └── checks.c:7 + 1 [as=column15:15]
       └── projections
-           ├── lt [type=bool]
-           │    ├── variable: abcde.b [type=int]
-           │    └── variable: column15 [type=int]
-           └── gt [type=bool]
-                ├── variable: abcde.a [type=int]
-                └── const: 0 [type=int]
+           ├── abcde.b:10 < column15:15 [as=check1:16]
+           └── abcde.a:9 > 0 [as=check2:17]
 
 # ------------------------------------------------------------------------------
 # Test decimal column truncation.
@@ -1971,54 +1615,28 @@ UPDATE decimals SET a=1.1, b=ARRAY[0.95, NULL, 15]
 ----
 update decimals
  ├── columns: <none>
- ├── fetch columns: decimals.a:5(decimal) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+ ├── fetch columns: decimals.a:5 decimals.b:6 c:7 decimals.d:8
  ├── update-mapping:
- │    ├──  a:11 => decimals.a:1
- │    ├──  b:12 => decimals.b:2
- │    └──  d:15 => decimals.d:4
- ├── check columns: check1:16(bool) check2:17(bool)
+ │    ├── a:11 => decimals.a:1
+ │    ├── b:12 => decimals.b:2
+ │    └── d:15 => decimals.d:4
+ ├── check columns: check1:16 check2:17
  └── project
-      ├── columns: check1:16(bool) check2:17(bool) d:15(decimal) decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal) a:11(decimal) b:12(decimal[])
+      ├── columns: check1:16 check2:17 d:15 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11 b:12
       ├── project
-      │    ├── columns: a:11(decimal) b:12(decimal[]) decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    ├── columns: a:11 b:12 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
       │    ├── scan decimals
-      │    │    ├── columns: decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    │    ├── columns: decimals.a:5!null decimals.b:6 c:7 decimals.d:8
       │    │    ├── check constraint expressions
-      │    │    │    ├── eq [type=bool]
-      │    │    │    │    ├── variable: decimals.a [type=decimal]
-      │    │    │    │    └── function: round [type=decimal]
-      │    │    │    │         └── variable: decimals.a [type=decimal]
-      │    │    │    └── gt [type=bool]
-      │    │    │         ├── indirection [type=decimal]
-      │    │    │         │    ├── variable: decimals.b [type=decimal[]]
-      │    │    │         │    └── const: 0 [type=int]
-      │    │    │         └── const: 1 [type=decimal]
+      │    │    │    ├── decimals.a:5 = round(decimals.a:5)
+      │    │    │    └── decimals.b:6[0] > 1
       │    │    └── computed column expressions
-      │    │         └── decimals.d:8(decimal)
-      │    │              └── plus [type=decimal]
-      │    │                   ├── variable: decimals.a [type=decimal]
-      │    │                   └── variable: c [type=decimal]
+      │    │         └── decimals.d:8
+      │    │              └── decimals.a:5 + c:7
       │    └── projections
-      │         ├── function: crdb_internal.round_decimal_values [type=decimal]
-      │         │    ├── const: 1.1 [type=decimal]
-      │         │    └── const: 0 [type=int]
-      │         └── function: crdb_internal.round_decimal_values [type=decimal[]]
-      │              ├── const: ARRAY[0.95,NULL,15] [type=decimal[]]
-      │              └── const: 1 [type=int]
+      │         ├── crdb_internal.round_decimal_values(1.1, 0) [as=a:11]
+      │         └── crdb_internal.round_decimal_values(ARRAY[0.95,NULL,15], 1) [as=b:12]
       └── projections
-           ├── eq [type=bool]
-           │    ├── variable: a [type=decimal]
-           │    └── function: round [type=decimal]
-           │         └── variable: a [type=decimal]
-           ├── gt [type=bool]
-           │    ├── indirection [type=decimal]
-           │    │    ├── variable: b [type=decimal[]]
-           │    │    └── const: 0 [type=int]
-           │    └── const: 1 [type=decimal]
-           └── function: crdb_internal.round_decimal_values [type=decimal]
-                ├── function: crdb_internal.round_decimal_values [type=decimal]
-                │    ├── plus [type=decimal]
-                │    │    ├── variable: a [type=decimal]
-                │    │    └── variable: c [type=decimal]
-                │    └── const: 1 [type=int]
-                └── const: 1 [type=int]
+           ├── a:11 = round(a:11) [as=check1:16]
+           ├── b:12[0] > 1 [as=check2:17]
+           └── crdb_internal.round_decimal_values(crdb_internal.round_decimal_values(a:11 + c:7, 1), 1) [as=d:15]

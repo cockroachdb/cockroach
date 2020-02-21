@@ -53,8 +53,8 @@ limit
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │    └── limit hint: 50.00
  │    └── filters
- │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
- └── const: 5 [type=int]
+ │         └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+ └── 5 [type=int]
 
 build
 SELECT * FROM a WHERE s = 'foo' LIMIT (SELECT 5 AS c)
@@ -76,7 +76,7 @@ limit
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters
- │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+ │         └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── subquery [type=int]
       └── max1-row
            ├── columns: c:5(int!null)
@@ -95,9 +95,9 @@ limit
                 │    ├── cardinality: [1 - 1]
                 │    ├── stats: [rows=1]
                 │    ├── key: ()
-                │    └── tuple [type=tuple]
+                │    └── () [type=tuple]
                 └── projections
-                     └── const: 5 [type=int]
+                     └── 5 [as=c:5, type=int]
 
 build
 SELECT * FROM (SELECT * FROM a ORDER BY s LIMIT 5) WHERE s = 'foo'
@@ -127,9 +127,9 @@ select
  │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    └── const: 5 [type=int]
+ │    └── 5 [type=int]
  └── filters
-      └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+      └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
 
 # Bump up null counts.
 exec-ddl
@@ -179,7 +179,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── limit hint: 5.00
- └── const: 5 [type=int]
+ └── 5 [type=int]
 
 build colstat=2 colstat=3 colstat=(2,3)
 SELECT * FROM a WHERE s = 'foo' LIMIT 5
@@ -203,8 +203,8 @@ limit
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │    └── limit hint: 100.00
  │    └── filters
- │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
- └── const: 5 [type=int]
+ │         └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+ └── 5 [type=int]
 
 exec-ddl
 CREATE TABLE b (x int)
@@ -235,5 +235,5 @@ offset
  │    │    └── scan b
  │    │         ├── columns: x:1(int)
  │    │         └── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    └── const: 10000 [type=int]
- └── const: 9999 [type=int]
+ │    └── 10000 [type=int]
+ └── 9999 [type=int]

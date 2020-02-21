@@ -6,16 +6,16 @@ opt
 SELECT k, s FROM a WHERE s >= 'foo'
 ----
 select
- ├── columns: k:1(int!null) s:3(string!null)
+ ├── columns: k:1!null s:3!null
  ├── stats: [rows=333.333333, distinct(3)=33.3333333, null(3)=0]
  ├── cost: 1070.03
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── scan a
- │    ├── columns: k:1(int!null) s:3(string)
+ │    ├── columns: k:1!null s:3
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(3)=100, null(3)=10]
  │    ├── cost: 1060.02
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
  └── filters
-      └── s >= 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
+      └── s:3 >= 'foo' [outer=(3), constraints=(/3: [/'foo' - ]; tight)]

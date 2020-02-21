@@ -145,11 +145,11 @@ with &1 (t0)
            │    │    │    │    │    ├── fd: ()-->(24)
            │    │    │    │    │    └── (true,) [type=tuple{bool}]
            │    │    │    │    └── aggregations
-           │    │    │    │         └── const-agg [type=bool, outer=(24)]
-           │    │    │    │              └── variable: true [type=bool]
+           │    │    │    │         └── const-agg [as=true_agg:25, type=bool, outer=(24)]
+           │    │    │    │              └── true:24 [type=bool]
            │    │    │    └── filters
-           │    │    │         └── true_agg IS NOT NULL [type=bool, outer=(25), constraints=(/25: (/NULL - ]; tight)]
+           │    │    │         └── true_agg:25 IS NOT NULL [type=bool, outer=(25), constraints=(/25: (/NULL - ]; tight)]
            │    │    └── filters (true)
            │    └── filters (true)
            └── projections
-                └── null [type=unknown]
+                └── NULL [as="?column?":27, type=unknown]

@@ -63,13 +63,13 @@ scalar-group-by
  │    │    │         ├── key: (1,4)
  │    │    │         └── fd: (1,4)-->(11)
  │    │    └── filters
- │    │         ├── (l_discount >= 0.05) AND (l_discount <= 0.07) [type=bool, outer=(7), constraints=(/7: [/0.05 - /0.07]; tight)]
- │    │         └── l_quantity < 24.0 [type=bool, outer=(5), constraints=(/5: (/NULL - /23.999999999999996]; tight)]
+ │    │         ├── (l_discount:7 >= 0.05) AND (l_discount:7 <= 0.07) [type=bool, outer=(7), constraints=(/7: [/0.05 - /0.07]; tight)]
+ │    │         └── l_quantity:5 < 24.0 [type=bool, outer=(5), constraints=(/5: (/NULL - /23.999999999999996]; tight)]
  │    └── projections
- │         └── l_extendedprice * l_discount [type=float, outer=(6,7)]
+ │         └── l_extendedprice:6 * l_discount:7 [as=column17:17, type=float, outer=(6,7)]
  └── aggregations
-      └── sum [type=float, outer=(17)]
-           └── variable: column17 [type=float]
+      └── sum [as=sum:18, type=float, outer=(17)]
+           └── column17:17 [type=float]
 
 stats table=q6_scalar_group_by_1
 ----

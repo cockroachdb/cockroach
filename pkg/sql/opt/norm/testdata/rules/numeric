@@ -15,16 +15,16 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6(int) s:7(int) t:8(float) u:9(float) v:10(decimal) w:11(decimal)
+ ├── columns: r:6 s:7 t:8 u:9 v:10 w:11
  ├── scan a
- │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i + i [type=int, outer=(2)]
-      ├── i + i [type=int, outer=(2)]
-      ├── f + f [type=float, outer=(3)]
-      ├── f + f [type=float, outer=(3)]
-      ├── d + d [type=decimal, outer=(4)]
-      └── d + d [type=decimal, outer=(4)]
+      ├── i:2 + i:2 [as=r:6, outer=(2)]
+      ├── i:2 + i:2 [as=s:7, outer=(2)]
+      ├── f:3 + f:3 [as=t:8, outer=(3)]
+      ├── f:3 + f:3 [as=u:9, outer=(3)]
+      ├── d:4 + d:4 [as=v:10, outer=(4)]
+      └── d:4 + d:4 [as=w:11, outer=(4)]
 
 
 # Regression test for #35113.
@@ -32,21 +32,21 @@ norm expect=FoldPlusZero
 SELECT i + 0::decimal FROM a
 ----
 project
- ├── columns: "?column?":6(decimal)
+ ├── columns: "?column?":6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i::DECIMAL [type=decimal, outer=(2)]
+      └── i:2::DECIMAL [as="?column?":6, outer=(2)]
 
 norm expect=FoldZeroPlus
 SELECT 0::decimal + i FROM a
 ----
 project
- ├── columns: "?column?":6(decimal)
+ ├── columns: "?column?":6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i::DECIMAL [type=decimal, outer=(2)]
+      └── i:2::DECIMAL [as="?column?":6, outer=(2)]
 
 # --------------------------------------------------
 # FoldMinusZero
@@ -61,35 +61,35 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6(int) s:7(float) t:8(decimal)
+ ├── columns: r:6 s:7 t:8
  ├── scan a
- │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i + i [type=int, outer=(2)]
-      ├── f + f [type=float, outer=(3)]
-      └── d + d [type=decimal, outer=(4)]
+      ├── i:2 + i:2 [as=r:6, outer=(2)]
+      ├── f:3 + f:3 [as=s:7, outer=(3)]
+      └── d:4 + d:4 [as=t:8, outer=(4)]
 
 # Regression test for #35113.
 norm expect=FoldMinusZero
 SELECT i - 0::decimal FROM a
 ----
 project
- ├── columns: "?column?":6(decimal)
+ ├── columns: "?column?":6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i::DECIMAL [type=decimal, outer=(2)]
+      └── i:2::DECIMAL [as="?column?":6, outer=(2)]
 
 # Regression test for #35612.
 norm expect-not=FoldMinusZero
 SELECT '[123]'::jsonb - 0
 ----
 values
- ├── columns: "?column?":1(jsonb!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('[]',) [type=tuple{jsonb}]
+ └── ('[]',)
 
 # --------------------------------------------------
 # FoldMultOne, FoldOneMult
@@ -104,37 +104,37 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6(int) s:7(int) t:8(float) u:9(float) v:10(decimal) w:11(decimal)
+ ├── columns: r:6 s:7 t:8 u:9 v:10 w:11
  ├── scan a
- │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i + i [type=int, outer=(2)]
-      ├── i + i [type=int, outer=(2)]
-      ├── f + f [type=float, outer=(3)]
-      ├── f + f [type=float, outer=(3)]
-      ├── d + d [type=decimal, outer=(4)]
-      └── d + d [type=decimal, outer=(4)]
+      ├── i:2 + i:2 [as=r:6, outer=(2)]
+      ├── i:2 + i:2 [as=s:7, outer=(2)]
+      ├── f:3 + f:3 [as=t:8, outer=(3)]
+      ├── f:3 + f:3 [as=u:9, outer=(3)]
+      ├── d:4 + d:4 [as=v:10, outer=(4)]
+      └── d:4 + d:4 [as=w:11, outer=(4)]
 
 # Regression test for #35113.
 norm expect=FoldMultOne
 SELECT i * 1::decimal FROM a
 ----
 project
- ├── columns: "?column?":6(decimal)
+ ├── columns: "?column?":6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i::DECIMAL [type=decimal, outer=(2)]
+      └── i:2::DECIMAL [as="?column?":6, outer=(2)]
 
 norm expect=FoldOneMult
 SELECT 1::decimal * i FROM a
 ----
 project
- ├── columns: "?column?":6(decimal)
+ ├── columns: "?column?":6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i::DECIMAL [type=decimal, outer=(2)]
+      └── i:2::DECIMAL [as="?column?":6, outer=(2)]
 
 # --------------------------------------------------
 # FoldDivOne
@@ -148,34 +148,34 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6(decimal) s:7(float) t:8(decimal)
+ ├── columns: r:6 s:7 t:8
  ├── scan a
- │    └── columns: i:2(int) f:3(float) d:4(decimal)
+ │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i::DECIMAL [type=decimal, outer=(2)]
-      ├── variable: f [type=float, outer=(3)]
-      └── variable: d [type=decimal, outer=(4)]
+      ├── i:2::DECIMAL [as=r:6, outer=(2)]
+      ├── f:3 [as=s:7, outer=(3)]
+      └── d:4 [as=t:8, outer=(4)]
 
 # Regression test for #35113.
 norm expect=FoldDivOne
 SELECT i / 1::decimal FROM a
 ----
 project
- ├── columns: "?column?":6(decimal)
+ ├── columns: "?column?":6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i::DECIMAL [type=decimal, outer=(2)]
+      └── i:2::DECIMAL [as="?column?":6, outer=(2)]
 
 norm expect=FoldDivOne
 SELECT i / 1::int8 FROM a
 ----
 project
- ├── columns: "?column?":6(decimal)
+ ├── columns: "?column?":6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i::DECIMAL [type=decimal, outer=(2)]
+      └── i:2::DECIMAL [as="?column?":6, outer=(2)]
 
 # --------------------------------------------------
 # InvertMinus
@@ -188,13 +188,13 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6(float) s:7(decimal) t:8(interval)
+ ├── columns: r:6 s:7 t:8
  ├── scan a
- │    └── columns: i:2(int) f:3(float) d:4(decimal) a.t:5(time)
+ │    └── columns: i:2 f:3 d:4 a.t:5
  └── projections
-      ├── f - f [type=float, outer=(3)]
-      ├── i - d [type=decimal, outer=(2,4)]
-      └── a.t - a.t [type=interval, outer=(5)]
+      ├── f:3 - f:3 [as=r:6, outer=(3)]
+      ├── i:2 - d:4 [as=s:7, outer=(2,4)]
+      └── a.t:5 - a.t:5 [as=t:8, outer=(5)]
 
 # --------------------------------------------------
 # EliminateUnaryMinus
@@ -203,8 +203,8 @@ norm expect=EliminateUnaryMinus
 SELECT -(-a.i::int) AS r FROM a
 ----
 project
- ├── columns: r:6(int)
+ ├── columns: r:6
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── variable: i [type=int, outer=(2)]
+      └── i:2 [as=r:6, outer=(2)]

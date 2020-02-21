@@ -78,7 +78,8 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		fmtFlags := memo.ExprFmtHideAll
 		switch {
 		case explain.Options.Flags.Contains(tree.ExplainFlagVerbose):
-			fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+			fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
+				memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull
 
 		case explain.Options.Flags.Contains(tree.ExplainFlagTypes):
 			fmtFlags = memo.ExprFmtHideQualifications

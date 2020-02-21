@@ -46,26 +46,26 @@ project
  │    │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
  │    │    │    └── filters
  │    │    │         └── is-not [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
- │    │    │              ├── variable: s [type=string]
+ │    │    │              ├── variable: s:4 [type=string]
  │    │    │              └── null [type=unknown]
  │    │    └── projections
- │    │         ├── gt [type=bool, outer=(3)]
- │    │         │    ├── variable: z [type=float]
+ │    │         ├── gt [as=column6:6, type=bool, outer=(3)]
+ │    │         │    ├── variable: z:3 [type=float]
  │    │         │    └── const: 0.0 [type=float]
- │    │         └── const: ',' [type=string]
+ │    │         └── const: ',' [as=column8:8, type=string]
  │    └── aggregations
- │         ├── sum [type=float, outer=(3)]
- │         │    └── variable: z [type=float]
- │         ├── agg-filter [type=float, outer=(3,6)]
+ │         ├── sum [as=sum:5, type=float, outer=(3)]
+ │         │    └── variable: z:3 [type=float]
+ │         ├── agg-filter [as=avg:7, type=float, outer=(3,6)]
  │         │    ├── avg [type=float]
- │         │    │    └── variable: z [type=float]
- │         │    └── variable: column6 [type=bool]
- │         └── agg-distinct [type=string, outer=(4,8)]
+ │         │    │    └── variable: z:3 [type=float]
+ │         │    └── variable: column6:6 [type=bool]
+ │         └── agg-distinct [as=string_agg:9, type=string, outer=(4,8)]
  │              └── string-agg [type=string]
- │                   ├── variable: s [type=string]
- │                   └── variable: column8 [type=string]
+ │                   ├── variable: s:4 [type=string]
+ │                   └── variable: column8:8 [type=string]
  └── projections
-      └── false [type=bool]
+      └── false [as=bool:10, type=bool]
 
 # Scalar groupby.
 build
@@ -90,12 +90,12 @@ scalar-group-by
  │         ├── prune: (1-4)
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── aggregations
-      ├── sum [type=decimal, outer=(1)]
-      │    └── variable: x [type=int]
-      ├── max [type=int, outer=(2)]
-      │    └── variable: y [type=int]
-      └── count [type=int, outer=(1)]
-           └── variable: x [type=int]
+      ├── sum [as=sum:5, type=decimal, outer=(1)]
+      │    └── variable: x:1 [type=int]
+      ├── max [as=max:6, type=int, outer=(2)]
+      │    └── variable: y:2 [type=int]
+      └── count [as=count:7, type=int, outer=(1)]
+           └── variable: x:1 [type=int]
 
 # Group by unique index columns.
 build
@@ -145,8 +145,8 @@ project
       │         ├── prune: (1-4)
       │         └── interesting orderings: (+1) (-4,+3,+1)
       └── aggregations
-           └── sum [type=float, outer=(3)]
-                └── variable: z [type=float]
+           └── sum [as=sum:5, type=float, outer=(3)]
+                └── variable: z:3 [type=float]
 
 # Group by column that is subset of unique index.
 build
@@ -170,8 +170,8 @@ group-by
  │         ├── prune: (1-4)
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── aggregations
-      └── max [type=string, outer=(4)]
-           └── variable: s [type=string]
+      └── max [as=max:5, type=string, outer=(4)]
+           └── variable: s:4 [type=string]
 
 # Group by all columns.
 build
@@ -219,12 +219,12 @@ project
  │    │    │    ├── prune: (1-4)
  │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
  │    │    └── projections
- │    │         └── variable: xyzs.x [type=int, outer=(1)]
+ │    │         └── variable: xyzs.x:1 [as=x:9, type=int, outer=(1)]
  │    └── aggregations
- │         └── sum [type=decimal, outer=(9)]
- │              └── variable: x [type=int]
+ │         └── sum [as=sum:10, type=decimal, outer=(9)]
+ │              └── variable: x:9 [type=int]
  └── projections
-      └── subquery [type=decimal, outer=(2,10), correlated-subquery]
+      └── subquery [as=sum:12, type=decimal, outer=(2,10), correlated-subquery]
            └── max1-row
                 ├── columns: sum:11(decimal)
                 ├── error: "more than one row returned by a subquery used as an expression"
@@ -258,9 +258,9 @@ project
                      │              │    ├── prune: (5-7)
                      │              │    └── interesting orderings: (+5)
                      │              └── projections
-                     │                   └── variable: xyzs.y [type=int, outer=(2)]
+                     │                   └── variable: xyzs.y:2 [as=y:8, type=int, outer=(2)]
                      └── projections
-                          └── variable: sum [type=decimal, outer=(10)]
+                          └── variable: sum:10 [as=sum:11, type=decimal, outer=(10)]
 
 # Calculate groupby cardinality.
 build
@@ -304,7 +304,7 @@ group-by
  │    ├── prune: (3)
  │    └── interesting orderings: (+1)
  └── aggregations
-      ├── count [type=int, outer=(3)]
-      │    └── variable: z [type=float]
-      └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int]
+      ├── count [as=count:5, type=int, outer=(3)]
+      │    └── variable: z:3 [type=float]
+      └── const-agg [as=x:1, type=int, outer=(1)]
+           └── variable: x:1 [type=int]

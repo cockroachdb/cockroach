@@ -54,15 +54,15 @@ with &1
  │    ├── canary column: 9
  │    ├── fetch columns: xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
  │    ├── insert-mapping:
- │    │    ├──  b:5 => xyz.x:1
- │    │    ├──  a:4 => xyz.y:2
- │    │    └──  column8:8 => xyz.z:3
+ │    │    ├── b:5 => xyz.x:1
+ │    │    ├── a:4 => xyz.y:2
+ │    │    └── column8:8 => xyz.z:3
  │    ├── update-mapping:
- │    │    └──  upsert_y:14 => xyz.y:2
+ │    │    └── upsert_y:14 => xyz.y:2
  │    ├── return-mapping:
- │    │    ├──  upsert_x:13 => xyz.x:1
- │    │    ├──  upsert_y:14 => xyz.y:2
- │    │    └──  upsert_z:15 => xyz.z:3
+ │    │    ├── upsert_x:13 => xyz.x:1
+ │    │    ├── upsert_y:14 => xyz.y:2
+ │    │    └── upsert_z:15 => xyz.z:3
  │    ├── side-effects, mutations
  │    ├── stats: [rows=200]
  │    └── project
@@ -93,28 +93,28 @@ with &1
  │         │    │    │    │         ├── scan abc
  │         │    │    │    │         │    ├── columns: a:4(int!null) b:5(string) c:6(float) rowid:7(int!null)
  │         │    │    │    │         │    ├── computed column expressions
- │         │    │    │    │         │    │    └── c:6(float)
- │         │    │    │    │         │    │         └── a::FLOAT8 [type=float]
+ │         │    │    │    │         │    │    └── c:6
+ │         │    │    │    │         │    │         └── a:4::FLOAT8 [type=float]
  │         │    │    │    │         │    ├── stats: [rows=2000, distinct(4)=2000, null(4)=0, distinct(5)=10, null(5)=0, distinct(7)=2000, null(7)=0]
  │         │    │    │    │         │    ├── key: (7)
  │         │    │    │    │         │    └── fd: (7)-->(4-6)
  │         │    │    │    │         └── filters
- │         │    │    │    │              └── b = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+ │         │    │    │    │              └── b:5 = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
  │         │    │    │    └── projections
- │         │    │    │         └── NULL::FLOAT8 [type=float]
+ │         │    │    │         └── NULL::FLOAT8 [as=column8:8, type=float]
  │         │    │    ├── scan xyz
  │         │    │    │    ├── columns: xyz.x:9(string!null) xyz.y:10(int!null) xyz.z:11(float)
  │         │    │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
  │         │    │    │    ├── key: (9)
  │         │    │    │    └── fd: (9)-->(10,11)
  │         │    │    └── filters
- │         │    │         └── b = xyz.x [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+ │         │    │         └── b:5 = xyz.x:9 [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
  │         │    └── projections
- │         │         └── const: 5 [type=int]
+ │         │         └── 5 [as=column12:12, type=int]
  │         └── projections
- │              ├── CASE WHEN xyz.x IS NULL THEN b ELSE xyz.x END [type=string, outer=(5,9)]
- │              ├── CASE WHEN xyz.x IS NULL THEN a ELSE column12 END [type=int, outer=(4,9,12)]
- │              └── CASE WHEN xyz.x IS NULL THEN column8 ELSE xyz.z END [type=float, outer=(8,9,11)]
+ │              ├── CASE WHEN xyz.x:9 IS NULL THEN b:5 ELSE xyz.x:9 END [as=upsert_x:13, type=string, outer=(5,9)]
+ │              ├── CASE WHEN xyz.x:9 IS NULL THEN a:4 ELSE column12:12 END [as=upsert_y:14, type=int, outer=(4,9,12)]
+ │              └── CASE WHEN xyz.x:9 IS NULL THEN column8:8 ELSE xyz.z:11 END [as=upsert_z:15, type=float, outer=(8,9,11)]
  └── select
       ├── columns: x:16(string!null) y:17(int!null) z:18(float)
       ├── stats: [rows=10, distinct(17)=1, null(17)=0]
@@ -127,7 +127,7 @@ with &1
       │    │    └──  xyz.z:3(float) => z:18(float)
       │    └── stats: [rows=200, distinct(16)=20, null(16)=0, distinct(17)=20, null(17)=0]
       └── filters
-           └── y = 10 [type=bool, outer=(17), constraints=(/17: [/10 - /10]; tight), fd=()-->(17)]
+           └── y:17 = 10 [type=bool, outer=(17), constraints=(/17: [/10 - /10]; tight), fd=()-->(17)]
 
 # Cardinality is zero.
 build
@@ -136,9 +136,9 @@ UPSERT INTO xyz SELECT b, a FROM abc WHERE False RETURNING *
 upsert xyz
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── upsert-mapping:
- │    ├──  b:5 => x:1
- │    ├──  a:4 => y:2
- │    └──  column8:8 => z:3
+ │    ├── b:5 => x:1
+ │    ├── a:4 => y:2
+ │    └── column8:8 => z:3
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]
@@ -161,12 +161,12 @@ upsert xyz
       │         ├── scan abc
       │         │    ├── columns: a:4(int!null) b:5(string) c:6(float) rowid:7(int!null)
       │         │    ├── computed column expressions
-      │         │    │    └── c:6(float)
-      │         │    │         └── a::FLOAT8 [type=float]
+      │         │    │    └── c:6
+      │         │    │         └── a:4::FLOAT8 [type=float]
       │         │    ├── stats: [rows=2000]
       │         │    ├── key: (7)
       │         │    └── fd: (7)-->(4-6)
       │         └── filters
       │              └── false [type=bool]
       └── projections
-           └── NULL::FLOAT8 [type=float]
+           └── NULL::FLOAT8 [as=column8:8, type=float]

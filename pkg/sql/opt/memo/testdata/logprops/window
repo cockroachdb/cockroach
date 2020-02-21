@@ -48,7 +48,7 @@ project
       │    │    └── interesting orderings: (+1)
       │    └── const: 10 [type=int]
       └── windows
-           └── rank [type=int]
+           └── rank [as=rank:8, type=int]
 
 build
 SELECT k, rank() OVER (PARTITION BY v ORDER BY f) FROM (SELECT * FROM kv LIMIT 10)
@@ -81,7 +81,7 @@ project
       │    │    └── interesting orderings: (+1)
       │    └── const: 10 [type=int]
       └── windows
-           └── rank [type=int]
+           └── rank [as=rank:8, type=int]
 
 # Outer cols.
 
@@ -101,7 +101,7 @@ project
  │    ├── prune: (1-7)
  │    └── interesting orderings: (+1)
  └── projections
-      └── subquery [type=int, outer=(1), correlated-subquery]
+      └── subquery [as="?column?":11, type=int, outer=(1), correlated-subquery]
            └── max1-row
                 ├── columns: "?column?":10(int)
                 ├── error: "more than one row returned by a subquery used as an expression"
@@ -135,13 +135,13 @@ project
                      │    │    │    ├── key: ()
                      │    │    │    └── tuple [type=tuple]
                      │    │    └── projections
-                     │    │         └── variable: k [type=int, outer=(1)]
+                     │    │         └── variable: k:1 [as=x:8, type=int, outer=(1)]
                      │    └── windows
-                     │         └── rank [type=int]
+                     │         └── rank [as=rank:9, type=int]
                      └── projections
-                          └── plus [type=int, outer=(8,9)]
-                               ├── variable: rank [type=int]
-                               └── variable: x [type=int]
+                          └── plus [as="?column?":10, type=int, outer=(8,9)]
+                               ├── variable: rank:9 [type=int]
+                               └── variable: x:8 [type=int]
 
 build
 SELECT lag('foo'::string) OVER (), lag(1) OVER () FROM kv
@@ -167,19 +167,19 @@ project
       │    │    ├── prune: (1-7)
       │    │    └── interesting orderings: (+1)
       │    └── projections
-      │         ├── cast: STRING [type=string]
+      │         ├── cast: STRING [as=lag_1_arg1:10, type=string]
       │         │    └── const: 'foo' [type=string]
-      │         ├── const: 1 [type=int]
-      │         ├── cast: STRING [type=string]
+      │         ├── const: 1 [as=lag_1_arg2:11, type=int]
+      │         ├── cast: STRING [as=lag_1_arg3:12, type=string]
       │         │    └── null [type=unknown]
-      │         └── cast: INT8 [type=int]
+      │         └── cast: INT8 [as=lag_2_arg3:13, type=int]
       │              └── null [type=unknown]
       └── windows
-           ├── lag [type=string, outer=(10-12)]
-           │    ├── variable: lag_1_arg1 [type=string]
-           │    ├── variable: lag_1_arg2 [type=int]
-           │    └── variable: lag_1_arg3 [type=string]
-           └── lag [type=int, outer=(11,13)]
-                ├── variable: lag_1_arg2 [type=int]
-                ├── variable: lag_1_arg2 [type=int]
-                └── variable: lag_2_arg3 [type=int]
+           ├── lag [as=lag:8, type=string, outer=(10-12)]
+           │    ├── variable: lag_1_arg1:10 [type=string]
+           │    ├── variable: lag_1_arg2:11 [type=int]
+           │    └── variable: lag_1_arg3:12 [type=string]
+           └── lag [as=lag:9, type=int, outer=(11,13)]
+                ├── variable: lag_1_arg2:11 [type=int]
+                ├── variable: lag_1_arg2:11 [type=int]
+                └── variable: lag_2_arg3:13 [type=int]

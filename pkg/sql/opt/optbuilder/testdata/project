@@ -10,37 +10,37 @@ build
 SELECT 5 r
 ----
 project
- ├── columns: r:1(int!null)
+ ├── columns: r:1!null
  ├── values
- │    └── tuple [type=tuple]
+ │    └── ()
  └── projections
-      └── const: 5 [type=int]
+      └── 5 [as=r:1]
 
 build
 SELECT a.x FROM a
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── scan a
-      └── columns: x:1(int!null) y:2(float)
+      └── columns: x:1!null y:2
 
 build
 SELECT a.x, a.y FROM a
 ----
 scan a
- └── columns: x:1(int!null) y:2(float)
+ └── columns: x:1!null y:2
 
 build
 SELECT a.y, a.x FROM a
 ----
 scan a
- └── columns: y:2(float) x:1(int!null)
+ └── columns: y:2 x:1!null
 
 build
 SELECT * FROM a
 ----
 scan a
- └── columns: x:1(int!null) y:2(float)
+ └── columns: x:1!null y:2
 
 # Note that an explicit projection operator is added for table b (unlike for
 # table a) to avoid projecting the hidden rowid column.
@@ -48,80 +48,64 @@ build
 SELECT * FROM b
 ----
 project
- ├── columns: x:1(int) y:2(float)
+ ├── columns: x:1 y:2
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null
 
 build
 SELECT (a.x + 3) AS "X", false AS "Y" FROM a
 ----
 project
- ├── columns: X:3(int!null) Y:4(bool!null)
+ ├── columns: X:3!null Y:4!null
  ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
+ │    └── columns: x:1!null y:2
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: x [type=int]
-      │    └── const: 3 [type=int]
-      └── false [type=bool]
+      ├── x:1 + 3 [as=X:3]
+      └── false [as=Y:4]
 
 build
 SELECT *, ((x < y) OR x > 1000) AS r FROM a
 ----
 project
- ├── columns: x:1(int!null) y:2(float) r:3(bool)
+ ├── columns: x:1!null y:2 r:3
  ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
+ │    └── columns: x:1!null y:2
  └── projections
-      └── or [type=bool]
-           ├── lt [type=bool]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=float]
-           └── gt [type=bool]
-                ├── variable: x [type=int]
-                └── const: 1000 [type=int]
+      └── (x:1 < y:2) OR (x:1 > 1000) [as=r:3]
 
 build
 SELECT a.*, true FROM a
 ----
 project
- ├── columns: x:1(int!null) y:2(float) bool:3(bool!null)
+ ├── columns: x:1!null y:2 bool:3!null
  ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
+ │    └── columns: x:1!null y:2
  └── projections
-      └── true [type=bool]
+      └── true [as=bool:3]
 
 build
 SELECT u + 1 AS r, v + 1 AS s FROM (SELECT a.x + 3 AS t, a.y + 1.0 AS u FROM a) AS foo(u, v)
 ----
 project
- ├── columns: r:5(int!null) s:6(float)
+ ├── columns: r:5!null s:6
  ├── project
- │    ├── columns: t:3(int!null) u:4(float)
+ │    ├── columns: t:3!null u:4
  │    ├── scan a
- │    │    └── columns: x:1(int!null) y:2(float)
+ │    │    └── columns: x:1!null y:2
  │    └── projections
- │         ├── plus [type=int]
- │         │    ├── variable: x [type=int]
- │         │    └── const: 3 [type=int]
- │         └── plus [type=float]
- │              ├── variable: y [type=float]
- │              └── const: 1.0 [type=float]
+ │         ├── x:1 + 3 [as=t:3]
+ │         └── y:2 + 1.0 [as=u:4]
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: t [type=int]
-      │    └── const: 1 [type=int]
-      └── plus [type=float]
-           ├── variable: u [type=float]
-           └── const: 1.0 [type=float]
+      ├── t:3 + 1 [as=r:5]
+      └── u:4 + 1.0 [as=s:6]
 
 build
 SELECT rowid FROM b;
 ----
 project
- ├── columns: rowid:3(int!null)
+ ├── columns: rowid:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null
 
 build
 SELECT rowid FROM (SELECT * FROM b)
@@ -132,25 +116,25 @@ build
 SELECT rowid FROM (SELECT rowid FROM b)
 ----
 project
- ├── columns: rowid:3(int!null)
+ ├── columns: rowid:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null
 
 build
 SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
- ├── columns: r:3(int!null)
+ ├── columns: r:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null
 
 build
 SELECT r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
- ├── columns: r:3(int!null)
+ ├── columns: r:3!null
  └── scan b
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null
 
 exec-ddl
 CREATE TABLE c (x INT, y FLOAT)
@@ -165,32 +149,29 @@ build
 SELECT x, y, rowid FROM c WHERE rowid > 0
 ----
 select
- ├── columns: x:1(int) y:2(float) rowid:3(int!null)
+ ├── columns: x:1 y:2 rowid:3!null
  ├── scan c
- │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
+ │    └── columns: x:1 y:2 rowid:3!null
  └── filters
-      └── gt [type=bool]
-           ├── variable: rowid [type=int]
-           └── const: 0 [type=int]
+      └── rowid:3 > 0
 
 build
 SELECT r FROM (SELECT x, y, rowid AS r FROM c)
 ----
 project
- ├── columns: r:3(int!null)
+ ├── columns: r:3!null
  └── scan c
-      └── columns: x:1(int) y:2(float) rowid:3(int!null)
+      └── columns: x:1 y:2 rowid:3!null
 
 build
 SELECT rowid::string FROM b
 ----
 project
- ├── columns: rowid:4(string!null)
+ ├── columns: rowid:4!null
  ├── scan b
- │    └── columns: x:1(int) y:2(float) b.rowid:3(int!null)
+ │    └── columns: x:1 y:2 b.rowid:3!null
  └── projections
-      └── cast: STRING [type=string]
-           └── variable: b.rowid [type=int]
+      └── b.rowid:3::STRING [as=rowid:4]
 
 build
 SELECT (x, y)::timestamp FROM b
@@ -234,20 +215,17 @@ build fully-qualify-names
 SELECT t.kv.k FROM kv
 ----
 project
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  └── scan t.public.kv
-      └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int)
+      └── columns: t.public.kv.k:1!null t.public.kv.v:2
 
 # Check that tuple type includes labels.
 build
 SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
 ----
 project
- ├── columns: x:3(tuple{int AS a, int AS b, int AS c})
+ ├── columns: x:3
  ├── scan kv
- │    └── columns: k:1(int!null) v:2(int)
+ │    └── columns: k:1!null v:2
  └── projections
-      └── tuple [type=tuple{int AS a, int AS b, int AS c}]
-           ├── variable: v [type=int]
-           ├── variable: v [type=int]
-           └── variable: v [type=int]
+      └── ((v:2, v:2, v:2) AS a, b, c) [as=x:3]
