@@ -582,6 +582,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,
 				},
@@ -677,7 +678,6 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("")
 	const batchSize = 5
 	defer TestingSetCsvInputReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
@@ -686,6 +686,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,
 				},
