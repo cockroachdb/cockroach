@@ -568,14 +568,14 @@ func restore(
 	spans []roachpb.Span,
 	job *jobs.Job,
 	encryption *roachpb.FileEncryptionOptions,
-) (roachpb.BulkOpSummary, error) {
+) (RowCount, error) {
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
 
 	mu := struct {
 		syncutil.Mutex
-		res               roachpb.BulkOpSummary
+		res               RowCount
 		requestsCompleted []bool
 		highWaterMark     int
 	}{
@@ -627,6 +627,11 @@ func restore(
 				log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
 			}
 		})
+
+	pkIDs := make(map[uint64]struct{})
+	for _, tbl := range tables {
+		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.ID), uint64(tbl.PrimaryIndex.ID))] = struct{}{}
+	}
 
 	// We're already limiting these on the server-side, but sending all the
 	// Import requests at once would fill up distsender/grpc/something and cause
@@ -712,7 +717,7 @@ func restore(
 				}
 
 				mu.Lock()
-				mu.res.Add(importRes.(*roachpb.ImportResponse).Imported)
+				mu.res.add(countRows(importRes.(*roachpb.ImportResponse).Imported, pkIDs))
 
 				// Assert that we're actually marking the correct span done. See #23977.
 				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
@@ -784,7 +789,7 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job                *jobs.Job
 	settings           *cluster.Settings
-	res                roachpb.BulkOpSummary
+	res                RowCount
 	databases          []*sqlbase.DatabaseDescriptor
 	tables             []*sqlbase.TableDescriptor
 	descriptorCoverage tree.DescriptorCoverage

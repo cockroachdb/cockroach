@@ -48,7 +48,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[118];
+  static const ::google::protobuf::internal::ParseTable schema[119];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -125,6 +125,9 @@ extern BatchResponse_HeaderDefaultTypeInternal _BatchResponse_Header_default_ins
 class BulkOpSummary;
 class BulkOpSummaryDefaultTypeInternal;
 extern BulkOpSummaryDefaultTypeInternal _BulkOpSummary_default_instance_;
+class BulkOpSummary_EntryCountsEntry_DoNotUse;
+class BulkOpSummary_EntryCountsEntry_DoNotUseDefaultTypeInternal;
+extern BulkOpSummary_EntryCountsEntry_DoNotUseDefaultTypeInternal _BulkOpSummary_EntryCountsEntry_DoNotUse_default_instance_;
 class CheckConsistencyRequest;
 class CheckConsistencyRequestDefaultTypeInternal;
 extern CheckConsistencyRequestDefaultTypeInternal _CheckConsistencyRequest_default_instance_;
@@ -437,6 +440,7 @@ template<> ::cockroach::roachpb::BatchRequest* Arena::CreateMaybeMessage<::cockr
 template<> ::cockroach::roachpb::BatchResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::BatchResponse>(Arena*);
 template<> ::cockroach::roachpb::BatchResponse_Header* Arena::CreateMaybeMessage<::cockroach::roachpb::BatchResponse_Header>(Arena*);
 template<> ::cockroach::roachpb::BulkOpSummary* Arena::CreateMaybeMessage<::cockroach::roachpb::BulkOpSummary>(Arena*);
+template<> ::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse>(Arena*);
 template<> ::cockroach::roachpb::CheckConsistencyRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckConsistencyRequest>(Arena*);
 template<> ::cockroach::roachpb::CheckConsistencyResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckConsistencyResponse>(Arena*);
 template<> ::cockroach::roachpb::CheckConsistencyResponse_Result* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckConsistencyResponse_Result>(Arena*);
@@ -11258,6 +11262,25 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
 };
 // -------------------------------------------------------------------
 
+class BulkOpSummary_EntryCountsEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<BulkOpSummary_EntryCountsEntry_DoNotUse, 
+    ::google::protobuf::uint64, ::google::protobuf::int64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_UINT64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+    0 > {
+public:
+  typedef ::google::protobuf::internal::MapEntryLite<BulkOpSummary_EntryCountsEntry_DoNotUse, 
+    ::google::protobuf::uint64, ::google::protobuf::int64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_UINT64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+    0 > SuperType;
+  BulkOpSummary_EntryCountsEntry_DoNotUse();
+  BulkOpSummary_EntryCountsEntry_DoNotUse(::google::protobuf::Arena* arena);
+  void MergeFrom(const BulkOpSummary_EntryCountsEntry_DoNotUse& other);
+  static const BulkOpSummary_EntryCountsEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const BulkOpSummary_EntryCountsEntry_DoNotUse*>(&_BulkOpSummary_EntryCountsEntry_DoNotUse_default_instance_); }
+};
+
+// -------------------------------------------------------------------
+
 class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.BulkOpSummary) */ {
  public:
   BulkOpSummary();
@@ -11292,7 +11315,7 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BulkOpSummary_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    85;
+    86;
 
   void Swap(BulkOpSummary* other);
   friend void swap(BulkOpSummary& a, BulkOpSummary& b) {
@@ -11341,7 +11364,17 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
 
   // nested types ----------------------------------------------------
 
+
   // accessors -------------------------------------------------------
+
+  // map<uint64, int64> entry_counts = 5;
+  int entry_counts_size() const;
+  void clear_entry_counts();
+  static const int kEntryCountsFieldNumber = 5;
+  const ::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >&
+      entry_counts() const;
+  ::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >*
+      mutable_entry_counts();
 
   // int64 data_size = 1;
   void clear_data_size();
@@ -11349,32 +11382,31 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::int64 data_size() const;
   void set_data_size(::google::protobuf::int64 value);
 
-  // int64 rows = 2;
-  void clear_rows();
-  static const int kRowsFieldNumber = 2;
-  ::google::protobuf::int64 rows() const;
-  void set_rows(::google::protobuf::int64 value);
+  // int64 deprecated_rows = 2;
+  void clear_deprecated_rows();
+  static const int kDeprecatedRowsFieldNumber = 2;
+  ::google::protobuf::int64 deprecated_rows() const;
+  void set_deprecated_rows(::google::protobuf::int64 value);
 
-  // int64 index_entries = 3;
-  void clear_index_entries();
-  static const int kIndexEntriesFieldNumber = 3;
-  ::google::protobuf::int64 index_entries() const;
-  void set_index_entries(::google::protobuf::int64 value);
-
-  // int64 system_records = 4;
-  void clear_system_records();
-  static const int kSystemRecordsFieldNumber = 4;
-  ::google::protobuf::int64 system_records() const;
-  void set_system_records(::google::protobuf::int64 value);
+  // int64 deprecated_index_entries = 3;
+  void clear_deprecated_index_entries();
+  static const int kDeprecatedIndexEntriesFieldNumber = 3;
+  ::google::protobuf::int64 deprecated_index_entries() const;
+  void set_deprecated_index_entries(::google::protobuf::int64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.BulkOpSummary)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::MapFieldLite<
+      BulkOpSummary_EntryCountsEntry_DoNotUse,
+      ::google::protobuf::uint64, ::google::protobuf::int64,
+      ::google::protobuf::internal::WireFormatLite::TYPE_UINT64,
+      ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+      0 > entry_counts_;
   ::google::protobuf::int64 data_size_;
-  ::google::protobuf::int64 rows_;
-  ::google::protobuf::int64 index_entries_;
-  ::google::protobuf::int64 system_records_;
+  ::google::protobuf::int64 deprecated_rows_;
+  ::google::protobuf::int64 deprecated_index_entries_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -11414,7 +11446,7 @@ class ExportResponse_File : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExportResponse_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    86;
+    87;
 
   void Swap(ExportResponse_File* other);
   friend void swap(ExportResponse_File& a, ExportResponse_File& b) {
@@ -11590,7 +11622,7 @@ class ExportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ExportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    87;
+    88;
 
   void Swap(ExportResponse* other);
   friend void swap(ExportResponse& a, ExportResponse& b) {
@@ -11722,7 +11754,7 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ImportRequest_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    88;
+    89;
 
   void Swap(ImportRequest_File* other);
   friend void swap(ImportRequest_File& a, ImportRequest_File& b) {
@@ -11858,7 +11890,7 @@ class ImportRequest_TableRekey : public ::google::protobuf::MessageLite /* @@pro
                &_ImportRequest_TableRekey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    89;
+    90;
 
   void Swap(ImportRequest_TableRekey* other);
   friend void swap(ImportRequest_TableRekey& a, ImportRequest_TableRekey& b) {
@@ -11973,7 +12005,7 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ImportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    90;
+    91;
 
   void Swap(ImportRequest* other);
   friend void swap(ImportRequest& a, ImportRequest& b) {
@@ -12143,7 +12175,7 @@ class ImportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ImportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    91;
+    92;
 
   void Swap(ImportResponse* other);
   friend void swap(ImportResponse& a, ImportResponse& b) {
@@ -12261,7 +12293,7 @@ class AdminScatterRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_AdminScatterRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    92;
+    93;
 
   void Swap(AdminScatterRequest* other);
   friend void swap(AdminScatterRequest& a, AdminScatterRequest& b) {
@@ -12374,7 +12406,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
                &_AdminScatterResponse_Range_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    93;
+    94;
 
   void Swap(AdminScatterResponse_Range* other);
   friend void swap(AdminScatterResponse_Range& a, AdminScatterResponse_Range& b) {
@@ -12480,7 +12512,7 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_AdminScatterResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    94;
+    95;
 
   void Swap(AdminScatterResponse* other);
   friend void swap(AdminScatterResponse& a, AdminScatterResponse& b) {
@@ -12600,7 +12632,7 @@ class AdminVerifyProtectedTimestampRequest : public ::google::protobuf::MessageL
                &_AdminVerifyProtectedTimestampRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    95;
+    96;
 
   void Swap(AdminVerifyProtectedTimestampRequest* other);
   friend void swap(AdminVerifyProtectedTimestampRequest& a, AdminVerifyProtectedTimestampRequest& b) {
@@ -12744,7 +12776,7 @@ class AdminVerifyProtectedTimestampResponse : public ::google::protobuf::Message
                &_AdminVerifyProtectedTimestampResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    96;
+    97;
 
   void Swap(AdminVerifyProtectedTimestampResponse* other);
   friend void swap(AdminVerifyProtectedTimestampResponse& a, AdminVerifyProtectedTimestampResponse& b) {
@@ -12869,7 +12901,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AddSSTableRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    97;
+    98;
 
   void Swap(AddSSTableRequest* other);
   friend void swap(AddSSTableRequest& a, AddSSTableRequest& b) {
@@ -13016,7 +13048,7 @@ class AddSSTableResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AddSSTableResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    98;
+    99;
 
   void Swap(AddSSTableResponse* other);
   friend void swap(AddSSTableResponse& a, AddSSTableResponse& b) {
@@ -13122,7 +13154,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RefreshRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    99;
+    100;
 
   void Swap(RefreshRequest* other);
   friend void swap(RefreshRequest& a, RefreshRequest& b) {
@@ -13240,7 +13272,7 @@ class RefreshResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_RefreshResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    100;
+    101;
 
   void Swap(RefreshResponse* other);
   friend void swap(RefreshResponse& a, RefreshResponse& b) {
@@ -13346,7 +13378,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RefreshRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    101;
+    102;
 
   void Swap(RefreshRangeRequest* other);
   friend void swap(RefreshRangeRequest& a, RefreshRangeRequest& b) {
@@ -13464,7 +13496,7 @@ class RefreshRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RefreshRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    102;
+    103;
 
   void Swap(RefreshRangeResponse* other);
   friend void swap(RefreshRangeResponse& a, RefreshRangeResponse& b) {
@@ -13570,7 +13602,7 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SubsumeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    103;
+    104;
 
   void Swap(SubsumeRequest* other);
   friend void swap(SubsumeRequest& a, SubsumeRequest& b) {
@@ -13700,7 +13732,7 @@ class SubsumeResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_SubsumeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    104;
+    105;
 
   void Swap(SubsumeResponse* other);
   friend void swap(SubsumeResponse& a, SubsumeResponse& b) {
@@ -13837,7 +13869,7 @@ class RangeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    105;
+    106;
 
   void Swap(RangeStatsRequest* other);
   friend void swap(RangeStatsRequest& a, RangeStatsRequest& b) {
@@ -13943,7 +13975,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    106;
+    107;
 
   void Swap(RangeStatsResponse* other);
   friend void swap(RangeStatsResponse& a, RangeStatsResponse& b) {
@@ -14116,7 +14148,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    107;
+    108;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -14883,7 +14915,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    108;
+    109;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15589,7 +15621,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    109;
+    110;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -15780,7 +15812,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    111;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -15898,7 +15930,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    112;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16054,7 +16086,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    113;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16174,7 +16206,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    114;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16299,7 +16331,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    115;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16431,7 +16463,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    116;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16549,7 +16581,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    117;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -16655,7 +16687,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    118;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -26575,6 +26607,8 @@ inline void ExportRequest::set_target_file_size(::google::protobuf::int64 value)
 
 // -------------------------------------------------------------------
 
+// -------------------------------------------------------------------
+
 // BulkOpSummary
 
 // int64 data_size = 1;
@@ -26591,46 +26625,50 @@ inline void BulkOpSummary::set_data_size(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.BulkOpSummary.data_size)
 }
 
-// int64 rows = 2;
-inline void BulkOpSummary::clear_rows() {
-  rows_ = GOOGLE_LONGLONG(0);
+// int64 deprecated_rows = 2;
+inline void BulkOpSummary::clear_deprecated_rows() {
+  deprecated_rows_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 BulkOpSummary::rows() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.BulkOpSummary.rows)
-  return rows_;
+inline ::google::protobuf::int64 BulkOpSummary::deprecated_rows() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.BulkOpSummary.deprecated_rows)
+  return deprecated_rows_;
 }
-inline void BulkOpSummary::set_rows(::google::protobuf::int64 value) {
+inline void BulkOpSummary::set_deprecated_rows(::google::protobuf::int64 value) {
   
-  rows_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.BulkOpSummary.rows)
+  deprecated_rows_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.BulkOpSummary.deprecated_rows)
 }
 
-// int64 index_entries = 3;
-inline void BulkOpSummary::clear_index_entries() {
-  index_entries_ = GOOGLE_LONGLONG(0);
+// int64 deprecated_index_entries = 3;
+inline void BulkOpSummary::clear_deprecated_index_entries() {
+  deprecated_index_entries_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 BulkOpSummary::index_entries() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.BulkOpSummary.index_entries)
-  return index_entries_;
+inline ::google::protobuf::int64 BulkOpSummary::deprecated_index_entries() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.BulkOpSummary.deprecated_index_entries)
+  return deprecated_index_entries_;
 }
-inline void BulkOpSummary::set_index_entries(::google::protobuf::int64 value) {
+inline void BulkOpSummary::set_deprecated_index_entries(::google::protobuf::int64 value) {
   
-  index_entries_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.BulkOpSummary.index_entries)
+  deprecated_index_entries_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.BulkOpSummary.deprecated_index_entries)
 }
 
-// int64 system_records = 4;
-inline void BulkOpSummary::clear_system_records() {
-  system_records_ = GOOGLE_LONGLONG(0);
+// map<uint64, int64> entry_counts = 5;
+inline int BulkOpSummary::entry_counts_size() const {
+  return entry_counts_.size();
 }
-inline ::google::protobuf::int64 BulkOpSummary::system_records() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.BulkOpSummary.system_records)
-  return system_records_;
+inline void BulkOpSummary::clear_entry_counts() {
+  entry_counts_.Clear();
 }
-inline void BulkOpSummary::set_system_records(::google::protobuf::int64 value) {
-  
-  system_records_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.BulkOpSummary.system_records)
+inline const ::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >&
+BulkOpSummary::entry_counts() const {
+  // @@protoc_insertion_point(field_map:cockroach.roachpb.BulkOpSummary.entry_counts)
+  return entry_counts_.GetMap();
+}
+inline ::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >*
+BulkOpSummary::mutable_entry_counts() {
+  // @@protoc_insertion_point(field_mutable_map:cockroach.roachpb.BulkOpSummary.entry_counts)
+  return entry_counts_.MutableMap();
 }
 
 // -------------------------------------------------------------------
@@ -34350,6 +34388,8 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
