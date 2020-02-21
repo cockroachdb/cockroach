@@ -37,31 +37,25 @@
 # set is non-empty, it is unknown whether it's in/not in the set.
 [FoldNullInNonEmpty, Normalize]
 (In | NotIn
-    $left:(Null)
+    (Null)
     (Tuple ^[])
 )
 =>
 (Null (BoolType))
 
-# FoldNullInEmpty replaces the In with False when the left input is null and
-# the right input is empty, since even an unknown value can't be in an empty
-# set.
-[FoldNullInEmpty, Normalize]
-(In
-    $left:(Null)
-    (Tuple [])
-)
+# FoldInEmpty replaces the In with False when the the right input is empty. Note
+# that this is correct even if the left side is Null, since even an unknown
+# value can't be in an empty set.
+[FoldInEmpty, Normalize]
+(In * (Tuple []))
 =>
 (False)
 
-# FoldNullNotInEmpty replaces the NotIn with True when the left input is null
-# and the right input is empty, since even an unknown value can't be in an
-# empty set.
-[FoldNullNotInEmpty, Normalize]
-(NotIn
-    $left:(Null)
-    (Tuple [])
-)
+# FoldNotInEmpty replaces the NotIn with True when the right input is empty.
+# Note that this is correct even if the left side is Null, since even an unknown
+# value can't be in an empty set.
+[FoldNotInEmpty, Normalize]
+(NotIn * (Tuple []))
 =>
 (True)
 
