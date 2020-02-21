@@ -636,13 +636,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.DisableBuffering()
 	}
 
-	// Ensure that the plan is collected just before closing.
-	if sampleLogicalPlans.Get(&ex.appStats.st.SV) {
-		planner.curPlan.maybeSavePlan = func(ctx context.Context) *roachpb.ExplainTreePlanNode {
-			return ex.maybeSavePlan(ctx, planner)
-		}
-	}
-
 	defer func() {
 		planner.maybeLogStatement(
 			ctx,
@@ -733,37 +726,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // makeExecPlan creates an execution plan and populates planner.curPlan, using
 // either the optimizer or the heuristic planner.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
-	stmt := planner.stmt
-	// Initialize planner.curPlan.AST early; it might be used by maybeLogStatement
-	// in error cases.
-	planner.curPlan = planTop{AST: stmt.AST}
+	planner.curPlan.init(planner.stmt, ex.appStats)
 
-	log.VEvent(ctx, 2, "generating optimizer plan")
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err
 	}
 	return nil
-}
-
-// saveLogicalPlanDescription returns whether we should save this as a sample logical plan
-// for its corresponding fingerprint. We use `logicalPlanCollectionPeriod`
-// to assess how frequently to sample logical plans.
-func (ex *connExecutor) saveLogicalPlanDescription(
-	stmt *Statement, useDistSQL bool, optimizerUsed bool, implicitTxn bool, err error,
-) bool {
-	stats := ex.appStats.getStatsForStmt(
-		stmt, useDistSQL, optimizerUsed, implicitTxn, err, false /* createIfNonexistent */)
-	if stats == nil {
-		// Save logical plan the first time we see new statement fingerprint.
-		return true
-	}
-	now := timeutil.Now()
-	period := logicalPlanCollectionPeriod.Get(&ex.appStats.st.SV)
-	stats.Lock()
-	defer stats.Unlock()
-	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
-	return now.Sub(timeLastSampled) >= period
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and

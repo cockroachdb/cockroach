@@ -38,7 +38,6 @@ type stmtKey struct {
 	stmt        string
 	failed      bool
 	distSQLUsed bool
-	optUsed     bool
 	implicitTxn bool
 }
 
@@ -116,9 +115,6 @@ func (s stmtKey) flags() string {
 	if s.distSQLUsed {
 		b.WriteByte('+')
 	}
-	if !s.optUsed {
-		b.WriteByte('-')
-	}
 	return b.String()
 }
 
@@ -129,7 +125,6 @@ func (a *appStats) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
-	optUsed bool,
 	implicitTxn bool,
 	automaticRetryCount int,
 	numRows int,
@@ -146,7 +141,7 @@ func (a *appStats) recordStatement(
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(stmt, distSQLUsed, optUsed, implicitTxn, err, true /* createIfNonexistent */)
+	s := a.getStatsForStmt(stmt, distSQLUsed, implicitTxn, err, true /* createIfNonexistent */)
 
 	// Collect the per-statement statistics.
 	s.Lock()
@@ -177,16 +172,11 @@ func (a *appStats) recordStatement(
 
 // getStatsForStmt retrieves the per-stmt stat object.
 func (a *appStats) getStatsForStmt(
-	stmt *Statement,
-	distSQLUsed bool,
-	optimizerUsed bool,
-	implicitTxn bool,
-	err error,
-	createIfNonexistent bool,
+	stmt *Statement, distSQLUsed bool, implicitTxn bool, err error, createIfNonexistent bool,
 ) *stmtStats {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optimizerUsed, implicitTxn: implicitTxn}
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, implicitTxn: implicitTxn}
 	if stmt.AnonymizedStr != "" {
 		// Use the cached anonymized string.
 		key.stmt = stmt.AnonymizedStr
@@ -249,6 +239,29 @@ func (a *appStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit b
 		return
 	}
 	a.txns.recordTransaction(txnTimeSec, ev, implicit)
+}
+
+// shouldSaveLogicalPlanDescription returns whether we should save this as a
+// sample logical plan for its corresponding fingerprint. We use
+// `logicalPlanCollectionPeriod` to assess how frequently to sample logical
+// plans.
+func (a *appStats) shouldSaveLogicalPlanDescription(
+	stmt *Statement, useDistSQL bool, implicitTxn bool, err error,
+) bool {
+	if !sampleLogicalPlans.Get(&a.st.SV) {
+		return false
+	}
+	stats := a.getStatsForStmt(stmt, useDistSQL, implicitTxn, err, false /* createIfNonexistent */)
+	if stats == nil {
+		// Save logical plan the first time we see new statement fingerprint.
+		return true
+	}
+	now := timeutil.Now()
+	period := logicalPlanCollectionPeriod.Get(&a.st.SV)
+	stats.Lock()
+	defer stats.Unlock()
+	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
+	return now.Sub(timeLastSampled) >= period
 }
 
 // sqlStats carries per-application statistics for all applications.
@@ -413,7 +426,7 @@ func (s *sqlStats) getStmtStats(
 				k := roachpb.StatementStatisticsKey{
 					Query:       maybeScrubbed,
 					DistSQL:     q.distSQLUsed,
-					Opt:         q.optUsed,
+					Opt:         true,
 					ImplicitTxn: q.implicitTxn,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,
