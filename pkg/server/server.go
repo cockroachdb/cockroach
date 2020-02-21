@@ -462,7 +462,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// This function defines how ExternalStorage objects are created.
 	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
 		return cloud.MakeExternalStorage(
-			ctx, dest, st,
+			ctx, dest, s.cfg.ExternalIOConfig, st,
 			blobs.NewBlobClientFactory(
 				s.nodeIDContainer.Get(),
 				s.nodeDialer,
@@ -472,7 +472,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
 		return cloud.ExternalStorageFromURI(
-			ctx, uri, st,
+			ctx, uri, s.cfg.ExternalIOConfig, st,
 			blobs.NewBlobClientFactory(
 				s.nodeIDContainer.Get(),
 				s.nodeDialer,

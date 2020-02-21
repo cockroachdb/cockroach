@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -55,7 +56,10 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 }
 
 func makeS3Storage(
-	ctx context.Context, conf *roachpb.ExternalStorage_S3, settings *cluster.Settings,
+	ctx context.Context,
+	ioConf base.ExternalIOConfig,
+	conf *roachpb.ExternalStorage_S3,
+	settings *cluster.Settings,
 ) (ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
@@ -63,6 +67,10 @@ func makeS3Storage(
 	region := conf.Region
 	config := conf.Keys()
 	if conf.Endpoint != "" {
+		if ioConf.DisableHTTP {
+			return nil, errors.New(
+				"custom endpoints disallowed for s3 due to --external-io-disable-http flag")
+		}
 		config.Endpoint = &conf.Endpoint
 		if conf.Region == "" {
 			region = "default-region"
