@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -540,6 +541,13 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									outputTypes:    outputTypes,
 									pspec:          pspec,
 									forceDiskSpill: spillForced,
+								}
+								if spillForced {
+									// We want to make recursive partitioning more likely, so we
+									// will "limit" the amount of RAM available. External hash
+									// joiner uses this limit to check whether repartitioning is
+									// needed.
+									args.memoryLimit = mon.DefaultPoolAllocationSize
 								}
 								if err := verifyColOperator(args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+

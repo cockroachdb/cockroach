@@ -42,6 +42,7 @@ type verifyColOperatorArgs struct {
 	pspec          *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
 	forceDiskSpill      bool
+	memoryLimit         int64
 	maxNumberPartitions int
 }
 
@@ -77,6 +78,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		},
 	}
 	flowCtx.Cfg.TestingKnobs.ForceDiskSpill = args.forceDiskSpill
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = args.memoryLimit
 
 	inputsProc := make([]execinfra.RowSource, len(args.inputs))
 	inputsColOp := make([]execinfra.RowSource, len(args.inputs))

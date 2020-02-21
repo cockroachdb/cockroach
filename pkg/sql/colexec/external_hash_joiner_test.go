@@ -13,11 +13,13 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,6 +49,14 @@ func TestExternalHashJoiner(t *testing.T) {
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+		if spillForced {
+			// We want to make recursive partitioning more likely, so we will "limit"
+			// the amount of RAM available. External hash joiner uses this limit to
+			// check whether repartitioning is needed.
+			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = mon.DefaultPoolAllocationSize
+		} else {
+			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+		}
 		t.Run(fmt.Sprintf("spillForced=%t", spillForced), func(t *testing.T) {
 			for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
 				for _, tc := range tcs {
@@ -67,6 +77,54 @@ func TestExternalHashJoiner(t *testing.T) {
 		memAccount.Close(ctx)
 	}
 	for _, memMonitor := range memMonitors {
+		memMonitor.Stop(ctx)
+	}
+}
+
+func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg:     &execinfra.ServerConfig{Settings: st},
+	}
+	sourceTypes := []coltypes.T{coltypes.Int64}
+	batch := testAllocator.NewMemBatch(sourceTypes)
+	// We don't need to set the data since zero values in the columns work.
+	batch.SetLength(coldata.BatchSize())
+	nBatches := 10
+	leftSource := newFiniteBatchSource(batch, nBatches)
+	rightSource := newFiniteBatchSource(batch, nBatches)
+	flowCtx.Cfg.TestingKnobs.ForceDiskSpill = true
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = mon.DefaultPoolAllocationSize
+	spec := createSpecForHashJoiner(joinTestCase{
+		joinType:     sqlbase.JoinType_INNER,
+		leftTypes:    sourceTypes,
+		leftOutCols:  []uint32{0},
+		leftEqCols:   []uint32{0},
+		rightTypes:   sourceTypes,
+		rightOutCols: []uint32{0},
+		rightEqCols:  []uint32{0},
+	})
+	var spilled bool
+	hj, accounts, monitors, err := createDiskBackedHashJoiner(
+		ctx, flowCtx, spec, []Operator{leftSource, rightSource}, func() { spilled = true },
+	)
+	require.NoError(t, err)
+	hj.Init()
+	err = execerror.CatchVectorizedRuntimeError(func() {
+		for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+		}
+	})
+	require.True(t, spilled)
+	require.NotNil(t, err)
+	require.True(t, strings.Contains(err.Error(), externalHJFallbackToSortMergeJoinMsg))
+	for _, memAccount := range accounts {
+		memAccount.Close(ctx)
+	}
+	for _, memMonitor := range monitors {
 		memMonitor.Stop(ctx)
 	}
 }
@@ -118,6 +176,11 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 			for _, nBatches := range []int{1 << 2, 1 << 7} {
 				for _, spillForced := range []bool{false, true} {
 					flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+					if spillForced {
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 100 * mon.DefaultPoolAllocationSize
+					} else {
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+					}
 					name := fmt.Sprintf(
 						"nulls=%t/fullOuter=%t/batches=%d/spillForced=%t",
 						hasNulls, fullOuter, nBatches, spillForced)

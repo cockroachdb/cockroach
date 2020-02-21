@@ -550,22 +550,20 @@ func NewColOperator(
 					inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
 					hashJoinerMemMonitorName,
 					func(inputOne, inputTwo Operator) Operator {
-						monitorNamePrefix := "external-hash-joiner-"
-						allocator := NewAllocator(
-							// Pass in the default limit explicitly since we don't want to
-							// use the default memory limit of 1 if ForceDiskSpill is true, to
-							// allow for the external hash join to have a normal amount of
-							// memory (for initialization and internal joining).
-							ctx, result.createBufferingMemAccountWithLimit(
-								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+						monitorNamePrefix := "external-hash-joiner"
+						unlimitedAllocator := NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(
+								ctx, flowCtx, monitorNamePrefix,
 							))
 						diskQueuesUnlimitedAllocator := NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
+								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
 							))
 						return newExternalHashJoiner(
-							allocator, hjSpec,
+							unlimitedAllocator, hjSpec,
 							inputOne, inputTwo,
+							execinfra.GetWorkMemLimit(flowCtx.Cfg),
+							args.DiskQueueCfg.BufferSizeBytes,
 							diskQueuesUnlimitedAllocator,
 						)
 					},
