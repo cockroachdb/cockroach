@@ -33,5 +33,6 @@ export class Duration extends React.PureComponent<{ job: Job }> {
     } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED)) {
       return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
     }
+    return null;
   }
 }
