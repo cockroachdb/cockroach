@@ -99,7 +99,7 @@ export const renamedStatuses = (status: string) => {
     case JOB_STATUS_CANCELED:
       return "Import failed";
     default:
-      return status;
+      return _.capitalize(status);
   }
 };
 
