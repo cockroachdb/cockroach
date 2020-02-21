@@ -263,12 +263,6 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	MetaSQLOpt = metric.Metadata{
-		Name:        "sql.optimizer.count",
-		Help:        "Number of statements which ran with the cost-based optimizer",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
 	MetaSQLOptFallback = metric.Metadata{
 		Name:        "sql.optimizer.fallback.count",
 		Help:        "Number of statements which the cost-based optimizer was unable to plan",
@@ -1968,7 +1962,6 @@ func (s *sqlStatsCollector) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
-	optUsed bool,
 	implicitTxn bool,
 	automaticRetryCount int,
 	numRows int,
@@ -1977,7 +1970,7 @@ func (s *sqlStatsCollector) recordStatement(
 	bytesRead, rowsRead int64,
 ) {
 	s.appStats.recordStatement(
-		stmt, samplePlanDescription, distSQLUsed, optUsed, implicitTxn, automaticRetryCount, numRows, err,
+		stmt, samplePlanDescription, distSQLUsed, implicitTxn, automaticRetryCount, numRows, err,
 		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 

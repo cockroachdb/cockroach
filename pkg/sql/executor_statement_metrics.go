@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -67,8 +66,6 @@ type phaseTimes [sessionNumPhases]time.Time
 type EngineMetrics struct {
 	// The subset of SELECTs that are processed through DistSQL.
 	DistSQLSelectCount *metric.Counter
-	// The subset of queries that are processed by the cost-based optimizer.
-	SQLOptCount *metric.Counter
 	// The subset of queries which we attempted and failed to plan with the
 	// cost-based optimizer.
 	SQLOptFallbackCount   *metric.Counter
@@ -95,21 +92,6 @@ var _ metric.Struct = EngineMetrics{}
 
 // MetricStruct is part of the metric.Struct interface.
 func (EngineMetrics) MetricStruct() {}
-
-func (ex *connExecutor) maybeSavePlan(
-	ctx context.Context, p *planner,
-) *roachpb.ExplainTreePlanNode {
-	if ex.saveLogicalPlanDescription(
-		p.stmt,
-		p.curPlan.flags.IsSet(planFlagDistributed),
-		p.curPlan.flags.IsSet(planFlagOptUsed),
-		p.curPlan.flags.IsSet(planFlagImplicitTxn),
-		p.curPlan.execErr) {
-		// If statement plan sample is requested, collect a sample.
-		return planToTree(ctx, &p.curPlan)
-	}
-	return nil
-}
 
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
@@ -168,8 +150,8 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	ex.statsCollector.recordStatement(
-		stmt, planner.curPlan.savedPlanForStats,
-		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed), flags.IsSet(planFlagImplicitTxn),
+		stmt, planner.curPlan.instrumentation.savedPlanForStats,
+		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagImplicitTxn),
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, bytesRead, rowsRead,
 	)
@@ -198,9 +180,6 @@ func (ex *connExecutor) recordStatementSummary(
 
 func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	m := &ex.metrics.EngineMetrics
-	if planFlags.IsSet(planFlagOptUsed) {
-		m.SQLOptCount.Inc(1)
-	}
 
 	if planFlags.IsSet(planFlagOptCacheHit) {
 		m.SQLOptPlanCacheHits.Inc(1)

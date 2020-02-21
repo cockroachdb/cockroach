@@ -37,8 +37,6 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //  - Types
 //  - AnonymizedStr
 //  - Memo (for reuse during exec, if appropriate).
-//
-// On success, the returned flags always have planFlagOptUsed set.
 func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) {
 	stmt := p.stmt
 
@@ -151,8 +149,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 }
 
 // makeOptimizerPlan generates a plan using the cost-based optimizer.
-// On success, it populates p.curPlan (and the flags always have
-// planFlagOptUsed set).
+// On success, it populates p.curPlan.
 func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	stmt := p.stmt
 
@@ -173,7 +170,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	result := plan.(*planTop)
-	result.AST = stmt.AST
+	result.stmt = stmt
 	result.flags = opc.flags
 
 	cols := planColumns(result.plan)
@@ -221,7 +218,7 @@ func (opc *optPlanningCtx) reset() {
 	p := opc.p
 	opc.catalog.reset()
 	opc.optimizer.Init(p.EvalContext(), &opc.catalog)
-	opc.flags = planFlagOptUsed
+	opc.flags = 0
 
 	// We only allow memo caching for SELECT/INSERT/UPDATE/DELETE. We could
 	// support it for all statements in principle, but it would increase the
