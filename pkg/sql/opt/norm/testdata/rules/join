@@ -67,7 +67,7 @@ left-join (hash)
 # --------------------------------------------------
 
 norm expect=DetectJoinContradiction
-SELECT * FROM a INNER JOIN b ON k IN ()
+SELECT * FROM a INNER JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
 values
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) x:6(int!null) y:7(int!null)
@@ -76,7 +76,7 @@ values
  └── fd: ()-->(1-7)
 
 norm expect=DetectJoinContradiction
-SELECT * FROM a LEFT JOIN b ON i=5 AND k IN () AND s='foo'
+SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
 left-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
@@ -94,7 +94,7 @@ left-join (cross)
  └── filters (true)
 
 norm expect=DetectJoinContradiction
-SELECT * FROM a FULL JOIN b ON i=5 AND k IN () AND s='foo'
+SELECT * FROM a FULL JOIN b ON i=5 AND ((k<1 AND k>2) OR (k<4 AND k>5)) AND s='foo'
 ----
 full-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
