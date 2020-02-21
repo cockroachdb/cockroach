@@ -21,5 +21,5 @@ run ok
 with t=B
   get k=a inconsistent
 ----
-get: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} PENDING
+get: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0}
 get: "a" -> <no data>

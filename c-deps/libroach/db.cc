@@ -573,8 +573,8 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
         // target key space, which will require appropriate resolution logic.
         cockroach::roachpb::WriteIntentError err;
         cockroach::roachpb::Intent* intent = err.add_intents();
-        intent->mutable_span()->set_key(existingIter->rep->key().data(),
-                                        existingIter->rep->key().size());
+        intent->mutable_single_key_span()->set_key(existingIter->rep->key().data(),
+                                                   existingIter->rep->key().size());
         intent->mutable_txn()->CopyFrom(meta.txn());
 
         *write_intent = ToDBString(err.SerializeAsString());

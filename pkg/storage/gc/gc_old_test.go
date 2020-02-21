@@ -82,7 +82,7 @@ func runGCOld(
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
-	intentSpanMap := map[uuid.UUID][]roachpb.Span{}
+	intentKeyMap := map[uuid.UUID][]roachpb.Key{}
 
 	// processKeysAndValues is invoked with each key and its set of
 	// values. Intents older than the intent age threshold are sent for
@@ -119,7 +119,7 @@ func runGCOld(
 							info.PushTxn++
 						}
 						info.IntentsConsidered++
-						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
+						intentKeyMap[txnID] = append(intentKeyMap[txnID], expBaseKey)
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
 					startIdx = 2
@@ -237,7 +237,7 @@ func runGCOld(
 	// Push transactions (if pending) and resolve intents.
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
-		intents = append(intents, roachpb.AsIntents(intentSpanMap[txnID], txn)...)
+		intents = append(intents, roachpb.AsIntents(&txn.TxnMeta, intentKeyMap[txnID])...)
 	}
 	info.ResolveTotal += len(intents)
 	log.Eventf(ctx, "cleanup of %d intents", len(intents))

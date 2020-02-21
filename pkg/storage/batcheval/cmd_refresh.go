@@ -72,7 +72,7 @@ func Refresh(
 	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
-			intent.Span.Key, intent.Txn.WriteTimestamp)
+			intent.Key, intent.Txn.WriteTimestamp)
 	}
 
 	return result.Result{}, nil

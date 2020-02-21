@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/gc"
@@ -567,7 +568,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			now, thresh, policy,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
-			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
+			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.LockUpdate) error { return nil },
 		)
 		if err != nil {
 			return err
@@ -1131,8 +1132,13 @@ func removeDeadReplicas(
 			if err := engine.MVCCDelete(ctx, batch, &ms, txnKey, hlc.Timestamp{}, nil); err != nil {
 				return nil, err
 			}
-			intent.Status = roachpb.ABORTED
-			if _, err := engine.MVCCResolveWriteIntent(ctx, batch, &ms, intent); err != nil {
+			update := roachpb.LockUpdate{
+				Span:       roachpb.Span{Key: intent.Key},
+				Txn:        intent.Txn,
+				Status:     roachpb.ABORTED,
+				Durability: lock.Replicated,
+			}
+			if _, err := engine.MVCCResolveWriteIntent(ctx, batch, &ms, update); err != nil {
 				return nil, err
 			}
 			// With the intent resolved, we can try again.

@@ -44,10 +44,12 @@ add_library(roach
   sst_dump.cc
   table_props.cc
   utils.cc
+  protos/roachpb/api.pb.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/errors.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
+  protos/storage/concurrency/lock/locking.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
   protos/storage/engine/enginepb/mvcc3.pb.cc
   protos/storage/engine/enginepb/file_registry.pb.cc
@@ -55,9 +57,8 @@ add_library(roach
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
   protos/util/log/log.pb.cc
-  protos/util/unresolved_addr.pb.cc
-  protos/roachpb/api.pb.cc
   protos/util/tracing/recorded_span.pb.cc
+  protos/util/unresolved_addr.pb.cc
   rocksdbutils/env_encryption.cc
 )
 target_include_directories(roach
