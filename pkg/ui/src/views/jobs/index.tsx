@@ -8,28 +8,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import moment from "moment";
 import React from "react";
-import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import {Helmet} from "react-helmet";
+import {connect} from "react-redux";
+import {withRouter} from "react-router-dom";
 
-import { cockroach } from "src/js/protos";
-import { jobsKey, refreshJobs } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import {cockroach} from "src/js/protos";
+import {jobsKey, refreshJobs} from "src/redux/apiReducers";
+import {CachedDataReducerState} from "src/redux/cachedDataReducer";
+import {LocalSetting} from "src/redux/localsettings";
+import {AdminUIState} from "src/redux/state";
+import Dropdown, {DropdownOption} from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
-import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
-import { SortSetting } from "src/views/shared/components/sortabletable";
+import {PageConfig, PageConfigItem} from "src/views/shared/components/pageconfig";
+import {SortSetting} from "src/views/shared/components/sortabletable";
 import "./index.styl";
 import {statusOptions} from "./jobStatusOptions";
+import {JobTable} from "oss/src/views/jobs/jobTable";
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import {JobTable} from "oss/src/views/jobs/jobTable";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting", s => s.localSettings, statusOptions[0].value,
@@ -71,19 +70,6 @@ export const JOB_STATUS_CANCELED = "canceled";
 export const JOB_STATUS_PENDING = "pending";
 export const JOB_STATUS_PAUSED = "paused";
 export const JOB_STATUS_RUNNING = "running";
-
-export const renamedStatuses = (status: string) => {
-  switch (status) {
-    case JOB_STATUS_SUCCEEDED:
-      return "Completed";
-    case JOB_STATUS_FAILED:
-      return "Import failed";
-    case JOB_STATUS_CANCELED:
-      return "Import failed";
-    default:
-      return _.capitalize(status);
-  }
-};
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "jobs/sort_setting",
