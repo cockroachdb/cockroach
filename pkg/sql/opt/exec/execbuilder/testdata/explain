@@ -976,15 +976,15 @@ sort
       │    └── filters
       │         └── gt [type=bool, outer=(1,2)]
       │              ├── plus [type=int]
-      │              │    ├── variable: a [type=int]
+      │              │    ├── variable: a:1 [type=int]
       │              │    └── mult [type=int]
-      │              │         ├── variable: b [type=int]
+      │              │         ├── variable: b:2 [type=int]
       │              │         └── const: 2 [type=int]
       │              └── const: 1 [type=int]
       └── projections
-           └── mult [type=int, outer=(1,2)]
-                ├── variable: a [type=int]
-                └── variable: b [type=int]
+           └── mult [type=int, outer=(1,2)] [projected as column4:4]
+                ├── variable: a:1 [type=int]
+                └── variable: b:2 [type=int]
 
 query TTT colnames
 EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)

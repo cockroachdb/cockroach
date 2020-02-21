@@ -49,6 +49,6 @@ project
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
  └── projections
-      └── plus [type=int, outer=(1)]
-           ├── variable: x [type=int]
+      └── plus [type=int, outer=(1)] [projected as y:2]
+           ├── variable: x:1 [type=int]
            └── const: 10 [type=int]

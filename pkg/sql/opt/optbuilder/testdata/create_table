@@ -12,16 +12,16 @@ CREATE TABLE ab (a, b) AS SELECT 1, 2
 create-table
  ├── CREATE TABLE ab (a, b) AS SELECT 1, 2
  └── project
-      ├── columns: rowid:3(int) "?column?":1(int!null) "?column?":2(int!null)
+      ├── columns: rowid:3 "?column?":1!null "?column?":2!null
       ├── project
-      │    ├── columns: "?column?":1(int!null) "?column?":2(int!null)
+      │    ├── columns: "?column?":1!null "?column?":2!null
       │    ├── values
-      │    │    └── tuple [type=tuple]
+      │    │    └── tuple
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
+      │         ├── const: 1 [projected as "?column?":1]
+      │         └── const: 2 [projected as "?column?":2]
       └── projections
-           └── function: unique_rowid [type=int]
+           └── unique_rowid()
 
 # Ensure that constraints are hoisted.
 build

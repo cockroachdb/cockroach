@@ -96,7 +96,7 @@ limit
                 │    ├── key: ()
                 │    └── tuple [type=tuple]
                 └── projections
-                     └── const: 5 [type=int]
+                     └── const: 5 [type=int] [projected as c:5]
 
 build
 SELECT * FROM (SELECT * FROM a ORDER BY s LIMIT 5) WHERE s = 'foo'

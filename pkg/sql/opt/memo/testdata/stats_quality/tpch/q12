@@ -103,10 +103,10 @@ sort
       │         ├── CASE WHEN (o_orderpriority = '1-URGENT') OR (o_orderpriority = '2-HIGH') THEN 1 ELSE 0 END [type=int, outer=(6)]
       │         └── CASE WHEN (o_orderpriority != '1-URGENT') AND (o_orderpriority != '2-HIGH') THEN 1 ELSE 0 END [type=int, outer=(6)]
       └── aggregations
-           ├── sum [type=decimal, outer=(26)]
-           │    └── variable: column26 [type=int]
-           └── sum [type=decimal, outer=(28)]
-                └── variable: column28 [type=int]
+           ├── sum [type=decimal, outer=(26)] [aggregated as sum:27]
+           │    └── variable: column26:26 [type=int]
+           └── sum [type=decimal, outer=(28)] [aggregated as sum:29]
+                └── variable: column28:28 [type=int]
 
 stats table=q12_sort_1
 ----

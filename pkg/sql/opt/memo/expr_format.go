@@ -76,6 +76,9 @@ const (
 	// expressions.
 	ExprFmtHideTypes
 
+	// ExprFmtHideNotNull hides the !null specifier from columns.
+	ExprFmtHideNotNull
+
 	// ExprFmtHideColumns removes column information.
 	ExprFmtHideColumns
 
@@ -720,26 +723,50 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 	// Don't show scalar-list, as it's redundant with its parent.
 	if scalar.Op() != opt.ScalarListOp {
 		f.Buffer.Reset()
-		propsExpr := scalar
 		switch scalar.Op() {
 		case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp,
-			opt.ZipItemOp:
+			opt.ZipItemOp, opt.WindowsItemOp:
 			// Use properties from the item, but otherwise omit it from output.
-			scalar = scalar.Child(0).(opt.ScalarExpr)
-		case opt.WindowsItemOp:
-			// Only show this if the frame differs from the default.
-			frame := scalar.Private().(*WindowsItemPrivate).Frame
-			if frame.Mode == tree.RANGE &&
-				frame.StartBoundType == tree.UnboundedPreceding &&
-				frame.EndBoundType == tree.CurrentRow &&
-				frame.FrameExclusion == tree.NoExclusion {
-				scalar = scalar.Child(0).(opt.ScalarExpr)
+			child := scalar.Child(0).(opt.ScalarExpr)
+
+			fmt.Fprintf(f.Buffer, "%v", child.Op())
+			f.formatScalarPrivate(child)
+			f.FormatScalarProps(scalar)
+
+			var extraInfoStr string
+			switch scalar.Op() {
+			case opt.ProjectionsItemOp:
+				extraInfoStr = "projected as"
+			case opt.AggregationsItemOp:
+				extraInfoStr = "aggregated as"
+			case opt.ZipItemOp:
+				extraInfoStr = "columns:"
+			case opt.WindowsItemOp:
+				// Only show the frame if it differs from the default.
+				def := WindowFrame{
+					Mode:           tree.RANGE,
+					StartBoundType: tree.UnboundedPreceding,
+					EndBoundType:   tree.CurrentRow,
+					FrameExclusion: tree.NoExclusion,
+				}
+				if scalar.Private().(*WindowsItemPrivate).Frame != def {
+					extraInfoStr = "frame:"
+				}
 			}
+			if extraInfoStr != "" {
+				fmt.Fprintf(f.Buffer, " [%s", extraInfoStr)
+				FormatPrivate(f, scalar.Private(), &physical.Required{})
+				f.Buffer.WriteByte(']')
+			}
+
+			scalar = child
+
+		default:
+			fmt.Fprintf(f.Buffer, "%v", scalar.Op())
+			f.formatScalarPrivate(scalar)
+			f.FormatScalarProps(scalar)
 		}
 
-		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
-		f.formatScalarPrivate(scalar)
-		f.FormatScalarProps(propsExpr)
 		tp = tp.Child(f.Buffer.String())
 	}
 
@@ -820,6 +847,7 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 		private = nil
 
 	case *ProjectionsExpr, *AggregationsExpr:
+		// XXX
 		// The private data of these ops was already used to print the output
 		// columns for their containing op (Project or GroupBy), so no need to
 		// print again.
@@ -984,10 +1012,10 @@ func (f *ExprFmtCtx) formatMutationCommon(tp treeprinter.Node, p *MutationPrivat
 // If a label is given, then it is used. Otherwise, a "best effort" label is
 // used from query metadata.
 //
-// If omitType is true, then the type specifier (including not nullable) is
-// omitted from the output.
+// If omitTypeAndNotNull is true, then the type/!null specifier is omitted from
+// the output.
 func formatCol(
-	f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.ColSet, omitType bool,
+	f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.ColSet, omitTypeAndNotNull bool,
 ) {
 	md := f.Memo.metadata
 	colMeta := md.ColumnMeta(id)
@@ -1006,14 +1034,19 @@ func formatCol(
 	f.Buffer.WriteString(label)
 	f.Buffer.WriteByte(':')
 	fmt.Fprintf(f.Buffer, "%d", id)
-	if !f.HasFlags(ExprFmtHideTypes) && !omitType {
-		f.Buffer.WriteByte('(')
-		f.Buffer.WriteString(colMeta.Type.String())
-
-		if notNullCols.Contains(id) {
+	if !omitTypeAndNotNull && !f.HasFlags(ExprFmtHideTypes|ExprFmtHideNotNull) {
+		parenOpen := false
+		if !f.HasFlags(ExprFmtHideTypes) {
+			f.Buffer.WriteByte('(')
+			parenOpen = true
+			f.Buffer.WriteString(colMeta.Type.String())
+		}
+		if !f.HasFlags(ExprFmtHideNotNull) && notNullCols.Contains(id) {
 			f.Buffer.WriteString("!null")
 		}
-		f.Buffer.WriteByte(')')
+		if parenOpen {
+			f.Buffer.WriteByte(')')
+		}
 	}
 }
 
@@ -1053,12 +1086,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	}
 	switch t := private.(type) {
 	case *opt.ColumnID:
-		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		if f.Memo != nil {
-			label := f.Memo.metadata.QualifiedAlias(*t, fullyQualify, f.Catalog)
-			fmt.Fprintf(f.Buffer, " %s", label)
-		} else {
-			fmt.Fprintf(f.Buffer, " unknown%d", *t)
+		formatCol(f, "" /* label */, *t, opt.ColSet{} /* notNullCols */, true /* omitType */)
+
+	case *opt.ColList:
+		for _, col := range *t {
+			formatCol(f, "" /* label */, col, opt.ColSet{} /* notNullCols */, true /* omitType */)
 		}
 
 	case *TupleOrdinal:
@@ -1191,7 +1223,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 
-	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, *types.T, *ExportPrivate:
+	case *ExplainPrivate, *opt.ColSet /*, *opt.ColList*/, *SetPrivate, *types.T, *ExportPrivate:
 		// Don't show anything, because it's mostly redundant.
 
 	default:

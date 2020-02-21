@@ -96,7 +96,7 @@ sort
       │    └── filters
       │         └── l_orderkey = o_orderkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:26]
 
 stats table=q4_sort_1
 ----

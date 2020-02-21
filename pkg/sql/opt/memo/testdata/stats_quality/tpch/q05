@@ -169,8 +169,8 @@ sort
       │    └── projections
       │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
       └── aggregations
-           └── sum [type=float, outer=(48)]
-                └── variable: column48 [type=float]
+           └── sum [type=float, outer=(48)] [aggregated as sum:49]
+                └── variable: column48:48 [type=float]
 
 stats table=q5_sort_1
 ----

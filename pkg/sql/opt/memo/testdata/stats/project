@@ -79,7 +79,7 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:5]
 
 # Test that the stats are calculated correctly for synthesized columns.
 build
@@ -272,5 +272,5 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── projections
-      ├── null [type=unknown]
+      ├── null [type=unknown] [projected as "?column?":5]
       └── CASE x WHEN y THEN NULL ELSE x END [type=int, outer=(1,2)]

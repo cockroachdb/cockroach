@@ -58,7 +58,7 @@ scan abcdef
       ├── d:4
       │    └── (b + c) + 1
       └── e:5
-           └── variable: a
+           └── variable: a:1
 
 statement ok
 CREATE TABLE uvwxy (

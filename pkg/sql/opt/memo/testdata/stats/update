@@ -71,7 +71,7 @@ with &1
  │         │    └── filters
  │         │         └── xyz.z = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
  │         └── projections
- │              └── const: 5 [type=int]
+ │              └── const: 5 [type=int] [projected as column7:7]
  └── select
       ├── columns: x:8(string!null) y:9(int!null) z:10(float!null)
       ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0]
@@ -122,4 +122,4 @@ update xyz
       │    └── filters
       │         └── false [type=bool]
       └── projections
-           └── const: 'foo' [type=string]
+           └── const: 'foo' [type=string] [projected as column7:7]

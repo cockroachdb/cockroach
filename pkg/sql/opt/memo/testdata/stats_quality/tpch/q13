@@ -90,10 +90,10 @@ sort
       │    │    └── filters
       │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    └── aggregations
-      │         └── count [type=int, outer=(9)]
-      │              └── variable: o_orderkey [type=int]
+      │         └── count [type=int, outer=(9)] [aggregated as count:18]
+      │              └── variable: o_orderkey:9 [type=int]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:19]
 
 stats table=q13_sort_1
 ----

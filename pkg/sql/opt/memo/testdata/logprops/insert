@@ -66,15 +66,15 @@ insert abcde
       │    │    │              └── interesting orderings: (+7)
       │    │    └── const: 10 [type=int]
       │    └── projections
-      │         ├── const: 10 [type=int]
-      │         ├── function: unique_rowid [type=int, side-effects]
-      │         └── cast: INT8 [type=int]
+      │         ├── const: 10 [type=int] [projected as column10:10]
+      │         ├── function: unique_rowid [type=int, side-effects] [projected as column11:11]
+      │         └── cast: INT8 [type=int] [projected as column12:12]
       │              └── null [type=unknown]
       └── projections
-           └── plus [type=int, outer=(8,10)]
+           └── plus [type=int, outer=(8,10)] [projected as column13:13]
                 ├── plus [type=int]
-                │    ├── variable: y [type=int]
-                │    └── variable: column10 [type=int]
+                │    ├── variable: y:8 [type=int]
+                │    └── variable: column10:10 [type=int]
                 └── const: 1 [type=int]
 
 # Properties with RETURNING clause.
@@ -134,15 +134,15 @@ project
            │    │    │              └── interesting orderings: (+7)
            │    │    └── const: 10 [type=int]
            │    └── projections
-           │         ├── const: 10 [type=int]
-           │         ├── function: unique_rowid [type=int, side-effects]
-           │         └── cast: INT8 [type=int]
+           │         ├── const: 10 [type=int] [projected as column10:10]
+           │         ├── function: unique_rowid [type=int, side-effects] [projected as column11:11]
+           │         └── cast: INT8 [type=int] [projected as column12:12]
            │              └── null [type=unknown]
            └── projections
-                └── plus [type=int, outer=(8,10)]
+                └── plus [type=int, outer=(8,10)] [projected as column13:13]
                      ├── plus [type=int]
-                     │    ├── variable: y [type=int]
-                     │    └── variable: column10 [type=int]
+                     │    ├── variable: y:8 [type=int]
+                     │    └── variable: column10:10 [type=int]
                      └── const: 1 [type=int]
 
 # Properties with RETURNING clause.
@@ -185,15 +185,15 @@ project
            │    │         ├── prune: (7-9)
            │    │         └── interesting orderings: (+7)
            │    └── projections
-           │         ├── const: 10 [type=int]
-           │         ├── function: unique_rowid [type=int, side-effects]
-           │         └── cast: INT8 [type=int]
+           │         ├── const: 10 [type=int] [projected as column10:10]
+           │         ├── function: unique_rowid [type=int, side-effects] [projected as column11:11]
+           │         └── cast: INT8 [type=int] [projected as column12:12]
            │              └── null [type=unknown]
            └── projections
-                └── plus [type=int, outer=(8,10)]
+                └── plus [type=int, outer=(8,10)] [projected as column13:13]
                      ├── plus [type=int]
-                     │    ├── variable: y [type=int]
-                     │    └── variable: column10 [type=int]
+                     │    ├── variable: y:8 [type=int]
+                     │    └── variable: column10:10 [type=int]
                      └── const: 1 [type=int]
 
 # Input is cardinality 1 VALUES expression.
@@ -237,15 +237,15 @@ insert abcde
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
       │    └── projections
-      │         ├── const: 10 [type=int]
-      │         ├── function: unique_rowid [type=int, side-effects]
-      │         └── cast: INT8 [type=int]
+      │         ├── const: 10 [type=int] [projected as column9:9]
+      │         ├── function: unique_rowid [type=int, side-effects] [projected as column10:10]
+      │         └── cast: INT8 [type=int] [projected as column11:11]
       │              └── null [type=unknown]
       └── projections
-           └── plus [type=int, outer=(8,9)]
+           └── plus [type=int, outer=(8,9)] [projected as column12:12]
                 ├── plus [type=int]
-                │    ├── variable: column2 [type=int]
-                │    └── variable: column9 [type=int]
+                │    ├── variable: column2:8 [type=int]
+                │    └── variable: column9:9 [type=int]
                 └── const: 1 [type=int]
 
 # Filter FD set.
@@ -296,21 +296,21 @@ project
            │    │    │    │    └── interesting orderings: (+7)
            │    │    │    └── filters
            │    │    │         └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
-           │    │    │              ├── variable: y [type=int]
+           │    │    │              ├── variable: y:8 [type=int]
            │    │    │              └── const: 1 [type=int]
            │    │    └── projections
-           │    │         └── cast: INT8 [type=int, outer=(9)]
+           │    │         └── cast: INT8 [type=int, outer=(9)] [projected as int8:10]
            │    │              └── plus [type=float]
-           │    │                   ├── variable: z [type=float]
+           │    │                   ├── variable: z:9 [type=float]
            │    │                   └── const: 1.0 [type=float]
            │    └── projections
-           │         ├── const: 10 [type=int]
-           │         ├── function: unique_rowid [type=int, side-effects]
-           │         └── cast: INT8 [type=int]
+           │         ├── const: 10 [type=int] [projected as column11:11]
+           │         ├── function: unique_rowid [type=int, side-effects] [projected as column12:12]
+           │         └── cast: INT8 [type=int] [projected as column13:13]
            │              └── null [type=unknown]
            └── projections
-                └── plus [type=int, outer=(10,11)]
+                └── plus [type=int, outer=(10,11)] [projected as column14:14]
                      ├── plus [type=int]
-                     │    ├── variable: int8 [type=int]
-                     │    └── variable: column11 [type=int]
+                     │    ├── variable: int8:10 [type=int]
+                     │    └── variable: column11:11 [type=int]
                      └── const: 1 [type=int]

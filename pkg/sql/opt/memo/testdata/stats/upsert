@@ -110,7 +110,7 @@ with &1
  │         │    │    └── filters
  │         │    │         └── b = xyz.x [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
  │         │    └── projections
- │         │         └── const: 5 [type=int]
+ │         │         └── const: 5 [type=int] [projected as column12:12]
  │         └── projections
  │              ├── CASE WHEN xyz.x IS NULL THEN b ELSE xyz.x END [type=string, outer=(5,9)]
  │              ├── CASE WHEN xyz.x IS NULL THEN a ELSE column12 END [type=int, outer=(4,9,12)]

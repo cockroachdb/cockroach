@@ -244,10 +244,10 @@ sort
       │    │    └── projections
       │    │         └── CASE WHEN n2.n_name = 'BRAZIL' THEN volume ELSE 0.0 END [type=float, outer=(55,62)]
       │    └── aggregations
-      │         ├── sum [type=float, outer=(63)]
-      │         │    └── variable: column63 [type=float]
-      │         └── sum [type=float, outer=(62)]
-      │              └── variable: volume [type=float]
+      │         ├── sum [type=float, outer=(63)] [aggregated as sum:64]
+      │         │    └── variable: column63:63 [type=float]
+      │         └── sum [type=float, outer=(62)] [aggregated as sum:65]
+      │              └── variable: volume:62 [type=float]
       └── projections
            └── sum / sum [type=float, outer=(64,65), side-effects]
 

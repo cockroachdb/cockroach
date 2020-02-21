@@ -111,11 +111,11 @@ sort
       │    │    └── projections
       │    │         └── ps_supplycost * ps_availqty::FLOAT8 [type=float, outer=(3,4)]
       │    └── aggregations
-      │         └── sum [type=float, outer=(17)]
-      │              └── variable: column17 [type=float]
+      │         └── sum [type=float, outer=(17)] [aggregated as sum:18]
+      │              └── variable: column17:17 [type=float]
       └── filters
            └── gt [type=bool, outer=(18), subquery, constraints=(/18: (/NULL - ])]
-                ├── variable: sum [type=float]
+                ├── variable: sum:18 [type=float]
                 └── subquery [type=float]
                      └── project
                           ├── save-table-name: q11_project_10
@@ -178,8 +178,8 @@ sort
                           │    │    └── projections
                           │    │         └── ps_supplycost * ps_availqty::FLOAT8 [type=float, outer=(21,22)]
                           │    └── aggregations
-                          │         └── sum [type=float, outer=(35)]
-                          │              └── variable: column35 [type=float]
+                          │         └── sum [type=float, outer=(35)] [aggregated as sum:36]
+                          │              └── variable: column35:35 [type=float]
                           └── projections
                                └── sum * 0.0001 [type=float, outer=(36)]
 

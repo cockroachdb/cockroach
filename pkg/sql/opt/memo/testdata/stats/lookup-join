@@ -413,7 +413,7 @@ inner-join (lookup wxyz)
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
  │    │    └── projections
- │    │         └── const: 10 [type=int]
+ │    │         └── const: 10 [type=int] [projected as "project_const_col_@6":9]
  │    └── filters (true)
  └── filters (true)
 

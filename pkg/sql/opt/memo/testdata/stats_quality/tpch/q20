@@ -154,10 +154,10 @@ sort
            │    │              │    │    │         ├── l_partkey = ps_partkey [type=bool, outer=(12,27), constraints=(/12: (/NULL - ]; /27: (/NULL - ]), fd=(12)==(27), (27)==(12)]
            │    │              │    │    │         └── l_suppkey = ps_suppkey [type=bool, outer=(13,28), constraints=(/13: (/NULL - ]; /28: (/NULL - ]), fd=(13)==(28), (28)==(13)]
            │    │              │    │    └── aggregations
-           │    │              │    │         ├── sum [type=float, outer=(30)]
-           │    │              │    │         │    └── variable: l_quantity [type=float]
-           │    │              │    │         └── const-agg [type=int, outer=(14)]
-           │    │              │    │              └── variable: ps_availqty [type=int]
+           │    │              │    │         ├── sum [type=float, outer=(30)] [aggregated as sum:42]
+           │    │              │    │         │    └── variable: l_quantity:30 [type=float]
+           │    │              │    │         └── const-agg [type=int, outer=(14)] [aggregated as ps_availqty:14]
+           │    │              │    │              └── variable: ps_availqty:14 [type=int]
            │    │              │    └── filters
            │    │              │         └── ps_availqty > (sum * 0.5) [type=bool, outer=(14,42), constraints=(/14: (/NULL - ])]
            │    │              ├── select

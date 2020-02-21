@@ -105,8 +105,8 @@ scalar-group-by
  │    └── projections
  │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(6,7)]
  └── aggregations
-      └── sum [type=float, outer=(26)]
-           └── variable: column26 [type=float]
+      └── sum [type=float, outer=(26)] [aggregated as sum:27]
+           └── variable: column26:26 [type=float]
 
 stats table=q19_scalar_group_by_1
 ----

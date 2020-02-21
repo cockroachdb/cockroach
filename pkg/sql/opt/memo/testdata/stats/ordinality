@@ -76,7 +76,7 @@ project
  │    └── scan a
  │         └── stats: [rows=4000]
  └── projections
-      └── const: 1 [type=int]
+      └── const: 1 [type=int] [projected as x:4]
 
 norm
 SELECT x FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinality <= 10

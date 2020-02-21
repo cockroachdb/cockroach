@@ -16,7 +16,7 @@ explain
       │    ├── key: ()
       │    └── tuple [type=tuple]
       └── projections
-           └── const: 1 [type=int]
+           └── const: 1 [type=int] [projected as "?column?":1]
 
 build
 SHOW TRACE FOR SESSION

@@ -120,16 +120,16 @@ project
  │    │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    └── aggregations
- │    │    │    │    │         └── avg [type=float, outer=(30)]
- │    │    │    │    │              └── variable: l_quantity [type=float]
+ │    │    │    │    │         └── avg [type=float, outer=(30)] [aggregated as avg:42]
+ │    │    │    │    │              └── variable: l_quantity:30 [type=float]
  │    │    │    │    └── projections
  │    │    │    │         └── avg * 0.2 [type=float, outer=(42)]
  │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── l_quantity < ?column? [type=bool, outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]
  │    └── aggregations
- │         └── sum [type=float, outer=(6)]
- │              └── variable: l_extendedprice [type=float]
+ │         └── sum [type=float, outer=(6)] [aggregated as sum:44]
+ │              └── variable: l_extendedprice:6 [type=float]
  └── projections
       └── sum / 7.0 [type=float, outer=(44), side-effects]
 

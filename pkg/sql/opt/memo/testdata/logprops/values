@@ -70,7 +70,7 @@ project
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── projections
-      └── subquery [type=int, outer=(1,2), correlated-subquery]
+      └── subquery [type=int, outer=(1,2), correlated-subquery] [projected as column1:4]
            └── max1-row
                 ├── columns: column1:3(int)
                 ├── outer: (1,2)
@@ -83,10 +83,10 @@ project
                      ├── cardinality: [2 - 2]
                      ├── prune: (3)
                      ├── tuple [type=tuple{int}]
-                     │    └── variable: x [type=int]
+                     │    └── variable: x:1 [type=int]
                      └── tuple [type=tuple{int}]
                           └── plus [type=int]
-                               ├── variable: y [type=int]
+                               ├── variable: y:2 [type=int]
                                └── const: 1 [type=int]
 
 # Single row.

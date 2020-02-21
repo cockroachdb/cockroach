@@ -38,7 +38,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── filters
-      └── variable: b [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+      └── variable: b:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -128,9 +128,9 @@ group-by
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      ├── count-rows [type=int]
-      └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int]
+      ├── count-rows [type=int] [aggregated as count_rows:6]
+      └── const-agg [type=int, outer=(2)] [aggregated as y:2]
+           └── variable: y:2 [type=int]
 
 # Test calculation of multi-column stats.
 opt
@@ -583,9 +583,9 @@ project
  │    │    └── projections
  │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h, tab1.e, tab0.f, tab0.e::STRING), tab1.f, '') THEN true ELSE false END [type=bool, outer=(5,6,8,16,17)]
  │    └── filters
- │         └── variable: col1 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
+ │         └── variable: col1:25 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
  └── projections
-      └── const: 1 [type=int]
+      └── const: 1 [type=int] [projected as "?column?":26]
 
 # ---------------------
 # Tests with Histograms

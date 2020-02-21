@@ -126,12 +126,12 @@ limit
  │         │    └── projections
  │         │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
  │         └── aggregations
- │              ├── sum [type=float, outer=(34)]
- │              │    └── variable: column34 [type=float]
- │              ├── const-agg [type=date, outer=(13)]
- │              │    └── variable: o_orderdate [type=date]
- │              └── const-agg [type=int, outer=(16)]
- │                   └── variable: o_shippriority [type=int]
+ │              ├── sum [type=float, outer=(34)] [aggregated as sum:35]
+ │              │    └── variable: column34:34 [type=float]
+ │              ├── const-agg [type=date, outer=(13)] [aggregated as o_orderdate:13]
+ │              │    └── variable: o_orderdate:13 [type=date]
+ │              └── const-agg [type=int, outer=(16)] [aggregated as o_shippriority:16]
+ │                   └── variable: o_shippriority:16 [type=int]
  └── const: 10 [type=int]
 
 stats table=q3_limit_1

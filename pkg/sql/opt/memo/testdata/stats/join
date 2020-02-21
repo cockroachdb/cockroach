@@ -280,8 +280,8 @@ group-by
  │         │    └── fd: (7)-->(5,6)
  │         └── filters (true)
  └── aggregations
-      └── sum [type=decimal, outer=(6)]
-           └── variable: v [type=int]
+      └── sum [type=decimal, outer=(6)] [aggregated as sum:8]
+           └── variable: v:6 [type=int]
 
 # Join selectivity: 1/max(distinct(x), distinct(u)) = 1/5000.
 norm
@@ -307,8 +307,8 @@ group-by
  │    └── filters
  │         └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── aggregations
-      └── sum [type=decimal, outer=(6)]
-           └── variable: v [type=int]
+      └── sum [type=decimal, outer=(6)] [aggregated as sum:8]
+           └── variable: v:6 [type=int]
 
 # Semi-join.
 norm
@@ -429,7 +429,7 @@ project
       │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + v) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:8]
 
 # Force column statistics calculation for anti-join.
 norm
@@ -463,7 +463,7 @@ project
       │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + v) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:8]
 
 # Force column statistics calculation for left join.
 norm
@@ -496,7 +496,7 @@ project
       │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + v) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:8]
 
 # Force column statistics calculation for right join.
 norm
@@ -529,7 +529,7 @@ project
       │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + v) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:8]
 
 # Force column statistics calculation for outer join.
 norm
@@ -562,7 +562,7 @@ project
       │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + v) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:8]
 
 exec-ddl
 CREATE TABLE uvw (u INT, v INT, w INT)
@@ -1165,12 +1165,12 @@ project
  │    │         │    │    ├── stats: [rows=0]
  │    │         │    │    └── key: ()
  │    │         │    └── filters
- │    │         │         └── variable: t0.col1 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ │    │         │         └── variable: t0.col1:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
  │    │         └── projections
- │    │              └── const: 1 [type=int]
+ │    │              └── const: 1 [type=int] [projected as "?column?":15]
  │    └── filters (true)
  └── projections
-      └── variable: ?column? [type=int, outer=(15)]
+      └── variable: "?column?":15 [type=int, outer=(15)] [projected as "?column?":16]
 
 norm colstat=1 colstat=2
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x

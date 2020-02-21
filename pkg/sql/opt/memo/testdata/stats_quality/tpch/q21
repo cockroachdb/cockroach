@@ -193,7 +193,7 @@ limit
  │         │    └── filters
  │         │         └── o_orderstatus = 'F' [type=bool, outer=(26), constraints=(/26: [/'F' - /'F']; tight), fd=()-->(26)]
  │         └── aggregations
- │              └── count-rows [type=int]
+ │              └── count-rows [type=int] [aggregated as count_rows:69]
  └── const: 100 [type=int]
 
 stats table=q21_limit_1

@@ -164,8 +164,8 @@ project
       │    └── filters
       │         └── (x > 1000) AND (x <= 2000) [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
       └── aggregations
-           └── sum [type=decimal, outer=(1)]
-                └── variable: x [type=int]
+           └── sum [type=decimal, outer=(1)] [aggregated as sum:4]
+                └── variable: x:1 [type=int]
 
 # Regression: statistics builder panics when end key is NULL when it's trying
 # to compute start/end int boundaries.
@@ -251,7 +251,7 @@ project
       │    └── filters
       │         └── col3 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [type=int] [aggregated as count_rows:8]
 
 
 exec-ddl
@@ -1318,12 +1318,12 @@ project
  │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
  │    │    │    └── (true, e'19\x1e', NULL) [type=tuple{bool, string, varbit}]
  │    │    └── aggregations
- │    │         └── min [type=bool, outer=(1)]
- │    │              └── variable: column1 [type=bool]
+ │    │         └── min [type=bool, outer=(1)] [aggregated as min:4]
+ │    │              └── variable: column1:1 [type=bool]
  │    └── filters
- │         └── variable: min [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ │         └── variable: min:4 [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
  └── projections
-      └── const: 1 [type=int]
+      └── const: 1 [type=int] [projected as "?column?":5]
 
 # Test that distinct count estimates are correct for date ranges.
 exec-ddl
@@ -1446,7 +1446,7 @@ with &1 (t)
       │    │    └──  x:5(bool) => x:6(bool)
       │    └── stats: [rows=4e+20, distinct(6)=3, null(6)=4e+18]
       └── filters
-           └── variable: x [type=bool, outer=(6), constraints=(/6: [/true - /true]; tight), fd=()-->(6)]
+           └── variable: x:6 [type=bool, outer=(6), constraints=(/6: [/true - /true]; tight), fd=()-->(6)]
 
 # Regression test for #38375. Avoid floating point precision errors.
 exec-ddl

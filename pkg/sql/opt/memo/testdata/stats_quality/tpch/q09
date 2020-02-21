@@ -156,8 +156,8 @@ sort
       │         ├── extract('year', o_orderdate) [type=float, outer=(42)]
       │         └── (l_extendedprice * (1.0 - l_discount)) - (ps_supplycost * l_quantity) [type=float, outer=(21-23,36)]
       └── aggregations
-           └── sum [type=float, outer=(52)]
-                └── variable: amount [type=float]
+           └── sum [type=float, outer=(52)] [aggregated as sum:53]
+                └── variable: amount:52 [type=float]
 
 stats table=q9_sort_1
 ----
