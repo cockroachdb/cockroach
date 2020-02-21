@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
@@ -103,4 +104,11 @@ func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 	d.batch.Batch = batch
 
 	return d.batch
+}
+
+func (d *simpleProjectOp) Close() error {
+	if c, ok := d.input.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }

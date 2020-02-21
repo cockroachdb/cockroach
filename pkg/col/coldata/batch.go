@@ -208,7 +208,7 @@ func (m *MemBatch) SetSelection(b bool) {
 func (m *MemBatch) SetLength(n uint16) {
 	m.n = n
 	for _, v := range m.b {
-		if v.Type() == coltypes.Bytes {
+		if v != nil && v.Type() == coltypes.Bytes {
 			v.Bytes().UpdateOffsetsToBeNonDecreasing(uint64(n))
 		}
 	}

@@ -155,3 +155,16 @@ func (d *tupleHashDistributor) distribute(
 	}
 	return d.selections
 }
+
+// resetNumOutputs sets up the tupleHashDistributor to distribute the tuples
+// to a different number of outputs.
+func (d *tupleHashDistributor) resetNumOutputs(numOutputs int) {
+	if cap(d.selections) >= numOutputs {
+		d.selections = d.selections[:numOutputs]
+		return
+	}
+	d.selections = d.selections[:cap(d.selections)]
+	for len(d.selections) < numOutputs {
+		d.selections = append(d.selections, make([]uint16, 0, coldata.BatchSize()))
+	}
+}

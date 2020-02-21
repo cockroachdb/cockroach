@@ -167,11 +167,7 @@ func newExternalSorter(
 		// it almost all of the available memory (except for a single output batch
 		// that mergers will use).
 		batchMemSize := estimateBatchSizeBytes(inputTypes, int(coldata.BatchSize()))
-		// TODO(yuzefovich): we currently allocate a full-sized batch in
-		// partitionerToOperator, but once we use actual disk-backed queues, we
-		// should allocate zero-sized batch in there and all memory will be
-		// allocated by the partitioner (and will be included in BufferSizeBytes).
-		maxNumberPartitions = (int(memoryLimit) - batchMemSize) / (cfg.BufferSizeBytes + batchMemSize)
+		maxNumberPartitions = (int(memoryLimit) - batchMemSize) / (cfg.BufferSizeBytes)
 	}
 	// In order to make progress when merging we have to merge at least two
 	// partitions.
@@ -384,42 +380,4 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 
 func (o *inputPartitioningOperator) reset() {
 	o.standaloneMemAccount.Shrink(o.ctx, o.standaloneMemAccount.Used())
-}
-
-func newPartitionerToOperator(
-	allocator *Allocator,
-	types []coltypes.T,
-	partitioner colcontainer.PartitionedQueue,
-	partitionIdx int,
-) *partitionerToOperator {
-	return &partitionerToOperator{
-		partitioner:  partitioner,
-		partitionIdx: partitionIdx,
-		// TODO(yuzefovich): allocate zero-sized batch once the disk-backed
-		// partitioner is used.
-		batch: allocator.NewMemBatch(types),
-	}
-}
-
-// partitionerToOperator is an Operator that Dequeue's from the corresponding
-// partition on every call to Next. It is a converter from filled in
-// PartitionedQueue to Operator.
-type partitionerToOperator struct {
-	ZeroInputNode
-	NonExplainable
-
-	partitioner  colcontainer.PartitionedQueue
-	partitionIdx int
-	batch        coldata.Batch
-}
-
-var _ Operator = &partitionerToOperator{}
-
-func (p *partitionerToOperator) Init() {}
-
-func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
-	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
-		execerror.VectorizedInternalPanic(err)
-	}
-	return p.batch
 }
