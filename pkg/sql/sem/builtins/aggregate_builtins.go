@@ -159,6 +159,17 @@ var aggregates = map[string]builtinDefinition{
 		// supports parametric types.
 	),
 
+	"corr": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Float, types.Float}, types.Float, newCorrAggregate,
+			"Calculates the correlation coefficient of the selected values."),
+		makeAggOverload([]*types.T{types.Int, types.Int}, types.Float, newCorrAggregate,
+			"Calculates the correlation coefficient of the selected values."),
+		makeAggOverload([]*types.T{types.Float, types.Int}, types.Float, newCorrAggregate,
+			"Calculates the correlation coefficient of the selected values."),
+		makeAggOverload([]*types.T{types.Int, types.Float}, types.Float, newCorrAggregate,
+			"Calculates the correlation coefficient of the selected values."),
+	),
+
 	"count": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements."),
@@ -395,6 +406,7 @@ func makeAggOverloadWithReturnType(
 
 var _ tree.AggregateFunc = &arrayAggregate{}
 var _ tree.AggregateFunc = &avgAggregate{}
+var _ tree.AggregateFunc = &corrAggregate{}
 var _ tree.AggregateFunc = &countAggregate{}
 var _ tree.AggregateFunc = &countRowsAggregate{}
 var _ tree.AggregateFunc = &MaxAggregate{}
@@ -425,6 +437,7 @@ var _ tree.AggregateFunc = &bitOrAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
+const sizeOfCorrAggregate = int64(unsafe.Sizeof(corrAggregate{}))
 const sizeOfCountAggregate = int64(unsafe.Sizeof(countAggregate{}))
 const sizeOfCountRowsAggregate = int64(unsafe.Sizeof(countRowsAggregate{}))
 const sizeOfMaxAggregate = int64(unsafe.Sizeof(MaxAggregate{}))
@@ -913,6 +926,138 @@ func (a *boolOrAggregate) Close(context.Context) {}
 // Size is part of the tree.AggregateFunc interface.
 func (a *boolOrAggregate) Size() int64 {
 	return sizeOfBoolOrAggregate
+}
+
+// corrAggregate represents SQL:2003 correlation coefficient.
+//
+// n   be count of rows.
+// sx  be the sum of the column of values of <independent variable expression>
+// sx2 be the sum of the squares of values in the <independent variable expression> column
+// sy  be the sum of the column of values of <dependent variable expression>
+// sy2 be the sum of the squares of values in the <dependent variable expression> column
+// sxy be the sum of the row-wise products of the value in the <independent variable expression>
+//     column times the value in the <dependent variable expression> column.
+//
+// result:
+//   1) If n*sx2 equals sx*sx, then the result is the null value.
+//   2) If n*sy2 equals sy*sy, then the result is the null value.
+//   3) Otherwise, the resut is SQRT(POWER(n*sxy-sx*sy,2) / ((n*sx2-sx*sx)*(n*sy2-sy*sy))).
+//      If the exponent of the approximate mathematical result of the operation is not within
+//      the implementation-defined exponent range for the result data type, then the result
+//      is the null value.
+type corrAggregate struct {
+	n   int
+	sx  float64
+	sx2 float64
+	sy  float64
+	sy2 float64
+	sxy float64
+}
+
+func newCorrAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &corrAggregate{}
+}
+
+// Add implements tree.AggregateFunc interface.
+func (a *corrAggregate) Add(_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum) error {
+	if datumY == tree.DNull {
+		return nil
+	}
+
+	datumX := otherArgs[0]
+	if datumX == tree.DNull {
+		return nil
+	}
+
+	x, err := a.float64Val(datumX)
+	if err != nil {
+		return err
+	}
+
+	y, err := a.float64Val(datumY)
+	if err != nil {
+		return err
+	}
+
+	a.n++
+	a.sx += x
+	a.sy += y
+	a.sx2 += x * x
+	a.sy2 += y * y
+	a.sxy += x * y
+
+	if math.IsInf(a.sx, 0) ||
+		math.IsInf(a.sx2, 0) ||
+		math.IsInf(a.sy, 0) ||
+		math.IsInf(a.sy2, 0) ||
+		math.IsInf(a.sxy, 0) {
+		return tree.ErrFloatOutOfRange
+	}
+
+	return nil
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *corrAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	if a.sx2 == 0 || a.sy2 == 0 {
+		return tree.DNull, nil
+	}
+
+	floatN := float64(a.n)
+
+	numeratorX := floatN*a.sx2 - a.sx*a.sx
+	if math.IsInf(numeratorX, 0) {
+		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
+	}
+
+	numeratorY := floatN*a.sy2 - a.sy*a.sy
+	if math.IsInf(numeratorY, 0) {
+		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
+	}
+
+	numeratorXY := floatN*a.sxy - a.sx*a.sy
+	if math.IsInf(numeratorXY, 0) {
+		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
+	}
+
+	if numeratorX <= 0 || numeratorY <= 0 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(numeratorXY / math.Sqrt(numeratorX*numeratorY))), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *corrAggregate) Reset(context.Context) {
+	a.n = 0
+	a.sx = 0
+	a.sx2 = 0
+	a.sy = 0
+	a.sy2 = 0
+	a.sxy = 0
+}
+
+// Close implements tree.AggregateFunc interface.
+func (a *corrAggregate) Close(context.Context) {}
+
+// Size implements tree.AggregateFunc interface.
+func (a *corrAggregate) Size() int64 {
+	return sizeOfCorrAggregate
+}
+
+func (a *corrAggregate) float64Val(datum tree.Datum) (float64, error) {
+	switch val := datum.(type) {
+	case *tree.DFloat:
+		return float64(*val), nil
+	case *tree.DInt:
+		return float64(*val), nil
+	default:
+		return 0, fmt.Errorf("invalid type %v", val)
+	}
 }
 
 type countAggregate struct {

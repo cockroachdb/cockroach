@@ -762,6 +762,12 @@ define ConcatAgg {
 }
 
 [Scalar, Aggregate]
+define Corr {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
 define Count {
     Input ScalarExpr
 }

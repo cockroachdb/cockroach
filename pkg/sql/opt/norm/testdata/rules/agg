@@ -7,17 +7,21 @@ CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
 # --------------------------------------------------
 
 norm expect=EliminateAggDistinct
-SELECT min(DISTINCT i), max(DISTINCT i), bool_and(DISTINCT i>f), bool_or(DISTINCT i>f) FROM a
+SELECT min(DISTINCT i), max(DISTINCT i), bool_and(DISTINCT i>f), bool_or(DISTINCT i>f), corr(DISTINCT k, i) FROM a
 ----
 scalar-group-by
- ├── columns: min:7(int) max:8(int) bool_and:10(bool) bool_or:11(bool)
+ ├── columns: min:7(int) max:8(int) bool_and:10(bool) bool_or:11(bool) corr:12(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(7,8,10,11)
+ ├── fd: ()-->(7,8,10-12)
  ├── project
- │    ├── columns: column9:9(bool) i:2(int)
+ │    ├── columns: column9:9(bool) k:1(int!null) i:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,9)
  │    ├── scan a
- │    │    └── columns: i:2(int) f:3(float)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
  │    └── projections
  │         └── i > f [type=bool, outer=(2,3)]
  └── aggregations
@@ -27,8 +31,11 @@ scalar-group-by
       │    └── variable: i [type=int]
       ├── bool-and [type=bool, outer=(9)]
       │    └── variable: column9 [type=bool]
-      └── bool-or [type=bool, outer=(9)]
-           └── variable: column9 [type=bool]
+      ├── bool-or [type=bool, outer=(9)]
+      │    └── variable: column9 [type=bool]
+      └── corr [type=float, outer=(1,2)]
+           ├── variable: k [type=int]
+           └── variable: i [type=int]
 
 # The rule should still work when FILTER is present.
 norm expect=EliminateAggDistinct
@@ -36,24 +43,29 @@ SELECT
     min(DISTINCT i) FILTER (WHERE i > 5),
     max(DISTINCT i) FILTER (WHERE i > 5),
     bool_and(DISTINCT i>f) FILTER (WHERE f > 0.0),
-    bool_or(DISTINCT i>f) FILTER (WHERE f > 1.0)
+    bool_or(DISTINCT i>f) FILTER (WHERE f > 1.0),
+    corr(DISTINCT k, i) FILTER(WHERE k > 5 AND i > 5)
 FROM a
 ----
 scalar-group-by
- ├── columns: min:8(int) max:9(int) bool_and:12(bool) bool_or:14(bool)
+ ├── columns: min:8(int) max:9(int) bool_and:12(bool) bool_or:14(bool) corr:16(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(8,9,12,14)
+ ├── fd: ()-->(8,9,12,14,16)
  ├── project
- │    ├── columns: column7:7(bool) column10:10(bool) column11:11(bool) column13:13(bool) i:2(int)
- │    ├── fd: (2)-->(7)
+ │    ├── columns: column7:7(bool) column10:10(bool) column11:11(bool) column13:13(bool) column15:15(bool) k:1(int!null) i:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,7,10,11,13), (2)-->(7), (1,2)-->(15)
  │    ├── scan a
- │    │    └── columns: i:2(int) f:3(float)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
  │    └── projections
  │         ├── i > 5 [type=bool, outer=(2)]
  │         ├── i > f [type=bool, outer=(2,3)]
  │         ├── f > 0.0 [type=bool, outer=(3)]
- │         └── f > 1.0 [type=bool, outer=(3)]
+ │         ├── f > 1.0 [type=bool, outer=(3)]
+ │         └── (k > 5) AND (i > 5) [type=bool, outer=(1,2)]
  └── aggregations
       ├── agg-filter [type=int, outer=(2,7)]
       │    ├── min [type=int]
@@ -67,10 +79,15 @@ scalar-group-by
       │    ├── bool-and [type=bool]
       │    │    └── variable: column10 [type=bool]
       │    └── variable: column11 [type=bool]
-      └── agg-filter [type=bool, outer=(10,13)]
-           ├── bool-or [type=bool]
-           │    └── variable: column10 [type=bool]
-           └── variable: column13 [type=bool]
+      ├── agg-filter [type=bool, outer=(10,13)]
+      │    ├── bool-or [type=bool]
+      │    │    └── variable: column10 [type=bool]
+      │    └── variable: column13 [type=bool]
+      └── agg-filter [type=float, outer=(1,2,15)]
+           ├── corr [type=float]
+           │    ├── variable: k [type=int]
+           │    └── variable: i [type=int]
+           └── variable: column15 [type=bool]
 
 # The rule should not apply to these aggregations.
 norm expect-not=EliminateAggDistinct

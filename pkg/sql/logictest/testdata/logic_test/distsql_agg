@@ -565,6 +565,18 @@ SELECT sum(a) FROM data WHERE FALSE
 ----
 NULL
 
+# Test that statistics aggregate functions.
+statement ok
+CREATE TABLE statistics_agg_test (y INT, x INT)
+
+statement ok
+INSERT INTO statistics_agg_test SELECT y, y%10 FROM generate_series(1, 100) AS y
+
+query R
+SELECT corr(y, x)::decimal FROM statistics_agg_test
+----
+0.045228963191363145
+
 # Regression test for #37211 (incorrect ordering between aggregator stages).
 statement ok
 CREATE TABLE uv (u INT PRIMARY KEY, v INT);

@@ -2881,6 +2881,80 @@ project
            └── max [type=decimal]
                 └── variable: column5 [type=decimal]
 
+# Tests for corr.
+
+build
+SELECT corr(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: corr:5(float)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── corr [type=float]
+           ├── variable: k [type=int]
+           └── variable: v [type=int]
+
+build
+SELECT corr(k) FROM kv
+----
+error (42883): unknown signature: corr(int)
+
+build
+SELECT corr(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: corr(int, string, string)
+
+build
+SELECT corr(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: corr:5(float)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── agg-distinct [type=float]
+           └── corr [type=float]
+                ├── variable: k [type=int]
+                └── variable: v [type=int]
+
+build
+SELECT max(s), corr(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:5(string) corr:6(float) min:7(string)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int) s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      ├── max [type=string]
+      │    └── variable: s [type=string]
+      ├── corr [type=float]
+      │    ├── variable: k [type=int]
+      │    └── variable: v [type=int]
+      └── min [type=string]
+           └── variable: s [type=string]
+
+build
+SELECT corr(k, NULL) FROM kv
+----
+project
+ ├── columns: corr:5(unknown)
+ ├── scan kv
+ │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── projections
+      └── null [type=unknown]
+
+build
+SELECT corr('foo', v) FROM kv
+----
+error (42883): unknown signature: corr(string, int)
+
 # Tests for string_agg.
 
 build

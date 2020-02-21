@@ -997,3 +997,15 @@ group        ·            ·
  │           scalar       ·
  └── values  ·            ·
 ·            size         2 columns, 2 rows
+
+query TTT
+EXPLAIN SELECT corr(a, b) FROM tc;
+----
+·          distributed  false
+·          vectorized   true
+group      ·            ·
+ │         aggregate 0  corr(a, b)
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        tc@primary
+·          spans        ALL

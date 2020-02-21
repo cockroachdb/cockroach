@@ -351,20 +351,19 @@ group-by
       └── count-rows
 
 query TTTTT
-EXPLAIN (verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
+EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b
 ----
-·               distributed  true           ·           ·
-·               vectorized   false          ·           ·
-group           ·            ·              (b, count)  ·
- │              aggregate 0  b              ·           ·
- │              aggregate 1  count_rows()   ·           ·
- │              group by     b              ·           ·
- │              ordered      +b             ·           ·
- └── render     ·            ·              (b)         +b
-      │         render 0     b              ·           ·
-      └── scan  ·            ·              (a, b)      +b
-·               table        data2@primary  ·           ·
-·               spans        /1-/2          ·           ·
+·          distributed  true           ·                 ·
+·          vectorized   false          ·                 ·
+group      ·            ·              (b, count, corr)  ·
+ │         aggregate 0  b              ·                 ·
+ │         aggregate 1  count_rows()   ·                 ·
+ │         aggregate 2  corr(a, b)     ·                 ·
+ │         group by     b              ·                 ·
+ │         ordered      +b             ·                 ·
+ └── scan  ·            ·              (a, b)            +b
+·          table        data2@primary  ·                 ·
+·          spans        /1-/2          ·                 ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b];
