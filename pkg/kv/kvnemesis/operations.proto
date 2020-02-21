@@ -14,6 +14,7 @@ option go_package = "kvnemesis";
 
 import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/api.proto";
 import "util/hlc/timestamp.proto";
 
 message BatchOperation {
@@ -57,6 +58,12 @@ message MergeOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message ChangeReplicasOperation {
+  bytes key = 1;
+  repeated roachpb.ReplicationChange changes = 2 [(gogoproto.nullable) = false];
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -73,6 +80,7 @@ message Operation {
   PutOperation put = 8;
   SplitOperation split = 9;
   MergeOperation merge = 10;
+  ChangeReplicasOperation change_replicas = 11;
 }
 
 enum ResultType {
@@ -93,4 +101,5 @@ message Step {
   Operation op = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp before = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp after = 3 [(gogoproto.nullable) = false];
+  int32 db_id = 4 [(gogoproto.customname) = 'DBID'];
 }
