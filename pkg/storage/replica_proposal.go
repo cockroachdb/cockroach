@@ -698,12 +698,21 @@ func (r *Replica) evaluateProposal(
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
+	ctx, csp := tracing.StartComponentSpan(ctx, r.AmbientContext.Tracer, "storage.replica.raft.eval", "write batch evaluation")
+	defer csp.Finish()
+	csp.SetTag("batch", &ba)
+
 	// Evaluate the commands. If this returns without an error, the batch should
 	// be committed. Note that we don't hold any locks at this point. This is
 	// important since evaluating a proposal is expensive.
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
 	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, spans)
+	csp.SetTag("result", &res)
+	csp.SetTag("batch result", br)
+	if pErr != nil {
+		csp.SetError(pErr.GoError())
+	}
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance

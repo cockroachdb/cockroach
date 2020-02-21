@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,6 +86,7 @@ type Parser struct {
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
 	stmtBuf    [1]Statement
+	tracer     opentracing.Tracer
 }
 
 // INT8 is the historical interpretation of INT. This should be left
@@ -91,6 +94,10 @@ type Parser struct {
 // in various descriptors.  Any user input that was created after
 // INT := INT4 will simply use INT4 in any resulting code.
 var defaultNakedIntType = types.Int
+
+func (p *Parser) SetTracer(tracer opentracing.Tracer) {
+	p.tracer = tracer
+}
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (Statements, error) {
@@ -147,7 +154,18 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	}
 }
 
-func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (Statements, error) {
+func (p *Parser) parseWithDepth(
+	depth int, sql string, nakedIntType *types.T,
+) (Statements, error) {
+	if p.tracer != nil {
+		tracing.RecordComponentEvent("parser", "parse statement")
+		// !!!
+		// _, sp, finish := tracing.StartComponentTrace(
+		//   context.TODO(), p.tracer, "parser", "parse statement", false /* isStuck */)
+		// defer func() { finish(_err) }()
+		// sp.SetTag("stmt", sql)
+	}
+
 	stmts := Statements(p.stmtBuf[:0])
 	p.scanner.init(sql)
 	defer p.scanner.cleanup()
@@ -155,6 +173,7 @@ func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (S
 		sql, tokens, done := p.scanOneStmt()
 		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
 		if err != nil {
+			tracing.RecordComponentErr("parser", "parse error", sql+" - "+err.Error())
 			return nil, err
 		}
 		if stmt.AST != nil {

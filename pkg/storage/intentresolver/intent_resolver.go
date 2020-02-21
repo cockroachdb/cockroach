@@ -186,7 +186,7 @@ func New(c Config) *IntentResolver {
 		db:           c.DB,
 		stopper:      c.Stopper,
 		sem:          make(chan struct{}, c.TaskLimit),
-		contentionQ:  newContentionQueue(c.Clock, c.DB),
+		contentionQ:  newContentionQueue(c.Clock, c.DB, c.AmbientCtx),
 		every:        log.Every(time.Minute),
 		Metrics:      makeMetrics(),
 		rdc:          c.RangeDescriptorCache,

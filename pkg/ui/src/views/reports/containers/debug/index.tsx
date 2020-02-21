@@ -102,6 +102,11 @@ export default function Debug() {
       <PanelSection>
         <PanelTitle>Reports</PanelTitle>
         <DebugPanelLink
+          name="System Component Activity"
+          url="#/reports/components"
+          note="View cluster-wide acitivity organized by system components."
+        />
+        <DebugPanelLink
           name="Custom Time Series Chart"
           url="#/debug/chart"
           note="Create a custom chart of time series data."

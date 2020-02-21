@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var (
@@ -113,7 +114,11 @@ func (tsdb *DB) findTimeSeries(
 func (tsdb *DB) pruneTimeSeries(
 	ctx context.Context, db *client.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
 ) error {
+	ctx, csp := tracing.StartComponentSpan(ctx, tsdb.st.Tracer, "timeseries.prune", "time series pruning")
+	defer csp.Finish()
+
 	thresholds := tsdb.computeThresholds(now.WallTime)
+	csp.SetTag("thresholds", thresholds)
 
 	b := &client.Batch{}
 	for _, timeSeries := range timeSeriesList {
@@ -143,5 +148,7 @@ func (tsdb *DB) pruneTimeSeries(
 		})
 	}
 
-	return db.Run(ctx, b)
+	err := db.Run(ctx, b)
+	csp.SetError(err)
+	return err
 }

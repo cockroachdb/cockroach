@@ -1,0 +1,95 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+@require nib
+@require "~styl/base/palette.styl"
+
+#matrix
+  font-family Lato-Regular
+  font-size 12px
+  border-collapse collapse
+
+#matrix th.node-header
+  white-space nowrap
+  height 60px
+  color #666
+
+  &--error
+    color #b33
+
+#matrix th.node-header > div
+  margin auto
+
+#matrix th.node-header > div > span
+  padding 5px 10px
+
+#matrix #title
+  white-space nowrap
+  font-size 14px
+  font-wieght bold
+  display block
+  padding-bottom 20px
+
+#matrix #title .component-name
+  color red
+
+#matrix #title .component-node
+  color blue
+
+#matrix #view-toggle
+  text-align right
+  color $link-color
+
+#matrix th .matrix-legend-cell
+  background-color $background-color
+  border 0px
+
+#matrix .matrix-name-cell
+  padding-left 2px
+  width 100px
+  min-width 100px
+  height 20px
+  border 1px solid white
+  text-transform capitalize
+  cursor pointer
+
+  &--part-1
+    background-color #bbb
+
+  &--part-2
+    background-color #ccc
+
+  &--part-3
+    background-color #ddd
+
+  &--part-4
+    background-color #eee
+
+#matrix .matrix-cell
+  background-color white
+  border 1px solid white
+  padding 0px
+  width 25px
+  height 20px
+  cursor pointer
+
+  &:hover
+    border 1px double #bbb
+
+  &--expanded
+    border 1px double #bbb
+
+#matrix .matrix-cell-expanded
+  padding 10px
+  border 0px

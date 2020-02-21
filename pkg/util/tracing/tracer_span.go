@@ -12,7 +12,9 @@ package tracing
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -88,6 +90,11 @@ const (
 	// SnowballRecording means that remote child spans (generally opened through
 	// RPCs) are also recorded.
 	SnowballRecording
+	// ComponentRecording means that remote child spans (generally
+	// opened through RPCs) are recorded, but the spans are meant to be
+	// collected locally on the remote nodes instead of being returned
+	// via RPC(s).
+	ComponentRecording
 	// SingleNodeRecording means that only spans on the current node are recorded.
 	SingleNodeRecording
 )
@@ -154,6 +161,21 @@ func IsRecording(s opentracing.Span) bool {
 	return s.(*span).isRecording()
 }
 
+// GetRecordingType returns the recording type if one is set on the
+// specified span. Otherwise, returns NoRecording.
+func GetRecordingType(s opentracing.Span) RecordingType {
+	switch t := s.(type) {
+	case *noopSpan:
+		return NoRecording
+	case *span:
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		return t.mu.recordingType
+	default:
+		return NoRecording
+	}
+}
+
 func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 	if group == nil {
 		panic("no spanGroup")
@@ -162,8 +184,8 @@ func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 	atomic.StoreInt32(&s.recording, 1)
 	s.mu.recordingGroup = group
 	s.mu.recordingType = recType
-	if recType == SnowballRecording {
-		s.setBaggageItemLocked(Snowball, "1")
+	if recType == SnowballRecording || recType == ComponentRecording {
+		s.setBaggageItemLocked(Snowball, strconv.Itoa(int(recType)))
 	}
 	// Clear any previously recorded logs.
 	s.mu.recordedLogs = nil
@@ -209,7 +231,7 @@ func (s *span) disableRecording() {
 	// We test the duration as a way to check if the span has been finished. If it
 	// has, we don't want to do the call below as it might crash (at least if
 	// there's a netTr).
-	if (s.mu.duration == -1) && (s.mu.recordingType == SnowballRecording) {
+	if (s.mu.duration == -1) && (s.mu.recordingType == SnowballRecording || s.mu.recordingType == ComponentRecording) {
 		// Clear the Snowball baggage item, assuming that it was set by
 		// enableRecording().
 		s.setBaggageItemLocked(Snowball, "")
@@ -363,6 +385,21 @@ func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	return nil
 }
 
+// CombineSpans combines the recorded span groups from os2 into os.
+func CombineSpans(os, os2 opentracing.Span) error {
+	s, s2 := os.(*span), os2.(*span)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s2.mu.Lock()
+	defer s2.mu.Unlock()
+	if g, g2 := s.mu.recordingGroup, s2.mu.recordingGroup; g == nil || g2 == nil {
+		return errors.New("combining spans requires that both groups are recording")
+	} else if g != g2 {
+		g.combine(g2)
+	}
+	return nil
+}
+
 // IsBlackHoleSpan returns true if events for this span are just dropped. This
 // is the case when tracing is disabled and we're not recording. Tracing clients
 // can use this method to figure out if they can short-circuit some
@@ -479,6 +516,46 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 		s.mu.Unlock()
 	}
 	return s
+}
+
+func (s *span) getTags() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getTagsLocked()
+}
+
+func (s *span) getTagsLocked() map[string]string {
+	var result map[string]string
+	if s.startTags != nil {
+		result = make(map[string]string)
+		for _, tag := range s.startTags.Get() {
+			result[tag.Key()] = stringifyTagValue(tag.Value())
+		}
+	}
+	for k, v := range s.mu.tags {
+		if result == nil {
+			result = make(map[string]string)
+		}
+		result[k] = stringifyTagValue(v)
+	}
+	return result
+}
+
+func stringifyTagValue(v interface{}) string {
+	switch v := v.(type) {
+	case bool, string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32, float64, complex64, complex128:
+		return fmt.Sprint(v)
+	default:
+		if _, ok := v.(fmt.Stringer); ok {
+			return fmt.Sprint(v)
+		} else {
+			if bytes, err := json.MarshalIndent(v, "", "    "); err != nil {
+				return fmt.Sprintf("%+v [%s]", v, err)
+			} else {
+				return string(bytes)
+			}
+		}
+	}
 }
 
 // LogFields is part of the opentracing.Span interface.
@@ -625,13 +702,7 @@ func (s *span) getRecording() RecordedSpan {
 		}
 	}
 	if len(s.mu.tags) > 0 {
-		if rs.Tags == nil {
-			rs.Tags = make(map[string]string)
-		}
-		for k, v := range s.mu.tags {
-			// We encode the tag values as strings.
-			rs.Tags[k] = fmt.Sprint(v)
-		}
+		rs.Tags = s.getTagsLocked()
 	}
 	rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
 	for i, r := range s.mu.recordedLogs {
@@ -665,6 +736,15 @@ type spanGroup struct {
 func (ss *spanGroup) addSpan(s *span) {
 	ss.Lock()
 	ss.spans = append(ss.spans, s)
+	ss.Unlock()
+}
+
+func (ss *spanGroup) combine(oss *spanGroup) {
+	ss.Lock()
+	oss.Lock()
+	ss.spans = append(ss.spans, oss.spans...)
+	ss.remoteSpans = append(ss.remoteSpans, oss.remoteSpans...)
+	oss.Unlock()
 	ss.Unlock()
 }
 

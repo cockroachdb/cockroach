@@ -51,6 +51,7 @@ import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
+import Components from "src/views/reports/containers/components";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -161,6 +162,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route exact path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
                   <Route exact path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
                   <Route exact path={`/reports/stores/:${nodeIDAttr}`} component={ Stores } />
+                  <Route exact path="/reports/components" component={ Components } />
 
                   { /* old route redirects */ }
                   <Redirect exact from="/cluster" to="/metrics/overview/cluster" />

@@ -60,3 +60,70 @@ message RecordedSpan {
   // Stats collected in this span.
   google.protobuf.Any stats = 10;
 }
+
+// ComponentActivity includes information about execution of a
+// particular system component.
+message ComponentActivity {
+  // The number of operations the component executed during the
+  // inspection period.
+  int64 span_count = 1;
+  // Sum of events.count.
+  int64 event_count = 2;
+  // The count of operations currently stuck in this component.
+  int64 stuck_count = 3;
+  // The count of errors during the inspection period. This includes spans
+  // finished with errors and error events (so it includes sum of events.count
+  // for error events).
+  int64 errors = 4;
+  // The timestamp on the server at which the span, event and error
+  // counts were collected from counters.
+  google.protobuf.Timestamp timestamp = 5 [(gogoproto.nullable) = false,
+                                           (gogoproto.stdtime) = true];
+  map<string, int64> custom_events = 6;
+}
+
+message ComponentSamples {
+  message Sample {
+    string error = 1;
+    // Pending is true if the sample is not complete when the
+    // recording period ended.
+    bool pending = 2;
+    // Stuck is true if the component entered a retry loop or exceeded
+    // a preset duration threshold.
+    bool stuck = 3;
+    // Component-level span (first span in slice) and all sub-spans.
+    repeated RecordedSpan spans = 4 [(gogoproto.nullable) = false];
+  }
+
+  // The sampled spans starting at this component during the
+  // inspection period. This slice acts as a reservoir sample,
+  // although values can't be replaced since nothing can be thrown
+  // away in order to ensure we can stitch together distributed traces.
+  repeated Sample samples = 1 [(gogoproto.nullable) = false];
+}
+
+// ComponentTraces includes sampled traces and events taken at a component.
+message ComponentTraces {
+  ComponentSamples samples = 1 [(gogoproto.nullable) = false,
+                                (gogoproto.embed) = true];
+
+  // Event is a counter. For error counters, the event also keeps track of the
+  // very first error.
+  //
+  // NOTE: The same event is not supposed to be used for both errors and
+  // non-errors. For example, the parser component has a "parse statement"
+  // event, and separately a "parse error" event.
+  message Event {
+    int64 count = 1;
+    // If this Event represents an error counter, this keeps track of the very
+    // first error recorded.
+    string error = 2;
+  }
+
+  // Counts of events recorded by the component.
+  map<string, Event> events = 2;
+
+  // The timestamp on the server at which the samples were collected.
+  google.protobuf.Timestamp timestamp = 3 [(gogoproto.nullable) = false,
+                                           (gogoproto.stdtime) = true];
+}

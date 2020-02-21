@@ -432,19 +432,30 @@ func (nl *NodeLiveness) StartHeartbeat(
 	stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
-		ctx, cancel := stopper.WithCancelOnStop(context.Background())
+		rootCtx, cancel := stopper.WithCancelOnStop(context.Background())
 		defer cancel()
-		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
-		defer sp.Finish()
 
 		incrementEpoch := true
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
+
+		var cspIsStarted bool
+		var ctx context.Context
+		var csp tracing.ComponentSpan
+
 		for {
 			select {
 			case <-nl.heartbeatToken:
 			case <-stopper.ShouldStop():
+				if cspIsStarted {
+					csp.Finish()
+				}
 				return
+			}
+			if !cspIsStarted {
+				ctx, csp = tracing.StartComponentSpan(rootCtx, nl.ambientCtx.Tracer, "storage.liveness", "heartbeat liveness loop")
+				ctx = ambient.AnnotateCtx(ctx)
+				cspIsStarted = true
 			}
 			// Give the context a timeout approximately as long as the time we
 			// have left before our liveness entry expires.
@@ -456,6 +467,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 						if err != nil && err != ErrNoLivenessRecord {
 							log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 						}
+						csp.SetTag("before heartbeat", liveness)
 						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
 							if err == ErrEpochIncremented {
 								log.Infof(ctx, "%s; retrying", err)
@@ -468,13 +480,23 @@ func (nl *NodeLiveness) StartHeartbeat(
 					}
 					return nil
 				}); err != nil {
+				ctx = csp.MarkAsStuck(ctx)
+				csp.SetError(err)
 				log.Warningf(ctx, "failed node liveness heartbeat: %+v", err)
+			} else {
+				liveness, _ := nl.Self()
+				csp.SetTag("after heartbeat", liveness)
+				csp.Finish()
+				cspIsStarted = false
 			}
 
 			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:
 			case <-stopper.ShouldStop():
+				if cspIsStarted {
+					csp.Finish()
+				}
 				return
 			}
 		}

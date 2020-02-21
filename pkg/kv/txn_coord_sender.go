@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -146,6 +147,8 @@ type TxnCoordSender struct {
 	// typ specifies whether this transaction is the top level,
 	// or one of potentially many distributed transactions.
 	typ client.TxnType
+
+	tracer opentracing.Tracer
 }
 
 var _ client.TxnSender = &TxnCoordSender{}
@@ -197,6 +200,7 @@ func newRootTxnCoordSender(
 	tcs := &TxnCoordSender{
 		typ:                   client.RootTxn,
 		TxnCoordSenderFactory: tcf,
+		tracer:                tcf.Tracer,
 	}
 	tcs.mu.txnState = txnPending
 	tcs.mu.userPriority = pri
@@ -284,6 +288,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		// we need to propagate the error to the root for an epoch restart.
 		canAutoRetry:     typ == client.RootTxn,
 		autoRetryCounter: tc.metrics.AutoRetries,
+		tracer:           tc.tracer,
 	}
 	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped:                 tc.wrapped,
@@ -326,6 +331,7 @@ func newLeafTxnCoordSender(
 	tcs := &TxnCoordSender{
 		typ:                   client.LeafTxn,
 		TxnCoordSenderFactory: tcf,
+		tracer:                tcf.Tracer,
 	}
 	tcs.mu.txnState = txnPending
 	// No need to initialize tcs.mu.userPriority here,
@@ -438,7 +444,11 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 // Send is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (_ *roachpb.BatchResponse, _pErr *roachpb.Error) {
+	var csp tracing.ComponentSpan
+	ctx, csp = tracing.StartComponentSpan(ctx, tc.Tracer, "client.txncoord.sender", "send")
+	defer func() { csp.FinishWithError(_pErr.GoError()) }()
+
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
 	// here, and unlock at the botton of the interceptor stack, in the
@@ -458,15 +468,12 @@ func (tc *TxnCoordSender) Send(
 
 	startNs := tc.clock.PhysicalNow()
 
-	ctx, sp := tc.AnnotateCtxWithSpan(ctx, opTxnCoordSender)
-	defer sp.Finish()
-
 	// Associate the txnID with the trace.
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
-	if !tracing.IsBlackHoleSpan(sp) {
-		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
+	if !tracing.IsBlackHoleSpan(csp.Span) {
+		csp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
 	}
 	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 	if log.V(2) {

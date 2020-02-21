@@ -248,10 +248,15 @@ func (t *Tracer) StartSpan(
 		if parentCtx.recordingGroup != nil {
 			recordingGroup = parentCtx.recordingGroup
 			recordingType = parentCtx.recordingType
-		} else if parentCtx.Baggage[Snowball] != "" {
+		} else if typ := parentCtx.Baggage[Snowball]; typ != "" {
 			// Automatically enable recording if we have the Snowball baggage item.
 			recordingGroup = new(spanGroup)
-			recordingType = SnowballRecording
+			typInt, err := strconv.Atoi(typ)
+			typEnum := RecordingType(typInt)
+			if err != nil || (typEnum != SnowballRecording && typEnum != ComponentRecording) {
+				panic(fmt.Sprintf("span baggage for Snowball(%s) not recognized as snowball recording type: %s", typ, err))
+			}
+			recordingType = RecordingType(typInt)
 		}
 		// TODO(radu): can we do something for multiple references?
 		break

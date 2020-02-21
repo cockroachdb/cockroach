@@ -348,6 +348,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:      s.stopper,
 		Linearizable: s.cfg.Linearizable,
 		Metrics:      txnMetrics,
+		Tracer:       cfg.AmbientCtx.Tracer,
 		TestingKnobs: clientTestingKnobs,
 	}
 	s.tcsFactory = kv.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)
@@ -2013,6 +2014,12 @@ func (s *Server) startServeSQL(
 			}))
 		})
 	}
+	// !!! I'm create these components early, otherwise the UI doesn't seem to reflect them
+	_, sp := tracing.StartComponentSpan(ctx, s.cfg.AmbientCtx.Tracer, "pgwire.conn", "event log")
+	sp.Finish()
+	_, sp = tracing.StartComponentSpan(ctx, s.cfg.AmbientCtx.Tracer, "sql.executor.connection_log", "event log")
+	sp.Finish()
+
 	return nil
 }
 

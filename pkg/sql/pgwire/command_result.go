@@ -80,6 +80,8 @@ type commandResult struct {
 	// statements.
 	bufferingDisabled bool
 
+	interceptor sql.Interceptor
+
 	// released is set when the command result has been released so that its
 	// memory can be reused. It is also used to assert against use-after-free
 	// errors.
@@ -94,6 +96,9 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	defer r.release()
 	if r.errExpected && r.err == nil {
 		panic("expected err to be set on result by Close, but wasn't")
+	}
+	if r.interceptor != nil {
+		r.interceptor.Close(nil /* err */)
 	}
 
 	r.conn.writerState.fi.registerCmd(r.pos)
@@ -158,6 +163,9 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if r.err != nil {
 		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
 			r.err))
+	}
+	if r.interceptor != nil {
+		r.interceptor.AddRow(row)
 	}
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if err := r.conn.GetErr(); err != nil {
@@ -283,6 +291,7 @@ func (c *conn) newCommandResult(
 	limit int,
 	portalName string,
 	implicitTxn bool,
+	interceptor sql.Interceptor,
 ) sql.CommandResult {
 	r := c.allocCommandResult()
 	*r = commandResult{
@@ -294,6 +303,7 @@ func (c *conn) newCommandResult(
 		stmtType:       stmt.StatementType(),
 		descOpt:        descOpt,
 		formatCodes:    formatCodes,
+		interceptor:    interceptor,
 	}
 	if limit == 0 {
 		return r

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type rollupDatapoint struct {
@@ -140,7 +141,11 @@ func (db *DB) rollupTimeSeries(
 	now hlc.Timestamp,
 	qmc QueryMemoryContext,
 ) error {
+	ctx, csp := tracing.StartComponentSpan(ctx, db.st.Tracer, "timeseries.rollup", "time series rollup")
+	defer csp.Finish()
+
 	thresholds := db.computeThresholds(now.WallTime)
+	csp.SetTag("thresholds", thresholds)
 	for _, timeSeries := range timeSeriesList {
 		// Only process rollup if this resolution has a target rollup resolution.
 		targetResolution, hasRollup := timeSeries.Resolution.TargetRollupResolution()
@@ -189,6 +194,7 @@ func (db *DB) rollupTimeSeries(
 		for _, data := range rollupDataMap {
 			rollupDataSlice = append(rollupDataSlice, data)
 		}
+		csp.SetTag("target resolution", targetResolution)
 		if err := db.storeRollup(ctx, targetResolution, rollupDataSlice); err != nil {
 			return err
 		}

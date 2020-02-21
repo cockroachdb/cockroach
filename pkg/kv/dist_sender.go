@@ -1032,6 +1032,10 @@ func mergeErrors(pErr1, pErr2 *roachpb.Error) *roachpb.Error {
 func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, withCommit bool, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	ctx, csp := tracing.StartComponentSpan(ctx, ds.Tracer, "client.dist.divider", "split")
+	csp.SetTag("batch", &ba)
+	defer func() { csp.FinishWithError(pErr.GoError()) }()
+
 	// Clone the BatchRequest's transaction so that future mutations to the
 	// proto don't affect the proto in this batch.
 	if ba.Txn != nil {
@@ -1309,7 +1313,13 @@ func (ds *DistSender) sendPartialBatch(
 	withCommit bool,
 	batchIdx int,
 	needsTruncate bool,
-) response {
+) (_r response) {
+	var csp tracing.ComponentSpan
+	ctx, csp = tracing.StartComponentSpan(ctx, ds.Tracer, "client.dist.sender", "send")
+	defer func() { csp.FinishWithError(_r.pErr.GoError()) }()
+	csp.SetTag("batch", &ba)
+	csp.SetTag("txn", ba.Txn)
+
 	if batchIdx == 1 {
 		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
 	} else if batchIdx > 1 {

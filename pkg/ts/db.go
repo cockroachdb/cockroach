@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var (
@@ -187,11 +188,13 @@ func (p *poller) poll() {
 			return
 		}
 
-		ctx, span := p.AnnotateCtxWithSpan(bgCtx, "ts-poll")
-		defer span.Finish()
+		ctx, csp := tracing.StartComponentSpan(bgCtx, p.Tracer, "timeseries.poll", "time series poll loop")
+		defer csp.Finish()
+		csp.SetTag("metrics data", data)
 
 		if err := p.db.StoreData(ctx, p.r, data); err != nil {
 			log.Warningf(ctx, "error writing time series data: %s", err)
+			csp.SetError(err)
 		}
 	}); err != nil {
 		log.Warning(bgCtx, err)

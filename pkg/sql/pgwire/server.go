@@ -520,7 +520,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			auth:            s.GetAuthenticationConfiguration(),
 			testingAuthHook: testingAuthHook,
 		},
-		s.stopper)
+		s.stopper, s.AmbientCtx.Tracer)
 	return nil
 }
 

@@ -12,6 +12,7 @@ package kv
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -19,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -130,6 +133,8 @@ type txnSpanRefresher struct {
 	// autoRetryCounter counts the number of auto retries which avoid
 	// client-side restarts.
 	autoRetryCounter *metric.Counter
+
+	tracer opentracing.Tracer
 }
 
 // SendLocked implements the lockedSender interface.
@@ -327,7 +332,18 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 // or not.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
-) bool {
+) (_res bool) {
+	ctx, csp := tracing.StartComponentSpan(ctx, sr.tracer, "client.txncoord.span_refresher", "refresh")
+	defer func() {
+		var err error
+		event := "refresh success"
+		if !_res {
+			event = "refresh failed"
+			err = fmt.Errorf(event)
+		}
+		tracing.RecordComponentEvent("client.txncoord.span_refresher", event)
+		csp.FinishWithError(err)
+	}()
 
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
@@ -372,6 +388,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 				req.Header().Span(), sr.refreshedTimestamp, refreshTxn.WriteTimestamp)
 		}
 	}
+	csp.SetTag("refresh spans", sr.refreshSpans)
 	addRefreshes(sr.refreshSpans)
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
