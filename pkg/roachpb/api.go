@@ -15,6 +15,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
@@ -1272,23 +1273,26 @@ func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
 	return sl
 }
 
-// AsIntent creates an intent corresponding to the given resolve intent request.
-func (rir *ResolveIntentRequest) AsIntent() Intent {
-	return Intent{
+// AsLockUpdate creates a lock update message corresponding to the given resolve
+// intent request.
+func (rir *ResolveIntentRequest) AsLockUpdate() LockUpdate {
+	return LockUpdate{
 		Span:           rir.Span(),
 		Txn:            rir.IntentTxn,
 		Status:         rir.Status,
 		IgnoredSeqNums: rir.IgnoredSeqNums,
+		Durability:     lock.Replicated,
 	}
 }
 
-// AsIntent creates an intent corresponding to the given resolve
+// AsLockUpdate creates a lock update message corresponding to the given resolve
 // intent range request.
-func (rirr *ResolveIntentRangeRequest) AsIntent() Intent {
-	return Intent{
+func (rirr *ResolveIntentRangeRequest) AsLockUpdate() LockUpdate {
+	return LockUpdate{
 		Span:           rirr.Span(),
 		Txn:            rirr.IntentTxn,
 		Status:         rirr.Status,
 		IgnoredSeqNums: rirr.IgnoredSeqNums,
+		Durability:     lock.Replicated,
 	}
 }

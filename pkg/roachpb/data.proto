@@ -13,6 +13,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "roachpb/metadata.proto";
+import "storage/concurrency/lock/locking.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -539,25 +540,42 @@ message TransactionRecord {
   reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
 }
 
-// A Intent is a Span together with a Transaction metadata and its status.
+// A Intent is a Span together with a Transaction metadata. Intents messages
+// are used to reference persistent on-disk write intents. They are used on
+// the return path of e.g. scans, to report the existence of a write intent
+// on a key.
 //
-// Intents are used for two separate purposes:
-// - on the return path of e.g. scans, to report the existence of a
-//    write intent on a key;
-// - as input argument to intent resolution, to pass the current txn status,
-//   timestamps and ignored seqnum ranges to the resolution algorithm.
-// Only in the latter case are the TxnMeta, status and ignored seqnum
-// ranges guaranteed to be consistent with the latest txn's state.
-//
-// Note: avoid constructing Intent directly; consider using
-// MakeIntent() or MakeErrorIntent() instead.
+// Note: avoid constructing Intent directly; consider using MakeIntent() instead.
 message Intent {
+  option (gogoproto.equal) = true;
+
+  // SingleKeySpan preseves wire compatibility with an earlier version of this
+  // proto which used a Span. An Intent never spans keys, so there was no need
+  // for this to contain an EndKey.
+  message SingleKeySpan {
+    option (gogoproto.equal) = true;
+
+    reserved 1, 2, 4;
+    // The start key of the key range.
+    bytes key = 3 [(gogoproto.casttype) = "Key"];
+  }
+  SingleKeySpan single_key_span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+}
+
+// A LockUpdate is a Span together with Transaction state. LockUpdate messages
+// are used to update all locks held by the transaction within the span to the
+// transaction's authoritative state. As such, the message is used as input
+// argument to intent resolution, to pass the current txn status, timestamps and
+// ignored seqnum ranges to the resolution algorithm.
+message LockUpdate {
   option (gogoproto.equal) = true;
 
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+  storage.concurrency.lock.Durability durability = 5;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.

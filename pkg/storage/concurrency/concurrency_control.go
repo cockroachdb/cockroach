@@ -229,11 +229,11 @@ type ContentionHandler interface {
 type LockManager interface {
 	// OnLockAcquired informs the concurrency manager that a transaction has
 	// acquired a new lock or re-acquired an existing lock that it already held.
-	OnLockAcquired(context.Context, *roachpb.Intent)
+	OnLockAcquired(context.Context, *roachpb.LockUpdate)
 
 	// OnLockUpdated informs the concurrency manager that a transaction has
 	// updated or released a lock or range of locks that it previously held.
-	OnLockUpdated(context.Context, *roachpb.Intent)
+	OnLockUpdated(context.Context, *roachpb.LockUpdate)
 }
 
 // TransactionManager is concerned with tracking transactions that have their
@@ -512,7 +512,7 @@ type lockTable interface {
 	//     contained in IgnoredSeqNums are dropped.
 	//   - the remaining locks are changed to timestamp equal to
 	//     txn.WriteTimestamp.
-	UpdateLocks(*roachpb.Intent) error
+	UpdateLocks(*roachpb.LockUpdate) error
 
 	// Clear removes all locks and lock wait-queues from the lockTable.
 	Clear()

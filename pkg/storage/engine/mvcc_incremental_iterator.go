@@ -193,7 +193,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
 				i.err = &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{
-						roachpb.MakePendingIntent(i.meta.Txn, roachpb.Span{Key: i.iter.Key().Key}),
+						roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
 					},
 				}
 				i.valid = false

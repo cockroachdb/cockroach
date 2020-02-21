@@ -503,7 +503,7 @@ func cmdResolveIntent(e *evalCtx) error {
 func (e *evalCtx) resolveIntent(
 	rw ReadWriter, key roachpb.Key, txn *roachpb.Transaction, resolveStatus roachpb.TransactionStatus,
 ) error {
-	intent := roachpb.MakeIntent(txn, roachpb.Span{Key: key})
+	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent)
 	return err
@@ -606,7 +606,7 @@ func cmdGet(e *evalCtx) error {
 	// ascertain no result is populated in the intent when an error
 	// occurs.
 	if intent != nil {
-		fmt.Fprintf(e.results.buf, "get: %v -> intent {%s} %s\n", key, intent.Txn, intent.Status)
+		fmt.Fprintf(e.results.buf, "get: %v -> intent {%s}\n", key, intent.Txn)
 	}
 	if val != nil {
 		fmt.Fprintf(e.results.buf, "get: %v -> %v @%v\n", key, val.PrettyPrint(), val.Timestamp)
@@ -713,7 +713,7 @@ func cmdScan(e *evalCtx) error {
 	// ascertain no result is populated in the intents when an error
 	// occurs.
 	for _, intent := range res.Intents {
-		fmt.Fprintf(e.results.buf, "scan: %v -> intent {%s} %s\n", key, intent.Txn, intent.Status)
+		fmt.Fprintf(e.results.buf, "scan: %v -> intent {%s}\n", key, intent.Txn)
 	}
 	for _, val := range res.KVs {
 		fmt.Fprintf(e.results.buf, "scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)

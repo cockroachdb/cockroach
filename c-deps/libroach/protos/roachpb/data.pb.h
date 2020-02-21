@@ -31,6 +31,7 @@
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
 #include "roachpb/metadata.pb.h"
+#include "storage/concurrency/lock/locking.pb.h"
 #include "storage/engine/enginepb/mvcc.pb.h"
 #include "storage/engine/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
@@ -42,7 +43,7 @@ namespace protobuf_roachpb_2fdata_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[19];
+  static const ::google::protobuf::internal::ParseTable schema[21];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -59,6 +60,9 @@ extern ChangeReplicasTriggerDefaultTypeInternal _ChangeReplicasTrigger_default_i
 class Intent;
 class IntentDefaultTypeInternal;
 extern IntentDefaultTypeInternal _Intent_default_instance_;
+class Intent_SingleKeySpan;
+class Intent_SingleKeySpanDefaultTypeInternal;
+extern Intent_SingleKeySpanDefaultTypeInternal _Intent_SingleKeySpan_default_instance_;
 class InternalCommitTrigger;
 class InternalCommitTriggerDefaultTypeInternal;
 extern InternalCommitTriggerDefaultTypeInternal _InternalCommitTrigger_default_instance_;
@@ -74,6 +78,9 @@ extern LeafTxnInputStateDefaultTypeInternal _LeafTxnInputState_default_instance_
 class Lease;
 class LeaseDefaultTypeInternal;
 extern LeaseDefaultTypeInternal _Lease_default_instance_;
+class LockUpdate;
+class LockUpdateDefaultTypeInternal;
+extern LockUpdateDefaultTypeInternal _LockUpdate_default_instance_;
 class MergeTrigger;
 class MergeTriggerDefaultTypeInternal;
 extern MergeTriggerDefaultTypeInternal _MergeTrigger_default_instance_;
@@ -114,11 +121,13 @@ namespace protobuf {
 template<> ::cockroach::roachpb::AbortSpanEntry* Arena::CreateMaybeMessage<::cockroach::roachpb::AbortSpanEntry>(Arena*);
 template<> ::cockroach::roachpb::ChangeReplicasTrigger* Arena::CreateMaybeMessage<::cockroach::roachpb::ChangeReplicasTrigger>(Arena*);
 template<> ::cockroach::roachpb::Intent* Arena::CreateMaybeMessage<::cockroach::roachpb::Intent>(Arena*);
+template<> ::cockroach::roachpb::Intent_SingleKeySpan* Arena::CreateMaybeMessage<::cockroach::roachpb::Intent_SingleKeySpan>(Arena*);
 template<> ::cockroach::roachpb::InternalCommitTrigger* Arena::CreateMaybeMessage<::cockroach::roachpb::InternalCommitTrigger>(Arena*);
 template<> ::cockroach::roachpb::KeyValue* Arena::CreateMaybeMessage<::cockroach::roachpb::KeyValue>(Arena*);
 template<> ::cockroach::roachpb::LeafTxnFinalState* Arena::CreateMaybeMessage<::cockroach::roachpb::LeafTxnFinalState>(Arena*);
 template<> ::cockroach::roachpb::LeafTxnInputState* Arena::CreateMaybeMessage<::cockroach::roachpb::LeafTxnInputState>(Arena*);
 template<> ::cockroach::roachpb::Lease* Arena::CreateMaybeMessage<::cockroach::roachpb::Lease>(Arena*);
+template<> ::cockroach::roachpb::LockUpdate* Arena::CreateMaybeMessage<::cockroach::roachpb::LockUpdate>(Arena*);
 template<> ::cockroach::roachpb::MergeTrigger* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeTrigger>(Arena*);
 template<> ::cockroach::roachpb::ModifiedSpanTrigger* Arena::CreateMaybeMessage<::cockroach::roachpb::ModifiedSpanTrigger>(Arena*);
 template<> ::cockroach::roachpb::ObservedTimestamp* Arena::CreateMaybeMessage<::cockroach::roachpb::ObservedTimestamp>(Arena*);
@@ -1984,6 +1993,114 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
 };
 // -------------------------------------------------------------------
 
+class Intent_SingleKeySpan : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Intent.SingleKeySpan) */ {
+ public:
+  Intent_SingleKeySpan();
+  virtual ~Intent_SingleKeySpan();
+
+  Intent_SingleKeySpan(const Intent_SingleKeySpan& from);
+
+  inline Intent_SingleKeySpan& operator=(const Intent_SingleKeySpan& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  Intent_SingleKeySpan(Intent_SingleKeySpan&& from) noexcept
+    : Intent_SingleKeySpan() {
+    *this = ::std::move(from);
+  }
+
+  inline Intent_SingleKeySpan& operator=(Intent_SingleKeySpan&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const Intent_SingleKeySpan& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const Intent_SingleKeySpan* internal_default_instance() {
+    return reinterpret_cast<const Intent_SingleKeySpan*>(
+               &_Intent_SingleKeySpan_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    13;
+
+  void Swap(Intent_SingleKeySpan* other);
+  friend void swap(Intent_SingleKeySpan& a, Intent_SingleKeySpan& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline Intent_SingleKeySpan* New() const final {
+    return CreateMaybeMessage<Intent_SingleKeySpan>(NULL);
+  }
+
+  Intent_SingleKeySpan* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<Intent_SingleKeySpan>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const Intent_SingleKeySpan& from);
+  void MergeFrom(const Intent_SingleKeySpan& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Intent_SingleKeySpan* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_key();
+  static const int kKeyFieldNumber = 3;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key(::std::string&& value);
+  #endif
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Intent.SingleKeySpan)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Intent) */ {
  public:
   Intent();
@@ -2018,7 +2135,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Intent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    13;
+    14;
 
   void Swap(Intent* other);
   friend void swap(Intent& a, Intent& b) {
@@ -2054,6 +2171,126 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   void SharedDtor();
   void SetCachedSize(int size) const;
   void InternalSwap(Intent* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  typedef Intent_SingleKeySpan SingleKeySpan;
+
+  // accessors -------------------------------------------------------
+
+  bool has_single_key_span() const;
+  void clear_single_key_span();
+  static const int kSingleKeySpanFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::Intent_SingleKeySpan& _internal_single_key_span() const;
+  public:
+  const ::cockroach::roachpb::Intent_SingleKeySpan& single_key_span() const;
+  ::cockroach::roachpb::Intent_SingleKeySpan* release_single_key_span();
+  ::cockroach::roachpb::Intent_SingleKeySpan* mutable_single_key_span();
+  void set_allocated_single_key_span(::cockroach::roachpb::Intent_SingleKeySpan* single_key_span);
+
+  bool has_txn() const;
+  void clear_txn();
+  static const int kTxnFieldNumber = 2;
+  private:
+  const ::cockroach::storage::engine::enginepb::TxnMeta& _internal_txn() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::TxnMeta& txn() const;
+  ::cockroach::storage::engine::enginepb::TxnMeta* release_txn();
+  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_txn();
+  void set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Intent)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::Intent_SingleKeySpan* single_key_span_;
+  ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.LockUpdate) */ {
+ public:
+  LockUpdate();
+  virtual ~LockUpdate();
+
+  LockUpdate(const LockUpdate& from);
+
+  inline LockUpdate& operator=(const LockUpdate& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  LockUpdate(LockUpdate&& from) noexcept
+    : LockUpdate() {
+    *this = ::std::move(from);
+  }
+
+  inline LockUpdate& operator=(LockUpdate&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const LockUpdate& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const LockUpdate* internal_default_instance() {
+    return reinterpret_cast<const LockUpdate*>(
+               &_LockUpdate_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    15;
+
+  void Swap(LockUpdate* other);
+  friend void swap(LockUpdate& a, LockUpdate& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline LockUpdate* New() const final {
+    return CreateMaybeMessage<LockUpdate>(NULL);
+  }
+
+  LockUpdate* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<LockUpdate>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const LockUpdate& from);
+  void MergeFrom(const LockUpdate& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(LockUpdate* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -2108,7 +2345,13 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Intent)
+  // .cockroach.storage.concurrency.lock.Durability durability = 5;
+  void clear_durability();
+  static const int kDurabilityFieldNumber = 5;
+  ::cockroach::storage::concurrency::lock::Durability durability() const;
+  void set_durability(::cockroach::storage::concurrency::lock::Durability value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.LockUpdate)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -2116,6 +2359,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::cockroach::roachpb::Span* span_;
   ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
   int status_;
+  int durability_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -2155,7 +2399,7 @@ class SequencedWrite : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SequencedWrite_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    14;
+    16;
 
   void Swap(SequencedWrite* other);
   friend void swap(SequencedWrite& a, SequencedWrite& b) {
@@ -2269,7 +2513,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Lease_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    17;
 
   void Swap(Lease* other);
   friend void swap(Lease& a, Lease& b) {
@@ -2436,7 +2680,7 @@ class AbortSpanEntry : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_AbortSpanEntry_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    18;
 
   void Swap(AbortSpanEntry* other);
   friend void swap(AbortSpanEntry& a, AbortSpanEntry& b) {
@@ -2562,7 +2806,7 @@ class LeafTxnInputState : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_LeafTxnInputState_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    17;
+    19;
 
   void Swap(LeafTxnInputState* other);
   friend void swap(LeafTxnInputState& a, LeafTxnInputState& b) {
@@ -2700,7 +2944,7 @@ class LeafTxnFinalState : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_LeafTxnFinalState_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    20;
 
   void Swap(LeafTxnFinalState* other);
   friend void swap(LeafTxnFinalState& a, LeafTxnFinalState& b) {
@@ -4806,59 +5050,115 @@ TransactionRecord::ignored_seqnums() const {
 
 // -------------------------------------------------------------------
 
+// Intent_SingleKeySpan
+
+inline void Intent_SingleKeySpan::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& Intent_SingleKeySpan::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.SingleKeySpan.key)
+  return key_.GetNoArena();
+}
+inline void Intent_SingleKeySpan::set_key(const ::std::string& value) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Intent.SingleKeySpan.key)
+}
+#if LANG_CXX11
+inline void Intent_SingleKeySpan::set_key(::std::string&& value) {
+  
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.Intent.SingleKeySpan.key)
+}
+#endif
+inline void Intent_SingleKeySpan::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Intent.SingleKeySpan.key)
+}
+inline void Intent_SingleKeySpan::set_key(const void* value, size_t size) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Intent.SingleKeySpan.key)
+}
+inline ::std::string* Intent_SingleKeySpan::mutable_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.SingleKeySpan.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* Intent_SingleKeySpan::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.SingleKeySpan.key)
+  
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Intent_SingleKeySpan::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    
+  } else {
+    
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.SingleKeySpan.key)
+}
+
+// -------------------------------------------------------------------
+
 // Intent
 
-inline bool Intent::has_span() const {
-  return this != internal_default_instance() && span_ != NULL;
+inline bool Intent::has_single_key_span() const {
+  return this != internal_default_instance() && single_key_span_ != NULL;
 }
-inline void Intent::clear_span() {
-  if (GetArenaNoVirtual() == NULL && span_ != NULL) {
-    delete span_;
+inline void Intent::clear_single_key_span() {
+  if (GetArenaNoVirtual() == NULL && single_key_span_ != NULL) {
+    delete single_key_span_;
   }
-  span_ = NULL;
+  single_key_span_ = NULL;
 }
-inline const ::cockroach::roachpb::Span& Intent::_internal_span() const {
-  return *span_;
+inline const ::cockroach::roachpb::Intent_SingleKeySpan& Intent::_internal_single_key_span() const {
+  return *single_key_span_;
 }
-inline const ::cockroach::roachpb::Span& Intent::span() const {
-  const ::cockroach::roachpb::Span* p = span_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.span)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Span*>(
-      &::cockroach::roachpb::_Span_default_instance_);
+inline const ::cockroach::roachpb::Intent_SingleKeySpan& Intent::single_key_span() const {
+  const ::cockroach::roachpb::Intent_SingleKeySpan* p = single_key_span_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.single_key_span)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Intent_SingleKeySpan*>(
+      &::cockroach::roachpb::_Intent_SingleKeySpan_default_instance_);
 }
-inline ::cockroach::roachpb::Span* Intent::release_span() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.span)
+inline ::cockroach::roachpb::Intent_SingleKeySpan* Intent::release_single_key_span() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.single_key_span)
   
-  ::cockroach::roachpb::Span* temp = span_;
-  span_ = NULL;
+  ::cockroach::roachpb::Intent_SingleKeySpan* temp = single_key_span_;
+  single_key_span_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::Span* Intent::mutable_span() {
+inline ::cockroach::roachpb::Intent_SingleKeySpan* Intent::mutable_single_key_span() {
   
-  if (span_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::Span>(GetArenaNoVirtual());
-    span_ = p;
+  if (single_key_span_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::Intent_SingleKeySpan>(GetArenaNoVirtual());
+    single_key_span_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.span)
-  return span_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.single_key_span)
+  return single_key_span_;
 }
-inline void Intent::set_allocated_span(::cockroach::roachpb::Span* span) {
+inline void Intent::set_allocated_single_key_span(::cockroach::roachpb::Intent_SingleKeySpan* single_key_span) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete span_;
+    delete single_key_span_;
   }
-  if (span) {
+  if (single_key_span) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      span = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, span, submessage_arena);
+      single_key_span = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, single_key_span, submessage_arena);
     }
     
   } else {
     
   }
-  span_ = span;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.span)
+  single_key_span_ = single_key_span;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.single_key_span)
 }
 
 inline bool Intent::has_txn() const {
@@ -4908,44 +5208,162 @@ inline void Intent::set_allocated_txn(::cockroach::storage::engine::enginepb::Tx
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.txn)
 }
 
-// .cockroach.roachpb.TransactionStatus status = 3;
-inline void Intent::clear_status() {
-  status_ = 0;
+// -------------------------------------------------------------------
+
+// LockUpdate
+
+inline bool LockUpdate::has_span() const {
+  return this != internal_default_instance() && span_ != NULL;
 }
-inline ::cockroach::roachpb::TransactionStatus Intent::status() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.status)
-  return static_cast< ::cockroach::roachpb::TransactionStatus >(status_);
+inline void LockUpdate::clear_span() {
+  if (GetArenaNoVirtual() == NULL && span_ != NULL) {
+    delete span_;
+  }
+  span_ = NULL;
 }
-inline void Intent::set_status(::cockroach::roachpb::TransactionStatus value) {
+inline const ::cockroach::roachpb::Span& LockUpdate::_internal_span() const {
+  return *span_;
+}
+inline const ::cockroach::roachpb::Span& LockUpdate::span() const {
+  const ::cockroach::roachpb::Span* p = span_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.span)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Span*>(
+      &::cockroach::roachpb::_Span_default_instance_);
+}
+inline ::cockroach::roachpb::Span* LockUpdate::release_span() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.LockUpdate.span)
   
-  status_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Intent.status)
+  ::cockroach::roachpb::Span* temp = span_;
+  span_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::Span* LockUpdate::mutable_span() {
+  
+  if (span_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::Span>(GetArenaNoVirtual());
+    span_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LockUpdate.span)
+  return span_;
+}
+inline void LockUpdate::set_allocated_span(::cockroach::roachpb::Span* span) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete span_;
+  }
+  if (span) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      span = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, span, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  span_ = span;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LockUpdate.span)
 }
 
-inline int Intent::ignored_seqnums_size() const {
+inline bool LockUpdate::has_txn() const {
+  return this != internal_default_instance() && txn_ != NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::TxnMeta& LockUpdate::_internal_txn() const {
+  return *txn_;
+}
+inline const ::cockroach::storage::engine::enginepb::TxnMeta& LockUpdate::txn() const {
+  const ::cockroach::storage::engine::enginepb::TxnMeta* p = txn_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.txn)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::TxnMeta*>(
+      &::cockroach::storage::engine::enginepb::_TxnMeta_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::TxnMeta* LockUpdate::release_txn() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.LockUpdate.txn)
+  
+  ::cockroach::storage::engine::enginepb::TxnMeta* temp = txn_;
+  txn_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::TxnMeta* LockUpdate::mutable_txn() {
+  
+  if (txn_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta>(GetArenaNoVirtual());
+    txn_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LockUpdate.txn)
+  return txn_;
+}
+inline void LockUpdate::set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(txn_);
+  }
+  if (txn) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      txn = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, txn, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  txn_ = txn;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LockUpdate.txn)
+}
+
+// .cockroach.roachpb.TransactionStatus status = 3;
+inline void LockUpdate::clear_status() {
+  status_ = 0;
+}
+inline ::cockroach::roachpb::TransactionStatus LockUpdate::status() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.status)
+  return static_cast< ::cockroach::roachpb::TransactionStatus >(status_);
+}
+inline void LockUpdate::set_status(::cockroach::roachpb::TransactionStatus value) {
+  
+  status_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LockUpdate.status)
+}
+
+inline int LockUpdate::ignored_seqnums_size() const {
   return ignored_seqnums_.size();
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Intent::mutable_ignored_seqnums(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.ignored_seqnums)
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* LockUpdate::mutable_ignored_seqnums(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
-Intent::mutable_ignored_seqnums() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Intent.ignored_seqnums)
+LockUpdate::mutable_ignored_seqnums() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return &ignored_seqnums_;
 }
-inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& Intent::ignored_seqnums(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.ignored_seqnums)
+inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& LockUpdate::ignored_seqnums(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_.Get(index);
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Intent::add_ignored_seqnums() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.Intent.ignored_seqnums)
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* LockUpdate::add_ignored_seqnums() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
-Intent::ignored_seqnums() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.Intent.ignored_seqnums)
+LockUpdate::ignored_seqnums() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_;
+}
+
+// .cockroach.storage.concurrency.lock.Durability durability = 5;
+inline void LockUpdate::clear_durability() {
+  durability_ = 0;
+}
+inline ::cockroach::storage::concurrency::lock::Durability LockUpdate::durability() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.durability)
+  return static_cast< ::cockroach::storage::concurrency::lock::Durability >(durability_);
+}
+inline void LockUpdate::set_durability(::cockroach::storage::concurrency::lock::Durability value) {
+  
+  durability_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LockUpdate.durability)
 }
 
 // -------------------------------------------------------------------
@@ -5643,6 +6061,10 @@ inline void LeafTxnFinalState::set_refresh_invalid(bool value) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

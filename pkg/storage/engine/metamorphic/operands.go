@@ -232,7 +232,7 @@ func (t *txnManager) open() *roachpb.Transaction {
 func (t *txnManager) close(op operand) {
 	txn := op.(*roachpb.Transaction)
 	for _, span := range txn.IntentSpans {
-		intent := roachpb.MakeIntent(txn, span)
+		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.COMMITTED
 		_, err := engine.MVCCResolveWriteIntent(context.TODO(), t.testRunner.engine, nil, intent)
 		if err != nil {

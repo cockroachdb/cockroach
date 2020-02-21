@@ -113,7 +113,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			txn.Status = roachpb.COMMITTED
 			txn.WriteTimestamp.Forward(ts4)
 			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeIntent(txn, roachpb.Span{Key: key}),
+				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -193,7 +193,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			txn.Status = roachpb.COMMITTED
 			txn.WriteTimestamp.Forward(ts4)
 			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeIntent(txn, roachpb.Span{Key: key}),
+				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -271,7 +271,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 			txn.WriteTimestamp.Forward(ts4)
 			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeIntent(txn, roachpb.Span{Key: key}),
+				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -606,7 +606,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				txnCommit.Status = roachpb.COMMITTED
 				txnCommit.WriteTimestamp.Forward(ts3)
 				if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
-					roachpb.MakeIntent(txnCommit, roachpb.Span{Key: key}),
+					roachpb.MakeLockUpdate(txnCommit, roachpb.Span{Key: key}),
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -635,7 +635,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				txnAbort.Status = roachpb.ABORTED
 				txnAbort.WriteTimestamp.Forward(ts3)
 				if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
-					roachpb.MakeIntent(txnAbort, roachpb.Span{Key: key}),
+					roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -765,7 +765,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				txnAbort := txn.Clone()
 				txnAbort.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
 				if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
-					roachpb.MakeIntent(txnAbort, roachpb.Span{Key: key}),
+					roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -1236,7 +1236,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 			// Now abort the intent.
 			txn.Status = roachpb.ABORTED
 			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeIntent(txn, roachpb.Span{Key: key}),
+				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -1339,14 +1339,14 @@ type state struct {
 	key roachpb.Key
 }
 
-func (s *state) intent(status roachpb.TransactionStatus) roachpb.Intent {
-	intent := roachpb.MakeIntent(s.Txn, roachpb.Span{Key: s.key})
+func (s *state) intent(status roachpb.TransactionStatus) roachpb.LockUpdate {
+	intent := roachpb.MakeLockUpdate(s.Txn, roachpb.Span{Key: s.key})
 	intent.Status = status
 	return intent
 }
 
-func (s *state) intentRange(status roachpb.TransactionStatus) roachpb.Intent {
-	intent := roachpb.MakeIntent(s.Txn, roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax})
+func (s *state) intentRange(status roachpb.TransactionStatus) roachpb.LockUpdate {
+	intent := roachpb.MakeLockUpdate(s.Txn, roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax})
 	intent.Status = status
 	return intent
 }

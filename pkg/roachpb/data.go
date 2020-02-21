@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -1782,15 +1783,55 @@ func (l *Lease) Equal(that interface{}) bool {
 	return true
 }
 
-// AsIntents takes a slice of spans and returns it as a slice of intents for
-// the given transaction.
-func AsIntents(spans []Span, txn *Transaction) []Intent {
-	ret := make([]Intent, len(spans))
-	for i := range spans {
-		ret[i] = Intent{Span: spans[i]}
-		ret[i].SetTxn(txn)
+// MakeIntent makes an intent with the given txn and key.
+// This is suitable for use when constructing WriteIntentError.
+func MakeIntent(txn *enginepb.TxnMeta, key Key) Intent {
+	var i Intent
+	i.Key = key
+	i.Txn = *txn
+	return i
+}
+
+// AsIntents takes a transaction and a slice of keys and
+// returns it as a slice of intents.
+func AsIntents(txn *enginepb.TxnMeta, keys []Key) []Intent {
+	ret := make([]Intent, len(keys))
+	for i := range keys {
+		ret[i] = MakeIntent(txn, keys[i])
 	}
 	return ret
+}
+
+// MakeLockUpdate makes a lock update from the given span and txn.
+// The function assumes that the lock has a replicated durability.
+func MakeLockUpdate(txn *Transaction, span Span) LockUpdate {
+	return MakeLockUpdateWithDur(txn, span, lock.Replicated)
+}
+
+// MakeLockUpdateWithDur makes a lock update from the given span,
+// txn, and lock durability.
+func MakeLockUpdateWithDur(txn *Transaction, span Span, dur lock.Durability) LockUpdate {
+	update := LockUpdate{Span: span}
+	update.SetTxn(txn)
+	update.Durability = dur
+	return update
+}
+
+// AsLockUpdates takes a slice of spans and returns it as a slice
+// of lock updates for the given transaction and lock durability.
+func AsLockUpdates(txn *Transaction, spans []Span, dur lock.Durability) []LockUpdate {
+	ret := make([]LockUpdate, len(spans))
+	for i := range spans {
+		ret[i] = MakeLockUpdateWithDur(txn, spans[i], dur)
+	}
+	return ret
+}
+
+// SetTxn updates the transaction details in the lock update.
+func (u *LockUpdate) SetTxn(txn *Transaction) {
+	u.Txn = txn.TxnMeta
+	u.Status = txn.Status
+	u.IgnoredSeqNums = txn.IgnoredSeqNums
 }
 
 // EqualValue compares for equality.
@@ -2128,29 +2169,4 @@ func init() {
 	// Inject the format dependency into the enginepb package.
 	enginepb.FormatBytesAsKey = func(k []byte) string { return Key(k).String() }
 	enginepb.FormatBytesAsValue = func(v []byte) string { return Value{RawBytes: v}.PrettyPrint() }
-}
-
-// MakeIntent makes an intent from the given span and txn.
-func MakeIntent(txn *Transaction, span Span) Intent {
-	intent := Intent{Span: span}
-	intent.SetTxn(txn)
-	return intent
-}
-
-// MakePendingIntent makes an intent in the pending state with the
-// given span and txn. This is suitable for use when constructing
-// WriteIntentError.
-func MakePendingIntent(txn *enginepb.TxnMeta, span Span) Intent {
-	return Intent{
-		Span:   span,
-		Txn:    *txn,
-		Status: PENDING,
-	}
-}
-
-// SetTxn updates the transaction details in the intent.
-func (i *Intent) SetTxn(txn *Transaction) {
-	i.Txn = txn.TxnMeta
-	i.Status = txn.Status
-	i.IgnoredSeqNums = txn.IgnoredSeqNums
 }

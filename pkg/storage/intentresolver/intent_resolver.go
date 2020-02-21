@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -250,7 +251,7 @@ func (ir *IntentResolver) ProcessWriteIntentError(
 	// Possibly queue this processing if the write intent error is for a
 	// single intent affecting a unitary key.
 	var cleanup func(*roachpb.WriteIntentError, *enginepb.TxnMeta)
-	if len(wiErr.Intents) == 1 && len(wiErr.Intents[0].Span.EndKey) == 0 {
+	if len(wiErr.Intents) == 1 {
 		var done bool
 		var pErr *roachpb.Error
 		// Note that the write intent error may be mutated here in the event
@@ -331,18 +332,11 @@ func (ir *IntentResolver) maybePushIntents(
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
 	skipIfInFlight bool,
-) ([]roachpb.Intent, *roachpb.Error) {
+) ([]roachpb.LockUpdate, *roachpb.Error) {
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	pushTxns := make(map[uuid.UUID]*enginepb.TxnMeta)
 	for i := range intents {
 		intent := &intents[i]
-		if intent.Status != roachpb.PENDING {
-			// The current intent does not need conflict resolution
-			// because the transaction is already finalized.
-			// This shouldn't happen as all intents created are in
-			// the PENDING status.
-			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
-		}
 		pushTxns[intent.Txn.ID] = &intent.Txn
 	}
 
@@ -363,8 +357,8 @@ func updateIntentTxnStatus(
 	pushedTxns map[uuid.UUID]roachpb.Transaction,
 	intents []roachpb.Intent,
 	skipIfInFlight bool,
-	results []roachpb.Intent,
-) []roachpb.Intent {
+	results []roachpb.LockUpdate,
+) []roachpb.LockUpdate {
 	for _, intent := range intents {
 		pushee, ok := pushedTxns[intent.Txn.ID]
 		if !ok {
@@ -375,8 +369,8 @@ func updateIntentTxnStatus(
 			// It must have been skipped.
 			continue
 		}
-		intent.SetTxn(&pushee)
-		results = append(results, intent)
+		up := roachpb.MakeLockUpdateWithDur(&pushee, roachpb.Span{Key: intent.Key}, lock.Replicated)
+		results = append(results, up)
 	}
 	return results
 }
@@ -559,6 +553,7 @@ func (ir *IntentResolver) CleanupIntents(
 	resolved := 0
 	const skipIfInFlight = true
 	pushTxns := make(map[uuid.UUID]*enginepb.TxnMeta)
+	var resolveIntents []roachpb.LockUpdate
 	for unpushed := intents; len(unpushed) > 0; {
 		for k := range pushTxns { // clear the pushTxns map
 			delete(pushTxns, k)
@@ -579,8 +574,8 @@ func (ir *IntentResolver) CleanupIntents(
 		if pErr != nil {
 			return 0, errors.Wrapf(pErr.GoError(), "failed to push during intent resolution")
 		}
-		resolveIntents := updateIntentTxnStatus(ctx, pushedTxns, unpushed[:i],
-			skipIfInFlight, unpushed[:0])
+		resolveIntents = updateIntentTxnStatus(ctx, pushedTxns, unpushed[:i],
+			skipIfInFlight, resolveIntents[:0])
 		// resolveIntents with poison=true because we're resolving
 		// intents outside of the context of an EndTxn.
 		//
@@ -627,7 +622,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsIntents(et.Txn.IntentSpans, et.Txn)
+			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.IntentSpans, lock.Replicated)
 			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, et.Txn, intents, now, et.Poison, nil); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
@@ -672,7 +667,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
-	intents []roachpb.Intent,
+	intents []roachpb.LockUpdate,
 	now hlc.Timestamp,
 	onComplete func(pushed, succeeded bool),
 ) error {
@@ -807,7 +802,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
-	intents []roachpb.Intent,
+	intents []roachpb.LockUpdate,
 	now hlc.Timestamp,
 	poison bool,
 	onComplete func(error),
@@ -882,14 +877,14 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 
 // ResolveIntent synchronously resolves an intent according to opts.
 func (ir *IntentResolver) ResolveIntent(
-	ctx context.Context, intent roachpb.Intent, opts ResolveOptions,
+	ctx context.Context, intent roachpb.LockUpdate, opts ResolveOptions,
 ) *roachpb.Error {
-	return ir.ResolveIntents(ctx, []roachpb.Intent{intent}, opts)
+	return ir.ResolveIntents(ctx, []roachpb.LockUpdate{intent}, opts)
 }
 
 // ResolveIntents synchronously resolves intents according to opts.
 func (ir *IntentResolver) ResolveIntents(
-	ctx context.Context, intents []roachpb.Intent, opts ResolveOptions,
+	ctx context.Context, intents []roachpb.LockUpdate, opts ResolveOptions,
 ) *roachpb.Error {
 	if len(intents) == 0 {
 		return nil
