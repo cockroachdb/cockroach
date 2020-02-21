@@ -328,7 +328,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 						forceDiskSpill: spillForced,
 					}
 					if spillForced {
-						args.maxNumberPartitions = 2 + rng.Intn(3)
+						args.numForcedRepartitions = 2 + rng.Intn(3)
 					}
 					if err := verifyColOperator(args); err != nil {
 						fmt.Printf("--- seed = %d spillForced = %t nCols = %d K = %d ---\n",
@@ -547,12 +547,13 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									},
 								}
 								args := verifyColOperatorArgs{
-									anyOrder:       true,
-									inputTypes:     [][]types.T{lInputTypes, rInputTypes},
-									inputs:         []sqlbase.EncDatumRows{lRows, rRows},
-									outputTypes:    outputTypes,
-									pspec:          pspec,
-									forceDiskSpill: spillForced,
+									anyOrder:              true,
+									inputTypes:            [][]types.T{lInputTypes, rInputTypes},
+									inputs:                []sqlbase.EncDatumRows{lRows, rRows},
+									outputTypes:           outputTypes,
+									pspec:                 pspec,
+									forceDiskSpill:        spillForced,
+									numForcedRepartitions: 2,
 								}
 								if err := verifyColOperator(args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+

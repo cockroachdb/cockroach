@@ -99,6 +99,9 @@ func (t *topKSorter) Init() {
 		typ := t.inputTypes[i]
 		t.comparators[i] = GetVecComparator(typ, 2)
 	}
+	// TODO(yuzefovich): switch to calling this method on allocator. This will
+	// require plumbing unlimited allocator to work correctly in tests with
+	// memory limit of 1.
 	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, int(coldata.BatchSize()))
 }
 
