@@ -1,6 +1,10 @@
 import React from "react";
-import {jobHasOneOfStatuses, renamedStatuses} from "src/views/jobs/jobStatusOptions";
-import {JOB_STATUS_CANCELED, JOB_STATUS_FAILED, JOB_STATUS_SUCCEEDED} from "oss/src/views/jobs/index";
+import {
+  JOB_STATUS_CANCELED,
+  JOB_STATUS_FAILED, JOB_STATUS_SUCCEEDED,
+  jobHasOneOfStatuses,
+  renamedStatuses,
+} from "src/views/jobs/jobStatusOptions";
 import classNames from "classnames";
 import {Line} from "rc-progress";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;

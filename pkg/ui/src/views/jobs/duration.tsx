@@ -1,12 +1,14 @@
 import React from "react";
 import {TimestampToMoment} from "src/util/convert";
-import {jobHasOneOfStatuses} from "src/views/jobs/jobStatusOptions";
 import {
-  formatDuration,
   JOB_STATUS_PAUSED,
   JOB_STATUS_PENDING,
-  JOB_STATUS_RUNNING,
-  JOB_STATUS_SUCCEEDED,
+  JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED,
+  jobHasOneOfStatuses,
+} from "src/views/jobs/jobStatusOptions";
+import {
+  formatDuration,
+
 } from "src/views/jobs/index";
 import _ from "lodash";
 import moment from "moment";

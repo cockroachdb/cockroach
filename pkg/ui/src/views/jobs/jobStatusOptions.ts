@@ -1,6 +1,5 @@
 import {cockroach} from "src/js/protos";
 import _ from "lodash";
-import {JOB_STATUS_CANCELED, JOB_STATUS_FAILED, JOB_STATUS_SUCCEEDED} from "src/views/jobs/index";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 
 export const statusOptions = [
@@ -29,3 +28,10 @@ export const renamedStatuses = (status: string) => {
       return _.capitalize(status);
   }
 };
+
+export const JOB_STATUS_SUCCEEDED = "succeeded";
+export const JOB_STATUS_FAILED = "failed";
+export const JOB_STATUS_CANCELED = "canceled";
+export const JOB_STATUS_PAUSED = "paused";
+export const JOB_STATUS_RUNNING = "running";
+export const JOB_STATUS_PENDING = "pending";

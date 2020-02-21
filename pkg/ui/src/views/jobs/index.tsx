@@ -64,13 +64,6 @@ export const formatDuration = (d: moment.Duration) =>
     .map(c => ("0" + c).slice(-2))
     .join(":");
 
-export const JOB_STATUS_SUCCEEDED = "succeeded";
-export const JOB_STATUS_FAILED = "failed";
-export const JOB_STATUS_CANCELED = "canceled";
-export const JOB_STATUS_PENDING = "pending";
-export const JOB_STATUS_PAUSED = "paused";
-export const JOB_STATUS_RUNNING = "running";
-
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "jobs/sort_setting",
   s => s.localSettings,
