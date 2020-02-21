@@ -12,14 +12,12 @@ export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
     const job = this.props.job;
     const additionalStyle = (job.statement ? "" : " jobs-table__cell--sql");
     return (
-      <Link className={`jobs-table__cell--description${additionalStyle}`} to={`jobs/${String(job.id)}`}>
+      <Link className={`${additionalStyle}`} to={`jobs/${String(job.id)}`}>
         <div className="cl-table-link__tooltip">
           <Tooltip overlayClassName="preset-black" placement="bottom" title={
             <pre style={{whiteSpace: "pre-wrap"}}>{job.description}</pre>
           }>
-            <div className={`jobs-table__cell--description${additionalStyle}`}>
-              {job.statement || job.description}
-            </div>
+            <div className="jobs-table__cell--description">{job.statement || job.description}</div>
           </Tooltip>
         </div>
       </Link>
