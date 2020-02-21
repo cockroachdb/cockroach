@@ -1,9 +1,6 @@
 import React from "react";
 import {ColumnDescriptor, SortedTable} from "src/views/shared/components/sortedtable";
 import {cockroach} from "src/js/protos";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {Link} from "react-router-dom";
-import {Tooltip} from "src/components";
 import {TimestampToMoment} from "src/util/convert";
 import {DATE_FORMAT} from "src/util/format";
 import {JobStatusCell} from "oss/src/views/jobs/jobStatusCell";
@@ -11,8 +8,10 @@ import {Icon, Pagination} from "antd";
 import Empty from "src/views/app/components/empty";
 import {SortSetting} from "oss/src/views/shared/components/sortabletable";
 import {CachedDataReducerState} from "oss/src/redux/cachedDataReducer";
-import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import _ from "lodash";
+import {JobDescriptionCell} from "oss/src/views/jobs/jobDescriptionCell";
+import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import JobsResponse = cockroach.server.serverpb.JobsResponse;
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -20,25 +19,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
     title: "Description",
     className: "cl-table__col-query-text",
-    cell: job => {
-      // If a [SQL] job.statement exists, it means that job.description
-      // is a human-readable message. Otherwise job.description is a SQL
-      // statement.
-      const additionalStyle = (job.statement ? "" : " jobs-table__cell--sql");
-      return (
-        <Link className={`jobs-table__cell--description${additionalStyle}`} to={`jobs/${String(job.id)}`}>
-          <div className="cl-table-link__tooltip">
-            <Tooltip overlayClassName="preset-black" placement="bottom" title={
-              <pre style={{ whiteSpace: "pre-wrap" }}>{ job.description }</pre>
-            }>
-              <div className={`jobs-table__cell--description${additionalStyle}`} >
-                {job.statement || job.description}
-              </div>
-            </Tooltip>
-          </div>
-        </Link>
-      );
-    },
+    cell: job => <JobDescriptionCell job={job}/>,
     sort: job => job.description,
   },
   {
