@@ -550,22 +550,35 @@ func NewColOperator(
 					inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
 					hashJoinerMemMonitorName,
 					func(inputOne, inputTwo Operator) Operator {
-						monitorNamePrefix := "external-hash-joiner-"
+						memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+						monitorNamePrefix := "external-hash-joiner"
 						allocator := NewAllocator(
 							// Pass in the default limit explicitly since we don't want to
 							// use the default memory limit of 1 if ForceDiskSpill is true, to
 							// allow for the external hash join to have a normal amount of
 							// memory (for initialization and internal joining).
 							ctx, result.createBufferingMemAccountWithLimit(
-								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+								ctx, flowCtx, monitorNamePrefix, memoryLimit,
 							))
 						diskQueuesUnlimitedAllocator := NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
+								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
 							))
+						if flowCtx.Cfg.TestingKnobs.ForceDiskSpill && flowCtx.Cfg.TestingKnobs.MemoryLimitBytes == 0 {
+							// We're in a test, and we want to make recursive partitioning
+							// more likely, so we will actually "limit" the number of RAM
+							// available. External hash joiner uses this limit to check
+							// whether repartitioning is needed.
+							// TODO(yuzefovich): once we have fall back to sort + merge join
+							// we should change memory limit here only if it is greater than
+							// mon.DefaultPoolAllocationSize.
+							memoryLimit = mon.DefaultPoolAllocationSize
+						}
 						return newExternalHashJoiner(
 							allocator, hjSpec,
 							inputOne, inputTwo,
+							memoryLimit,
+							args.DiskQueueCfg.BufferSizeBytes,
 							diskQueuesUnlimitedAllocator,
 						)
 					},

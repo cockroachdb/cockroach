@@ -118,6 +118,11 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 			for _, nBatches := range []int{1 << 2, 1 << 7} {
 				for _, spillForced := range []bool{false, true} {
 					flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+					if spillForced {
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 100 * mon.DefaultPoolAllocationSize
+					} else {
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+					}
 					name := fmt.Sprintf(
 						"nulls=%t/fullOuter=%t/batches=%d/spillForced=%t",
 						hasNulls, fullOuter, nBatches, spillForced)
