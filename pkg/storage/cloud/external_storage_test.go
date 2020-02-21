@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,7 +62,7 @@ func storeFromURI(
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := MakeExternalStorage(ctx, conf, testSettings, clientFactory)
+	s, err := MakeExternalStorage(ctx, conf, base.ExternalIOConfig{}, testSettings, clientFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +70,12 @@ func storeFromURI(
 }
 
 func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
+	testExportStoreWithExternalIOConfig(t, base.ExternalIOConfig{}, storeURI, skipSingleFile)
+}
+
+func testExportStoreWithExternalIOConfig(
+	t *testing.T, ioConf base.ExternalIOConfig, storeURI string, skipSingleFile bool,
+) {
 	ctx := context.TODO()
 
 	conf, err := ExternalStorageConfFromURI(storeURI)
@@ -78,7 +85,7 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := MakeExternalStorage(ctx, conf, testSettings, clientFactory)
+	s, err := MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +476,8 @@ func TestWorkloadStorage(t *testing.T) {
 
 	{
 		s, err := ExternalStorageFromURI(
-			ctx, bankURL().String(), settings, blobs.TestEmptyBlobClientFactory,
+			ctx, bankURL().String(), base.ExternalIOConfig{},
+			settings, blobs.TestEmptyBlobClientFactory,
 		)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
@@ -488,7 +496,8 @@ func TestWorkloadStorage(t *testing.T) {
 		params := map[string]string{
 			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
 		s, err := ExternalStorageFromURI(
-			ctx, bankURL(params).String(), settings, blobs.TestEmptyBlobClientFactory,
+			ctx, bankURL(params).String(), base.ExternalIOConfig{},
+			settings, blobs.TestEmptyBlobClientFactory,
 		)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
@@ -502,27 +511,33 @@ func TestWorkloadStorage(t *testing.T) {
 	}
 
 	_, err := ExternalStorageFromURI(
-		ctx, `workload:///nope`, settings, blobs.TestEmptyBlobClientFactory,
+		ctx, `workload:///nope`, base.ExternalIOConfig{},
+		settings, blobs.TestEmptyBlobClientFactory,
 	)
 	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
 	_, err = ExternalStorageFromURI(
-		ctx, `workload:///fmt/bank/bank?version=`, settings, blobs.TestEmptyBlobClientFactory,
+		ctx, `workload:///fmt/bank/bank?version=`, base.ExternalIOConfig{},
+		settings, blobs.TestEmptyBlobClientFactory,
 	)
 	require.EqualError(t, err, `unsupported format: fmt`)
 	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/nope/nope?version=`, settings, blobs.TestEmptyBlobClientFactory,
+		ctx, `workload:///csv/nope/nope?version=`, base.ExternalIOConfig{},
+		settings, blobs.TestEmptyBlobClientFactory,
 	)
 	require.EqualError(t, err, `unknown generator: nope`)
 	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank`, settings, blobs.TestEmptyBlobClientFactory,
+		ctx, `workload:///csv/bank/bank`, base.ExternalIOConfig{},
+		settings, blobs.TestEmptyBlobClientFactory,
 	)
 	require.EqualError(t, err, `parameter version is required`)
 	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank?version=`, settings, blobs.TestEmptyBlobClientFactory,
+		ctx, `workload:///csv/bank/bank?version=`, base.ExternalIOConfig{},
+		settings, blobs.TestEmptyBlobClientFactory,
 	)
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
 	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank?version=nope`, settings, blobs.TestEmptyBlobClientFactory,
+		ctx, `workload:///csv/bank/bank?version=nope`, base.ExternalIOConfig{},
+		settings, blobs.TestEmptyBlobClientFactory,
 	)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }
