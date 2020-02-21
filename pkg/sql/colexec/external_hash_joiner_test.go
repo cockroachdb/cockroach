@@ -52,9 +52,9 @@ func TestExternalHashJoiner(t *testing.T) {
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-		t.Run(fmt.Sprintf("spillForced=%t", spillForced), func(t *testing.T) {
-			for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
-				for _, tc := range tcs {
+		for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
+			for _, tc := range tcs {
+				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
 					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
 						spec := createSpecForHashJoiner(tc)
 						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(ctx, flowCtx, spec, sources, func() {}, queueCfg)
@@ -62,9 +62,9 @@ func TestExternalHashJoiner(t *testing.T) {
 						memMonitors = append(memMonitors, monitors...)
 						return hjOp, err
 					})
-				}
+				})
 			}
-		})
+		}
 	}
 	for _, memAccount := range memAccounts {
 		memAccount.Close(ctx)
