@@ -68,10 +68,14 @@ func TestBuilder(t *testing.T) {
 				memo.ExprFmtHideRuleProps |
 				memo.ExprFmtHideStats |
 				memo.ExprFmtHideCost |
-				memo.ExprFmtHideQualifications
+				memo.ExprFmtHideQualifications |
+				memo.ExprFmtHideScalars |
+				memo.ExprFmtHideTypes
 
 			switch d.Cmd {
 			case "build-scalar":
+				// Remove the HideScalars, HideTypes flag for build-scalars.
+				tester.Flags.ExprFormat &= ^(memo.ExprFmtHideScalars | memo.ExprFmtHideTypes)
 				for _, arg := range d.CmdArgs {
 					key, vals := arg.Key, arg.Vals
 					switch key {

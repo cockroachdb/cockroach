@@ -79,7 +79,7 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [as=count_rows:5, type=int]
 
 # Test that the stats are calculated correctly for synthesized columns.
 build
@@ -98,9 +98,9 @@ select
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── projections
- │         └── concat(s, y::STRING) [type=string, outer=(2,3)]
+ │         └── concat(s:3, y:2::STRING) [as=concat:5, type=string, outer=(2,3)]
  └── filters
-      └── concat = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+      └── concat:5 = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
 
 # Test that stats for synthesized and non-synthesized columns are combined.
 build
@@ -123,7 +123,7 @@ group-by
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── projections
-           └── concat(s, y::STRING) [type=string, outer=(2,3)]
+           └── concat(s:3, y:2::STRING) [as=concat:5, type=string, outer=(2,3)]
 
 # No available stats for column y.
 build
@@ -141,9 +141,9 @@ select
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── projections
- │         └── y + 3 [type=int, outer=(2)]
+ │         └── y:2 + 3 [as=v:5, type=int, outer=(2)]
  └── filters
-      └── (v >= 1) AND (v <= 100) [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
+      └── (v:5 >= 1) AND (v:5 <= 100) [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
 
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
@@ -198,7 +198,7 @@ select
                      │    ├── key: (5)
                      │    └── fd: (5)-->(6,7)
                      └── projections
-                          └── s < v [type=bool, outer=(3,7)]
+                          └── s:3 < v:7 [as=column8:8, type=bool, outer=(3,7)]
 
 # Bump up null counts.
 exec-ddl
@@ -255,9 +255,9 @@ select
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── projections
- │         └── concat(s, y::STRING) [type=string, outer=(2,3)]
+ │         └── concat(s:3, y:2::STRING) [as=concat:5, type=string, outer=(2,3)]
  └── filters
-      └── concat = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+      └── concat:5 = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
 
 build colstat=5 colstat=6 colstat=(5,6)
 SELECT NULL, NULLIF(x,y) FROM a
@@ -272,5 +272,5 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── projections
-      ├── null [type=unknown]
-      └── CASE x WHEN y THEN NULL ELSE x END [type=int, outer=(1,2)]
+      ├── NULL [as="?column?":5, type=unknown]
+      └── CASE x:1 WHEN y:2 THEN NULL ELSE x:1 END [as=nullif:6, type=int, outer=(1,2)]

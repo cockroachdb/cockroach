@@ -38,7 +38,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── filters
-      └── variable: b [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+      └── b:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -128,9 +128,9 @@ group-by
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      ├── count-rows [type=int]
-      └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int]
+      ├── count-rows [as=count_rows:6, type=int]
+      └── const-agg [as=y:2, type=int, outer=(2)]
+           └── y:2 [type=int]
 
 # Test calculation of multi-column stats.
 opt
@@ -162,7 +162,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'aaa'] [/'bar' - ])]
+      └── (s:3 <= 'aaa') OR (s:3 >= 'bar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'aaa'] [/'bar' - ])]
 
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
@@ -181,7 +181,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)~~>(1)
  └── filters
-      └── ((s <= 'aaa') OR ((s >= 'bar') AND (s <= 'foo'))) OR (s IS NULL) [type=bool, outer=(3), constraints=(/3: [/NULL - /'aaa'] [/'bar' - /'foo'])]
+      └── ((s:3 <= 'aaa') OR ((s:3 >= 'bar') AND (s:3 <= 'foo'))) OR (s:3 IS NULL) [type=bool, outer=(3), constraints=(/3: [/NULL - /'aaa'] [/'bar' - /'foo'])]
 
 opt
 SELECT s, d, x FROM a WHERE s IS NOT NULL
@@ -210,7 +210,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
+      └── (s:3 <= 'foo') OR (s:3 >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d > 5.0
@@ -234,8 +234,8 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
-           └── d > 5.0 [type=bool, outer=(4), constraints=(/4: (/5.0 - ]; tight)]
+           ├── (s:3 <= 'foo') OR (s:3 >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
+           └── d:4 > 5.0 [type=bool, outer=(4), constraints=(/4: (/5.0 - ]; tight)]
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 5.0 AND s IS NOT NULL
@@ -259,8 +259,8 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
-           └── d <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
+           ├── (s:3 <= 'foo') OR (s:3 >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
+           └── d:4 <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
 
 # Bump up null counts.
 
@@ -356,7 +356,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'aaa'] [/'bar' - ])]
+      └── (s:3 <= 'aaa') OR (s:3 >= 'bar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'aaa'] [/'bar' - ])]
 
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
@@ -375,7 +375,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)~~>(1)
  └── filters
-      └── ((s <= 'aaa') OR ((s >= 'bar') AND (s <= 'foo'))) OR (s IS NULL) [type=bool, outer=(3), constraints=(/3: [/NULL - /'aaa'] [/'bar' - /'foo'])]
+      └── ((s:3 <= 'aaa') OR ((s:3 >= 'bar') AND (s:3 <= 'foo'))) OR (s:3 IS NULL) [type=bool, outer=(3), constraints=(/3: [/NULL - /'aaa'] [/'bar' - /'foo'])]
 
 opt
 SELECT s, d, x FROM a WHERE s IS NOT NULL
@@ -404,7 +404,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
+      └── (s:3 <= 'foo') OR (s:3 >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 5.0 AND s IS NOT NULL
@@ -428,8 +428,8 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
-           └── d <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
+           ├── (s:3 <= 'foo') OR (s:3 >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
+           └── d:4 <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
 
 exec-ddl
 CREATE TABLE abcde (
@@ -579,13 +579,13 @@ project
  │    │    │    │    ├── columns: tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
  │    │    │    │    └── stats: [rows=1000, distinct(16,17)=1000, null(16,17)=19.9]
  │    │    │    └── filters
- │    │    │         └── tab0.j IN (tab1.j,) [type=bool, outer=(10,21)]
+ │    │    │         └── tab0.j:10 IN (tab1.j:21,) [type=bool, outer=(10,21)]
  │    │    └── projections
- │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h, tab1.e, tab0.f, tab0.e::STRING), tab1.f, '') THEN true ELSE false END [type=bool, outer=(5,6,8,16,17)]
+ │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:16, tab0.f:6, tab0.e:5::STRING), tab1.f:17, '') THEN true ELSE false END [as=col1:25, type=bool, outer=(5,6,8,16,17)]
  │    └── filters
- │         └── variable: col1 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
+ │         └── col1:25 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as="?column?":26, type=int]
 
 # ---------------------
 # Tests with Histograms
@@ -746,7 +746,7 @@ select
  │        histogram(1)=  0  0  90  10  180  20  270  30  360  40
  │                     <--- 0 ---- 10 ----- 20 ----- 30 ----- 40
  └── filters
-      └── a > 30 [type=bool, outer=(1), constraints=(/1: [/31 - ]; tight)]
+      └── a:1 > 30 [type=bool, outer=(1), constraints=(/1: [/31 - ]; tight)]
 
 opt
 SELECT * FROM hist WHERE b > '2018-07-31'::DATE AND b < '2018-08-05'::DATE
@@ -821,7 +821,7 @@ index-join hist
       │    ├── key: (8)
       │    └── fd: (8)-->(4)
       └── filters
-           └── (d < 15.0) OR (d >= 40.0) [type=bool, outer=(4), constraints=(/4: (/NULL - /14.999999999999998] [/40.0 - ])]
+           └── (d:4 < 15.0) OR (d:4 >= 40.0) [type=bool, outer=(4), constraints=(/4: (/NULL - /14.999999999999998] [/40.0 - ])]
 
 opt
 SELECT * FROM hist WHERE e < '2018-07-31 23:00:00'::TIMESTAMP
@@ -899,9 +899,9 @@ select
  │         │    ├── key: (8)
  │         │    └── fd: (8)-->(1)
  │         └── filters
- │              └── (a = 10) OR (a = 20) [type=bool, outer=(1), constraints=(/1: [/10 - /10] [/20 - /20])]
+ │              └── (a:1 = 10) OR (a:1 = 20) [type=bool, outer=(1), constraints=(/1: [/10 - /10] [/20 - /20])]
  └── filters
-      └── (b = '2018-08-31') OR (b = '2018-09-30') [type=bool, outer=(2), constraints=(/2: [/'2018-08-31' - /'2018-08-31'] [/'2018-09-30' - /'2018-09-30'])]
+      └── (b:2 = '2018-08-31') OR (b:2 = '2018-09-30') [type=bool, outer=(2), constraints=(/2: [/'2018-08-31' - /'2018-08-31'] [/'2018-09-30' - /'2018-09-30'])]
 
 opt
 SELECT * FROM hist WHERE (a = 30 OR a = 40) AND (b = '2018-06-30'::DATE OR b = '2018-07-31'::DATE)
@@ -928,6 +928,6 @@ select
  │         │    ├── key: (8)
  │         │    └── fd: (8)-->(2)
  │         └── filters
- │              └── (b = '2018-06-30') OR (b = '2018-07-31') [type=bool, outer=(2), constraints=(/2: [/'2018-06-30' - /'2018-06-30'] [/'2018-07-31' - /'2018-07-31'])]
+ │              └── (b:2 = '2018-06-30') OR (b:2 = '2018-07-31') [type=bool, outer=(2), constraints=(/2: [/'2018-06-30' - /'2018-06-30'] [/'2018-07-31' - /'2018-07-31'])]
  └── filters
-      └── (a = 30) OR (a = 40) [type=bool, outer=(1), constraints=(/1: [/30 - /30] [/40 - /40])]
+      └── (a:1 = 30) OR (a:1 = 40) [type=bool, outer=(1), constraints=(/1: [/30 - /30] [/40 - /40])]

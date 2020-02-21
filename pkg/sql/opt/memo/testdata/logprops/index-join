@@ -46,8 +46,8 @@ select
  └── filters
       └── eq [type=bool, outer=(1,2)]
            ├── plus [type=int]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── const: 10 [type=int]
 
 opt
@@ -76,8 +76,8 @@ project
       └── filters
            └── eq [type=bool, outer=(1,2)]
                 ├── plus [type=int]
-                │    ├── variable: x [type=int]
-                │    └── variable: y [type=int]
+                │    ├── variable: x:1 [type=int]
+                │    └── variable: y:2 [type=int]
                 └── const: 10 [type=int]
 
 # Use secondary index to join to multi-valued primary index, but project only
@@ -103,5 +103,5 @@ select
  │         └── interesting orderings: (+1,+2) (+3,+1,+2)
  └── filters
       └── eq [type=bool, outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
-           ├── variable: d [type=int]
+           ├── variable: d:4 [type=int]
            └── const: 2 [type=int]

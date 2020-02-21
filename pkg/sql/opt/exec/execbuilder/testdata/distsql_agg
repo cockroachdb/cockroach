@@ -348,7 +348,7 @@ group-by
  │    ├── prune: (2)
  │    └── interesting orderings: (+1,+2) (+2,+1)
  └── aggregations
-      └── count-rows
+      └── count-rows [as=count_rows:3]
 
 query TTTTT
 EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b

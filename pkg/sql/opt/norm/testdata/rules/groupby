@@ -55,26 +55,26 @@ norm expect=ConvertGroupByToDistinct
 SELECT s, f FROM a GROUP BY s, f
 ----
 distinct-on
- ├── columns: s:4(string!null) f:3(float)
- ├── grouping columns: f:3(float) s:4(string!null)
+ ├── columns: s:4!null f:3
+ ├── grouping columns: f:3 s:4!null
  ├── key: (3,4)
  └── scan a
-      └── columns: f:3(float) s:4(string!null)
+      └── columns: f:3 s:4!null
 
 # Group by not converted to DistinctOn because it has an aggregation.
 norm expect-not=ConvertGroupByToDistinct
 SELECT s, f, sum(f) FROM a GROUP BY s, f
 ----
 group-by
- ├── columns: s:4(string!null) f:3(float) sum:6(float)
- ├── grouping columns: f:3(float) s:4(string!null)
+ ├── columns: s:4!null f:3 sum:6
+ ├── grouping columns: f:3 s:4!null
  ├── key: (3,4)
  ├── fd: (3,4)-->(6)
  ├── scan a
- │    └── columns: f:3(float) s:4(string!null)
+ │    └── columns: f:3 s:4!null
  └── aggregations
-      └── sum [type=float, outer=(3)]
-           └── variable: f [type=float]
+      └── sum [as=sum:6, outer=(3)]
+           └── f:3
 
 
 # --------------------------------------------------
@@ -84,21 +84,21 @@ norm expect=EliminateDistinct
 SELECT DISTINCT k FROM a
 ----
 scan a
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  └── key: (1)
 
 norm expect=EliminateDistinct
 SELECT DISTINCT s, i FROM a
 ----
 scan a
- ├── columns: s:4(string!null) i:2(int!null)
+ ├── columns: s:4!null i:2!null
  └── key: (2,4)
 
 norm expect=EliminateDistinct
 SELECT DISTINCT ON (s, i) k, i, f FROM a
 ----
 scan a
- ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+ ├── columns: k:1!null i:2!null f:3
  ├── key: (1)
  └── fd: (1)-->(2,3), (2,3)~~>(1)
 
@@ -107,7 +107,7 @@ norm expect=EliminateDistinct
 SELECT DISTINCT s, i, f FROM a
 ----
 scan a
- ├── columns: s:4(string!null) i:2(int!null) f:3(float)
+ ├── columns: s:4!null i:2!null f:3
  ├── key: (2,4)
  └── fd: (2,4)-->(3), (2,3)~~>(4)
 
@@ -116,22 +116,22 @@ norm expect-not=EliminateDistinct
 SELECT DISTINCT i FROM a
 ----
 distinct-on
- ├── columns: i:2(int!null)
- ├── grouping columns: i:2(int!null)
+ ├── columns: i:2!null
+ ├── grouping columns: i:2!null
  ├── key: (2)
  └── scan a
-      └── columns: i:2(int!null)
+      └── columns: i:2!null
 
 # Distinct not eliminated despite a unique index on (f, i) because f is nullable.
 norm expect-not=EliminateDistinct
 SELECT DISTINCT f, i FROM a
 ----
 distinct-on
- ├── columns: f:3(float) i:2(int!null)
- ├── grouping columns: i:2(int!null) f:3(float)
+ ├── columns: f:3 i:2!null
+ ├── grouping columns: i:2!null f:3
  ├── key: (2,3)
  └── scan a
-      ├── columns: i:2(int!null) f:3(float)
+      ├── columns: i:2!null f:3
       └── lax-key: (2,3)
 
 # Regression test for #40295. Ensure that the DistinctOn is replaced with a
@@ -161,14 +161,14 @@ SELECT
   );
 ----
 values
- ├── columns: col2:7(int4)
+ ├── columns: col2:7
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
- └── tuple [type=tuple{int4}]
-      └── subquery [type=int4]
+ └── tuple
+      └── subquery
            └── values
-                ├── columns: t1.col2:3(int4!null)
+                ├── columns: t1.col2:3!null
                 ├── cardinality: [0 - 0]
                 ├── key: ()
                 └── fd: ()-->(3)
@@ -180,102 +180,102 @@ norm expect=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GROUP BY i
 ----
 project
- ├── columns: min:16(string!null)
+ ├── columns: min:16!null
  └── group-by
-      ├── columns: i:12(int!null) min:16(string!null)
-      ├── grouping columns: i:12(int!null)
+      ├── columns: i:12!null min:16!null
+      ├── grouping columns: i:12!null
       ├── key: (12)
       ├── fd: (12)-->(16)
       ├── union
-      │    ├── columns: k:11(int!null) i:12(int!null) f:13(float) s:14(string!null) j:15(jsonb)
-      │    ├── left columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-      │    ├── right columns: a.k:6(int) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+      │    ├── columns: k:11!null i:12!null f:13 s:14!null j:15
+      │    ├── left columns: a.k:1 a.i:2 a.f:3 a.s:4 a.j:5
+      │    ├── right columns: a.k:6 a.i:7 a.f:8 a.s:9 a.j:10
       │    ├── key: (11-15)
       │    ├── scan a
-      │    │    ├── columns: a.k:1(int!null) a.i:2(int!null) a.f:3(float) a.s:4(string!null) a.j:5(jsonb)
+      │    │    ├── columns: a.k:1!null a.i:2!null a.f:3 a.s:4!null a.j:5
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-5), (2,4)-->(1,3,5), (2,3)~~>(1,4,5)
       │    └── scan a
-      │         ├── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
+      │         ├── columns: a.k:6!null a.i:7!null a.f:8 a.s:9!null a.j:10
       │         ├── key: (6)
       │         └── fd: (6)-->(7-10), (7,9)-->(6,8,10), (7,8)~~>(6,9,10)
       └── aggregations
-           └── min [type=string, outer=(14)]
-                └── variable: s [type=string]
+           └── min [as=min:16, outer=(14)]
+                └── s:14
 
 # ScalarGroupBy case.
 norm expect=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 scalar-group-by
- ├── columns: min:16(string)
+ ├── columns: min:16
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(16)
  ├── union
- │    ├── columns: k:11(int!null) i:12(int!null) f:13(float) s:14(string!null) j:15(jsonb)
- │    ├── left columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- │    ├── right columns: a.k:6(int) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:11!null i:12!null f:13 s:14!null j:15
+ │    ├── left columns: a.k:1 a.i:2 a.f:3 a.s:4 a.j:5
+ │    ├── right columns: a.k:6 a.i:7 a.f:8 a.s:9 a.j:10
  │    ├── key: (11-15)
  │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int!null) a.f:3(float) a.s:4(string!null) a.j:5(jsonb)
+ │    │    ├── columns: a.k:1!null a.i:2!null a.f:3 a.s:4!null a.j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5), (2,4)-->(1,3,5), (2,3)~~>(1,4,5)
  │    └── scan a
- │         ├── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
+ │         ├── columns: a.k:6!null a.i:7!null a.f:8 a.s:9!null a.j:10
  │         ├── key: (6)
  │         └── fd: (6)-->(7-10), (7,9)-->(6,8,10), (7,8)~~>(6,9,10)
  └── aggregations
-      └── min [type=string, outer=(14)]
-           └── variable: s [type=string]
+      └── min [as=min:16, outer=(14)]
+           └── s:14
 
 # DistinctOn case.
 norm expect=EliminateGroupByProject
 SELECT DISTINCT ON (i) s FROM (SELECT i, s, f FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 distinct-on
- ├── columns: s:14(string!null)  [hidden: i:12(int!null)]
- ├── grouping columns: i:12(int!null)
+ ├── columns: s:14!null  [hidden: i:12!null]
+ ├── grouping columns: i:12!null
  ├── key: (12)
  ├── fd: (12)-->(14)
  ├── union
- │    ├── columns: k:11(int!null) i:12(int!null) f:13(float) s:14(string!null) j:15(jsonb)
- │    ├── left columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- │    ├── right columns: a.k:6(int) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+ │    ├── columns: k:11!null i:12!null f:13 s:14!null j:15
+ │    ├── left columns: a.k:1 a.i:2 a.f:3 a.s:4 a.j:5
+ │    ├── right columns: a.k:6 a.i:7 a.f:8 a.s:9 a.j:10
  │    ├── key: (11-15)
  │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int!null) a.f:3(float) a.s:4(string!null) a.j:5(jsonb)
+ │    │    ├── columns: a.k:1!null a.i:2!null a.f:3 a.s:4!null a.j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5), (2,4)-->(1,3,5), (2,3)~~>(1,4,5)
  │    └── scan a
- │         ├── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
+ │         ├── columns: a.k:6!null a.i:7!null a.f:8 a.s:9!null a.j:10
  │         ├── key: (6)
  │         └── fd: (6)-->(7-10), (7,9)-->(6,8,10), (7,8)~~>(6,9,10)
  └── aggregations
-      └── first-agg [type=string, outer=(14)]
-           └── variable: s [type=string]
+      └── first-agg [as=s:14, outer=(14)]
+           └── s:14
 
 # Don't eliminate project if it computes extra column(s).
 norm expect-not=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 ----
 project
- ├── columns: min:7(string!null)
+ ├── columns: min:7!null
  └── group-by
-      ├── columns: i2:6(int!null) min:7(string!null)
-      ├── grouping columns: i2:6(int!null)
+      ├── columns: i2:6!null min:7!null
+      ├── grouping columns: i2:6!null
       ├── key: (6)
       ├── fd: (6)-->(7)
       ├── project
-      │    ├── columns: i2:6(int!null) s:4(string!null)
+      │    ├── columns: i2:6!null s:4!null
       │    ├── scan a
-      │    │    ├── columns: i:2(int!null) s:4(string!null)
+      │    │    ├── columns: i:2!null s:4!null
       │    │    └── key: (2,4)
       │    └── projections
-      │         └── i + 1 [type=int, outer=(2)]
+      │         └── i:2 + 1 [as=i2:6, outer=(2)]
       └── aggregations
-           └── min [type=string, outer=(4)]
-                └── variable: s [type=string]
+           └── min [as=min:7, outer=(4)]
+                └── s:4
 
 # --------------------------------------------------
 # ReduceGroupingCols
@@ -284,122 +284,122 @@ norm expect=ReduceGroupingCols
 SELECT k, min(i), f, s FROM a GROUP BY s, f, k
 ----
 group-by
- ├── columns: k:1(int!null) min:6(int!null) f:3(float) s:4(string!null)
- ├── grouping columns: k:1(int!null)
+ ├── columns: k:1!null min:6!null f:3 s:4!null
+ ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(3,4,6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
+ │    ├── columns: k:1!null i:2!null f:3 s:4!null
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
  └── aggregations
-      ├── min [type=int, outer=(2)]
-      │    └── variable: i [type=int]
-      ├── const-agg [type=float, outer=(3)]
-      │    └── variable: f [type=float]
-      └── const-agg [type=string, outer=(4)]
-           └── variable: s [type=string]
+      ├── min [as=min:6, outer=(2)]
+      │    └── i:2
+      ├── const-agg [as=f:3, outer=(3)]
+      │    └── f:3
+      └── const-agg [as=s:4, outer=(4)]
+           └── s:4
 
 norm expect=ReduceGroupingCols
 SELECT k, sum(DISTINCT i), f, s FROM a, xy GROUP BY s, f, k
 ----
 group-by
- ├── columns: k:1(int!null) sum:8(decimal!null) f:3(float) s:4(string!null)
- ├── grouping columns: k:1(int!null)
+ ├── columns: k:1!null sum:8!null f:3 s:4!null
+ ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(3,4,8)
  ├── inner-join (cross)
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
+ │    ├── columns: k:1!null i:2!null f:3 s:4!null
  │    ├── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
+ │    │    ├── columns: k:1!null i:2!null f:3 s:4!null
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
  │    ├── scan xy
  │    └── filters (true)
  └── aggregations
-      ├── agg-distinct [type=decimal, outer=(2)]
-      │    └── sum [type=decimal]
-      │         └── variable: i [type=int]
-      ├── const-agg [type=float, outer=(3)]
-      │    └── variable: f [type=float]
-      └── const-agg [type=string, outer=(4)]
-           └── variable: s [type=string]
+      ├── agg-distinct [as=sum:8, outer=(2)]
+      │    └── sum
+      │         └── i:2
+      ├── const-agg [as=f:3, outer=(3)]
+      │    └── f:3
+      └── const-agg [as=s:4, outer=(4)]
+           └── s:4
 
 # Eliminated columns are not part of projection.
 norm expect=ReduceGroupingCols
 SELECT min(f) FROM a GROUP BY i, s, k
 ----
 project
- ├── columns: min:6(float)
+ ├── columns: min:6
  └── group-by
-      ├── columns: i:2(int!null) s:4(string!null) min:6(float)
-      ├── grouping columns: i:2(int!null) s:4(string!null)
+      ├── columns: i:2!null s:4!null min:6
+      ├── grouping columns: i:2!null s:4!null
       ├── key: (2,4)
       ├── fd: (2,4)-->(6)
       ├── scan a
-      │    ├── columns: i:2(int!null) f:3(float) s:4(string!null)
+      │    ├── columns: i:2!null f:3 s:4!null
       │    ├── key: (2,4)
       │    └── fd: (2,4)-->(3), (2,3)~~>(4)
       └── aggregations
-           └── min [type=float, outer=(3)]
-                └── variable: f [type=float]
+           └── min [as=min:6, outer=(3)]
+                └── f:3
 
 # All grouping columns eliminated.
 norm expect=ReduceGroupingCols
 SELECT sum(f), i FROM a GROUP BY k, i, f HAVING k=1
 ----
 group-by
- ├── columns: sum:6(float) i:2(int!null)
+ ├── columns: sum:6 i:2!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,6)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+ │    ├── columns: k:1!null i:2!null f:3
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-3)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+ │    │    ├── columns: k:1!null i:2!null f:3
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
  │    └── filters
- │         └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │         └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  └── aggregations
-      ├── sum [type=float, outer=(3)]
-      │    └── variable: f [type=float]
-      └── const-agg [type=int, outer=(2)]
-           └── variable: i [type=int]
+      ├── sum [as=sum:6, outer=(3)]
+      │    └── f:3
+      └── const-agg [as=i:2, outer=(2)]
+           └── i:2
 
 norm expect=ReduceGroupingCols
 SELECT DISTINCT ON (k, f, s) i, f, x FROM a JOIN xy ON i=y
 ----
 distinct-on
- ├── columns: i:2(int!null) f:3(float) x:6(int!null)  [hidden: k:1(int!null)]
- ├── grouping columns: k:1(int!null)
+ ├── columns: i:2!null f:3 x:6!null  [hidden: k:1!null]
+ ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(2,3,6), (2,3)~~>(1), (6)-->(2)
  ├── inner-join (hash)
- │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) x:6(int!null) y:7(int!null)
+ │    ├── columns: k:1!null i:2!null f:3 x:6!null y:7!null
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2,3), (2,3)~~>(1), (6)-->(7), (2)==(7), (7)==(2)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+ │    │    ├── columns: k:1!null i:2!null f:3
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │    ├── columns: x:6!null y:7
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
  │    └── filters
- │         └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ │         └── i:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  └── aggregations
-      ├── first-agg [type=int, outer=(2)]
-      │    └── variable: i [type=int]
-      ├── first-agg [type=int, outer=(6)]
-      │    └── variable: x [type=int]
-      └── const-agg [type=float, outer=(3)]
-           └── variable: f [type=float]
+      ├── first-agg [as=i:2, outer=(2)]
+      │    └── i:2
+      ├── first-agg [as=x:6, outer=(6)]
+      │    └── x:6
+      └── const-agg [as=f:3, outer=(3)]
+           └── f:3
 
 # --------------------------------------------------
 # EliminateAggDistinctForKeys
@@ -411,118 +411,118 @@ norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT k), sum(DISTINCT i) FROM a
 ----
 scalar-group-by
- ├── columns: sum:6(decimal) sum:7(decimal)
+ ├── columns: sum:6 sum:7
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6,7)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int!null)
+ │    ├── columns: k:1!null i:2!null
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      ├── sum [type=decimal, outer=(1)]
-      │    └── variable: k [type=int]
-      └── agg-distinct [type=decimal, outer=(2)]
-           └── sum [type=decimal]
-                └── variable: i [type=int]
+      ├── sum [as=sum:6, outer=(1)]
+      │    └── k:1
+      └── agg-distinct [as=sum:7, outer=(2)]
+           └── sum
+                └── i:2
 
 norm expect=EliminateAggDistinctForKeys
 SELECT string_agg(DISTINCT s, ', ') FROM s
 ----
 scalar-group-by
- ├── columns: string_agg:3(string)
+ ├── columns: string_agg:3
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(3)
  ├── project
- │    ├── columns: column2:2(string!null) s:1(string!null)
+ │    ├── columns: column2:2!null s:1!null
  │    ├── key: (1)
  │    ├── fd: ()-->(2)
  │    ├── scan s
- │    │    ├── columns: s:1(string!null)
+ │    │    ├── columns: s:1!null
  │    │    └── key: (1)
  │    └── projections
- │         └── const: ', ' [type=string]
+ │         └── ', ' [as=column2:2]
  └── aggregations
-      └── string-agg [type=string, outer=(1,2)]
-           ├── variable: s [type=string]
-           └── variable: column2 [type=string]
+      └── string-agg [as=string_agg:3, outer=(1,2)]
+           ├── s:1
+           └── column2:2
 
 # GroupBy with key argument.
 norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT k) FROM a GROUP BY i
 ----
 project
- ├── columns: sum:6(decimal!null)
+ ├── columns: sum:6!null
  └── group-by
-      ├── columns: i:2(int!null) sum:6(decimal!null)
-      ├── grouping columns: i:2(int!null)
+      ├── columns: i:2!null sum:6!null
+      ├── grouping columns: i:2!null
       ├── key: (2)
       ├── fd: (2)-->(6)
       ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int!null)
+      │    ├── columns: k:1!null i:2!null
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── aggregations
-           └── sum [type=decimal, outer=(1)]
-                └── variable: k [type=int]
+           └── sum [as=sum:6, outer=(1)]
+                └── k:1
 
 # GroupBy with no key.
 norm expect-not=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT a) FROM abc GROUP BY b
 ----
 project
- ├── columns: sum:4(decimal!null)
+ ├── columns: sum:4!null
  └── group-by
-      ├── columns: b:2(int!null) sum:4(decimal!null)
-      ├── grouping columns: b:2(int!null)
+      ├── columns: b:2!null sum:4!null
+      ├── grouping columns: b:2!null
       ├── key: (2)
       ├── fd: (2)-->(4)
       ├── scan abc
-      │    └── columns: a:1(int!null) b:2(int!null)
+      │    └── columns: a:1!null b:2!null
       └── aggregations
-           └── agg-distinct [type=decimal, outer=(1)]
-                └── sum [type=decimal]
-                     └── variable: a [type=int]
+           └── agg-distinct [as=sum:4, outer=(1)]
+                └── sum
+                     └── a:1
 
 # GroupBy with composite key formed by argument plus grouping columns.
 norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT a) FROM abc GROUP BY b, c
 ----
 project
- ├── columns: sum:4(decimal!null)
+ ├── columns: sum:4!null
  └── group-by
-      ├── columns: b:2(int!null) c:3(int!null) sum:4(decimal!null)
-      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── columns: b:2!null c:3!null sum:4!null
+      ├── grouping columns: b:2!null c:3!null
       ├── key: (2,3)
       ├── fd: (2,3)-->(4)
       ├── scan abc
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    ├── columns: a:1!null b:2!null c:3!null
       │    └── key: (1-3)
       └── aggregations
-           └── sum [type=decimal, outer=(1)]
-                └── variable: a [type=int]
+           └── sum [as=sum:4, outer=(1)]
+                └── a:1
 
 # GroupBy with multiple aggregations simplified.
 norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT i), avg(DISTINCT f) FROM a GROUP BY k
 ----
 project
- ├── columns: sum:6(decimal!null) avg:7(float)
+ ├── columns: sum:6!null avg:7
  └── group-by
-      ├── columns: k:1(int!null) sum:6(decimal!null) avg:7(float)
-      ├── grouping columns: k:1(int!null)
+      ├── columns: k:1!null sum:6!null avg:7
+      ├── grouping columns: k:1!null
       ├── key: (1)
       ├── fd: (1)-->(6,7)
       ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+      │    ├── columns: k:1!null i:2!null f:3
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3), (2,3)~~>(1)
       └── aggregations
-           ├── sum [type=decimal, outer=(2)]
-           │    └── variable: i [type=int]
-           └── avg [type=float, outer=(3)]
-                └── variable: f [type=float]
+           ├── sum [as=sum:6, outer=(2)]
+           │    └── i:2
+           └── avg [as=avg:7, outer=(3)]
+                └── f:3
 
 # GroupBy where only some aggregations are simplified (the table has
 # keys u,v and v,w).
@@ -530,24 +530,24 @@ norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT u), stddev(DISTINCT w), avg(DISTINCT z) FROM uvwz GROUP BY v
 ----
 project
- ├── columns: sum:6(decimal!null) stddev:7(decimal!null) avg:8(decimal!null)
+ ├── columns: sum:6!null stddev:7!null avg:8!null
  └── group-by
-      ├── columns: v:2(int!null) sum:6(decimal!null) stddev:7(decimal!null) avg:8(decimal!null)
-      ├── grouping columns: v:2(int!null)
+      ├── columns: v:2!null sum:6!null stddev:7!null avg:8!null
+      ├── grouping columns: v:2!null
       ├── key: (2)
       ├── fd: (2)-->(6-8)
       ├── scan uvwz
-      │    ├── columns: u:1(int!null) v:2(int!null) w:3(int!null) z:4(int!null)
+      │    ├── columns: u:1!null v:2!null w:3!null z:4!null
       │    ├── key: (2,3)
       │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
       └── aggregations
-           ├── sum [type=decimal, outer=(1)]
-           │    └── variable: u [type=int]
-           ├── std-dev [type=decimal, outer=(3)]
-           │    └── variable: w [type=int]
-           └── agg-distinct [type=decimal, outer=(4)]
-                └── avg [type=decimal]
-                     └── variable: z [type=int]
+           ├── sum [as=sum:6, outer=(1)]
+           │    └── u:1
+           ├── std-dev [as=stddev:7, outer=(3)]
+           │    └── w:3
+           └── agg-distinct [as=avg:8, outer=(4)]
+                └── avg
+                     └── z:4
 
 # --------------------------------------------------
 # EliminateAggFilteredDistinctForKeys
@@ -559,166 +559,166 @@ norm expect=EliminateAggFilteredDistinctForKeys
 SELECT sum(DISTINCT k) FILTER (WHERE k > 0), sum(DISTINCT i) FILTER (WHERE i > 0) FROM a
 ----
 scalar-group-by
- ├── columns: sum:7(decimal) sum:9(decimal)
+ ├── columns: sum:7 sum:9
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7,9)
  ├── project
- │    ├── columns: column6:6(bool!null) column8:8(bool!null) k:1(int!null) i:2(int!null)
+ │    ├── columns: column6:6!null column8:8!null k:1!null i:2!null
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,6), (2)-->(8)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int!null)
+ │    │    ├── columns: k:1!null i:2!null
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    └── projections
- │         ├── k > 0 [type=bool, outer=(1)]
- │         └── i > 0 [type=bool, outer=(2)]
+ │         ├── k:1 > 0 [as=column6:6, outer=(1)]
+ │         └── i:2 > 0 [as=column8:8, outer=(2)]
  └── aggregations
-      ├── agg-filter [type=decimal, outer=(1,6)]
-      │    ├── sum [type=decimal]
-      │    │    └── variable: k [type=int]
-      │    └── variable: column6 [type=bool]
-      └── agg-filter [type=decimal, outer=(2,8)]
-           ├── agg-distinct [type=decimal]
-           │    └── sum [type=decimal]
-           │         └── variable: i [type=int]
-           └── variable: column8 [type=bool]
+      ├── agg-filter [as=sum:7, outer=(1,6)]
+      │    ├── sum
+      │    │    └── k:1
+      │    └── column6:6
+      └── agg-filter [as=sum:9, outer=(2,8)]
+           ├── agg-distinct
+           │    └── sum
+           │         └── i:2
+           └── column8:8
 
 norm expect=EliminateAggFilteredDistinctForKeys
 SELECT string_agg(DISTINCT s, ',') FILTER (WHERE s > 'a') FROM s
 ----
 scalar-group-by
- ├── columns: string_agg:4(string)
+ ├── columns: string_agg:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── project
- │    ├── columns: column2:2(string!null) column3:3(bool!null) s:1(string!null)
+ │    ├── columns: column2:2!null column3:3!null s:1!null
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3)
  │    ├── scan s
- │    │    ├── columns: s:1(string!null)
+ │    │    ├── columns: s:1!null
  │    │    └── key: (1)
  │    └── projections
- │         ├── const: ',' [type=string]
- │         └── s > 'a' [type=bool, outer=(1)]
+ │         ├── ',' [as=column2:2]
+ │         └── s:1 > 'a' [as=column3:3, outer=(1)]
  └── aggregations
-      └── agg-filter [type=string, outer=(1-3)]
-           ├── string-agg [type=string]
-           │    ├── variable: s [type=string]
-           │    └── variable: column2 [type=string]
-           └── variable: column3 [type=bool]
+      └── agg-filter [as=string_agg:4, outer=(1-3)]
+           ├── string-agg
+           │    ├── s:1
+           │    └── column2:2
+           └── column3:3
 
 # GroupBy with key argument.
 norm expect=EliminateAggFilteredDistinctForKeys
 SELECT sum(DISTINCT k) FILTER (WHERE f > 0) FROM a GROUP BY i
 ----
 project
- ├── columns: sum:7(decimal)
+ ├── columns: sum:7
  └── group-by
-      ├── columns: i:2(int!null) sum:7(decimal)
-      ├── grouping columns: i:2(int!null)
+      ├── columns: i:2!null sum:7
+      ├── grouping columns: i:2!null
       ├── key: (2)
       ├── fd: (2)-->(7)
       ├── project
-      │    ├── columns: column6:6(bool) k:1(int!null) i:2(int!null)
+      │    ├── columns: column6:6 k:1!null i:2!null
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,6)
       │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+      │    │    ├── columns: k:1!null i:2!null f:3
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
       │    └── projections
-      │         └── f > 0.0 [type=bool, outer=(3)]
+      │         └── f:3 > 0.0 [as=column6:6, outer=(3)]
       └── aggregations
-           └── agg-filter [type=decimal, outer=(1,6)]
-                ├── sum [type=decimal]
-                │    └── variable: k [type=int]
-                └── variable: column6 [type=bool]
+           └── agg-filter [as=sum:7, outer=(1,6)]
+                ├── sum
+                │    └── k:1
+                └── column6:6
 
 # GroupBy with no key.
 norm expect-not=EliminateAggFilteredDistinctForKeys
 SELECT sum(DISTINCT a) FILTER (WHERE c > 0) FROM abc GROUP BY b
 ----
 project
- ├── columns: sum:5(decimal)
+ ├── columns: sum:5
  └── group-by
-      ├── columns: b:2(int!null) sum:5(decimal)
-      ├── grouping columns: b:2(int!null)
+      ├── columns: b:2!null sum:5
+      ├── grouping columns: b:2!null
       ├── key: (2)
       ├── fd: (2)-->(5)
       ├── project
-      │    ├── columns: column4:4(bool!null) a:1(int!null) b:2(int!null)
+      │    ├── columns: column4:4!null a:1!null b:2!null
       │    ├── scan abc
-      │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    │    ├── columns: a:1!null b:2!null c:3!null
       │    │    └── key: (1-3)
       │    └── projections
-      │         └── c > 0 [type=bool, outer=(3)]
+      │         └── c:3 > 0 [as=column4:4, outer=(3)]
       └── aggregations
-           └── agg-filter [type=decimal, outer=(1,4)]
-                ├── agg-distinct [type=decimal]
-                │    └── sum [type=decimal]
-                │         └── variable: a [type=int]
-                └── variable: column4 [type=bool]
+           └── agg-filter [as=sum:5, outer=(1,4)]
+                ├── agg-distinct
+                │    └── sum
+                │         └── a:1
+                └── column4:4
 
 # GroupBy with composite key formed by argument plus grouping columns.
 norm expect=EliminateAggFilteredDistinctForKeys
 SELECT sum(DISTINCT a) FILTER (WHERE c > 0) FROM abc GROUP BY b, c
 ----
 project
- ├── columns: sum:5(decimal)
+ ├── columns: sum:5
  └── group-by
-      ├── columns: b:2(int!null) c:3(int!null) sum:5(decimal)
-      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── columns: b:2!null c:3!null sum:5
+      ├── grouping columns: b:2!null c:3!null
       ├── key: (2,3)
       ├── fd: (2,3)-->(5)
       ├── project
-      │    ├── columns: column4:4(bool!null) a:1(int!null) b:2(int!null) c:3(int!null)
+      │    ├── columns: column4:4!null a:1!null b:2!null c:3!null
       │    ├── key: (1-3)
       │    ├── fd: (3)-->(4)
       │    ├── scan abc
-      │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    │    ├── columns: a:1!null b:2!null c:3!null
       │    │    └── key: (1-3)
       │    └── projections
-      │         └── c > 0 [type=bool, outer=(3)]
+      │         └── c:3 > 0 [as=column4:4, outer=(3)]
       └── aggregations
-           └── agg-filter [type=decimal, outer=(1,4)]
-                ├── sum [type=decimal]
-                │    └── variable: a [type=int]
-                └── variable: column4 [type=bool]
+           └── agg-filter [as=sum:5, outer=(1,4)]
+                ├── sum
+                │    └── a:1
+                └── column4:4
 
 # GroupBy with multiple aggregations simplified.
 norm expect=EliminateAggFilteredDistinctForKeys
 SELECT sum(DISTINCT i) FILTER (WHERE f > 0), avg(DISTINCT f) FILTER (WHERE i > 0) FROM a GROUP BY k
 ----
 project
- ├── columns: sum:7(decimal) avg:9(float)
+ ├── columns: sum:7 avg:9
  └── group-by
-      ├── columns: k:1(int!null) sum:7(decimal) avg:9(float)
-      ├── grouping columns: k:1(int!null)
+      ├── columns: k:1!null sum:7 avg:9
+      ├── grouping columns: k:1!null
       ├── key: (1)
       ├── fd: (1)-->(7,9)
       ├── project
-      │    ├── columns: column6:6(bool) column8:8(bool!null) k:1(int!null) i:2(int!null) f:3(float)
+      │    ├── columns: column6:6 column8:8!null k:1!null i:2!null f:3
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3,6), (2,3)~~>(1), (2)-->(8)
       │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+      │    │    ├── columns: k:1!null i:2!null f:3
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
       │    └── projections
-      │         ├── f > 0.0 [type=bool, outer=(3)]
-      │         └── i > 0 [type=bool, outer=(2)]
+      │         ├── f:3 > 0.0 [as=column6:6, outer=(3)]
+      │         └── i:2 > 0 [as=column8:8, outer=(2)]
       └── aggregations
-           ├── agg-filter [type=decimal, outer=(2,6)]
-           │    ├── sum [type=decimal]
-           │    │    └── variable: i [type=int]
-           │    └── variable: column6 [type=bool]
-           └── agg-filter [type=float, outer=(3,8)]
-                ├── avg [type=float]
-                │    └── variable: f [type=float]
-                └── variable: column8 [type=bool]
+           ├── agg-filter [as=sum:7, outer=(2,6)]
+           │    ├── sum
+           │    │    └── i:2
+           │    └── column6:6
+           └── agg-filter [as=avg:9, outer=(3,8)]
+                ├── avg
+                │    └── f:3
+                └── column8:8
 
 # GroupBy where only some aggregations are simplified (the table has
 # keys u,v and v,w).
@@ -731,38 +731,38 @@ FROM uvwz
 GROUP BY v
 ----
 project
- ├── columns: sum:7(decimal) stddev:9(decimal) avg:11(decimal)
+ ├── columns: sum:7 stddev:9 avg:11
  └── group-by
-      ├── columns: v:2(int!null) sum:7(decimal) stddev:9(decimal) avg:11(decimal)
-      ├── grouping columns: v:2(int!null)
+      ├── columns: v:2!null sum:7 stddev:9 avg:11
+      ├── grouping columns: v:2!null
       ├── key: (2)
       ├── fd: (2)-->(7,9,11)
       ├── project
-      │    ├── columns: column6:6(bool!null) column8:8(bool!null) column10:10(bool!null) u:1(int!null) v:2(int!null) w:3(int!null) z:4(int!null)
+      │    ├── columns: column6:6!null column8:8!null column10:10!null u:1!null v:2!null w:3!null z:4!null
       │    ├── key: (2,3)
       │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(6), (3)-->(8), (4)-->(10)
       │    ├── scan uvwz
-      │    │    ├── columns: u:1(int!null) v:2(int!null) w:3(int!null) z:4(int!null)
+      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
       │    │    ├── key: (2,3)
       │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
       │    └── projections
-      │         ├── u > 0 [type=bool, outer=(1)]
-      │         ├── w > 0 [type=bool, outer=(3)]
-      │         └── z > 0 [type=bool, outer=(4)]
+      │         ├── u:1 > 0 [as=column6:6, outer=(1)]
+      │         ├── w:3 > 0 [as=column8:8, outer=(3)]
+      │         └── z:4 > 0 [as=column10:10, outer=(4)]
       └── aggregations
-           ├── agg-filter [type=decimal, outer=(1,6)]
-           │    ├── sum [type=decimal]
-           │    │    └── variable: u [type=int]
-           │    └── variable: column6 [type=bool]
-           ├── agg-filter [type=decimal, outer=(3,8)]
-           │    ├── std-dev [type=decimal]
-           │    │    └── variable: w [type=int]
-           │    └── variable: column8 [type=bool]
-           └── agg-filter [type=decimal, outer=(4,10)]
-                ├── agg-distinct [type=decimal]
-                │    └── avg [type=decimal]
-                │         └── variable: z [type=int]
-                └── variable: column10 [type=bool]
+           ├── agg-filter [as=sum:7, outer=(1,6)]
+           │    ├── sum
+           │    │    └── u:1
+           │    └── column6:6
+           ├── agg-filter [as=stddev:9, outer=(3,8)]
+           │    ├── std-dev
+           │    │    └── w:3
+           │    └── column8:8
+           └── agg-filter [as=avg:11, outer=(4,10)]
+                ├── agg-distinct
+                │    └── avg
+                │         └── z:4
+                └── column10:10
 
 # --------------------------------------------------
 # EliminateDistinctOnNoColumns
@@ -772,40 +772,40 @@ norm expect=EliminateDistinctOnNoColumns
 SELECT DISTINCT ON (a) a, b FROM abc WHERE a = 1
 ----
 limit
- ├── columns: a:1(int!null) b:2(int!null)
+ ├── columns: a:1!null b:2!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── select
- │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── columns: a:1!null b:2!null
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan abc
- │    │    ├── columns: a:1(int!null) b:2(int!null)
+ │    │    ├── columns: a:1!null b:2!null
  │    │    └── limit hint: 100.00
  │    └── filters
- │         └── a = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- └── const: 1 [type=int]
+ │         └── a:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ └── 1
 
 norm expect=EliminateDistinctOnNoColumns
 SELECT DISTINCT ON (b) b, c FROM abc WHERE b = 1 ORDER BY b, c
 ----
 limit
- ├── columns: b:2(int!null) c:3(int!null)
+ ├── columns: b:2!null c:3!null
  ├── internal-ordering: +3 opt(2)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,3)
  ├── sort
- │    ├── columns: b:2(int!null) c:3(int!null)
+ │    ├── columns: b:2!null c:3!null
  │    ├── fd: ()-->(2)
  │    ├── ordering: +3 opt(2) [actual: +3]
  │    ├── limit hint: 1.00
  │    └── select
- │         ├── columns: b:2(int!null) c:3(int!null)
+ │         ├── columns: b:2!null c:3!null
  │         ├── fd: ()-->(2)
  │         ├── scan abc
- │         │    └── columns: b:2(int!null) c:3(int!null)
+ │         │    └── columns: b:2!null c:3!null
  │         └── filters
- │              └── b = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- └── const: 1 [type=int]
+ │              └── b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ └── 1

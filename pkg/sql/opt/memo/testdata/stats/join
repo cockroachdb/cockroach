@@ -109,7 +109,7 @@ inner-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
@@ -130,7 +130,7 @@ left-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
@@ -151,7 +151,7 @@ right-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
@@ -172,7 +172,7 @@ full-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT * FROM xysd, uv
@@ -247,7 +247,7 @@ project
       │    │    └── fd: (7)-->(5,6)
       │    └── filters (true)
       └── filters
-           └── v = 5 [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight), fd=()-->(6)]
+           └── v:6 = 5 [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight), fd=()-->(6)]
 
 # Force calculation of the distinct count for the column set spanning both
 # tables in the join.
@@ -280,8 +280,8 @@ group-by
  │         │    └── fd: (7)-->(5,6)
  │         └── filters (true)
  └── aggregations
-      └── sum [type=decimal, outer=(6)]
-           └── variable: v [type=int]
+      └── sum [as=sum:8, type=decimal, outer=(6)]
+           └── v:6 [type=int]
 
 # Join selectivity: 1/max(distinct(x), distinct(u)) = 1/5000.
 norm
@@ -305,10 +305,10 @@ group-by
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
  │    └── filters
- │         └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── aggregations
-      └── sum [type=decimal, outer=(6)]
-           └── variable: v [type=int]
+      └── sum [as=sum:8, type=decimal, outer=(6)]
+           └── v:6 [type=int]
 
 # Semi-join.
 norm
@@ -328,7 +328,7 @@ semi-join (hash)
  │    ├── columns: u:5(int)
  │    └── stats: [rows=10000, distinct(5)=500, null(5)=0]
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Anti-join.
 norm
@@ -348,7 +348,7 @@ anti-join (hash)
  │    ├── columns: u:5(int)
  │    └── stats: [rows=10000, distinct(5)=500, null(5)=0]
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Multiple equality conditions.
 norm
@@ -367,8 +367,8 @@ inner-join (hash)
  │    ├── columns: u:5(int) v:6(int!null)
  │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
  └── filters
-      ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── y = v [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── y:2 = v:6 [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 # Equality condition + extra filters.
 norm
@@ -389,13 +389,13 @@ inner-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters
- │         └── (y > 0) AND (y < 300) [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
+ │         └── (y:2 > 0) AND (y:2 < 300) [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
  │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
  └── filters
-      ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── (y + v) = 5 [type=bool, outer=(2,6)]
+      ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
 
 # Force column statistics calculation for semi-join.
 norm
@@ -426,10 +426,10 @@ project
       │    │    ├── columns: u:5(int) v:6(int!null)
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
       │    └── filters
-      │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y + v) = 5 [type=bool, outer=(2,6)]
+      │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [as=count_rows:8, type=int]
 
 # Force column statistics calculation for anti-join.
 norm
@@ -460,10 +460,10 @@ project
       │    │    ├── columns: u:5(int) v:6(int!null)
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
       │    └── filters
-      │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y + v) = 5 [type=bool, outer=(2,6)]
+      │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [as=count_rows:8, type=int]
 
 # Force column statistics calculation for left join.
 norm
@@ -493,10 +493,10 @@ project
       │    │    ├── columns: u:5(int) v:6(int!null)
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0]
       │    └── filters
-      │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y + v) = 5 [type=bool, outer=(2,6)]
+      │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [as=count_rows:8, type=int]
 
 # Force column statistics calculation for right join.
 norm
@@ -526,10 +526,10 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── filters
-      │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y + v) = 5 [type=bool, outer=(2,6)]
+      │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [as=count_rows:8, type=int]
 
 # Force column statistics calculation for outer join.
 norm
@@ -559,10 +559,10 @@ project
       │    │    ├── columns: u:5(int) v:6(int!null)
       │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0]
       │    └── filters
-      │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── (y + v) = 5 [type=bool, outer=(2,6)]
+      │         ├── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │         └── (y:2 + v:6) = 5 [type=bool, outer=(2,6)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [as=count_rows:8, type=int]
 
 exec-ddl
 CREATE TABLE uvw (u INT, v INT, w INT)
@@ -592,7 +592,7 @@ inner-join (hash)
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
  │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
  │    └── filters
- │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ │         └── w:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── select
  │    ├── columns: x:5(int!null) y:6(int) z:7(int)
  │    ├── stats: [rows=10, distinct(5)=1, null(5)=0]
@@ -601,9 +601,9 @@ inner-join (hash)
  │    │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │    └── filters
- │         └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+ │         └── x:5 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
  └── filters
-      └── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── u:1 = x:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
@@ -620,13 +620,13 @@ inner-join (hash)
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
  │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
  │    └── filters
- │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ │         └── w:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── scan xyz
  │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
  └── filters
-      ├── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+      ├── u:1 = x:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:5 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
 
 # Bump up null counts.
 exec-ddl
@@ -690,7 +690,7 @@ inner-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
@@ -711,7 +711,7 @@ left-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
@@ -732,7 +732,7 @@ right-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
@@ -753,7 +753,7 @@ full-join (hash)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Set one of the columns to non-nullable and see impact on multi-column null counts.
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
@@ -780,9 +780,9 @@ select
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(5,6)
  │    └── filters
- │         └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── filters
-      └── s IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      └── s:3 IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # Do a full join on a condition that results in 0 rows on one side. All null counts
 # on the right side should be greater due to expected null-extension of columns.
@@ -805,7 +805,7 @@ full-join (cross)
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
  └── filters
-      └── (u > 4) AND (u < 2) [type=bool, outer=(5), constraints=(contradiction; tight)]
+      └── (u:5 > 4) AND (u:5 < 2) [type=bool, outer=(5), constraints=(contradiction; tight)]
 
 build colstat=2 colstat=(1,2,7)
 SELECT * FROM xysd, uv
@@ -848,7 +848,7 @@ semi-join (hash)
  │    ├── columns: u:5(int)
  │    └── stats: [rows=10000, distinct(5)=500, null(5)=5000]
  └── filters
-      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 norm
 SELECT * FROM uv WHERE EXISTS(SELECT * FROM xysd WHERE x=u)
@@ -864,7 +864,7 @@ semi-join (hash)
  │    ├── stats: [rows=5000, distinct(4)=5000, null(4)=0]
  │    └── key: (4)
  └── filters
-      └── x = u [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── x:4 = u:1 [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 # Merge join (inner).
 expr colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
@@ -947,7 +947,7 @@ left-join (merge)
  │         ├── key: (7)
  │         └── fd: (7)-->(5,6)
  └── filters
-      └── y > v [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      └── y:2 > v:6 [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 # Check that true filters are handled correctly for all join types.
 norm
@@ -1166,12 +1166,12 @@ project
  │    │         │    │    ├── stats: [rows=0]
  │    │         │    │    └── key: ()
  │    │         │    └── filters
- │    │         │         └── variable: t0.col1 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ │    │         │         └── t0.col1:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
  │    │         └── projections
- │    │              └── const: 1 [type=int]
+ │    │              └── 1 [as="?column?":15, type=int]
  │    └── filters (true)
  └── projections
-      └── variable: ?column? [type=int, outer=(15)]
+      └── "?column?":15 [as="?column?":16, type=int, outer=(15)]
 
 norm colstat=1 colstat=2
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
@@ -1404,8 +1404,8 @@ full-join (cross)
  └── filters
       └── is [type=bool, subquery]
            ├── function: not_like_escape [type=bool]
-           │    ├── const: '' [type=string]
-           │    ├── null [type=string]
+           │    ├── '' [type=string]
+           │    ├── CAST(NULL AS STRING) [type=string]
            │    └── cast: STRING [type=string]
            │         └── subquery [type=unknown]
            │              └── values

@@ -8,13 +8,13 @@ build
 SELECT * FROM onecolumn AS a(x) CROSS JOIN onecolumn AS b(y)
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  └── inner-join (cross)
-      ├── columns: x:1(int) a.rowid:2(int!null) y:3(int) b.rowid:4(int!null)
+      ├── columns: x:1 a.rowid:2!null y:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters (true)
 
 # Check that name resolution chokes on ambiguity when it needs to.
@@ -31,21 +31,21 @@ build
 SELECT x FROM (SELECT 1 AS x), onecolumn AS a, onecolumn AS b
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (cross)
-      ├── columns: x:1(int!null) a.x:2(int) a.rowid:3(int!null) b.x:4(int) b.rowid:5(int!null)
+      ├── columns: x:1!null a.x:2 a.rowid:3!null b.x:4 b.rowid:5!null
       ├── project
-      │    ├── columns: x:1(int!null)
+      │    ├── columns: x:1!null
       │    ├── values
-      │    │    └── tuple [type=tuple]
+      │    │    └── ()
       │    └── projections
-      │         └── const: 1 [type=int]
+      │         └── 1 [as=x:1]
       ├── inner-join (cross)
-      │    ├── columns: a.x:2(int) a.rowid:3(int!null) b.x:4(int) b.rowid:5(int!null)
+      │    ├── columns: a.x:2 a.rowid:3!null b.x:4 b.rowid:5!null
       │    ├── scan a
-      │    │    └── columns: a.x:2(int) a.rowid:3(int!null)
+      │    │    └── columns: a.x:2 a.rowid:3!null
       │    ├── scan b
-      │    │    └── columns: b.x:4(int) b.rowid:5(int!null)
+      │    │    └── columns: b.x:4 b.rowid:5!null
       │    └── filters (true)
       └── filters (true)
 
@@ -53,87 +53,77 @@ build
 SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int!null) y:3(int!null)
+ ├── columns: x:1!null y:3!null
  └── inner-join (hash)
-      ├── columns: x:1(int!null) a.rowid:2(int!null) y:3(int!null) b.rowid:4(int!null)
+      ├── columns: x:1!null a.rowid:2!null y:3!null b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  ├── ordering: +1
  └── project
-      ├── columns: a.x:1(int!null)
+      ├── columns: a.x:1!null
       └── inner-join (hash)
-           ├── columns: a.x:1(int!null) a.rowid:2(int!null) b.x:3(int!null) b.rowid:4(int!null)
+           ├── columns: a.x:1!null a.rowid:2!null b.x:3!null b.rowid:4!null
            ├── scan a
-           │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    └── columns: a.x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    └── columns: b.x:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── a.x:1 = b.x:3
 
 build
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (hash)
-      ├── columns: a.x:1(int!null) a.rowid:2(int!null) b.x:3(int!null) b.rowid:4(int!null)
+      ├── columns: a.x:1!null a.rowid:2!null b.x:3!null b.rowid:4!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 build
 SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  └── left-join (hash)
-      ├── columns: x:1(int) a.rowid:2(int!null) y:3(int) b.rowid:4(int)
+      ├── columns: x:1 a.rowid:2!null y:3 b.rowid:4
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:1(int)
+ ├── columns: x:1
  ├── ordering: +1
  └── project
-      ├── columns: a.x:1(int)
+      ├── columns: a.x:1
       └── left-join (hash)
-           ├── columns: a.x:1(int) a.rowid:2(int!null) b.x:3(int) b.rowid:4(int)
+           ├── columns: a.x:1 a.rowid:2!null b.x:3 b.rowid:4
            ├── scan a
-           │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    └── columns: a.x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    └── columns: b.x:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── a.x:1 = b.x:3
 
 # Check that ORDER BY chokes on ambiguity if no table less columns
 # were introduced by USING. (#12239)
@@ -166,68 +156,60 @@ build
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1
  └── left-join (hash)
-      ├── columns: a.x:1(int) a.rowid:2(int!null) b.x:3(int) b.rowid:4(int)
+      ├── columns: a.x:1 a.rowid:2!null b.x:3 b.rowid:4
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 build
 SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  └── right-join (hash)
-      ├── columns: x:1(int) a.rowid:2(int) y:3(int) b.rowid:4(int!null)
+      ├── columns: x:1 a.rowid:2 y:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:3(int)
+ ├── columns: x:3
  ├── ordering: +3
  └── project
-      ├── columns: b.x:3(int)
+      ├── columns: b.x:3
       └── right-join (hash)
-           ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int!null)
+           ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4!null
            ├── scan a
-           │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    └── columns: a.x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    └── columns: b.x:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── a.x:1 = b.x:3
 
 build
 SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
 ----
 project
- ├── columns: x:3(int)
+ ├── columns: x:3
  └── right-join (hash)
-      ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int!null)
+      ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 exec-ddl
 CREATE TABLE onecolumn_w(w INT)
@@ -237,13 +219,13 @@ build
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
 ----
 project
- ├── columns: x:1(int) w:3(int)
+ ├── columns: x:1 w:3
  └── inner-join (cross)
-      ├── columns: x:1(int) a.rowid:2(int!null) w:3(int) b.rowid:4(int!null)
+      ├── columns: x:1 a.rowid:2!null w:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: w:3(int) b.rowid:4(int!null)
+      │    └── columns: w:3 b.rowid:4!null
       └── filters (true)
 
 exec-ddl
@@ -254,45 +236,39 @@ build
 SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x ORDER BY a.x,b.x
 ----
 sort
- ├── columns: x:1(int) x:3(int)
+ ├── columns: x:1 x:3
  ├── ordering: +1,+3
  └── project
-      ├── columns: a.x:1(int) b.x:3(int)
+      ├── columns: a.x:1 b.x:3
       └── full-join (hash)
-           ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4
            ├── scan a
-           │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    └── columns: a.x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    └── columns: b.x:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── a.x:1 = b.x:3
 
 build
 SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:5(int)
+ ├── columns: x:5
  ├── ordering: +5
  └── project
-      ├── columns: x:5(int)
+      ├── columns: x:5
       └── project
-           ├── columns: x:5(int) a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           ├── columns: x:5 a.x:1 a.rowid:2 b.x:3 b.rowid:4
            ├── full-join (hash)
-           │    ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           │    ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4
            │    ├── scan a
-           │    │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    │    └── columns: a.x:1 a.rowid:2!null
            │    ├── scan b
-           │    │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    │    └── columns: b.x:3 b.rowid:4!null
            │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: a.x [type=int]
-           │              └── variable: b.x [type=int]
+           │         └── a.x:1 = b.x:3
            └── projections
-                └── coalesce [type=int]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── COALESCE(a.x:1, b.x:3) [as=x:5]
 
 # Check that the source columns can be selected separately from the
 # USING column (#12033).
@@ -300,51 +276,43 @@ build
 SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY s
 ----
 sort
- ├── columns: s:5(int) x:1(int) x:3(int)
+ ├── columns: s:5 x:1 x:3
  ├── ordering: +5
  └── project
-      ├── columns: a.x:1(int) b.x:3(int) x:5(int)
+      ├── columns: a.x:1 b.x:3 x:5
       └── project
-           ├── columns: x:5(int) a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           ├── columns: x:5 a.x:1 a.rowid:2 b.x:3 b.rowid:4
            ├── full-join (hash)
-           │    ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           │    ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4
            │    ├── scan a
-           │    │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    │    └── columns: a.x:1 a.rowid:2!null
            │    ├── scan b
-           │    │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    │    └── columns: b.x:3 b.rowid:4!null
            │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: a.x [type=int]
-           │              └── variable: b.x [type=int]
+           │         └── a.x:1 = b.x:3
            └── projections
-                └── coalesce [type=int]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── COALESCE(a.x:1, b.x:3) [as=x:5]
 
 build
 SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
 ----
 sort
- ├── columns: x:5(int)
+ ├── columns: x:5
  ├── ordering: +5
  └── project
-      ├── columns: x:5(int)
+      ├── columns: x:5
       └── project
-           ├── columns: x:5(int) a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           ├── columns: x:5 a.x:1 a.rowid:2 b.x:3 b.rowid:4
            ├── full-join (hash)
-           │    ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           │    ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4
            │    ├── scan a
-           │    │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    │    └── columns: a.x:1 a.rowid:2!null
            │    ├── scan b
-           │    │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    │    └── columns: b.x:3 b.rowid:4!null
            │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: a.x [type=int]
-           │              └── variable: b.x [type=int]
+           │         └── a.x:1 = b.x:3
            └── projections
-                └── coalesce [type=int]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── COALESCE(a.x:1, b.x:3) [as=x:5]
 
 # Check that a limit on the JOIN's result do not cause rows from the
 # JOIN operands to become invisible to the JOIN.
@@ -352,26 +320,23 @@ build
 SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
 ----
 limit
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  ├── project
- │    ├── columns: x:1(int!null)
+ │    ├── columns: x:1!null
  │    ├── limit hint: 1.00
  │    └── inner-join (hash)
- │         ├── columns: x:1(int!null) column1:3(int!null)
+ │         ├── columns: x:1!null column1:3!null
  │         ├── limit hint: 1.00
  │         ├── project
- │         │    ├── columns: x:1(int)
+ │         │    ├── columns: x:1
  │         │    └── scan onecolumn
- │         │         └── columns: x:1(int) rowid:2(int!null)
+ │         │         └── columns: x:1 rowid:2!null
  │         ├── values
- │         │    ├── columns: column1:3(int!null)
- │         │    └── tuple [type=tuple{int}]
- │         │         └── const: 42 [type=int]
+ │         │    ├── columns: column1:3!null
+ │         │    └── (42,)
  │         └── filters
- │              └── eq [type=bool]
- │                   ├── variable: x [type=int]
- │                   └── variable: column1 [type=int]
- └── const: 1 [type=int]
+ │              └── x:1 = column1:3
+ └── 1
 
 exec-ddl
 CREATE TABLE empty (x INT)
@@ -381,281 +346,249 @@ build
 SELECT * FROM onecolumn AS a(x) CROSS JOIN empty AS b(y)
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  └── inner-join (cross)
-      ├── columns: x:1(int) a.rowid:2(int!null) y:3(int) b.rowid:4(int!null)
+      ├── columns: x:1 a.rowid:2!null y:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters (true)
 
 build
 SELECT * FROM empty AS a CROSS JOIN onecolumn AS b
 ----
 project
- ├── columns: x:1(int) x:3(int)
+ ├── columns: x:1 x:3
  └── inner-join (cross)
-      ├── columns: a.x:1(int) a.rowid:2(int!null) b.x:3(int) b.rowid:4(int!null)
+      ├── columns: a.x:1 a.rowid:2!null b.x:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters (true)
 
 build
 SELECT * FROM onecolumn AS a(x) JOIN empty AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int!null) y:3(int!null)
+ ├── columns: x:1!null y:3!null
  └── inner-join (hash)
-      ├── columns: x:1(int!null) a.rowid:2(int!null) y:3(int!null) b.rowid:4(int!null)
+      ├── columns: x:1!null a.rowid:2!null y:3!null b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a JOIN empty AS b USING(x)
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (hash)
-      ├── columns: a.x:1(int!null) a.rowid:2(int!null) b.x:3(int!null) b.rowid:4(int!null)
+      ├── columns: a.x:1!null a.rowid:2!null b.x:3!null b.rowid:4!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 build
 SELECT * FROM empty AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int!null) y:3(int!null)
+ ├── columns: x:1!null y:3!null
  └── inner-join (hash)
-      ├── columns: x:1(int!null) a.rowid:2(int!null) y:3(int!null) b.rowid:4(int!null)
+      ├── columns: x:1!null a.rowid:2!null y:3!null b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM empty AS a JOIN onecolumn AS b USING(x)
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (hash)
-      ├── columns: a.x:1(int!null) a.rowid:2(int!null) b.x:3(int!null) b.rowid:4(int!null)
+      ├── columns: a.x:1!null a.rowid:2!null b.x:3!null b.rowid:4!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 build
 SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
 ----
 sort
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  ├── ordering: +1
  └── project
-      ├── columns: x:1(int) y:3(int)
+      ├── columns: x:1 y:3
       └── left-join (hash)
-           ├── columns: x:1(int) a.rowid:2(int!null) y:3(int) b.rowid:4(int)
+           ├── columns: x:1 a.rowid:2!null y:3 b.rowid:4
            ├── scan a
-           │    └── columns: x:1(int) a.rowid:2(int!null)
+           │    └── columns: x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: y:3(int) b.rowid:4(int!null)
+           │    └── columns: y:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: x [type=int]
-                     └── variable: y [type=int]
+                └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:1(int)
+ ├── columns: x:1
  ├── ordering: +1
  └── project
-      ├── columns: a.x:1(int)
+      ├── columns: a.x:1
       └── left-join (hash)
-           ├── columns: a.x:1(int) a.rowid:2(int!null) b.x:3(int) b.rowid:4(int)
+           ├── columns: a.x:1 a.rowid:2!null b.x:3 b.rowid:4
            ├── scan a
-           │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    └── columns: a.x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    └── columns: b.x:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── a.x:1 = b.x:3
 
 build
 SELECT * FROM empty AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  └── left-join (hash)
-      ├── columns: x:1(int) a.rowid:2(int!null) y:3(int) b.rowid:4(int)
+      ├── columns: x:1 a.rowid:2!null y:3 b.rowid:4
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM empty AS a LEFT OUTER JOIN onecolumn AS b USING(x)
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1
  └── left-join (hash)
-      ├── columns: a.x:1(int) a.rowid:2(int!null) b.x:3(int) b.rowid:4(int)
+      ├── columns: a.x:1 a.rowid:2!null b.x:3 b.rowid:4
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 build
 SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN empty AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  └── right-join (hash)
-      ├── columns: x:1(int) a.rowid:2(int) y:3(int) b.rowid:4(int!null)
+      ├── columns: x:1 a.rowid:2 y:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a RIGHT OUTER JOIN empty AS b USING(x)
 ----
 project
- ├── columns: x:3(int)
+ ├── columns: x:3
  └── right-join (hash)
-      ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int!null)
+      ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) b.rowid:4(int!null)
+      │    └── columns: b.x:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 build
 SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
 ----
 sort
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  ├── ordering: +3
  └── project
-      ├── columns: x:1(int) y:3(int)
+      ├── columns: x:1 y:3
       └── full-join (hash)
-           ├── columns: x:1(int) a.rowid:2(int) y:3(int) b.rowid:4(int)
+           ├── columns: x:1 a.rowid:2 y:3 b.rowid:4
            ├── scan a
-           │    └── columns: x:1(int) a.rowid:2(int!null)
+           │    └── columns: x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: y:3(int) b.rowid:4(int!null)
+           │    └── columns: y:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: x [type=int]
-                     └── variable: y [type=int]
+                └── x:1 = y:3
 
 build
 SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:5(int)
+ ├── columns: x:5
  ├── ordering: +5
  └── project
-      ├── columns: x:5(int)
+      ├── columns: x:5
       └── project
-           ├── columns: x:5(int) a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           ├── columns: x:5 a.x:1 a.rowid:2 b.x:3 b.rowid:4
            ├── full-join (hash)
-           │    ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           │    ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4
            │    ├── scan a
-           │    │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    │    └── columns: a.x:1 a.rowid:2!null
            │    ├── scan b
-           │    │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    │    └── columns: b.x:3 b.rowid:4!null
            │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: a.x [type=int]
-           │              └── variable: b.x [type=int]
+           │         └── a.x:1 = b.x:3
            └── projections
-                └── coalesce [type=int]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── COALESCE(a.x:1, b.x:3) [as=x:5]
 
 build
 SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
 ----
 sort
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  ├── ordering: +1
  └── project
-      ├── columns: x:1(int) y:3(int)
+      ├── columns: x:1 y:3
       └── full-join (hash)
-           ├── columns: x:1(int) a.rowid:2(int) y:3(int) b.rowid:4(int)
+           ├── columns: x:1 a.rowid:2 y:3 b.rowid:4
            ├── scan a
-           │    └── columns: x:1(int) a.rowid:2(int!null)
+           │    └── columns: x:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: y:3(int) b.rowid:4(int!null)
+           │    └── columns: y:3 b.rowid:4!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: x [type=int]
-                     └── variable: y [type=int]
+                └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x) ORDER BY x
 ----
 sort
- ├── columns: x:5(int)
+ ├── columns: x:5
  ├── ordering: +5
  └── project
-      ├── columns: x:5(int)
+      ├── columns: x:5
       └── project
-           ├── columns: x:5(int) a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           ├── columns: x:5 a.x:1 a.rowid:2 b.x:3 b.rowid:4
            ├── full-join (hash)
-           │    ├── columns: a.x:1(int) a.rowid:2(int) b.x:3(int) b.rowid:4(int)
+           │    ├── columns: a.x:1 a.rowid:2 b.x:3 b.rowid:4
            │    ├── scan a
-           │    │    └── columns: a.x:1(int) a.rowid:2(int!null)
+           │    │    └── columns: a.x:1 a.rowid:2!null
            │    ├── scan b
-           │    │    └── columns: b.x:3(int) b.rowid:4(int!null)
+           │    │    └── columns: b.x:3 b.rowid:4!null
            │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: a.x [type=int]
-           │              └── variable: b.x [type=int]
+           │         └── a.x:1 = b.x:3
            └── projections
-                └── coalesce [type=int]
-                     ├── variable: a.x [type=int]
-                     └── variable: b.x [type=int]
+                └── COALESCE(a.x:1, b.x:3) [as=x:5]
 
 exec-ddl
 CREATE TABLE twocolumn (x INT, y INT)
@@ -666,195 +599,157 @@ build
 SELECT * FROM onecolumn NATURAL JOIN twocolumn
 ----
 project
- ├── columns: x:1(int!null) y:4(int)
+ ├── columns: x:1!null y:4
  └── inner-join (hash)
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null twocolumn.x:3!null y:4 twocolumn.rowid:5!null
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3 y:4 twocolumn.rowid:5!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: twocolumn.x [type=int]
+           └── onecolumn.x:1 = twocolumn.x:3
 
 build
 SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 project
- ├── columns: x:1(int!null) y:4(int)
+ ├── columns: x:1!null y:4
  └── inner-join (hash)
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null twocolumn.x:3!null y:4 twocolumn.rowid:5!null
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3 y:4 twocolumn.rowid:5!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: twocolumn.x [type=int]
+           └── onecolumn.x:1 = twocolumn.x:3
 
 build
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 project
- ├── columns: x:1(int!null) y:2(int) x:4(int) y:5(int!null)
+ ├── columns: x:1!null y:2 x:4 y:5!null
  └── inner-join (hash)
-      ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int) b.y:5(int!null) b.rowid:6(int!null)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4 b.y:5!null b.rowid:6!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null
       ├── scan b
-      │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      │    └── columns: b.x:4 b.y:5 b.rowid:6!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.y [type=int]
+           └── a.x:1 = b.y:5
 
 build
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
 ----
 project
- ├── columns: x:1(int!null) y:2(int!null) x:4(int) y:5(int)
+ ├── columns: x:1!null y:2!null x:4 y:5
  └── inner-join (cross)
-      ├── columns: a.x:1(int!null) a.y:2(int!null) a.rowid:3(int!null) b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      ├── columns: a.x:1!null a.y:2!null a.rowid:3!null b.x:4 b.y:5 b.rowid:6!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null
       ├── scan b
-      │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      │    └── columns: b.x:4 b.y:5 b.rowid:6!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: a.y [type=int]
+           └── a.x:1 = a.y:2
 
 build
 SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 project
- ├── columns: x:1(int!null) x:3(int) y:4(int!null)
+ ├── columns: x:1!null x:3 y:4!null
  └── inner-join (hash)
-      ├── columns: a.x:1(int!null) a.rowid:2(int!null) b.x:3(int) y:4(int!null) b.rowid:5(int!null)
+      ├── columns: a.x:1!null a.rowid:2!null b.x:3 y:4!null b.rowid:5!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.rowid:2(int!null)
+      │    └── columns: a.x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.x:3(int) y:4(int) b.rowid:5(int!null)
+      │    └── columns: b.x:3 y:4 b.rowid:5!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: y [type=int]
+           └── a.x:1 = y:4
 
 build
 SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 project
- ├── columns: x:1(int!null) x:3(int) y:4(int!null)
+ ├── columns: x:1!null x:3 y:4!null
  └── inner-join (hash)
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int!null) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null twocolumn.x:3 y:4!null twocolumn.rowid:5!null
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3 y:4 twocolumn.rowid:5!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: y [type=int]
+           └── onecolumn.x:1 = y:4
 
 # Inner join with filter predicate
 build
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 project
- ├── columns: x:1(int!null) y:2(int) x:4(int) y:5(int)
+ ├── columns: x:1!null y:2 x:4 y:5
  └── inner-join (cross)
-      ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4 b.y:5 b.rowid:6!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null
       ├── scan b
-      │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      │    └── columns: b.x:4 b.y:5 b.rowid:6!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── const: 44 [type=int]
+           └── a.x:1 = 44
 
 build
 SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
 ----
 project
- ├── columns: x:1(int!null) y:4(int!null)
+ ├── columns: x:1!null y:4!null
  └── inner-join (cross)
-      ├── columns: o.x:1(int!null) o.rowid:2(int!null) t.x:3(int!null) y:4(int!null) t.rowid:5(int!null)
+      ├── columns: o.x:1!null o.rowid:2!null t.x:3!null y:4!null t.rowid:5!null
       ├── scan o
-      │    └── columns: o.x:1(int) o.rowid:2(int!null)
+      │    └── columns: o.x:1 o.rowid:2!null
       ├── scan t
-      │    └── columns: t.x:3(int) y:4(int) t.rowid:5(int!null)
+      │    └── columns: t.x:3 y:4 t.rowid:5!null
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: o.x [type=int]
-                │    └── variable: t.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: y [type=int]
-                     └── const: 53 [type=int]
+           └── (o.x:1 = t.x:3) AND (y:4 = 53)
 
 # Outer joins with filter predicate
 build
 SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
 ----
 project
- ├── columns: x:1(int) y:4(int)
+ ├── columns: x:1 y:4
  └── left-join (cross)
-      ├── columns: o.x:1(int) o.rowid:2(int!null) t.x:3(int) y:4(int) t.rowid:5(int)
+      ├── columns: o.x:1 o.rowid:2!null t.x:3 y:4 t.rowid:5
       ├── scan o
-      │    └── columns: o.x:1(int) o.rowid:2(int!null)
+      │    └── columns: o.x:1 o.rowid:2!null
       ├── scan t
-      │    └── columns: t.x:3(int) y:4(int) t.rowid:5(int!null)
+      │    └── columns: t.x:3 y:4 t.rowid:5!null
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: o.x [type=int]
-                │    └── variable: t.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: y [type=int]
-                     └── const: 53 [type=int]
+           └── (o.x:1 = t.x:3) AND (y:4 = 53)
 
 build
 SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND o.x=44)
 ----
 project
- ├── columns: x:1(int) y:4(int)
+ ├── columns: x:1 y:4
  └── left-join (cross)
-      ├── columns: o.x:1(int) o.rowid:2(int!null) t.x:3(int) y:4(int) t.rowid:5(int)
+      ├── columns: o.x:1 o.rowid:2!null t.x:3 y:4 t.rowid:5
       ├── scan o
-      │    └── columns: o.x:1(int) o.rowid:2(int!null)
+      │    └── columns: o.x:1 o.rowid:2!null
       ├── scan t
-      │    └── columns: t.x:3(int) y:4(int) t.rowid:5(int!null)
+      │    └── columns: t.x:3 y:4 t.rowid:5!null
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: o.x [type=int]
-                │    └── variable: t.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: o.x [type=int]
-                     └── const: 44 [type=int]
+           └── (o.x:1 = t.x:3) AND (o.x:1 = 44)
 
 build
 SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x=44)
 ----
 project
- ├── columns: x:1(int) y:4(int)
+ ├── columns: x:1 y:4
  └── left-join (cross)
-      ├── columns: o.x:1(int) o.rowid:2(int!null) t.x:3(int) y:4(int) t.rowid:5(int)
+      ├── columns: o.x:1 o.rowid:2!null t.x:3 y:4 t.rowid:5
       ├── scan o
-      │    └── columns: o.x:1(int) o.rowid:2(int!null)
+      │    └── columns: o.x:1 o.rowid:2!null
       ├── scan t
-      │    └── columns: t.x:3(int) y:4(int) t.rowid:5(int!null)
+      │    └── columns: t.x:3 y:4 t.rowid:5!null
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: o.x [type=int]
-                │    └── variable: t.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: t.x [type=int]
-                     └── const: 44 [type=int]
+           └── (o.x:1 = t.x:3) AND (t.x:3 = 44)
 
 build
 SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b) AS q
@@ -881,274 +776,231 @@ build
 SELECT * FROM a INNER JOIN b ON a.i = b.i
 ----
 project
- ├── columns: i:1(int!null) i:3(int!null) b:4(bool)
+ ├── columns: i:1!null i:3!null b:4
  └── inner-join (hash)
-      ├── columns: a.i:1(int!null) a.rowid:2(int!null) b.i:3(int!null) b:4(bool) b.rowid:5(int!null)
+      ├── columns: a.i:1!null a.rowid:2!null b.i:3!null b:4 b.rowid:5!null
       ├── scan a
-      │    └── columns: a.i:1(int) a.rowid:2(int!null)
+      │    └── columns: a.i:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
+      │    └── columns: b.i:3 b:4 b.rowid:5!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.i [type=int]
-                └── variable: b.i [type=int]
+           └── a.i:1 = b.i:3
 
 build
 SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
 ----
 project
- ├── columns: i:1(int) i:3(int) b:4(bool)
+ ├── columns: i:1 i:3 b:4
  └── left-join (hash)
-      ├── columns: a.i:1(int) a.rowid:2(int!null) b.i:3(int) b:4(bool) b.rowid:5(int)
+      ├── columns: a.i:1 a.rowid:2!null b.i:3 b:4 b.rowid:5
       ├── scan a
-      │    └── columns: a.i:1(int) a.rowid:2(int!null)
+      │    └── columns: a.i:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
+      │    └── columns: b.i:3 b:4 b.rowid:5!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.i [type=int]
-                └── variable: b.i [type=int]
+           └── a.i:1 = b.i:3
 
 build
 SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
 ----
 sort
- ├── columns: i:1(int) i:3(int) b:4(bool)
+ ├── columns: i:1 i:3 b:4
  ├── ordering: +3,+4
  └── project
-      ├── columns: a.i:1(int) b.i:3(int) b:4(bool)
+      ├── columns: a.i:1 b.i:3 b:4
       └── right-join (hash)
-           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b:4(bool) b.rowid:5(int!null)
+           ├── columns: a.i:1 a.rowid:2 b.i:3 b:4 b.rowid:5!null
            ├── scan a
-           │    └── columns: a.i:1(int) a.rowid:2(int!null)
+           │    └── columns: a.i:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
+           │    └── columns: b.i:3 b:4 b.rowid:5!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.i [type=int]
-                     └── variable: b.i [type=int]
+                └── a.i:1 = b.i:3
 
 build
 SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
 ----
 sort
- ├── columns: i:1(int) i:3(int) b:4(bool)
+ ├── columns: i:1 i:3 b:4
  ├── ordering: +3,+4
  └── project
-      ├── columns: a.i:1(int) b.i:3(int) b:4(bool)
+      ├── columns: a.i:1 b.i:3 b:4
       └── full-join (hash)
-           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b:4(bool) b.rowid:5(int)
+           ├── columns: a.i:1 a.rowid:2 b.i:3 b:4 b.rowid:5
            ├── scan a
-           │    └── columns: a.i:1(int) a.rowid:2(int!null)
+           │    └── columns: a.i:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
+           │    └── columns: b.i:3 b:4 b.rowid:5!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.i [type=int]
-                     └── variable: b.i [type=int]
+                └── a.i:1 = b.i:3
 
 # Full outer join with filter predicate
 build
 SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i
 ----
 sort
- ├── columns: i:1(int) i:3(int) b:4(bool)
+ ├── columns: i:1 i:3 b:4
  ├── ordering: +1,+3
  └── project
-      ├── columns: a.i:1(int) b.i:3(int) b:4(bool)
+      ├── columns: a.i:1 b.i:3 b:4
       └── full-join (cross)
-           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b:4(bool) b.rowid:5(int)
+           ├── columns: a.i:1 a.rowid:2 b.i:3 b:4 b.rowid:5
            ├── scan a
-           │    └── columns: a.i:1(int) a.rowid:2(int!null)
+           │    └── columns: a.i:1 a.rowid:2!null
            ├── scan b
-           │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
+           │    └── columns: b.i:3 b:4 b.rowid:5!null
            └── filters
-                └── and [type=bool]
-                     ├── eq [type=bool]
-                     │    ├── variable: a.i [type=int]
-                     │    └── variable: b.i [type=int]
-                     └── gt [type=bool]
-                          ├── variable: a.i [type=int]
-                          └── const: 2 [type=int]
+                └── (a.i:1 = b.i:3) AND (a.i:1 > 2)
 
 # Check column orders and names.
 build
 SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
 ----
 limit
- ├── columns: x:1(int!null) x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
+ ├── columns: x:1!null x:3!null y:4 b:6!null d:8!null e:9
  ├── internal-ordering: +1
  ├── ordering: +1
  ├── sort
- │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
+ │    ├── columns: onecolumn.x:1!null twocolumn.x:3!null y:4 b:6!null d:8!null e:9
  │    ├── ordering: +1
  │    ├── limit hint: 1.00
  │    └── project
- │         ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
+ │         ├── columns: onecolumn.x:1!null twocolumn.x:3!null y:4 b:6!null d:8!null e:9
  │         └── inner-join (cross)
- │              ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) b:6(int!null) a.rowid:7(int!null) d:8(int!null) e:9(int) c.rowid:10(int!null)
+ │              ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null twocolumn.x:3!null y:4 twocolumn.rowid:5!null b:6!null a.rowid:7!null d:8!null e:9 c.rowid:10!null
  │              ├── inner-join (hash)
- │              │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) b:6(int!null) a.rowid:7(int!null)
+ │              │    ├── columns: onecolumn.x:1 onecolumn.rowid:2!null twocolumn.x:3!null y:4 twocolumn.rowid:5!null b:6!null a.rowid:7!null
  │              │    ├── inner-join (cross)
- │              │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+ │              │    │    ├── columns: onecolumn.x:1 onecolumn.rowid:2!null twocolumn.x:3 y:4 twocolumn.rowid:5!null
  │              │    │    ├── scan onecolumn
- │              │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │              │    │    │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null
  │              │    │    ├── scan twocolumn
- │              │    │    │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+ │              │    │    │    └── columns: twocolumn.x:3 y:4 twocolumn.rowid:5!null
  │              │    │    └── filters (true)
  │              │    ├── scan a
- │              │    │    └── columns: b:6(int) a.rowid:7(int!null)
+ │              │    │    └── columns: b:6 a.rowid:7!null
  │              │    └── filters
- │              │         └── eq [type=bool]
- │              │              ├── variable: b [type=int]
- │              │              └── variable: twocolumn.x [type=int]
+ │              │         └── b:6 = twocolumn.x:3
  │              ├── scan c
- │              │    └── columns: d:8(int) e:9(int) c.rowid:10(int!null)
+ │              │    └── columns: d:8 e:9 c.rowid:10!null
  │              └── filters
- │                   └── and [type=bool]
- │                        ├── eq [type=bool]
- │                        │    ├── variable: b [type=int]
- │                        │    └── variable: d [type=int]
- │                        └── eq [type=bool]
- │                             ├── variable: d [type=int]
- │                             └── variable: onecolumn.x [type=int]
- └── const: 1 [type=int]
+ │                   └── (b:6 = d:8) AND (d:8 = onecolumn.x:1)
+ └── 1
 
 # Check sub-queries in ON conditions.
 build
 SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolumn.x IN (SELECT x FROM twocolumn WHERE y >= 52)
 ----
 project
- ├── columns: x:1(int!null) x:3(int!null) y:4(int)
+ ├── columns: x:1!null x:3!null y:4
  └── inner-join (cross)
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null twocolumn.x:3!null y:4 twocolumn.rowid:5!null
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3 y:4 twocolumn.rowid:5!null
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: twocolumn.x [type=int]
-                │    └── variable: onecolumn.x [type=int]
-                └── any: eq [type=bool]
+           └── and
+                ├── twocolumn.x:3 = onecolumn.x:1
+                └── any: eq
                      ├── project
-                     │    ├── columns: twocolumn.x:6(int)
+                     │    ├── columns: twocolumn.x:6
                      │    └── select
-                     │         ├── columns: twocolumn.x:6(int) y:7(int!null) twocolumn.rowid:8(int!null)
+                     │         ├── columns: twocolumn.x:6 y:7!null twocolumn.rowid:8!null
                      │         ├── scan twocolumn
-                     │         │    └── columns: twocolumn.x:6(int) y:7(int) twocolumn.rowid:8(int!null)
+                     │         │    └── columns: twocolumn.x:6 y:7 twocolumn.rowid:8!null
                      │         └── filters
-                     │              └── ge [type=bool]
-                     │                   ├── variable: y [type=int]
-                     │                   └── const: 52 [type=int]
-                     └── variable: onecolumn.x [type=int]
+                     │              └── y:7 >= 52
+                     └── onecolumn.x:1
 
 # Check sub-queries as data sources.
 build
 SELECT * FROM onecolumn JOIN (VALUES (41),(42),(43)) AS a(x) USING(x)
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (hash)
-      ├── columns: x:1(int!null) rowid:2(int!null) column1:3(int!null)
+      ├── columns: x:1!null rowid:2!null column1:3!null
       ├── scan onecolumn
-      │    └── columns: x:1(int) rowid:2(int!null)
+      │    └── columns: x:1 rowid:2!null
       ├── values
-      │    ├── columns: column1:3(int!null)
-      │    ├── tuple [type=tuple{int}]
-      │    │    └── const: 41 [type=int]
-      │    ├── tuple [type=tuple{int}]
-      │    │    └── const: 42 [type=int]
-      │    └── tuple [type=tuple{int}]
-      │         └── const: 43 [type=int]
+      │    ├── columns: column1:3!null
+      │    ├── (41,)
+      │    ├── (42,)
+      │    └── (43,)
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: column1 [type=int]
+           └── x:1 = column1:3
 
 build
 SELECT * FROM onecolumn JOIN (SELECT x + 2 AS x FROM onecolumn) USING(x)
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (hash)
-      ├── columns: onecolumn.x:1(int!null) rowid:2(int!null) x:5(int!null)
+      ├── columns: onecolumn.x:1!null rowid:2!null x:5!null
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) rowid:2(int!null)
+      │    └── columns: onecolumn.x:1 rowid:2!null
       ├── project
-      │    ├── columns: x:5(int)
+      │    ├── columns: x:5
       │    ├── scan onecolumn
-      │    │    └── columns: onecolumn.x:3(int) rowid:4(int!null)
+      │    │    └── columns: onecolumn.x:3 rowid:4!null
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: onecolumn.x [type=int]
-      │              └── const: 2 [type=int]
+      │         └── onecolumn.x:3 + 2 [as=x:5]
       └── filters
-           └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: x [type=int]
+           └── onecolumn.x:1 = x:5
 
 # Check that a single column can have multiple table aliases.
 build
 SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x LIMIT 1
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) y:5(int) y:8(int)
+ ├── columns: x:1!null y:2 y:5 y:8
  ├── internal-ordering: +1
  ├── ordering: +1
  ├── sort
- │    ├── columns: a.x:1(int!null) a.y:2(int) b.y:5(int) c.y:8(int)
+ │    ├── columns: a.x:1!null a.y:2 b.y:5 c.y:8
  │    ├── ordering: +1
  │    ├── limit hint: 1.00
  │    └── project
- │         ├── columns: a.x:1(int!null) a.y:2(int) b.y:5(int) c.y:8(int)
+ │         ├── columns: a.x:1!null a.y:2 b.y:5 c.y:8
  │         └── inner-join (hash)
- │              ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int!null) b.y:5(int) b.rowid:6(int!null) c.x:7(int!null) c.y:8(int) c.rowid:9(int!null)
+ │              ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4!null b.y:5 b.rowid:6!null c.x:7!null c.y:8 c.rowid:9!null
  │              ├── inner-join (hash)
- │              │    ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int!null) b.y:5(int) b.rowid:6(int!null)
+ │              │    ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4!null b.y:5 b.rowid:6!null
  │              │    ├── scan a
- │              │    │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+ │              │    │    └── columns: a.x:1 a.y:2 a.rowid:3!null
  │              │    ├── scan b
- │              │    │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+ │              │    │    └── columns: b.x:4 b.y:5 b.rowid:6!null
  │              │    └── filters
- │              │         └── eq [type=bool]
- │              │              ├── variable: a.x [type=int]
- │              │              └── variable: b.x [type=int]
+ │              │         └── a.x:1 = b.x:4
  │              ├── scan c
- │              │    └── columns: c.x:7(int) c.y:8(int) c.rowid:9(int!null)
+ │              │    └── columns: c.x:7 c.y:8 c.rowid:9!null
  │              └── filters
- │                   └── eq [type=bool]
- │                        ├── variable: a.x [type=int]
- │                        └── variable: c.x [type=int]
- └── const: 1 [type=int]
+ │                   └── a.x:1 = c.x:7
+ └── 1
 
 build
 SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
 ----
 sort
- ├── columns: s:1(int!null) x:4(int!null) x:7(int!null) y:2(int) y:5(int) y:8(int)
+ ├── columns: s:1!null x:4!null x:7!null y:2 y:5 y:8
  ├── ordering: +1
  └── project
-      ├── columns: a.x:1(int!null) a.y:2(int) b.x:4(int!null) b.y:5(int) c.x:7(int!null) c.y:8(int)
+      ├── columns: a.x:1!null a.y:2 b.x:4!null b.y:5 c.x:7!null c.y:8
       └── inner-join (hash)
-           ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int!null) b.y:5(int) b.rowid:6(int!null) c.x:7(int!null) c.y:8(int) c.rowid:9(int!null)
+           ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4!null b.y:5 b.rowid:6!null c.x:7!null c.y:8 c.rowid:9!null
            ├── inner-join (hash)
-           │    ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int!null) b.y:5(int) b.rowid:6(int!null)
+           │    ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4!null b.y:5 b.rowid:6!null
            │    ├── scan a
-           │    │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+           │    │    └── columns: a.x:1 a.y:2 a.rowid:3!null
            │    ├── scan b
-           │    │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+           │    │    └── columns: b.x:4 b.y:5 b.rowid:6!null
            │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: a.x [type=int]
-           │              └── variable: b.x [type=int]
+           │         └── a.x:1 = b.x:4
            ├── scan c
-           │    └── columns: c.x:7(int) c.y:8(int) c.rowid:9(int!null)
+           │    └── columns: c.x:7 c.y:8 c.rowid:9!null
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a.x [type=int]
-                     └── variable: c.x [type=int]
+                └── a.x:1 = c.x:7
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
@@ -1184,15 +1036,15 @@ build
 SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 ----
 inner-join (cross)
- ├── columns: x:1(int) x:3(int)
+ ├── columns: x:1 x:3
  ├── project
- │    ├── columns: x:1(int)
+ │    ├── columns: x:1
  │    └── scan onecolumn
- │         └── columns: x:1(int) rowid:2(int!null)
+ │         └── columns: x:1 rowid:2!null
  ├── project
- │    ├── columns: x:3(int)
+ │    ├── columns: x:3
  │    └── scan onecolumn
- │         └── columns: x:3(int) rowid:4(int!null)
+ │         └── columns: x:3 rowid:4!null
  └── filters (true)
 
 # Check that anonymous sources are properly looked up without ambiguity.
@@ -1200,33 +1052,27 @@ build
 SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x)
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (hash)
-      ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) othercolumn.x:3(int!null) othercolumn.rowid:4(int!null) a.x:5(int!null) a.rowid:6(int!null) b.x:7(int!null) b.rowid:8(int!null)
+      ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null othercolumn.x:3!null othercolumn.rowid:4!null a.x:5!null a.rowid:6!null b.x:7!null b.rowid:8!null
       ├── inner-join (hash)
-      │    ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) othercolumn.x:3(int!null) othercolumn.rowid:4(int!null)
+      │    ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null othercolumn.x:3!null othercolumn.rowid:4!null
       │    ├── scan onecolumn
-      │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    │    └── columns: onecolumn.x:1 onecolumn.rowid:2!null
       │    ├── scan othercolumn
-      │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
+      │    │    └── columns: othercolumn.x:3 othercolumn.rowid:4!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: onecolumn.x [type=int]
-      │              └── variable: othercolumn.x [type=int]
+      │         └── onecolumn.x:1 = othercolumn.x:3
       ├── inner-join (hash)
-      │    ├── columns: a.x:5(int!null) a.rowid:6(int!null) b.x:7(int!null) b.rowid:8(int!null)
+      │    ├── columns: a.x:5!null a.rowid:6!null b.x:7!null b.rowid:8!null
       │    ├── scan a
-      │    │    └── columns: a.x:5(int) a.rowid:6(int!null)
+      │    │    └── columns: a.x:5 a.rowid:6!null
       │    ├── scan b
-      │    │    └── columns: b.x:7(int) b.rowid:8(int!null)
+      │    │    └── columns: b.x:7 b.rowid:8!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: a.x [type=int]
-      │              └── variable: b.x [type=int]
+      │         └── a.x:5 = b.x:7
       └── filters
-           └── eq [type=bool]
-                ├── variable: onecolumn.x [type=int]
-                └── variable: a.x [type=int]
+           └── onecolumn.x:1 = a.x:5
 
 # Check that multiple anonymous sources cause proper ambiguity errors.
 build
@@ -1249,94 +1095,78 @@ build
 SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
 project
- ├── columns: x:1(int) y:5(int)
+ ├── columns: x:1 y:5
  └── inner-join (cross)
-      ├── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null) b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      ├── columns: a.x:1 a.y:2 a.rowid:3!null b.x:4 b.y:5 b.rowid:6!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null
       ├── scan b
-      │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      │    └── columns: b.x:4 b.y:5 b.rowid:6!null
       └── filters (true)
 
 build
 SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
 project
- ├── columns: y:5(int)
+ ├── columns: y:5
  └── inner-join (hash)
-      ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int!null) b.y:5(int) b.rowid:6(int!null)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4!null b.y:5 b.rowid:6!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null
       ├── scan b
-      │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      │    └── columns: b.x:4 b.y:5 b.rowid:6!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:4
 
 build
 SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
 project
- ├── columns: y:5(int)
+ ├── columns: y:5
  └── inner-join (hash)
-      ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int!null) b.y:5(int) b.rowid:6(int!null)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4!null b.y:5 b.rowid:6!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null
       ├── scan b
-      │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      │    └── columns: b.x:4 b.y:5 b.rowid:6!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:4
 
 build
 SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
 project
- ├── columns: x:1(int!null)
+ ├── columns: x:1!null
  └── inner-join (cross)
-      ├── columns: a.x:1(int!null) a.y:2(int) a.rowid:3(int!null) b.x:4(int) b.y:5(int!null) b.rowid:6(int!null)
+      ├── columns: a.x:1!null a.y:2 a.rowid:3!null b.x:4 b.y:5!null b.rowid:6!null
       ├── scan a
-      │    └── columns: a.x:1(int) a.y:2(int) a.rowid:3(int!null)
+      │    └── columns: a.x:1 a.y:2 a.rowid:3!null
       ├── scan b
-      │    └── columns: b.x:4(int) b.y:5(int) b.rowid:6(int!null)
+      │    └── columns: b.x:4 b.y:5 b.rowid:6!null
       └── filters
-           └── lt [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.y [type=int]
+           └── a.x:1 < b.y:5
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
 sort
- ├── columns: k:2(int!null) u:1(int!null) w:4(int!null)
+ ├── columns: k:2!null u:1!null w:4!null
  ├── ordering: +1
  └── project
-      ├── columns: column1:1(int!null) column2:2(int!null) column2:4(int!null)
+      ├── columns: column1:1!null column2:2!null column2:4!null
       └── inner-join (hash)
-           ├── columns: column1:1(int!null) column2:2(int!null) column1:3(int!null) column2:4(int!null)
+           ├── columns: column1:1!null column2:2!null column1:3!null column2:4!null
            ├── values
-           │    ├── columns: column1:1(int!null) column2:2(int!null)
-           │    ├── tuple [type=tuple{int, int}]
-           │    │    ├── const: 9 [type=int]
-           │    │    └── const: 1 [type=int]
-           │    └── tuple [type=tuple{int, int}]
-           │         ├── const: 8 [type=int]
-           │         └── const: 2 [type=int]
+           │    ├── columns: column1:1!null column2:2!null
+           │    ├── (9, 1)
+           │    └── (8, 2)
            ├── values
-           │    ├── columns: column1:3(int!null) column2:4(int!null)
-           │    ├── tuple [type=tuple{int, int}]
-           │    │    ├── const: 1 [type=int]
-           │    │    └── const: 1 [type=int]
-           │    └── tuple [type=tuple{int, int}]
-           │         ├── const: 2 [type=int]
-           │         └── const: 2 [type=int]
+           │    ├── columns: column1:3!null column2:4!null
+           │    ├── (1, 1)
+           │    └── (2, 2)
            └── filters
-                └── eq [type=bool]
-                     ├── variable: column2 [type=int]
-                     └── variable: column1 [type=int]
+                └── column2:2 = column1:3
 
 # Tests for filter propagation through joins.
 
@@ -1353,42 +1183,36 @@ build
 SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 project
- ├── columns: a:1(int) b:2(int!null) n:4(int!null) sq:5(int)
+ ├── columns: a:1 b:2!null n:4!null sq:5
  └── select
-      ├── columns: a:1(int) b:2(int!null) rowid:3(int!null) n:4(int!null) sq:5(int)
+      ├── columns: a:1 b:2!null rowid:3!null n:4!null sq:5
       ├── inner-join (cross)
-      │    ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
+      │    ├── columns: a:1 b:2 rowid:3!null n:4!null sq:5
       │    ├── scan pairs
-      │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      │    │    └── columns: a:1 b:2 rowid:3!null
       │    ├── scan square
-      │    │    └── columns: n:4(int!null) sq:5(int)
+      │    │    └── columns: n:4!null sq:5
       │    └── filters (true)
       └── filters
-           └── eq [type=bool]
-                ├── variable: b [type=int]
-                └── variable: n [type=int]
+           └── b:2 = n:4
 
 # The filter expression becomes an ON predicate.
 build
 SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
 project
- ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
+ ├── columns: a:1 b:2 n:4!null sq:5
  └── select
-      ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
+      ├── columns: a:1 b:2 rowid:3!null n:4!null sq:5
       ├── inner-join (cross)
-      │    ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
+      │    ├── columns: a:1 b:2 rowid:3!null n:4!null sq:5
       │    ├── scan pairs
-      │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      │    │    └── columns: a:1 b:2 rowid:3!null
       │    ├── scan square
-      │    │    └── columns: n:4(int!null) sq:5(int)
+      │    │    └── columns: n:4!null sq:5
       │    └── filters (true)
       └── filters
-           └── eq [type=bool]
-                ├── plus [type=int]
-                │    ├── variable: a [type=int]
-                │    └── variable: b [type=int]
-                └── variable: sq [type=int]
+           └── (a:1 + b:2) = sq:5
 
 # Query similar to the one above, but the filter refers to a rendered
 # expression and can't "break through". See the comment for propagateFilters
@@ -1397,73 +1221,55 @@ build
 SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
 ----
 project
- ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int!null)
+ ├── columns: a:1 b:2 n:4!null sq:5!null
  └── select
-      ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int!null) sum:6(int!null)
+      ├── columns: a:1 b:2 n:4!null sq:5!null sum:6!null
       ├── project
-      │    ├── columns: sum:6(int) a:1(int) b:2(int) n:4(int!null) sq:5(int)
+      │    ├── columns: sum:6 a:1 b:2 n:4!null sq:5
       │    ├── inner-join (cross)
-      │    │    ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
+      │    │    ├── columns: a:1 b:2 rowid:3!null n:4!null sq:5
       │    │    ├── scan pairs
-      │    │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      │    │    │    └── columns: a:1 b:2 rowid:3!null
       │    │    ├── scan square
-      │    │    │    └── columns: n:4(int!null) sq:5(int)
+      │    │    │    └── columns: n:4!null sq:5
       │    │    └── filters (true)
       │    └── projections
-      │         └── plus [type=int]
-      │              ├── variable: a [type=int]
-      │              └── variable: b [type=int]
+      │         └── a:1 + b:2 [as=sum:6]
       └── filters
-           └── eq [type=bool]
-                ├── variable: sum [type=int]
-                └── variable: sq [type=int]
+           └── sum:6 = sq:5
 
 # The filter expression must stay on top of the outer join.
 build
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
 project
- ├── columns: a:1(int) b:2(int) n:4(int) sq:5(int)
+ ├── columns: a:1 b:2 n:4 sq:5
  └── full-join (cross)
-      ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int) sq:5(int)
+      ├── columns: a:1 b:2 rowid:3 n:4 sq:5
       ├── scan pairs
-      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      │    └── columns: a:1 b:2 rowid:3!null
       ├── scan square
-      │    └── columns: n:4(int!null) sq:5(int)
+      │    └── columns: n:4!null sq:5
       └── filters
-           └── eq [type=bool]
-                ├── plus [type=int]
-                │    ├── variable: a [type=int]
-                │    └── variable: b [type=int]
-                └── variable: sq [type=int]
+           └── (a:1 + b:2) = sq:5
 
 build
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
 project
- ├── columns: a:1(int) b:2(int) n:4(int) sq:5(int)
+ ├── columns: a:1 b:2 n:4 sq:5
  └── select
-      ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int) sq:5(int)
+      ├── columns: a:1 b:2 rowid:3 n:4 sq:5
       ├── full-join (cross)
-      │    ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int) sq:5(int)
+      │    ├── columns: a:1 b:2 rowid:3 n:4 sq:5
       │    ├── scan pairs
-      │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+      │    │    └── columns: a:1 b:2 rowid:3!null
       │    ├── scan square
-      │    │    └── columns: n:4(int!null) sq:5(int)
+      │    │    └── columns: n:4!null sq:5
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── plus [type=int]
-      │              │    ├── variable: a [type=int]
-      │              │    └── variable: b [type=int]
-      │              └── variable: sq [type=int]
+      │         └── (a:1 + b:2) = sq:5
       └── filters
-           └── ne [type=bool]
-                ├── mod [type=int]
-                │    ├── variable: b [type=int]
-                │    └── const: 2 [type=int]
-                └── mod [type=int]
-                     ├── variable: sq [type=int]
-                     └── const: 2 [type=int]
+           └── (b:2 % 2) != (sq:5 % 2)
 
 # Filter propagation through outer joins.
 
@@ -1473,47 +1279,19 @@ SELECT *
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ----
 select
- ├── columns: a:1(int) b:2(int!null) n:4(int) sq:5(int)
+ ├── columns: a:1 b:2!null n:4 sq:5
  ├── project
- │    ├── columns: a:1(int) b:2(int) n:4(int) sq:5(int)
+ │    ├── columns: a:1 b:2 n:4 sq:5
  │    └── left-join (cross)
- │         ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int) sq:5(int)
+ │         ├── columns: a:1 b:2 rowid:3!null n:4 sq:5
  │         ├── scan pairs
- │         │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+ │         │    └── columns: a:1 b:2 rowid:3!null
  │         ├── scan square
- │         │    └── columns: n:4(int!null) sq:5(int)
+ │         │    └── columns: n:4!null sq:5
  │         └── filters
- │              └── and [type=bool]
- │                   ├── and [type=bool]
- │                   │    ├── eq [type=bool]
- │                   │    │    ├── variable: b [type=int]
- │                   │    │    └── variable: sq [type=int]
- │                   │    └── gt [type=bool]
- │                   │         ├── variable: a [type=int]
- │                   │         └── const: 1 [type=int]
- │                   └── lt [type=bool]
- │                        ├── variable: n [type=int]
- │                        └── const: 6 [type=int]
+ │              └── ((b:2 = sq:5) AND (a:1 > 1)) AND (n:4 < 6)
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── gt [type=bool]
-           │    │    ├── variable: b [type=int]
-           │    │    └── const: 1 [type=int]
-           │    └── or [type=bool]
-           │         ├── is [type=bool]
-           │         │    ├── variable: n [type=int]
-           │         │    └── null [type=unknown]
-           │         └── gt [type=bool]
-           │              ├── variable: n [type=int]
-           │              └── const: 1 [type=int]
-           └── or [type=bool]
-                ├── is [type=bool]
-                │    ├── variable: n [type=int]
-                │    └── null [type=unknown]
-                └── lt [type=bool]
-                     ├── variable: a [type=int]
-                     └── variable: sq [type=int]
+      └── ((b:2 > 1) AND ((n:4 IS NULL) OR (n:4 > 1))) AND ((n:4 IS NULL) OR (a:1 < sq:5))
 
 build
 SELECT *
@@ -1521,47 +1299,19 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ----
 select
- ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
+ ├── columns: a:1 b:2 n:4!null sq:5
  ├── project
- │    ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
+ │    ├── columns: a:1 b:2 n:4!null sq:5
  │    └── right-join (cross)
- │         ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int!null) sq:5(int)
+ │         ├── columns: a:1 b:2 rowid:3 n:4!null sq:5
  │         ├── scan pairs
- │         │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+ │         │    └── columns: a:1 b:2 rowid:3!null
  │         ├── scan square
- │         │    └── columns: n:4(int!null) sq:5(int)
+ │         │    └── columns: n:4!null sq:5
  │         └── filters
- │              └── and [type=bool]
- │                   ├── and [type=bool]
- │                   │    ├── eq [type=bool]
- │                   │    │    ├── variable: b [type=int]
- │                   │    │    └── variable: sq [type=int]
- │                   │    └── gt [type=bool]
- │                   │         ├── variable: a [type=int]
- │                   │         └── const: 1 [type=int]
- │                   └── lt [type=bool]
- │                        ├── variable: n [type=int]
- │                        └── const: 6 [type=int]
+ │              └── ((b:2 = sq:5) AND (a:1 > 1)) AND (n:4 < 6)
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── or [type=bool]
-           │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a [type=int]
-           │    │    │    └── null [type=unknown]
-           │    │    └── gt [type=bool]
-           │    │         ├── variable: a [type=int]
-           │    │         └── const: 2 [type=int]
-           │    └── gt [type=bool]
-           │         ├── variable: n [type=int]
-           │         └── const: 1 [type=int]
-           └── or [type=bool]
-                ├── is [type=bool]
-                │    ├── variable: a [type=int]
-                │    └── null [type=unknown]
-                └── lt [type=bool]
-                     ├── variable: a [type=int]
-                     └── variable: sq [type=int]
+      └── (((a:1 IS NULL) OR (a:1 > 2)) AND (n:4 > 1)) AND ((a:1 IS NULL) OR (a:1 < sq:5))
 
 # The simpler plan for an inner join, to compare.
 build
@@ -1570,47 +1320,19 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ----
 select
- ├── columns: a:1(int!null) b:2(int!null) n:4(int!null) sq:5(int!null)
+ ├── columns: a:1!null b:2!null n:4!null sq:5!null
  ├── project
- │    ├── columns: a:1(int!null) b:2(int!null) n:4(int!null) sq:5(int!null)
+ │    ├── columns: a:1!null b:2!null n:4!null sq:5!null
  │    └── inner-join (cross)
- │         ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null) n:4(int!null) sq:5(int!null)
+ │         ├── columns: a:1!null b:2!null rowid:3!null n:4!null sq:5!null
  │         ├── scan pairs
- │         │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
+ │         │    └── columns: a:1 b:2 rowid:3!null
  │         ├── scan square
- │         │    └── columns: n:4(int!null) sq:5(int)
+ │         │    └── columns: n:4!null sq:5
  │         └── filters
- │              └── and [type=bool]
- │                   ├── and [type=bool]
- │                   │    ├── eq [type=bool]
- │                   │    │    ├── variable: b [type=int]
- │                   │    │    └── variable: sq [type=int]
- │                   │    └── gt [type=bool]
- │                   │         ├── variable: a [type=int]
- │                   │         └── const: 1 [type=int]
- │                   └── lt [type=bool]
- │                        ├── variable: n [type=int]
- │                        └── const: 6 [type=int]
+ │              └── ((b:2 = sq:5) AND (a:1 > 1)) AND (n:4 < 6)
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── or [type=bool]
-           │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a [type=int]
-           │    │    │    └── null [type=unknown]
-           │    │    └── gt [type=bool]
-           │    │         ├── variable: a [type=int]
-           │    │         └── const: 2 [type=int]
-           │    └── gt [type=bool]
-           │         ├── variable: n [type=int]
-           │         └── const: 1 [type=int]
-           └── or [type=bool]
-                ├── is [type=bool]
-                │    ├── variable: a [type=int]
-                │    └── null [type=unknown]
-                └── lt [type=bool]
-                     ├── variable: a [type=int]
-                     └── variable: sq [type=int]
+      └── (((a:1 IS NULL) OR (a:1 > 2)) AND (n:4 > 1)) AND ((a:1 IS NULL) OR (a:1 < sq:5))
 
 
 exec-ddl
@@ -1625,249 +1347,203 @@ build
 SELECT * FROM t1 JOIN t2 USING(x)
 ----
 project
- ├── columns: x:2(int!null) col1:1(int) col2:3(int) y:4(int) col3:6(int) y:7(int) col4:9(int)
+ ├── columns: x:2!null col1:1 col2:3 y:4 col3:6 y:7 col4:9
  └── inner-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4 t1.rowid:5!null col3:6 t2.y:7 t2.x:8!null col4:9 t2.rowid:10!null
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── scan t2
-      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: t1.x [type=int]
-                └── variable: t2.x [type=int]
+           └── t1.x:2 = t2.x:8
 
 build
 SELECT * FROM t1 NATURAL JOIN t2
 ----
 project
- ├── columns: x:2(int!null) y:4(int!null) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
+ ├── columns: x:2!null y:4!null col1:1 col2:3 col3:6 col4:9
  └── inner-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null col3:6 t2.y:7!null t2.x:8!null col4:9 t2.rowid:10!null
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── scan t2
-      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: t1.x [type=int]
-           │    └── variable: t2.x [type=int]
-           └── eq [type=bool]
-                ├── variable: t1.y [type=int]
-                └── variable: t2.y [type=int]
+           ├── t1.x:2 = t2.x:8
+           └── t1.y:4 = t2.y:7
 
 build
 SELECT x, t1.x, t2.x FROM t1 NATURAL JOIN t2
 ----
 project
- ├── columns: x:2(int!null) x:2(int!null) x:8(int!null)
+ ├── columns: x:2!null x:2!null x:8!null
  └── inner-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null col3:6 t2.y:7!null t2.x:8!null col4:9 t2.rowid:10!null
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── scan t2
-      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: t1.x [type=int]
-           │    └── variable: t2.x [type=int]
-           └── eq [type=bool]
-                ├── variable: t1.y [type=int]
-                └── variable: t2.y [type=int]
+           ├── t1.x:2 = t2.x:8
+           └── t1.y:4 = t2.y:7
 
 build
 SELECT t1.*, t2.* FROM t1 NATURAL JOIN t2
 ----
 project
- ├── columns: x:2(int!null) y:4(int!null) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
+ ├── columns: x:2!null y:4!null col1:1 col2:3 col3:6 col4:9
  └── inner-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null col3:6 t2.y:7!null t2.x:8!null col4:9 t2.rowid:10!null
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── scan t2
-      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: t1.x [type=int]
-           │    └── variable: t2.x [type=int]
-           └── eq [type=bool]
-                ├── variable: t1.y [type=int]
-                └── variable: t2.y [type=int]
+           ├── t1.x:2 = t2.x:8
+           └── t1.y:4 = t2.y:7
 
 build
 SELECT * FROM t1 JOIN t2 ON t2.x=t1.x
 ----
 project
- ├── columns: col1:1(int) x:2(int!null) col2:3(int) y:4(int) col3:6(int) y:7(int) x:8(int!null) col4:9(int)
+ ├── columns: col1:1 x:2!null col2:3 y:4 col3:6 y:7 x:8!null col4:9
  └── inner-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4 t1.rowid:5!null col3:6 t2.y:7 t2.x:8!null col4:9 t2.rowid:10!null
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── scan t2
-      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: t2.x [type=int]
-                └── variable: t1.x [type=int]
+           └── t2.x:8 = t1.x:2
 
 build
 SELECT * FROM t1 FULL OUTER JOIN t2 USING(x)
 ----
 project
- ├── columns: x:11(int) col1:1(int) col2:3(int) y:4(int) col3:6(int) y:7(int) col4:9(int)
+ ├── columns: x:11 col1:1 col2:3 y:4 col3:6 y:7 col4:9
  └── project
-      ├── columns: x:11(int) col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
+      ├── columns: x:11 col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10
       ├── full-join (hash)
-      │    ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
+      │    ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10
       │    ├── scan t1
-      │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       │    ├── scan t2
-      │    │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: t1.x [type=int]
-      │              └── variable: t2.x [type=int]
+      │         └── t1.x:2 = t2.x:8
       └── projections
-           └── coalesce [type=int]
-                ├── variable: t1.x [type=int]
-                └── variable: t2.x [type=int]
+           └── COALESCE(t1.x:2, t2.x:8) [as=x:11]
 
 build
 SELECT * FROM t1 NATURAL FULL OUTER JOIN t2
 ----
 project
- ├── columns: x:11(int) y:12(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
+ ├── columns: x:11 y:12 col1:1 col2:3 col3:6 col4:9
  └── project
-      ├── columns: x:11(int) y:12(int) col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
+      ├── columns: x:11 y:12 col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10
       ├── full-join (hash)
-      │    ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
+      │    ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10
       │    ├── scan t1
-      │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       │    ├── scan t2
-      │    │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: t1.x [type=int]
-      │         │    └── variable: t2.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: t1.y [type=int]
-      │              └── variable: t2.y [type=int]
+      │         ├── t1.x:2 = t2.x:8
+      │         └── t1.y:4 = t2.y:7
       └── projections
-           ├── coalesce [type=int]
-           │    ├── variable: t1.x [type=int]
-           │    └── variable: t2.x [type=int]
-           └── coalesce [type=int]
-                ├── variable: t1.y [type=int]
-                └── variable: t2.y [type=int]
+           ├── COALESCE(t1.x:2, t2.x:8) [as=x:11]
+           └── COALESCE(t1.y:4, t2.y:7) [as=y:12]
 
 # Regression: computed columns are not wrapped with Variable outside join.
 build
 SELECT * FROM (SELECT x, x+1 AS plus1 FROM t1) NATURAL FULL OUTER JOIN (SELECT x, 2 AS two FROM t2)
 ----
 project
- ├── columns: x:13(int) plus1:6(int) two:12(int)
+ ├── columns: x:13 plus1:6 two:12
  └── project
-      ├── columns: x:13(int) t1.x:2(int) plus1:6(int) t2.x:9(int) two:12(int)
+      ├── columns: x:13 t1.x:2 plus1:6 t2.x:9 two:12
       ├── full-join (hash)
-      │    ├── columns: t1.x:2(int) plus1:6(int) t2.x:9(int) two:12(int)
+      │    ├── columns: t1.x:2 plus1:6 t2.x:9 two:12
       │    ├── project
-      │    │    ├── columns: plus1:6(int) t1.x:2(int)
+      │    │    ├── columns: plus1:6 t1.x:2
       │    │    ├── scan t1
-      │    │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       │    │    └── projections
-      │    │         └── plus [type=int]
-      │    │              ├── variable: t1.x [type=int]
-      │    │              └── const: 1 [type=int]
+      │    │         └── t1.x:2 + 1 [as=plus1:6]
       │    ├── project
-      │    │    ├── columns: two:12(int!null) t2.x:9(int)
+      │    │    ├── columns: two:12!null t2.x:9
       │    │    ├── scan t2
-      │    │    │    └── columns: col3:7(int) t2.y:8(int) t2.x:9(int) col4:10(int) t2.rowid:11(int!null)
+      │    │    │    └── columns: col3:7 t2.y:8 t2.x:9 col4:10 t2.rowid:11!null
       │    │    └── projections
-      │    │         └── const: 2 [type=int]
+      │    │         └── 2 [as=two:12]
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: t1.x [type=int]
-      │              └── variable: t2.x [type=int]
+      │         └── t1.x:2 = t2.x:9
       └── projections
-           └── coalesce [type=int]
-                ├── variable: t1.x [type=int]
-                └── variable: t2.x [type=int]
+           └── COALESCE(t1.x:2, t2.x:9) [as=x:13]
 
 build
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.x=t2.x
 ----
 project
- ├── columns: col1:1(int) x:2(int) col2:3(int) y:4(int) col3:6(int) y:7(int) x:8(int) col4:9(int)
+ ├── columns: col1:1 x:2 col2:3 y:4 col3:6 y:7 x:8 col4:9
  └── full-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
+      ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── scan t2
-      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: t1.x [type=int]
-                └── variable: t2.x [type=int]
+           └── t1.x:2 = t2.x:8
 
 build
 SELECT t2.x, t1.x, x FROM t1 JOIN t2 USING(x)
 ----
 project
- ├── columns: x:8(int!null) x:2(int!null) x:2(int!null)
+ ├── columns: x:8!null x:2!null x:2!null
  └── inner-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int!null) col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4 t1.rowid:5!null col3:6 t2.y:7 t2.x:8!null col4:9 t2.rowid:10!null
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── scan t2
-      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: t1.x [type=int]
-                └── variable: t2.x [type=int]
+           └── t1.x:2 = t2.x:8
 
 build
 SELECT t2.x, t1.x, x FROM t1 FULL OUTER JOIN t2 USING(x)
 ----
 project
- ├── columns: x:8(int) x:2(int) x:11(int)
+ ├── columns: x:8 x:2 x:11
  └── project
-      ├── columns: x:11(int) col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
+      ├── columns: x:11 col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10
       ├── full-join (hash)
-      │    ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
+      │    ├── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5 col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10
       │    ├── scan t1
-      │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       │    ├── scan t2
-      │    │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │    │    └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: t1.x [type=int]
-      │              └── variable: t2.x [type=int]
+      │         └── t1.x:2 = t2.x:8
       └── projections
-           └── coalesce [type=int]
-                ├── variable: t1.x [type=int]
-                └── variable: t2.x [type=int]
+           └── COALESCE(t1.x:2, t2.x:8) [as=x:11]
 
 # Test for #19536.
 build
 SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
 project
- ├── columns: x:2(int!null)
+ ├── columns: x:2!null
  └── inner-join (hash)
-      ├── columns: col1:1(int) t1.x:2(int!null) col2:3(int) t1.y:4(int!null) t1.rowid:5(int!null) col3:6(int) t2.y:7(int!null) t2.x:8(int!null) col4:9(int)
+      ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null col3:6 t2.y:7!null t2.x:8!null col4:9
       ├── scan t1
-      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1 t1.x:2 col2:3 t1.y:4 t1.rowid:5!null
       ├── project
-      │    ├── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int)
+      │    ├── columns: col3:6 t2.y:7 t2.x:8 col4:9
       │    └── scan t2
-      │         └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
+      │         └── columns: col3:6 t2.y:7 t2.x:8 col4:9 t2.rowid:10!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: t1.x [type=int]
-           │    └── variable: t2.x [type=int]
-           └── eq [type=bool]
-                ├── variable: t1.y [type=int]
-                └── variable: t2.y [type=int]
+           ├── t1.x:2 = t2.x:8
+           └── t1.y:4 = t2.y:7
 
 # Tests for merge join ordering information.
 exec-ddl
@@ -1890,92 +1566,58 @@ build
 SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
 inner-join (cross)
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) a:5(int!null) b:6(int!null) c:7(int!null) d:8(int)
+ ├── columns: a:1!null b:2!null c:3!null d:4 a:5!null b:6!null c:7!null d:8
  ├── scan l
- │    └── columns: l.a:1(int!null) l.b:2(int!null) l.c:3(int) l.d:4(int)
+ │    └── columns: l.a:1!null l.b:2!null l.c:3 l.d:4
  ├── scan r
- │    └── columns: r.a:5(int) r.b:6(int!null) r.c:7(int!null) r.d:8(int)
+ │    └── columns: r.a:5 r.b:6!null r.c:7!null r.d:8
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── eq [type=bool]
-           │    │    ├── variable: l.a [type=int]
-           │    │    └── variable: r.a [type=int]
-           │    └── eq [type=bool]
-           │         ├── variable: l.b [type=int]
-           │         └── variable: r.b [type=int]
-           └── eq [type=bool]
-                ├── variable: l.c [type=int]
-                └── variable: r.c [type=int]
+      └── ((l.a:1 = r.a:5) AND (l.b:2 = r.b:6)) AND (l.c:3 = r.c:7)
 
 build
 SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── columns: a:1!null b:2!null c:3!null d:4!null
  └── inner-join (hash)
-      ├── columns: pkba.a:1(int!null) pkba.b:2(int!null) pkba.c:3(int!null) pkba.d:4(int!null) pkbad.a:5(int!null) pkbad.b:6(int!null) pkbad.c:7(int!null) pkbad.d:8(int!null)
+      ├── columns: pkba.a:1!null pkba.b:2!null pkba.c:3!null pkba.d:4!null pkbad.a:5!null pkbad.b:6!null pkbad.c:7!null pkbad.d:8!null
       ├── scan pkba
-      │    └── columns: pkba.a:1(int!null) pkba.b:2(int!null) pkba.c:3(int) pkba.d:4(int)
+      │    └── columns: pkba.a:1!null pkba.b:2!null pkba.c:3 pkba.d:4
       ├── scan pkbad
-      │    └── columns: pkbad.a:5(int!null) pkbad.b:6(int!null) pkbad.c:7(int) pkbad.d:8(int!null)
+      │    └── columns: pkbad.a:5!null pkbad.b:6!null pkbad.c:7 pkbad.d:8!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: pkba.a [type=int]
-           │    └── variable: pkbad.a [type=int]
-           ├── eq [type=bool]
-           │    ├── variable: pkba.b [type=int]
-           │    └── variable: pkbad.b [type=int]
-           ├── eq [type=bool]
-           │    ├── variable: pkba.c [type=int]
-           │    └── variable: pkbad.c [type=int]
-           └── eq [type=bool]
-                ├── variable: pkba.d [type=int]
-                └── variable: pkbad.d [type=int]
+           ├── pkba.a:1 = pkbad.a:5
+           ├── pkba.b:2 = pkbad.b:6
+           ├── pkba.c:3 = pkbad.c:7
+           └── pkba.d:4 = pkbad.d:8
 
 build
 SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) d:8(int)
+ ├── columns: a:1!null b:2!null c:3!null d:4 d:8
  └── inner-join (hash)
-      ├── columns: l.a:1(int!null) l.b:2(int!null) l.c:3(int!null) l.d:4(int) r.a:5(int!null) r.b:6(int!null) r.c:7(int!null) r.d:8(int)
+      ├── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4 r.a:5!null r.b:6!null r.c:7!null r.d:8
       ├── scan l
-      │    └── columns: l.a:1(int!null) l.b:2(int!null) l.c:3(int!null) l.d:4(int)
+      │    └── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4
       ├── scan r
-      │    └── columns: r.a:5(int!null) r.b:6(int!null) r.c:7(int!null) r.d:8(int)
+      │    └── columns: r.a:5!null r.b:6!null r.c:7!null r.d:8
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: l.a [type=int]
-           │    └── variable: r.a [type=int]
-           ├── eq [type=bool]
-           │    ├── variable: l.b [type=int]
-           │    └── variable: r.b [type=int]
-           └── eq [type=bool]
-                ├── variable: l.c [type=int]
-                └── variable: r.c [type=int]
+           ├── l.a:1 = r.a:5
+           ├── l.b:2 = r.b:6
+           └── l.c:3 = r.c:7
 
 build
 SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
 inner-join (cross)
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) a:5(int!null) b:6(int!null) c:7(int) d:8(int!null)
+ ├── columns: a:1!null b:2!null c:3!null d:4 a:5!null b:6!null c:7 d:8!null
  ├── scan l
- │    └── columns: l.a:1(int!null) l.b:2(int!null) l.c:3(int!null) l.d:4(int)
+ │    └── columns: l.a:1!null l.b:2!null l.c:3!null l.d:4
  ├── scan r
- │    └── columns: r.a:5(int!null) r.b:6(int!null) r.c:7(int) r.d:8(int!null)
+ │    └── columns: r.a:5!null r.b:6!null r.c:7 r.d:8!null
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── eq [type=bool]
-           │    │    ├── variable: l.c [type=int]
-           │    │    └── variable: r.d [type=int]
-           │    └── eq [type=bool]
-           │         ├── variable: l.a [type=int]
-           │         └── variable: r.a [type=int]
-           └── eq [type=bool]
-                ├── variable: l.b [type=int]
-                └── variable: r.b [type=int]
+      └── ((l.c:3 = r.d:8) AND (l.a:1 = r.a:5)) AND (l.b:2 = r.b:6)
 
 # Tests with joins with merged columns of collated string type.
 exec-ddl
@@ -1990,77 +1632,65 @@ build
 SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
 project
- ├── columns: s:2(collatedstring{en_u_ks_level1}!null) s:2(collatedstring{en_u_ks_level1}!null) s:4(collatedstring{en_u_ks_level1}!null)
+ ├── columns: s:2!null s:2!null s:4!null
  └── inner-join (hash)
-      ├── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1}!null) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1}!null)
+      ├── columns: str1.a:1!null str1.s:2!null str2.a:3!null str2.s:4!null
       ├── scan str1
-      │    └── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1})
+      │    └── columns: str1.a:1!null str1.s:2
       ├── scan str2
-      │    └── columns: str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      │    └── columns: str2.a:3!null str2.s:4
       └── filters
-           └── eq [type=bool]
-                ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-                └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+           └── str1.s:2 = str2.s:4
 
 build
 SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
 ----
 project
- ├── columns: s:2(collatedstring{en_u_ks_level1}) s:2(collatedstring{en_u_ks_level1}) s:4(collatedstring{en_u_ks_level1})
+ ├── columns: s:2 s:2 s:4
  └── left-join (hash)
-      ├── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int) str2.s:4(collatedstring{en_u_ks_level1})
+      ├── columns: str1.a:1!null str1.s:2 str2.a:3 str2.s:4
       ├── scan str1
-      │    └── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1})
+      │    └── columns: str1.a:1!null str1.s:2
       ├── scan str2
-      │    └── columns: str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      │    └── columns: str2.a:3!null str2.s:4
       └── filters
-           └── eq [type=bool]
-                ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-                └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+           └── str1.s:2 = str2.s:4
 
 build
 SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
 ----
 project
- ├── columns: s:5(collatedstring{en_u_ks_level1}) s:2(collatedstring{en_u_ks_level1}) s:4(collatedstring{en_u_ks_level1})
+ ├── columns: s:5 s:2 s:4
  └── project
-      ├── columns: s:5(collatedstring{en_u_ks_level1}) str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      ├── columns: s:5 str1.a:1 str1.s:2 str2.a:3!null str2.s:4
       ├── right-join (hash)
-      │    ├── columns: str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      │    ├── columns: str1.a:1 str1.s:2 str2.a:3!null str2.s:4
       │    ├── scan str1
-      │    │    └── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1})
+      │    │    └── columns: str1.a:1!null str1.s:2
       │    ├── scan str2
-      │    │    └── columns: str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      │    │    └── columns: str2.a:3!null str2.s:4
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-      │              └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+      │         └── str1.s:2 = str2.s:4
       └── projections
-           └── coalesce [type=collatedstring{en_u_ks_level1}]
-                ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-                └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+           └── COALESCE(str1.s:2, str2.s:4) [as=s:5]
 
 build
 SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
 ----
 project
- ├── columns: s:5(collatedstring{en_u_ks_level1}) s:2(collatedstring{en_u_ks_level1}) s:4(collatedstring{en_u_ks_level1})
+ ├── columns: s:5 s:2 s:4
  └── project
-      ├── columns: s:5(collatedstring{en_u_ks_level1}) str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int) str2.s:4(collatedstring{en_u_ks_level1})
+      ├── columns: s:5 str1.a:1 str1.s:2 str2.a:3 str2.s:4
       ├── full-join (hash)
-      │    ├── columns: str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int) str2.s:4(collatedstring{en_u_ks_level1})
+      │    ├── columns: str1.a:1 str1.s:2 str2.a:3 str2.s:4
       │    ├── scan str1
-      │    │    └── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1})
+      │    │    └── columns: str1.a:1!null str1.s:2
       │    ├── scan str2
-      │    │    └── columns: str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      │    │    └── columns: str2.a:3!null str2.s:4
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-      │              └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+      │         └── str1.s:2 = str2.s:4
       └── projections
-           └── coalesce [type=collatedstring{en_u_ks_level1}]
-                ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-                └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+           └── COALESCE(str1.s:2, str2.s:4) [as=s:5]
 
 # Verify that we resolve the merged column a to str2.a but use IFNULL for
 # column s which is a collated string.
@@ -2068,26 +1698,20 @@ build
 SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 ----
 project
- ├── columns: a:3(int!null) s:5(collatedstring{en_u_ks_level1})
+ ├── columns: a:3!null s:5
  └── project
-      ├── columns: s:5(collatedstring{en_u_ks_level1}) str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      ├── columns: s:5 str1.a:1 str1.s:2 str2.a:3!null str2.s:4
       ├── right-join (hash)
-      │    ├── columns: str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      │    ├── columns: str1.a:1 str1.s:2 str2.a:3!null str2.s:4
       │    ├── scan str1
-      │    │    └── columns: str1.a:1(int!null) str1.s:2(collatedstring{en_u_ks_level1})
+      │    │    └── columns: str1.a:1!null str1.s:2
       │    ├── scan str2
-      │    │    └── columns: str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
+      │    │    └── columns: str2.a:3!null str2.s:4
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: str1.a [type=int]
-      │         │    └── variable: str2.a [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-      │              └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+      │         ├── str1.a:1 = str2.a:3
+      │         └── str1.s:2 = str2.s:4
       └── projections
-           └── coalesce [type=collatedstring{en_u_ks_level1}]
-                ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-                └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+           └── COALESCE(str1.s:2, str2.s:4) [as=s:5]
 
 
 exec-ddl
@@ -2102,217 +1726,135 @@ build
 SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int!null)
+ ├── columns: x:1!null y:2!null u:3!null v:6!null
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4!null xyv.y:5!null v:6!null
       ├── inner-join (hash)
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4!null xyv.y:5!null v:6!null
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── xyu.x:1 = xyv.x:4
+      │         └── xyu.y:2 = xyv.y:5
       └── filters
-           └── gt [type=bool]
-                ├── variable: xyu.x [type=int]
-                └── const: 2 [type=int]
+           └── xyu.x:1 > 2
 
 build
 SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int)
+ ├── columns: x:1!null y:2!null u:3!null v:6
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4 xyv.y:5 v:6
       ├── left-join (hash)
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4 xyv.y:5 v:6
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── xyu.x:1 = xyv.x:4
+      │         └── xyu.y:2 = xyv.y:5
       └── filters
-           └── gt [type=bool]
-                ├── variable: xyu.x [type=int]
-                └── const: 2 [type=int]
+           └── xyu.x:1 > 2
 
 build
 SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:4(int!null) y:5(int!null) u:3(int) v:6(int!null)
+ ├── columns: x:4!null y:5!null u:3 v:6!null
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4!null xyv.y:5!null v:6!null
       ├── right-join (hash)
-      │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4!null xyv.y:5!null v:6!null
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── xyu.x:1 = xyv.x:4
+      │         └── xyu.y:2 = xyv.y:5
       └── filters
-           └── gt [type=bool]
-                ├── variable: xyv.x [type=int]
-                └── const: 2 [type=int]
+           └── xyv.x:4 > 2
 
 build
 SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:7(int!null) y:8(int) u:3(int) v:6(int)
+ ├── columns: x:7!null y:8 u:3 v:6
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int) x:7(int!null) y:8(int)
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4 xyv.y:5 v:6 x:7!null y:8
       ├── project
-      │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      │    ├── columns: x:7 y:8 xyu.x:1 xyu.y:2 u:3 xyv.x:4 xyv.y:5 v:6
       │    ├── full-join (hash)
-      │    │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      │    │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4 xyv.y:5 v:6
       │    │    ├── scan xyu
-      │    │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    │    ├── scan xyv
-      │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    │    └── filters
-      │    │         ├── eq [type=bool]
-      │    │         │    ├── variable: xyu.x [type=int]
-      │    │         │    └── variable: xyv.x [type=int]
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: xyu.y [type=int]
-      │    │              └── variable: xyv.y [type=int]
+      │    │         ├── xyu.x:1 = xyv.x:4
+      │    │         └── xyu.y:2 = xyv.y:5
       │    └── projections
-      │         ├── coalesce [type=int]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── coalesce [type=int]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── COALESCE(xyu.x:1, xyv.x:4) [as=x:7]
+      │         └── COALESCE(xyu.y:2, xyv.y:5) [as=y:8]
       └── filters
-           └── gt [type=bool]
-                ├── variable: x [type=int]
-                └── const: 2 [type=int]
+           └── x:7 > 2
 
 # Verify that we transfer constraints between the two sides.
 build
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
 select
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int!null) y:5(int!null) v:6(int!null)
+ ├── columns: x:1!null y:2!null u:3!null x:4!null y:5!null v:6!null
  ├── inner-join (cross)
- │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+ │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4!null xyv.y:5!null v:6!null
  │    ├── scan xyu
- │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+ │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
  │    ├── scan xyv
- │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+ │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
  │    └── filters
- │         └── and [type=bool]
- │              ├── eq [type=bool]
- │              │    ├── variable: xyu.x [type=int]
- │              │    └── variable: xyv.x [type=int]
- │              └── eq [type=bool]
- │                   ├── variable: xyu.y [type=int]
- │                   └── variable: xyv.y [type=int]
+ │         └── (xyu.x:1 = xyv.x:4) AND (xyu.y:2 = xyv.y:5)
  └── filters
-      └── and [type=bool]
-           ├── eq [type=bool]
-           │    ├── variable: xyu.x [type=int]
-           │    └── const: 1 [type=int]
-           └── lt [type=bool]
-                ├── variable: xyu.y [type=int]
-                └── const: 10 [type=int]
+      └── (xyu.x:1 = 1) AND (xyu.y:2 < 10)
 
 build
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 inner-join (cross)
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int!null) y:5(int!null) v:6(int!null)
+ ├── columns: x:1!null y:2!null u:3!null x:4!null y:5!null v:6!null
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+ │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+ │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── and [type=bool]
-           │    │    ├── eq [type=bool]
-           │    │    │    ├── variable: xyu.x [type=int]
-           │    │    │    └── variable: xyv.x [type=int]
-           │    │    └── eq [type=bool]
-           │    │         ├── variable: xyu.y [type=int]
-           │    │         └── variable: xyv.y [type=int]
-           │    └── eq [type=bool]
-           │         ├── variable: xyu.x [type=int]
-           │         └── const: 1 [type=int]
-           └── lt [type=bool]
-                ├── variable: xyu.y [type=int]
-                └── const: 10 [type=int]
+      └── (((xyu.x:1 = xyv.x:4) AND (xyu.y:2 = xyv.y:5)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
 
 build
 SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 left-join (cross)
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int) y:5(int) v:6(int)
+ ├── columns: x:1!null y:2!null u:3!null x:4 y:5 v:6
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+ │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+ │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── and [type=bool]
-           │    │    ├── eq [type=bool]
-           │    │    │    ├── variable: xyu.x [type=int]
-           │    │    │    └── variable: xyv.x [type=int]
-           │    │    └── eq [type=bool]
-           │    │         ├── variable: xyu.y [type=int]
-           │    │         └── variable: xyv.y [type=int]
-           │    └── eq [type=bool]
-           │         ├── variable: xyu.x [type=int]
-           │         └── const: 1 [type=int]
-           └── lt [type=bool]
-                ├── variable: xyu.y [type=int]
-                └── const: 10 [type=int]
+      └── (((xyu.x:1 = xyv.x:4) AND (xyu.y:2 = xyv.y:5)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
 
 build
 SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 right-join (cross)
- ├── columns: x:1(int) y:2(int) u:3(int) x:4(int!null) y:5(int!null) v:6(int!null)
+ ├── columns: x:1 y:2 u:3 x:4!null y:5!null v:6!null
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+ │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+ │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── and [type=bool]
-           │    │    ├── eq [type=bool]
-           │    │    │    ├── variable: xyu.x [type=int]
-           │    │    │    └── variable: xyv.x [type=int]
-           │    │    └── eq [type=bool]
-           │    │         ├── variable: xyu.y [type=int]
-           │    │         └── variable: xyv.y [type=int]
-           │    └── eq [type=bool]
-           │         ├── variable: xyu.x [type=int]
-           │         └── const: 1 [type=int]
-           └── lt [type=bool]
-                ├── variable: xyu.y [type=int]
-                └── const: 10 [type=int]
+      └── (((xyu.x:1 = xyv.x:4) AND (xyu.y:2 = xyv.y:5)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
 
 
 # Test OUTER joins that are run in the distSQL merge joiner
@@ -2321,169 +1863,107 @@ build
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int)
+ ├── columns: x:1!null y:2!null u:3!null v:6
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4 xyv.y:5 v:6
       ├── left-join (hash)
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4 xyv.y:5 v:6
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── xyu.x:1 = xyv.x:4
+      │         └── xyu.y:2 = xyv.y:5
       └── filters
-           └── gt [type=bool]
-                ├── variable: xyu.x [type=int]
-                └── const: 2 [type=int]
+           └── xyu.x:1 > 2
 
 build
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:4(int!null) y:5(int!null) u:3(int) v:6(int!null)
+ ├── columns: x:4!null y:5!null u:3 v:6!null
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4!null xyv.y:5!null v:6!null
       ├── right-join (hash)
-      │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4!null xyv.y:5!null v:6!null
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── xyu.x:1 = xyv.x:4
+      │         └── xyu.y:2 = xyv.y:5
       └── filters
-           └── gt [type=bool]
-                ├── variable: xyv.x [type=int]
-                └── const: 2 [type=int]
+           └── xyv.x:4 > 2
 
 build
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:7(int!null) y:8(int) u:3(int) v:6(int)
+ ├── columns: x:7!null y:8 u:3 v:6
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int) x:7(int!null) y:8(int)
+      ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4 xyv.y:5 v:6 x:7!null y:8
       ├── project
-      │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      │    ├── columns: x:7 y:8 xyu.x:1 xyu.y:2 u:3 xyv.x:4 xyv.y:5 v:6
       │    ├── full-join (hash)
-      │    │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
+      │    │    ├── columns: xyu.x:1 xyu.y:2 u:3 xyv.x:4 xyv.y:5 v:6
       │    │    ├── scan xyu
-      │    │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    │    ├── scan xyv
-      │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    │    └── filters
-      │    │         ├── eq [type=bool]
-      │    │         │    ├── variable: xyu.x [type=int]
-      │    │         │    └── variable: xyv.x [type=int]
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: xyu.y [type=int]
-      │    │              └── variable: xyv.y [type=int]
+      │    │         ├── xyu.x:1 = xyv.x:4
+      │    │         └── xyu.y:2 = xyv.y:5
       │    └── projections
-      │         ├── coalesce [type=int]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── coalesce [type=int]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── COALESCE(xyu.x:1, xyv.x:4) [as=x:7]
+      │         └── COALESCE(xyu.y:2, xyv.y:5) [as=y:8]
       └── filters
-           └── gt [type=bool]
-                ├── variable: x [type=int]
-                └── const: 2 [type=int]
+           └── x:7 > 2
 
 build
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 left-join (cross)
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int) y:5(int) v:6(int)
+ ├── columns: x:1!null y:2!null u:3!null x:4 y:5 v:6
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+ │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+ │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── and [type=bool]
-           │    │    ├── eq [type=bool]
-           │    │    │    ├── variable: xyu.x [type=int]
-           │    │    │    └── variable: xyv.x [type=int]
-           │    │    └── eq [type=bool]
-           │    │         ├── variable: xyu.y [type=int]
-           │    │         └── variable: xyv.y [type=int]
-           │    └── eq [type=bool]
-           │         ├── variable: xyu.x [type=int]
-           │         └── const: 1 [type=int]
-           └── lt [type=bool]
-                ├── variable: xyu.y [type=int]
-                └── const: 10 [type=int]
+      └── (((xyu.x:1 = xyv.x:4) AND (xyu.y:2 = xyv.y:5)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
 
 build
 SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 right-join (cross)
- ├── columns: x:1(int) y:2(int) u:3(int) x:4(int!null) y:5(int!null) v:6(int!null)
+ ├── columns: x:1 y:2 u:3 x:4!null y:5!null v:6!null
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+ │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+ │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
  └── filters
-      └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── and [type=bool]
-           │    │    ├── eq [type=bool]
-           │    │    │    ├── variable: xyu.x [type=int]
-           │    │    │    └── variable: xyv.x [type=int]
-           │    │    └── eq [type=bool]
-           │    │         ├── variable: xyu.y [type=int]
-           │    │         └── variable: xyv.y [type=int]
-           │    └── eq [type=bool]
-           │         ├── variable: xyu.x [type=int]
-           │         └── const: 1 [type=int]
-           └── lt [type=bool]
-                ├── variable: xyu.y [type=int]
-                └── const: 10 [type=int]
+      └── (((xyu.x:1 = xyv.x:4) AND (xyu.y:2 = xyv.y:5)) AND (xyu.x:1 = 1)) AND (xyu.y:2 < 10)
 
 # Regression test for #20472: break up tuple inequalities.
 build
 SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
 project
- ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int!null)
+ ├── columns: x:1!null y:2!null u:3!null v:6!null
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4!null xyv.y:5!null v:6!null
       ├── inner-join (hash)
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    ├── columns: xyu.x:1!null xyu.y:2!null u:3!null xyv.x:4!null xyv.y:5!null v:6!null
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
+      │    │    └── columns: xyu.x:1!null xyu.y:2!null u:3!null
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
+      │    │    └── columns: xyv.x:4!null xyv.y:5!null v:6!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: xyu.x [type=int]
-      │         │    └── variable: xyv.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: xyu.y [type=int]
-      │              └── variable: xyv.y [type=int]
+      │         ├── xyu.x:1 = xyv.x:4
+      │         └── xyu.y:2 = xyv.y:5
       └── filters
-           └── gt [type=bool]
-                ├── tuple [type=tuple{int, int, int}]
-                │    ├── variable: xyu.x [type=int]
-                │    ├── variable: xyu.y [type=int]
-                │    └── variable: u [type=int]
-                └── tuple [type=tuple{int, int, int}]
-                     ├── const: 1 [type=int]
-                     ├── const: 2 [type=int]
-                     └── const: 3 [type=int]
+           └── (xyu.x:1, xyu.y:2, u:3) > (1, 2, 3)
 
 
 # Regression test for #20858.
@@ -2500,85 +1980,69 @@ build
 SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
 select
- ├── columns: a:1(int!null) a:2(int)
+ ├── columns: a:1!null a:2
  ├── left-join (hash)
- │    ├── columns: l.a:1(int!null) r.a:2(int)
+ │    ├── columns: l.a:1!null r.a:2
  │    ├── scan l
- │    │    └── columns: l.a:1(int!null)
+ │    │    └── columns: l.a:1!null
  │    ├── scan r
- │    │    └── columns: r.a:2(int!null)
+ │    │    └── columns: r.a:2!null
  │    └── filters
- │         └── eq [type=bool]
- │              ├── variable: l.a [type=int]
- │              └── variable: r.a [type=int]
+ │         └── l.a:1 = r.a:2
  └── filters
-      └── eq [type=bool]
-           ├── variable: l.a [type=int]
-           └── const: 3 [type=int]
+      └── l.a:1 = 3
 
 build
 SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
 select
- ├── columns: a:1(int) a:2(int!null)
+ ├── columns: a:1 a:2!null
  ├── right-join (hash)
- │    ├── columns: l.a:1(int) r.a:2(int!null)
+ │    ├── columns: l.a:1 r.a:2!null
  │    ├── scan l
- │    │    └── columns: l.a:1(int!null)
+ │    │    └── columns: l.a:1!null
  │    ├── scan r
- │    │    └── columns: r.a:2(int!null)
+ │    │    └── columns: r.a:2!null
  │    └── filters
- │         └── eq [type=bool]
- │              ├── variable: l.a [type=int]
- │              └── variable: r.a [type=int]
+ │         └── l.a:1 = r.a:2
  └── filters
-      └── eq [type=bool]
-           ├── variable: r.a [type=int]
-           └── const: 3 [type=int]
+      └── r.a:2 = 3
 
 build
 SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
 ----
 project
- ├── columns: a:1(int!null)
+ ├── columns: a:1!null
  └── select
-      ├── columns: l.a:1(int!null) r.a:2(int)
+      ├── columns: l.a:1!null r.a:2
       ├── left-join (hash)
-      │    ├── columns: l.a:1(int!null) r.a:2(int)
+      │    ├── columns: l.a:1!null r.a:2
       │    ├── scan l
-      │    │    └── columns: l.a:1(int!null)
+      │    │    └── columns: l.a:1!null
       │    ├── scan r
-      │    │    └── columns: r.a:2(int!null)
+      │    │    └── columns: r.a:2!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: l.a [type=int]
-      │              └── variable: r.a [type=int]
+      │         └── l.a:1 = r.a:2
       └── filters
-           └── eq [type=bool]
-                ├── variable: l.a [type=int]
-                └── const: 1 [type=int]
+           └── l.a:1 = 1
 
 build
 SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
 ----
 project
- ├── columns: a:2(int!null)
+ ├── columns: a:2!null
  └── select
-      ├── columns: l.a:1(int) r.a:2(int!null)
+      ├── columns: l.a:1 r.a:2!null
       ├── right-join (hash)
-      │    ├── columns: l.a:1(int) r.a:2(int!null)
+      │    ├── columns: l.a:1 r.a:2!null
       │    ├── scan l
-      │    │    └── columns: l.a:1(int!null)
+      │    │    └── columns: l.a:1!null
       │    ├── scan r
-      │    │    └── columns: r.a:2(int!null)
+      │    │    └── columns: r.a:2!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: l.a [type=int]
-      │              └── variable: r.a [type=int]
+      │         └── l.a:1 = r.a:2
       └── filters
-           └── eq [type=bool]
-                ├── variable: r.a [type=int]
-                └── const: 3 [type=int]
+           └── r.a:2 = 3
 
 # Regression tests for #21243
 exec-ddl
@@ -2606,56 +2070,20 @@ build
 SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int) g:9(int)
+ ├── columns: a:1!null b:2!null c:3!null d:4!null e:5 f:6 g:9
  └── select
-      ├── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int) abg.a:7(int!null) abg.b:8(int!null) g:9(int)
+      ├── columns: abcdef.a:1!null abcdef.b:2!null c:3!null d:4!null e:5 f:6 abg.a:7!null abg.b:8!null g:9
       ├── inner-join (hash)
-      │    ├── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int) abg.a:7(int!null) abg.b:8(int!null) g:9(int)
+      │    ├── columns: abcdef.a:1!null abcdef.b:2!null c:3!null d:4!null e:5 f:6 abg.a:7!null abg.b:8!null g:9
       │    ├── scan abcdef
-      │    │    └── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int)
+      │    │    └── columns: abcdef.a:1!null abcdef.b:2!null c:3!null d:4!null e:5 f:6
       │    ├── scan abg
-      │    │    └── columns: abg.a:7(int!null) abg.b:8(int!null) g:9(int)
+      │    │    └── columns: abg.a:7!null abg.b:8!null g:9
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: abcdef.a [type=int]
-      │         │    └── variable: abg.a [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: abcdef.b [type=int]
-      │              └── variable: abg.b [type=int]
+      │         ├── abcdef.a:1 = abg.a:7
+      │         └── abcdef.b:2 = abg.b:8
       └── filters
-           └── or [type=bool]
-                ├── or [type=bool]
-                │    ├── gt [type=bool]
-                │    │    ├── tuple [type=tuple{int, int}]
-                │    │    │    ├── variable: abcdef.a [type=int]
-                │    │    │    └── variable: abcdef.b [type=int]
-                │    │    └── tuple [type=tuple{int, int}]
-                │    │         ├── const: 1 [type=int]
-                │    │         └── const: 2 [type=int]
-                │    └── and [type=bool]
-                │         ├── eq [type=bool]
-                │         │    ├── tuple [type=tuple{int, int}]
-                │         │    │    ├── variable: abcdef.a [type=int]
-                │         │    │    └── variable: abcdef.b [type=int]
-                │         │    └── tuple [type=tuple{int, int}]
-                │         │         ├── const: 1 [type=int]
-                │         │         └── const: 2 [type=int]
-                │         └── lt [type=bool]
-                │              ├── variable: c [type=int]
-                │              └── const: 6 [type=int]
-                └── and [type=bool]
-                     ├── eq [type=bool]
-                     │    ├── tuple [type=tuple{int, int, int}]
-                     │    │    ├── variable: abcdef.a [type=int]
-                     │    │    ├── variable: abcdef.b [type=int]
-                     │    │    └── variable: c [type=int]
-                     │    └── tuple [type=tuple{int, int, int}]
-                     │         ├── const: 1 [type=int]
-                     │         ├── const: 2 [type=int]
-                     │         └── const: 6 [type=int]
-                     └── gt [type=bool]
-                          ├── variable: d [type=int]
-                          └── const: 8 [type=int]
+           └── (((abcdef.a:1, abcdef.b:2) > (1, 2)) OR (((abcdef.a:1, abcdef.b:2) = (1, 2)) AND (c:3 < 6))) OR (((abcdef.a:1, abcdef.b:2, c:3) = (1, 2, 6)) AND (d:4 > 8))
 
 # Regression tests for mixed-type equality columns (#22514).
 exec-ddl
@@ -2681,197 +2109,151 @@ build
 SELECT * FROM foo NATURAL JOIN bar
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(float!null) d:4(float!null)
+ ├── columns: a:1!null b:2!null c:3!null d:4!null
  └── inner-join (hash)
-      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float!null) foo.d:4(float!null) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float!null) bar.d:9(int!null) bar.rowid:10(int!null)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3!null foo.d:4!null foo.rowid:5!null bar.a:6!null bar.b:7!null bar.c:8!null bar.d:9!null bar.rowid:10!null
       ├── scan foo
-      │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       ├── scan bar
-      │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: foo.a [type=int]
-           │    └── variable: bar.a [type=int]
-           ├── eq [type=bool]
-           │    ├── variable: foo.b [type=int]
-           │    └── variable: bar.b [type=float]
-           ├── eq [type=bool]
-           │    ├── variable: foo.c [type=float]
-           │    └── variable: bar.c [type=float]
-           └── eq [type=bool]
-                ├── variable: foo.d [type=float]
-                └── variable: bar.d [type=int]
+           ├── foo.a:1 = bar.a:6
+           ├── foo.b:2 = bar.b:7
+           ├── foo.c:3 = bar.c:8
+           └── foo.d:4 = bar.d:9
 
 # b can't be an equality column.
 build
 SELECT * FROM foo JOIN bar USING (b)
 ----
 project
- ├── columns: b:2(int!null) a:1(int) c:3(float) d:4(float) a:6(int) c:8(float) d:9(int)
+ ├── columns: b:2!null a:1 c:3 d:4 a:6 c:8 d:9
  └── inner-join (cross)
-      ├── columns: foo.a:1(int) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1 foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6 bar.b:7!null bar.c:8 bar.d:9 bar.rowid:10!null
       ├── scan foo
-      │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       ├── scan bar
-      │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: foo.b [type=int]
-                └── variable: bar.b [type=float]
+           └── foo.b:2 = bar.b:7
 
 # Only a can be an equality column.
 build
 SELECT * FROM foo JOIN bar USING (a, b)
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(float) d:4(float) c:8(float) d:9(int)
+ ├── columns: a:1!null b:2!null c:3 d:4 c:8 d:9
  └── inner-join (hash)
-      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6!null bar.b:7!null bar.c:8 bar.d:9 bar.rowid:10!null
       ├── scan foo
-      │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       ├── scan bar
-      │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: foo.a [type=int]
-           │    └── variable: bar.a [type=int]
-           └── eq [type=bool]
-                ├── variable: foo.b [type=int]
-                └── variable: bar.b [type=float]
+           ├── foo.a:1 = bar.a:6
+           └── foo.b:2 = bar.b:7
 
 # Only a and c can be equality columns.
 build
 SELECT * FROM foo JOIN bar USING (a, b, c)
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(float!null) d:4(float) d:9(int)
+ ├── columns: a:1!null b:2!null c:3!null d:4 d:9
  └── inner-join (hash)
-      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float!null) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float!null) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3!null foo.d:4 foo.rowid:5!null bar.a:6!null bar.b:7!null bar.c:8!null bar.d:9 bar.rowid:10!null
       ├── scan foo
-      │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       ├── scan bar
-      │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       └── filters
-           ├── eq [type=bool]
-           │    ├── variable: foo.a [type=int]
-           │    └── variable: bar.a [type=int]
-           ├── eq [type=bool]
-           │    ├── variable: foo.b [type=int]
-           │    └── variable: bar.b [type=float]
-           └── eq [type=bool]
-                ├── variable: foo.c [type=float]
-                └── variable: bar.c [type=float]
+           ├── foo.a:1 = bar.a:6
+           ├── foo.b:2 = bar.b:7
+           └── foo.c:3 = bar.c:8
 
 # b can't be an equality column.
 build
 SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ----
 project
- ├── columns: a:1(int) b:2(int!null) c:3(float) d:4(float) a:6(int) b:7(float!null) c:8(float) d:9(int)
+ ├── columns: a:1 b:2!null c:3 d:4 a:6 b:7!null c:8 d:9
  └── inner-join (cross)
-      ├── columns: foo.a:1(int) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1 foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6 bar.b:7!null bar.c:8 bar.d:9 bar.rowid:10!null
       ├── scan foo
-      │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       ├── scan bar
-      │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: foo.b [type=int]
-                └── variable: bar.b [type=float]
+           └── foo.b:2 = bar.b:7
 
 # Only a can be an equality column.
 build
 SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(float) d:4(float) a:6(int!null) b:7(float!null) c:8(float) d:9(int)
+ ├── columns: a:1!null b:2!null c:3 d:4 a:6!null b:7!null c:8 d:9
  └── inner-join (cross)
-      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6!null bar.b:7!null bar.c:8 bar.d:9 bar.rowid:10!null
       ├── scan foo
-      │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       ├── scan bar
-      │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: foo.a [type=int]
-                │    └── variable: bar.a [type=int]
-                └── eq [type=bool]
-                     ├── variable: foo.b [type=int]
-                     └── variable: bar.b [type=float]
+           └── (foo.a:1 = bar.a:6) AND (foo.b:2 = bar.b:7)
 
 build
 SELECT * FROM foo, bar WHERE foo.b = bar.b
 ----
 project
- ├── columns: a:1(int) b:2(int!null) c:3(float) d:4(float) a:6(int) b:7(float!null) c:8(float) d:9(int)
+ ├── columns: a:1 b:2!null c:3 d:4 a:6 b:7!null c:8 d:9
  └── select
-      ├── columns: foo.a:1(int) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1 foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6 bar.b:7!null bar.c:8 bar.d:9 bar.rowid:10!null
       ├── inner-join (cross)
-      │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    ├── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       │    ├── scan foo
-      │    │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       │    ├── scan bar
-      │    │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       │    └── filters (true)
       └── filters
-           └── eq [type=bool]
-                ├── variable: foo.b [type=int]
-                └── variable: bar.b [type=float]
+           └── foo.b:2 = bar.b:7
 
 # Only a can be an equality column.
 build
 SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(float) d:4(float) a:6(int!null) b:7(float!null) c:8(float) d:9(int)
+ ├── columns: a:1!null b:2!null c:3 d:4 a:6!null b:7!null c:8 d:9
  └── select
-      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6!null bar.b:7!null bar.c:8 bar.d:9 bar.rowid:10!null
       ├── inner-join (cross)
-      │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    ├── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       │    ├── scan foo
-      │    │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       │    ├── scan bar
-      │    │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       │    └── filters (true)
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: foo.a [type=int]
-                │    └── variable: bar.a [type=int]
-                └── eq [type=bool]
-                     ├── variable: foo.b [type=int]
-                     └── variable: bar.b [type=float]
+           └── (foo.a:1 = bar.a:6) AND (foo.b:2 = bar.b:7)
 
 # Only a and c can be equality columns.
 build
 SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(float!null) d:4(float!null) c:8(float!null) d:9(int!null)
+ ├── columns: a:1!null b:2!null c:3!null d:4!null c:8!null d:9!null
  └── select
-      ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float!null) foo.d:4(float!null) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float!null) bar.d:9(int!null) bar.rowid:10(int!null)
+      ├── columns: foo.a:1!null foo.b:2!null foo.c:3!null foo.d:4!null foo.rowid:5!null bar.a:6!null bar.b:7!null bar.c:8!null bar.d:9!null bar.rowid:10!null
       ├── inner-join (hash)
-      │    ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    ├── columns: foo.a:1!null foo.b:2!null foo.c:3 foo.d:4 foo.rowid:5!null bar.a:6!null bar.b:7!null bar.c:8 bar.d:9 bar.rowid:10!null
       │    ├── scan foo
-      │    │    └── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null)
+      │    │    └── columns: foo.a:1 foo.b:2 foo.c:3 foo.d:4 foo.rowid:5!null
       │    ├── scan bar
-      │    │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+      │    │    └── columns: bar.a:6 bar.b:7 bar.c:8 bar.d:9 bar.rowid:10!null
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: foo.a [type=int]
-      │         │    └── variable: bar.a [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: foo.b [type=int]
-      │              └── variable: bar.b [type=float]
+      │         ├── foo.a:1 = bar.a:6
+      │         └── foo.b:2 = bar.b:7
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: foo.c [type=float]
-                │    └── variable: bar.c [type=float]
-                └── eq [type=bool]
-                     ├── variable: foo.d [type=float]
-                     └── variable: bar.d [type=int]
+           └── (foo.c:3 = bar.c:8) AND (foo.d:4 = bar.d:9)
 
 exec-ddl
 CREATE TABLE t.kv (
@@ -2886,81 +2268,69 @@ build
 SELECT k FROM kv, (SELECT 1 AS k)
 ----
 project
- ├── columns: k:5(int!null)
+ ├── columns: k:5!null
  └── inner-join (cross)
-      ├── columns: kv.k:1(int!null) v:2(int) w:3(int) s:4(string) k:5(int!null)
+      ├── columns: kv.k:1!null v:2 w:3 s:4 k:5!null
       ├── scan kv
-      │    └── columns: kv.k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    └── columns: kv.k:1!null v:2 w:3 s:4
       ├── project
-      │    ├── columns: k:5(int!null)
+      │    ├── columns: k:5!null
       │    ├── values
-      │    │    └── tuple [type=tuple]
+      │    │    └── ()
       │    └── projections
-      │         └── const: 1 [type=int]
+      │         └── 1 [as=k:5]
       └── filters (true)
 
 build
 select * from (select 1 as k), (select 2 as k) where 1 in (select k from kv)
 ----
 select
- ├── columns: k:1(int!null) k:2(int!null)
+ ├── columns: k:1!null k:2!null
  ├── inner-join (cross)
- │    ├── columns: k:1(int!null) k:2(int!null)
+ │    ├── columns: k:1!null k:2!null
  │    ├── project
- │    │    ├── columns: k:1(int!null)
+ │    │    ├── columns: k:1!null
  │    │    ├── values
- │    │    │    └── tuple [type=tuple]
+ │    │    │    └── ()
  │    │    └── projections
- │    │         └── const: 1 [type=int]
+ │    │         └── 1 [as=k:1]
  │    ├── project
- │    │    ├── columns: k:2(int!null)
+ │    │    ├── columns: k:2!null
  │    │    ├── values
- │    │    │    └── tuple [type=tuple]
+ │    │    │    └── ()
  │    │    └── projections
- │    │         └── const: 2 [type=int]
+ │    │         └── 2 [as=k:2]
  │    └── filters (true)
  └── filters
-      └── any: eq [type=bool]
+      └── any: eq
            ├── project
-           │    ├── columns: kv.k:3(int!null)
+           │    ├── columns: kv.k:3!null
            │    └── scan kv
-           │         └── columns: kv.k:3(int!null) v:4(int) w:5(int) s:6(string)
-           └── const: 1 [type=int]
+           │         └── columns: kv.k:3!null v:4 w:5 s:6
+           └── 1
 
 # Test natural outer join when the left side has unknown type
 build
 SELECT * FROM (VALUES (NULL, NULL)) NATURAL FULL OUTER JOIN (SELECT * FROM (VALUES (1, 1)))
 ----
 project
- ├── columns: column1:5(int) column2:6(int)
+ ├── columns: column1:5 column2:6
  └── project
-      ├── columns: column1:5(int) column2:6(int) column1:1(unknown) column2:2(unknown) column1:3(int) column2:4(int)
+      ├── columns: column1:5 column2:6 column1:1 column2:2 column1:3 column2:4
       ├── full-join (cross)
-      │    ├── columns: column1:1(unknown) column2:2(unknown) column1:3(int) column2:4(int)
+      │    ├── columns: column1:1 column2:2 column1:3 column2:4
       │    ├── values
-      │    │    ├── columns: column1:1(unknown) column2:2(unknown)
-      │    │    └── tuple [type=tuple{unknown, unknown}]
-      │    │         ├── null [type=unknown]
-      │    │         └── null [type=unknown]
+      │    │    ├── columns: column1:1 column2:2
+      │    │    └── (NULL, NULL)
       │    ├── values
-      │    │    ├── columns: column1:3(int!null) column2:4(int!null)
-      │    │    └── tuple [type=tuple{int, int}]
-      │    │         ├── const: 1 [type=int]
-      │    │         └── const: 1 [type=int]
+      │    │    ├── columns: column1:3!null column2:4!null
+      │    │    └── (1, 1)
       │    └── filters
-      │         ├── eq [type=bool]
-      │         │    ├── variable: column1 [type=unknown]
-      │         │    └── variable: column1 [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: column2 [type=unknown]
-      │              └── variable: column2 [type=int]
+      │         ├── column1:1 = column1:3
+      │         └── column2:2 = column2:4
       └── projections
-           ├── coalesce [type=int]
-           │    ├── variable: column1 [type=unknown]
-           │    └── variable: column1 [type=int]
-           └── coalesce [type=int]
-                ├── variable: column2 [type=unknown]
-                └── variable: column2 [type=int]
+           ├── COALESCE(column1:1, column1:3) [as=column1:5]
+           └── COALESCE(column2:2, column2:4) [as=column2:6]
 
 # Regression test for #23609: make sure that the type of the merged column
 # is int (not unknown).
@@ -2973,41 +2343,27 @@ FROM
     (VALUES (1, 1)) AS u)
 ----
 project
- ├── columns: column1:5(int) r:7(int)
+ ├── columns: column1:5 r:7
  ├── project
- │    ├── columns: column1:5(int) column2:6(int)
+ │    ├── columns: column1:5 column2:6
  │    └── project
- │         ├── columns: column1:5(int) column2:6(int) column1:1(unknown) column2:2(unknown) column1:3(int) column2:4(int)
+ │         ├── columns: column1:5 column2:6 column1:1 column2:2 column1:3 column2:4
  │         ├── full-join (cross)
- │         │    ├── columns: column1:1(unknown) column2:2(unknown) column1:3(int) column2:4(int)
+ │         │    ├── columns: column1:1 column2:2 column1:3 column2:4
  │         │    ├── values
- │         │    │    ├── columns: column1:1(unknown) column2:2(unknown)
- │         │    │    └── tuple [type=tuple{unknown, unknown}]
- │         │    │         ├── null [type=unknown]
- │         │    │         └── null [type=unknown]
+ │         │    │    ├── columns: column1:1 column2:2
+ │         │    │    └── (NULL, NULL)
  │         │    ├── values
- │         │    │    ├── columns: column1:3(int!null) column2:4(int!null)
- │         │    │    └── tuple [type=tuple{int, int}]
- │         │    │         ├── const: 1 [type=int]
- │         │    │         └── const: 1 [type=int]
+ │         │    │    ├── columns: column1:3!null column2:4!null
+ │         │    │    └── (1, 1)
  │         │    └── filters
- │         │         ├── eq [type=bool]
- │         │         │    ├── variable: column1 [type=unknown]
- │         │         │    └── variable: column1 [type=int]
- │         │         └── eq [type=bool]
- │         │              ├── variable: column2 [type=unknown]
- │         │              └── variable: column2 [type=int]
+ │         │         ├── column1:1 = column1:3
+ │         │         └── column2:2 = column2:4
  │         └── projections
- │              ├── coalesce [type=int]
- │              │    ├── variable: column1 [type=unknown]
- │              │    └── variable: column1 [type=int]
- │              └── coalesce [type=int]
- │                   ├── variable: column2 [type=unknown]
- │                   └── variable: column2 [type=int]
+ │              ├── COALESCE(column1:1, column1:3) [as=column1:5]
+ │              └── COALESCE(column2:2, column2:4) [as=column2:6]
  └── projections
-      └── plus [type=int]
-           ├── variable: column1 [type=int]
-           └── const: 1 [type=int]
+      └── column1:5 + 1 [as=r:7]
 
 # ON clause must be type bool.
 build
@@ -3031,18 +2387,16 @@ build
 SELECT * FROM onecolumn AS a(x) INNER MERGE JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int!null) y:3(int!null)
+ ├── columns: x:1!null y:3!null
  └── inner-join (hash)
-      ├── columns: x:1(int!null) a.rowid:2(int!null) y:3(int!null) b.rowid:4(int!null)
+      ├── columns: x:1!null a.rowid:2!null y:3!null b.rowid:4!null
       ├── flags: force merge join
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3
 
 build
 SELECT * FROM onecolumn AS a NATURAL LEFT LOOKUP JOIN onecolumn as b USING(x)
@@ -3053,15 +2407,13 @@ build
 SELECT * FROM onecolumn AS a(x) FULL OUTER HASH JOIN onecolumn AS b(y) ON a.x = b.y
 ----
 project
- ├── columns: x:1(int) y:3(int)
+ ├── columns: x:1 y:3
  └── full-join (hash)
-      ├── columns: x:1(int) a.rowid:2(int) y:3(int) b.rowid:4(int)
+      ├── columns: x:1 a.rowid:2 y:3 b.rowid:4
       ├── flags: force hash join (store right side)
       ├── scan a
-      │    └── columns: x:1(int) a.rowid:2(int!null)
+      │    └── columns: x:1 a.rowid:2!null
       ├── scan b
-      │    └── columns: y:3(int) b.rowid:4(int!null)
+      │    └── columns: y:3 b.rowid:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: y [type=int]
+           └── x:1 = y:3

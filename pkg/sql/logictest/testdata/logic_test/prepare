@@ -1153,7 +1153,7 @@ select
  │    ├── fd: (1)-->(2)
  │    └── prune: (1,2)
  └── filters
-      └── (k % 2) = 1 [outer=(1)]
+      └── (k:1 % 2) = 1 [outer=(1)]
 
 # Only root may use PREPARE AS OPT PLAN.
 

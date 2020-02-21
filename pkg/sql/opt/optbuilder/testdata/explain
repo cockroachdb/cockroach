@@ -6,163 +6,157 @@ build
 EXPLAIN SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:4(string) description:5(string)
+ ├── columns: tree:3 field:4 description:5
  └── scan xy
-      └── columns: x:1(int!null) y:2(int)
+      └── columns: x:1!null y:2
 
 build
 EXPLAIN (PLAN,SYMVARS) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:4(string) description:5(string)
+ ├── columns: tree:3 field:4 description:5
  └── scan xy
-      └── columns: x:1(int!null) y:2(int)
+      └── columns: x:1!null y:2
 
 build
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)  [hidden: level:4(int) node_type:5(string)]
+ ├── columns: tree:3 field:6 description:7 columns:8 ordering:9  [hidden: level:4 node_type:5]
  └── scan xy
-      └── columns: x:1(int!null) y:2(int)
+      └── columns: x:1!null y:2
 
 build
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)  [hidden: level:4(int) node_type:5(string)]
+ ├── columns: tree:3 field:6 description:7 columns:8 ordering:9  [hidden: level:4 node_type:5]
  ├── mode: verbose
  └── scan xy
-      └── columns: x:1(int!null) y:2(int)
+      └── columns: x:1!null y:2
 
 # Verify we preserve the ordering requirement of the explained query.
 build
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
 explain
- ├── columns: tree:3(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)  [hidden: level:4(int) node_type:5(string)]
+ ├── columns: tree:3 field:6 description:7 columns:8 ordering:9  [hidden: level:4 node_type:5]
  ├── mode: verbose
  └── sort
-      ├── columns: x:1(int!null) y:2(int)
+      ├── columns: x:1!null y:2
       ├── ordering: +2
       └── scan xy
-           └── columns: x:1(int!null) y:2(int)
+           └── columns: x:1!null y:2
 
 build
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
 explain
- ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)  [hidden: level:6(int) node_type:7(string)]
+ ├── columns: tree:5 field:8 description:9 columns:10 ordering:11  [hidden: level:6 node_type:7]
  ├── mode: verbose
  └── inner-join (hash)
-      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
+      ├── columns: x:1!null y:2 u:3!null v:4!null
       ├── scan xy
-      │    └── columns: x:1(int!null) y:2(int)
+      │    └── columns: x:1!null y:2
       ├── values
-      │    ├── columns: column1:3(int!null) column2:4(int!null)
-      │    ├── tuple [type=tuple{int, int}]
-      │    │    ├── const: 1 [type=int]
-      │    │    └── const: 2 [type=int]
-      │    └── tuple [type=tuple{int, int}]
-      │         ├── const: 3 [type=int]
-      │         └── const: 4 [type=int]
+      │    ├── columns: column1:3!null column2:4!null
+      │    ├── (1, 2)
+      │    └── (3, 4)
       └── filters
-           └── eq [type=bool]
-                ├── variable: x [type=int]
-                └── variable: column1 [type=int]
+           └── x:1 = column1:3
 
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ]
 ----
 with &1
- ├── columns: tree:10(string)
+ ├── columns: tree:10
  ├── explain
- │    ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ │    ├── columns: tree:3 level:4 node_type:5 field:6 description:7 columns:8 ordering:9
  │    ├── mode: verbose
  │    └── scan xy
- │         └── columns: x:1(int!null) y:2(int)
+ │         └── columns: x:1!null y:2
  └── project
-      ├── columns: tree:10(string)
+      ├── columns: tree:10
       └── with-scan &1
-           ├── columns: tree:10(string) level:11(int) node_type:12(string) field:13(string) description:14(string) columns:15(string) ordering:16(string)
+           ├── columns: tree:10 level:11 node_type:12 field:13 description:14 columns:15 ordering:16
            └── mapping:
-                ├──  tree:3(string) => tree:10(string)
-                ├──  level:4(int) => level:11(int)
-                ├──  node_type:5(string) => node_type:12(string)
-                ├──  field:6(string) => field:13(string)
-                ├──  description:7(string) => description:14(string)
-                ├──  columns:8(string) => columns:15(string)
-                └──  ordering:9(string) => ordering:16(string)
+                ├──  tree:3 => tree:10
+                ├──  level:4 => level:11
+                ├──  node_type:5 => node_type:12
+                ├──  field:6 => field:13
+                ├──  description:7 => description:14
+                ├──  columns:8 => columns:15
+                └──  ordering:9 => ordering:16
 
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y ]
 ----
 with &1
- ├── columns: tree:10(string)
+ ├── columns: tree:10
  ├── explain
- │    ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ │    ├── columns: tree:3 level:4 node_type:5 field:6 description:7 columns:8 ordering:9
  │    ├── mode: verbose
  │    └── sort
- │         ├── columns: x:1(int!null) x:1(int!null) y:2(int)
+ │         ├── columns: x:1!null x:1!null y:2
  │         ├── ordering: +2
  │         └── scan xy
- │              └── columns: x:1(int!null) y:2(int)
+ │              └── columns: x:1!null y:2
  └── project
-      ├── columns: tree:10(string)
+      ├── columns: tree:10
       └── with-scan &1
-           ├── columns: tree:10(string) level:11(int) node_type:12(string) field:13(string) description:14(string) columns:15(string) ordering:16(string)
+           ├── columns: tree:10 level:11 node_type:12 field:13 description:14 columns:15 ordering:16
            └── mapping:
-                ├──  tree:3(string) => tree:10(string)
-                ├──  level:4(int) => level:11(int)
-                ├──  node_type:5(string) => node_type:12(string)
-                ├──  field:6(string) => field:13(string)
-                ├──  description:7(string) => description:14(string)
-                ├──  columns:8(string) => columns:15(string)
-                └──  ordering:9(string) => ordering:16(string)
+                ├──  tree:3 => tree:10
+                ├──  level:4 => level:11
+                ├──  node_type:5 => node_type:12
+                ├──  field:6 => field:13
+                ├──  description:7 => description:14
+                ├──  columns:8 => columns:15
+                └──  ordering:9 => ordering:16
 
 build
 SELECT json FROM [EXPLAIN (DISTSQL) SELECT * FROM xy] WHERE false
 ----
 with &1
- ├── columns: json:8(string)
+ ├── columns: json:8
  ├── explain
- │    ├── columns: automatic:3(bool) url:4(string) json:5(string)
+ │    ├── columns: automatic:3 url:4 json:5
  │    ├── mode: distsql
  │    └── scan xy
- │         └── columns: x:1(int!null) y:2(int)
+ │         └── columns: x:1!null y:2
  └── project
-      ├── columns: json:8(string)
+      ├── columns: json:8
       └── select
-           ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           ├── columns: automatic:6 url:7 json:8
            ├── with-scan &1
-           │    ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           │    ├── columns: automatic:6 url:7 json:8
            │    └── mapping:
-           │         ├──  automatic:3(bool) => automatic:6(bool)
-           │         ├──  url:4(string) => url:7(string)
-           │         └──  json:5(string) => json:8(string)
+           │         ├──  automatic:3 => automatic:6
+           │         ├──  url:4 => url:7
+           │         └──  json:5 => json:8
            └── filters
-                └── false [type=bool]
+                └── false
 
 # Don't include hidden columns on a SELECT *.
 build
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM xy] WHERE false
 ----
 with &1
- ├── columns: automatic:6(bool) url:7(string)
+ ├── columns: automatic:6 url:7
  ├── explain
- │    ├── columns: automatic:3(bool) url:4(string) json:5(string)
+ │    ├── columns: automatic:3 url:4 json:5
  │    ├── mode: distsql
  │    └── scan xy
- │         └── columns: x:1(int!null) y:2(int)
+ │         └── columns: x:1!null y:2
  └── project
-      ├── columns: automatic:6(bool) url:7(string)
+      ├── columns: automatic:6 url:7
       └── select
-           ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           ├── columns: automatic:6 url:7 json:8
            ├── with-scan &1
-           │    ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           │    ├── columns: automatic:6 url:7 json:8
            │    └── mapping:
-           │         ├──  automatic:3(bool) => automatic:6(bool)
-           │         ├──  url:4(string) => url:7(string)
-           │         └──  json:5(string) => json:8(string)
+           │         ├──  automatic:3 => automatic:6
+           │         ├──  url:4 => url:7
+           │         └──  json:5 => json:8
            └── filters
-                └── false [type=bool]
+                └── false

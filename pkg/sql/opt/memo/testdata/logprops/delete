@@ -34,11 +34,11 @@ delete abcde
       ├── scan abcde
       │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
       │    ├── computed column expressions
-      │    │    └── d:10(int)
+      │    │    └── d:10
       │    │         └── plus [type=int]
       │    │              ├── plus [type=int]
-      │    │              │    ├── variable: b [type=int]
-      │    │              │    └── variable: c [type=int]
+      │    │              │    ├── variable: b:8 [type=int]
+      │    │              │    └── variable: c:9 [type=int]
       │    │              └── const: 1 [type=int]
       │    ├── key: (11)
       │    ├── fd: (11)-->(7-10,12)
@@ -46,7 +46,7 @@ delete abcde
       │    └── interesting orderings: (+11)
       └── filters
            └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-                ├── variable: a [type=int]
+                ├── variable: a:7 [type=int]
                 └── const: 1 [type=int]
 
 # Properties with RETURNING clause.
@@ -74,11 +74,11 @@ project
            ├── scan abcde
            │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
            │    ├── computed column expressions
-           │    │    └── d:10(int)
+           │    │    └── d:10
            │    │         └── plus [type=int]
            │    │              ├── plus [type=int]
-           │    │              │    ├── variable: b [type=int]
-           │    │              │    └── variable: c [type=int]
+           │    │              │    ├── variable: b:8 [type=int]
+           │    │              │    └── variable: c:9 [type=int]
            │    │              └── const: 1 [type=int]
            │    ├── key: (11)
            │    ├── fd: (11)-->(7-10,12)
@@ -86,7 +86,7 @@ project
            │    └── interesting orderings: (+11)
            └── filters
                 └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-                     ├── variable: a [type=int]
+                     ├── variable: a:7 [type=int]
                      └── const: 1 [type=int]
 
 # Input is cardinality 0-1 expression.
@@ -118,11 +118,11 @@ project
            ├── scan abcde
            │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
            │    ├── computed column expressions
-           │    │    └── d:10(int)
+           │    │    └── d:10
            │    │         └── plus [type=int]
            │    │              ├── plus [type=int]
-           │    │              │    ├── variable: b [type=int]
-           │    │              │    └── variable: c [type=int]
+           │    │              │    ├── variable: b:8 [type=int]
+           │    │              │    └── variable: c:9 [type=int]
            │    │              └── const: 1 [type=int]
            │    ├── key: (11)
            │    ├── fd: (11)-->(7-10,12)
@@ -130,7 +130,7 @@ project
            │    └── interesting orderings: (+11)
            └── filters
                 └── eq [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
-                     ├── variable: rowid [type=int]
+                     ├── variable: rowid:11 [type=int]
                      └── const: 1 [type=int]
 
 # Filter FD set.
@@ -158,11 +158,11 @@ project
            ├── scan abcde
            │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
            │    ├── computed column expressions
-           │    │    └── d:10(int)
+           │    │    └── d:10
            │    │         └── plus [type=int]
            │    │              ├── plus [type=int]
-           │    │              │    ├── variable: b [type=int]
-           │    │              │    └── variable: c [type=int]
+           │    │              │    ├── variable: b:8 [type=int]
+           │    │              │    └── variable: c:9 [type=int]
            │    │              └── const: 1 [type=int]
            │    ├── key: (11)
            │    ├── fd: (11)-->(7-10,12)
@@ -170,5 +170,5 @@ project
            │    └── interesting orderings: (+11)
            └── filters
                 └── eq [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
-                     ├── variable: b [type=int]
-                     └── variable: c [type=int]
+                     ├── variable: b:8 [type=int]
+                     └── variable: c:9 [type=int]

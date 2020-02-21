@@ -102,7 +102,7 @@ limit
  │         │    │    │    │    │    ├── key: (9)
  │         │    │    │    │    │    └── fd: (9)-->(10,13,16)
  │         │    │    │    │    └── filters
- │         │    │    │    │         └── o_orderdate < '1995-03-15' [type=bool, outer=(13), constraints=(/13: (/NULL - /'1995-03-14']; tight)]
+ │         │    │    │    │         └── o_orderdate:13 < '1995-03-15' [type=bool, outer=(13), constraints=(/13: (/NULL - /'1995-03-14']; tight)]
  │         │    │    │    ├── select
  │         │    │    │    │    ├── save-table-name: q3_select_9
  │         │    │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(char!null)
@@ -118,21 +118,21 @@ limit
  │         │    │    │    │    │    ├── key: (1)
  │         │    │    │    │    │    └── fd: (1)-->(7)
  │         │    │    │    │    └── filters
- │         │    │    │    │         └── c_mktsegment = 'BUILDING' [type=bool, outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight), fd=()-->(7)]
+ │         │    │    │    │         └── c_mktsegment:7 = 'BUILDING' [type=bool, outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight), fd=()-->(7)]
  │         │    │    │    └── filters
- │         │    │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         │    │    │         └── c_custkey:1 = o_custkey:10 [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │         │    │    └── filters
- │         │    │         └── l_shipdate > '1995-03-15' [type=bool, outer=(28), constraints=(/28: [/'1995-03-16' - ]; tight)]
+ │         │    │         └── l_shipdate:28 > '1995-03-15' [type=bool, outer=(28), constraints=(/28: [/'1995-03-16' - ]; tight)]
  │         │    └── projections
- │         │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
+ │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column34:34, type=float, outer=(23,24)]
  │         └── aggregations
- │              ├── sum [type=float, outer=(34)]
- │              │    └── variable: column34 [type=float]
- │              ├── const-agg [type=date, outer=(13)]
- │              │    └── variable: o_orderdate [type=date]
- │              └── const-agg [type=int, outer=(16)]
- │                   └── variable: o_shippriority [type=int]
- └── const: 10 [type=int]
+ │              ├── sum [as=sum:35, type=float, outer=(34)]
+ │              │    └── column34:34 [type=float]
+ │              ├── const-agg [as=o_orderdate:13, type=date, outer=(13)]
+ │              │    └── o_orderdate:13 [type=date]
+ │              └── const-agg [as=o_shippriority:16, type=int, outer=(16)]
+ │                   └── o_shippriority:16 [type=int]
+ └── 10 [type=int]
 
 stats table=q3_limit_1
 ----

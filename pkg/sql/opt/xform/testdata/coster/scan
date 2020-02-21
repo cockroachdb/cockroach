@@ -6,7 +6,7 @@ opt
 SELECT k, s FROM a
 ----
 scan a
- ├── columns: k:1(int!null) s:3(string)
+ ├── columns: k:1!null s:3
  ├── stats: [rows=1000]
  ├── cost: 1060.02
  ├── key: (1)
@@ -21,13 +21,13 @@ opt
 SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0)
 ----
 select
- ├── columns: id:1(int!null)
+ ├── columns: id:1!null
  ├── cardinality: [0 - 1000]
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
  ├── cost: 1030.02
  ├── key: (1)
  ├── scan speed_test
- │    ├── columns: id:1(int!null)
+ │    ├── columns: id:1!null
  │    ├── constraint: /1: [/1 - /1000]
  │    ├── flags: force-index=primary
  │    ├── cardinality: [0 - 1000]
@@ -35,19 +35,19 @@ select
  │    ├── cost: 1020.01
  │    └── key: (1)
  └── filters
-      └── (id % 16) = 0 [type=bool, outer=(1)]
+      └── (id:1 % 16) = 0 [outer=(1)]
 
 opt
 SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0)
 ----
 select
- ├── columns: id:1(int!null)
+ ├── columns: id:1!null
  ├── cardinality: [0 - 2000]
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
  ├── cost: 1030.02
  ├── key: (1)
  ├── scan speed_test
- │    ├── columns: id:1(int!null)
+ │    ├── columns: id:1!null
  │    ├── constraint: /1: [/1 - /2000]
  │    ├── flags: force-index=primary
  │    ├── cardinality: [0 - 2000]
@@ -55,4 +55,4 @@ select
  │    ├── cost: 1020.01
  │    └── key: (1)
  └── filters
-      └── (id % 16) = 0 [type=bool, outer=(1)]
+      └── (id:1 % 16) = 0 [outer=(1)]

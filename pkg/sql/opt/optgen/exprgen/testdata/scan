@@ -58,5 +58,5 @@ select
  │    └── interesting orderings: (+1,+2)
  └── filters
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-           ├── variable: t.public.abc.a [type=int]
+           ├── variable: t.public.abc.a:1 [type=int]
            └── const: 1 [type=int]

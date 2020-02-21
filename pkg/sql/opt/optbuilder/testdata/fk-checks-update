@@ -11,77 +11,71 @@ UPDATE child SET p = 4
 ----
 update child
  ├── columns: <none>
- ├── fetch columns: child.c:3(int) child.p:4(int)
+ ├── fetch columns: child.c:3 child.p:4
  ├── update-mapping:
- │    └──  column5:5 => child.p:2
+ │    └── column5:5 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int!null) child.c:3(int!null) child.p:4(int!null)
+ │    ├── columns: column5:5!null child.c:3!null child.p:4!null
  │    ├── scan child
- │    │    └── columns: child.c:3(int!null) child.p:4(int!null)
+ │    │    └── columns: child.c:3!null child.p:4!null
  │    └── projections
- │         └── const: 4 [type=int]
+ │         └── 4 [as=column5:5]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column5:7(int!null)
+                ├── columns: column5:7!null
                 ├── project
-                │    ├── columns: column5:7(int!null)
+                │    ├── columns: column5:7!null
                 │    └── with-scan &1
-                │         ├── columns: c:6(int!null) column5:7(int!null)
+                │         ├── columns: c:6!null column5:7!null
                 │         └── mapping:
-                │              ├──  child.c:3(int) => c:6(int)
-                │              └──  column5:5(int) => column5:7(int)
+                │              ├──  child.c:3 => c:6
+                │              └──  column5:5 => column5:7
                 ├── scan parent
-                │    └── columns: parent.p:9(int!null)
+                │    └── columns: parent.p:9!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: column5 [type=int]
-                          └── variable: parent.p [type=int]
+                     └── column5:7 = parent.p:9
 
 build
 UPDATE parent SET p = p+1
 ----
 update parent
  ├── columns: <none>
- ├── fetch columns: x:4(int) parent.p:5(int) other:6(int)
+ ├── fetch columns: x:4 parent.p:5 other:6
  ├── update-mapping:
- │    └──  column7:7 => parent.p:2
+ │    └── column7:7 => parent.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column7:7(int!null) x:4(int) parent.p:5(int!null) other:6(int)
+ │    ├── columns: column7:7!null x:4 parent.p:5!null other:6
  │    ├── scan parent
- │    │    └── columns: x:4(int) parent.p:5(int!null) other:6(int)
+ │    │    └── columns: x:4 parent.p:5!null other:6
  │    └── projections
- │         └── plus [type=int]
- │              ├── variable: parent.p [type=int]
- │              └── const: 1 [type=int]
+ │         └── parent.p:5 + 1 [as=column7:7]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── semi-join (hash)
-                ├── columns: p:10(int!null)
+                ├── columns: p:10!null
                 ├── project
-                │    ├── columns: p:10(int!null)
+                │    ├── columns: p:10!null
                 │    ├── except
-                │    │    ├── columns: p:8(int!null)
-                │    │    ├── left columns: p:8(int!null)
-                │    │    ├── right columns: column7:9(int)
+                │    │    ├── columns: p:8!null
+                │    │    ├── left columns: p:8!null
+                │    │    ├── right columns: column7:9
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: p:8(int!null)
+                │    │    │    ├── columns: p:8!null
                 │    │    │    └── mapping:
-                │    │    │         └──  parent.p:5(int) => p:8(int)
+                │    │    │         └──  parent.p:5 => p:8
                 │    │    └── with-scan &1
-                │    │         ├── columns: column7:9(int!null)
+                │    │         ├── columns: column7:9!null
                 │    │         └── mapping:
-                │    │              └──  column7:7(int) => column7:9(int)
+                │    │              └──  column7:7 => column7:9
                 │    └── projections
-                │         └── variable: p [type=int]
+                │         └── p:8 [as=p:10]
                 ├── scan child
-                │    └── columns: child.p:12(int!null)
+                │    └── columns: child.p:12!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: p [type=int]
-                          └── variable: child.p [type=int]
+                     └── p:10 = child.p:12
 
 exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
@@ -92,42 +86,40 @@ UPDATE child SET c = 4
 ----
 update child
  ├── columns: <none>
- ├── fetch columns: child.c:3(int) p:4(int)
+ ├── fetch columns: child.c:3 p:4
  ├── update-mapping:
- │    └──  column5:5 => child.c:1
+ │    └── column5:5 => child.c:1
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int!null) child.c:3(int!null) p:4(int!null)
+ │    ├── columns: column5:5!null child.c:3!null p:4!null
  │    ├── scan child
- │    │    └── columns: child.c:3(int!null) p:4(int!null)
+ │    │    └── columns: child.c:3!null p:4!null
  │    └── projections
- │         └── const: 4 [type=int]
+ │         └── 4 [as=column5:5]
  └── f-k-checks
       └── f-k-checks-item: grandchild(c) -> child(c)
            └── semi-join (hash)
-                ├── columns: c:8(int!null)
+                ├── columns: c:8!null
                 ├── project
-                │    ├── columns: c:8(int!null)
+                │    ├── columns: c:8!null
                 │    ├── except
-                │    │    ├── columns: c:6(int!null)
-                │    │    ├── left columns: c:6(int!null)
-                │    │    ├── right columns: column5:7(int)
+                │    │    ├── columns: c:6!null
+                │    │    ├── left columns: c:6!null
+                │    │    ├── right columns: column5:7
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: c:6(int!null)
+                │    │    │    ├── columns: c:6!null
                 │    │    │    └── mapping:
-                │    │    │         └──  child.c:3(int) => c:6(int)
+                │    │    │         └──  child.c:3 => c:6
                 │    │    └── with-scan &1
-                │    │         ├── columns: column5:7(int!null)
+                │    │         ├── columns: column5:7!null
                 │    │         └── mapping:
-                │    │              └──  column5:5(int) => column5:7(int)
+                │    │              └──  column5:5 => column5:7
                 │    └── projections
-                │         └── variable: c [type=int]
+                │         └── c:6 [as=c:8]
                 ├── scan grandchild
-                │    └── columns: grandchild.c:10(int!null)
+                │    └── columns: grandchild.c:10!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: c [type=int]
-                          └── variable: grandchild.c [type=int]
+                     └── c:8 = grandchild.c:10
 
 # This update shouldn't emit checks for c, since it's unchanged.
 build
@@ -135,126 +127,114 @@ UPDATE child SET p = 4
 ----
 update child
  ├── columns: <none>
- ├── fetch columns: child.c:3(int) child.p:4(int)
+ ├── fetch columns: child.c:3 child.p:4
  ├── update-mapping:
- │    └──  column5:5 => child.p:2
+ │    └── column5:5 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int!null) child.c:3(int!null) child.p:4(int!null)
+ │    ├── columns: column5:5!null child.c:3!null child.p:4!null
  │    ├── scan child
- │    │    └── columns: child.c:3(int!null) child.p:4(int!null)
+ │    │    └── columns: child.c:3!null child.p:4!null
  │    └── projections
- │         └── const: 4 [type=int]
+ │         └── 4 [as=column5:5]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column5:7(int!null)
+                ├── columns: column5:7!null
                 ├── project
-                │    ├── columns: column5:7(int!null)
+                │    ├── columns: column5:7!null
                 │    └── with-scan &1
-                │         ├── columns: c:6(int!null) column5:7(int!null)
+                │         ├── columns: c:6!null column5:7!null
                 │         └── mapping:
-                │              ├──  child.c:3(int) => c:6(int)
-                │              └──  column5:5(int) => column5:7(int)
+                │              ├──  child.c:3 => c:6
+                │              └──  column5:5 => column5:7
                 ├── scan parent
-                │    └── columns: parent.p:9(int!null)
+                │    └── columns: parent.p:9!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: column5 [type=int]
-                          └── variable: parent.p [type=int]
+                     └── column5:7 = parent.p:9
 
 build
 UPDATE child SET p = p
 ----
 update child
  ├── columns: <none>
- ├── fetch columns: child.c:3(int) child.p:4(int)
+ ├── fetch columns: child.c:3 child.p:4
  ├── update-mapping:
- │    └──  child.p:4 => child.p:2
+ │    └── child.p:4 => child.p:2
  ├── input binding: &1
  ├── scan child
- │    └── columns: child.c:3(int!null) child.p:4(int!null)
+ │    └── columns: child.c:3!null child.p:4!null
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:6(int!null)
+                ├── columns: p:6!null
                 ├── project
-                │    ├── columns: p:6(int!null)
+                │    ├── columns: p:6!null
                 │    └── with-scan &1
-                │         ├── columns: c:5(int!null) p:6(int!null)
+                │         ├── columns: c:5!null p:6!null
                 │         └── mapping:
-                │              ├──  child.c:3(int) => c:5(int)
-                │              └──  child.p:4(int) => p:6(int)
+                │              ├──  child.c:3 => c:5
+                │              └──  child.p:4 => p:6
                 ├── scan parent
-                │    └── columns: parent.p:8(int!null)
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: p [type=int]
-                          └── variable: parent.p [type=int]
+                     └── p:6 = parent.p:8
 
 build
 UPDATE child SET p = p+1, c = c+1
 ----
 update child
  ├── columns: <none>
- ├── fetch columns: child.c:3(int) child.p:4(int)
+ ├── fetch columns: child.c:3 child.p:4
  ├── update-mapping:
- │    ├──  column6:6 => child.c:1
- │    └──  column5:5 => child.p:2
+ │    ├── column6:6 => child.c:1
+ │    └── column5:5 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int!null) column6:6(int!null) child.c:3(int!null) child.p:4(int!null)
+ │    ├── columns: column5:5!null column6:6!null child.c:3!null child.p:4!null
  │    ├── scan child
- │    │    └── columns: child.c:3(int!null) child.p:4(int!null)
+ │    │    └── columns: child.c:3!null child.p:4!null
  │    └── projections
- │         ├── plus [type=int]
- │         │    ├── variable: child.p [type=int]
- │         │    └── const: 1 [type=int]
- │         └── plus [type=int]
- │              ├── variable: child.c [type=int]
- │              └── const: 1 [type=int]
+ │         ├── child.p:4 + 1 [as=column5:5]
+ │         └── child.c:3 + 1 [as=column6:6]
  └── f-k-checks
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── anti-join (hash)
-      │         ├── columns: column5:8(int!null)
+      │         ├── columns: column5:8!null
       │         ├── project
-      │         │    ├── columns: column5:8(int!null)
+      │         │    ├── columns: column5:8!null
       │         │    └── with-scan &1
-      │         │         ├── columns: column6:7(int!null) column5:8(int!null)
+      │         │         ├── columns: column6:7!null column5:8!null
       │         │         └── mapping:
-      │         │              ├──  column6:6(int) => column6:7(int)
-      │         │              └──  column5:5(int) => column5:8(int)
+      │         │              ├──  column6:6 => column6:7
+      │         │              └──  column5:5 => column5:8
       │         ├── scan parent
-      │         │    └── columns: parent.p:10(int!null)
+      │         │    └── columns: parent.p:10!null
       │         └── filters
-      │              └── eq [type=bool]
-      │                   ├── variable: column5 [type=int]
-      │                   └── variable: parent.p [type=int]
+      │              └── column5:8 = parent.p:10
       └── f-k-checks-item: grandchild(c) -> child(c)
            └── semi-join (hash)
-                ├── columns: c:14(int!null)
+                ├── columns: c:14!null
                 ├── project
-                │    ├── columns: c:14(int!null)
+                │    ├── columns: c:14!null
                 │    ├── except
-                │    │    ├── columns: c:12(int!null)
-                │    │    ├── left columns: c:12(int!null)
-                │    │    ├── right columns: column6:13(int)
+                │    │    ├── columns: c:12!null
+                │    │    ├── left columns: c:12!null
+                │    │    ├── right columns: column6:13
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: c:12(int!null)
+                │    │    │    ├── columns: c:12!null
                 │    │    │    └── mapping:
-                │    │    │         └──  child.c:3(int) => c:12(int)
+                │    │    │         └──  child.c:3 => c:12
                 │    │    └── with-scan &1
-                │    │         ├── columns: column6:13(int!null)
+                │    │         ├── columns: column6:13!null
                 │    │         └── mapping:
-                │    │              └──  column6:6(int) => column6:13(int)
+                │    │              └──  column6:6 => column6:13
                 │    └── projections
-                │         └── variable: c [type=int]
+                │         └── c:12 [as=c:14]
                 ├── scan grandchild
-                │    └── columns: grandchild.c:16(int!null)
+                │    └── columns: grandchild.c:16!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: c [type=int]
-                          └── variable: grandchild.c [type=int]
+                     └── c:14 = grandchild.c:16
 
 # Multiple grandchild tables
 exec-ddl
@@ -266,33 +246,31 @@ UPDATE child SET p = 4
 ----
 update child
  ├── columns: <none>
- ├── fetch columns: child.c:3(int) child.p:4(int)
+ ├── fetch columns: child.c:3 child.p:4
  ├── update-mapping:
- │    └──  column5:5 => child.p:2
+ │    └── column5:5 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int!null) child.c:3(int!null) child.p:4(int!null)
+ │    ├── columns: column5:5!null child.c:3!null child.p:4!null
  │    ├── scan child
- │    │    └── columns: child.c:3(int!null) child.p:4(int!null)
+ │    │    └── columns: child.c:3!null child.p:4!null
  │    └── projections
- │         └── const: 4 [type=int]
+ │         └── 4 [as=column5:5]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column5:7(int!null)
+                ├── columns: column5:7!null
                 ├── project
-                │    ├── columns: column5:7(int!null)
+                │    ├── columns: column5:7!null
                 │    └── with-scan &1
-                │         ├── columns: c:6(int!null) column5:7(int!null)
+                │         ├── columns: c:6!null column5:7!null
                 │         └── mapping:
-                │              ├──  child.c:3(int) => c:6(int)
-                │              └──  column5:5(int) => column5:7(int)
+                │              ├──  child.c:3 => c:6
+                │              └──  column5:5 => column5:7
                 ├── scan parent
-                │    └── columns: parent.p:9(int!null)
+                │    └── columns: parent.p:9!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: column5 [type=int]
-                          └── variable: parent.p [type=int]
+                     └── column5:7 = parent.p:9
 
 exec-ddl
 CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
@@ -303,75 +281,71 @@ UPDATE self SET y = 3
 ----
 update self
  ├── columns: <none>
- ├── fetch columns: self.x:3(int) y:4(int)
+ ├── fetch columns: self.x:3 y:4
  ├── update-mapping:
- │    └──  column5:5 => y:2
+ │    └── column5:5 => y:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int!null) self.x:3(int!null) y:4(int!null)
+ │    ├── columns: column5:5!null self.x:3!null y:4!null
  │    ├── scan self
- │    │    └── columns: self.x:3(int!null) y:4(int!null)
+ │    │    └── columns: self.x:3!null y:4!null
  │    └── projections
- │         └── const: 3 [type=int]
+ │         └── 3 [as=column5:5]
  └── f-k-checks
       └── f-k-checks-item: self(y) -> self(x)
            └── anti-join (hash)
-                ├── columns: column5:7(int!null)
+                ├── columns: column5:7!null
                 ├── project
-                │    ├── columns: column5:7(int!null)
+                │    ├── columns: column5:7!null
                 │    └── with-scan &1
-                │         ├── columns: x:6(int!null) column5:7(int!null)
+                │         ├── columns: x:6!null column5:7!null
                 │         └── mapping:
-                │              ├──  self.x:3(int) => x:6(int)
-                │              └──  column5:5(int) => column5:7(int)
+                │              ├──  self.x:3 => x:6
+                │              └──  column5:5 => column5:7
                 ├── scan self
-                │    └── columns: self.x:8(int!null)
+                │    └── columns: self.x:8!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: column5 [type=int]
-                          └── variable: self.x [type=int]
+                     └── column5:7 = self.x:8
 
 build
 UPDATE self SET x = 3
 ----
 update self
  ├── columns: <none>
- ├── fetch columns: self.x:3(int) y:4(int)
+ ├── fetch columns: self.x:3 y:4
  ├── update-mapping:
- │    └──  column5:5 => self.x:1
+ │    └── column5:5 => self.x:1
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int!null) self.x:3(int!null) y:4(int!null)
+ │    ├── columns: column5:5!null self.x:3!null y:4!null
  │    ├── scan self
- │    │    └── columns: self.x:3(int!null) y:4(int!null)
+ │    │    └── columns: self.x:3!null y:4!null
  │    └── projections
- │         └── const: 3 [type=int]
+ │         └── 3 [as=column5:5]
  └── f-k-checks
       └── f-k-checks-item: self(y) -> self(x)
            └── semi-join (hash)
-                ├── columns: x:8(int!null)
+                ├── columns: x:8!null
                 ├── project
-                │    ├── columns: x:8(int!null)
+                │    ├── columns: x:8!null
                 │    ├── except
-                │    │    ├── columns: x:6(int!null)
-                │    │    ├── left columns: x:6(int!null)
-                │    │    ├── right columns: column5:7(int)
+                │    │    ├── columns: x:6!null
+                │    │    ├── left columns: x:6!null
+                │    │    ├── right columns: column5:7
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: x:6(int!null)
+                │    │    │    ├── columns: x:6!null
                 │    │    │    └── mapping:
-                │    │    │         └──  self.x:3(int) => x:6(int)
+                │    │    │         └──  self.x:3 => x:6
                 │    │    └── with-scan &1
-                │    │         ├── columns: column5:7(int!null)
+                │    │         ├── columns: column5:7!null
                 │    │         └── mapping:
-                │    │              └──  column5:5(int) => column5:7(int)
+                │    │              └──  column5:5 => column5:7
                 │    └── projections
-                │         └── variable: x [type=int]
+                │         └── x:6 [as=x:8]
                 ├── scan self
-                │    └── columns: y:10(int!null)
+                │    └── columns: y:10!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: x [type=int]
-                          └── variable: y [type=int]
+                     └── x:8 = y:10
 
 exec-ddl
 CREATE TABLE two (a int, b int, primary key (a, b))
@@ -399,80 +373,68 @@ UPDATE fam SET c = 3
 ----
 update fam
  ├── columns: <none>
- ├── fetch columns: fam.a:7(int) fam.b:8(int) c:9(int) fam.d:10(int) fam.rowid:12(int)
+ ├── fetch columns: fam.a:7 fam.b:8 c:9 fam.d:10 fam.rowid:12
  ├── update-mapping:
- │    └──  column13:13 => c:3
+ │    └── column13:13 => c:3
  ├── input binding: &1
  ├── project
- │    ├── columns: column13:13(int!null) fam.a:7(int) fam.b:8(int) c:9(int) fam.d:10(int) fam.rowid:12(int!null)
+ │    ├── columns: column13:13!null fam.a:7 fam.b:8 c:9 fam.d:10 fam.rowid:12!null
  │    ├── scan fam
- │    │    └── columns: fam.a:7(int) fam.b:8(int) c:9(int) fam.d:10(int) fam.rowid:12(int!null)
+ │    │    └── columns: fam.a:7 fam.b:8 c:9 fam.d:10 fam.rowid:12!null
  │    └── projections
- │         └── const: 3 [type=int]
+ │         └── 3 [as=column13:13]
  └── f-k-checks
       └── f-k-checks-item: fam(c,d) -> two(a,b)
            └── anti-join (hash)
-                ├── columns: column13:16(int!null) d:17(int!null)
+                ├── columns: column13:16!null d:17!null
                 ├── select
-                │    ├── columns: column13:16(int!null) d:17(int!null)
+                │    ├── columns: column13:16!null d:17!null
                 │    ├── with-scan &1
-                │    │    ├── columns: column13:16(int!null) d:17(int)
+                │    │    ├── columns: column13:16!null d:17
                 │    │    └── mapping:
-                │    │         ├──  column13:13(int) => column13:16(int)
-                │    │         └──  fam.d:10(int) => d:17(int)
+                │    │         ├──  column13:13 => column13:16
+                │    │         └──  fam.d:10 => d:17
                 │    └── filters
-                │         └── is-not [type=bool]
-                │              ├── variable: d [type=int]
-                │              └── null [type=unknown]
+                │         └── d:17 IS NOT NULL
                 ├── scan two
-                │    └── columns: two.a:20(int!null) two.b:21(int!null)
+                │    └── columns: two.a:20!null two.b:21!null
                 └── filters
-                     ├── eq [type=bool]
-                     │    ├── variable: column13 [type=int]
-                     │    └── variable: two.a [type=int]
-                     └── eq [type=bool]
-                          ├── variable: d [type=int]
-                          └── variable: two.b [type=int]
+                     ├── column13:16 = two.a:20
+                     └── d:17 = two.b:21
 
 norm
 UPDATE fam SET d = 3
 ----
 update fam
  ├── columns: <none>
- ├── fetch columns: fam.c:9(int) d:10(int) fam.e:11(int) fam.rowid:12(int)
+ ├── fetch columns: fam.c:9 d:10 fam.e:11 fam.rowid:12
  ├── update-mapping:
- │    └──  column13:13 => d:4
+ │    └── column13:13 => d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column13:13(int!null) fam.c:9(int) d:10(int) fam.e:11(int) fam.rowid:12(int!null)
+ │    ├── columns: column13:13!null fam.c:9 d:10 fam.e:11 fam.rowid:12!null
  │    ├── scan fam
- │    │    └── columns: fam.c:9(int) d:10(int) fam.e:11(int) fam.rowid:12(int!null)
+ │    │    └── columns: fam.c:9 d:10 fam.e:11 fam.rowid:12!null
  │    └── projections
- │         └── const: 3 [type=int]
+ │         └── 3 [as=column13:13]
  └── f-k-checks
       └── f-k-checks-item: fam(c,d) -> two(a,b)
            └── anti-join (hash)
-                ├── columns: c:16(int!null) column13:17(int!null)
+                ├── columns: c:16!null column13:17!null
                 ├── select
-                │    ├── columns: c:16(int!null) column13:17(int!null)
+                │    ├── columns: c:16!null column13:17!null
                 │    ├── with-scan &1
-                │    │    ├── columns: c:16(int) column13:17(int!null)
+                │    │    ├── columns: c:16 column13:17!null
                 │    │    └── mapping:
-                │    │         ├──  fam.c:9(int) => c:16(int)
-                │    │         └──  column13:13(int) => column13:17(int)
+                │    │         ├──  fam.c:9 => c:16
+                │    │         └──  column13:13 => column13:17
                 │    └── filters
-                │         └── is-not [type=bool]
-                │              ├── variable: c [type=int]
-                │              └── null [type=unknown]
+                │         └── c:16 IS NOT NULL
                 ├── scan two
-                │    └── columns: two.a:20(int!null) two.b:21(int!null)
+                │    └── columns: two.a:20!null two.b:21!null
                 └── filters
-                     ├── eq [type=bool]
-                     │    ├── variable: c [type=int]
-                     │    └── variable: two.a [type=int]
-                     └── eq [type=bool]
-                          ├── variable: column13 [type=int]
-                          └── variable: two.b [type=int]
+                     ├── c:16 = two.a:20
+                     └── column13:17 = two.b:21
 
 exec-ddl
 CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON UPDATE CASCADE)
@@ -484,15 +446,13 @@ UPDATE parent SET p = p+1
 ----
 update parent
  ├── columns: <none>
- ├── fetch columns: x:4(int) parent.p:5(int) other:6(int)
+ ├── fetch columns: x:4 parent.p:5 other:6
  ├── update-mapping:
- │    └──  column7:7 => parent.p:2
+ │    └── column7:7 => parent.p:2
  ├── fk-fallback
  └── project
-      ├── columns: column7:7(int!null) x:4(int) parent.p:5(int!null) other:6(int)
+      ├── columns: column7:7!null x:4 parent.p:5!null other:6
       ├── scan parent
-      │    └── columns: x:4(int) parent.p:5(int!null) other:6(int)
+      │    └── columns: x:4 parent.p:5!null other:6
       └── projections
-           └── plus [type=int]
-                ├── variable: parent.p [type=int]
-                └── const: 1 [type=int]
+           └── parent.p:5 + 1 [as=column7:7]
