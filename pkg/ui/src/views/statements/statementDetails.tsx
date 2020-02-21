@@ -42,6 +42,7 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import { approximify, latencyBreakdown, longToInt, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
+import DiagnosticsView from "./diagnosticsView";
 import classNames from "classnames";
 import { Button, BackIcon } from "oss/src/components/button";
 
@@ -82,6 +83,7 @@ interface StatementDetailsOwnProps {
   nodeNames: { [nodeId: string]: string };
   refreshStatements: typeof refreshStatements;
   nodesSummary: NodesSummary;
+  diagnosticsCount: number;
 }
 
 type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
@@ -199,6 +201,8 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
   }
 
   renderContent = () => {
+    const { diagnosticsCount } = this.props;
+
     if (!this.props.statement) {
       return null;
     }
@@ -314,7 +318,10 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             </Col>
           </Row>
         </TabPane>
-        <TabPane tab="Logical Plan" key="2">
+        <TabPane tab={`Diagnostics ${diagnosticsCount > 0 ? `(${diagnosticsCount})` : ""}`} key="2">
+          <DiagnosticsView statementId={statement} />
+        </TabPane>
+        <TabPane tab="Logical Plan" key="3">
           <SummaryCard>
             <PlanView
               title="Logical Plan"
@@ -322,7 +329,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             />
           </SummaryCard>
         </TabPane>
-        <TabPane tab="Execution Stats" key="3">
+        <TabPane tab="Execution Stats" key="4">
           <SummaryCard>
             <h2 className="base-heading summary--card__title">
               Execution Latency By Phase
@@ -497,6 +504,7 @@ const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => ({
   statement: selectStatement(state, props),
   statementsError: state.cachedData.statements.lastError,
   nodeNames: nodeDisplayNameByIDSelector(state),
+  diagnosticsCount: 0,
 });
 
 const mapDispatchToProps = {
