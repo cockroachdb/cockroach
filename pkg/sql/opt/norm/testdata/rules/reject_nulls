@@ -588,6 +588,98 @@ project
  └── projections
       └── const: 1 [type=int]
 
+# Use with multi-argument aggregate function.
+norm expect=RejectNullsGroupBy
+SELECT string_agg(s, ',')
+FROM (SELECT x FROM xy)
+LEFT JOIN (SELECT k, s FROM a)
+ON True
+GROUP BY k
+HAVING string_agg(s, ',')='foo'
+----
+project
+ ├── columns: string_agg:8(string!null)
+ ├── fd: ()-->(8)
+ └── select
+      ├── columns: k:3(int!null) string_agg:8(string!null)
+      ├── key: (3)
+      ├── fd: ()-->(8)
+      ├── group-by
+      │    ├── columns: k:3(int!null) string_agg:8(string)
+      │    ├── grouping columns: k:3(int!null)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(8)
+      │    ├── project
+      │    │    ├── columns: column7:7(string!null) k:3(int!null) s:6(string!null)
+      │    │    ├── fd: ()-->(7), (3)-->(6)
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: k:3(int!null) s:6(string!null)
+      │    │    │    ├── fd: (3)-->(6)
+      │    │    │    ├── scan xy
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: k:3(int!null) s:6(string!null)
+      │    │    │    │    ├── key: (3)
+      │    │    │    │    ├── fd: (3)-->(6)
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    ├── columns: k:3(int!null) s:6(string)
+      │    │    │    │    │    ├── key: (3)
+      │    │    │    │    │    └── fd: (3)-->(6)
+      │    │    │    │    └── filters
+      │    │    │    │         └── s IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── const: ',' [type=string]
+      │    └── aggregations
+      │         └── string-agg [type=string, outer=(6,7)]
+      │              ├── variable: s [type=string]
+      │              └── variable: column7 [type=string]
+      └── filters
+           └── string_agg = 'foo' [type=bool, outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
+
+# Don't reject nulls when aggregate argument is a not a Project passthrough
+# column.
+norm expect-not=RejectNullsGroupBy
+SELECT string_agg(s || 'bar', ',')
+FROM (SELECT x FROM xy)
+LEFT JOIN (SELECT k, s FROM a)
+ON True
+GROUP BY k
+HAVING string_agg(s || 'bar', ',')='foo'
+----
+project
+ ├── columns: string_agg:9(string!null)
+ ├── fd: ()-->(9)
+ └── select
+      ├── columns: k:3(int) string_agg:9(string!null)
+      ├── key: (3)
+      ├── fd: ()-->(9)
+      ├── group-by
+      │    ├── columns: k:3(int) string_agg:9(string)
+      │    ├── grouping columns: k:3(int)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(9)
+      │    ├── project
+      │    │    ├── columns: column7:7(string) column8:8(string!null) k:3(int)
+      │    │    ├── fd: ()-->(8), (3)-->(7)
+      │    │    ├── left-join (cross)
+      │    │    │    ├── columns: k:3(int) s:6(string)
+      │    │    │    ├── fd: (3)-->(6)
+      │    │    │    ├── scan xy
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:3(int!null) s:6(string)
+      │    │    │    │    ├── key: (3)
+      │    │    │    │    └── fd: (3)-->(6)
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         ├── s || 'bar' [type=string, outer=(6)]
+      │    │         └── const: ',' [type=string]
+      │    └── aggregations
+      │         └── string-agg [type=string, outer=(7,8)]
+      │              ├── variable: column7 [type=string]
+      │              └── variable: column8 [type=string]
+      └── filters
+           └── string_agg = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
+
 # Regression test: the not-null filter can't make it all the way down to the
 # join that requested it, so ensure that we don't endlessly try to introduce
 # them.

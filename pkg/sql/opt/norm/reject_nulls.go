@@ -104,6 +104,13 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
 		relProps.Rule.RejectNullCols = deriveGroupByRejectNullCols(in)
+
+	case opt.ProjectOp:
+		// Pass through all null-rejection columns that the Project passes through.
+		// The PushSelectIntoProject rule is able to push the IS NOT NULL filter
+		// below the Project for these columns.
+		rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+		relProps.Rule.RejectNullCols = relProps.OutputCols.Intersection(rejectNullCols)
 	}
 
 	return relProps.Rule.RejectNullCols

@@ -1061,17 +1061,18 @@ group           ·            ·             (array_agg)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 ----
-·               distributed  false          ·             ·
-·               vectorized   true           ·             ·
-group           ·            ·              (string_agg)  ·
- │              aggregate 0  string_agg(s)  ·             ·
- │              scalar       ·              ·             ·
- └── render     ·            ·              (k, s)        +k
-      │         render 0     k              ·             ·
-      │         render 1     s              ·             ·
-      └── scan  ·            ·              (k, s)        +k
-·               table        kv@primary     ·             ·
-·               spans        ALL            ·             ·
+·               distributed  false                   ·                ·
+·               vectorized   true                    ·                ·
+group           ·            ·                       (string_agg)     ·
+ │              aggregate 0  string_agg(s, column5)  ·                ·
+ │              scalar       ·                       ·                ·
+ └── render     ·            ·                       (column5, k, s)  +k
+      │         render 0     ','                     ·                ·
+      │         render 1     k                       ·                ·
+      │         render 2     s                       ·                ·
+      └── scan  ·            ·                       (k, s)           +k
+·               table        kv@primary              ·                ·
+·               spans        ALL                     ·                ·
 
 # Verify that we project away all input columns for count(*).
 query TTTTT
@@ -1117,16 +1118,17 @@ group      ·            ·             (u, v, s)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
 ----
-·               distributed  false          ·             ·
-·               vectorized   true           ·             ·
-group           ·            ·              (string_agg)  ·
- │              aggregate 0  string_agg(s)  ·             ·
- │              scalar       ·              ·             ·
- └── render     ·            ·              (s)           ·
-      │         render 0     s              ·             ·
-      └── scan  ·            ·              (s)           ·
-·               table        kv@primary     ·             ·
-·               spans        ALL            ·             ·
+·               distributed  false                   ·             ·
+·               vectorized   true                    ·             ·
+group           ·            ·                       (string_agg)  ·
+ │              aggregate 0  string_agg(s, column5)  ·             ·
+ │              scalar       ·                       ·             ·
+ └── render     ·            ·                       (column5, s)  ·
+      │         render 0     ', '                    ·             ·
+      │         render 1     s                       ·             ·
+      └── scan  ·            ·                       (s)           ·
+·               table        kv@primary              ·             ·
+·               spans        ALL                     ·             ·
 
 statement ok
 CREATE TABLE string_agg_test (
@@ -1146,17 +1148,21 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·               distributed  false                    ·                         ·
-·               vectorized   false                    ·                         ·
-sort            ·            ·                        (company_id, string_agg)  +company_id
- │              order        +company_id              ·                         ·
- └── group      ·            ·                        (company_id, string_agg)  ·
-      │         aggregate 0  company_id               ·                         ·
-      │         aggregate 1  string_agg(employee)     ·                         ·
-      │         group by     company_id               ·                         ·
-      └── scan  ·            ·                        (company_id, employee)    ·
-·               table        string_agg_test@primary  ·                         ·
-·               spans        ALL                      ·                         ·
+·                    distributed  false                          ·                                ·
+·                    vectorized   false                          ·                                ·
+sort                 ·            ·                              (company_id, string_agg)         +company_id
+ │                   order        +company_id                    ·                                ·
+ └── group           ·            ·                              (company_id, string_agg)         ·
+      │              aggregate 0  company_id                     ·                                ·
+      │              aggregate 1  string_agg(employee, column4)  ·                                ·
+      │              group by     company_id                     ·                                ·
+      └── render     ·            ·                              (column4, company_id, employee)  ·
+           │         render 0     ','                            ·                                ·
+           │         render 1     company_id                     ·                                ·
+           │         render 2     employee                       ·                                ·
+           └── scan  ·            ·                              (company_id, employee)           ·
+·                    table        string_agg_test@primary        ·                                ·
+·                    spans        ALL                            ·                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -1169,20 +1175,21 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·                    distributed  false                    ·                         ·
-·                    vectorized   false                    ·                         ·
-sort                 ·            ·                        (company_id, string_agg)  +company_id
- │                   order        +company_id              ·                         ·
- └── group           ·            ·                        (company_id, string_agg)  ·
-      │              aggregate 0  company_id               ·                         ·
-      │              aggregate 1  string_agg(column4)      ·                         ·
-      │              group by     company_id               ·                         ·
-      └── render     ·            ·                        (column4, company_id)     ·
-           │         render 0     employee::BYTES          ·                         ·
-           │         render 1     company_id               ·                         ·
-           └── scan  ·            ·                        (company_id, employee)    ·
-·                    table        string_agg_test@primary  ·                         ·
-·                    spans        ALL                      ·                         ·
+·                    distributed  false                         ·                               ·
+·                    vectorized   false                         ·                               ·
+sort                 ·            ·                             (company_id, string_agg)        +company_id
+ │                   order        +company_id                   ·                               ·
+ └── group           ·            ·                             (company_id, string_agg)        ·
+      │              aggregate 0  company_id                    ·                               ·
+      │              aggregate 1  string_agg(column4, column5)  ·                               ·
+      │              group by     company_id                    ·                               ·
+      └── render     ·            ·                             (column4, column5, company_id)  ·
+           │         render 0     employee::BYTES               ·                               ·
+           │         render 1     '\x2c'                        ·                               ·
+           │         render 2     company_id                    ·                               ·
+           └── scan  ·            ·                             (company_id, employee)          ·
+·                    table        string_agg_test@primary       ·                               ·
+·                    spans        ALL                           ·                               ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -1195,17 +1202,21 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·               distributed  false                    ·                         ·
-·               vectorized   false                    ·                         ·
-sort            ·            ·                        (company_id, string_agg)  +company_id
- │              order        +company_id              ·                         ·
- └── group      ·            ·                        (company_id, string_agg)  ·
-      │         aggregate 0  company_id               ·                         ·
-      │         aggregate 1  string_agg(employee)     ·                         ·
-      │         group by     company_id               ·                         ·
-      └── scan  ·            ·                        (company_id, employee)    ·
-·               table        string_agg_test@primary  ·                         ·
-·               spans        ALL                      ·                         ·
+·                    distributed  false                          ·                                ·
+·                    vectorized   false                          ·                                ·
+sort                 ·            ·                              (company_id, string_agg)         +company_id
+ │                   order        +company_id                    ·                                ·
+ └── group           ·            ·                              (company_id, string_agg)         ·
+      │              aggregate 0  company_id                     ·                                ·
+      │              aggregate 1  string_agg(employee, column4)  ·                                ·
+      │              group by     company_id                     ·                                ·
+      └── render     ·            ·                              (column4, company_id, employee)  ·
+           │         render 0     NULL                           ·                                ·
+           │         render 1     company_id                     ·                                ·
+           │         render 2     employee                       ·                                ·
+           └── scan  ·            ·                              (company_id, employee)           ·
+·                    table        string_agg_test@primary        ·                                ·
+·                    spans        ALL                            ·                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -1218,17 +1229,18 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-·                    distributed  false                    ·                         ·
-·                    vectorized   false                    ·                         ·
-sort                 ·            ·                        (company_id, string_agg)  +company_id
- │                   order        +company_id              ·                         ·
- └── group           ·            ·                        (company_id, string_agg)  ·
-      │              aggregate 0  company_id               ·                         ·
-      │              aggregate 1  string_agg(column4)      ·                         ·
-      │              group by     company_id               ·                         ·
-      └── render     ·            ·                        (column4, company_id)     ·
-           │         render 0     employee::BYTES          ·                         ·
-           │         render 1     company_id               ·                         ·
-           └── scan  ·            ·                        (company_id, employee)    ·
-·                    table        string_agg_test@primary  ·                         ·
-·                    spans        ALL                      ·                         ·
+·                    distributed  false                         ·                               ·
+·                    vectorized   false                         ·                               ·
+sort                 ·            ·                             (company_id, string_agg)        +company_id
+ │                   order        +company_id                   ·                               ·
+ └── group           ·            ·                             (company_id, string_agg)        ·
+      │              aggregate 0  company_id                    ·                               ·
+      │              aggregate 1  string_agg(column4, column5)  ·                               ·
+      │              group by     company_id                    ·                               ·
+      └── render     ·            ·                             (column4, column5, company_id)  ·
+           │         render 0     employee::BYTES               ·                               ·
+           │         render 1     NULL                          ·                               ·
+           │         render 2     company_id                    ·                               ·
+           └── scan  ·            ·                             (company_id, employee)          ·
+·                    table        string_agg_test@primary       ·                               ·
+·                    spans        ALL                           ·                               ·

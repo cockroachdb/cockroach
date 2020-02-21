@@ -985,3 +985,27 @@ sort
            └── mult [type=int, outer=(1,2)]
                 ├── variable: a [type=int]
                 └── variable: b [type=int]
+
+query TTT colnames
+EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)
+----
+tree         field        description
+·            distributed  false
+·            vectorized   false
+group        ·            ·
+ │           aggregate 0  string_agg(column1, column2)
+ │           scalar       ·
+ └── values  ·            ·
+·            size         2 columns, 2 rows
+
+query TTT
+EXPLAIN SELECT corr(a, b) FROM tc;
+----
+·          distributed  false
+·          vectorized   true
+group      ·            ·
+ │         aggregate 0  corr(a, b)
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        tc@primary
+·          spans        ALL

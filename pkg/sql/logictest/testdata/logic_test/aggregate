@@ -1223,6 +1223,94 @@ SELECT 123 FROM kv ORDER BY max(v)
 ----
 123
 
+subtest statistics
+
+statement OK
+CREATE TABLE statistics_agg_test (
+  y float,
+  x float,
+  int_y int,
+  int_x int
+)
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0,   10.0,    1,   10),
+  (2.0,   25.0,    2,   25),
+  (2.0,   25.0,    2,   25),
+  (3.0,   40.0,    3,   40),
+  (3.0,   40.0,    3,   40),
+  (3.0,   40.0,    3,   40),
+  (4.0,  100.0,    4,  100),
+  (4.0,  100.0,    4,  100),
+  (4.0,  100.0,    4,  100),
+  (4.0,  100.0,    4,  100),
+  (NULL,  NULL, NULL, NULL)
+
+query RRRR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal, corr(y, int_x)::decimal, corr(int_y, x)::decimal FROM statistics_agg_test
+----
+0.933007822647968 0.933007822647968 0.933007822647968 0.933007822647968
+
+query R
+SELECT corr(DISTINCT y, x)::decimal FROM statistics_agg_test
+----
+0.9326733179802503
+
+query R
+SELECT CAST(corr(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 30) AS decimal) FROM statistics_agg_test
+----
+0.9326733179802503
+
+query error pq: unknown signature: corr\(string, string\)
+SELECT corr(y::string, x::string) FROM statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+
+query error float out of range
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0,  10.0, 1, 10),
+  (2.0,  20.0, 2, 20)
+
+query RR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+----
+1 1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0,  10.0, 1,  10),
+  (2.0, -20.0, 2, -20)
+
+query RR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+----
+-1 -1
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0, -1.0, 1, -1),
+  (1.0,  1.0, 1,  1)
+
+query RR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test
+----
+NULL NULL
+
 subtest string_agg
 
 statement OK
@@ -1277,10 +1365,16 @@ INSERT INTO string_agg_test VALUES
   (9, 3, 'C'),
   (10, 2, 'B')
 
-query error pq: unimplemented: aggregate functions with multiple non-constant expressions are not supported
+# This is a bit strange but the same behavior as PostgreSQL.
+query IT rowsort
 SELECT company_id, string_agg(employee, employee)
 FROM string_agg_test
 GROUP BY company_id;
+----
+1           A
+2           BBB
+3           CCCCC
+4           DDDDDDD
 
 query IT colnames
 SELECT company_id, string_agg(employee, ',')
@@ -1688,6 +1782,12 @@ ORDER BY company_id, id;
 
 query error pq: unknown signature: string_agg\(string\)
 SELECT company_id, string_agg(employee)
+OVER (PARTITION BY company_id)
+FROM string_agg_test
+ORDER BY company_id, id;
+
+query error pq: unknown signature: string_agg\(string, string, string, string\)
+SELECT company_id, string_agg(employee, 'foo', employee, 'bar')
 OVER (PARTITION BY company_id)
 FROM string_agg_test
 ORDER BY company_id, id;

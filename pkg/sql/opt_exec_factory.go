@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -426,7 +425,7 @@ func (ef *execFactory) ConstructGroupBy(
 		f := n.newAggregateFuncHolder(
 			builtins.AnyNotNull,
 			inputCols[col].Typ,
-			col,
+			[]int{col},
 			builtins.NewAnyNotNullAggregate,
 			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
@@ -445,32 +444,21 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 	for i := range aggregations {
 		agg := &aggregations[i]
 		builtin := agg.Builtin
-		var renderIdx int
-		var aggFn func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
-
-		switch len(agg.ArgCols) {
-		case 0:
-			renderIdx = noRenderIdx
-			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return builtin.AggregateFunc([]*types.T{}, evalCtx, arguments)
-			}
-
-		case 1:
-			renderIdx = int(agg.ArgCols[0])
-			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return builtin.AggregateFunc([]*types.T{inputCols[renderIdx].Typ}, evalCtx, arguments)
-			}
-
-		default:
-			return unimplemented.NewWithIssue(28417,
-				"aggregate functions with multiple non-constant expressions are not supported",
-			)
+		renderIdxs := make([]int, len(agg.ArgCols))
+		params := make([]*types.T, len(agg.ArgCols))
+		for j, col := range agg.ArgCols {
+			renderIdx := int(col)
+			renderIdxs[j] = renderIdx
+			params[j] = inputCols[renderIdx].Typ
+		}
+		aggFn := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+			return builtin.AggregateFunc(params, evalCtx, arguments)
 		}
 
 		f := n.newAggregateFuncHolder(
 			agg.FuncName,
 			agg.ResultType,
-			renderIdx,
+			renderIdxs,
 			aggFn,
 			agg.ConstArgs,
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),

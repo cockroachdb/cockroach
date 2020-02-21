@@ -444,9 +444,9 @@ scalar-group-by
  │    └── projections
  │         └── const: ', ' [type=string]
  └── aggregations
-      └── string-agg [type=string, outer=(1)]
+      └── string-agg [type=string, outer=(1,2)]
            ├── variable: s [type=string]
-           └── const: ', ' [type=string]
+           └── variable: column2 [type=string]
 
 # GroupBy with key argument.
 norm expect=EliminateAggDistinctForKeys
@@ -604,10 +604,10 @@ scalar-group-by
  │         ├── const: ',' [type=string]
  │         └── s > 'a' [type=bool, outer=(1)]
  └── aggregations
-      └── agg-filter [type=string, outer=(1,3)]
+      └── agg-filter [type=string, outer=(1-3)]
            ├── string-agg [type=string]
            │    ├── variable: s [type=string]
-           │    └── const: ',' [type=string]
+           │    └── variable: column2 [type=string]
            └── variable: column3 [type=bool]
 
 # GroupBy with key argument.

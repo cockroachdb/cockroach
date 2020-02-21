@@ -204,14 +204,6 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			panic(errors.AssertionFailedf("NULL values should always use NullExpr, not ConstExpr"))
 		}
 
-	case *StringAggExpr:
-		if !CanExtractConstDatum(t.Sep) {
-			panic(errors.AssertionFailedf(
-				"second argument to StringAggOp must always be constant, but got %s",
-				log.Safe(e.Child(1).Op()),
-			))
-		}
-
 	default:
 		if opt.IsJoinOp(e) {
 			checkFilters(*e.Child(2).(*FiltersExpr))
