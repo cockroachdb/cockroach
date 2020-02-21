@@ -17,7 +17,7 @@ select
  │    └── prune: (1,2)
  └── filters
       └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-           ├── variable: x [type=int]
+           ├── variable: x:1 [type=int]
            └── const: 1 [type=int]
 
 # Verify that 1 is determined to be constant (from the intersection of the
@@ -36,10 +36,10 @@ select
       └── range [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
            └── and [type=bool]
                 ├── gt [type=bool]
-                │    ├── variable: x [type=int]
+                │    ├── variable: x:1 [type=int]
                 │    └── const: 0 [type=int]
                 └── lt [type=bool]
-                     ├── variable: x [type=int]
+                     ├── variable: x:1 [type=int]
                      └── const: 2 [type=int]
 
 opt
@@ -53,7 +53,7 @@ select
  │    └── prune: (1,2)
  └── filters
       └── ge [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
-           ├── variable: x [type=int]
+           ├── variable: x:1 [type=int]
            └── const: 1 [type=int]
 
 opt
@@ -67,7 +67,7 @@ select
  │    └── prune: (1,2)
  └── filters
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
-           ├── variable: x [type=int]
+           ├── variable: x:1 [type=int]
            └── const: 1 [type=int]
 
 opt
@@ -81,7 +81,7 @@ select
  │    └── prune: (1,2)
  └── filters
       └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
-           ├── variable: x [type=int]
+           ├── variable: x:1 [type=int]
            └── const: 1 [type=int]
 
 opt
@@ -96,7 +96,7 @@ select
  │    └── prune: (1,2)
  └── filters
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-           ├── variable: x [type=int]
+           ├── variable: x:1 [type=int]
            └── const: 1 [type=int]
 
 opt
@@ -112,10 +112,10 @@ select
       └── range [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
            └── and [type=bool]
                 ├── gt [type=bool]
-                │    ├── variable: x [type=int]
+                │    ├── variable: x:1 [type=int]
                 │    └── const: 1 [type=int]
                 └── lt [type=bool]
-                     ├── variable: x [type=int]
+                     ├── variable: x:1 [type=int]
                      └── const: 5 [type=int]
 
 opt
@@ -129,10 +129,10 @@ select
  │    └── prune: (1,2)
  └── filters
       ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      │    ├── variable: x [type=int]
+      │    ├── variable: x:1 [type=int]
       │    └── const: 1 [type=int]
       └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-           ├── variable: y [type=int]
+           ├── variable: y:2 [type=int]
            └── const: 5 [type=int]
 
 opt
@@ -147,18 +147,18 @@ select
       ├── range [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       │    └── and [type=bool]
       │         ├── gt [type=bool]
-      │         │    ├── variable: x [type=int]
+      │         │    ├── variable: x:1 [type=int]
       │         │    └── const: 1 [type=int]
       │         └── lt [type=bool]
-      │              ├── variable: x [type=int]
+      │              ├── variable: x:1 [type=int]
       │              └── const: 5 [type=int]
       └── range [type=bool, outer=(2), constraints=(/2: [/7 - /9]; tight)]
            └── and [type=bool]
                 ├── ge [type=bool]
-                │    ├── variable: y [type=int]
+                │    ├── variable: y:2 [type=int]
                 │    └── const: 7 [type=int]
                 └── le [type=bool]
-                     ├── variable: y [type=int]
+                     ├── variable: y:2 [type=int]
                      └── const: 9 [type=int]
 
 # Verify the resulting constraints are not tight.
@@ -174,15 +174,15 @@ select
       ├── range [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       │    └── and [type=bool]
       │         ├── gt [type=bool]
-      │         │    ├── variable: x [type=int]
+      │         │    ├── variable: x:1 [type=int]
       │         │    └── const: 1 [type=int]
       │         └── lt [type=bool]
-      │              ├── variable: x [type=int]
+      │              ├── variable: x:1 [type=int]
       │              └── const: 5 [type=int]
       └── eq [type=bool, outer=(1,2)]
            ├── plus [type=int]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── const: 5 [type=int]
 
 opt
@@ -195,17 +195,17 @@ select
  │    └── prune: (1,2)
  └── filters
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-      │    ├── variable: x [type=int]
+      │    ├── variable: x:1 [type=int]
       │    └── const: 1 [type=int]
       ├── ge [type=bool, outer=(1,2)]
       │    ├── plus [type=int]
-      │    │    ├── variable: x [type=int]
-      │    │    └── variable: y [type=int]
+      │    │    ├── variable: x:1 [type=int]
+      │    │    └── variable: y:2 [type=int]
       │    └── const: 5 [type=int]
       └── le [type=bool, outer=(1,2)]
            ├── plus [type=int]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── const: 7 [type=int]
 
 # Verify that we ignore some mixed-type comparisons.
@@ -220,7 +220,7 @@ select
  │    └── prune: (1,2)
  └── filters
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
-           ├── variable: x [type=int]
+           ├── variable: x:1 [type=int]
            └── const: 1.5 [type=decimal]
 
 # This is a safe mixed-type comparison.
@@ -241,7 +241,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── gt [type=bool, outer=(2), constraints=(/2: [/1.0000000000000002 - ]; tight)]
-           ├── variable: u [type=float]
+           ├── variable: u:2 [type=float]
            └── const: 1.0 [type=float]
 
 opt
@@ -263,10 +263,10 @@ select
       └── range [type=bool, outer=(3), constraints=(/3: [/'bar' - /'foo']; tight)]
            └── and [type=bool]
                 ├── le [type=bool]
-                │    ├── variable: v [type=string]
+                │    ├── variable: v:3 [type=string]
                 │    └── const: 'foo' [type=string]
                 └── ge [type=bool]
-                     ├── variable: v [type=string]
+                     ├── variable: v:3 [type=string]
                      └── const: 'bar' [type=string]
 
 # Test IN.
@@ -281,7 +281,7 @@ select
  │    └── prune: (1,2)
  └── filters
       └── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
-           ├── variable: x [type=int]
+           ├── variable: x:1 [type=int]
            └── tuple [type=tuple{unknown, int, int, int}]
                 ├── null [type=unknown]
                 ├── const: 1 [type=int]
@@ -321,7 +321,7 @@ select
       └── range [type=bool, outer=(1), constraints=(/1: [/7 - /7] [/9 - /9]; tight)]
            └── and [type=bool]
                 ├── in [type=bool]
-                │    ├── variable: x [type=int]
+                │    ├── variable: x:1 [type=int]
                 │    └── tuple [type=tuple{int, int, int, int, int}]
                 │         ├── const: 1 [type=int]
                 │         ├── const: 3 [type=int]
@@ -329,7 +329,7 @@ select
                 │         ├── const: 7 [type=int]
                 │         └── const: 9 [type=int]
                 └── gt [type=bool]
-                     ├── variable: x [type=int]
+                     ├── variable: x:1 [type=int]
                      └── const: 6 [type=int]
 
 # Test IN in combination with a condition on another column.
@@ -343,12 +343,12 @@ select
  │    └── prune: (1,2)
  └── filters
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3]; tight)]
-      │    ├── variable: x [type=int]
+      │    ├── variable: x:1 [type=int]
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 1 [type=int]
       │         └── const: 3 [type=int]
       └── gt [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
-           ├── variable: y [type=int]
+           ├── variable: y:2 [type=int]
            └── const: 4 [type=int]
 
 # Test tuple inequality.
@@ -363,8 +363,8 @@ select
  └── filters
       └── gt [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -380,8 +380,8 @@ select
  └── filters
       └── ge [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -397,8 +397,8 @@ select
  └── filters
       └── lt [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -414,8 +414,8 @@ select
  └── filters
       └── le [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -432,8 +432,8 @@ select
  └── filters
       └── ge [type=bool, outer=(1,2)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── tuple [type=tuple{int, decimal}]
                 ├── const: 1 [type=int]
                 └── const: 2.5 [type=decimal]
@@ -450,8 +450,8 @@ select
  └── filters
       └── ge [type=bool, outer=(1,2)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: x [type=int]
-           │    └── variable: y [type=int]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
            └── tuple [type=tuple{int, unknown}]
                 ├── const: 1 [type=int]
                 └── null [type=unknown]
@@ -470,7 +470,7 @@ select
  └── filters
       └── ge [type=bool, outer=(1)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: x [type=int]
+           │    ├── variable: x:1 [type=int]
            │    └── const: 1 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
@@ -491,7 +491,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── ne [type=bool, outer=(1), constraints=(/1: (/NULL - /4] [/6 - ]; tight)]
-           ├── variable: a [type=int]
+           ├── variable: a:1 [type=int]
            └── const: 5 [type=int]
 
 opt
@@ -505,7 +505,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── is-not [type=bool, outer=(1), constraints=(/1: [ - /4] [/6 - ]; tight)]
-           ├── variable: a [type=int]
+           ├── variable: a:1 [type=int]
            └── const: 5 [type=int]
 
 opt
@@ -519,7 +519,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
-           ├── variable: b [type=bool]
+           ├── variable: b:2 [type=bool]
            └── true [type=bool]
 
 opt
@@ -533,7 +533,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── ne [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
-           ├── variable: b [type=bool]
+           ├── variable: b:2 [type=bool]
            └── false [type=bool]
 
 opt
@@ -547,7 +547,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
-           ├── variable: b [type=bool]
+           ├── variable: b:2 [type=bool]
            └── true [type=bool]
 
 opt
@@ -561,7 +561,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
-           ├── variable: b [type=bool]
+           ├── variable: b:2 [type=bool]
            └── false [type=bool]
 
 opt
@@ -575,7 +575,7 @@ select
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── prune: (1-3)
  └── filters
-      └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      └── variable: b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
 opt
 SELECT * FROM abc WHERE NOT b
@@ -589,7 +589,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── not [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
-           └── variable: b [type=bool]
+           └── variable: b:2 [type=bool]
 
 opt
 SELECT * FROM abc WHERE a > 5 AND b
@@ -603,9 +603,9 @@ select
  │    └── prune: (1-3)
  └── filters
       ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
-      │    ├── variable: a [type=int]
+      │    ├── variable: a:1 [type=int]
       │    └── const: 5 [type=int]
-      └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      └── variable: b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
 opt
 SELECT * FROM abc WHERE c != 'foo'
@@ -618,7 +618,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── ne [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo') [/e'foo\x00' - ]; tight)]
-           ├── variable: c [type=string]
+           ├── variable: c:3 [type=string]
            └── const: 'foo' [type=string]
 
 opt
@@ -632,7 +632,7 @@ select
  │    └── prune: (1-3)
  └── filters
       └── is-not [type=bool, outer=(3), constraints=(/3: [ - /'foo') [/e'foo\x00' - ]; tight)]
-           ├── variable: c [type=string]
+           ├── variable: c:3 [type=string]
            └── const: 'foo' [type=string]
 
 opt
@@ -647,12 +647,12 @@ select
  │    │    ├── columns: x:1(int) y:2(int)
  │    │    └── prune: (1,2)
  │    └── projections
- │         └── tuple [type=tuple{int, int}, outer=(1,2)]
- │              ├── variable: x [type=int]
- │              └── variable: y [type=int]
+ │         └── tuple [as=col:4, type=tuple{int, int}, outer=(1,2)]
+ │              ├── variable: x:1 [type=int]
+ │              └── variable: y:2 [type=int]
  └── filters
       └── gt [type=bool, outer=(4), constraints=(/4: [/(1, 3) - ]; tight)]
-           ├── variable: col [type=tuple{int, int}]
+           ├── variable: col:4 [type=tuple{int, int}]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -687,8 +687,6 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/4]
- ├── stats: [rows=0.3, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0]
- ├── cost: 0.328
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
@@ -703,8 +701,6 @@ scan c@v
  │    ├── [/1/2 - /1/2]
  │    ├── [/3/2 - /3/2]
  │    └── [/5/2 - /5/2]
- ├── stats: [rows=0.3, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0]
- ├── cost: 0.328
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
@@ -716,8 +712,6 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2]
- ├── stats: [rows=0.1, distinct(2)=0.1, null(2)=0, distinct(3)=0.1, null(3)=0]
- ├── cost: 0.116
  ├── key: (1)
  ├── fd: ()-->(2,3)
  ├── prune: (1)
@@ -729,8 +723,6 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/4]
- ├── stats: [rows=0.3, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0]
- ├── cost: 0.328
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
@@ -745,8 +737,6 @@ scan c@v
  │    ├── [/1/2 - /1/2]
  │    ├── [/3/2 - /3/2]
  │    └── [/5/2 - /5/2]
- ├── stats: [rows=0.3, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0]
- ├── cost: 0.328
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
@@ -758,8 +748,6 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2]
- ├── stats: [rows=0.1, distinct(2)=0.1, null(2)=0, distinct(3)=0.1, null(3)=0]
- ├── cost: 0.116
  ├── key: (1)
  ├── fd: ()-->(2,3)
  ├── prune: (1)
@@ -803,7 +791,7 @@ select
  └── filters
       └── in [type=bool, outer=(3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: v [type=int]
+           │    ├── variable: v:3 [type=int]
            │    └── const: 2 [type=int]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
@@ -841,10 +829,10 @@ select
  └── filters
       └── in [type=bool, outer=(2,3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: v [type=int]
+           │    ├── variable: v:3 [type=int]
            │    └── plus [type=int]
-           │         ├── variable: u [type=int]
-           │         └── variable: v [type=int]
+           │         ├── variable: u:2 [type=int]
+           │         └── variable: v:3 [type=int]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── const: 1 [type=int]
@@ -873,14 +861,14 @@ select
  └── filters
       └── in [type=bool, outer=(1-3), constraints=(/2: [/2 - /2] [/50 - /50] [/100 - /100])]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: v [type=int]
-           │    └── variable: u [type=int]
+           │    ├── variable: v:3 [type=int]
+           │    └── variable: u:2 [type=int]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── const: 1 [type=int]
                 │    └── const: 2 [type=int]
                 ├── tuple [type=tuple{int, int}]
-                │    ├── variable: k [type=int]
+                │    ├── variable: k:1 [type=int]
                 │    └── const: 50 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 5 [type=int]
@@ -900,16 +888,12 @@ SELECT * FROM d WHERE (p, q) IN ((1, 2), (1, 3), (1, 4))
 ----
 select
  ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
- ├── stats: [rows=0.3, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0]
- ├── cost: 1070.03
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
  ├── interesting orderings: (+1)
  ├── scan d
  │    ├── columns: k:1(int!null) p:2(int) q:3(int)
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10]
- │    ├── cost: 1060.02
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
@@ -917,8 +901,8 @@ select
  └── filters
       └── in [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight), fd=()-->(2)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: p [type=int]
-           │    └── variable: q [type=int]
+           │    ├── variable: p:2 [type=int]
+           │    └── variable: q:3 [type=int]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── const: 1 [type=int]
@@ -935,16 +919,12 @@ SELECT * FROM d WHERE (p, q) IN ((2, 1), (3, 1), (4, 1))
 ----
 select
  ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
- ├── stats: [rows=0.3, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0]
- ├── cost: 1070.03
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
  ├── interesting orderings: (+1)
  ├── scan d
  │    ├── columns: k:1(int!null) p:2(int) q:3(int)
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10]
- │    ├── cost: 1060.02
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
@@ -952,8 +932,8 @@ select
  └── filters
       └── in [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight), fd=()-->(3)]
            ├── tuple [type=tuple{int, int}]
-           │    ├── variable: p [type=int]
-           │    └── variable: q [type=int]
+           │    ├── variable: p:2 [type=int]
+           │    └── variable: q:3 [type=int]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── const: 2 [type=int]
@@ -1005,12 +985,12 @@ select
  │    │    ├── columns: x:1(int) y:2(int)
  │    │    └── prune: (1,2)
  │    └── projections
- │         └── tuple [type=tuple{int, int}, outer=(1,2)]
- │              ├── variable: x [type=int]
- │              └── variable: y [type=int]
+ │         └── tuple [as=foo:4, type=tuple{int, int}, outer=(1,2)]
+ │              ├── variable: x:1 [type=int]
+ │              └── variable: y:2 [type=int]
  └── filters
       └── in [type=bool, outer=(4), constraints=(/4: [/(1, 2) - /(1, 2)] [/(3, 4) - /(3, 4)]; tight)]
-           ├── variable: foo [type=tuple{int, int}]
+           ├── variable: foo:4 [type=tuple{int, int}]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── const: 3 [type=int]
@@ -1037,7 +1017,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'); tight)]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: 'ABC%' [type=string]
 
 opt
@@ -1057,7 +1037,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: 'ABC_' [type=string]
 
 opt
@@ -1077,7 +1057,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: 'ABC%Z' [type=string]
 
 opt
@@ -1097,7 +1077,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABC']; tight), fd=()-->(3)]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: 'ABC' [type=string]
 
 opt
@@ -1117,7 +1097,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: '%' [type=string]
 
 opt
@@ -1137,7 +1117,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: '%XY' [type=string]
 
 opt
@@ -1157,7 +1137,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: 'ABC.*' [type=string]
 
 opt
@@ -1177,7 +1157,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: 'ABC.*Z' [type=string]
 
 opt
@@ -1197,7 +1177,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABC']; tight), fd=()-->(3)]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: 'ABC' [type=string]
 
 opt
@@ -1217,7 +1197,7 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: '(ABC|ABCDEF).*' [type=string]
 
 opt
@@ -1237,5 +1217,5 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'' - ])]
-           ├── variable: v [type=string]
+           ├── variable: v:3 [type=string]
            └── const: '.*' [type=string]

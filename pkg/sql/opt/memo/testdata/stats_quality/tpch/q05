@@ -126,12 +126,12 @@ sort
       │    │    │    │    │    │    │    │    ├── key: (45)
       │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
       │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── r_name = 'ASIA' [type=bool, outer=(46), constraints=(/46: [/'ASIA' - /'ASIA']; tight), fd=()-->(46)]
+      │    │    │    │    │    │    │         └── r_name:46 = 'ASIA' [type=bool, outer=(46), constraints=(/46: [/'ASIA' - /'ASIA']; tight), fd=()-->(46)]
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── n_regionkey = r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
+      │    │    │    │    │    │         └── n_regionkey:43 = r_regionkey:45 [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters
-      │    │    │    │         └── l_suppkey = s_suppkey [type=bool, outer=(20,34), constraints=(/20: (/NULL - ]; /34: (/NULL - ]), fd=(20)==(34), (34)==(20)]
+      │    │    │    │         └── l_suppkey:20 = s_suppkey:34 [type=bool, outer=(20,34), constraints=(/20: (/NULL - ]; /34: (/NULL - ]), fd=(20)==(34), (34)==(20)]
       │    │    │    ├── index-join orders
       │    │    │    │    ├── save-table-name: q5_index_join_13
       │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null)
@@ -152,7 +152,7 @@ sort
       │    │    │    │         ├── key: (9)
       │    │    │    │         └── fd: (9)-->(13)
       │    │    │    └── filters
-      │    │    │         └── l_orderkey = o_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
+      │    │    │         └── l_orderkey:18 = o_orderkey:9 [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
       │    │    ├── scan customer@c_nk
       │    │    │    ├── save-table-name: q5_scan_15
       │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null)
@@ -164,13 +164,13 @@ sort
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(4)
       │    │    └── filters
-      │    │         ├── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
-      │    │         └── c_nationkey = s_nationkey [type=bool, outer=(4,37), constraints=(/4: (/NULL - ]; /37: (/NULL - ]), fd=(4)==(37), (37)==(4)]
+      │    │         ├── c_custkey:1 = o_custkey:10 [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      │    │         └── c_nationkey:4 = s_nationkey:37 [type=bool, outer=(4,37), constraints=(/4: (/NULL - ]; /37: (/NULL - ]), fd=(4)==(37), (37)==(4)]
       │    └── projections
-      │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
+      │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column48:48, type=float, outer=(23,24)]
       └── aggregations
-           └── sum [type=float, outer=(48)]
-                └── variable: column48 [type=float]
+           └── sum [as=sum:49, type=float, outer=(48)]
+                └── column48:48 [type=float]
 
 stats table=q5_sort_1
 ----

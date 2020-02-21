@@ -2,30 +2,28 @@ build
 SHOW DATABASES
 ----
 sort
- ├── columns: database_name:1(string)
+ ├── columns: database_name:1
  ├── ordering: +1
  └── distinct-on
-      ├── columns: catalog_name:1(string)
-      ├── grouping columns: catalog_name:1(string)
+      ├── columns: catalog_name:1
+      ├── grouping columns: catalog_name:1
       └── project
-           ├── columns: catalog_name:1(string)
+           ├── columns: catalog_name:1
            └── virtual-scan "".information_schema.schemata
-                └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
+                └── columns: catalog_name:1 schema_name:2 default_character_set_name:3 sql_path:4
 
 # Note: t is the default database for the test catalog.
 build
 SHOW SCHEMAS FROM t
 ----
 sort
- ├── columns: schema_name:2(string)
+ ├── columns: schema_name:2
  ├── ordering: +2
  └── project
-      ├── columns: schema_name:2(string)
+      ├── columns: schema_name:2
       └── select
-           ├── columns: catalog_name:1(string!null) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
+           ├── columns: catalog_name:1!null schema_name:2 default_character_set_name:3 sql_path:4
            ├── virtual-scan t.information_schema.schemata
-           │    └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
+           │    └── columns: catalog_name:1 schema_name:2 default_character_set_name:3 sql_path:4
            └── filters
-                └── eq [type=bool]
-                     ├── variable: catalog_name [type=string]
-                     └── const: 't' [type=string]
+                └── catalog_name:1 = 't'

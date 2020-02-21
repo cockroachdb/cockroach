@@ -125,8 +125,8 @@ sort
       │    │    │    │    │    │    │    ├── key: (33,34)
       │    │    │    │    │    │    │    └── fd: (33,34)-->(36)
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         ├── ps_suppkey = l_suppkey [type=bool, outer=(19,34), constraints=(/19: (/NULL - ]; /34: (/NULL - ]), fd=(19)==(34), (34)==(19)]
-      │    │    │    │    │    │         └── ps_partkey = l_partkey [type=bool, outer=(18,33), constraints=(/18: (/NULL - ]; /33: (/NULL - ]), fd=(18)==(33), (33)==(18)]
+      │    │    │    │    │    │         ├── ps_suppkey:34 = l_suppkey:19 [type=bool, outer=(19,34), constraints=(/19: (/NULL - ]; /34: (/NULL - ]), fd=(19)==(34), (34)==(19)]
+      │    │    │    │    │    │         └── ps_partkey:33 = l_partkey:18 [type=bool, outer=(18,33), constraints=(/18: (/NULL - ]; /33: (/NULL - ]), fd=(18)==(33), (33)==(18)]
       │    │    │    │    │    └── filters (true)
       │    │    │    │    ├── scan nation
       │    │    │    │    │    ├── save-table-name: q9_scan_11
@@ -148,16 +148,16 @@ sort
       │    │    │    │    ├── key: (10)
       │    │    │    │    └── fd: (10)-->(13)
       │    │    │    └── filters
-      │    │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
-      │    │    │         └── s_nationkey = n_nationkey [type=bool, outer=(13,47), constraints=(/13: (/NULL - ]; /47: (/NULL - ]), fd=(13)==(47), (47)==(13)]
+      │    │    │         ├── s_suppkey:10 = l_suppkey:19 [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
+      │    │    │         └── s_nationkey:13 = n_nationkey:47 [type=bool, outer=(13,47), constraints=(/13: (/NULL - ]; /47: (/NULL - ]), fd=(13)==(47), (47)==(13)]
       │    │    └── filters
-      │    │         └── p_name LIKE '%green%' [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      │    │         └── p_name:2 LIKE '%green%' [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    └── projections
-      │         ├── extract('year', o_orderdate) [type=float, outer=(42)]
-      │         └── (l_extendedprice * (1.0 - l_discount)) - (ps_supplycost * l_quantity) [type=float, outer=(21-23,36)]
+      │         ├── extract('year', o_orderdate:42) [as=o_year:51, type=float, outer=(42)]
+      │         └── (l_extendedprice:22 * (1.0 - l_discount:23)) - (ps_supplycost:36 * l_quantity:21) [as=amount:52, type=float, outer=(21-23,36)]
       └── aggregations
-           └── sum [type=float, outer=(52)]
-                └── variable: amount [type=float]
+           └── sum [as=sum:53, type=float, outer=(52)]
+                └── amount:52 [type=float]
 
 stats table=q9_sort_1
 ----

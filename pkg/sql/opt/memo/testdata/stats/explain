@@ -14,9 +14,9 @@ explain
       │    ├── cardinality: [1 - 1]
       │    ├── stats: [rows=1]
       │    ├── key: ()
-      │    └── tuple [type=tuple]
+      │    └── () [type=tuple]
       └── projections
-           └── const: 1 [type=int]
+           └── 1 [as="?column?":1, type=int]
 
 build
 SHOW TRACE FOR SESSION

@@ -20,11 +20,11 @@ SELECT
     null::int2vector
 ----
 values
- ├── columns: int8:1(int) timestamptz:2(timestamptz) bpchar:3(char) oid:4(oidvector) int2:5(int2vector)
+ ├── columns: int8:1 timestamptz:2 bpchar:3 oid:4 int2:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
- └── (NULL, NULL, NULL, NULL, NULL) [type=tuple{int, timestamptz, char, oidvector, int2vector}]
+ └── (NULL, NULL, NULL, NULL, NULL)
 
 # --------------------------------------------------
 # FoldNullUnary
@@ -33,13 +33,13 @@ norm expect=FoldNullUnary
 SELECT +null::int AS r, -null::int AS s, ~null::int AS t FROM a
 ----
 project
- ├── columns: r:7(int) s:8(int) t:9(int)
+ ├── columns: r:7 s:8 t:9
  ├── fd: ()-->(7-9)
  ├── scan a
  └── projections
-      ├── null [type=int]
-      ├── null [type=int]
-      └── null [type=int]
+      ├── CAST(NULL AS INT8) [as=r:7]
+      ├── CAST(NULL AS INT8) [as=s:8]
+      └── CAST(NULL AS INT8) [as=t:9]
 
 # --------------------------------------------------
 # FoldNullBinaryLeft, FoldNullBinaryRight
@@ -60,23 +60,23 @@ SELECT
 FROM a
 ----
 project
- ├── columns: ra:7(int) rb:8(int) sa:9(decimal) sb:10(decimal) ta:11(float) tb:12(float) ua:13(int) ub:14(int) va:15(decimal[]) vb:16(string[]) wa:17(decimal[]) wb:18(float[])
+ ├── columns: ra:7 rb:8 sa:9 sb:10 ta:11 tb:12 ua:13 ub:14 va:15 vb:16 wa:17 wb:18
  ├── fd: ()-->(7-14)
  ├── scan a
- │    └── columns: i:2(int) arr:6(int[])
+ │    └── columns: i:2 arr:6
  └── projections
-      ├── null [type=int]
-      ├── null [type=int]
-      ├── null [type=decimal]
-      ├── null [type=decimal]
-      ├── null [type=float]
-      ├── null [type=float]
-      ├── null [type=int]
-      ├── null [type=int]
-      ├── arr::DECIMAL[] || CAST(NULL AS DECIMAL[]) [type=decimal[], outer=(6)]
-      ├── CAST(NULL AS STRING[]) || arr::STRING[] [type=string[], outer=(6)]
-      ├── i::DECIMAL || CAST(NULL AS DECIMAL[]) [type=decimal[], outer=(2)]
-      └── CAST(NULL AS FLOAT8[]) || i::FLOAT8 [type=float[], outer=(2)]
+      ├── CAST(NULL AS INT8) [as=ra:7]
+      ├── CAST(NULL AS INT8) [as=rb:8]
+      ├── CAST(NULL AS DECIMAL) [as=sa:9]
+      ├── CAST(NULL AS DECIMAL) [as=sb:10]
+      ├── CAST(NULL AS FLOAT8) [as=ta:11]
+      ├── CAST(NULL AS FLOAT8) [as=tb:12]
+      ├── CAST(NULL AS INT8) [as=ua:13]
+      ├── CAST(NULL AS INT8) [as=ub:14]
+      ├── arr:6::DECIMAL[] || CAST(NULL AS DECIMAL[]) [as=va:15, outer=(6)]
+      ├── CAST(NULL AS STRING[]) || arr:6::STRING[] [as=vb:16, outer=(6)]
+      ├── i:2::DECIMAL || CAST(NULL AS DECIMAL[]) [as=wa:17, outer=(2)]
+      └── CAST(NULL AS FLOAT8[]) || i:2::FLOAT8 [as=wb:18, outer=(2)]
 
 norm
 SELECT
@@ -89,19 +89,19 @@ SELECT
 FROM a
 ----
 project
- ├── columns: ra:7(jsonb) rb:8(jsonb) sa:9(jsonb) sb:10(jsonb) ta:11(string) tb:12(string) ua:11(string) ub:12(string) va:13(jsonb) vb:14(unknown) wa:15(string) wb:14(unknown)
+ ├── columns: ra:7 rb:8 sa:9 sb:10 ta:11 tb:12 ua:11 ub:12 va:13 vb:14 wa:15 wb:14
  ├── fd: ()-->(7-15)
  ├── scan a
  └── projections
-      ├── null [type=jsonb]
-      ├── null [type=jsonb]
-      ├── null [type=jsonb]
-      ├── null [type=jsonb]
-      ├── null [type=string]
-      ├── null [type=string]
-      ├── null [type=jsonb]
-      ├── null [type=unknown]
-      └── null [type=string]
+      ├── CAST(NULL AS JSONB) [as=ra:7]
+      ├── CAST(NULL AS JSONB) [as=rb:8]
+      ├── CAST(NULL AS JSONB) [as=sa:9]
+      ├── CAST(NULL AS JSONB) [as=sb:10]
+      ├── CAST(NULL AS STRING) [as=ta:11]
+      ├── CAST(NULL AS STRING) [as=tb:12]
+      ├── CAST(NULL AS JSONB) [as=va:13]
+      ├── NULL [as=vb:14]
+      └── CAST(NULL AS STRING) [as=wa:15]
 
 # --------------------------------------------------
 # FoldNullInNonEmpty
@@ -110,12 +110,12 @@ norm expect=FoldNullInNonEmpty
 SELECT null IN (i) AS r, null NOT IN (s) AS s FROM a
 ----
 project
- ├── columns: r:7(bool) s:8(bool)
+ ├── columns: r:7 s:8
  ├── fd: ()-->(7,8)
  ├── scan a
  └── projections
-      ├── null [type=bool]
-      └── null [type=bool]
+      ├── CAST(NULL AS BOOL) [as=r:7]
+      └── CAST(NULL AS BOOL) [as=s:8]
 
 # --------------------------------------------------
 # FoldInNull
@@ -124,12 +124,12 @@ norm expect=FoldInNull
 SELECT i IN (null, null) AS r, k NOT IN (1 * null, null::int, 1 < null) AS s FROM a
 ----
 project
- ├── columns: r:7(bool) s:8(bool)
+ ├── columns: r:7 s:8
  ├── fd: ()-->(7,8)
  ├── scan a
  └── projections
-      ├── null [type=bool]
-      └── null [type=bool]
+      ├── CAST(NULL AS BOOL) [as=r:7]
+      └── CAST(NULL AS BOOL) [as=s:8]
 
 # --------------------------------------------------
 # FoldInEmpty
@@ -138,27 +138,27 @@ norm expect=FoldInEmpty
 SELECT 1 IN ()
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldInEmpty
 SELECT NULL IN ()
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldInEmpty
 SELECT i FROM a WHERE i = ANY ARRAY[]
 ----
 values
- ├── columns: i:2(int!null)
+ ├── columns: i:2!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(2)
@@ -170,21 +170,21 @@ norm expect=FoldNotInEmpty
 SELECT 1 NOT IN ()
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldNotInEmpty
 SELECT NULL NOT IN ()
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 # --------------------------------------------------
 # FoldArray
@@ -193,33 +193,33 @@ norm expect=FoldArray
 SELECT ARRAY[1, 2, 3] FROM t
 ----
 project
- ├── columns: array:2(int[]!null)
+ ├── columns: array:2!null
  ├── fd: ()-->(2)
  ├── scan t
  └── projections
-      └── const: ARRAY[1,2,3] [type=int[]]
+      └── ARRAY[1,2,3] [as=array:2]
 
 # Do not fold if there is a non-constant element.
 norm expect-not=FoldArray
 SELECT ARRAY[1, 2, 3, x] FROM t
 ----
 project
- ├── columns: array:2(int[]!null)
+ ├── columns: array:2!null
  ├── scan t
- │    ├── columns: x:1(int!null)
+ │    ├── columns: x:1!null
  │    └── key: (1)
  └── projections
-      └── ARRAY[1, 2, 3, x] [type=int[], outer=(1)]
+      └── ARRAY[1, 2, 3, x:1] [as=array:2, outer=(1)]
 
 norm expect=FoldArray
 SELECT ARRAY['foo', 'bar']
 ----
 values
- ├── columns: array:1(string[]!null)
+ ├── columns: array:1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (ARRAY['foo','bar'],) [type=tuple{string[]}]
+ └── (ARRAY['foo','bar'],)
 
 # --------------------------------------------------
 # FoldBinary
@@ -229,199 +229,199 @@ norm expect=FoldBinary
 SELECT 1::INT + 2::DECIMAL
 ----
 values
- ├── columns: "?column?":1(decimal!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (3,) [type=tuple{decimal}]
+ └── (3,)
 
 # Don't fold: out of range error.
 norm expect-not=FoldBinary
 SELECT 9223372036854775800::INT + 9223372036854775800::INT
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (9223372036854775800 + 9223372036854775800,) [type=tuple{int}]
+ └── (9223372036854775800 + 9223372036854775800,)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT 1::INT - 2::INT
 ----
 values
- ├── columns: "?column?":1(int!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (-1,) [type=tuple{int}]
+ └── (-1,)
 
 # Don't fold: out of range error.
 norm expect-not=FoldBinary
 SELECT (-9223372036854775800)::INT - 9223372036854775800::INT
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (-9223372036854775800 - 9223372036854775800,) [type=tuple{int}]
+ └── (-9223372036854775800 - 9223372036854775800,)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT 4::INT * 2::INT
 ----
 values
- ├── columns: "?column?":1(int!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (8,) [type=tuple{int}]
+ └── (8,)
 
 # Don't fold: out of range error.
 norm expect-not=FoldBinary
 SELECT 9223372036854775800::INT * 9223372036854775800::INT
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (9223372036854775800 * 9223372036854775800,) [type=tuple{int}]
+ └── (9223372036854775800 * 9223372036854775800,)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT 1::FLOAT / 2::FLOAT
 ----
 values
- ├── columns: "?column?":1(float!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (0.5,) [type=tuple{float}]
+ └── (0.5,)
 
 # Don't fold: divide by zero error.
 norm expect-not=FoldBinary
 SELECT 1::INT / 0::INT
 ----
 values
- ├── columns: "?column?":1(decimal)
+ ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1)
- └── (1 / 0,) [type=tuple{decimal}]
+ └── (1 / 0,)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT B'01' # B'11'
 ----
 values
- ├── columns: "?column?":1(varbit!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (B'10',) [type=tuple{varbit}]
+ └── (B'10',)
 
 # Don't fold: cannot mix bit array sizes error.
 norm expect-not=FoldBinary
 SELECT B'01' # B'11001001010101'
 ----
 values
- ├── columns: "?column?":1(varbit)
+ ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (B'01' # B'11001001010101',) [type=tuple{varbit}]
+ └── (B'01' # B'11001001010101',)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT B'01' | B'11'
 ----
 values
- ├── columns: "?column?":1(varbit!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (B'11',) [type=tuple{varbit}]
+ └── (B'11',)
 
 # Don't fold: cannot mix bit array sizes error.
 norm expect-not=FoldBinary
 SELECT B'01' | B'11001001010101'
 ----
 values
- ├── columns: "?column?":1(varbit)
+ ├── columns: "?column?":1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (B'01' | B'11001001010101',) [type=tuple{varbit}]
+ └── (B'01' | B'11001001010101',)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMP
 ----
 values
- ├── columns: "?column?":1(interval!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('-24:00:00',) [type=tuple{interval}]
+ └── ('-24:00:00',)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMPTZ
 ----
 values
- ├── columns: "?column?":1(interval!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('-21:00:00',) [type=tuple{interval}]
+ └── ('-21:00:00',)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT ARRAY['a','b','c'] || 'd'::string
 ----
 values
- ├── columns: "?column?":1(string[]!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (ARRAY['a','b','c','d'],) [type=tuple{string[]}]
+ └── (ARRAY['a','b','c','d'],)
 
 # Fold constant.
 norm expect=FoldBinary
 SELECT ARRAY['a','b','c'] || ARRAY['d','e','f']
 ----
 values
- ├── columns: "?column?":1(string[]!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (ARRAY['a','b','c','d','e','f'],) [type=tuple{string[]}]
+ └── (ARRAY['a','b','c','d','e','f'],)
 
 # NULL should not be added to the array.
 norm expect=FoldBinary
 SELECT ARRAY[1,2,3] || NULL
 ----
 values
- ├── columns: "?column?":1(int[]!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (ARRAY[1,2,3],) [type=tuple{int[]}]
+ └── (ARRAY[1,2,3],)
 
 # Regression test for #34270.
 norm expect=FoldBinary
 VALUES ((e'{}' ->> 0) || (e'{}' ->> 0))
 ----
 values
- ├── columns: column1:1(string)
+ ├── columns: column1:1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (NULL,) [type=tuple{string}]
+ └── (NULL,)
 
 # --------------------------------------------------
 # FoldUnary
@@ -430,21 +430,21 @@ norm expect=FoldUnary
 SELECT -(1:::int)
 ----
 values
- ├── columns: "?column?":1(int!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (-1,) [type=tuple{int}]
+ └── (-1,)
 
 norm expect=FoldUnary
 SELECT -(1:::float)
 ----
 values
- ├── columns: "?column?":1(float!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (-1.0,) [type=tuple{float}]
+ └── (-1.0,)
 
 # TODO(justin): it would be better if this produced an error in the optimizer
 # rather than falling back to execution to error.
@@ -497,33 +497,33 @@ norm expect=FoldUnary
 SELECT -('-9223372036854775808d'::interval);
 ----
 values
- ├── columns: "?column?":1(interval!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('-9223372036854775808 days',) [type=tuple{interval}]
+ └── ('-9223372036854775808 days',)
 
 # Fold constant.
 norm expect=FoldUnary
 SELECT ~(500::INT)
 ----
 values
- ├── columns: "?column?":1(int!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (-501,) [type=tuple{int}]
+ └── (-501,)
 
 # Fold constant.
 norm expect=FoldUnary
 SELECT ~('35.231.178.195'::INET)
 ----
 values
- ├── columns: "?column?":1(inet!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('220.24.77.60',) [type=tuple{inet}]
+ └── ('220.24.77.60',)
 
 # --------------------------------------------------
 # FoldComparison
@@ -532,221 +532,221 @@ norm expect=FoldComparison
 SELECT 1::INT < 2::INT
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 1::INT > 2::INT
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 10.0::FLOAT <= 20.0::FLOAT
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 10.0::FLOAT >= 20.0::FLOAT
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 2.0::DECIMAL = 2::INT
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 2.0::DECIMAL != 2::INT
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 100 IS NOT DISTINCT FROM 200
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 100 IS DISTINCT FROM 200
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 'foo' IN ('a', 'b', 'c')
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 'foo' NOT IN ('a', 'b', 'c')
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 'foo' LIKE 'foobar'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 'foo' NOT LIKE 'foobar'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 'foo' ILIKE 'FOO%'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 'foo' NOT ILIKE 'FOO%'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 'monday' SIMILAR TO '_onday'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 'monday' NOT SIMILAR TO '_onday'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 'tuEsday' ~ 't[uU][eE]sday'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 'tuEsday' !~ 't[uU][eE]sday'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT 'wednesday' ~* 'W.*y'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT 'wednesday' !~* 'W.*y'
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 norm expect=FoldComparison
 SELECT '[1, 2]'::JSONB <@ '[1, 2, 3]'::JSONB
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (true,) [type=tuple{bool}]
+ └── (true,)
 
 norm expect=FoldComparison
 SELECT ('a', 'b', 'c') = ('d', 'e', 'f')
 ----
 values
- ├── columns: "?column?":1(bool!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (false,) [type=tuple{bool}]
+ └── (false,)
 
 # --------------------------------------------------
 # FoldCast
@@ -755,11 +755,11 @@ norm expect=FoldCast
 SELECT 1::int/1
 ----
 values
- ├── columns: "?column?":1(decimal!null)
+ ├── columns: "?column?":1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (1,) [type=tuple{decimal}]
+ └── (1,)
 
 # --------------------------------------------------
 # FoldFunction
@@ -768,52 +768,52 @@ norm expect=FoldFunction
 SELECT length('abc'), upper('xyz'), lower('DEF')
 ----
 values
- ├── columns: length:1(int!null) upper:2(string!null) lower:3(string!null)
+ ├── columns: length:1!null upper:2!null lower:3!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-3)
- └── (3, 'XYZ', 'def') [type=tuple{int, string, string}]
+ └── (3, 'XYZ', 'def')
 
 norm expect=FoldFunction
 SELECT encode('abc', 'hex'), decode('616263', 'hex')
 ----
 values
- ├── columns: encode:1(string!null) decode:2(bytes!null)
+ ├── columns: encode:1!null decode:2!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- └── ('616263', '\x616263') [type=tuple{string, bytes}]
+ └── ('616263', '\x616263')
 
 norm expect=FoldFunction locality=(region=east,dc=east1-b)
 SELECT crdb_internal.locality_value('dc')
 ----
 values
- ├── columns: crdb_internal.locality_value:1(string!null)
+ ├── columns: crdb_internal.locality_value:1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('east1-b',) [type=tuple{string}]
+ └── ('east1-b',)
 
 norm expect=FoldFunction
 SELECT crdb_internal.locality_value('unk')
 ----
 values
- ├── columns: crdb_internal.locality_value:1(string)
+ ├── columns: crdb_internal.locality_value:1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (NULL,) [type=tuple{string}]
+ └── (NULL,)
 
 norm expect-not=FoldFunction
 SELECT now(), current_user(), current_database()
 ----
 values
- ├── columns: now:1(timestamptz) current_user:2(string) current_database:3(string)
+ ├── columns: now:1 current_user:2 current_database:3
  ├── cardinality: [1 - 1]
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1-3)
- └── (now(), current_user(), current_database()) [type=tuple{timestamptz, string, string}]
+ └── (now(), current_user(), current_database())
 
 # --------------------------------------------------
 # FoldIndirection
@@ -823,92 +823,92 @@ norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][1] FROM a
 ----
 project
- ├── columns: array:7(int)
+ ├── columns: array:7
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── variable: i [type=int, outer=(2)]
+      └── i:2 [as=array:7, outer=(2)]
 
 norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][2] FROM a
 ----
 project
- ├── columns: array:7(int)
+ ├── columns: array:7
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── i + 1 [type=int, outer=(2)]
+      └── i:2 + 1 [as=array:7, outer=(2)]
 
 # Fold when input is a DArray constant.
 norm expect=FoldIndirection
 SELECT ARRAY[4, 5, 6][2] FROM a
 ----
 project
- ├── columns: array:7(int!null)
+ ├── columns: array:7!null
  ├── fd: ()-->(7)
  ├── scan a
  └── projections
-      └── const: 5 [type=int]
+      └── 5 [as=array:7]
 
 # Array bounds are out-of-range.
 norm expect=FoldIndirection
 SELECT ARRAY[s, 'foo'][0] FROM a
 ----
 project
- ├── columns: array:7(string)
+ ├── columns: array:7
  ├── fd: ()-->(7)
  ├── scan a
  └── projections
-      └── null [type=string]
+      └── CAST(NULL AS STRING) [as=array:7]
 
 norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][3] FROM a
 ----
 project
- ├── columns: array:7(int)
+ ├── columns: array:7
  ├── fd: ()-->(7)
  ├── scan a
  └── projections
-      └── null [type=int]
+      └── CAST(NULL AS INT8) [as=array:7]
 
 norm expect=FoldIndirection
 SELECT ARRAY[4, 5, 6][0] FROM a
 ----
 project
- ├── columns: array:7(int)
+ ├── columns: array:7
  ├── fd: ()-->(7)
  ├── scan a
  └── projections
-      └── null [type=int]
+      └── CAST(NULL AS INT8) [as=array:7]
 
 # Array is dynamically constructed.
 norm expect-not=FoldIndirection
 SELECT arr[0] FROM a
 ----
 project
- ├── columns: arr:7(int)
+ ├── columns: arr:7
  ├── scan a
- │    └── columns: a.arr:6(int[])
+ │    └── columns: a.arr:6
  └── projections
-      └── a.arr[0] [type=int, outer=(6)]
+      └── a.arr:6[0] [as=arr:7, outer=(6)]
 
 # Regression test for #40404.
 norm expect=FoldIndirection
 SELECT (SELECT x[1]) FROM (VALUES(null::oid[])) v(x)
 ----
 values
- ├── columns: x:3(oid)
+ ├── columns: x:3
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(3)
- └── tuple [type=tuple{oid}]
-      └── subquery [type=oid]
+ └── tuple
+      └── subquery
            └── values
-                ├── columns: x:2(oid)
+                ├── columns: x:2
                 ├── cardinality: [1 - 1]
                 ├── key: ()
                 ├── fd: ()-->(2)
-                └── (NULL,) [type=tuple{oid}]
+                └── (NULL,)
 
 # --------------------------------------------------
 # FoldColumnAccess
@@ -920,32 +920,32 @@ norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', i) AS foo, bar)][1]).foo FROM a
 ----
 project
- ├── columns: foo:7(string!null)
+ ├── columns: foo:7!null
  ├── fd: ()-->(7)
  ├── scan a
  └── projections
-      └── const: 'foo' [type=string]
+      └── 'foo' [as=foo:7]
 
 norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', i) AS foo, bar)][1]).bar FROM a
 ----
 project
- ├── columns: bar:7(int)
+ ├── columns: bar:7
  ├── scan a
- │    └── columns: i:2(int)
+ │    └── columns: i:2
  └── projections
-      └── variable: i [type=int, outer=(2)]
+      └── i:2 [as=bar:7, outer=(2)]
 
 # Fold when input is a constant DTuple.
 norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', 'bar') AS foo, bar)][1]).foo
 ----
 values
- ├── columns: foo:1(string!null)
+ ├── columns: foo:1!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('foo',) [type=tuple{string}]
+ └── ('foo',)
 
 # --------------------------------------------------
 # FoldEqualsAnyNull
@@ -954,7 +954,7 @@ norm expect=FoldEqualsAnyNull
 SELECT * FROM a WHERE i = ANY (NULL::int[])
 ----
 values
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) arr:6(int[]!null)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null arr:6!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-6)

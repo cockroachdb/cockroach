@@ -35,19 +35,19 @@ project
       ├── canary column: 13
       ├── fetch columns: a:10(int) b:11(int) c:12(int) rowid:13(int)
       ├── insert-mapping:
-      │    ├──  x:5 => a:1
-      │    ├──  y:6 => b:2
-      │    ├──  column9:9 => c:3
-      │    └──  column8:8 => rowid:4
+      │    ├── x:5 => a:1
+      │    ├── y:6 => b:2
+      │    ├── column9:9 => c:3
+      │    └── column8:8 => rowid:4
       ├── update-mapping:
-      │    ├──  upsert_a:17 => a:1
-      │    ├──  upsert_b:18 => b:2
-      │    └──  upsert_c:19 => c:3
+      │    ├── upsert_a:17 => a:1
+      │    ├── upsert_b:18 => b:2
+      │    └── upsert_c:19 => c:3
       ├── return-mapping:
-      │    ├──  upsert_a:17 => a:1
-      │    ├──  upsert_b:18 => b:2
-      │    ├──  upsert_c:19 => c:3
-      │    └──  upsert_rowid:20 => rowid:4
+      │    ├── upsert_a:17 => a:1
+      │    ├── upsert_b:18 => b:2
+      │    ├── upsert_c:19 => c:3
+      │    └── upsert_rowid:20 => rowid:4
       ├── side-effects, mutations
       └── project
            ├── columns: upsert_a:17(int!null) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int) column16:16(int)
@@ -115,20 +115,20 @@ project
            │    │    │    │    │    │         │    └── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
            │    │    │    │    │    │         └── filters
            │    │    │    │    │    │              └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
-           │    │    │    │    │    │                   ├── variable: y [type=int]
+           │    │    │    │    │    │                   ├── variable: y:6 [type=int]
            │    │    │    │    │    │                   └── const: 1 [type=int]
            │    │    │    │    │    └── projections
-           │    │    │    │    │         └── function: unique_rowid [type=int, side-effects]
+           │    │    │    │    │         └── function: unique_rowid [as=column8:8, type=int, side-effects]
            │    │    │    │    └── projections
-           │    │    │    │         └── plus [type=int, outer=(6)]
-           │    │    │    │              ├── variable: y [type=int]
+           │    │    │    │         └── plus [as=column9:9, type=int, outer=(6)]
+           │    │    │    │              ├── variable: y:6 [type=int]
            │    │    │    │              └── const: 1 [type=int]
            │    │    │    ├── scan abc
            │    │    │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
            │    │    │    │    ├── computed column expressions
-           │    │    │    │    │    └── c:12(int)
+           │    │    │    │    │    └── c:12
            │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── variable: b [type=int]
+           │    │    │    │    │              ├── variable: b:11 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
@@ -136,53 +136,53 @@ project
            │    │    │    │    └── interesting orderings: (+13) (+10) (+11,+12,+13)
            │    │    │    └── filters
            │    │    │         ├── eq [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
-           │    │    │         │    ├── variable: y [type=int]
-           │    │    │         │    └── variable: b [type=int]
+           │    │    │         │    ├── variable: y:6 [type=int]
+           │    │    │         │    └── variable: b:11 [type=int]
            │    │    │         └── eq [type=bool, outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
-           │    │    │              ├── variable: column9 [type=int]
-           │    │    │              └── variable: c [type=int]
+           │    │    │              ├── variable: column9:9 [type=int]
+           │    │    │              └── variable: c:12 [type=int]
            │    │    └── projections
-           │    │         ├── const: 1 [type=int]
-           │    │         └── plus [type=int, outer=(6,12)]
-           │    │              ├── variable: y [type=int]
-           │    │              └── variable: c [type=int]
+           │    │         ├── const: 1 [as=column14:14, type=int]
+           │    │         └── plus [as=column15:15, type=int, outer=(6,12)]
+           │    │              ├── variable: y:6 [type=int]
+           │    │              └── variable: c:12 [type=int]
            │    └── projections
-           │         └── plus [type=int, outer=(15)]
-           │              ├── variable: column15 [type=int]
+           │         └── plus [as=column16:16, type=int, outer=(15)]
+           │              ├── variable: column15:15 [type=int]
            │              └── const: 1 [type=int]
            └── projections
-                ├── case [type=int, outer=(5,13,14)]
+                ├── case [as=upsert_a:17, type=int, outer=(5,13,14)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    ├── variable: rowid:13 [type=int]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: x [type=int]
-                │    └── variable: column14 [type=int]
-                ├── case [type=int, outer=(6,13,15)]
+                │    │    └── variable: x:5 [type=int]
+                │    └── variable: column14:14 [type=int]
+                ├── case [as=upsert_b:18, type=int, outer=(6,13,15)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    ├── variable: rowid:13 [type=int]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: y [type=int]
-                │    └── variable: column15 [type=int]
-                ├── case [type=int, outer=(9,13,16)]
+                │    │    └── variable: y:6 [type=int]
+                │    └── variable: column15:15 [type=int]
+                ├── case [as=upsert_c:19, type=int, outer=(9,13,16)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    ├── variable: rowid:13 [type=int]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: column9 [type=int]
-                │    └── variable: column16 [type=int]
-                └── case [type=int, outer=(8,13)]
+                │    │    └── variable: column9:9 [type=int]
+                │    └── variable: column16:16 [type=int]
+                └── case [as=upsert_rowid:20, type=int, outer=(8,13)]
                      ├── true [type=bool]
                      ├── when [type=int]
                      │    ├── is [type=bool]
-                     │    │    ├── variable: rowid [type=int]
+                     │    │    ├── variable: rowid:13 [type=int]
                      │    │    └── null [type=unknown]
-                     │    └── variable: column8 [type=int]
-                     └── variable: rowid [type=int]
+                     │    └── variable: column8:8 [type=int]
+                     └── variable: rowid:13 [type=int]
 
 # DO NOTHING case.
 build
@@ -200,10 +200,10 @@ project
  └── insert abc
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
       ├── insert-mapping:
-      │    ├──  x:5 => a:1
-      │    ├──  y:6 => b:2
-      │    ├──  column9:9 => c:3
-      │    └──  column8:8 => rowid:4
+      │    ├── x:5 => a:1
+      │    ├── y:6 => b:2
+      │    ├── column9:9 => c:3
+      │    └── column8:8 => rowid:4
       ├── side-effects, mutations
       ├── key: (1)
       ├── fd: (1)-->(2-4), (2)-->(3)
@@ -300,17 +300,17 @@ project
                 │    │         │    │         │    │    │    │         ├── prune: (5-7)
                 │    │         │    │         │    │    │    │         └── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
                 │    │         │    │         │    │    │    └── projections
-                │    │         │    │         │    │    │         └── function: unique_rowid [type=int, side-effects]
+                │    │         │    │         │    │    │         └── function: unique_rowid [as=column8:8, type=int, side-effects]
                 │    │         │    │         │    │    └── projections
-                │    │         │    │         │    │         └── plus [type=int, outer=(6)]
-                │    │         │    │         │    │              ├── variable: y [type=int]
+                │    │         │    │         │    │         └── plus [as=column9:9, type=int, outer=(6)]
+                │    │         │    │         │    │              ├── variable: y:6 [type=int]
                 │    │         │    │         │    │              └── const: 1 [type=int]
                 │    │         │    │         │    ├── scan abc
                 │    │         │    │         │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
                 │    │         │    │         │    │    ├── computed column expressions
-                │    │         │    │         │    │    │    └── c:12(int)
+                │    │         │    │         │    │    │    └── c:12
                 │    │         │    │         │    │    │         └── plus [type=int]
-                │    │         │    │         │    │    │              ├── variable: b [type=int]
+                │    │         │    │         │    │    │              ├── variable: b:11 [type=int]
                 │    │         │    │         │    │    │              └── const: 1 [type=int]
                 │    │         │    │         │    │    ├── key: (13)
                 │    │         │    │         │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
@@ -318,18 +318,18 @@ project
                 │    │         │    │         │    │    └── interesting orderings: (+13) (+10) (+11,+12,+13)
                 │    │         │    │         │    └── filters
                 │    │         │    │         │         └── eq [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
-                │    │         │    │         │              ├── variable: column8 [type=int]
-                │    │         │    │         │              └── variable: rowid [type=int]
+                │    │         │    │         │              ├── variable: column8:8 [type=int]
+                │    │         │    │         │              └── variable: rowid:13 [type=int]
                 │    │         │    │         └── filters
                 │    │         │    │              └── is [type=bool, outer=(13), constraints=(/13: [/NULL - /NULL]; tight), fd=()-->(13)]
-                │    │         │    │                   ├── variable: rowid [type=int]
+                │    │         │    │                   ├── variable: rowid:13 [type=int]
                 │    │         │    │                   └── null [type=unknown]
                 │    │         │    ├── scan abc
                 │    │         │    │    ├── columns: a:14(int!null) b:15(int) c:16(int) rowid:17(int!null)
                 │    │         │    │    ├── computed column expressions
-                │    │         │    │    │    └── c:16(int)
+                │    │         │    │    │    └── c:16
                 │    │         │    │    │         └── plus [type=int]
-                │    │         │    │    │              ├── variable: b [type=int]
+                │    │         │    │    │              ├── variable: b:15 [type=int]
                 │    │         │    │    │              └── const: 1 [type=int]
                 │    │         │    │    ├── key: (17)
                 │    │         │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17)
@@ -337,18 +337,18 @@ project
                 │    │         │    │    └── interesting orderings: (+17) (+14) (+15,+16,+17)
                 │    │         │    └── filters
                 │    │         │         └── eq [type=bool, outer=(5,14), constraints=(/5: (/NULL - ]; /14: (/NULL - ]), fd=(5)==(14), (14)==(5)]
-                │    │         │              ├── variable: x [type=int]
-                │    │         │              └── variable: a [type=int]
+                │    │         │              ├── variable: x:5 [type=int]
+                │    │         │              └── variable: a:14 [type=int]
                 │    │         └── filters
                 │    │              └── is [type=bool, outer=(14), constraints=(/14: [/NULL - /NULL]; tight), fd=()-->(14)]
-                │    │                   ├── variable: a [type=int]
+                │    │                   ├── variable: a:14 [type=int]
                 │    │                   └── null [type=unknown]
                 │    ├── scan abc
                 │    │    ├── columns: a:18(int!null) b:19(int) c:20(int) rowid:21(int!null)
                 │    │    ├── computed column expressions
-                │    │    │    └── c:20(int)
+                │    │    │    └── c:20
                 │    │    │         └── plus [type=int]
-                │    │    │              ├── variable: b [type=int]
+                │    │    │              ├── variable: b:19 [type=int]
                 │    │    │              └── const: 1 [type=int]
                 │    │    ├── key: (21)
                 │    │    ├── fd: (21)-->(18-20), (18)-->(19-21), (19,20)~~>(18,21)
@@ -356,14 +356,14 @@ project
                 │    │    └── interesting orderings: (+21) (+18) (+19,+20,+21)
                 │    └── filters
                 │         ├── eq [type=bool, outer=(6,19), constraints=(/6: (/NULL - ]; /19: (/NULL - ]), fd=(6)==(19), (19)==(6)]
-                │         │    ├── variable: y [type=int]
-                │         │    └── variable: b [type=int]
+                │         │    ├── variable: y:6 [type=int]
+                │         │    └── variable: b:19 [type=int]
                 │         └── eq [type=bool, outer=(9,20), constraints=(/9: (/NULL - ]; /20: (/NULL - ]), fd=(9)==(20), (20)==(9)]
-                │              ├── variable: column9 [type=int]
-                │              └── variable: c [type=int]
+                │              ├── variable: column9:9 [type=int]
+                │              └── variable: c:20 [type=int]
                 └── filters
                      └── is [type=bool, outer=(21), constraints=(/21: [/NULL - /NULL]; tight), fd=()-->(21)]
-                          ├── variable: rowid [type=int]
+                          ├── variable: rowid:21 [type=int]
                           └── null [type=unknown]
 
 # UPSERT case.
@@ -380,18 +380,18 @@ project
  │    ├── canary column: 12
  │    ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
  │    ├── insert-mapping:
- │    │    ├──  column1:5 => a:1
- │    │    ├──  column6:6 => b:2
- │    │    ├──  column8:8 => c:3
- │    │    └──  column7:7 => rowid:4
+ │    │    ├── column1:5 => a:1
+ │    │    ├── column6:6 => b:2
+ │    │    ├── column8:8 => c:3
+ │    │    └── column7:7 => rowid:4
  │    ├── update-mapping:
- │    │    ├──  column1:5 => a:1
- │    │    └──  upsert_c:15 => c:3
+ │    │    ├── column1:5 => a:1
+ │    │    └── upsert_c:15 => c:3
  │    ├── return-mapping:
- │    │    ├──  column1:5 => a:1
- │    │    ├──  upsert_b:14 => b:2
- │    │    ├──  upsert_c:15 => c:3
- │    │    └──  upsert_rowid:16 => rowid:4
+ │    │    ├── column1:5 => a:1
+ │    │    ├── upsert_b:14 => b:2
+ │    │    ├── upsert_c:15 => c:3
+ │    │    └── upsert_rowid:16 => rowid:4
  │    ├── cardinality: [2 - ]
  │    ├── side-effects, mutations
  │    └── project
@@ -439,18 +439,18 @@ project
  │         │    │    │    │    │    └── tuple [type=tuple{int}]
  │         │    │    │    │    │         └── const: 2 [type=int]
  │         │    │    │    │    └── projections
- │         │    │    │    │         ├── const: 10 [type=int]
- │         │    │    │    │         └── function: unique_rowid [type=int, side-effects]
+ │         │    │    │    │         ├── const: 10 [as=column6:6, type=int]
+ │         │    │    │    │         └── function: unique_rowid [as=column7:7, type=int, side-effects]
  │         │    │    │    └── projections
- │         │    │    │         └── plus [type=int, outer=(6)]
- │         │    │    │              ├── variable: column6 [type=int]
+ │         │    │    │         └── plus [as=column8:8, type=int, outer=(6)]
+ │         │    │    │              ├── variable: column6:6 [type=int]
  │         │    │    │              └── const: 1 [type=int]
  │         │    │    ├── scan abc
  │         │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
  │         │    │    │    ├── computed column expressions
- │         │    │    │    │    └── c:11(int)
+ │         │    │    │    │    └── c:11
  │         │    │    │    │         └── plus [type=int]
- │         │    │    │    │              ├── variable: b [type=int]
+ │         │    │    │    │              ├── variable: b:10 [type=int]
  │         │    │    │    │              └── const: 1 [type=int]
  │         │    │    │    ├── key: (12)
  │         │    │    │    ├── fd: (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12)
@@ -458,38 +458,38 @@ project
  │         │    │    │    └── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         │    │    └── filters
  │         │    │         └── eq [type=bool, outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
- │         │    │              ├── variable: column7 [type=int]
- │         │    │              └── variable: rowid [type=int]
+ │         │    │              ├── variable: column7:7 [type=int]
+ │         │    │              └── variable: rowid:12 [type=int]
  │         │    └── projections
- │         │         └── plus [type=int, outer=(10)]
- │         │              ├── variable: b [type=int]
+ │         │         └── plus [as=column13:13, type=int, outer=(10)]
+ │         │              ├── variable: b:10 [type=int]
  │         │              └── const: 1 [type=int]
  │         └── projections
- │              ├── case [type=int, outer=(6,10,12)]
+ │              ├── case [as=upsert_b:14, type=int, outer=(6,10,12)]
  │              │    ├── true [type=bool]
  │              │    ├── when [type=int]
  │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid [type=int]
+ │              │    │    │    ├── variable: rowid:12 [type=int]
  │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: column6 [type=int]
- │              │    └── variable: b [type=int]
- │              ├── case [type=int, outer=(8,12,13)]
+ │              │    │    └── variable: column6:6 [type=int]
+ │              │    └── variable: b:10 [type=int]
+ │              ├── case [as=upsert_c:15, type=int, outer=(8,12,13)]
  │              │    ├── true [type=bool]
  │              │    ├── when [type=int]
  │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid [type=int]
+ │              │    │    │    ├── variable: rowid:12 [type=int]
  │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: column8 [type=int]
- │              │    └── variable: column13 [type=int]
- │              └── case [type=int, outer=(7,12)]
+ │              │    │    └── variable: column8:8 [type=int]
+ │              │    └── variable: column13:13 [type=int]
+ │              └── case [as=upsert_rowid:16, type=int, outer=(7,12)]
  │                   ├── true [type=bool]
  │                   ├── when [type=int]
  │                   │    ├── is [type=bool]
- │                   │    │    ├── variable: rowid [type=int]
+ │                   │    │    ├── variable: rowid:12 [type=int]
  │                   │    │    └── null [type=unknown]
- │                   │    └── variable: column7 [type=int]
- │                   └── variable: rowid [type=int]
+ │                   │    └── variable: column7:7 [type=int]
+ │                   └── variable: rowid:12 [type=int]
  └── projections
-      └── plus [type=int, outer=(2,3)]
-           ├── variable: b [type=int]
-           └── variable: c [type=int]
+      └── plus [as="?column?":17, type=int, outer=(2,3)]
+           ├── variable: b:2 [type=int]
+           └── variable: c:3 [type=int]

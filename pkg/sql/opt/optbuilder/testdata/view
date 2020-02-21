@@ -10,43 +10,41 @@ build
 SELECT * FROM av
 ----
 project
- ├── columns: k:1(int!null) i:2(int) s:4(string)
+ ├── columns: k:1!null i:2 s:4
  └── scan a
-      └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      └── columns: k:1!null i:2 f:3 s:4 j:5
 
 build
 SELECT av.i, s, t.public.av.s AS s2 FROM t.av
 ----
 project
- ├── columns: i:2(int) s:4(string) s2:4(string)
+ ├── columns: i:2 s:4 s2:4
  └── project
-      ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── columns: k:1!null i:2 s:4
       └── scan a
-           └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+           └── columns: k:1!null i:2 f:3 s:4 j:5
 
 # Self view join (multiple references to view).
 build
 SELECT av.k, av2.s FROM av, av AS av2 WHERE av.k=av2.k
 ----
 project
- ├── columns: k:1(int!null) s:9(string)
+ ├── columns: k:1!null s:9
  └── select
-      ├── columns: k:1(int!null) i:2(int) s:4(string) k:6(int!null) i:7(int) s:9(string)
+      ├── columns: k:1!null i:2 s:4 k:6!null i:7 s:9
       ├── inner-join (cross)
-      │    ├── columns: k:1(int!null) i:2(int) s:4(string) k:6(int!null) i:7(int) s:9(string)
+      │    ├── columns: k:1!null i:2 s:4 k:6!null i:7 s:9
       │    ├── project
-      │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    │    ├── columns: k:1!null i:2 s:4
       │    │    └── scan a
-      │    │         └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │         └── columns: k:1!null i:2 f:3 s:4 j:5
       │    ├── project
-      │    │    ├── columns: k:6(int!null) i:7(int) s:9(string)
+      │    │    ├── columns: k:6!null i:7 s:9
       │    │    └── scan a
-      │    │         └── columns: k:6(int!null) i:7(int) f:8(float) s:9(string) j:10(jsonb)
+      │    │         └── columns: k:6!null i:7 f:8 s:9 j:10
       │    └── filters (true)
       └── filters
-           └── eq [type=bool]
-                ├── variable: k [type=int]
-                └── variable: k [type=int]
+           └── k:1 = k:6
 
 # View with aliased column names, filter, and ORDER BY.
 exec-ddl
@@ -58,40 +56,36 @@ build
 SELECT * FROM av2
 ----
 project
- ├── columns: x:1(int!null) y:3(float)
+ ├── columns: x:1!null y:3
  └── project
-      ├── columns: k:1(int!null) f:3(float) s:4(string)
+      ├── columns: k:1!null f:3 s:4
       └── select
-           ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+           ├── columns: k:1!null i:2!null f:3 s:4 j:5
            ├── scan a
-           │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+           │    └── columns: k:1!null i:2 f:3 s:4 j:5
            └── filters
-                └── eq [type=bool]
-                     ├── variable: i [type=int]
-                     └── const: 10 [type=int]
+                └── i:2 = 10
 
 # Sort used by group by because of presence of ARRAY_AGG.
 build
 SELECT array_agg(y) FROM av2
 ----
 scalar-group-by
- ├── columns: array_agg:6(float[])
+ ├── columns: array_agg:6
  ├── internal-ordering: +4
  ├── sort
- │    ├── columns: f:3(float) s:4(string)
+ │    ├── columns: f:3 s:4
  │    ├── ordering: +4
  │    └── project
- │         ├── columns: f:3(float) s:4(string)
+ │         ├── columns: f:3 s:4
  │         └── project
- │              ├── columns: k:1(int!null) f:3(float) s:4(string)
+ │              ├── columns: k:1!null f:3 s:4
  │              └── select
- │                   ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │                   ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │                   ├── scan a
- │                   │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │                   │    └── columns: k:1!null i:2 f:3 s:4 j:5
  │                   └── filters
- │                        └── eq [type=bool]
- │                             ├── variable: i [type=int]
- │                             └── const: 10 [type=int]
+ │                        └── i:2 = 10
  └── aggregations
-      └── array-agg [type=float[]]
-           └── variable: f [type=float]
+      └── array-agg [as=array_agg:6]
+           └── f:3
