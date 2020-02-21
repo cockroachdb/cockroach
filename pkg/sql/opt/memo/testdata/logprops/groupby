@@ -6,50 +6,77 @@ exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 ----
 
+# Group-by with interesting aggregate expressions.
 build
-SELECT y, sum(z), x, False FROM xyzs GROUP BY x, y
+SELECT y, sum(z), x, FALSE, avg(z) FILTER (WHERE z>0), string_agg(DISTINCT s, ',')
+FROM xyzs
+WHERE s IS NOT NULL
+GROUP BY x, y
 ----
 project
- ├── columns: y:2(int) sum:5(float) x:1(int!null) bool:6(bool!null)
+ ├── columns: y:2(int) sum:5(float!null) x:1(int!null) bool:10(bool!null) avg:7(float) string_agg:9(string!null)
  ├── key: (1)
- ├── fd: ()-->(6), (1)-->(2,5)
- ├── prune: (1,2,5,6)
+ ├── fd: ()-->(10), (1)-->(2,5,7,9)
+ ├── prune: (1,2,5,7,9,10)
  ├── interesting orderings: (+1)
  ├── group-by
- │    ├── columns: x:1(int!null) y:2(int) sum:5(float)
+ │    ├── columns: x:1(int!null) y:2(int) sum:5(float!null) avg:7(float) string_agg:9(string!null)
  │    ├── grouping columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,5)
- │    ├── prune: (5)
+ │    ├── fd: (1)-->(2,5,7,9)
+ │    ├── prune: (5,7,9)
  │    ├── interesting orderings: (+1)
  │    ├── project
- │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
+ │    │    ├── columns: column6:6(bool!null) column8:8(string!null) x:1(int!null) y:2(int) z:3(float!null) s:4(string!null)
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2,3)
- │    │    ├── prune: (1-3)
- │    │    ├── interesting orderings: (+1)
- │    │    └── scan xyzs
- │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │         ├── key: (1)
- │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    │         ├── prune: (1-4)
- │    │         └── interesting orderings: (+1) (-4,+3,+1)
+ │    │    ├── fd: ()-->(8), (1)-->(2-4,6), (3,4)-->(1,2)
+ │    │    ├── prune: (1-4,6,8)
+ │    │    ├── interesting orderings: (+1) (-4,+3,+1)
+ │    │    ├── select
+ │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string!null)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2-4), (3,4)-->(1,2)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    ├── interesting orderings: (+1) (-4,+3,+1)
+ │    │    │    ├── scan xyzs
+ │    │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    │    │    ├── prune: (1-4)
+ │    │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
+ │    │    │    └── filters
+ │    │    │         └── is-not [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │    │    │              ├── variable: s [type=string]
+ │    │    │              └── null [type=unknown]
+ │    │    └── projections
+ │    │         ├── gt [type=bool, outer=(3)]
+ │    │         │    ├── variable: z [type=float]
+ │    │         │    └── const: 0.0 [type=float]
+ │    │         └── const: ',' [type=string]
  │    └── aggregations
- │         └── sum [type=float, outer=(3)]
- │              └── variable: z [type=float]
+ │         ├── sum [type=float, outer=(3)]
+ │         │    └── variable: z [type=float]
+ │         ├── agg-filter [type=float, outer=(3,6)]
+ │         │    ├── avg [type=float]
+ │         │    │    └── variable: z [type=float]
+ │         │    └── variable: column6 [type=bool]
+ │         └── agg-distinct [type=string, outer=(4,8)]
+ │              └── string-agg [type=string]
+ │                   ├── variable: s [type=string]
+ │                   └── variable: column8 [type=string]
  └── projections
       └── false [type=bool]
 
 # Scalar groupby.
 build
-SELECT sum(x), max(y) FROM xyzs
+SELECT sum(x), max(y), count(x) FROM xyzs
 ----
 scalar-group-by
- ├── columns: sum:5(decimal) max:6(int)
+ ├── columns: sum:5(decimal) max:6(int) count:7(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5,6)
- ├── prune: (5,6)
+ ├── fd: ()-->(5-7)
+ ├── prune: (5-7)
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
@@ -65,8 +92,10 @@ scalar-group-by
  └── aggregations
       ├── sum [type=decimal, outer=(1)]
       │    └── variable: x [type=int]
-      └── max [type=int, outer=(2)]
-           └── variable: y [type=int]
+      ├── max [type=int, outer=(2)]
+      │    └── variable: y [type=int]
+      └── count [type=int, outer=(1)]
+           └── variable: x [type=int]
 
 # Group by unique index columns.
 build
@@ -98,10 +127,10 @@ build
 SELECT y, sum(z) FROM xyzs GROUP BY z, y
 ----
 project
- ├── columns: y:2(int) sum:5(float)
+ ├── columns: y:2(int) sum:5(float!null)
  ├── prune: (2,5)
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) sum:5(float)
+      ├── columns: y:2(int) z:3(float!null) sum:5(float!null)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── key: (2,3)
       ├── fd: (2,3)-->(5)
@@ -173,7 +202,7 @@ project
  ├── columns: sum:12(decimal)
  ├── prune: (12)
  ├── group-by
- │    ├── columns: xyzs.y:2(int) sum:10(decimal)
+ │    ├── columns: xyzs.y:2(int) sum:10(decimal!null)
  │    ├── grouping columns: xyzs.y:2(int)
  │    ├── key: (2)
  │    ├── fd: (2)-->(10)
@@ -260,7 +289,7 @@ opt
 SELECT x, count(z) FROM xyzs GROUP BY x HAVING x=1
 ----
 group-by
- ├── columns: x:1(int) count:5(int)
+ ├── columns: x:1(int!null) count:5(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1,5)

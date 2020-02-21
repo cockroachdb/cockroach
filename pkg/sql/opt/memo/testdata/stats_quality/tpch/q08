@@ -61,7 +61,7 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q8_sort_1
- ├── columns: o_year:61(float) mkt_share:66(float)
+ ├── columns: o_year:61(float) mkt_share:66(float!null)
  ├── side-effects
  ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(66)=717.329701, null(66)=0]
  ├── key: (61)
@@ -69,14 +69,14 @@ sort
  ├── ordering: +61
  └── project
       ├── save-table-name: q8_project_2
-      ├── columns: mkt_share:66(float) o_year:61(float)
+      ├── columns: mkt_share:66(float!null) o_year:61(float)
       ├── side-effects
       ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(66)=717.329701, null(66)=0]
       ├── key: (61)
       ├── fd: (61)-->(66)
       ├── group-by
       │    ├── save-table-name: q8_group_by_3
-      │    ├── columns: o_year:61(float) sum:64(float) sum:65(float)
+      │    ├── columns: o_year:61(float) sum:64(float!null) sum:65(float!null)
       │    ├── grouping columns: o_year:61(float)
       │    ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(64)=717.329701, null(64)=0, distinct(65)=717.329701, null(65)=0, distinct(64,65)=717.329701, null(64,65)=0]
       │    ├── key: (61)

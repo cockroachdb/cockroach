@@ -58,7 +58,7 @@ sort
       ├── fd: (1)-->(18)
       ├── group-by
       │    ├── save-table-name: q11_group_by_3
-      │    ├── columns: ps_partkey:1(int!null) sum:18(float)
+      │    ├── columns: ps_partkey:1(int!null) sum:18(float!null)
       │    ├── grouping columns: ps_partkey:1(int!null)
       │    ├── stats: [rows=29783.4869, distinct(1)=29783.4869, null(1)=0, distinct(18)=29783.4869, null(18)=0]
       │    ├── key: (1)

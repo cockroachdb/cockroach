@@ -601,7 +601,7 @@ WHERE ol_w_id = 1
 ----
 scalar-group-by
  ├── save-table-name: stock_level_02_scalar_group_by_1
- ├── columns: count:28(int)
+ ├── columns: count:28(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(28)=1, null(28)=0]
  ├── cost: 1366.94732
@@ -702,7 +702,7 @@ WHERE w_ytd != sum_d_ytd
 ----
 scalar-group-by
  ├── save-table-name: consistency_01_scalar_group_by_1
- ├── columns: count:22(int)
+ ├── columns: count:22(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(22)=1, null(22)=0]
  ├── cost: 126.643333
@@ -819,7 +819,7 @@ ORDER BY no_w_id, no_d_id
 ----
 group-by
  ├── save-table-name: consistency_03_group_by_1
- ├── columns: max:4(int)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
+ ├── columns: max:4(int!null)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
  ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(4)=100, null(4)=0, distinct(2,3)=100, null(2,3)=0]
  ├── cost: 98101.04
@@ -863,7 +863,7 @@ ORDER BY o_w_id, o_d_id
 ----
 group-by
  ├── save-table-name: consistency_04_group_by_1
- ├── columns: max:9(int)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── columns: max:9(int!null)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(9)=100, null(9)=0, distinct(2,3)=100, null(2,3)=0]
  ├── cost: 336001.04
@@ -911,7 +911,7 @@ WHERE nod != -1
 ----
 scalar-group-by
  ├── save-table-name: consistency_05_scalar_group_by_1
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  ├── cost: 99902.4133
@@ -920,7 +920,7 @@ scalar-group-by
  ├── prune: (8)
  ├── select
  │    ├── save-table-name: consistency_05_select_2
- │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
+ │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int!null) min:5(int!null) count_rows:6(int!null)
  │    ├── stats: [rows=33.3333333, distinct(2)=9.8265847, null(2)=0, distinct(3)=9.8265847, null(3)=0, distinct(4)=33.3333333, null(4)=0, distinct(5)=33.3333333, null(5)=0, distinct(6)=33.3333333, null(6)=0]
  │    ├── cost: 99902.05
  │    ├── key: (2,3)
@@ -928,7 +928,7 @@ scalar-group-by
  │    ├── interesting orderings: (+3,+2)
  │    ├── group-by
  │    │    ├── save-table-name: consistency_05_group_by_3
- │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
+ │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int!null) min:5(int!null) count_rows:6(int!null)
  │    │    ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  │    │    ├── internal-ordering: +3,+2
  │    │    ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=0, distinct(2,3)=100, null(2,3)=0]
@@ -1056,7 +1056,7 @@ ORDER BY ol_w_id, ol_d_id
 ----
 sort
  ├── save-table-name: consistency_07_sort_1
- ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
+ ├── columns: count:11(int!null)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
  ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
  ├── cost: 3361385.74
  ├── key: (2,3)
@@ -1066,7 +1066,7 @@ sort
  ├── interesting orderings: (+3,+2)
  └── group-by
       ├── save-table-name: consistency_07_group_by_2
-      ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
+      ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int!null)
       ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
       ├── cost: 3361369.68
@@ -1280,7 +1280,7 @@ except-all
  │    └── interesting orderings: (+3,+2,-1)
  └── group-by
       ├── save-table-name: consistency_10_group_by_3
-      ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
+      ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int!null)
       ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       ├── stats: [rows=299900, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(19)=299900, null(19)=0, distinct(9-11)=299900, null(9-11)=0]
       ├── cost: 3424392.12
@@ -1351,7 +1351,7 @@ except-all
  ├── cost: 3769390.15
  ├── group-by
  │    ├── save-table-name: consistency_11_group_by_2
- │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int!null)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    ├── stats: [rows=299900, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=299900, null(11)=0, distinct(1-3)=299900, null(1-3)=0]
  │    ├── cost: 3424392.12
@@ -1415,7 +1415,7 @@ WHERE ol_o_id IS NULL OR o_id IS NULL
 ----
 scalar-group-by
  ├── save-table-name: consistency_12_scalar_group_by_1
- ├── columns: count:19(int)
+ ├── columns: count:19(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(19)=1, null(19)=0]
  ├── key: ()

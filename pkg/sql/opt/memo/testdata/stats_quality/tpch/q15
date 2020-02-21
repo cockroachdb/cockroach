@@ -90,7 +90,7 @@ project
       │         ├── fd: (10)-->(25)
       │         ├── group-by
       │         │    ├── save-table-name: q15_group_by_6
-      │         │    ├── columns: l_suppkey:10(int!null) sum:25(float)
+      │         │    ├── columns: l_suppkey:10(int!null) sum:25(float!null)
       │         │    ├── grouping columns: l_suppkey:10(int!null)
       │         │    ├── stats: [rows=9920, distinct(10)=9920, null(10)=0, distinct(25)=9920, null(25)=0]
       │         │    ├── key: (10)
@@ -134,7 +134,7 @@ project
       │                             ├── fd: ()-->(44)
       │                             ├── group-by
       │                             │    ├── save-table-name: q15_group_by_11
-      │                             │    ├── columns: l_suppkey:28(int!null) sum:43(float)
+      │                             │    ├── columns: l_suppkey:28(int!null) sum:43(float!null)
       │                             │    ├── grouping columns: l_suppkey:28(int!null)
       │                             │    ├── stats: [rows=9920, distinct(28)=9920, null(28)=0, distinct(43)=9920, null(43)=0]
       │                             │    ├── key: (28)

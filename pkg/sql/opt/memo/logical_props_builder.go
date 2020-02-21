@@ -462,6 +462,33 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 	// Propagate not null setting from input columns that are being grouped.
 	rel.NotNullCols = inputProps.NotNullCols.Intersection(groupPrivate.GroupingCols)
 
+	// GroupBy and DistinctOn always have at least one row per group.
+	atLeastOneRowPerGroup := groupExpr.Op() == opt.GroupByOp || groupExpr.Op() == opt.DistinctOnOp
+	for i := range aggs {
+		item := &aggs[i]
+		agg := ExtractAggFunc(item.Agg)
+
+		// Some aggregates never return NULL, regardless of input.
+		if opt.AggregateIsNeverNull(agg.Op()) {
+			rel.NotNullCols.Add(item.Col)
+			continue
+		}
+
+		// If there is a possibility that the aggregate function has zero input
+		// rows, then it may return NULL. This is possible with ScalarGroupBy and
+		// with AggFilter.
+		if !atLeastOneRowPerGroup || item.Agg.Op() == opt.AggFilterOp {
+			continue
+		}
+
+		// All PG aggregate functions return a non-NULL result if they have at
+		// least one input row, and if all argument values are non-NULL.
+		inputCols := ExtractAggInputColumns(agg)
+		if inputCols.SubsetOf(inputProps.NotNullCols) {
+			rel.NotNullCols.Add(item.Col)
+		}
+	}
+
 	// Outer Columns
 	// -------------
 	// Outer columns were derived by BuildSharedProps; remove any that are bound

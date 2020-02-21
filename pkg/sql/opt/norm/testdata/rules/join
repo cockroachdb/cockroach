@@ -903,90 +903,53 @@ WHERE EXISTS (
 project
  ├── columns: "?column?":22(int!null)
  ├── fd: ()-->(22)
- ├── distinct-on
- │    ├── columns: k:1(int!null)
- │    ├── grouping columns: k:1(int!null)
- │    ├── key: (1)
- │    └── select
- │         ├── columns: k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool!null)
- │         ├── key: (1,6,8)
- │         ├── fd: (1,6,8)-->(14)
- │         ├── group-by
- │         │    ├── columns: k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool)
- │         │    ├── grouping columns: k:1(int!null) xy.x:6(int!null) u:8(int!null)
- │         │    ├── key: (1,6,8)
- │         │    ├── fd: (1,6,8)-->(14)
- │         │    ├── project
- │         │    │    ├── columns: true:13(bool!null) k:1(int!null) xy.x:6(int!null) u:8(int!null)
- │         │    │    ├── fd: ()-->(13)
- │         │    │    ├── inner-join-apply
- │         │    │    │    ├── columns: k:1(int!null) s:4(string) xy.x:6(int!null) u:8(int!null)
- │         │    │    │    ├── fd: (1)-->(4)
- │         │    │    │    ├── scan a
- │         │    │    │    │    ├── columns: k:1(int!null) s:4(string)
- │         │    │    │    │    ├── key: (1)
- │         │    │    │    │    └── fd: (1)-->(4)
- │         │    │    │    ├── inner-join (cross)
- │         │    │    │    │    ├── columns: xy.x:6(int!null) u:8(int!null)
- │         │    │    │    │    ├── outer: (4)
- │         │    │    │    │    ├── inner-join (cross)
- │         │    │    │    │    │    ├── columns: xy.x:6(int!null) u:8(int!null)
- │         │    │    │    │    │    ├── key: (6,8)
- │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
- │         │    │    │    │    │    │    ├── key: (6)
- │         │    │    │    │    │    │    ├── scan xy
- │         │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
- │         │    │    │    │    │    │    │    └── key: (6)
- │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── eq [type=bool, subquery]
- │         │    │    │    │    │    │              ├── subquery [type=string]
- │         │    │    │    │    │    │              │    └── max1-row
- │         │    │    │    │    │    │              │         ├── columns: s:19(string)
- │         │    │    │    │    │    │              │         ├── cardinality: [0 - 1]
- │         │    │    │    │    │    │              │         ├── key: ()
- │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
- │         │    │    │    │    │    │              │         └── scan a
- │         │    │    │    │    │    │              │              └── columns: s:19(string)
- │         │    │    │    │    │    │              └── const: 'foo' [type=string]
- │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── columns: u:8(int!null)
- │         │    │    │    │    │    │    ├── key: (8)
- │         │    │    │    │    │    │    ├── scan uv
- │         │    │    │    │    │    │    │    ├── columns: u:8(int!null)
- │         │    │    │    │    │    │    │    └── key: (8)
- │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── eq [type=bool, subquery]
- │         │    │    │    │    │    │              ├── subquery [type=string]
- │         │    │    │    │    │    │              │    └── max1-row
- │         │    │    │    │    │    │              │         ├── columns: s:19(string)
- │         │    │    │    │    │    │              │         ├── cardinality: [0 - 1]
- │         │    │    │    │    │    │              │         ├── key: ()
- │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
- │         │    │    │    │    │    │              │         └── scan a
- │         │    │    │    │    │    │              │              └── columns: s:19(string)
- │         │    │    │    │    │    │              └── const: 'foo' [type=string]
- │         │    │    │    │    │    └── filters (true)
- │         │    │    │    │    ├── limit
- │         │    │    │    │    │    ├── outer: (4)
- │         │    │    │    │    │    ├── cardinality: [0 - 10]
- │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── outer: (4)
- │         │    │    │    │    │    │    ├── limit hint: 10.00
- │         │    │    │    │    │    │    ├── scan b
- │         │    │    │    │    │    │    │    └── limit hint: 30.00
- │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
- │         │    │    │    │    │    └── const: 10 [type=int]
- │         │    │    │    │    └── filters (true)
- │         │    │    │    └── filters (true)
- │         │    │    └── projections
- │         │    │         └── true [type=bool]
- │         │    └── aggregations
- │         │         └── const-not-null-agg [type=bool, outer=(13)]
- │         │              └── variable: true [type=bool]
- │         └── filters
- │              └── true_agg IS NOT NULL [type=bool, outer=(14), constraints=(/14: (/NULL - ]; tight)]
+ ├── semi-join-apply
+ │    ├── columns: s:4(string)
+ │    ├── scan a
+ │    │    └── columns: s:4(string)
+ │    ├── inner-join (cross)
+ │    │    ├── outer: (4)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── select
+ │    │    │    │    ├── scan xy
+ │    │    │    │    └── filters
+ │    │    │    │         └── eq [type=bool, subquery]
+ │    │    │    │              ├── subquery [type=string]
+ │    │    │    │              │    └── max1-row
+ │    │    │    │              │         ├── columns: s:19(string)
+ │    │    │    │              │         ├── cardinality: [0 - 1]
+ │    │    │    │              │         ├── key: ()
+ │    │    │    │              │         ├── fd: ()-->(19)
+ │    │    │    │              │         └── scan a
+ │    │    │    │              │              └── columns: s:19(string)
+ │    │    │    │              └── const: 'foo' [type=string]
+ │    │    │    ├── select
+ │    │    │    │    ├── scan uv
+ │    │    │    │    └── filters
+ │    │    │    │         └── eq [type=bool, subquery]
+ │    │    │    │              ├── subquery [type=string]
+ │    │    │    │              │    └── max1-row
+ │    │    │    │              │         ├── columns: s:19(string)
+ │    │    │    │              │         ├── cardinality: [0 - 1]
+ │    │    │    │              │         ├── key: ()
+ │    │    │    │              │         ├── fd: ()-->(19)
+ │    │    │    │              │         └── scan a
+ │    │    │    │              │              └── columns: s:19(string)
+ │    │    │    │              └── const: 'foo' [type=string]
+ │    │    │    └── filters (true)
+ │    │    ├── limit
+ │    │    │    ├── outer: (4)
+ │    │    │    ├── cardinality: [0 - 10]
+ │    │    │    ├── select
+ │    │    │    │    ├── outer: (4)
+ │    │    │    │    ├── limit hint: 10.00
+ │    │    │    │    ├── scan b
+ │    │    │    │    │    └── limit hint: 30.00
+ │    │    │    │    └── filters
+ │    │    │    │         └── s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
+ │    │    │    └── const: 10 [type=int]
+ │    │    └── filters (true)
+ │    └── filters (true)
  └── projections
       └── const: 1 [type=int]
 
@@ -1453,7 +1416,7 @@ norm expect=SimplifyLeftJoinWithoutFilters
 SELECT * FROM a LEFT JOIN (SELECT count(*) FROM b) ON True
 ----
 inner-join (cross)
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) count:8(int)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) count:8(int!null)
  ├── key: (1)
  ├── fd: ()-->(8), (1)-->(2-5)
  ├── scan a
@@ -1461,7 +1424,7 @@ inner-join (cross)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scalar-group-by
- │    ├── columns: count_rows:8(int)
+ │    ├── columns: count_rows:8(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(8)
@@ -1475,12 +1438,12 @@ norm expect=SimplifyLeftJoinWithoutFilters
 SELECT * FROM a FULL JOIN (SELECT count(*) FROM b) ON True
 ----
 left-join (cross)
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
  ├── cardinality: [1 - ]
  ├── key: (1)
  ├── fd: ()-->(8), (1)-->(2-5)
  ├── scalar-group-by
- │    ├── columns: count_rows:8(int)
+ │    ├── columns: count_rows:8(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(8)
@@ -1498,15 +1461,15 @@ norm expect=SimplifyLeftJoinWithoutFilters
 SELECT * FROM a WHERE (SELECT sum(column1) FROM (VALUES (k), (1))) = 1
 ----
 project
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) sum:7(decimal!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) sum:7(decimal!null)
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(2-5)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) sum:7(decimal)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) sum:7(decimal)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,7)
@@ -1543,12 +1506,12 @@ norm expect-not=SimplifyLeftJoinWithoutFilters
 SELECT * FROM a RIGHT JOIN (SELECT count(*) FROM b) ON True
 ----
 left-join (cross)
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
  ├── cardinality: [1 - ]
  ├── key: (1)
  ├── fd: ()-->(8), (1)-->(2-5)
  ├── scalar-group-by
- │    ├── columns: count_rows:8(int)
+ │    ├── columns: count_rows:8(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(8)
@@ -1568,12 +1531,12 @@ norm expect=SimplifyRightJoinWithoutFilters
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── columns: count:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
- │    ├── columns: count_rows:3(int)
+ │    ├── columns: count_rows:3(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
@@ -1591,12 +1554,12 @@ norm expect=SimplifyRightJoinWithoutFilters
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── columns: count:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
- │    ├── columns: count_rows:3(int)
+ │    ├── columns: count_rows:3(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
@@ -1614,12 +1577,12 @@ norm expect=SimplifyRightJoinWithoutFilters
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── columns: count:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
- │    ├── columns: count_rows:3(int)
+ │    ├── columns: count_rows:3(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
@@ -1637,12 +1600,12 @@ norm expect-not=SimplifyRightJoinWithoutFilters
 SELECT * FROM (SELECT count(*) FROM b) LEFT JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── columns: count:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
  ├── scalar-group-by
- │    ├── columns: count_rows:3(int)
+ │    ├── columns: count_rows:3(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)

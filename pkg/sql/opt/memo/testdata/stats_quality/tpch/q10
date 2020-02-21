@@ -54,7 +54,7 @@ LIMIT 20;
 ----
 limit
  ├── save-table-name: q10_limit_1
- ├── columns: c_custkey:1(int!null) c_name:2(varchar) revenue:39(float) c_acctbal:6(float) n_name:35(char) c_address:3(varchar) c_phone:5(char) c_comment:8(varchar)
+ ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) revenue:39(float!null) c_acctbal:6(float!null) n_name:35(char!null) c_address:3(varchar!null) c_phone:5(char!null) c_comment:8(varchar!null)
  ├── internal-ordering: -39
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=20, null(2)=0, distinct(3)=20, null(3)=0, distinct(5)=20, null(5)=0, distinct(6)=20, null(6)=0, distinct(8)=20, null(8)=0, distinct(35)=20, null(35)=0, distinct(39)=20, null(39)=0]
@@ -63,7 +63,7 @@ limit
  ├── ordering: -39
  ├── sort
  │    ├── save-table-name: q10_sort_2
- │    ├── columns: c_custkey:1(int!null) c_name:2(varchar) c_address:3(varchar) c_phone:5(char) c_acctbal:6(float) c_comment:8(varchar) n_name:35(char) sum:39(float)
+ │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null) sum:39(float!null)
  │    ├── stats: [rows=42917.9526, distinct(1)=42917.9526, null(1)=0, distinct(2)=42917.9526, null(2)=0, distinct(3)=42917.9526, null(3)=0, distinct(5)=42917.9526, null(5)=0, distinct(6)=42917.9526, null(6)=0, distinct(8)=42917.9526, null(8)=0, distinct(35)=42917.9526, null(35)=0, distinct(39)=42917.9526, null(39)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3,5,6,8,35,39)
@@ -71,7 +71,7 @@ limit
  │    ├── limit hint: 20.00
  │    └── group-by
  │         ├── save-table-name: q10_group_by_3
- │         ├── columns: c_custkey:1(int!null) c_name:2(varchar) c_address:3(varchar) c_phone:5(char) c_acctbal:6(float) c_comment:8(varchar) n_name:35(char) sum:39(float)
+ │         ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null) sum:39(float!null)
  │         ├── grouping columns: c_custkey:1(int!null)
  │         ├── stats: [rows=42917.9526, distinct(1)=42917.9526, null(1)=0, distinct(2)=42917.9526, null(2)=0, distinct(3)=42917.9526, null(3)=0, distinct(5)=42917.9526, null(5)=0, distinct(6)=42917.9526, null(6)=0, distinct(8)=42917.9526, null(8)=0, distinct(35)=42917.9526, null(35)=0, distinct(39)=42917.9526, null(39)=0]
  │         ├── key: (1)

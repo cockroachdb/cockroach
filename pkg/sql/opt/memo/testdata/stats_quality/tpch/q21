@@ -58,7 +58,7 @@ LIMIT 100;
 ----
 limit
  ├── save-table-name: q21_limit_1
- ├── columns: s_name:2(char!null) numwait:69(int)
+ ├── columns: s_name:2(char!null) numwait:69(int!null)
  ├── internal-ordering: -69,+2
  ├── cardinality: [0 - 100]
  ├── stats: [rows=100, distinct(2)=100, null(2)=0, distinct(69)=100, null(69)=0]
@@ -67,7 +67,7 @@ limit
  ├── ordering: -69,+2
  ├── sort
  │    ├── save-table-name: q21_sort_2
- │    ├── columns: s_name:2(char!null) count_rows:69(int)
+ │    ├── columns: s_name:2(char!null) count_rows:69(int!null)
  │    ├── stats: [rows=8329.18391, distinct(2)=8329.18391, null(2)=0, distinct(69)=8329.18391, null(69)=0]
  │    ├── key: (2)
  │    ├── fd: (2)-->(69)
@@ -75,7 +75,7 @@ limit
  │    ├── limit hint: 100.00
  │    └── group-by
  │         ├── save-table-name: q21_group_by_3
- │         ├── columns: s_name:2(char!null) count_rows:69(int)
+ │         ├── columns: s_name:2(char!null) count_rows:69(int!null)
  │         ├── grouping columns: s_name:2(char!null)
  │         ├── stats: [rows=8329.18391, distinct(2)=8329.18391, null(2)=0, distinct(69)=8329.18391, null(69)=0]
  │         ├── key: (2)

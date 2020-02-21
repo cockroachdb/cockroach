@@ -388,7 +388,7 @@ opt
 SELECT a, min(b) FROM abc GROUP BY a ORDER BY a
 ----
 group-by
- ├── columns: a:1(int!null) min:4(int)
+ ├── columns: a:1(int!null) min:4(int!null)
  ├── grouping columns: a:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(4)
@@ -404,7 +404,7 @@ opt
 SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a
 ----
 group-by
- ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) min:4(int!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── internal-ordering: +1,+2
  ├── key: (1,2)
@@ -422,7 +422,7 @@ opt
 SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a, b
 ----
 group-by
- ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) min:4(int!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── key: (1,2)
  ├── fd: (1,2)-->(4)
@@ -439,7 +439,7 @@ opt
 SELECT a, b, min(c) FROM abc GROUP BY b, a ORDER BY a, b
 ----
 group-by
- ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) min:4(int!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── key: (1,2)
  ├── fd: (1,2)-->(4)
@@ -457,12 +457,12 @@ opt
 SELECT a, b, min(c) AS m FROM abc GROUP BY a, b ORDER BY a, m
 ----
 sort (segmented)
- ├── columns: a:1(int!null) b:2(int!null) m:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) m:4(int!null)
  ├── key: (1,2)
  ├── fd: (1,2)-->(4)
  ├── ordering: +1,+4
  └── group-by
-      ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+      ├── columns: a:1(int!null) b:2(int!null) min:4(int!null)
       ├── grouping columns: a:1(int!null) b:2(int!null)
       ├── internal-ordering: +1,+2
       ├── key: (1,2)
@@ -481,7 +481,7 @@ opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY c) GROUP BY a, b ORDER BY a, b
 ----
 group-by
- ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
+ ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[]!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── internal-ordering: +3 opt(1,2)
  ├── key: (1,2)
@@ -499,7 +499,7 @@ opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY a, b, c) GROUP BY a, b ORDER BY a, b
 ----
 group-by
- ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
+ ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[]!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── internal-ordering: +3 opt(1,2)
  ├── key: (1,2)
@@ -517,7 +517,7 @@ opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY b, c, a) GROUP BY b, a ORDER BY a, b
 ----
 group-by
- ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
+ ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[]!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── internal-ordering: +3 opt(1,2)
  ├── key: (1,2)
@@ -537,7 +537,7 @@ opt
 SELECT sum(c) FROM abc WHERE a = 1 GROUP BY b ORDER BY b
 ----
 group-by
- ├── columns: sum:4(decimal)  [hidden: b:2(int!null)]
+ ├── columns: sum:4(decimal!null)  [hidden: b:2(int!null)]
  ├── grouping columns: b:2(int!null)
  ├── key: (2)
  ├── fd: (2)-->(4)
@@ -1216,7 +1216,7 @@ opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b
 ----
 distinct-on
- ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── grouping columns: b:2(int!null) c:3(int!null)
  ├── key: (2,3)
  ├── fd: (2,3)-->(1)
@@ -1236,7 +1236,7 @@ opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b, c, a
 ----
 distinct-on
- ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── grouping columns: b:2(int!null) c:3(int!null)
  ├── internal-ordering: +1 opt(2,3)
  ├── key: (2,3)
@@ -1257,7 +1257,7 @@ opt
 SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
 distinct-on
- ├── columns: a:1(int!null) c:3(int)
+ ├── columns: a:1(int!null) c:3(int!null)
  ├── grouping columns: a:1(int!null)
  ├── internal-ordering: -3,+2 opt(1)
  ├── key: (1)
@@ -1280,7 +1280,7 @@ opt
 SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc) ORDER BY a
 ----
 distinct-on
- ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── internal-ordering: +1,+2
  ├── key: (1,2)
@@ -1299,7 +1299,7 @@ opt
 SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a) ORDER BY a, b
 ----
 distinct-on
- ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
@@ -1316,7 +1316,7 @@ opt
 SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a, b) ORDER BY a
 ----
 distinct-on
- ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── grouping columns: a:1(int!null) b:2(int!null)
  ├── internal-ordering: +1,+2
  ├── key: (1,2)
@@ -1335,7 +1335,7 @@ opt
 SELECT * FROM (SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY c, b, a) ORDER BY a
 ----
 distinct-on
- ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── grouping columns: b:2(int!null) c:3(int!null)
  ├── internal-ordering: +1 opt(2,3)
  ├── key: (2,3)
@@ -1355,12 +1355,12 @@ opt
 SELECT * FROM (SELECT DISTINCT ON (b) a, b, c FROM abc ORDER BY b, c) ORDER BY a
 ----
 sort
- ├── columns: a:1(int) b:2(int!null) c:3(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── key: (2)
  ├── fd: (2)-->(1,3)
  ├── ordering: +1
  └── distinct-on
-      ├── columns: a:1(int) b:2(int!null) c:3(int)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       ├── grouping columns: b:2(int!null)
       ├── internal-ordering: +3 opt(2)
       ├── key: (2)
@@ -1383,12 +1383,12 @@ opt
 SELECT * FROM (SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b) ORDER BY c
 ----
 sort
- ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +3
  └── distinct-on
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       ├── grouping columns: a:1(int!null)
       ├── internal-ordering: +1,+2
       ├── key: (1)
@@ -1408,7 +1408,7 @@ opt
 SELECT DISTINCT ON(a) a, b FROM abc WHERE a=c ORDER BY a
 ----
 distinct-on
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1(int!null) b:2(int!null)
  ├── grouping columns: a:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2)

@@ -60,10 +60,10 @@ build
 SELECT count(*) FROM (SELECT x, y FROM a) GROUP BY x, y
 ----
 project
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  ├── stats: [rows=2000]
  └── group-by
-      ├── columns: x:1(int!null) y:2(int) count_rows:5(int)
+      ├── columns: x:1(int!null) y:2(int) count_rows:5(int!null)
       ├── grouping columns: x:1(int!null) y:2(int)
       ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
       ├── key: (1)

@@ -175,7 +175,7 @@ build
 SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
 ----
 scalar-group-by
- ├── columns: count:4(int)
+ ├── columns: count:4(int!null)
  ├── project
  │    └── distinct-on
  │         ├── columns: y:2(int)
@@ -225,12 +225,12 @@ build
 SELECT DISTINCT max(x) FROM xyz GROUP BY x
 ----
 distinct-on
- ├── columns: max:4(int)
- ├── grouping columns: max:4(int)
+ ├── columns: max:4(int!null)
+ ├── grouping columns: max:4(int!null)
  └── project
-      ├── columns: max:4(int)
+      ├── columns: max:4(int!null)
       └── group-by
-           ├── columns: x:1(int!null) max:4(int)
+           ├── columns: x:1(int!null) max:4(int!null)
            ├── grouping columns: x:1(int!null)
            ├── project
            │    ├── columns: x:1(int!null)

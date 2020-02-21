@@ -147,10 +147,10 @@ norm
 SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
 ----
 project
- ├── columns: sum:4(decimal)
+ ├── columns: sum:4(decimal!null)
  ├── stats: [rows=100]
  └── group-by
-      ├── columns: z:2(int!null) sum:4(decimal)
+      ├── columns: z:2(int!null) sum:4(decimal!null)
       ├── grouping columns: z:2(int!null)
       ├── stats: [rows=100, distinct(2)=100, null(2)=0]
       ├── key: (2)
@@ -233,10 +233,10 @@ opt
 SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 ----
 project
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── stats: [rows=0.999973439]
  └── group-by
-      ├── columns: col0:2(int) count_rows:8(int)
+      ├── columns: col0:2(int) count_rows:8(int!null)
       ├── grouping columns: col0:2(int)
       ├── stats: [rows=0.999973439, distinct(2)=0.999973439, null(2)=0.999973439]
       ├── key: (2)
@@ -1296,19 +1296,19 @@ HAVING
 project
  ├── columns: "?column?":5(int!null)
  ├── cardinality: [0 - 2]
- ├── stats: [rows=2e-10]
+ ├── stats: [rows=1]
  ├── fd: ()-->(5)
  ├── select
  │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
  │    ├── cardinality: [0 - 2]
- │    ├── stats: [rows=2e-10, distinct(4)=2e-10, null(4)=0]
+ │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
  │    ├── key: (2,3)
  │    ├── fd: ()-->(4)
  │    ├── group-by
- │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool)
+ │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
  │    │    ├── grouping columns: column2:2(string) column3:3(varbit)
  │    │    ├── cardinality: [1 - 2]
- │    │    ├── stats: [rows=2, distinct(4)=2, null(4)=2, distinct(2,3)=2, null(2,3)=2]
+ │    │    ├── stats: [rows=2, distinct(4)=2, null(4)=0, distinct(2,3)=2, null(2,3)=2]
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(4)
  │    │    ├── values
