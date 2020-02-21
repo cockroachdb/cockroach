@@ -78,6 +78,9 @@ var _ bufferingInMemoryOperator = &sortChunksOp{}
 func (c *sortChunksOp) Init() {
 	c.input.init()
 	c.sorter.Init()
+	// TODO(yuzefovich): switch to calling this method on allocator. This will
+	// require plumbing unlimited allocator to work correctly in tests with
+	// memory limit of 1.
 	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, int(coldata.BatchSize()))
 }
 

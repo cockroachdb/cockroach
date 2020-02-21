@@ -42,8 +42,14 @@ type verifyColOperatorArgs struct {
 	outputTypes    []types.T
 	pspec          *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
-	forceDiskSpill      bool
-	maxNumberPartitions int
+	forceDiskSpill bool
+	// numForcedRepartitions specifies a number of "repartitions" that a
+	// disk-backed operator should be forced to perform. "Repartition" can mean
+	// different things depending on the operator (for example, for hash joiner
+	// it is dividing original partition into multiple new partitions; for sorter
+	// it is merging already created partitions into new one before proceeding
+	// to the next partition from the input).
+	numForcedRepartitions int
 }
 
 // verifyColOperator passes inputs through both the processor defined by pspec
@@ -122,9 +128,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	if args.forceDiskSpill {
 		constructorArgs.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
 	}
-	if args.maxNumberPartitions > 0 {
-		constructorArgs.TestingKnobs.MaxNumberPartitions = args.maxNumberPartitions
-	}
+	constructorArgs.TestingKnobs.NumForcedRepartitions = args.numForcedRepartitions
 	result, err := colexec.NewColOperator(ctx, flowCtx, constructorArgs)
 	if err != nil {
 		return err
