@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -600,7 +601,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	jobCtx, cancelImport := context.WithCancel(ctx)
 	jobIDCh := make(chan int64)
 	var jobID int64 = -1
-	var importSummary roachpb.BulkOpSummary
+	var importSummary backupccl.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 		// Arrange for our special job resumer to be
@@ -608,7 +609,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
-			resumer.testingKnobs.afterImport = func(summary roachpb.BulkOpSummary) error {
+			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
 				return nil
 			}
@@ -705,7 +706,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	controllerBarrier, importBarrier := newSyncBarrier()
 
 	var jobID int64 = -1
-	var importSummary roachpb.BulkOpSummary
+	var importSummary backupccl.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 		// Arrange for our special job resumer to be
@@ -713,7 +714,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
-			resumer.testingKnobs.afterImport = func(summary roachpb.BulkOpSummary) error {
+			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
 				return nil
 			}

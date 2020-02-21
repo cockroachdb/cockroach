@@ -1171,12 +1171,24 @@ func InsertRangeInfo(ris []RangeInfo, ri RangeInfo) []RangeInfo {
 	return append(ris, ri)
 }
 
+// BulkOpSummaryID returns the key within a BulkOpSummary's EntryCounts map for
+// the given table and index ID. This logic is mirrored in c++ in rowcounter.cc.
+func BulkOpSummaryID(tableID, indexID uint64) uint64 {
+	return (tableID << 32) | indexID
+}
+
 // Add combines the values from other, for use on an accumulator BulkOpSummary.
 func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.DataSize += other.DataSize
-	b.Rows += other.Rows
-	b.IndexEntries += other.IndexEntries
-	b.SystemRecords += other.SystemRecords
+	b.DeprecatedRows += other.DeprecatedRows
+	b.DeprecatedIndexEntries += other.DeprecatedIndexEntries
+
+	if other.EntryCounts != nil && b.EntryCounts == nil {
+		b.EntryCounts = make(map[uint64]int64, len(other.EntryCounts))
+	}
+	for i := range other.EntryCounts {
+		b.EntryCounts[i] += other.EntryCounts[i]
+	}
 }
 
 // MustSetValue is like SetValue, except it resets the enum and panics if the

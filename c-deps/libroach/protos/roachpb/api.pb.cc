@@ -17,7 +17,7 @@
 // @@protoc_insertion_point(includes)
 
 namespace protobuf_roachpb_2fapi_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_BulkOpSummary;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_BulkOpSummary_EntryCountsEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_CheckConsistencyResponse_Result;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_Azure;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_GCS;
@@ -39,6 +39,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminTransferLeaseResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitResponse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_BulkOpSummary;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComputeChecksumResponse;
@@ -590,6 +591,11 @@ class ExportRequestDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<ExportRequest>
       _instance;
 } _ExportRequest_default_instance_;
+class BulkOpSummary_EntryCountsEntry_DoNotUseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<BulkOpSummary_EntryCountsEntry_DoNotUse>
+      _instance;
+} _BulkOpSummary_EntryCountsEntry_DoNotUse_default_instance_;
 class BulkOpSummaryDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<BulkOpSummary>
@@ -2167,6 +2173,19 @@ static void InitDefaultsExportRequest() {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions.base,}};
 
+static void InitDefaultsBulkOpSummary_EntryCountsEntry_DoNotUse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_BulkOpSummary_EntryCountsEntry_DoNotUse_default_instance_;
+    new (ptr) ::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse();
+  }
+  ::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_BulkOpSummary_EntryCountsEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsBulkOpSummary_EntryCountsEntry_DoNotUse}, {}};
+
 static void InitDefaultsBulkOpSummary() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -2178,8 +2197,9 @@ static void InitDefaultsBulkOpSummary() {
   ::cockroach::roachpb::BulkOpSummary::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<0> scc_info_BulkOpSummary =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsBulkOpSummary}, {}};
+::google::protobuf::internal::SCCInfo<1> scc_info_BulkOpSummary =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsBulkOpSummary}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_BulkOpSummary_EntryCountsEntry_DoNotUse.base,}};
 
 static void InitDefaultsExportResponse_File() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2861,6 +2881,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_FileEncryptionOptions.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_BulkOpSummary_EntryCountsEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_BulkOpSummary.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportResponse_File.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportResponse.base);
@@ -24587,13 +24608,21 @@ void ExportRequest::InternalSwap(ExportRequest* other) {
 
 // ===================================================================
 
+BulkOpSummary_EntryCountsEntry_DoNotUse::BulkOpSummary_EntryCountsEntry_DoNotUse() {}
+BulkOpSummary_EntryCountsEntry_DoNotUse::BulkOpSummary_EntryCountsEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
+void BulkOpSummary_EntryCountsEntry_DoNotUse::MergeFrom(const BulkOpSummary_EntryCountsEntry_DoNotUse& other) {
+  MergeFromInternal(other);
+}
+
+// ===================================================================
+
 void BulkOpSummary::InitAsDefaultInstance() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BulkOpSummary::kDataSizeFieldNumber;
-const int BulkOpSummary::kRowsFieldNumber;
-const int BulkOpSummary::kIndexEntriesFieldNumber;
-const int BulkOpSummary::kSystemRecordsFieldNumber;
+const int BulkOpSummary::kDeprecatedRowsFieldNumber;
+const int BulkOpSummary::kDeprecatedIndexEntriesFieldNumber;
+const int BulkOpSummary::kEntryCountsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 BulkOpSummary::BulkOpSummary()
@@ -24607,16 +24636,17 @@ BulkOpSummary::BulkOpSummary(const BulkOpSummary& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  entry_counts_.MergeFrom(from.entry_counts_);
   ::memcpy(&data_size_, &from.data_size_,
-    static_cast<size_t>(reinterpret_cast<char*>(&system_records_) -
-    reinterpret_cast<char*>(&data_size_)) + sizeof(system_records_));
+    static_cast<size_t>(reinterpret_cast<char*>(&deprecated_index_entries_) -
+    reinterpret_cast<char*>(&data_size_)) + sizeof(deprecated_index_entries_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.BulkOpSummary)
 }
 
 void BulkOpSummary::SharedCtor() {
   ::memset(&data_size_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&system_records_) -
-      reinterpret_cast<char*>(&data_size_)) + sizeof(system_records_));
+      reinterpret_cast<char*>(&deprecated_index_entries_) -
+      reinterpret_cast<char*>(&data_size_)) + sizeof(deprecated_index_entries_));
 }
 
 BulkOpSummary::~BulkOpSummary() {
@@ -24642,9 +24672,10 @@ void BulkOpSummary::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  entry_counts_.Clear();
   ::memset(&data_size_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&system_records_) -
-      reinterpret_cast<char*>(&data_size_)) + sizeof(system_records_));
+      reinterpret_cast<char*>(&deprecated_index_entries_) -
+      reinterpret_cast<char*>(&data_size_)) + sizeof(deprecated_index_entries_));
   _internal_metadata_.Clear();
 }
 
@@ -24678,42 +24709,47 @@ bool BulkOpSummary::MergePartialFromCodedStream(
         break;
       }
 
-      // int64 rows = 2;
+      // int64 deprecated_rows = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &rows_)));
+                 input, &deprecated_rows_)));
         } else {
           goto handle_unusual;
         }
         break;
       }
 
-      // int64 index_entries = 3;
+      // int64 deprecated_index_entries = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &index_entries_)));
+                 input, &deprecated_index_entries_)));
         } else {
           goto handle_unusual;
         }
         break;
       }
 
-      // int64 system_records = 4;
-      case 4: {
+      // map<uint64, int64> entry_counts = 5;
+      case 5: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &system_records_)));
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          BulkOpSummary_EntryCountsEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
+              BulkOpSummary_EntryCountsEntry_DoNotUse,
+              ::google::protobuf::uint64, ::google::protobuf::int64,
+              ::google::protobuf::internal::WireFormatLite::TYPE_UINT64,
+              ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+              0 >,
+            ::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 > > parser(&entry_counts_);
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, &parser));
         } else {
           goto handle_unusual;
         }
@@ -24751,19 +24787,53 @@ void BulkOpSummary::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->data_size(), output);
   }
 
-  // int64 rows = 2;
-  if (this->rows() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->rows(), output);
+  // int64 deprecated_rows = 2;
+  if (this->deprecated_rows() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->deprecated_rows(), output);
   }
 
-  // int64 index_entries = 3;
-  if (this->index_entries() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->index_entries(), output);
+  // int64 deprecated_index_entries = 3;
+  if (this->deprecated_index_entries() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->deprecated_index_entries(), output);
   }
 
-  // int64 system_records = 4;
-  if (this->system_records() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->system_records(), output);
+  // map<uint64, int64> entry_counts = 5;
+  if (!this->entry_counts().empty()) {
+    typedef ::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >::const_pointer
+        ConstPtr;
+    typedef ::google::protobuf::internal::SortItem< ::google::protobuf::uint64, ConstPtr > SortItem;
+    typedef ::google::protobuf::internal::CompareByFirstField<SortItem> Less;
+
+    if (output->IsSerializationDeterministic() &&
+        this->entry_counts().size() > 1) {
+      ::std::unique_ptr<SortItem[]> items(
+          new SortItem[this->entry_counts().size()]);
+      typedef ::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >::const_iterator
+          it = this->entry_counts().begin();
+          it != this->entry_counts().end(); ++it, ++n) {
+        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
+      ::std::unique_ptr<BulkOpSummary_EntryCountsEntry_DoNotUse> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(entry_counts_.NewEntryWrapper(
+            items[static_cast<ptrdiff_t>(i)].second->first, items[static_cast<ptrdiff_t>(i)].second->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            5, *entry, output);
+      }
+    } else {
+      ::std::unique_ptr<BulkOpSummary_EntryCountsEntry_DoNotUse> entry;
+      for (::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >::const_iterator
+          it = this->entry_counts().begin();
+          it != this->entry_counts().end(); ++it) {
+        entry.reset(entry_counts_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            5, *entry, output);
+      }
+    }
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -24777,6 +24847,20 @@ size_t BulkOpSummary::ByteSizeLong() const {
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
+  // map<uint64, int64> entry_counts = 5;
+  total_size += 1 *
+      ::google::protobuf::internal::FromIntSize(this->entry_counts_size());
+  {
+    ::std::unique_ptr<BulkOpSummary_EntryCountsEntry_DoNotUse> entry;
+    for (::google::protobuf::Map< ::google::protobuf::uint64, ::google::protobuf::int64 >::const_iterator
+        it = this->entry_counts().begin();
+        it != this->entry_counts().end(); ++it) {
+      entry.reset(entry_counts_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
+    }
+  }
+
   // int64 data_size = 1;
   if (this->data_size() != 0) {
     total_size += 1 +
@@ -24784,25 +24868,18 @@ size_t BulkOpSummary::ByteSizeLong() const {
         this->data_size());
   }
 
-  // int64 rows = 2;
-  if (this->rows() != 0) {
+  // int64 deprecated_rows = 2;
+  if (this->deprecated_rows() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int64Size(
-        this->rows());
+        this->deprecated_rows());
   }
 
-  // int64 index_entries = 3;
-  if (this->index_entries() != 0) {
+  // int64 deprecated_index_entries = 3;
+  if (this->deprecated_index_entries() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int64Size(
-        this->index_entries());
-  }
-
-  // int64 system_records = 4;
-  if (this->system_records() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int64Size(
-        this->system_records());
+        this->deprecated_index_entries());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -24822,17 +24899,15 @@ void BulkOpSummary::MergeFrom(const BulkOpSummary& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  entry_counts_.MergeFrom(from.entry_counts_);
   if (from.data_size() != 0) {
     set_data_size(from.data_size());
   }
-  if (from.rows() != 0) {
-    set_rows(from.rows());
+  if (from.deprecated_rows() != 0) {
+    set_deprecated_rows(from.deprecated_rows());
   }
-  if (from.index_entries() != 0) {
-    set_index_entries(from.index_entries());
-  }
-  if (from.system_records() != 0) {
-    set_system_records(from.system_records());
+  if (from.deprecated_index_entries() != 0) {
+    set_deprecated_index_entries(from.deprecated_index_entries());
   }
 }
 
@@ -24853,10 +24928,10 @@ void BulkOpSummary::Swap(BulkOpSummary* other) {
 }
 void BulkOpSummary::InternalSwap(BulkOpSummary* other) {
   using std::swap;
+  entry_counts_.Swap(&other->entry_counts_);
   swap(data_size_, other->data_size_);
-  swap(rows_, other->rows_);
-  swap(index_entries_, other->index_entries_);
-  swap(system_records_, other->system_records_);
+  swap(deprecated_rows_, other->deprecated_rows_);
+  swap(deprecated_index_entries_, other->deprecated_index_entries_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -38022,6 +38097,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ExportReques
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ExportRequest* Arena::CreateMaybeMessage< ::cockroach::roachpb::ExportRequest >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ExportRequest >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::BulkOpSummary* Arena::CreateMaybeMessage< ::cockroach::roachpb::BulkOpSummary >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::BulkOpSummary >(arena);
