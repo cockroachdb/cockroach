@@ -24,11 +24,13 @@ const int MaxReservedDescID = 49;
 // via `Count`. Note: the `DataSize` field of the BulkOpSummary is *not*
 // populated by this and should be set separately.
 struct RowCounter {
-  bool Count(const rocksdb::Slice& key, cockroach::roachpb::BulkOpSummary* summary);
+  RowCounter(cockroach::roachpb::BulkOpSummary* summary) : summary(summary) {}
+  bool Count(const rocksdb::Slice& key);
 
  private:
   void EnsureSafeSplitKey(rocksdb::Slice* key);
   int GetRowPrefixLength(rocksdb::Slice* key);
+  cockroach::roachpb::BulkOpSummary* summary;
   std::string prev_key;
   rocksdb::Slice prev;
 };
