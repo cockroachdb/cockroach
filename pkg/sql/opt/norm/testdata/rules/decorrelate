@@ -2584,6 +2584,46 @@ project
       └── filters
            └── concat_agg = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
 
+# With a multi-argument aggregate.
+norm expect=TryDecorrelateScalarGroupBy
+SELECT k, (SELECT string_agg(a.s, ',') FROM a WHERE a.k = a2.i) FROM a AS a2
+----
+project
+ ├── columns: k:1(int!null) string_agg:13(string)
+ ├── key: (1)
+ ├── fd: (1)-->(13)
+ ├── group-by
+ │    ├── columns: a2.k:1(int!null) string_agg:12(string)
+ │    ├── grouping columns: a2.k:1(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(12)
+ │    ├── left-join (hash)
+ │    │    ├── columns: a2.k:1(int!null) a2.i:2(int) a.k:6(int) a.s:9(string) column11:11(string)
+ │    │    ├── key: (1,6)
+ │    │    ├── fd: (1)-->(2), (6)-->(9), (1,6)-->(11)
+ │    │    ├── scan a2
+ │    │    │    ├── columns: a2.k:1(int!null) a2.i:2(int)
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── project
+ │    │    │    ├── columns: column11:11(string!null) a.k:6(int!null) a.s:9(string)
+ │    │    │    ├── key: (6)
+ │    │    │    ├── fd: ()-->(11), (6)-->(9)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: a.k:6(int!null) a.s:9(string)
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    └── fd: (6)-->(9)
+ │    │    │    └── projections
+ │    │    │         └── const: ',' [type=string]
+ │    │    └── filters
+ │    │         └── a.k = a2.i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ │    └── aggregations
+ │         └── string-agg [type=string, outer=(9,11)]
+ │              ├── variable: a.s [type=string]
+ │              └── variable: column11 [type=string]
+ └── projections
+      └── variable: string_agg [type=string, outer=(12)]
+
 # --------------------------------------------------
 # TryDecorrelateSemiJoin
 # --------------------------------------------------

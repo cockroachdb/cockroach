@@ -1269,8 +1269,8 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 		aggregations[i].Func = execinfrapb.AggregatorSpec_Func(funcIdx)
 		aggregations[i].Distinct = fholder.isDistinct()
-		if fholder.argRenderIdx != noRenderIdx {
-			aggregations[i].ColIdx = []uint32{uint32(p.PlanToStreamColMap[fholder.argRenderIdx])}
+		for _, renderIdx := range fholder.argRenderIdxs {
+			aggregations[i].ColIdx = append(aggregations[i].ColIdx, uint32(p.PlanToStreamColMap[renderIdx]))
 		}
 		if fholder.hasFilter() {
 			col := uint32(p.PlanToStreamColMap[fholder.filterRenderIdx])

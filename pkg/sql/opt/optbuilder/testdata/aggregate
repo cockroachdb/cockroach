@@ -2673,7 +2673,7 @@ scalar-group-by
       └── agg-filter [type=string]
            ├── string-agg [type=string]
            │    ├── variable: column4 [type=string]
-           │    └── const: 'foo' [type=string]
+           │    └── variable: column5 [type=string]
            └── variable: column6 [type=bool]
 
 build
@@ -2881,6 +2881,80 @@ project
            └── max [type=decimal]
                 └── variable: column5 [type=decimal]
 
+# Tests for corr.
+
+build
+SELECT corr(k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: corr:5(float)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── corr [type=float]
+           ├── variable: k [type=int]
+           └── variable: v [type=int]
+
+build
+SELECT corr(k) FROM kv
+----
+error (42883): unknown signature: corr(int)
+
+build
+SELECT corr(k, 'x', 'y') FROM kv
+----
+error (42883): unknown signature: corr(int, string, string)
+
+build
+SELECT corr(DISTINCT k, v) FROM kv
+----
+scalar-group-by
+ ├── columns: corr:5(float)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── agg-distinct [type=float]
+           └── corr [type=float]
+                ├── variable: k [type=int]
+                └── variable: v [type=int]
+
+build
+SELECT max(s), corr(k, v), min(s) FROM kv
+----
+scalar-group-by
+ ├── columns: max:5(string) corr:6(float) min:7(string)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int) s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      ├── max [type=string]
+      │    └── variable: s [type=string]
+      ├── corr [type=float]
+      │    ├── variable: k [type=int]
+      │    └── variable: v [type=int]
+      └── min [type=string]
+           └── variable: s [type=string]
+
+build
+SELECT corr(k, NULL) FROM kv
+----
+project
+ ├── columns: corr:5(unknown)
+ ├── scan kv
+ │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── projections
+      └── null [type=unknown]
+
+build
+SELECT corr('foo', v) FROM kv
+----
+error (42883): unknown signature: corr(string, int)
+
 # Tests for string_agg.
 
 build
@@ -2897,7 +2971,7 @@ scalar-group-by
  └── aggregations
       └── string-agg [type=string]
            ├── variable: s [type=string]
-           └── const: 'separator' [type=string]
+           └── variable: column5 [type=string]
 
 build
 SELECT string_agg(s) FROM kv
@@ -2924,7 +2998,7 @@ scalar-group-by
       └── agg-distinct [type=string]
            └── string-agg [type=string]
                 ├── variable: s [type=string]
-                └── const: 'separator' [type=string]
+                └── variable: column5 [type=string]
 
 build
 SELECT max(s), string_agg(s, 'sep1'), string_agg(s, 'sep2'), min(s) FROM kv
@@ -2943,10 +3017,10 @@ scalar-group-by
       │    └── variable: s [type=string]
       ├── string-agg [type=string]
       │    ├── variable: s [type=string]
-      │    └── const: 'sep1' [type=string]
+      │    └── variable: column6 [type=string]
       ├── string-agg [type=string]
       │    ├── variable: s [type=string]
-      │    └── const: 'sep2' [type=string]
+      │    └── variable: column8 [type=string]
       └── min [type=string]
            └── variable: s [type=string]
 
@@ -2966,7 +3040,7 @@ scalar-group-by
  └── aggregations
       └── string-agg [type=string]
            ├── variable: s [type=string]
-           └── const: 'abcxyz' [type=string]
+           └── variable: column5 [type=string]
 
 build
 SELECT string_agg(s, NULL) FROM kv
@@ -2982,12 +3056,21 @@ scalar-group-by
  └── aggregations
       └── string-agg [type=string]
            ├── variable: s [type=string]
-           └── null [type=unknown]
+           └── variable: column5 [type=unknown]
 
 build
 SELECT string_agg(s, s) FROM kv
 ----
-error (0A000): unimplemented: aggregate functions with multiple non-constant expressions are not supported
+scalar-group-by
+ ├── columns: string_agg:5(string)
+ ├── project
+ │    ├── columns: s:4(string)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── string-agg [type=string]
+           ├── variable: s [type=string]
+           └── variable: s [type=string]
 
 # Regression test for #26419
 build
