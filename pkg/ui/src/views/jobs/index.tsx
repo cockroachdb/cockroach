@@ -29,7 +29,6 @@ import {statusOptions} from "./jobStatusOptions";
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import {JobStatusDropdown} from "oss/src/views/jobs/jobStatusDropdown";
 import {JobTable} from "oss/src/views/jobs/jobTable";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
@@ -146,8 +145,10 @@ export class JobsTable extends React.Component<JobsTableProps> {
         <div>
           <PageConfig>
             <PageConfigItem>
-              <JobStatusDropdown
-                selectedStatus={this.props.status}
+              <Dropdown
+                title="Status"
+                options={statusOptions}
+                selected={this.props.status}
                 onChange={this.onStatusSelected}
               />
             </PageConfigItem>
