@@ -155,7 +155,7 @@ func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas b
 					}
 				}
 			}
-			descSizes := make(map[sqlbase.ID]roachpb.BulkOpSummary)
+			descSizes := make(map[sqlbase.ID]RowCount)
 			for _, file := range desc.Files {
 				// TODO(dan): This assumes each file in the backup only contains
 				// data from a single table, which is usually but not always
@@ -167,7 +167,7 @@ func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas b
 					continue
 				}
 				s := descSizes[sqlbase.ID(tableID)]
-				s.Add(file.EntryCounts)
+				s.add(file.EntryCounts)
 				descSizes[sqlbase.ID(tableID)] = s
 			}
 			start := tree.DNull
