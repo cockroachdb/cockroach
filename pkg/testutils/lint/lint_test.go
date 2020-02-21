@@ -1449,9 +1449,10 @@ func TestLint(t *testing.T) {
 			// We prohibit usage of:
 			// - coldata.NewMemBatch
 			// - coldata.NewMemBatchWithSize
+			// - coldata.NewMemBatchNoCols
 			// - coldata.NewMemColumn
 			// - coldata.Batch.AppendCol
-			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithSize|Column)|\.AppendCol)\(`),
+			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithSize|BatchNoCols|Column)|\.AppendCol)\(`),
 			"--",
 			"sql/colexec",
 			"sql/colflow",

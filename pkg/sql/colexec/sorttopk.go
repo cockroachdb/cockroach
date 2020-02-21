@@ -99,7 +99,7 @@ func (t *topKSorter) Init() {
 		typ := t.inputTypes[i]
 		t.comparators[i] = GetVecComparator(typ, 2)
 	}
-	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, int(coldata.BatchSize()))
+	t.windowedBatch = t.allocator.NewMemBatchNoCols(t.inputTypes, int(coldata.BatchSize()))
 }
 
 func (t *topKSorter) Next(ctx context.Context) coldata.Batch {

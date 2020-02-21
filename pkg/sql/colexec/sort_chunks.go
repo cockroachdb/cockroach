@@ -78,7 +78,7 @@ var _ bufferingInMemoryOperator = &sortChunksOp{}
 func (c *sortChunksOp) Init() {
 	c.input.init()
 	c.sorter.Init()
-	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, int(coldata.BatchSize()))
+	c.windowedBatch = c.allocator.NewMemBatchNoCols(c.input.inputTypes, int(coldata.BatchSize()))
 }
 
 func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {

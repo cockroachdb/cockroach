@@ -155,3 +155,18 @@ func (d *tupleHashDistributor) distribute(
 	}
 	return d.selections
 }
+
+// resetNumOutputs sets up the tupleHashDistributor to distribute the tuples
+// to a different number of outputs.
+func (d *tupleHashDistributor) resetNumOutputs(numOutputs int) {
+	if len(d.selections) <= numOutputs {
+		d.selections = d.selections[:numOutputs]
+		return
+	}
+	for len(d.selections) < numOutputs {
+		d.selections = append(d.selections, make([]uint16, 0, coldata.BatchSize()))
+	}
+}
+
+// Remove unused warning. I believe this function might be helpful later.
+var _ = (*tupleHashDistributor).resetNumOutputs

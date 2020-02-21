@@ -13,12 +13,14 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -57,7 +59,9 @@ func TestExternalHashJoiner(t *testing.T) {
 				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
 					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
 						spec := createSpecForHashJoiner(tc)
-						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(ctx, flowCtx, spec, sources, func() {}, queueCfg)
+						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(
+							ctx, flowCtx, spec, sources, func() {}, queueCfg, 2, /* numForcedPartitions */
+						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
 						return hjOp, err
@@ -72,6 +76,70 @@ func TestExternalHashJoiner(t *testing.T) {
 	for _, memMonitor := range memMonitors {
 		memMonitor.Stop(ctx)
 	}
+}
+
+// TestExternalHashJoinerFallbackToSortMergeJoin tests that the external hash
+// joiner falls back to using sort + merge join when repartitioning doesn't
+// decrease the size of the partition. We instantiate two sources that contain
+// the same tuple many times.
+func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+			TestingKnobs: execinfra.TestingKnobs{
+				ForceDiskSpill:   true,
+				MemoryLimitBytes: 1,
+			},
+		},
+	}
+	sourceTypes := []coltypes.T{coltypes.Int64}
+	batch := testAllocator.NewMemBatch(sourceTypes)
+	// We don't need to set the data since zero values in the columns work.
+	batch.SetLength(coldata.BatchSize())
+	nBatches := 2
+	leftSource := newFiniteBatchSource(batch, nBatches)
+	rightSource := newFiniteBatchSource(batch, nBatches)
+	spec := createSpecForHashJoiner(joinTestCase{
+		joinType:     sqlbase.JoinType_INNER,
+		leftTypes:    sourceTypes,
+		leftOutCols:  []uint32{0},
+		leftEqCols:   []uint32{0},
+		rightTypes:   sourceTypes,
+		rightOutCols: []uint32{0},
+		rightEqCols:  []uint32{0},
+	})
+	var spilled bool
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+	hj, accounts, monitors, err := createDiskBackedHashJoiner(
+		ctx, flowCtx, spec, []Operator{leftSource, rightSource},
+		func() { spilled = true }, queueCfg, 0, /* numForcedRepartitions */
+	)
+	defer func() {
+		for _, memAccount := range accounts {
+			memAccount.Close(ctx)
+		}
+		for _, memMonitor := range monitors {
+			memMonitor.Stop(ctx)
+		}
+	}()
+	require.NoError(t, err)
+	hj.Init()
+	err = execerror.CatchVectorizedRuntimeError(func() {
+		for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+		}
+	})
+	require.True(t, spilled)
+	// Currently, we don't have the fallback in place, so we expect an error.
+	// TODO(yuzefovich): change this once we have the fallback.
+	require.NotNil(t, err)
+	require.True(t, strings.Contains(err.Error(), externalHJFallbackToSortMergeJoinMsg))
 }
 
 func BenchmarkExternalHashJoiner(b *testing.B) {
@@ -147,7 +215,10 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							leftSource.reset(nBatches)
 							rightSource.reset(nBatches)
-							hj, accounts, monitors, err := createDiskBackedHashJoiner(ctx, flowCtx, spec, []Operator{leftSource, rightSource}, func() {}, queueCfg)
+							hj, accounts, monitors, err := createDiskBackedHashJoiner(
+								ctx, flowCtx, spec, []Operator{leftSource, rightSource},
+								func() {}, queueCfg, 0, /* numForcedRepartitions */
+							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
 							require.NoError(b, err)
@@ -180,6 +251,7 @@ func createDiskBackedHashJoiner(
 	inputs []Operator,
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
+	numForcedRepartitions int,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	args := NewColOperatorArgs{
 		Spec:                spec,
@@ -197,6 +269,7 @@ func createDiskBackedHashJoiner(
 	// that the in-memory hash join operator could hit the memory limit set on
 	// flowCtx.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
+	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }
