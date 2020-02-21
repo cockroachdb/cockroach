@@ -24,7 +24,7 @@ SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1),
   variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
 scalar-group-by
- ├── columns: min:6(int) max:7(int) count:8(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_or:17(bool) xor_agg:19(bytes)
+ ├── columns: min:6(int) max:7(int) count:8(int!null) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_or:17(bool) xor_agg:19(bytes)
  ├── project
  │    ├── columns: column5:5(int!null) column14:14(bool!null) column16:16(bool!null) column18:18(bytes!null)
  │    ├── scan kv
@@ -63,7 +63,7 @@ SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v),
   variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
 scalar-group-by
- ├── columns: min:5(int) max:6(int) count:7(int) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_and:15(bool) xor_agg:17(bytes)
+ ├── columns: min:5(int) max:6(int) count:7(int!null) sum_int:9(int) avg:10(decimal) sum:11(decimal) stddev:12(decimal) variance:13(decimal) bool_and:15(bool) bool_and:15(bool) xor_agg:17(bytes)
  ├── project
  │    ├── columns: column8:8(int!null) column14:14(bool) column16:16(bytes) v:2(int)
  │    ├── scan kv
@@ -107,9 +107,9 @@ SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1),
   variance(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
 project
- ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:15(float) sum:7(decimal) stddev:8(decimal) variance:16(float) bool_and:11(bool) bool_or:12(bool) to_hex:17(string)
+ ├── columns: min:2(int) count:3(int!null) max:4(int) sum_int:5(int) avg:15(float) sum:7(decimal) stddev:8(decimal) variance:16(float) bool_and:11(bool) bool_or:12(bool) to_hex:17(string)
  ├── scalar-group-by
- │    ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:6(decimal) sum:7(decimal) stddev:8(decimal) variance:9(decimal) bool_and:11(bool) bool_or:12(bool) xor_agg:14(bytes)
+ │    ├── columns: min:2(int) count:3(int!null) max:4(int) sum_int:5(int) avg:6(decimal) sum:7(decimal) stddev:8(decimal) variance:9(decimal) bool_and:11(bool) bool_or:12(bool) xor_agg:14(bytes)
  │    ├── project
  │    │    ├── columns: column1:1(int!null) column10:10(bool!null) column13:13(bytes!null)
  │    │    ├── values
@@ -291,7 +291,7 @@ build
 SELECT count(*), k FROM kv GROUP BY k
 ----
 group-by
- ├── columns: count:5(int) k:1(int!null)
+ ├── columns: count:5(int!null) k:1(int!null)
  ├── grouping columns: k:1(int!null)
  ├── project
  │    ├── columns: k:1(int!null)
@@ -305,7 +305,7 @@ build
 SELECT count(*), k FROM kv GROUP BY 2
 ----
 group-by
- ├── columns: count:5(int) k:1(int!null)
+ ├── columns: count:5(int!null) k:1(int!null)
  ├── grouping columns: k:1(int!null)
  ├── project
  │    ├── columns: k:1(int!null)
@@ -359,7 +359,7 @@ build
 SELECT count(*), kv.s FROM kv GROUP BY s
 ----
 group-by
- ├── columns: count:5(int) s:4(string)
+ ├── columns: count:5(int!null) s:4(string)
  ├── grouping columns: s:4(string)
  ├── project
  │    ├── columns: s:4(string)
@@ -372,7 +372,7 @@ build
 SELECT count(*), s FROM kv GROUP BY kv.s
 ----
 group-by
- ├── columns: count:5(int) s:4(string)
+ ├── columns: count:5(int!null) s:4(string)
  ├── grouping columns: s:4(string)
  ├── project
  │    ├── columns: s:4(string)
@@ -385,7 +385,7 @@ build
 SELECT count(*), kv.s FROM kv GROUP BY kv.s
 ----
 group-by
- ├── columns: count:5(int) s:4(string)
+ ├── columns: count:5(int!null) s:4(string)
  ├── grouping columns: s:4(string)
  ├── project
  │    ├── columns: s:4(string)
@@ -398,7 +398,7 @@ build
 SELECT count(*), s FROM kv GROUP BY s
 ----
 group-by
- ├── columns: count:5(int) s:4(string)
+ ├── columns: count:5(int!null) s:4(string)
  ├── grouping columns: s:4(string)
  ├── project
  │    ├── columns: s:4(string)
@@ -412,7 +412,7 @@ build
 SELECT v, count(*), w FROM kv GROUP BY v, w
 ----
 group-by
- ├── columns: v:2(int) count:5(int) w:3(int)
+ ├── columns: v:2(int) count:5(int!null) w:3(int)
  ├── grouping columns: v:2(int) w:3(int)
  ├── project
  │    ├── columns: v:2(int) w:3(int)
@@ -426,7 +426,7 @@ build
 SELECT v, count(*), w FROM kv GROUP BY 1, 3
 ----
 group-by
- ├── columns: v:2(int) count:5(int) w:3(int)
+ ├── columns: v:2(int) count:5(int!null) w:3(int)
  ├── grouping columns: v:2(int) w:3(int)
  ├── project
  │    ├── columns: v:2(int) w:3(int)
@@ -440,7 +440,7 @@ build
 SELECT count(*), upper(s) FROM kv GROUP BY upper(s)
 ----
 group-by
- ├── columns: count:5(int) upper:6(string)
+ ├── columns: count:5(int!null) upper:6(string)
  ├── grouping columns: column6:6(string)
  ├── project
  │    ├── columns: column6:6(string)
@@ -457,9 +457,9 @@ build
 SELECT count(*) FROM kv GROUP BY 1+2
 ----
 project
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  └── group-by
-      ├── columns: count_rows:5(int) column6:6(int!null)
+      ├── columns: count_rows:5(int!null) column6:6(int!null)
       ├── grouping columns: column6:6(int!null)
       ├── project
       │    ├── columns: column6:6(int!null)
@@ -474,9 +474,9 @@ build
 SELECT count(*) FROM kv GROUP BY length('abc')
 ----
 project
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  └── group-by
-      ├── columns: count_rows:5(int) column6:6(int)
+      ├── columns: count_rows:5(int!null) column6:6(int)
       ├── grouping columns: column6:6(int)
       ├── project
       │    ├── columns: column6:6(int)
@@ -493,9 +493,9 @@ build
 SELECT count(*), upper(s) FROM kv GROUP BY s
 ----
 project
- ├── columns: count:5(int) upper:6(string)
+ ├── columns: count:5(int!null) upper:6(string)
  ├── group-by
- │    ├── columns: s:4(string) count_rows:5(int)
+ │    ├── columns: s:4(string) count_rows:5(int!null)
  │    ├── grouping columns: s:4(string)
  │    ├── project
  │    │    ├── columns: s:4(string)
@@ -518,7 +518,7 @@ build
 SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 group-by
- ├── columns: count:5(int) r:6(int)
+ ├── columns: count:5(int!null) r:6(int)
  ├── grouping columns: column6:6(int)
  ├── project
  │    ├── columns: column6:6(int)
@@ -537,9 +537,9 @@ build
 SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
 project
- ├── columns: count:5(int) r:6(int)
+ ├── columns: count:5(int!null) r:6(int)
  ├── group-by
- │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int)
+ │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int!null)
  │    ├── grouping columns: k:1(int!null) v:2(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
@@ -577,7 +577,7 @@ build
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 ----
 group-by
- ├── columns: count_1:5(int) lx:6(int)
+ ├── columns: count_1:5(int!null) lx:6(int)
  ├── grouping columns: column6:6(int)
  ├── project
  │    ├── columns: column6:6(int) k:1(int!null)
@@ -595,7 +595,7 @@ build
 SELECT count(*)
 ----
 scalar-group-by
- ├── columns: count:1(int)
+ ├── columns: count:1(int!null)
  ├── values
  │    └── tuple [type=tuple]
  └── aggregations
@@ -605,7 +605,7 @@ build
 SELECT count(k) from kv
 ----
 scalar-group-by
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  ├── project
  │    ├── columns: k:1(int!null)
  │    └── scan kv
@@ -618,7 +618,7 @@ build
 SELECT count(1)
 ----
 scalar-group-by
- ├── columns: count:2(int)
+ ├── columns: count:2(int!null)
  ├── project
  │    ├── columns: column1:1(int!null)
  │    ├── values
@@ -633,7 +633,7 @@ build
 SELECT count(1) from kv
 ----
 scalar-group-by
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  ├── project
  │    ├── columns: column5:5(int!null)
  │    ├── scan kv
@@ -653,10 +653,10 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v
 ----
 sort
- ├── columns: v:2(int) count:5(int)
+ ├── columns: v:2(int) count:5(int!null)
  ├── ordering: +2
  └── group-by
-      ├── columns: v:2(int) count:5(int)
+      ├── columns: v:2(int) count:5(int!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int)
@@ -670,10 +670,10 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v DESC
 ----
 sort
- ├── columns: v:2(int) count:5(int)
+ ├── columns: v:2(int) count:5(int!null)
  ├── ordering: -2
  └── group-by
-      ├── columns: v:2(int) count:5(int)
+      ├── columns: v:2(int) count:5(int!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int)
@@ -687,10 +687,10 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k) DESC
 ----
 sort
- ├── columns: v:2(int) count:5(int)
+ ├── columns: v:2(int) count:5(int!null)
  ├── ordering: -5
  └── group-by
-      ├── columns: v:2(int) count:5(int)
+      ├── columns: v:2(int) count:5(int!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int)
@@ -704,12 +704,12 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v-count(k)
 ----
 sort
- ├── columns: v:2(int) count:5(int)  [hidden: column6:6(int)]
+ ├── columns: v:2(int) count:5(int!null)  [hidden: column6:6(int)]
  ├── ordering: +6
  └── project
-      ├── columns: column6:6(int) v:2(int) count:5(int)
+      ├── columns: column6:6(int) v:2(int) count:5(int!null)
       ├── group-by
-      │    ├── columns: v:2(int) count:5(int)
+      │    ├── columns: v:2(int) count:5(int!null)
       │    ├── grouping columns: v:2(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
@@ -727,10 +727,10 @@ build
 SELECT v FROM kv GROUP BY v ORDER BY sum(k)
 ----
 sort
- ├── columns: v:2(int)  [hidden: sum:5(decimal)]
+ ├── columns: v:2(int)  [hidden: sum:5(decimal!null)]
  ├── ordering: +5
  └── group-by
-      ├── columns: v:2(int) sum:5(decimal)
+      ├── columns: v:2(int) sum:5(decimal!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int)
@@ -744,10 +744,10 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY 1 DESC
 ----
 sort
- ├── columns: v:2(int) count:5(int)
+ ├── columns: v:2(int) count:5(int!null)
  ├── ordering: -2
  └── group-by
-      ├── columns: v:2(int) count:5(int)
+      ├── columns: v:2(int) count:5(int!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int)
@@ -761,7 +761,7 @@ build
 SELECT count(*), count(k), count(kv.v) FROM kv
 ----
 scalar-group-by
- ├── columns: count:5(int) count:6(int) count:7(int)
+ ├── columns: count:5(int!null) count:6(int!null) count:7(int!null)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
  │    └── scan kv
@@ -777,7 +777,7 @@ build
 SELECT count(kv.*) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  ├── project
  │    ├── columns: column5:5(tuple{int AS k, int AS v, int AS w, string AS s})
  │    ├── scan kv
@@ -796,7 +796,7 @@ build
 SELECT count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv
 ----
 scalar-group-by
- ├── columns: count:5(int) count:6(int) count:6(int)
+ ├── columns: count:5(int!null) count:6(int!null) count:6(int!null)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
  │    └── scan kv
@@ -813,7 +813,7 @@ build
 SELECT upper(s), count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv GROUP BY upper(s)
 ----
 group-by
- ├── columns: upper:7(string) count:5(int) count:6(int) count:6(int)
+ ├── columns: upper:7(string) count:5(int!null) count:6(int!null) count:6(int!null)
  ├── grouping columns: column7:7(string)
  ├── project
  │    ├── columns: column7:7(string) k:1(int!null) v:2(int)
@@ -834,7 +834,7 @@ build
 SELECT count((k, v)) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  ├── project
  │    ├── columns: column5:5(tuple{int, int})
  │    ├── scan kv
@@ -851,7 +851,7 @@ build
 SELECT count(DISTINCT (k, v)) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  ├── project
  │    ├── columns: column5:5(tuple{int, int})
  │    ├── scan kv
@@ -869,7 +869,7 @@ build
 SELECT count(DISTINCT (k, (v))) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  ├── project
  │    ├── columns: column5:5(tuple{int, int})
  │    ├── scan kv
@@ -887,7 +887,7 @@ build
 SELECT count(*) FROM kv a, kv b
 ----
 scalar-group-by
- ├── columns: count:9(int)
+ ├── columns: count:9(int!null)
  ├── project
  │    └── inner-join (cross)
  │         ├── columns: a.k:1(int!null) a.v:2(int) a.w:3(int) a.s:4(string) b.k:5(int!null) b.v:6(int) b.w:7(int) b.s:8(string)
@@ -903,9 +903,9 @@ build
 SELECT count((k, v)) FROM kv LIMIT 1
 ----
 limit
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  ├── scalar-group-by
- │    ├── columns: count:6(int)
+ │    ├── columns: count:6(int!null)
  │    ├── limit hint: 1.00
  │    ├── project
  │    │    ├── columns: column5:5(tuple{int, int})
@@ -924,9 +924,9 @@ build
 SELECT count((k, v)) FROM kv OFFSET 1
 ----
 offset
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  ├── scalar-group-by
- │    ├── columns: count:6(int)
+ │    ├── columns: count:6(int!null)
  │    ├── project
  │    │    ├── columns: column5:5(tuple{int, int})
  │    │    ├── scan kv
@@ -944,9 +944,9 @@ build
 SELECT count(k)+count(kv.v) AS r FROM kv
 ----
 project
- ├── columns: r:7(int)
+ ├── columns: r:7(int!null)
  ├── scalar-group-by
- │    ├── columns: count:5(int) count:6(int)
+ │    ├── columns: count:5(int!null) count:6(int!null)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
  │    │    └── scan kv
@@ -965,7 +965,7 @@ build
 SELECT count(NULL::int), count((NULL, NULL))
 ----
 scalar-group-by
- ├── columns: count:2(int) count:4(int)
+ ├── columns: count:2(int!null) count:4(int!null)
  ├── project
  │    ├── columns: column1:1(int) column3:3(tuple{unknown, unknown})
  │    ├── values
@@ -1626,7 +1626,7 @@ build
 SELECT count(2::int), count(3::float), count(4::decimal)
 ----
 scalar-group-by
- ├── columns: count:2(int) count:4(int) count:6(int)
+ ├── columns: count:2(int!null) count:4(int!null) count:6(int!null)
  ├── project
  │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
@@ -2000,10 +2000,10 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
 sort
- ├── columns: v:2(int) count:5(int)
+ ├── columns: v:2(int) count:5(int!null)
  ├── ordering: +5
  └── group-by
-      ├── columns: v:2(int) count:5(int)
+      ├── columns: v:2(int) count:5(int!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int)
@@ -2017,10 +2017,10 @@ build
 SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ----
 sort
- ├── columns: v:2(int) count:5(int)
+ ├── columns: v:2(int) count:5(int!null)
  ├── ordering: +5
  └── group-by
-      ├── columns: v:2(int) count_rows:5(int)
+      ├── columns: v:2(int) count_rows:5(int!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: v:2(int)
@@ -2033,10 +2033,10 @@ build
 SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ----
 sort
- ├── columns: v:2(int) count:6(int)
+ ├── columns: v:2(int) count:6(int!null)
  ├── ordering: +6
  └── group-by
-      ├── columns: v:2(int) count:6(int)
+      ├── columns: v:2(int) count:6(int!null)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: column5:5(int!null) v:2(int)
@@ -2501,9 +2501,9 @@ build
 SELECT count(*) FROM kv GROUP BY k, k
 ----
 project
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  └── group-by
-      ├── columns: k:1(int!null) count_rows:5(int)
+      ├── columns: k:1(int!null) count_rows:5(int!null)
       ├── grouping columns: k:1(int!null)
       ├── project
       │    ├── columns: k:1(int!null)
@@ -2516,9 +2516,9 @@ build
 SELECT count(upper(s)) FROM kv GROUP BY upper(s)
 ----
 project
- ├── columns: count:6(int)
+ ├── columns: count:6(int!null)
  └── group-by
-      ├── columns: column5:5(string) count:6(int)
+      ├── columns: column5:5(string) count:6(int!null)
       ├── grouping columns: column5:5(string)
       ├── project
       │    ├── columns: column5:5(string)
@@ -2535,9 +2535,9 @@ build
 SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ----
 project
- ├── columns: sum:9(decimal)
+ ├── columns: sum:9(decimal!null)
  └── group-by
-      ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) sum:9(decimal)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) sum:9(decimal!null)
       ├── grouping columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) d:8(decimal!null)
@@ -2680,7 +2680,7 @@ build
 SELECT y, count(*) FILTER (WHERE x > 5) FROM xyz GROUP BY y
 ----
 group-by
- ├── columns: y:2(int) count:6(int)
+ ├── columns: y:2(int) count:6(int!null)
  ├── grouping columns: y:2(int)
  ├── project
  │    ├── columns: column4:4(bool!null) column5:5(bool!null) y:2(int)
@@ -2708,12 +2708,12 @@ build
 SELECT max(k) AS mk FROM kv GROUP BY v ORDER BY mk
 ----
 sort
- ├── columns: mk:5(int)
+ ├── columns: mk:5(int!null)
  ├── ordering: +5
  └── project
-      ├── columns: max:5(int)
+      ├── columns: max:5(int!null)
       └── group-by
-           ├── columns: v:2(int) max:5(int)
+           ├── columns: v:2(int) max:5(int!null)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2727,12 +2727,12 @@ build
 SELECT max(k) AS mk FROM kv GROUP BY v ORDER BY max(k)
 ----
 sort
- ├── columns: mk:5(int)
+ ├── columns: mk:5(int!null)
  ├── ordering: +5
  └── project
-      ├── columns: max:5(int)
+      ├── columns: max:5(int!null)
       └── group-by
-           ├── columns: v:2(int) max:5(int)
+           ├── columns: v:2(int) max:5(int!null)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2746,12 +2746,12 @@ build
 SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v ORDER BY mk1
 ----
 sort
- ├── columns: mk1:5(int) mk2:5(int)
+ ├── columns: mk1:5(int!null) mk2:5(int!null)
  ├── ordering: +5
  └── project
-      ├── columns: max:5(int)
+      ├── columns: max:5(int!null)
       └── group-by
-           ├── columns: v:2(int) max:5(int)
+           ├── columns: v:2(int) max:5(int!null)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2765,12 +2765,12 @@ build
 SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v ORDER BY mk2
 ----
 sort
- ├── columns: mk1:5(int) mk2:5(int)
+ ├── columns: mk1:5(int!null) mk2:5(int!null)
  ├── ordering: +5
  └── project
-      ├── columns: max:5(int)
+      ├── columns: max:5(int!null)
       └── group-by
-           ├── columns: v:2(int) max:5(int)
+           ├── columns: v:2(int) max:5(int!null)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2784,12 +2784,12 @@ build
 SELECT max(k) AS mk1, max(k)/5 AS mk2 FROM kv GROUP BY v ORDER BY mk2
 ----
 sort
- ├── columns: mk1:5(int) mk2:6(decimal)
+ ├── columns: mk1:5(int!null) mk2:6(decimal!null)
  ├── ordering: +6
  └── project
-      ├── columns: mk2:6(decimal) max:5(int)
+      ├── columns: mk2:6(decimal!null) max:5(int!null)
       ├── group-by
-      │    ├── columns: v:2(int) max:5(int)
+      │    ├── columns: v:2(int) max:5(int!null)
       │    ├── grouping columns: v:2(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
@@ -3216,7 +3216,7 @@ build
 SELECT count(col1 ORDER BY col2) FROM tab
 ----
 scalar-group-by
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  ├── project
  │    ├── columns: col1:1(int!null) col2:2(int!null)
  │    └── scan tab
@@ -3604,9 +3604,9 @@ build
 SELECT count(*), k+v FROM kv GROUP BY k
 ----
 project
- ├── columns: count:5(int) "?column?":6(int)
+ ├── columns: count:5(int!null) "?column?":6(int)
  ├── group-by
- │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int)
+ │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int!null)
  │    ├── grouping columns: k:1(int!null) v:2(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
@@ -3623,11 +3623,11 @@ build
 SELECT count(*) FROM kv GROUP BY k HAVING v=1
 ----
 project
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  └── select
-      ├── columns: k:1(int!null) v:2(int!null) count_rows:5(int)
+      ├── columns: k:1(int!null) v:2(int!null) count_rows:5(int!null)
       ├── group-by
-      │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int)
+      │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int!null)
       │    ├── grouping columns: k:1(int!null) v:2(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
@@ -3644,7 +3644,7 @@ build
 SELECT k, v, count(*) FROM kv JOIN ab ON a=k GROUP BY k
 ----
 group-by
- ├── columns: k:1(int!null) v:2(int) count:7(int)
+ ├── columns: k:1(int!null) v:2(int) count:7(int!null)
  ├── grouping columns: k:1(int!null) v:2(int)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)

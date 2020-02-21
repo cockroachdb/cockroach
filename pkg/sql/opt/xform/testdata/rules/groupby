@@ -448,9 +448,9 @@ opt
 SELECT min(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
- ├── columns: min:4(int) count:5(int)
+ ├── columns: min:4(int!null) count:5(int!null)
  └── group-by
-      ├── columns: x:1(int!null) min:4(int) count:5(int)
+      ├── columns: x:1(int!null) min:4(int!null) count:5(int!null)
       ├── grouping columns: x:1(int!null)
       ├── internal-ordering: +1
       ├── key: (1)
@@ -472,9 +472,9 @@ opt
 SELECT max(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
- ├── columns: max:4(int) count:5(int)
+ ├── columns: max:4(int!null) count:5(int!null)
  └── group-by
-      ├── columns: x:1(int!null) max:4(int) count:5(int)
+      ├── columns: x:1(int!null) max:4(int!null) count:5(int!null)
       ├── grouping columns: x:1(int!null)
       ├── internal-ordering: +1
       ├── key: (1)
@@ -736,7 +736,7 @@ opt expect=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE w = 5 GROUP BY w
 ----
 project
- ├── columns: min:5(int)
+ ├── columns: min:5(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
@@ -772,12 +772,12 @@ opt expect=ReplaceMinWithLimit
 SELECT v + 1, min(w), v FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 ----
 project
- ├── columns: "?column?":6(int) min:5(int) v:3(int)
+ ├── columns: "?column?":6(int!null) min:5(int!null) v:3(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,5,6)
  ├── project
- │    ├── columns: min:5(int) v:3(int)
+ │    ├── columns: min:5(int!null) v:3(int!null)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3,5)
@@ -797,12 +797,12 @@ opt expect=ReplaceMaxWithLimit
 SELECT v + 1, max(w), v FROM kuvw WHERE v = 5 GROUP BY v
 ----
 project
- ├── columns: "?column?":6(int) max:5(int) v:3(int)
+ ├── columns: "?column?":6(int!null) max:5(int) v:3(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,5,6)
  ├── project
- │    ├── columns: max:5(int) v:3(int)
+ │    ├── columns: max:5(int) v:3(int!null)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3,5)
@@ -822,7 +822,7 @@ opt expect=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: min:5(int)
+ ├── columns: min:5(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
@@ -840,7 +840,7 @@ opt expect=ReplaceMaxWithLimit
 SELECT max(k) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
@@ -858,7 +858,7 @@ opt expect=ReplaceMinWithLimit
 SELECT v, min(k), w FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: v:3(int) min:5(int) w:4(int)
+ ├── columns: v:3(int!null) min:5(int!null) w:4(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3-5)
@@ -876,7 +876,7 @@ opt expect=ReplaceMaxWithLimit
 SELECT v, max(k), w FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: v:3(int) max:5(int) w:4(int)
+ ├── columns: v:3(int!null) max:5(int!null) w:4(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3-5)
@@ -894,7 +894,7 @@ opt expect=ReplaceMinWithLimit
 SELECT min(u) FROM kuvw WHERE v = 5 AND w = 10 AND u > 0 GROUP BY v, w
 ----
 project
- ├── columns: min:5(int)
+ ├── columns: min:5(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
@@ -930,9 +930,9 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
- ├── columns: min:5(int)
+ ├── columns: min:5(int!null)
  └── group-by
-      ├── columns: w:4(int) min:5(int)
+      ├── columns: w:4(int) min:5(int!null)
       ├── grouping columns: w:4(int)
       ├── internal-ordering: +4 opt(3)
       ├── key: (4)
@@ -952,9 +952,9 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5(int!null)
  └── group-by
-      ├── columns: w:4(int) max:5(int)
+      ├── columns: w:4(int) max:5(int!null)
       ├── grouping columns: w:4(int)
       ├── internal-ordering: +4 opt(3)
       ├── key: (4)
@@ -976,9 +976,9 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w) FROM kuvw WHERE v > 5 AND w IS NOT NULL GROUP BY v
 ----
 project
- ├── columns: min:5(int)
+ ├── columns: min:5(int!null)
  └── group-by
-      ├── columns: v:3(int!null) min:5(int)
+      ├── columns: v:3(int!null) min:5(int!null)
       ├── grouping columns: v:3(int!null)
       ├── internal-ordering: +3
       ├── key: (3)
@@ -1024,7 +1024,7 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w), min(k) FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 ----
 group-by
- ├── columns: min:5(int) min:6(int)
+ ├── columns: min:5(int!null) min:6(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)
@@ -1045,7 +1045,7 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), max(k) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: max:5(int) max:6(int)
+ ├── columns: max:5(int) max:6(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)
@@ -1065,7 +1065,7 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(k), max(k) FROM kuvw WHERE w = 5 GROUP BY w
 ----
 group-by
- ├── columns: min:5(int) max:6(int)
+ ├── columns: min:5(int!null) max:6(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)
@@ -1085,7 +1085,7 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), count(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: max:5(int) count:6(int)
+ ├── columns: max:5(int) count:6(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)

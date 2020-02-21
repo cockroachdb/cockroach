@@ -52,14 +52,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q16_sort_1
- ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) supplier_cnt:22(int)
+ ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) supplier_cnt:22(int!null)
  ├── stats: [rows=3315.43068, distinct(9)=8.33333333, null(9)=0, distinct(10)=150, null(10)=0, distinct(11)=8, null(11)=0, distinct(22)=3315.43068, null(22)=0, distinct(9-11)=3315.43068, null(9-11)=0]
  ├── key: (9-11)
  ├── fd: (9-11)-->(22)
  ├── ordering: -22,+9,+10,+11
  └── group-by
       ├── save-table-name: q16_group_by_2
-      ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) count:22(int)
+      ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) count:22(int!null)
       ├── grouping columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
       ├── stats: [rows=3315.43068, distinct(9)=8.33333333, null(9)=0, distinct(10)=150, null(10)=0, distinct(11)=8, null(11)=0, distinct(22)=3315.43068, null(22)=0, distinct(9-11)=3315.43068, null(9-11)=0]
       ├── key: (9-11)

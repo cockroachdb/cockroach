@@ -31,7 +31,7 @@ SELECT s, count(*) FROM kv GROUP BY s HAVING count(*) > 1
 select
  ├── columns: s:4(string) count:5(int!null)
  ├── group-by
- │    ├── columns: s:4(string) count_rows:5(int)
+ │    ├── columns: s:4(string) count_rows:5(int!null)
  │    ├── grouping columns: s:4(string)
  │    ├── project
  │    │    ├── columns: s:4(string)
@@ -137,9 +137,9 @@ build
 SELECT count(*), k+w AS r FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
 select
- ├── columns: count:5(int) r:6(int!null)
+ ├── columns: count:5(int!null) r:6(int!null)
  ├── group-by
- │    ├── columns: count_rows:5(int) column6:6(int)
+ │    ├── columns: count_rows:5(int!null) column6:6(int)
  │    ├── grouping columns: column6:6(int)
  │    ├── project
  │    │    ├── columns: column6:6(int)
@@ -269,9 +269,9 @@ build fully-qualify-names
 SELECT upper(s), count(s), count(upper(s)) FROM t.kv GROUP BY upper(s) HAVING count(s) > 1
 ----
 select
- ├── columns: upper:6(string) count:5(int!null) count:7(int)
+ ├── columns: upper:6(string) count:5(int!null) count:7(int!null)
  ├── group-by
- │    ├── columns: count:5(int) column6:6(string) count:7(int)
+ │    ├── columns: count:5(int!null) column6:6(string) count:7(int!null)
  │    ├── grouping columns: column6:6(string)
  │    ├── project
  │    │    ├── columns: column6:6(string) t.public.kv.s:4(string)
@@ -300,7 +300,7 @@ project
  └── select
       ├── columns: v:2(int) sum:5(decimal!null)
       ├── group-by
-      │    ├── columns: v:2(int) sum:5(decimal)
+      │    ├── columns: v:2(int) sum:5(decimal!null)
       │    ├── grouping columns: v:2(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
@@ -318,14 +318,14 @@ build
 SELECT sum(k) AS mk FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk
 ----
 sort
- ├── columns: mk:5(decimal)
+ ├── columns: mk:5(decimal!null)
  ├── ordering: +5
  └── project
-      ├── columns: sum:5(decimal)
+      ├── columns: sum:5(decimal!null)
       └── select
-           ├── columns: v:2(int) sum:5(decimal) max:6(int!null)
+           ├── columns: v:2(int) sum:5(decimal!null) max:6(int!null)
            ├── group-by
-           │    ├── columns: v:2(int) sum:5(decimal) max:6(int)
+           │    ├── columns: v:2(int) sum:5(decimal!null) max:6(int!null)
            │    ├── grouping columns: v:2(int)
            │    ├── project
            │    │    ├── columns: k:1(int!null) v:2(int)
@@ -345,14 +345,14 @@ build
 SELECT sum(k) AS mk FROM kv GROUP BY v HAVING v > 10 ORDER BY mk
 ----
 sort
- ├── columns: mk:5(decimal)
+ ├── columns: mk:5(decimal!null)
  ├── ordering: +5
  └── project
-      ├── columns: sum:5(decimal)
+      ├── columns: sum:5(decimal!null)
       └── select
-           ├── columns: v:2(int!null) sum:5(decimal)
+           ├── columns: v:2(int!null) sum:5(decimal!null)
            ├── group-by
-           │    ├── columns: v:2(int) sum:5(decimal)
+           │    ├── columns: v:2(int) sum:5(decimal!null)
            │    ├── grouping columns: v:2(int)
            │    ├── project
            │    │    ├── columns: k:1(int!null) v:2(int)
@@ -377,7 +377,7 @@ sort
       └── select
            ├── columns: v:2(int) max:5(int!null)
            ├── group-by
-           │    ├── columns: v:2(int) max:5(int)
+           │    ├── columns: v:2(int) max:5(int!null)
            │    ├── grouping columns: v:2(int)
            │    ├── project
            │    │    ├── columns: k:1(int!null) v:2(int)
@@ -402,7 +402,7 @@ sort
       └── select
            ├── columns: v:2(int) max:5(int!null)
            ├── group-by
-           │    ├── columns: v:2(int) max:5(int)
+           │    ├── columns: v:2(int) max:5(int!null)
            │    ├── grouping columns: v:2(int)
            │    ├── project
            │    │    ├── columns: k:1(int!null) v:2(int)

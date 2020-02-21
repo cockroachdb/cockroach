@@ -255,7 +255,7 @@ build
 SELECT sum(v), x, v FROM xysd, uv GROUP BY x, v
 ----
 group-by
- ├── columns: sum:8(decimal) x:1(int!null) v:6(int!null)
+ ├── columns: sum:8(decimal!null) x:1(int!null) v:6(int!null)
  ├── grouping columns: x:1(int!null) v:6(int!null)
  ├── stats: [rows=500000, distinct(1,6)=500000, null(1,6)=0]
  ├── key: (1,6)
@@ -288,7 +288,7 @@ norm
 SELECT sum(v), x, v FROM xysd, uv WHERE x=u GROUP BY x, v
 ----
 group-by
- ├── columns: sum:8(decimal) x:1(int!null) v:6(int!null)
+ ├── columns: sum:8(decimal!null) x:1(int!null) v:6(int!null)
  ├── grouping columns: x:1(int!null) v:6(int!null)
  ├── stats: [rows=10000, distinct(1,6)=10000, null(1,6)=0]
  ├── key: (1,6)
@@ -404,10 +404,10 @@ FROM (SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u AND y+v=5)) AS
 GROUP BY y
 ----
 project
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── stats: [rows=138.170075]
  └── group-by
-      ├── columns: y:2(int) count_rows:8(int)
+      ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=138.170075, distinct(2)=138.170075, null(2)=0]
       ├── key: (2)
@@ -438,10 +438,10 @@ FROM (SELECT * FROM xysd WHERE NOT EXISTS (SELECT * FROM uv WHERE x=u AND y+v=5)
 GROUP BY y
 ----
 project
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── stats: [rows=400]
  └── group-by
-      ├── columns: y:2(int) count_rows:8(int)
+      ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
@@ -472,10 +472,10 @@ FROM (SELECT * FROM xysd LEFT OUTER JOIN uv ON x=u AND y+v=5) AS a
 GROUP BY y
 ----
 project
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── stats: [rows=400]
  └── group-by
-      ├── columns: y:2(int) count_rows:8(int)
+      ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
@@ -505,10 +505,10 @@ FROM (SELECT * FROM xysd RIGHT OUTER JOIN uv ON x=u AND y+v=5) AS a
 GROUP BY y
 ----
 project
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── stats: [rows=399.903879]
  └── group-by
-      ├── columns: y:2(int) count_rows:8(int)
+      ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=399.903879]
       ├── key: (2)
@@ -538,10 +538,10 @@ FROM (SELECT * FROM xysd FULL OUTER JOIN uv ON x=u AND y+v=5) AS a
 GROUP BY y
 ----
 project
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── stats: [rows=400]
  └── group-by
-      ├── columns: y:2(int) count_rows:8(int)
+      ├── columns: y:2(int) count_rows:8(int!null)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=400, distinct(2)=400, null(2)=400]
       ├── key: (2)

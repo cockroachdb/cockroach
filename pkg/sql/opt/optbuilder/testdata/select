@@ -522,9 +522,9 @@ limit
  │    └── mult [type=int]
  │         ├── subquery [type=int]
  │         │    └── max1-row
- │         │         ├── columns: count_rows:8(int)
+ │         │         ├── columns: count_rows:8(int!null)
  │         │         └── scalar-group-by
- │         │              ├── columns: count_rows:8(int)
+ │         │              ├── columns: count_rows:8(int!null)
  │         │              ├── project
  │         │              │    └── scan abc
  │         │              │         └── columns: a:5(int!null) b:6(int) c:7(int)
@@ -534,9 +534,9 @@ limit
  └── mult [type=int]
       ├── subquery [type=int]
       │    └── max1-row
-      │         ├── columns: count_rows:12(int)
+      │         ├── columns: count_rows:12(int!null)
       │         └── scalar-group-by
-      │              ├── columns: count_rows:12(int)
+      │              ├── columns: count_rows:12(int!null)
       │              ├── project
       │              │    └── scan abc
       │              │         └── columns: a:9(int!null) b:10(int) c:11(int)

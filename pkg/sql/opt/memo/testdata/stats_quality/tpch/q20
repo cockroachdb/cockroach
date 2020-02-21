@@ -113,7 +113,7 @@ sort
            │    │              │    ├── fd: (12,13)-->(14,42)
            │    │              │    ├── group-by
            │    │              │    │    ├── save-table-name: q20_group_by_10
-           │    │              │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int) sum:42(float)
+           │    │              │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) sum:42(float)
            │    │              │    │    ├── grouping columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
            │    │              │    │    ├── stats: [rows=800000, distinct(12)=199241, null(12)=0, distinct(13)=9920, null(13)=0, distinct(14)=800000, null(14)=0, distinct(42)=800000, null(42)=0, distinct(12,13)=800000, null(12,13)=0]
            │    │              │    │    ├── key: (12,13)

@@ -40,14 +40,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q4_sort_1
- ├── columns: o_orderpriority:6(char!null) order_count:26(int)
+ ├── columns: o_orderpriority:6(char!null) order_count:26(int!null)
  ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(26)=5, null(26)=0]
  ├── key: (6)
  ├── fd: (6)-->(26)
  ├── ordering: +6
  └── group-by
       ├── save-table-name: q4_group_by_2
-      ├── columns: o_orderpriority:6(char!null) count_rows:26(int)
+      ├── columns: o_orderpriority:6(char!null) count_rows:26(int!null)
       ├── grouping columns: o_orderpriority:6(char!null)
       ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(26)=5, null(26)=0]
       ├── key: (6)

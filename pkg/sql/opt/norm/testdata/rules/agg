@@ -104,7 +104,7 @@ SELECT
 FROM a
 ----
 scalar-group-by
- ├── columns: count:7(int) sum:9(decimal) sum_int:10(int) avg:11(decimal) stddev:12(float) variance:13(float) xor_agg:15(bytes) array_agg:16(int[]) json_agg:17(jsonb)
+ ├── columns: count:7(int!null) sum:9(decimal) sum_int:10(int) avg:11(decimal) stddev:12(float) variance:13(float) xor_agg:15(bytes) array_agg:16(int[]) json_agg:17(jsonb)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7,9-13,15-17)

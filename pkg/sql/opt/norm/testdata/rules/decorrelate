@@ -1391,11 +1391,11 @@ project
  ├── columns: k:1(int!null)
  ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) count_rows:10(int)
+      ├── columns: k:1(int!null) count_rows:10(int!null)
       ├── key: (1)
       ├── fd: (1)-->(10)
       ├── group-by
-      │    ├── columns: k:1(int!null) count_rows:10(int)
+      │    ├── columns: k:1(int!null) count_rows:10(int!null)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(10)
@@ -1600,16 +1600,16 @@ WHERE EXISTS
 )
 ----
 group-by
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(2-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count_rows:10(int!null)
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count_rows:10(int!null)
  │    ├── key: (1,6,9)
  │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(3-5,10), (6)==(10), (10)==(6)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count_rows:10(int)
+ │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count_rows:10(int!null)
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,9)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(2-5,10)
@@ -1666,16 +1666,16 @@ WHERE EXISTS
 )
 ----
 group-by
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(2-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count:10(int!null)
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count:10(int!null)
  │    ├── key: (1,6,9)
  │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(3-5,10), (6)==(10), (10)==(6)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count:10(int)
+ │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) count:10(int!null)
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,9)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(2-5,10)
@@ -1732,15 +1732,15 @@ FROM xy, uv
 WHERE x=v AND u=(SELECT max(i) FROM a WHERE k=x)
 ----
 project
- ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int)
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
  ├── key: (3)
  ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1)
  └── select
-      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int!null)
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) max:10(int!null)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1), (3)==(10), (10)==(3)
       ├── group-by
-      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) max:10(int!null)
       │    ├── grouping columns: u:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
@@ -1794,15 +1794,15 @@ FROM xy, uv
 WHERE x=v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
 ----
 project
- ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int)
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
  ├── key: (3)
  ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1)
  └── select
-      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) max:10(int)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
       ├── group-by
-      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) max:10(int)
       │    ├── grouping columns: u:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
@@ -1852,14 +1852,14 @@ FROM
 WHERE 'bar'=(SELECT max(s) FROM (SELECT * FROM a LIMIT 1) WHERE k=y GROUP BY i)
 ----
 project
- ├── columns: y:2(int) cst:3(string!null)
+ ├── columns: y:2(int!null) cst:3(string!null)
  ├── fd: ()-->(2,3)
  ├── select
- │    ├── columns: y:2(int) max:9(string!null) rownum:10(int!null)
+ │    ├── columns: y:2(int!null) max:9(string!null) rownum:10(int!null)
  │    ├── key: (10)
  │    ├── fd: ()-->(2,9)
  │    ├── group-by
- │    │    ├── columns: y:2(int) max:9(string) rownum:10(int!null)
+ │    │    ├── columns: y:2(int!null) max:9(string) rownum:10(int!null)
  │    │    ├── grouping columns: rownum:10(int!null)
  │    │    ├── key: (10)
  │    │    ├── fd: ()-->(2), (10)-->(2,9)
@@ -1908,16 +1908,16 @@ WHERE EXISTS
 )
 ----
 group-by
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(2-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) u:8(int!null) v:9(int)
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) u:8(int!null) v:9(int)
  │    ├── key: (1,8)
  │    ├── fd: ()-->(2), (1)-->(3-5), (8)-->(9), (1,6,9)-->(3-5,8), (6)==(8), (8)==(6)
  │    ├── distinct-on
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) u:8(int) v:9(int)
+ │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) u:8(int!null) v:9(int)
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,8)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (8)-->(9), (1,6,9)-->(2-5,8)
@@ -2037,90 +2037,74 @@ with &1 (w0)
       │    ├── scan t0
       │    │    └── columns: t0._string:6(int)
       │    ├── limit
-      │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
+      │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
       │    │    ├── internal-ordering: +26 opt(25)
       │    │    ├── outer: (6)
       │    │    ├── cardinality: [0 - 66]
-      │    │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31,41), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
+      │    │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
       │    │    ├── sort
-      │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
+      │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
       │    │    │    ├── outer: (6)
-      │    │    │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31,41), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
+      │    │    │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
       │    │    │    ├── ordering: +26 opt(25) [actual: +26]
       │    │    │    ├── limit hint: 66.00
       │    │    │    └── inner-join (hash)
-      │    │    │         ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
+      │    │    │         ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
       │    │    │         ├── outer: (6)
-      │    │    │         ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31,41), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
+      │    │    │         ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
       │    │    │         ├── inner-join (hash)
-      │    │    │         │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null)
+      │    │    │         │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null)
       │    │    │         │    ├── outer: (6)
-      │    │    │         │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31,41), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
-      │    │    │         │    ├── select
-      │    │    │         │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true_agg:41(bool!null)
+      │    │    │         │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
+      │    │    │         │    ├── group-by
+      │    │    │         │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    ├── grouping columns: tab_orig.rowid:14(int!null) t1.rowid:21(int!null) t2.rowid:28(int!null) t3.rowid:35(int!null)
       │    │    │         │    │    ├── outer: (6)
       │    │    │         │    │    ├── key: (14,21,28,35)
-      │    │    │         │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31,41)
-      │    │    │         │    │    ├── group-by
-      │    │    │         │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true_agg:41(bool)
-      │    │    │         │    │    │    ├── grouping columns: tab_orig.rowid:14(int!null) t1.rowid:21(int!null) t2.rowid:28(int!null) t3.rowid:35(int!null)
+      │    │    │         │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31)
+      │    │    │         │    │    ├── inner-join (cross)
+      │    │    │         │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
       │    │    │         │    │    │    ├── outer: (6)
       │    │    │         │    │    │    ├── key: (14,21,28,35)
-      │    │    │         │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31,41)
-      │    │    │         │    │    │    ├── project
-      │    │    │         │    │    │    │    ├── columns: true:40(bool!null) tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │    │    │    │    ├── outer: (6)
-      │    │    │         │    │    │    │    ├── key: (14,21,28,35)
-      │    │    │         │    │    │    │    ├── fd: ()-->(40), (21)-->(19), (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    ├── scan tab_orig
+      │    │    │         │    │    │    │    ├── columns: tab_orig.rowid:14(int!null)
+      │    │    │         │    │    │    │    └── key: (14)
+      │    │    │         │    │    │    ├── inner-join (cross)
+      │    │    │         │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    ├── key: (21,28,35)
+      │    │    │         │    │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    │    ├── scan t1
+      │    │    │         │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null)
+      │    │    │         │    │    │    │    │    ├── key: (21)
+      │    │    │         │    │    │    │    │    └── fd: (21)-->(19)
       │    │    │         │    │    │    │    ├── inner-join (cross)
-      │    │    │         │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │    │    │    │    │    ├── outer: (6)
-      │    │    │         │    │    │    │    │    ├── key: (14,21,28,35)
-      │    │    │         │    │    │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31)
-      │    │    │         │    │    │    │    │    ├── scan tab_orig
-      │    │    │         │    │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null)
-      │    │    │         │    │    │    │    │    │    └── key: (14)
-      │    │    │         │    │    │    │    │    ├── inner-join (cross)
-      │    │    │         │    │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │    │    │    │    │    │    ├── key: (21,28,35)
-      │    │    │         │    │    │    │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31)
-      │    │    │         │    │    │    │    │    │    ├── scan t1
-      │    │    │         │    │    │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null)
-      │    │    │         │    │    │    │    │    │    │    ├── key: (21)
-      │    │    │         │    │    │    │    │    │    │    └── fd: (21)-->(19)
-      │    │    │         │    │    │    │    │    │    ├── inner-join (cross)
-      │    │    │         │    │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │    │    │    │    │    │    │    ├── key: (28,35)
-      │    │    │         │    │    │    │    │    │    │    ├── fd: (28)-->(25,26), (35)-->(29,31)
-      │    │    │         │    │    │    │    │    │    │    ├── scan t2
-      │    │    │         │    │    │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null)
-      │    │    │         │    │    │    │    │    │    │    │    ├── key: (28)
-      │    │    │         │    │    │    │    │    │    │    │    └── fd: (28)-->(25,26)
-      │    │    │         │    │    │    │    │    │    │    ├── scan t3
-      │    │    │         │    │    │    │    │    │    │    │    ├── columns: t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │    │    │    │    │    │    │    │    ├── key: (35)
-      │    │    │         │    │    │    │    │    │    │    │    └── fd: (35)-->(29,31)
-      │    │    │         │    │    │    │    │    │    │    └── filters (true)
-      │    │    │         │    │    │    │    │    │    └── filters (true)
-      │    │    │         │    │    │    │    │    └── filters
-      │    │    │         │    │    │    │    │         └── t0._string = 1 [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
-      │    │    │         │    │    │    │    └── projections
-      │    │    │         │    │    │    │         └── true [type=bool]
-      │    │    │         │    │    │    └── aggregations
-      │    │    │         │    │    │         ├── const-not-null-agg [type=bool, outer=(40)]
-      │    │    │         │    │    │         │    └── variable: true [type=bool]
-      │    │    │         │    │    │         ├── const-agg [type=bool, outer=(25)]
-      │    │    │         │    │    │         │    └── variable: t2._bool [type=bool]
-      │    │    │         │    │    │         ├── const-agg [type=int, outer=(26)]
-      │    │    │         │    │    │         │    └── variable: t2._decimal [type=int]
-      │    │    │         │    │    │         ├── const-agg [type=int, outer=(29)]
-      │    │    │         │    │    │         │    └── variable: t3._int2 [type=int]
-      │    │    │         │    │    │         ├── const-agg [type=timestamptz, outer=(31)]
-      │    │    │         │    │    │         │    └── variable: t3._timestamptz [type=timestamptz]
-      │    │    │         │    │    │         └── const-agg [type=int, outer=(19)]
-      │    │    │         │    │    │              └── variable: t1._decimal [type=int]
-      │    │    │         │    │    └── filters
-      │    │    │         │    │         └── true_agg IS NOT NULL [type=bool, outer=(41), constraints=(/41: (/NULL - ]; tight)]
+      │    │    │         │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    │    ├── key: (28,35)
+      │    │    │         │    │    │    │    │    ├── fd: (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    │    │    ├── scan t2
+      │    │    │         │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null)
+      │    │    │         │    │    │    │    │    │    ├── key: (28)
+      │    │    │         │    │    │    │    │    │    └── fd: (28)-->(25,26)
+      │    │    │         │    │    │    │    │    ├── scan t3
+      │    │    │         │    │    │    │    │    │    ├── columns: t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    │    │    ├── key: (35)
+      │    │    │         │    │    │    │    │    │    └── fd: (35)-->(29,31)
+      │    │    │         │    │    │    │    │    └── filters (true)
+      │    │    │         │    │    │    │    └── filters (true)
+      │    │    │         │    │    │    └── filters
+      │    │    │         │    │    │         └── t0._string = 1 [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      │    │    │         │    │    └── aggregations
+      │    │    │         │    │         ├── const-agg [type=bool, outer=(25)]
+      │    │    │         │    │         │    └── variable: t2._bool [type=bool]
+      │    │    │         │    │         ├── const-agg [type=int, outer=(26)]
+      │    │    │         │    │         │    └── variable: t2._decimal [type=int]
+      │    │    │         │    │         ├── const-agg [type=int, outer=(29)]
+      │    │    │         │    │         │    └── variable: t3._int2 [type=int]
+      │    │    │         │    │         ├── const-agg [type=timestamptz, outer=(31)]
+      │    │    │         │    │         │    └── variable: t3._timestamptz [type=timestamptz]
+      │    │    │         │    │         └── const-agg [type=int, outer=(19)]
+      │    │    │         │    │              └── variable: t1._decimal [type=int]
       │    │    │         │    ├── scan t4
       │    │    │         │    │    └── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz)
       │    │    │         │    └── filters
@@ -2157,7 +2141,7 @@ group-by
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (1,6)-->(2-5,11), (6)==(11), (11)==(6)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) count_rows:11(int)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) count_rows:11(int!null)
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(2-5), (1,6)-->(2-5,11)
@@ -2212,14 +2196,14 @@ norm expect=TryDecorrelateScalarGroupBy
 SELECT * FROM (SELECT i, 'foo' AS cst FROM a) WHERE 5=(SELECT max(y) FROM xy WHERE x=i)
 ----
 project
- ├── columns: i:2(int) cst:6(string!null)
+ ├── columns: i:2(int!null) cst:6(string!null)
  ├── fd: ()-->(6)
  ├── select
- │    ├── columns: i:2(int) max:9(int!null) rownum:10(int!null)
+ │    ├── columns: i:2(int!null) max:9(int!null) rownum:10(int!null)
  │    ├── key: (10)
  │    ├── fd: ()-->(9), (10)-->(2)
  │    ├── group-by
- │    │    ├── columns: i:2(int) max:9(int) rownum:10(int!null)
+ │    │    ├── columns: i:2(int!null) max:9(int!null) rownum:10(int!null)
  │    │    ├── grouping columns: rownum:10(int!null)
  │    │    ├── key: (10)
  │    │    ├── fd: (10)-->(2,9)
@@ -2483,19 +2467,19 @@ WHERE
 ) = ARRAY[]:::INT[]
 ----
 project
- ├── columns: c:1(int!null) d:2(int)
+ ├── columns: c:1(int!null) d:2(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── select
-      ├── columns: c:1(int!null) d:2(int) array_agg:5(int[]!null)
+      ├── columns: c:1(int!null) d:2(int!null) array_agg:5(int[]!null)
       ├── key: (1)
       ├── fd: ()-->(5), (1)-->(2)
       ├── project
-      │    ├── columns: array_agg:5(int[]) c:1(int!null) d:2(int)
+      │    ├── columns: array_agg:5(int[]) c:1(int!null) d:2(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,5)
       │    ├── group-by
-      │    │    ├── columns: c:1(int!null) d:2(int) x:3(int) array_agg:6(int[])
+      │    │    ├── columns: c:1(int!null) d:2(int!null) x:3(int) array_agg:6(int[])
       │    │    ├── grouping columns: c:1(int!null)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,3,6)
@@ -2647,7 +2631,7 @@ group-by
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2), (3)-->(4), (1,3)-->(2,4,13), (4)==(13), (13)==(4)
  │    ├── group-by
- │    │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) max:13(int)
+ │    │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) max:13(int!null)
  │    │    ├── grouping columns: x:1(int!null) k:3(int!null)
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1)-->(2), (3)-->(4), (1,3)-->(2,4,13)
@@ -2703,16 +2687,16 @@ WHERE EXISTS
 )
 ----
 group-by
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── grouping columns: x:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── select
- │    ├── columns: x:1(int!null) y:2(int) i:4(int!null) f:5(float!null)
+ │    ├── columns: x:1(int!null) y:2(int!null) i:4(int!null) f:5(float!null)
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2), (1,5)-->(2,4), (1)==(4), (4)==(1)
  │    ├── distinct-on
- │    │    ├── columns: x:1(int!null) y:2(int) i:4(int) f:5(float!null)
+ │    │    ├── columns: x:1(int!null) y:2(int!null) i:4(int) f:5(float!null)
  │    │    ├── grouping columns: x:1(int!null) f:5(float!null)
  │    │    ├── key: (1,5)
  │    │    ├── fd: (1)-->(2), (1,5)-->(2,4)
@@ -3535,7 +3519,7 @@ project
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: (1)-->(2-5,8)
       │    │    │    ├── group-by
-      │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int)
+      │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int!null)
       │    │    │    │    ├── grouping columns: k:1(int!null)
       │    │    │    │    ├── key: (1)
       │    │    │    │    ├── fd: (1)-->(2-5,8)
@@ -3591,11 +3575,11 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int!null)
       ├── key: (1)
       ├── fd: (1)-->(2-5,8)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int!null)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,8)
@@ -3901,10 +3885,10 @@ SELECT
 FROM a
 ----
 project
- ├── columns: a:17(int!null) x:18(int) y:19(int) b:20(bool) exists:21(bool) count:22(int)
+ ├── columns: a:17(int!null) x:18(int) y:19(int) b:20(bool) exists:21(bool) count:22(int!null)
  ├── fd: ()-->(17,19-21)
  ├── group-by
- │    ├── columns: k:1(int!null) xy.x:6(int) count_rows:16(int)
+ │    ├── columns: k:1(int!null) xy.x:6(int) count_rows:16(int!null)
  │    ├── grouping columns: k:1(int!null) xy.x:6(int)
  │    ├── key: (1,6)
  │    ├── fd: (1,6)-->(16)

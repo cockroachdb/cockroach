@@ -221,7 +221,7 @@ project
       ├── key: (1)
       ├── fd: ()-->(7)
       ├── group-by
-      │    ├── columns: k:1(int!null) max:7(int)
+      │    ├── columns: k:1(int!null) max:7(int!null)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7)
@@ -258,7 +258,7 @@ project
       ├── key: (1)
       ├── fd: ()-->(7)
       ├── group-by
-      │    ├── columns: k:1(int!null) sum:7(decimal)
+      │    ├── columns: k:1(int!null) sum:7(decimal!null)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7)
@@ -322,14 +322,14 @@ GROUP BY k
 HAVING min(x)=1
 ----
 project
- ├── columns: min:7(int!null) max:8(int)
+ ├── columns: min:7(int!null) max:8(int!null)
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1(int!null) min:7(int!null) max:8(int)
+      ├── columns: k:1(int!null) min:7(int!null) max:8(int!null)
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(8)
       ├── group-by
-      │    ├── columns: k:1(int!null) min:7(int) max:8(int)
+      │    ├── columns: k:1(int!null) min:7(int!null) max:8(int!null)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7,8)
@@ -361,14 +361,14 @@ GROUP BY k
 HAVING max(y)=1
 ----
 project
- ├── columns: sum:7(decimal) max:8(int!null)
+ ├── columns: sum:7(decimal!null) max:8(int!null)
  ├── fd: ()-->(8)
  └── select
-      ├── columns: k:1(int!null) sum:7(decimal) max:8(int!null)
+      ├── columns: k:1(int!null) sum:7(decimal!null) max:8(int!null)
       ├── key: (1)
       ├── fd: ()-->(8), (1)-->(7)
       ├── group-by
-      │    ├── columns: k:1(int!null) sum:7(decimal) max:8(int)
+      │    ├── columns: k:1(int!null) sum:7(decimal!null) max:8(int!null)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7,8)
@@ -513,7 +513,7 @@ project
       ├── key: (1)
       ├── fd: ()-->(7)
       ├── group-by
-      │    ├── columns: k:1(int!null) count:7(int)
+      │    ├── columns: k:1(int!null) count:7(int!null)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7)
@@ -605,7 +605,7 @@ project
       ├── key: (3)
       ├── fd: ()-->(8)
       ├── group-by
-      │    ├── columns: k:3(int!null) string_agg:8(string)
+      │    ├── columns: k:3(int!null) string_agg:8(string!null)
       │    ├── grouping columns: k:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (3)-->(8)

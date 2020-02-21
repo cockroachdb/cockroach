@@ -42,7 +42,7 @@ LIMIT 10;
 ----
 limit
  ├── save-table-name: q3_limit_1
- ├── columns: l_orderkey:18(int!null) revenue:35(float) o_orderdate:13(date) o_shippriority:16(int)
+ ├── columns: l_orderkey:18(int!null) revenue:35(float!null) o_orderdate:13(date!null) o_shippriority:16(int!null)
  ├── internal-ordering: -35,+13
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10, distinct(13)=10, null(13)=0, distinct(16)=10, null(16)=0, distinct(18)=10, null(18)=0, distinct(35)=10, null(35)=0]
@@ -51,7 +51,7 @@ limit
  ├── ordering: -35,+13
  ├── sort
  │    ├── save-table-name: q3_sort_2
- │    ├── columns: o_orderdate:13(date) o_shippriority:16(int) l_orderkey:18(int!null) sum:35(float)
+ │    ├── columns: o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null) sum:35(float!null)
  │    ├── stats: [rows=359560.406, distinct(13)=359560.406, null(13)=0, distinct(16)=359560.406, null(16)=0, distinct(18)=359560.406, null(18)=0, distinct(35)=359560.406, null(35)=0]
  │    ├── key: (18)
  │    ├── fd: (18)-->(13,16,35)
@@ -59,7 +59,7 @@ limit
  │    ├── limit hint: 10.00
  │    └── group-by
  │         ├── save-table-name: q3_group_by_3
- │         ├── columns: o_orderdate:13(date) o_shippriority:16(int) l_orderkey:18(int!null) sum:35(float)
+ │         ├── columns: o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null) sum:35(float!null)
  │         ├── grouping columns: l_orderkey:18(int!null)
  │         ├── stats: [rows=359560.406, distinct(13)=359560.406, null(13)=0, distinct(16)=359560.406, null(16)=0, distinct(18)=359560.406, null(18)=0, distinct(35)=359560.406, null(35)=0]
  │         ├── key: (18)
