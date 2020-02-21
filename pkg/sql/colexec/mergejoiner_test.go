@@ -1577,7 +1577,7 @@ func TestMergeJoiner(t *testing.T) {
 
 		// We use a custom verifier function so that we can get the merge join op
 		// to use a custom output batch size per test, to exercise more cases.
-		var mergeJoinVerifier verifier = func(output *opTestOutput) error {
+		var mergeJoinVerifier verifierFn = func(output *opTestOutput) error {
 			if mj, ok := output.input.(variableOutputBatchSizeInitializer); ok {
 				mj.initWithOutputBatchSize(tc.outputBatchSize)
 			} else {
