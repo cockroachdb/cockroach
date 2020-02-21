@@ -350,21 +350,9 @@ func (b *Builder) buildAggregation(having opt.ScalarExpr, fromScope *scope) (out
 		// except in the case of string_agg, where the second argument must be
 		// a constant expression.
 		args := make([]opt.ScalarExpr, 0, 2)
-		for i, arg := range agg.args {
-			// TODO(andyk): Once we have true support for multiple aggregate
-			// arguments, expect all arguments to be variable and get rid of this
-			// condition.
-			if i == 0 {
-				colID := argCols[0].id
-				args = append(args, b.factory.ConstructVariable(colID))
-			} else {
-				// Only case of this is string_agg.
-				if !memo.CanExtractConstDatum(arg) {
-					panic(unimplementedWithIssueDetailf(28417, "string_agg",
-						"aggregate functions with multiple non-constant expressions are not supported"))
-				}
-				args = append(args, arg)
-			}
+		for range agg.args {
+			colID := argCols[0].id
+			args = append(args, b.factory.ConstructVariable(colID))
 
 			// Skip past argCols that have been handled. There may be variable
 			// number of them, so need to set up for next aggregate function.

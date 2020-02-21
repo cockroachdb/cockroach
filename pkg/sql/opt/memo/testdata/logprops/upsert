@@ -55,6 +55,7 @@ project
            ├── key: (5,13)
            ├── fd: ()-->(6,9,14), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16), (5,13)-->(17), (13,15)-->(18), (13,16)-->(19), (8,13)-->(20)
            ├── prune: (5,6,8-20)
+           ├── reject-nulls: (10-13)
            ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            ├── project
            │    ├── columns: column16:16(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
@@ -62,6 +63,7 @@ project
            │    ├── key: (5,13)
            │    ├── fd: ()-->(6,9,14), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16)
            │    ├── prune: (5,6,8-16)
+           │    ├── reject-nulls: (10-13)
            │    ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            │    ├── project
            │    │    ├── columns: column14:14(int!null) column15:15(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
@@ -69,6 +71,7 @@ project
            │    │    ├── key: (5,13)
            │    │    ├── fd: ()-->(6,9,14), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15)
            │    │    ├── prune: (5,6,8-15)
+           │    │    ├── reject-nulls: (10-13)
            │    │    ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
@@ -397,6 +400,7 @@ project
  │         ├── side-effects
  │         ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10)-->(13), (10,12)-->(14), (12,13)-->(15), (7,12)-->(16)
  │         ├── prune: (5-16)
+ │         ├── reject-nulls: (9-12)
  │         ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         ├── project
  │         │    ├── columns: column13:13(int) column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
@@ -404,6 +408,7 @@ project
  │         │    ├── side-effects
  │         │    ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10)-->(13)
  │         │    ├── prune: (5-13)
+ │         │    ├── reject-nulls: (9-12)
  │         │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
