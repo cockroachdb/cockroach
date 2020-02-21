@@ -13,9 +13,13 @@ package kvnemesis
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
+
+// TODO(dan): Test that all operations actually are in newAllOperationsConfig.
 
 // TestRandStep generates random steps until we've seen each type at least N
 // times, validating each step along the way.
@@ -23,22 +27,14 @@ func TestRandStep(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const minEachType = 5
-	config := GeneratorConfig{
-		OpPGetMissing:              1,
-		OpPGetExisting:             1,
-		OpPPutMissing:              1,
-		OpPPutExisting:             1,
-		OpPBatch:                   1,
-		OpPClosureTxn:              1,
-		OpPClosureTxnCommitInBatch: 1,
-		OpPSplitNew:                1,
-		OpPSplitAgain:              1,
-		OpPMergeNotSplit:           1,
-		OpPMergeIsSplit:            1,
-	}
-
+	config := newAllOperationsConfig()
+	config.NumNodes, config.NumReplicas = 2, 1
 	rng, _ := randutil.NewPseudoRand()
-	g := MakeGenerator(config)
+	getReplicasFn := func(_ roachpb.Key) []roachpb.ReplicationTarget {
+		return make([]roachpb.ReplicationTarget, rng.Intn(1)+1)
+	}
+	g, err := MakeGenerator(config, getReplicasFn)
+	require.NoError(t, err)
 
 	keys := make(map[string]struct{})
 	var updateKeys func(Operation)
@@ -59,7 +55,7 @@ func TestRandStep(t *testing.T) {
 
 	splits := make(map[string]struct{})
 
-	counts := make(map[OpP]int, len(config))
+	counts := make(map[OpP]int, len(config.OpPs))
 	for {
 		step := g.RandStep(rng)
 
@@ -100,13 +96,15 @@ func TestRandStep(t *testing.T) {
 			} else {
 				counts[OpPMergeNotSplit]++
 			}
+		case *ChangeReplicasOperation:
+			counts[OpPChangeReplicas]++
 		}
 		updateKeys(step.Op)
 
 		// TODO(dan): Make sure the proportions match the requested ones to within
 		// some bounds.
 		done := true
-		for op := range config {
+		for op := range config.OpPs {
 			if counts[op] < minEachType {
 				done = false
 				break

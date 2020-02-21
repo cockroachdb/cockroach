@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,36 +36,50 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).DB()
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB := tc.ServerConn(0)
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
-	config := GeneratorConfig{
-		OpPGetMissing:  1,
-		OpPGetExisting: 1,
-		OpPPutMissing:  1,
-		OpPPutExisting: 1,
-		// TODO(dan): This sometimes returns "TransactionStatusError: already
-		// committed".
-		//
-		// TODO(dan): This fails with a WriteTooOld error if the same key is Put
-		// twice in a single batch. However, if the same Batch is committed using
-		// txn.Run, then it works and only the last one is materialized. We could
-		// make the db.Run behavior match txn.Run by ensuring that all requests in a
-		// nontransactional batch are disjoint and upgrading to a transactional
-		// batch (see CrossRangeTxnWrapperSender) if they are. roachpb.SpanGroup can
-		// be used to efficiently check this.
-		OpPBatch:                   0,
-		OpPClosureTxn:              5,
-		OpPClosureTxnCommitInBatch: 5,
-		OpPSplitNew:                1,
-		OpPSplitAgain:              1,
-		OpPMergeNotSplit:           1,
-		OpPMergeIsSplit:            1,
-	}
-
+	config := NewDefaultConfig()
+	config.NumNodes, config.NumReplicas = 1, 1
 	rng, _ := randutil.NewPseudoRand()
-	ct := sqlClosedTimestampTargetInterval{tc.ServerConn(0)}
-	failures, err := RunNemesis(ctx, rng, db, ct, config)
+	ct := sqlClosedTimestampTargetInterval{sqlDBs: []*gosql.DB{sqlDB}}
+	failures, err := RunNemesis(ctx, rng, ct, config, db)
+	require.NoError(t, err, `%+v`, err)
+
+	for _, failure := range failures {
+		t.Errorf("failure:\n%+v", failure)
+	}
+}
+
+func TestKVNemesisMultiNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	// 4 nodes so we have somewhere to move 3x replicated ranges to.
+	const numNodes = 4
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	dbs, sqlDBs := make([]*client.DB, numNodes), make([]*gosql.DB, numNodes)
+	for i := 0; i < numNodes; i++ {
+		dbs[i] = tc.Server(i).DB()
+		sqlDBs[i] = tc.ServerConn(i)
+	}
+	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+
+	config := NewDefaultConfig()
+	config.NumNodes, config.NumReplicas = numNodes, 3
+	// kvnemesis found a rare bug with closed timestamps when splits (and maybe
+	// merges) happen on a multinode cluster. Disable the combo for now to keep
+	// the test from flaking. #44878
+	config.OpPs[OpPMergeIsSplit] = 0
+	config.OpPs[OpPMergeNotSplit] = 0
+	config.OpPs[OpPSplitNew] = 0
+	config.OpPs[OpPSplitAgain] = 0
+	rng, _ := randutil.NewPseudoRand()
+	ct := sqlClosedTimestampTargetInterval{sqlDBs: sqlDBs}
+	failures, err := RunNemesis(ctx, rng, ct, config, dbs...)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
@@ -73,16 +88,31 @@ func TestKVNemesisSingleNode(t *testing.T) {
 }
 
 type sqlClosedTimestampTargetInterval struct {
-	*gosql.DB
+	sqlDBs []*gosql.DB
 }
 
-func (db sqlClosedTimestampTargetInterval) Set(d time.Duration) error {
-	q := fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`, d)
-	_, err := db.DB.Exec(q)
+func (x sqlClosedTimestampTargetInterval) Set(ctx context.Context, d time.Duration) error {
+	var err error
+	for i, sqlDB := range x.sqlDBs {
+		q := fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`, d)
+		if _, err = sqlDB.Exec(q); err == nil {
+			return nil
+		}
+		log.Infof(ctx, "node %d could not set target duration: %+v", i, err)
+	}
+	log.Infof(ctx, "all nodes could not set target duration: %+v", err)
 	return err
 }
 
-func (db sqlClosedTimestampTargetInterval) ResetToDefault() error {
-	_, err := db.DB.Exec(`SET CLUSTER SETTING kv.closed_timestamp.target_duration TO DEFAULT`)
+func (x sqlClosedTimestampTargetInterval) ResetToDefault(ctx context.Context) error {
+	var err error
+	for i, sqlDB := range x.sqlDBs {
+		q := fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration TO DEFAULT`)
+		if _, err = sqlDB.Exec(q); err == nil {
+			return nil
+		}
+		log.Infof(ctx, "node %d could not reset target duration: %+v", i, err)
+	}
+	log.Infof(ctx, "all nodes could not reset target duration: %+v", err)
 	return err
 }

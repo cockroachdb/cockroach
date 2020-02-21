@@ -13,6 +13,7 @@ package kvnemesis
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -149,6 +150,51 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// However, I think the right thing to do is sniff this inside the
 			// AdminMerge code and retry so the client never sees it. In the meantime,
 			// no-op. #44377
+		} else if resultIsError(t.Result, `merge failed: cannot merge range with non-voter replicas`) {
+			// This operation executed concurrently with one that was changing
+			// replicas.
+		} else if resultIsError(t.Result, `merge failed: ranges not collocated`) {
+			// A merge requires that the two ranges have replicas on the same nodes,
+			// but Generator intentiontally does not try to avoid this so that this
+			// edge case is exercised.
+		} else if resultIsError(t.Result, `merge failed: waiting for all left-hand replicas to initialize`) {
+			// Probably should be transparently retried.
+		} else if resultIsError(t.Result, `merge failed: waiting for all right-hand replicas to catch up`) {
+			// Probably should be transparently retried.
+		} else {
+			v.failIfError(op, t.Result)
+		}
+	case *ChangeReplicasOperation:
+		if resultIsError(t.Result, `unable to add replica .* which is already present in`) {
+			// Generator created this operations based on data about a range's
+			// replicas that is now stale (because it raced with some other operation
+			// created by that Generator): a replica is being added and in the
+			// meantime, some other operation added the same replica.
+		} else if resultIsError(t.Result, `unable to add replica .* which is already present as a learner`) {
+			// Generator created this operations based on data about a range's
+			// replicas that is now stale (because it raced with some other operation
+			// created by that Generator): a replica is being added and in the
+			// meantime, some other operation started (but did not finish) adding the
+			// same replica.
+		} else if resultIsError(t.Result, `descriptor changed`) {
+			// Race between two operations being executed concurrently. Applier grabs
+			// a range descriptor and then calls AdminChangeReplicas with it, but the
+			// descriptor is changed by some other operation in between.
+		} else if resultIsError(t.Result, `received invalid ChangeReplicasTrigger .* to remove self \(leaseholder\)`) {
+			// Removing the leaseholder is invalid for technical reasons, but
+			// Generator intentiontally does not try to avoid this so that this edge
+			// case is exercised.
+		} else if resultIsError(t.Result, `removing .* which is not in`) {
+			// Generator created this operations based on data about a range's
+			// replicas that is now stale (because it raced with some other operation
+			// created by that Generator): a replica is being removed and in the
+			// meantime, some other operation removed the same replica.
+		} else if resultIsError(t.Result, `remote failed to apply snapshot for reason failed to apply snapshot: raft group deleted`) {
+			// Probably should be transparently retried.
+		} else if resultIsError(t.Result, `cannot apply snapshot: snapshot intersects existing range`) {
+			// Probably should be transparently retried.
+		} else if resultIsError(t.Result, `snapshot of type LEARNER was sent to .* which did not contain it as a replica`) {
+			// Probably should be transparently retried.
 		} else {
 			v.failIfError(op, t.Result)
 		}
@@ -277,13 +323,13 @@ func (v *validator) failIfError(op Operation, r Result) {
 // that can be sniffed. Some of these may be removed or handled differently but
 // the rest should graduate to documented parts of the public api. Remove this
 // once it happens.
-func resultIsError(r Result, msg string) bool {
+func resultIsError(r Result, msgRE string) bool {
 	if r.Type != ResultType_Error {
 		return false
 	}
 	ctx := context.Background()
 	err := errors.DecodeError(ctx, *r.Err)
-	return strings.Contains(err.Error(), msg)
+	return regexp.MustCompile(msgRE).MatchString(err.Error())
 }
 
 func resultIsRetryable(r Result) bool {
