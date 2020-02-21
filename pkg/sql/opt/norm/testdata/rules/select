@@ -1325,7 +1325,7 @@ project
 # --------------------------------------------------
 
 norm expect=DetectSelectContradiction
-SELECT k FROM b WHERE k IN ()
+SELECT k FROM b WHERE k<1 AND k>2
 ----
 values
  ├── columns: k:1(int!null)
@@ -1334,7 +1334,7 @@ values
  └── fd: ()-->(1)
 
 norm expect=DetectSelectContradiction
-SELECT k FROM b WHERE i=5 AND k IN () AND s='foo'
+SELECT k FROM b WHERE i=5 AND k<1 AND k>2 AND s='foo'
 ----
 values
  ├── columns: k:1(int!null)
