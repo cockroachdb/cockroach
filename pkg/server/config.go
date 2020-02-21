@@ -134,6 +134,10 @@ type Config struct {
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
 
+	// ExternalIOConfig is used to configure external storage
+	// access (http://, nodelocal://, etc)
+	ExternalIOConfig base.ExternalIOConfig
+
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
 	// in zone configs.
