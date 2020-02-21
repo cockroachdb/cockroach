@@ -180,9 +180,9 @@ norm expect=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GROUP BY i
 ----
 project
- ├── columns: min:16(string)
+ ├── columns: min:16(string!null)
  └── group-by
-      ├── columns: i:12(int!null) min:16(string)
+      ├── columns: i:12(int!null) min:16(string!null)
       ├── grouping columns: i:12(int!null)
       ├── key: (12)
       ├── fd: (12)-->(16)
@@ -234,7 +234,7 @@ norm expect=EliminateGroupByProject
 SELECT DISTINCT ON (i) s FROM (SELECT i, s, f FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 distinct-on
- ├── columns: s:14(string)  [hidden: i:12(int!null)]
+ ├── columns: s:14(string!null)  [hidden: i:12(int!null)]
  ├── grouping columns: i:12(int!null)
  ├── key: (12)
  ├── fd: (12)-->(14)
@@ -260,9 +260,9 @@ norm expect-not=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 ----
 project
- ├── columns: min:7(string)
+ ├── columns: min:7(string!null)
  └── group-by
-      ├── columns: i2:6(int!null) min:7(string)
+      ├── columns: i2:6(int!null) min:7(string!null)
       ├── grouping columns: i2:6(int!null)
       ├── key: (6)
       ├── fd: (6)-->(7)
@@ -284,7 +284,7 @@ norm expect=ReduceGroupingCols
 SELECT k, min(i), f, s FROM a GROUP BY s, f, k
 ----
 group-by
- ├── columns: k:1(int!null) min:6(int) f:3(float) s:4(string)
+ ├── columns: k:1(int!null) min:6(int!null) f:3(float) s:4(string!null)
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(3,4,6)
@@ -304,7 +304,7 @@ norm expect=ReduceGroupingCols
 SELECT k, sum(DISTINCT i), f, s FROM a, xy GROUP BY s, f, k
 ----
 group-by
- ├── columns: k:1(int!null) sum:8(decimal) f:3(float) s:4(string)
+ ├── columns: k:1(int!null) sum:8(decimal!null) f:3(float) s:4(string!null)
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(3,4,8)
@@ -350,7 +350,7 @@ norm expect=ReduceGroupingCols
 SELECT sum(f), i FROM a GROUP BY k, i, f HAVING k=1
 ----
 group-by
- ├── columns: sum:6(float) i:2(int)
+ ├── columns: sum:6(float) i:2(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,6)
@@ -375,7 +375,7 @@ norm expect=ReduceGroupingCols
 SELECT DISTINCT ON (k, f, s) i, f, x FROM a JOIN xy ON i=y
 ----
 distinct-on
- ├── columns: i:2(int) f:3(float) x:6(int)  [hidden: k:1(int!null)]
+ ├── columns: i:2(int!null) f:3(float) x:6(int!null)  [hidden: k:1(int!null)]
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3,6), (2,3)~~>(1), (6)-->(2)
@@ -453,9 +453,9 @@ norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT k) FROM a GROUP BY i
 ----
 project
- ├── columns: sum:6(decimal)
+ ├── columns: sum:6(decimal!null)
  └── group-by
-      ├── columns: i:2(int!null) sum:6(decimal)
+      ├── columns: i:2(int!null) sum:6(decimal!null)
       ├── grouping columns: i:2(int!null)
       ├── key: (2)
       ├── fd: (2)-->(6)
@@ -472,9 +472,9 @@ norm expect-not=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT a) FROM abc GROUP BY b
 ----
 project
- ├── columns: sum:4(decimal)
+ ├── columns: sum:4(decimal!null)
  └── group-by
-      ├── columns: b:2(int!null) sum:4(decimal)
+      ├── columns: b:2(int!null) sum:4(decimal!null)
       ├── grouping columns: b:2(int!null)
       ├── key: (2)
       ├── fd: (2)-->(4)
@@ -490,9 +490,9 @@ norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT a) FROM abc GROUP BY b, c
 ----
 project
- ├── columns: sum:4(decimal)
+ ├── columns: sum:4(decimal!null)
  └── group-by
-      ├── columns: b:2(int!null) c:3(int!null) sum:4(decimal)
+      ├── columns: b:2(int!null) c:3(int!null) sum:4(decimal!null)
       ├── grouping columns: b:2(int!null) c:3(int!null)
       ├── key: (2,3)
       ├── fd: (2,3)-->(4)
@@ -508,9 +508,9 @@ norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT i), avg(DISTINCT f) FROM a GROUP BY k
 ----
 project
- ├── columns: sum:6(decimal) avg:7(float)
+ ├── columns: sum:6(decimal!null) avg:7(float)
  └── group-by
-      ├── columns: k:1(int!null) sum:6(decimal) avg:7(float)
+      ├── columns: k:1(int!null) sum:6(decimal!null) avg:7(float)
       ├── grouping columns: k:1(int!null)
       ├── key: (1)
       ├── fd: (1)-->(6,7)
@@ -530,9 +530,9 @@ norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT u), stddev(DISTINCT w), avg(DISTINCT z) FROM uvwz GROUP BY v
 ----
 project
- ├── columns: sum:6(decimal) stddev:7(decimal) avg:8(decimal)
+ ├── columns: sum:6(decimal!null) stddev:7(decimal!null) avg:8(decimal!null)
  └── group-by
-      ├── columns: v:2(int!null) sum:6(decimal) stddev:7(decimal) avg:8(decimal)
+      ├── columns: v:2(int!null) sum:6(decimal!null) stddev:7(decimal!null) avg:8(decimal!null)
       ├── grouping columns: v:2(int!null)
       ├── key: (2)
       ├── fd: (2)-->(6-8)

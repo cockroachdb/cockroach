@@ -6,7 +6,7 @@ opt
 SELECT max(k), min(k), i, s FROM a GROUP BY i, s
 ----
 group-by
- ├── columns: max:5(int) min:6(int) i:2(int) s:3(string)
+ ├── columns: max:5(int!null) min:6(int!null) i:2(int) s:3(string)
  ├── grouping columns: i:2(int) s:3(string)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
  ├── cost: 1130.04

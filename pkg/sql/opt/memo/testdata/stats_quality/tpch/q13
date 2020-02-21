@@ -37,21 +37,21 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q13_sort_1
- ├── columns: c_count:18(int) custdist:19(int)
+ ├── columns: c_count:18(int!null) custdist:19(int!null)
  ├── stats: [rows=148813, distinct(18)=148813, null(18)=0, distinct(19)=148813, null(19)=0]
  ├── key: (18)
  ├── fd: (18)-->(19)
  ├── ordering: -19,-18
  └── group-by
       ├── save-table-name: q13_group_by_2
-      ├── columns: count:18(int) count_rows:19(int)
-      ├── grouping columns: count:18(int)
+      ├── columns: count:18(int!null) count_rows:19(int!null)
+      ├── grouping columns: count:18(int!null)
       ├── stats: [rows=148813, distinct(18)=148813, null(18)=0, distinct(19)=148813, null(19)=0]
       ├── key: (18)
       ├── fd: (18)-->(19)
       ├── group-by
       │    ├── save-table-name: q13_group_by_3
-      │    ├── columns: c_custkey:1(int!null) count:18(int)
+      │    ├── columns: c_custkey:1(int!null) count:18(int!null)
       │    ├── grouping columns: c_custkey:1(int!null)
       │    ├── stats: [rows=148813, distinct(1)=148813, null(1)=0, distinct(18)=148813, null(18)=0]
       │    ├── key: (1)

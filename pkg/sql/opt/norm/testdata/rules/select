@@ -1075,7 +1075,7 @@ norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT i, count(*) FROM a GROUP BY i) a WHERE i=1
 ----
 group-by
- ├── columns: i:2(int) count:6(int)
+ ├── columns: i:2(int!null) count:6(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,6)
@@ -1116,11 +1116,11 @@ norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='foo'
 ----
 select
- ├── columns: k:1(int!null) i:2(int) m:6(string!null)
+ ├── columns: k:1(int!null) i:2(int!null) m:6(string!null)
  ├── key: (1)
  ├── fd: ()-->(6), (1)==(2), (2)==(1), (1)-->(2)
  ├── group-by
- │    ├── columns: k:1(int!null) i:2(int) max:6(string)
+ │    ├── columns: k:1(int!null) i:2(int!null) max:6(string)
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,6)
@@ -1166,7 +1166,7 @@ norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT DISTINCT ON (k, f, s) k, i, f, x FROM a JOIN xy ON i=y) WHERE k > f
 ----
 distinct-on
- ├── columns: k:1(int!null) i:2(int) f:3(float) x:6(int)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) x:6(int!null)
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3,6), (6)-->(2)
@@ -1209,7 +1209,7 @@ select
  ├── key: ()
  ├── fd: ()-->(6)
  ├── scalar-group-by
- │    ├── columns: count_rows:6(int)
+ │    ├── columns: count_rows:6(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(6)

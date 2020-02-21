@@ -1640,11 +1640,11 @@ project
                      └── projections
                           └── subquery [type=int]
                                └── max1-row
-                                    ├── columns: count_rows:10(int)
+                                    ├── columns: count_rows:10(int!null)
                                     └── project
-                                         ├── columns: count_rows:10(int)
+                                         ├── columns: count_rows:10(int!null)
                                          └── group-by
-                                              ├── columns: count_rows:10(int) a:11(int)
+                                              ├── columns: count_rows:10(int!null) a:11(int)
                                               ├── grouping columns: a:11(int)
                                               ├── project
                                               │    ├── columns: a:11(int)
@@ -1742,9 +1742,9 @@ project
                 └── project
                      ├── columns: array:9(int[])
                      ├── select
-                     │    ├── columns: t1.a:4(int) count_rows:7(int) a:8(int!null)
+                     │    ├── columns: t1.a:4(int) count_rows:7(int!null) a:8(int!null)
                      │    ├── group-by
-                     │    │    ├── columns: t1.a:4(int) count_rows:7(int) a:8(int)
+                     │    │    ├── columns: t1.a:4(int) count_rows:7(int!null) a:8(int)
                      │    │    ├── grouping columns: t1.a:4(int) a:8(int)
                      │    │    ├── project
                      │    │    │    ├── columns: a:8(int) t1.a:4(int)
@@ -2395,11 +2395,11 @@ group-by
            └── filters
                 └── subquery [type=bool]
                      └── max1-row
-                          ├── columns: "?column?":12(bool)
+                          ├── columns: "?column?":12(bool!null)
                           └── project
-                               ├── columns: "?column?":12(bool)
+                               ├── columns: "?column?":12(bool!null)
                                ├── scalar-group-by
-                               │    ├── columns: count:11(int)
+                               │    ├── columns: count:11(int!null)
                                │    ├── project
                                │    │    ├── columns: i:7(int)
                                │    │    └── scan a

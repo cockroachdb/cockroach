@@ -133,7 +133,7 @@ build
 SELECT DISTINCT ON (a, c) a, b FROM abc
 ----
 distinct-on
- ├── columns: a:1(string!null) b:2(string)  [hidden: c:3(string!null)]
+ ├── columns: a:1(string!null) b:2(string!null)  [hidden: c:3(string!null)]
  ├── grouping columns: a:1(string!null) c:3(string!null)
  ├── scan abc
  │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
@@ -145,7 +145,7 @@ build
 SELECT DISTINCT ON (c, a) b, c, a FROM abc
 ----
 distinct-on
- ├── columns: b:2(string) c:3(string!null) a:1(string!null)
+ ├── columns: b:2(string!null) c:3(string!null) a:1(string!null)
  ├── grouping columns: a:1(string!null) c:3(string!null)
  ├── scan abc
  │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
@@ -428,7 +428,7 @@ build
 SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
 distinct-on
- ├── columns: pk1:4(int)  [hidden: x:1(int) y:2(int) z:3(int)]
+ ├── columns: pk1:4(int!null)  [hidden: x:1(int) y:2(int) z:3(int)]
  ├── grouping columns: x:1(int) y:2(int) z:3(int)
  ├── ordering: +1
  ├── sort

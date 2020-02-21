@@ -184,7 +184,7 @@ ON x=u
 GROUP BY div
 ----
 group-by
- ├── columns: sum:7(decimal) div:3(decimal)
+ ├── columns: sum:7(decimal!null) div:3(decimal)
  ├── grouping columns: div:3(decimal)
  ├── side-effects
  ├── key: (3)

@@ -291,7 +291,7 @@ project
  │    ├── key: (1)
  │    ├── fd: ()-->(5), (1)-->(3)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) f:3(float) sum:5(decimal)
+ │    │    ├── columns: k:1(int!null) f:3(float) sum:5(decimal!null)
  │    │    ├── grouping columns: k:1(int!null)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(3,5)
@@ -1303,12 +1303,12 @@ norm expect=PruneGroupByCols
 SELECT min(sm), i FROM (SELECT s, i, sum(k) sm, avg(k) av FROM a GROUP BY i, s) a GROUP BY i, i+1
 ----
 group-by
- ├── columns: min:7(decimal) i:2(int)
+ ├── columns: min:7(decimal!null) i:2(int)
  ├── grouping columns: i:2(int)
  ├── key: (2)
  ├── fd: (2)-->(7)
  ├── group-by
- │    ├── columns: i:2(int) s:4(string) sum:5(decimal)
+ │    ├── columns: i:2(int) s:4(string) sum:5(decimal!null)
  │    ├── grouping columns: i:2(int) s:4(string)
  │    ├── key: (2,4)
  │    ├── fd: (2,4)-->(5)
@@ -2890,7 +2890,7 @@ SELECT count(*) FROM (
 )
 ----
 scalar-group-by
- ├── columns: count:10(int)
+ ├── columns: count:10(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(10)

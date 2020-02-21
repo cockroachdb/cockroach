@@ -61,14 +61,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q7_sort_1
- ├── columns: supp_nation:42(char!null) cust_nation:46(char!null) l_year:49(float) revenue:51(float)
+ ├── columns: supp_nation:42(char!null) cust_nation:46(char!null) l_year:49(float) revenue:51(float!null)
  ├── stats: [rows=974.320532, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(51)=974.320532, null(51)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
  ├── key: (42,46,49)
  ├── fd: (42,46,49)-->(51)
  ├── ordering: +42,+46,+49
  └── group-by
       ├── save-table-name: q7_group_by_2
-      ├── columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float) sum:51(float)
+      ├── columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float) sum:51(float!null)
       ├── grouping columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float)
       ├── stats: [rows=974.320532, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(51)=974.320532, null(51)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
       ├── key: (42,46,49)
