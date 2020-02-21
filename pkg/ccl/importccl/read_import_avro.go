@@ -73,7 +73,14 @@ func nativeToDatum(
 	case float64:
 		d = tree.NewDFloat(tree.DFloat(v))
 	case []byte:
-		d = tree.NewDBytes(tree.DBytes(v))
+		if targetT.Equal(*types.Bytes) {
+			d = tree.NewDBytes(tree.DBytes(v))
+		} else {
+			// []byte arrays are hard.  Sometimes we want []bytes, sometimes
+			// we want StringFamily.  So, instead of creating DBytes datum,
+			// parse this data to "cast" it to our expected type.
+			return sqlbase.ParseDatumStringAs(targetT, string(v), evalCtx)
+		}
 	case string:
 		// We allow strings to be specified for any column, as
 		// long as we can convert the string value to the target type.
@@ -129,7 +136,7 @@ var familyToAvroT = map[types.Family][]string{
 	types.BoolFamily:   {"bool", "boolean", "string"},
 	types.IntFamily:    {"int", "long", "string"},
 	types.FloatFamily:  {"float", "double", "string"},
-	types.StringFamily: {"string"},
+	types.StringFamily: {"string", "bytes"},
 	types.BytesFamily:  {"bytes", "string"},
 
 	// Arrays can be specified as avro array type, or we can try parsing string.
