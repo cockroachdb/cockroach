@@ -370,41 +370,6 @@ func (o *inputPartitioningOperator) reset() {
 	o.standaloneAllocator.Clear()
 }
 
-func newPartitionerToOperator(
-	allocator *Allocator, types []coltypes.T, partitioner Partitioner, partitionIdx int,
-) *partitionerToOperator {
-	return &partitionerToOperator{
-		partitioner:  partitioner,
-		partitionIdx: partitionIdx,
-		// TODO(yuzefovich): allocate zero-sized batch once the disk-backed
-		// partitioner is used.
-		batch: allocator.NewMemBatch(types),
-	}
-}
-
-// partitionerToOperator is an Operator that Dequeue's from the corresponding
-// partition on every call to Next. It is a converter from filled in
-// Partitioner to Operator.
-type partitionerToOperator struct {
-	ZeroInputNode
-	NonExplainable
-
-	partitioner  Partitioner
-	partitionIdx int
-	batch        coldata.Batch
-}
-
-var _ Operator = &partitionerToOperator{}
-
-func (p *partitionerToOperator) Init() {}
-
-func (p *partitionerToOperator) Next(context.Context) coldata.Batch {
-	if err := p.partitioner.Dequeue(p.partitionIdx, p.batch); err != nil {
-		execerror.VectorizedInternalPanic(err)
-	}
-	return p.batch
-}
-
 func newDummyPartitioner(allocator *Allocator, types []coltypes.T) Partitioner {
 	return &dummyPartitioner{allocator: allocator, types: types}
 }

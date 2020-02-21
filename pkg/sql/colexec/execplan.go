@@ -113,6 +113,9 @@ type NewColOperatorArgs struct {
 		// MaxNumberPartitions determines the maximum number of "active"
 		// partitions for Partitioner interface.
 		MaxNumberPartitions int
+		// NumForcedRepartitionsInExternalHashJoiner is the number of times that
+		// the external hash joiner is forced to recursively partition.
+		NumForcedRepartitionsInExternalHashJoiner int
 	}
 }
 
@@ -550,22 +553,21 @@ func NewColOperator(
 					inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
 					hashJoinerMemMonitorName,
 					func(inputOne, inputTwo Operator) Operator {
-						monitorNamePrefix := "external-hash-joiner-"
-						allocator := NewAllocator(
-							// Pass in the default limit explicitly since we don't want to
-							// use the default memory limit of 1 if ForceDiskSpill is true, to
-							// allow for the external hash join to have a normal amount of
-							// memory (for initialization and internal joining).
-							ctx, result.createBufferingMemAccountWithLimit(
-								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+						monitorNamePrefix := "external-hash-joiner"
+						unlimitedAllocator := NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(
+								ctx, flowCtx, monitorNamePrefix,
 							))
 						diskQueuesUnlimitedAllocator := NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
+								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
 							))
 						return newExternalHashJoiner(
-							allocator, hjSpec,
+							unlimitedAllocator, hjSpec,
 							inputOne, inputTwo,
+							execinfra.GetWorkMemLimit(flowCtx.Cfg),
+							args.DiskQueueCfg,
+							args.TestingKnobs.NumForcedRepartitionsInExternalHashJoiner,
 							diskQueuesUnlimitedAllocator,
 						)
 					},
@@ -977,21 +979,6 @@ func (r *NewColOperatorResult) createBufferingMemAccount(
 	)
 	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
-	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount
-}
-
-// createBufferingMemAccountWithLimit is identical to createBufferingMemAccount
-// although it creates a monitor with the provided limit, rather than using the
-// default limit. Only disk-aware operators should use this method, as it is
-// useful to enforce different limits in testing scenarios.
-func (r *NewColOperatorResult) createBufferingMemAccountWithLimit(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, limit int64,
-) *mon.BoundAccount {
-	limitedMon := mon.MakeMonitorInheritWithLimit(name+"-limited", limit, flowCtx.EvalCtx.Mon)
-	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, &limitedMon)
-	limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-	bufferingMemAccount := limitedMon.MakeBoundAccount()
 	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
 	return &bufferingMemAccount
 }

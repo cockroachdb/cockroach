@@ -540,6 +540,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									outputTypes:    outputTypes,
 									pspec:          pspec,
 									forceDiskSpill: spillForced,
+									numForcedRepartitionsInExternalHashJoiner: 2,
 								}
 								if err := verifyColOperator(args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
