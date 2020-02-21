@@ -33,21 +33,12 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import Empty from "../app/components/empty";
 import "./index.styl";
-
+import {statusOptions} from "./jobStatusOptions";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-
-const statusOptions = [
-  { value: "", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "running", label: "Running" },
-  { value: "paused", label: "Paused" },
-  { value: "canceled", label: "Canceled" },
-  { value: "succeeded", label: "Succeeded" },
-  { value: "failed", label: "Failed" },
-];
+import {JobStatusDropdown} from "oss/src/views/jobs/jobStatusDropdown";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting", s => s.localSettings, statusOptions[0].value,
@@ -394,10 +385,8 @@ export class JobsTable extends React.Component<JobsTableProps> {
         <div>
           <PageConfig>
             <PageConfigItem>
-              <Dropdown
-                title="Status"
-                options={statusOptions}
-                selected={this.props.status}
+              <JobStatusDropdown
+                selectedStatus={this.props.status}
                 onChange={this.onStatusSelected}
               />
             </PageConfigItem>
