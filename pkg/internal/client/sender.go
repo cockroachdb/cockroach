@@ -221,6 +221,22 @@ type TxnSender interface {
 	// been fixed to the start timestamp and cannot be pushed forward.
 	CommitTimestampFixed() bool
 
+	PushTo(timestamp hlc.Timestamp)
+
+	// Forces a heartbeat which if successful ensures that
+	// the transaction record is persistent.
+	//
+	// TODO(sbhola): we should not need to do this since a
+	// synthesized transaction record, when the transaction record is
+	// written lazily, can also be constrained to have an expiry timestamp
+	// based on the intent that is being pushed.
+	ForceHeartbeat() error
+
+	// The earliest time at which the transaction's intents can be
+	// forcefully aborted. Must only be called after at least one call
+	// to TryForceHeartbeat() has returned with no error.
+	ExpiryTimestamp() hlc.Timestamp
+
 	// ProvisionalCommitTimestamp returns the transaction's provisional
 	// commit timestamp. This can move forward throughout the txn's
 	// lifetime. See the explanatory comments for the WriteTimestamp

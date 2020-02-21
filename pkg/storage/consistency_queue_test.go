@@ -313,9 +313,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	var val roachpb.Value
 	val.SetInt(42)
 	diffTimestamp = mtc.stores[1].Clock().Now()
-	if err := engine.MVCCPut(
-		context.Background(), mtc.stores[1].Engine(), nil, diffKey, diffTimestamp, val, nil,
-	); err != nil {
+	if err := engine.MVCCPut(context.Background(), mtc.stores[1].Engine(), nil, diffKey, diffTimestamp, val, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 

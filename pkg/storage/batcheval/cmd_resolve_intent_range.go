@@ -47,9 +47,11 @@ func ResolveIntentRange(
 	iterAndBuf := engine.GetIterAndBuf(readWriter, engine.IterOptions{UpperBound: args.EndKey})
 	defer iterAndBuf.Cleanup()
 
-	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, readWriter, iterAndBuf, ms, intent, cArgs.MaxKeys,
-	)
+	var res result.Result
+	leasingIntentFunc := func(intent roachpb.Intent) {
+		res.Local.AbortedLeasingIntents = append(res.Local.AbortedLeasingIntents, intent)
+	}
+	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, cArgs.MaxKeys, leasingIntentFunc)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -60,7 +62,6 @@ func ResolveIntentRange(
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
-	var res result.Result
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, numKeys > 0) {

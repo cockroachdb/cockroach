@@ -297,6 +297,24 @@ func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.ProvisionalCommitTimestamp()
 }
 
+func (txn *Txn) PushTo(timestamp hlc.Timestamp) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.PushTo(timestamp)
+}
+
+func (txn *Txn) ForceHeartbeat() error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ForceHeartbeat()
+}
+
+func (txn *Txn) ExpiryTimestamp() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ExpiryTimestamp()
+}
+
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTxnRequest.
 func (txn *Txn) SetSystemConfigTrigger() error {
@@ -384,6 +402,12 @@ func (txn *Txn) GetProtoTs(
 func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 	b := txn.NewBatch()
 	b.Put(key, value)
+	return getOneErr(txn.Run(ctx, b), b)
+}
+
+func (txn *Txn) PutLease(ctx context.Context, key, value interface{}) error {
+	b := txn.NewBatch()
+	b.put(key, value, false, true)
 	return getOneErr(txn.Run(ctx, b), b)
 }
 

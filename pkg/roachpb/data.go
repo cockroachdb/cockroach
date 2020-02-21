@@ -2153,4 +2153,5 @@ func (i *Intent) SetTxn(txn *Transaction) {
 	i.Txn = txn.TxnMeta
 	i.Status = txn.Status
 	i.IgnoredSeqNums = txn.IgnoredSeqNums
+	i.HeartbeatTimestamp = txn.LastHeartbeat
 }

@@ -325,19 +325,11 @@ func (rsl StateLoader) SetLegacyAppliedIndex(
 
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
-	if err := engine.MVCCPut(ctx, readWriter, ms,
-		rsl.RaftAppliedIndexLegacyKey(),
-		hlc.Timestamp{},
-		value,
-		nil /* txn */); err != nil {
+	if err := engine.MVCCPut(ctx, readWriter, ms, rsl.RaftAppliedIndexLegacyKey(), hlc.Timestamp{}, value, nil, nil); err != nil {
 		return err
 	}
 	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCPut(ctx, readWriter, ms,
-		rsl.LeaseAppliedIndexLegacyKey(),
-		hlc.Timestamp{},
-		value,
-		nil /* txn */)
+	return engine.MVCCPut(ctx, readWriter, ms, rsl.LeaseAppliedIndexLegacyKey(), hlc.Timestamp{}, value, nil, nil)
 }
 
 // SetLegacyAppliedIndexBlind sets the legacy {raft,lease} applied index values

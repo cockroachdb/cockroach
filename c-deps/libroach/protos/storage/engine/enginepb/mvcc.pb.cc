@@ -367,6 +367,7 @@ const int MVCCMetadata::kValBytesFieldNumber;
 const int MVCCMetadata::kRawBytesFieldNumber;
 const int MVCCMetadata::kIntentHistoryFieldNumber;
 const int MVCCMetadata::kMergeTimestampFieldNumber;
+const int MVCCMetadata::kLeasingIntentFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCMetadata::MVCCMetadata()
@@ -402,16 +403,16 @@ MVCCMetadata::MVCCMetadata(const MVCCMetadata& from)
     merge_timestamp_ = NULL;
   }
   ::memcpy(&key_bytes_, &from.key_bytes_,
-    static_cast<size_t>(reinterpret_cast<char*>(&deleted_) -
-    reinterpret_cast<char*>(&key_bytes_)) + sizeof(deleted_));
+    static_cast<size_t>(reinterpret_cast<char*>(&leasing_intent_) -
+    reinterpret_cast<char*>(&key_bytes_)) + sizeof(leasing_intent_));
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.MVCCMetadata)
 }
 
 void MVCCMetadata::SharedCtor() {
   raw_bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&txn_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&deleted_) -
-      reinterpret_cast<char*>(&txn_)) + sizeof(deleted_));
+      reinterpret_cast<char*>(&leasing_intent_) -
+      reinterpret_cast<char*>(&txn_)) + sizeof(leasing_intent_));
 }
 
 MVCCMetadata::~MVCCMetadata() {
@@ -460,10 +461,10 @@ void MVCCMetadata::Clear() {
       merge_timestamp_->Clear();
     }
   }
-  if (cached_has_bits & 112u) {
+  if (cached_has_bits & 240u) {
     ::memset(&key_bytes_, 0, static_cast<size_t>(
-        reinterpret_cast<char*>(&deleted_) -
-        reinterpret_cast<char*>(&key_bytes_)) + sizeof(deleted_));
+        reinterpret_cast<char*>(&leasing_intent_) -
+        reinterpret_cast<char*>(&key_bytes_)) + sizeof(leasing_intent_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -582,6 +583,20 @@ bool MVCCMetadata::MergePartialFromCodedStream(
         break;
       }
 
+      // optional bool leasing_intent = 9;
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
+          set_has_leasing_intent();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &leasing_intent_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -652,6 +667,11 @@ void MVCCMetadata::SerializeWithCachedSizes(
       output);
   }
 
+  // optional bool leasing_intent = 9;
+  if (cached_has_bits & 0x00000080u) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(9, this->leasing_intent(), output);
+  }
+
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.MVCCMetadata)
@@ -673,7 +693,7 @@ size_t MVCCMetadata::ByteSizeLong() const {
     }
   }
 
-  if (_has_bits_[0 / 32] & 127u) {
+  if (_has_bits_[0 / 32] & 255u) {
     // optional bytes raw_bytes = 6;
     if (has_raw_bytes()) {
       total_size += 1 +
@@ -717,6 +737,11 @@ size_t MVCCMetadata::ByteSizeLong() const {
       total_size += 1 + 1;
     }
 
+    // optional bool leasing_intent = 9;
+    if (has_leasing_intent()) {
+      total_size += 1 + 1;
+    }
+
   }
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
@@ -737,7 +762,7 @@ void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
 
   intent_history_.MergeFrom(from.intent_history_);
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 127u) {
+  if (cached_has_bits & 255u) {
     if (cached_has_bits & 0x00000001u) {
       set_has_raw_bytes();
       raw_bytes_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.raw_bytes_);
@@ -759,6 +784,9 @@ void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
     }
     if (cached_has_bits & 0x00000040u) {
       deleted_ = from.deleted_;
+    }
+    if (cached_has_bits & 0x00000080u) {
+      leasing_intent_ = from.leasing_intent_;
     }
     _has_bits_[0] |= cached_has_bits;
   }
@@ -790,6 +818,7 @@ void MVCCMetadata::InternalSwap(MVCCMetadata* other) {
   swap(key_bytes_, other->key_bytes_);
   swap(val_bytes_, other->val_bytes_);
   swap(deleted_, other->deleted_);
+  swap(leasing_intent_, other->leasing_intent_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

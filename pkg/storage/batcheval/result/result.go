@@ -45,6 +45,8 @@ type LocalResult struct {
 	// live.
 	EndTxns []EndTxnIntents
 
+	AbortedLeasingIntents []roachpb.Intent
+
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
 	GossipFirstRange bool

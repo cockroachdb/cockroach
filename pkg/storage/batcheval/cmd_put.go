@@ -62,5 +62,10 @@ func Put(
 	if args.Blind {
 		return result.Result{}, engine.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
 	}
-	return result.Result{}, engine.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+	// TODO: plumn args.LeasingIntent into MVCCMetadata written for this intent.
+	var options *engine.PutOptions
+	if args.LeasingIntent {
+		options = &engine.PutOptions{LeasingIntent: args.LeasingIntent}
+	}
+	return result.Result{}, engine.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn, options)
 }

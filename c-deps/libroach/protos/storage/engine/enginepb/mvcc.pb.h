@@ -378,6 +378,13 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   bool deleted() const;
   void set_deleted(bool value);
 
+  // optional bool leasing_intent = 9;
+  bool has_leasing_intent() const;
+  void clear_leasing_intent();
+  static const int kLeasingIntentFieldNumber = 9;
+  bool leasing_intent() const;
+  void set_leasing_intent(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCMetadata)
  private:
   void set_has_txn();
@@ -394,6 +401,8 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   void clear_has_raw_bytes();
   void set_has_merge_timestamp();
   void clear_has_merge_timestamp();
+  void set_has_leasing_intent();
+  void clear_has_leasing_intent();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -406,6 +415,7 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::int64 key_bytes_;
   ::google::protobuf::int64 val_bytes_;
   bool deleted_;
+  bool leasing_intent_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1063,6 +1073,30 @@ inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::
   }
   merge_timestamp_ = merge_timestamp;
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
+}
+
+// optional bool leasing_intent = 9;
+inline bool MVCCMetadata::has_leasing_intent() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void MVCCMetadata::set_has_leasing_intent() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void MVCCMetadata::clear_has_leasing_intent() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void MVCCMetadata::clear_leasing_intent() {
+  leasing_intent_ = false;
+  clear_has_leasing_intent();
+}
+inline bool MVCCMetadata::leasing_intent() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.leasing_intent)
+  return leasing_intent_;
+}
+inline void MVCCMetadata::set_leasing_intent(bool value) {
+  set_has_leasing_intent();
+  leasing_intent_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.leasing_intent)
 }
 
 // -------------------------------------------------------------------

@@ -61,7 +61,7 @@ func testScanReverseScanInner(
 
 	// Write to k1 and k2.
 	for _, k := range []roachpb.Key{k1, k2} {
-		err := engine.MVCCPut(ctx, eng, nil, k, ts, roachpb.MakeValueFromString("value-"+string(k)), nil)
+		err := engine.MVCCPut(ctx, eng, nil, k, ts, roachpb.MakeValueFromString("value-"+string(k)), nil, nil)
 		require.NoError(t, err)
 	}
 

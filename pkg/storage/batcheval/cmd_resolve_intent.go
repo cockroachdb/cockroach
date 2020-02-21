@@ -82,12 +82,15 @@ func ResolveIntent(
 	}
 
 	intent := args.AsIntent()
-	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, intent)
+	var res result.Result
+	leasingIntentFunc := func(intent roachpb.Intent) {
+		res.Local.AbortedLeasingIntents = append(res.Local.AbortedLeasingIntents, intent)
+	}
+	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, intent, leasingIntentFunc)
 	if err != nil {
 		return result.Result{}, err
 	}
 
-	var res result.Result
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, ok) {

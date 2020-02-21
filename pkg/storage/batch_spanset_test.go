@@ -526,15 +526,7 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 
 	value := roachpb.MakeValueFromString("irrelevant")
 
-	if err := engine.MVCCPut(
-		ctx,
-		eng,
-		nil, // ms
-		roachpb.Key("b"),
-		hlc.Timestamp{WallTime: 10}, // irrelevant
-		value,
-		nil, // txn
-	); err != nil {
+	if err := engine.MVCCPut(ctx, eng, nil, roachpb.Key("b"), hlc.Timestamp{WallTime: 10}, value, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -553,9 +545,7 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	iterAndBuf := engine.GetIterAndBuf(batch, engine.IterOptions{UpperBound: intent.Span.EndKey})
 	defer iterAndBuf.Cleanup()
 
-	if _, _, err := engine.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, batch, iterAndBuf, nil /* ms */, intent, math.MaxInt64,
-	); err != nil {
+	if _, _, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, nil, intent, math.MaxInt64, nil); err != nil {
 		t.Fatal(err)
 	}
 }

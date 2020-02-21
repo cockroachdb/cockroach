@@ -331,15 +331,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
 			key := ops[opIdx](rangeID)
 			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
-			if err := engine.MVCCPut(
-				ctx,
-				eng,
-				nil, /* ms */
-				key,
-				hlc.Timestamp{},
-				roachpb.MakeValueFromString("fake value for "+key.String()),
-				nil, /* txn */
-			); err != nil {
+			if err := engine.MVCCPut(ctx, eng, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("fake value for "+key.String()), nil, nil); err != nil {
 				t.Fatal(err)
 			}
 		}

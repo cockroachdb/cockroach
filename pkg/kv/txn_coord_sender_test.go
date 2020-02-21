@@ -1902,7 +1902,7 @@ func TestSequenceNumbers(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		var ba roachpb.BatchRequest
 		for j := 0; j < i; j++ {
-			ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*roachpb.PutRequest))
+			ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")))
 		}
 		if _, pErr := txn.Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)

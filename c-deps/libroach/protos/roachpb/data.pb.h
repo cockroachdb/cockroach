@@ -2102,6 +2102,17 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::cockroach::storage::engine::enginepb::TxnMeta* mutable_txn();
   void set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn);
 
+  bool has_heartbeat_timestamp() const;
+  void clear_heartbeat_timestamp();
+  static const int kHeartbeatTimestampFieldNumber = 5;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_heartbeat_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& heartbeat_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_heartbeat_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_heartbeat_timestamp();
+  void set_allocated_heartbeat_timestamp(::cockroach::util::hlc::Timestamp* heartbeat_timestamp);
+
   // .cockroach.roachpb.TransactionStatus status = 3;
   void clear_status();
   static const int kStatusFieldNumber = 3;
@@ -2115,6 +2126,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::cockroach::roachpb::Span* span_;
   ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
+  ::cockroach::util::hlc::Timestamp* heartbeat_timestamp_;
   int status_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
@@ -4946,6 +4958,53 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine:
 Intent::ignored_seqnums() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.Intent.ignored_seqnums)
   return ignored_seqnums_;
+}
+
+inline bool Intent::has_heartbeat_timestamp() const {
+  return this != internal_default_instance() && heartbeat_timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& Intent::_internal_heartbeat_timestamp() const {
+  return *heartbeat_timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& Intent::heartbeat_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = heartbeat_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.heartbeat_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* Intent::release_heartbeat_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.heartbeat_timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = heartbeat_timestamp_;
+  heartbeat_timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* Intent::mutable_heartbeat_timestamp() {
+  
+  if (heartbeat_timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    heartbeat_timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.heartbeat_timestamp)
+  return heartbeat_timestamp_;
+}
+inline void Intent::set_allocated_heartbeat_timestamp(::cockroach::util::hlc::Timestamp* heartbeat_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(heartbeat_timestamp_);
+  }
+  if (heartbeat_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      heartbeat_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, heartbeat_timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  heartbeat_timestamp_ = heartbeat_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.heartbeat_timestamp)
 }
 
 // -------------------------------------------------------------------
