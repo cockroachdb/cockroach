@@ -34,7 +34,7 @@ import {
   JOB_STATUS_CANCELED, JOB_STATUS_FAILED,
   JOB_STATUS_PAUSED,
   JOB_STATUS_PENDING,
-  JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED,
+  JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED, jobHasOneOfStatuses,
   renamedStatuses,
 } from "src/views/jobs/jobStatusOptions";
 
@@ -48,10 +48,6 @@ interface JobsTableProps extends RouteComponentProps {
 }
 
 class JobDetails extends React.Component<JobsTableProps, {}> {
-  is(...statuses: string[]) {
-    return statuses.indexOf(this.props.job.status) !== -1;
-  }
-
   refresh = (props = this.props) => {
     props.refreshJobs(new JobsRequest({
       status: props.status,
@@ -67,10 +63,10 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
   prevPage = () => this.props.history.goBack();
 
   renderProgress() {
-    if (this.is(JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
+    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
       const className = classNames("jobs-table__status", {
-        "jobs-table__status--succeed": this.is(JOB_STATUS_SUCCEEDED),
-        "jobs-table__status--failed": this.is(JOB_STATUS_FAILED, JOB_STATUS_CANCELED),
+        "jobs-table__status--succeed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED),
+        "jobs-table__status--failed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_FAILED, JOB_STATUS_CANCELED),
       });
       return (
         <span className={className}>
@@ -102,16 +98,16 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
     const started = TimestampToMoment(job.started);
     const finished = TimestampToMoment(job.finished);
     const modified = TimestampToMoment(job.modified);
-    if (this.is(JOB_STATUS_PENDING, JOB_STATUS_PAUSED)) {
+    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_PENDING, JOB_STATUS_PAUSED)) {
       return _.capitalize(this.props.job.status);
-    } else if (this.is(JOB_STATUS_RUNNING)) {
+    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_RUNNING)) {
       const fractionCompleted = this.props.job.fraction_completed;
       if (fractionCompleted > 0) {
         const duration = modified.diff(started);
         const remaining = duration / fractionCompleted - duration;
         return <span className="jobs-table__duration--right">{formatDuration(moment.duration(remaining)) + " remaining"}</span>;
       }
-    } else if (this.is(JOB_STATUS_SUCCEEDED)) {
+    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED)) {
       return <span>{"Duration: " + formatDuration(moment.duration(finished.diff(started)))}</span>;
     }
   }
