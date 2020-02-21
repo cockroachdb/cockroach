@@ -36,11 +36,12 @@ TEST(FileRegistry, TransformPath) {
       {"/mnt/otherdevice/myfile", "/mnt/otherdevice/myfile", ""},
   };
 
+  std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
   int test_num = 0;
   for (auto t : test_cases) {
     SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
 
-    FileRegistry reg(nullptr, t.db_dir, false /* read-only */);
+    FileRegistry reg(env.get(), t.db_dir, false /* read-only */);
     auto out = reg.TransformPath(t.input);
     EXPECT_EQ(t.output, out);
   }
