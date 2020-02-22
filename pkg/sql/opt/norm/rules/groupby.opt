@@ -115,6 +115,9 @@
 #   SELECT DISTINCT ON (a) a, b FROM ab WHERE a=1
 # is equivalent to:
 #   SELECT a, b FROM ab WHERE a=1 LIMIT 1
+#
+# Note that this rule does not apply to UpsertDistinctOn, since that will raise
+# error if there are duplicate rows.
 [EliminateDistinctOnNoColumns, Normalize]
 (DistinctOn
     $input:*

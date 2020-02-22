@@ -97,25 +97,36 @@ upsert xy
  ├── return-mapping:
  │    ├── upsert_x:9 => x:1
  │    └── upsert_y:10 => y:2
- ├── cardinality: [2 - ]
+ ├── cardinality: [1 - ]
  ├── side-effects, mutations
  └── project
       ├── columns: upsert_x:9 upsert_y:10 column1:3!null column2:4!null x:5 y:6
-      ├── cardinality: [2 - ]
-      ├── fd: (5)-->(6)
+      ├── cardinality: [1 - ]
+      ├── fd: (3)-->(4), (5)-->(6)
       ├── left-join (hash)
       │    ├── columns: column1:3!null column2:4!null x:5 y:6 u:7 v:8
-      │    ├── cardinality: [2 - ]
-      │    ├── fd: (5)-->(6), (7)-->(8)
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (3,5,7)
+      │    ├── fd: (3)-->(4), (5)-->(6), (7)-->(8)
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3!null column2:4!null x:5 y:6
-      │    │    ├── cardinality: [2 - ]
-      │    │    ├── fd: (5)-->(6)
-      │    │    ├── values
+      │    │    ├── cardinality: [1 - ]
+      │    │    ├── key: (3,5)
+      │    │    ├── fd: (3)-->(4), (5)-->(6)
+      │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: column1:3!null column2:4!null
-      │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    ├── (1, 2)
-      │    │    │    └── (3, 4)
+      │    │    │    ├── grouping columns: column1:3!null
+      │    │    │    ├── cardinality: [1 - 2]
+      │    │    │    ├── key: (3)
+      │    │    │    ├── fd: (3)-->(4)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:3!null column2:4!null
+      │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    ├── (1, 2)
+      │    │    │    │    └── (3, 4)
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=column2:4, outer=(4)]
+      │    │    │              └── column2:4
       │    │    ├── scan xy
       │    │    │    ├── columns: x:5!null y:6
       │    │    │    ├── key: (5)

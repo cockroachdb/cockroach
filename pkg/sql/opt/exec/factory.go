@@ -189,7 +189,11 @@ type Factory interface {
 	// ordered along these columns (i.e. all rows with the same values on these
 	// columns are a contiguous part of the input).
 	ConstructDistinct(
-		input Node, distinctCols, orderedCols ColumnOrdinalSet, reqOrdering OutputOrdering,
+		input Node,
+		distinctCols, orderedCols ColumnOrdinalSet,
+		reqOrdering OutputOrdering,
+		nullsAreDistinct bool,
+		errorOnDup string,
 	) (Node, error)
 
 	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT

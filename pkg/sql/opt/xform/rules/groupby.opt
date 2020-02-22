@@ -93,12 +93,13 @@
     $aggregations
 )
 
-# GenerateStreamingGroupBy creates variants of a GroupBy or DistinctOn which
-# require more specific orderings on the grouping columns, using the interesting
-# orderings property. When we have orderings on grouping columns, we can execute
-# aggregations in a streaming fashion which is more efficient.
+# GenerateStreamingGroupBy creates variants of a GroupBy, DistinctOn, or
+# UpsertDistinctOn which require more specific orderings on the grouping
+# columns, using the interesting orderings property. When we have orderings on
+# grouping columns, we can execute aggregations in a streaming fashion which is
+# more efficient.
 [GenerateStreamingGroupBy, Explore]
-(GroupBy | DistinctOn
+(GroupBy | DistinctOn | UpsertDistinctOn
     $input:*
     $aggs:*
     $private:* & (IsCanonicalGroupBy $private)

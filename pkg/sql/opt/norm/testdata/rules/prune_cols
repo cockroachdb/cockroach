@@ -1915,32 +1915,39 @@ upsert a
  ├── side-effects, mutations
  └── project
       ├── columns: upsert_i:15 column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
-      ├── cardinality: [1 - 1]
-      ├── key: ()
-      ├── fd: ()-->(5-12,15)
-      ├── left-join (cross)
+      ├── cardinality: [1 - ]
+      ├── key: (9)
+      ├── fd: ()-->(5-8), (9)-->(10-12), (9,10)-->(15)
+      ├── left-join (hash)
       │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
-      │    ├── cardinality: [1 - 1]
-      │    ├── key: ()
-      │    ├── fd: ()-->(5-12)
-      │    ├── values
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (9)
+      │    ├── fd: ()-->(5-8), (9)-->(10-12)
+      │    ├── upsert-distinct-on
       │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
+      │    │    ├── grouping columns: column1:5!null
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(5-8)
-      │    │    └── (1, 'foo', NULL, NULL)
-      │    ├── select
+      │    │    ├── values
+      │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(5-8)
+      │    │    │    └── (1, 'foo', NULL, NULL)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:6, outer=(6)]
+      │    │         │    └── column2:6
+      │    │         ├── first-agg [as=column7:7, outer=(7)]
+      │    │         │    └── column7:7
+      │    │         └── first-agg [as=column8:8, outer=(8)]
+      │    │              └── column8:8
+      │    ├── scan a
       │    │    ├── columns: k:9!null i:10 f:11 s:12
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(9-12)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:9!null i:10 f:11 s:12
-      │    │    │    ├── key: (9)
-      │    │    │    └── fd: (9)-->(10-12)
-      │    │    └── filters
-      │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
-      │    └── filters (true)
+      │    │    ├── key: (9)
+      │    │    └── fd: (9)-->(10-12)
+      │    └── filters
+      │         └── column1:5 = k:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
       └── projections
            └── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
 
@@ -1965,38 +1972,43 @@ upsert a
  │    ├── upsert_i:15 => i:2
  │    ├── upsert_f:16 => f:3
  │    └── upsert_s:17 => s:4
- ├── cardinality: [1 - 1]
+ ├── cardinality: [1 - ]
  ├── side-effects, mutations
- ├── key: ()
- ├── fd: ()-->(1-4)
  └── project
       ├── columns: upsert_k:14 upsert_i:15 upsert_f:16 upsert_s:17 column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
-      ├── cardinality: [1 - 1]
-      ├── key: ()
-      ├── fd: ()-->(5-12,14-17)
-      ├── left-join (cross)
+      ├── cardinality: [1 - ]
+      ├── key: (9)
+      ├── fd: ()-->(5-8), (9)-->(10-12,16), (9)-->(14), (9,10)-->(15), (9,12)-->(17)
+      ├── left-join (hash)
       │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
-      │    ├── cardinality: [1 - 1]
-      │    ├── key: ()
-      │    ├── fd: ()-->(5-12)
-      │    ├── values
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (9)
+      │    ├── fd: ()-->(5-8), (9)-->(10-12)
+      │    ├── upsert-distinct-on
       │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
+      │    │    ├── grouping columns: column1:5!null
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(5-8)
-      │    │    └── (1, 'foo', NULL, NULL)
-      │    ├── select
+      │    │    ├── values
+      │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(5-8)
+      │    │    │    └── (1, 'foo', NULL, NULL)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:6, outer=(6)]
+      │    │         │    └── column2:6
+      │    │         ├── first-agg [as=column7:7, outer=(7)]
+      │    │         │    └── column7:7
+      │    │         └── first-agg [as=column8:8, outer=(8)]
+      │    │              └── column8:8
+      │    ├── scan a
       │    │    ├── columns: k:9!null i:10 f:11 s:12
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(9-12)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:9!null i:10 f:11 s:12
-      │    │    │    ├── key: (9)
-      │    │    │    └── fd: (9)-->(10-12)
-      │    │    └── filters
-      │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
-      │    └── filters (true)
+      │    │    ├── key: (9)
+      │    │    └── fd: (9)-->(10-12)
+      │    └── filters
+      │         └── column1:5 = k:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
       └── projections
            ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14, outer=(5,9)]
            ├── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
@@ -2021,39 +2033,42 @@ upsert "family"
  │    └── column2:7 => b:2
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- └── left-join (cross)
+ └── left-join (hash)
       ├── columns: column1:6!null column2:7!null column8:8 a:9 b:10
-      ├── cardinality: [1 - 1]
-      ├── key: ()
-      ├── fd: ()-->(6-10)
-      ├── values
+      ├── cardinality: [1 - ]
+      ├── key: (9)
+      ├── fd: ()-->(6-8), (9)-->(10)
+      ├── upsert-distinct-on
       │    ├── columns: column1:6!null column2:7!null column8:8
+      │    ├── grouping columns: column1:6!null
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6-8)
-      │    └── (1, 2, NULL)
-      ├── select
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null column8:8
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-8)
+      │    │    └── (1, 2, NULL)
+      │    └── aggregations
+      │         ├── first-agg [as=column2:7, outer=(7)]
+      │         │    └── column2:7
+      │         └── first-agg [as=column8:8, outer=(8)]
+      │              └── column8:8
+      ├── scan "family"
       │    ├── columns: a:9!null b:10
-      │    ├── cardinality: [0 - 1]
-      │    ├── key: ()
-      │    ├── fd: ()-->(9,10)
-      │    ├── scan "family"
-      │    │    ├── columns: a:9!null b:10
-      │    │    ├── key: (9)
-      │    │    └── fd: (9)-->(10)
-      │    └── filters
-      │         └── a:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
-      └── filters (true)
+      │    ├── key: (9)
+      │    └── fd: (9)-->(10)
+      └── filters
+           └── column1:6 = a:9 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
 
 norm
 INSERT INTO family VALUES (1, 2, 3, 4, 5) ON CONFLICT (a) DO UPDATE SET c = 10 RETURNING e
 ----
 project
  ├── columns: e:5
- ├── cardinality: [1 - 1]
+ ├── cardinality: [1 - ]
  ├── side-effects, mutations
- ├── key: ()
- ├── fd: ()-->(5)
  └── upsert "family"
       ├── columns: a:1!null e:5
       ├── canary column: 11
@@ -2069,38 +2084,45 @@ project
       ├── return-mapping:
       │    ├── upsert_a:17 => a:1
       │    └── upsert_e:21 => e:5
-      ├── cardinality: [1 - 1]
+      ├── cardinality: [1 - ]
       ├── side-effects, mutations
-      ├── key: ()
-      ├── fd: ()-->(1,5)
       └── project
            ├── columns: upsert_a:17 upsert_c:19!null upsert_e:21 column1:6!null column2:7!null column3:8!null column4:9!null column5:10!null a:11 c:13 d:14 e:15
-           ├── cardinality: [1 - 1]
-           ├── key: ()
-           ├── fd: ()-->(6-11,13-15,17,19,21)
-           ├── left-join (cross)
+           ├── cardinality: [1 - ]
+           ├── key: (11)
+           ├── fd: ()-->(6-10), (11)-->(13-15), (11)-->(17), (11)-->(19), (11,15)-->(21)
+           ├── left-join (hash)
            │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column5:10!null a:11 c:13 d:14 e:15
-           │    ├── cardinality: [1 - 1]
-           │    ├── key: ()
-           │    ├── fd: ()-->(6-11,13-15)
-           │    ├── values
+           │    ├── cardinality: [1 - ]
+           │    ├── key: (11)
+           │    ├── fd: ()-->(6-10), (11)-->(13-15)
+           │    ├── upsert-distinct-on
            │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column5:10!null
+           │    │    ├── grouping columns: column1:6!null
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(6-10)
-           │    │    └── (1, 2, 3, 4, 5)
-           │    ├── select
+           │    │    ├── values
+           │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column5:10!null
+           │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(6-10)
+           │    │    │    └── (1, 2, 3, 4, 5)
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=column2:7, outer=(7)]
+           │    │         │    └── column2:7
+           │    │         ├── first-agg [as=column3:8, outer=(8)]
+           │    │         │    └── column3:8
+           │    │         ├── first-agg [as=column4:9, outer=(9)]
+           │    │         │    └── column4:9
+           │    │         └── first-agg [as=column5:10, outer=(10)]
+           │    │              └── column5:10
+           │    ├── scan "family"
            │    │    ├── columns: a:11!null c:13 d:14 e:15
-           │    │    ├── cardinality: [0 - 1]
-           │    │    ├── key: ()
-           │    │    ├── fd: ()-->(11,13-15)
-           │    │    ├── scan "family"
-           │    │    │    ├── columns: a:11!null c:13 d:14 e:15
-           │    │    │    ├── key: (11)
-           │    │    │    └── fd: (11)-->(13-15)
-           │    │    └── filters
-           │    │         └── a:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
-           │    └── filters (true)
+           │    │    ├── key: (11)
+           │    │    └── fd: (11)-->(13-15)
+           │    └── filters
+           │         └── column1:6 = a:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
            └── projections
                 ├── CASE WHEN a:11 IS NULL THEN column1:6 ELSE a:11 END [as=upsert_a:17, outer=(6,11)]
                 ├── CASE WHEN a:11 IS NULL THEN column3:8 ELSE 10 END [as=upsert_c:19, outer=(8,11)]
@@ -2127,32 +2149,41 @@ upsert "family"
  ├── side-effects, mutations
  └── project
       ├── columns: upsert_d:20!null column1:6!null column2:7!null column3:8!null column4:9!null column10:10 a:11 c:13 d:14
-      ├── cardinality: [1 - 1]
-      ├── key: ()
-      ├── fd: ()-->(6-11,13,14,20)
-      ├── left-join (cross)
+      ├── cardinality: [1 - ]
+      ├── key: (11)
+      ├── fd: ()-->(6-10), (11)-->(13,14), (11)-->(20)
+      ├── left-join (hash)
       │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 a:11 c:13 d:14
-      │    ├── cardinality: [1 - 1]
-      │    ├── key: ()
-      │    ├── fd: ()-->(6-11,13,14)
-      │    ├── values
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (11)
+      │    ├── fd: ()-->(6-10), (11)-->(13,14)
+      │    ├── upsert-distinct-on
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10
+      │    │    ├── grouping columns: column1:6!null
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(6-10)
-      │    │    └── (1, 2, 3, 4, NULL)
-      │    ├── select
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(6-10)
+      │    │    │    └── (1, 2, 3, 4, NULL)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:7, outer=(7)]
+      │    │         │    └── column2:7
+      │    │         ├── first-agg [as=column3:8, outer=(8)]
+      │    │         │    └── column3:8
+      │    │         ├── first-agg [as=column4:9, outer=(9)]
+      │    │         │    └── column4:9
+      │    │         └── first-agg [as=column10:10, outer=(10)]
+      │    │              └── column10:10
+      │    ├── scan "family"
       │    │    ├── columns: a:11!null c:13 d:14
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(11,13,14)
-      │    │    ├── scan "family"
-      │    │    │    ├── columns: a:11!null c:13 d:14
-      │    │    │    ├── key: (11)
-      │    │    │    └── fd: (11)-->(13,14)
-      │    │    └── filters
-      │    │         └── a:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
-      │    └── filters (true)
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(13,14)
+      │    └── filters
+      │         └── column1:6 = a:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
       └── projections
            └── CASE WHEN a:11 IS NULL THEN column4:9 ELSE 10 END [as=upsert_d:20, outer=(9,11)]
 
@@ -2175,32 +2206,39 @@ upsert mutation
  ├── side-effects, mutations
  └── project
       ├── columns: upsert_b:17!null column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 e:14
-      ├── cardinality: [1 - 1]
-      ├── key: ()
-      ├── fd: ()-->(6-14,17)
-      ├── left-join (cross)
+      ├── cardinality: [1 - ]
+      ├── key: (10)
+      ├── fd: ()-->(6-9), (10)-->(11-14), (10)-->(17)
+      ├── left-join (hash)
       │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 e:14
-      │    ├── cardinality: [1 - 1]
-      │    ├── key: ()
-      │    ├── fd: ()-->(6-14)
-      │    ├── values
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (10)
+      │    ├── fd: ()-->(6-9), (10)-->(11-14)
+      │    ├── upsert-distinct-on
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9
+      │    │    ├── grouping columns: column1:6!null
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(6-9)
-      │    │    └── (1, 2, 3, NULL)
-      │    ├── select
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(6-9)
+      │    │    │    └── (1, 2, 3, NULL)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:7, outer=(7)]
+      │    │         │    └── column2:7
+      │    │         ├── first-agg [as=column3:8, outer=(8)]
+      │    │         │    └── column3:8
+      │    │         └── first-agg [as=column9:9, outer=(9)]
+      │    │              └── column9:9
+      │    ├── scan mutation
       │    │    ├── columns: a:10!null b:11 c:12 d:13 e:14
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(10-14)
-      │    │    ├── scan mutation
-      │    │    │    ├── columns: a:10!null b:11 c:12 d:13 e:14
-      │    │    │    ├── key: (10)
-      │    │    │    └── fd: (10)-->(11-14)
-      │    │    └── filters
-      │    │         └── a:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
-      │    └── filters (true)
+      │    │    ├── key: (10)
+      │    │    └── fd: (10)-->(11-14)
+      │    └── filters
+      │         └── column1:6 = a:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       └── projections
            └── CASE WHEN a:10 IS NULL THEN column2:7 ELSE 10 END [as=upsert_b:17, outer=(7,10)]
 
@@ -2489,10 +2527,8 @@ INSERT INTO returning_test VALUES (1, 2, 'c') ON CONFLICT (a) DO UPDATE SET a = 
 ----
 project
  ├── columns: a:1 b:2 c:3
- ├── cardinality: [1 - 1]
+ ├── cardinality: [1 - ]
  ├── side-effects, mutations
- ├── key: ()
- ├── fd: ()-->(1-3)
  └── upsert returning_test
       ├── columns: a:1 b:2 c:3 rowid:8!null
       ├── canary column: 21
@@ -2513,41 +2549,49 @@ project
       │    ├── upsert_b:24 => b:2
       │    ├── upsert_c:25 => c:3
       │    └── upsert_rowid:30 => rowid:8
-      ├── cardinality: [1 - 1]
+      ├── cardinality: [1 - ]
       ├── side-effects, mutations
-      ├── key: ()
-      ├── fd: ()-->(1-3,8)
       └── project
            ├── columns: upsert_a:23 upsert_b:24 upsert_c:25 upsert_rowid:30 column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 rowid:21
-           ├── cardinality: [1 - 1]
+           ├── cardinality: [1 - ]
            ├── side-effects
-           ├── key: ()
-           ├── fd: ()-->(9-16,21,23-25,30)
-           ├── left-join (cross)
+           ├── key: (21)
+           ├── fd: ()-->(9-13), (21)-->(14-16), (14)~~>(15,16,21), (14,21)-->(23), (15,21)-->(24), (16,21)-->(25), (21)-->(30)
+           ├── left-join (hash)
            │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 rowid:21
-           │    ├── cardinality: [1 - 1]
+           │    ├── cardinality: [1 - ]
            │    ├── side-effects
-           │    ├── key: ()
-           │    ├── fd: ()-->(9-16,21)
-           │    ├── values
+           │    ├── key: (21)
+           │    ├── fd: ()-->(9-13), (21)-->(14-16), (14)~~>(15,16,21)
+           │    ├── upsert-distinct-on
            │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
+           │    │    ├── grouping columns: column1:9!null
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── side-effects
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(9-13)
-           │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
-           │    ├── select
-           │    │    ├── columns: a:14!null b:15 c:16 rowid:21!null
-           │    │    ├── cardinality: [0 - 1]
-           │    │    ├── key: ()
-           │    │    ├── fd: ()-->(14-16,21)
-           │    │    ├── scan returning_test
-           │    │    │    ├── columns: a:14 b:15 c:16 rowid:21!null
-           │    │    │    ├── key: (21)
-           │    │    │    └── fd: (21)-->(14-16), (14)~~>(15,16,21)
-           │    │    └── filters
-           │    │         └── a:14 = 1 [outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
-           │    └── filters (true)
+           │    │    ├── values
+           │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
+           │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    ├── side-effects
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(9-13)
+           │    │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=column2:10, outer=(10)]
+           │    │         │    └── column2:10
+           │    │         ├── first-agg [as=column3:11, outer=(11)]
+           │    │         │    └── column3:11
+           │    │         ├── first-agg [as=column12:12, outer=(12)]
+           │    │         │    └── column12:12
+           │    │         └── first-agg [as=column13:13, outer=(13)]
+           │    │              └── column13:13
+           │    ├── scan returning_test
+           │    │    ├── columns: a:14 b:15 c:16 rowid:21!null
+           │    │    ├── key: (21)
+           │    │    └── fd: (21)-->(14-16), (14)~~>(15,16,21)
+           │    └── filters
+           │         └── column1:9 = a:14 [outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
            └── projections
                 ├── CASE WHEN rowid:21 IS NULL THEN column1:9 ELSE column1:9 + a:14 END [as=upsert_a:23, outer=(9,14,21)]
                 ├── CASE WHEN rowid:21 IS NULL THEN column2:10 ELSE b:15 END [as=upsert_b:24, outer=(10,15,21)]
@@ -2625,13 +2669,29 @@ project
            │    ├── side-effects
            │    ├── key: (21)
            │    ├── fd: ()-->(9-13), (21)-->(14-17), (14)~~>(15-17,21)
-           │    ├── values
+           │    ├── upsert-distinct-on
            │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
+           │    │    ├── grouping columns: column13:13
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── side-effects
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(9-13)
-           │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
+           │    │    ├── values
+           │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
+           │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    ├── side-effects
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(9-13)
+           │    │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=column1:9, outer=(9)]
+           │    │         │    └── column1:9
+           │    │         ├── first-agg [as=column2:10, outer=(10)]
+           │    │         │    └── column2:10
+           │    │         ├── first-agg [as=column3:11, outer=(11)]
+           │    │         │    └── column3:11
+           │    │         └── first-agg [as=column12:12, outer=(12)]
+           │    │              └── column12:12
            │    ├── scan returning_test
            │    │    ├── columns: a:14 b:15 c:16 d:17 rowid:21!null
            │    │    ├── key: (21)

@@ -1790,20 +1790,27 @@ sort
       │         │    ├── key columns: [4 5 6] = [7 8 9]
       │         │    ├── lookup columns are key
       │         │    ├── key: (4-9)
-      │         │    ├── limit
+      │         │    ├── upsert-distinct-on
       │         │    │    ├── columns: x:4!null y:5!null z:6!null
+      │         │    │    ├── grouping columns: x:4!null y:5!null z:6!null
       │         │    │    ├── internal-ordering: +5,+6
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (4-6)
-      │         │    │    ├── sort
-      │         │    │    │    ├── columns: x:4!null y:5!null z:6!null
-      │         │    │    │    ├── key: (4-6)
-      │         │    │    │    ├── ordering: +5,+6
-      │         │    │    │    ├── limit hint: 2.00
-      │         │    │    │    └── scan xyz
-      │         │    │    │         ├── columns: x:4!null y:5!null z:6!null
-      │         │    │    │         └── key: (4-6)
-      │         │    │    └── 2
+      │         │    │    └── limit
+      │         │    │         ├── columns: x:4!null y:5!null z:6!null
+      │         │    │         ├── internal-ordering: +5,+6
+      │         │    │         ├── cardinality: [0 - 2]
+      │         │    │         ├── key: (4-6)
+      │         │    │         ├── ordering: +5,+6
+      │         │    │         ├── sort
+      │         │    │         │    ├── columns: x:4!null y:5!null z:6!null
+      │         │    │         │    ├── key: (4-6)
+      │         │    │         │    ├── ordering: +5,+6
+      │         │    │         │    ├── limit hint: 2.00
+      │         │    │         │    └── scan xyz
+      │         │    │         │         ├── columns: x:4!null y:5!null z:6!null
+      │         │    │         │         └── key: (4-6)
+      │         │    │         └── 2
       │         │    └── filters (true)
       │         └── projections
       │              ├── CASE WHEN abc.a:7 IS NULL THEN x:4 ELSE 10 END [as=upsert_a:11, outer=(4,7)]

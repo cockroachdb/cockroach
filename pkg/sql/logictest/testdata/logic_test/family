@@ -428,3 +428,79 @@ SELECT field, description FROM [EXPLAIN SELECT a, b FROM t2@a_idx WHERE a = 10] 
 ----
 table  t2@a_idx
 spans  /1E+1/0-/1E+1/1 /1E+1/2/1-/1E+1/2/2
+
+# ------------------------------------------------------------------------------
+# UPSERT/INSERT..ON CONFLICT cases.
+# ------------------------------------------------------------------------------
+
+# No secondary index.
+statement ok
+CREATE TABLE fam (x INT PRIMARY KEY, y INT, y2 INT, y3 INT, FAMILY (x), FAMILY (y, y2), FAMILY (y3))
+
+statement ok
+INSERT INTO fam VALUES (1, NULL, NULL, NULL)
+
+statement ok
+INSERT INTO fam (x, y) VALUES (1, 1), (2, 2) ON CONFLICT (x) DO UPDATE SET y2=excluded.y, y3=excluded.y
+
+query IIII rowsort
+SELECT * from fam
+----
+1  NULL  1     1
+2  2     NULL  NULL
+
+# Add secondary index.
+statement ok
+CREATE UNIQUE INDEX secondary ON fam (y)
+
+statement ok
+INSERT INTO fam (x, y) VALUES (2, NULL), (3, NULL) ON CONFLICT (x) DO UPDATE SET y=NULL, y3=2
+
+query IIII rowsort
+SELECT * from fam
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+
+query IIII rowsort
+SELECT * from fam@secondary
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+
+# Add secondary index with STORING column.
+statement ok
+DROP INDEX secondary
+
+statement ok
+CREATE UNIQUE INDEX secondary ON fam (y) STORING (y2)
+
+statement ok
+UPSERT INTO fam (x, y) VALUES (4, 4), (5, 5)
+
+statement ok
+INSERT INTO fam (x, y) VALUES (4, 4), (5, 5)
+ON CONFLICT (y) DO UPDATE SET y=NULL, y2=excluded.y, y3=excluded.y
+
+query IIII rowsort
+SELECT * from fam
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+4  NULL  4     4
+5  NULL  5     5
+
+query IIII rowsort
+SELECT * from fam@secondary
+----
+1  NULL  1     1
+2  NULL  NULL  2
+3  NULL  NULL  NULL
+4  NULL  4     4
+5  NULL  5     5
+
+statement ok
+DROP TABLE fam

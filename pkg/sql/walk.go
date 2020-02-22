@@ -382,6 +382,12 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				prefix = ", "
 			})
 			v.observer.attr(name, "distinct on", buf.String())
+			if n.nullsAreDistinct {
+				v.observer.attr(name, "nulls are distinct", "")
+			}
+			if n.errorOnDup != "" {
+				v.observer.attr(name, "error on dups", "")
+			}
 		}
 
 		if !n.columnsInOrder.Empty() {
