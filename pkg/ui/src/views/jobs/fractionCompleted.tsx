@@ -18,7 +18,7 @@ export class FractionCompleted extends React.PureComponent<{ job: Job }> {
   render() {
     return (
       <div>
-        <Progress job={this.props.job}/>
+        <Progress job={this.props.job} lineWidth={11} showPercentage={true}/>
         <span className="jobs-table__duration">
           <Duration job={this.props.job}/>
         </span>

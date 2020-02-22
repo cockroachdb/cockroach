@@ -9,10 +9,8 @@
 // licenses/APL.txt.
 
 import { Col, Divider, Icon, Row } from "antd";
-import classNames from "classnames";
 import _ from "lodash";
 import { TimestampToMoment } from "oss/src/util/convert";
-import { Line } from "rc-progress";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
@@ -31,10 +29,10 @@ import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import {
   JOB_STATUS_CANCELED, JOB_STATUS_FAILED,
-  JOB_STATUS_SUCCEEDED, jobHasOneOfStatuses,
-  renamedStatuses,
+  JOB_STATUS_SUCCEEDED,
 } from "src/views/jobs/jobStatusOptions";
 import {Duration} from "oss/src/views/jobs/duration";
+import {Progress} from "oss/src/views/jobs/progress";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -60,50 +58,32 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
 
   prevPage = () => this.props.history.goBack();
 
-  renderProgress() {
-    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
-      const className = classNames("jobs-table__status", {
-        "jobs-table__status--succeed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED),
-        "jobs-table__status--failed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_FAILED, JOB_STATUS_CANCELED),
-      });
-      return (
-        <span className={className}>
-          {renamedStatuses(this.props.job.status)}
-        </span>
-      );
-    }
-    const percent = this.props.job.fraction_completed * 100;
-    return (
-      <div className="jobs-table__progress">
-        {this.props.job.running_status
-          ? <div className="jobs-table__running-status">{this.props.job.running_status}</div>
-          : null}
-
-        <Line
-          percent={percent}
-          strokeWidth={2}
-          trailWidth={2}
-          strokeColor="#0788ff"
-          trailColor="#d6dbe7"
-          className="jobs-table__progress-bar"
-        />
-      </div>
-    );
-  }
-
   renderStatus = () => {
     const { job } = this.props;
     const percent = job.fraction_completed * 100;
     switch (job.status) {
       case JOB_STATUS_SUCCEEDED:
-        return <div className="job-status__line">{this.renderProgress()} - <Duration job={this.props.job} /></div>;
+        return (
+          <div className="job-status__line">
+            <Progress job={this.props.job} lineWidth={2} showPercentage={false} /> - <Duration job={this.props.job} />
+          </div>
+        );
       case JOB_STATUS_FAILED || JOB_STATUS_CANCELED:
-        return <div>{this.renderProgress()}</div>;
+        return (
+          <div>
+            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
+          </div>
+        );
       default:
-        return <div>
-          {this.renderProgress()}
-          <div className="job-status__line--percentage"><span>{percent.toFixed() + "%"} done</span><Divider type="vertical" /><Duration job={this.props.job} /></div>
-        </div>;
+        return (
+          <div>
+            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
+            <div className="job-status__line--percentage">
+              <span>{percent.toFixed() + "%"} done</span>
+              <Divider type="vertical" /><Duration job={this.props.job} />
+            </div>
+          </div>
+        );
     }
   }
 
