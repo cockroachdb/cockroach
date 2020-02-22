@@ -104,6 +104,7 @@ project
       └── subquery [type=int, outer=(1), correlated-subquery]
            └── max1-row
                 ├── columns: "?column?":10(int)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 ├── outer: (1)
                 ├── cardinality: [1 - 1]
                 ├── key: ()
