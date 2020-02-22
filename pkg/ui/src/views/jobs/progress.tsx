@@ -1,3 +1,13 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 import React from "react";
 import {
   JOB_STATUS_CANCELED,
@@ -34,7 +44,7 @@ export class Progress extends React.PureComponent<{ job: Job }> {
              title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</div>
         <Line
           percent={percent}
-          strokeWidth={11}
+          strokeWidth={11}Â
           trailWidth={11}
           strokeColor="#0788ff"
           trailColor="#d6dbe7"
