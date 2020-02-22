@@ -20,7 +20,7 @@ import {Line} from "rc-progress";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import {cockroach} from "src/js/protos";
 
-export class Progress extends React.PureComponent<{ job: Job }> {
+export class Progress extends React.PureComponent<{ job: Job; lineWidth: number; showPercentage: boolean}> {
   render() {
     if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
       const className = classNames("jobs-table__status", {
@@ -40,12 +40,12 @@ export class Progress extends React.PureComponent<{ job: Job }> {
           ? <div className="jobs-table__running-status">{this.props.job.running_status}</div>
           : null}
 
-        <div className="jobs-table__status--percentage"
-             title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</div>
+        {this.props.showPercentage ? <div className="jobs-table__status--percentage"
+             title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</div> : null }
         <Line
           percent={percent}
-          strokeWidth={11}Â
-          trailWidth={11}
+          strokeWidth={this.props.lineWidth}
+          trailWidth={this.props.lineWidth}
           strokeColor="#0788ff"
           trailColor="#d6dbe7"
           className="jobs-table__progress-bar"
