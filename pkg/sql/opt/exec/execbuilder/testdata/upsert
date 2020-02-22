@@ -138,53 +138,48 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
 ]
 ----
-·                                     distributed            false
-·                                     vectorized             false
-count                                 ·                      ·
- └── upsert                           ·                      ·
-      │                               into                   indexed(a, b, c, d)
-      │                               strategy               opt upserter
-      │                               auto commit            ·
-      └── render                      ·                      ·
-           │                          render 0               column1
-           │                          render 1               column6
-           │                          render 2               column7
-           │                          render 3               column8
-           │                          render 4               a
-           │                          render 5               b
-           │                          render 6               c
-           │                          render 7               d
-           │                          render 8               column6
-           │                          render 9               column7
-           │                          render 10              column8
-           │                          render 11              a
-           │                          render 12              check1
-           └── render                 ·                      ·
-                │                     render 0               column7 > 0
-                │                     render 1               column1
-                │                     render 2               column6
-                │                     render 3               column7
-                │                     render 4               column8
-                │                     render 5               a
-                │                     render 6               b
-                │                     render 7               c
-                │                     render 8               d
-                └── lookup-join       ·                      ·
-                     │                table                  indexed@primary
-                     │                type                   left outer
-                     │                equality               (column1) = (a)
-                     │                equality cols are key  ·
-                     │                parallel               ·
-                     └── distinct     ·                      ·
-                          │           distinct on            column1
-                          │           nulls are distinct     ·
-                          │           error on dups          ·
-                          └── values  ·                      ·
-·                                     size                   4 columns, 1 row
-·                                     row 0, expr 0          1
-·                                     row 0, expr 1          CAST(NULL AS INT8)
-·                                     row 0, expr 2          10
-·                                     row 0, expr 3          11
+·                                distributed    false
+·                                vectorized     false
+count                            ·              ·
+ └── upsert                      ·              ·
+      │                          into           indexed(a, b, c, d)
+      │                          strategy       opt upserter
+      │                          auto commit    ·
+      └── render                 ·              ·
+           │                     render 0       column1
+           │                     render 1       column6
+           │                     render 2       column7
+           │                     render 3       column8
+           │                     render 4       a
+           │                     render 5       b
+           │                     render 6       c
+           │                     render 7       d
+           │                     render 8       column6
+           │                     render 9       column7
+           │                     render 10      column8
+           │                     render 11      a
+           │                     render 12      check1
+           └── render            ·              ·
+                │                render 0       column7 > 0
+                │                render 1       column1
+                │                render 2       column6
+                │                render 3       column7
+                │                render 4       column8
+                │                render 5       a
+                │                render 6       b
+                │                render 7       c
+                │                render 8       d
+                └── cross-join   ·              ·
+                     │           type           left outer
+                     ├── values  ·              ·
+                     │           size           4 columns, 1 row
+                     │           row 0, expr 0  1
+                     │           row 0, expr 1  CAST(NULL AS INT8)
+                     │           row 0, expr 2  10
+                     │           row 0, expr 3  11
+                     └── scan    ·              ·
+·                                table          indexed@primary
+·                                spans          /1-/1/#
 
 # Drop index and verify that existing values no longer need to be fetched.
 statement ok
@@ -257,7 +252,7 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-join reader                           Scan /Table/57/1/2{-/#}
+table reader                          Scan /Table/57/1/2{-/#}
 flow                                  CPut /Table/57/1/2/0 -> /TUPLE/2:2:Int/3
 flow                                  InitPut /Table/57/2/3/0 -> /BYTES/0x8a
 kv.DistSender: sending partial batch  r29: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
@@ -271,7 +266,7 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-join reader                           Scan /Table/57/1/1{-/#}
+table reader                          Scan /Table/57/1/1{-/#}
 flow                                  CPut /Table/57/1/1/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/57/2/2/0 -> /BYTES/0x89
 kv.DistSender: sending partial batch  r29: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
@@ -286,8 +281,8 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-join reader                           Scan /Table/57/1/2{-/#}
-join reader                           fetched: /kv/primary/2/v -> /3
+table reader                          Scan /Table/57/1/2{-/#}
+table reader                          fetched: /kv/primary/2/v -> /3
 flow                                  Put /Table/57/1/2/0 -> /TUPLE/2:2:Int/2
 flow                                  Del /Table/57/2/3/0
 flow                                  CPut /Table/57/2/2/0 -> /BYTES/0x8a (expecting does not exist)
@@ -437,33 +432,29 @@ BEGIN; ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
 query TTTTT
 EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
 ----
-·                              distributed            false               ·                      ·
-·                              vectorized             false               ·                      ·
-count                          ·                      ·                   ()                     ·
- └── upsert                    ·                      ·                   ()                     ·
-      │                        into                   table38627(a, b)    ·                      ·
-      │                        strategy               opt upserter        ·                      ·
-      └── render               ·                      ·                   (a, b, a, b, c, b, a)  ·
-           │                   render 0               a                   ·                      ·
-           │                   render 1               b                   ·                      ·
-           │                   render 2               a                   ·                      ·
-           │                   render 3               b                   ·                      ·
-           │                   render 4               c                   ·                      ·
-           │                   render 5               b                   ·                      ·
-           │                   render 6               a                   ·                      ·
-           └── lookup-join     ·                      ·                   (a, b, a, b, c)        ·
-                │              table                  table38627@primary  ·                      ·
-                │              type                   inner               ·                      ·
-                │              equality               (a) = (a)           ·                      ·
-                │              equality cols are key  ·                   ·                      ·
-                │              parallel               ·                   ·                      ·
-                └── distinct   ·                      ·                   (a, b)                 ·
-                     │         distinct on            a                   ·                      ·
-                     │         nulls are distinct     ·                   ·                      ·
-                     │         error on dups          ·                   ·                      ·
-                     └── scan  ·                      ·                   (a, b)                 ·
-·                              table                  table38627@primary  ·                      ·
-·                              spans                  /1-/1/#             ·                      ·
+·                           distributed            false               ·                      ·
+·                           vectorized             false               ·                      ·
+count                       ·                      ·                   ()                     ·
+ └── upsert                 ·                      ·                   ()                     ·
+      │                     into                   table38627(a, b)    ·                      ·
+      │                     strategy               opt upserter        ·                      ·
+      └── render            ·                      ·                   (a, b, a, b, c, b, a)  ·
+           │                render 0               a                   ·                      ·
+           │                render 1               b                   ·                      ·
+           │                render 2               a                   ·                      ·
+           │                render 3               b                   ·                      ·
+           │                render 4               c                   ·                      ·
+           │                render 5               b                   ·                      ·
+           │                render 6               a                   ·                      ·
+           └── lookup-join  ·                      ·                   (a, b, a, b, c)        ·
+                │           table                  table38627@primary  ·                      ·
+                │           type                   inner               ·                      ·
+                │           equality               (a) = (a)           ·                      ·
+                │           equality cols are key  ·                   ·                      ·
+                │           parallel               ·                   ·                      ·
+                └── scan    ·                      ·                   (a, b)                 ·
+·                           table                  table38627@primary  ·                      ·
+·                           spans                  /1-/1/#             ·                      ·
 
 statement ok
 COMMIT
