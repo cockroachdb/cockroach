@@ -853,6 +853,7 @@ project
       │    └── fd: (1)-->(2)
       ├── max1-row
       │    ├── columns: r:7(int)
+      │    ├── error: "more than one row returned by a subquery used as an expression"
       │    ├── outer: (1)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
@@ -3033,6 +3034,7 @@ project
  │    │    │    │         └── subquery [type=bool]
  │    │    │    │              └── max1-row
  │    │    │    │                   ├── columns: bool:4(bool!null)
+ │    │    │    │                   ├── error: "more than one row returned by a subquery used as an expression"
  │    │    │    │                   ├── cardinality: [0 - 1]
  │    │    │    │                   ├── key: ()
  │    │    │    │                   ├── fd: ()-->(4)

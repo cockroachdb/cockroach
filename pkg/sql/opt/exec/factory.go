@@ -267,9 +267,9 @@ type Factory interface {
 	ConstructLimit(input Node, limit, offset tree.TypedExpr) (Node, error)
 
 	// ConstructMax1Row returns a node that permits at most one row from the
-	// given input node, returning an error at runtime if the node tries to return
-	// more than one row.
-	ConstructMax1Row(input Node) (Node, error)
+	// given input node, returning an error with the given text at runtime if
+	// the node tries to return more than one row.
+	ConstructMax1Row(input Node, errorText string) (Node, error)
 
 	// ConstructProjectSet returns a node that performs a lateral cross join
 	// between the output of the given node and the functional zip of the given

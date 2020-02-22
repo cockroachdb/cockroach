@@ -42,7 +42,7 @@ const (
 	ExprFmtShowAll ExprFmtFlags = 0
 
 	// ExprFmtHideMiscProps does not show outer columns, row cardinality, provided
-	// orderings, or side effects in the output.
+	// orderings, side effects, or error text in the output.
 	ExprFmtHideMiscProps ExprFmtFlags = 1 << (iota - 1)
 
 	// ExprFmtHideConstraints does not show inferred constraints in the output.
@@ -299,6 +299,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	case *OffsetExpr:
 		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
+		}
+
+	case *Max1RowExpr:
+		if !f.HasFlags(ExprFmtHideMiscProps) {
+			tp.Childf("error: \"%s\"", t.ErrorText)
 		}
 
 	// Special-case handling for set operators to show the left and right

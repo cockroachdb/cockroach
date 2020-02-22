@@ -1399,7 +1399,7 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	node, err := b.factory.ConstructMax1Row(input.root)
+	node, err := b.factory.ConstructMax1Row(input.root, max1Row.ErrorText)
 	if err != nil {
 		return execPlan{}, err
 	}

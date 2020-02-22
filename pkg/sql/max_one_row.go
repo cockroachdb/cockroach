@@ -29,8 +29,9 @@ import (
 type max1RowNode struct {
 	plan planNode
 
-	nexted bool
-	values tree.Datums
+	nexted    bool
+	values    tree.Datums
+	errorText string
 }
 
 func (m *max1RowNode) startExec(runParams) error {
@@ -56,8 +57,7 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 		var secondOk bool
 		secondOk, err = m.plan.Next(params)
 		if secondOk {
-			return false, pgerror.Newf(pgcode.CardinalityViolation,
-				"more than one row returned by a subquery used as an expression")
+			return false, pgerror.New(pgcode.CardinalityViolation, m.errorText)
 		}
 	}
 	return ok, err

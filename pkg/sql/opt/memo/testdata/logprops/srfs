@@ -37,6 +37,7 @@ project
  │    │    └── prune: (1,2)
  │    ├── max1-row
  │    │    ├── columns: unnest:6(int)
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── outer: (1,2)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── side-effects

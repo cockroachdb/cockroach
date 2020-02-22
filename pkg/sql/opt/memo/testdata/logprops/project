@@ -66,6 +66,7 @@ select
            ├── subquery [type=int]
            │    └── max1-row
            │         ├── columns: y:9(int)
+           │         ├── error: "more than one row returned by a subquery used as an expression"
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
            │         ├── key: ()
@@ -99,6 +100,7 @@ select
            │                   └── subquery [type=int, outer=(2), correlated-subquery]
            │                        └── max1-row
            │                             ├── columns: y:8(int)
+           │                             ├── error: "more than one row returned by a subquery used as an expression"
            │                             ├── outer: (2)
            │                             ├── cardinality: [1 - 1]
            │                             ├── key: ()
@@ -216,6 +218,7 @@ project
       └── subquery [type=int, outer=(1), correlated-subquery]
            └── max1-row
                 ├── columns: xysd.y:5(int)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 ├── outer: (1)
                 ├── cardinality: [0 - 1]
                 ├── key: ()

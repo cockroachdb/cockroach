@@ -65,6 +65,7 @@ project
  │    │    ├── prune: (6)
  │    │    ├── max1-row
  │    │    │    ├── columns: column1:5(int)
+ │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    │    ├── outer: (1,2)
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
@@ -117,6 +118,7 @@ project
       │    └── interesting orderings: (+1) (-3,+4,+1)
       ├── max1-row
       │    ├── columns: v:6(int!null)
+      │    ├── error: "more than one row returned by a subquery used as an expression"
       │    ├── outer: (1)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
@@ -176,6 +178,7 @@ project
       │    └── interesting orderings: (+1) (-3,+4,+1)
       ├── max1-row
       │    ├── columns: v:6(int!null)
+      │    ├── error: "more than one row returned by a subquery used as an expression"
       │    ├── outer: (1,2)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
@@ -269,6 +272,7 @@ project
       │    │    └── interesting orderings: (+1) (-3,+4,+1)
       │    ├── max1-row
       │    │    ├── columns: u:5(int!null)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()

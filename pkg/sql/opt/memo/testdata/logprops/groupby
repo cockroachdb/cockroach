@@ -227,6 +227,7 @@ project
       └── subquery [type=decimal, outer=(2,10), correlated-subquery]
            └── max1-row
                 ├── columns: sum:11(decimal)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 ├── outer: (2,10)
                 ├── cardinality: [0 - 1]
                 ├── key: ()
