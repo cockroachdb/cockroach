@@ -160,7 +160,6 @@ type registryTestSuite struct {
 	failOrCancelCh      chan error
 	resumeCheckCh       chan struct{}
 	failOrCancelCheckCh chan struct{}
-	termCh              chan struct{}
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
 	successErr error
@@ -181,7 +180,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.failOrCancelCh = make(chan error)
 	rts.resumeCheckCh = make(chan struct{})
 	rts.failOrCancelCheckCh = make(chan struct{})
-	rts.termCh = make(chan struct{})
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
@@ -224,12 +222,13 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 					rts.mu.Unlock()
 					t.Log("Exiting OnFailOrCancel")
 				}()
+				<-rts.failOrCancelCheckCh
 				select {
 				case <-ctx.Done():
 					rts.mu.a.OnFailOrCancelExit--
 					return ctx.Err()
-				case <-rts.failOrCancelCheckCh:
-					return <-rts.failOrCancelCh
+				case err := <-rts.failOrCancelCh:
+					return err
 				}
 			},
 
@@ -249,7 +248,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				rts.mu.Lock()
 				rts.mu.a.Terminal++
 				rts.mu.Unlock()
-				<-rts.termCh
 				t.Log("Exiting terminal")
 			},
 		}
@@ -262,7 +260,6 @@ func (rts *registryTestSuite) tearDown() {
 	close(rts.resumeCheckCh)
 	close(rts.failOrCancelCh)
 	close(rts.failOrCancelCheckCh)
-	close(rts.termCh)
 	close(rts.done)
 	rts.s.Stopper().Stop(rts.ctx)
 	jobs.DefaultAdoptInterval = rts.oldInterval
@@ -312,14 +309,13 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.job = j
 
 		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusRunning)
 
-		rts.resumeCheckCh <- struct{}{}
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
@@ -342,7 +338,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
@@ -378,12 +373,10 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.Success = true
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
 	t.Run("pause reverting", func(t *testing.T) {
-		t.Skip()
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
@@ -398,26 +391,26 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.resumeCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusRunning)
 
+		// Make Resume fail.
 		rts.resumeCh <- errors.New("resume failed")
 		rts.mu.e.ResumeExit++
 		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusReverting)
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
-		rts.mu.e.OnFailOrCancelExit++
 		rts.check(t, jobs.StatusPaused)
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
 		rts.check(t, jobs.StatusPaused)
 
 		rts.sqlDB.Exec(t, "RESUME JOB $1", *j.ID())
+		rts.failOrCancelCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusReverting)
 
-		rts.failOrCancelCheckCh <- struct{}{}
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusFailed)
 	})
 
@@ -443,7 +436,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 
 		rts.check(t, jobs.StatusCanceled)
 	})
@@ -470,9 +462,75 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.check(t, jobs.StatusReverting)
 	})
 
+	t.Run("cancel pause running", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.Exec(t, "CANCEL JOB $1", *j.ID())
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit++
+		rts.mu.e.Terminal++
+		rts.check(t, jobs.StatusCanceled)
+	})
+
+	t.Run("cancel pause reverting", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+
+		// Make Resume fail.
+		rts.resumeCh <- errors.New("resume failed")
+		rts.mu.e.ResumeExit++
+		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		rts.sqlDB.Exec(t, "PAUSE JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError resume", "CANCEL JOB $1", *j.ID())
+		rts.check(t, jobs.StatusPaused)
+
+		rts.sqlDB.Exec(t, "RESUME JOB $1", *j.ID())
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		rts.failOrCancelCh <- nil
+		rts.mu.e.OnFailOrCancelExit++
+		rts.mu.e.Terminal++
+		rts.check(t, jobs.StatusFailed)
+	})
+
 	// Verify that pause and cancel in a rollback do nothing.
 	t.Run("rollback", func(t *testing.T) {
-		t.Skip()
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
@@ -481,9 +539,11 @@ func TestRegistryLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		rts.job = job
+
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusRunning)
+
 		// Rollback a CANCEL.
 		{
 			txn, err := rts.outerDB.Begin()
@@ -534,14 +594,8 @@ func TestRegistryLifecycle(t *testing.T) {
 			if err := txn.Commit(); err != nil {
 				t.Fatal(err)
 			}
-			// Test for a paused error message.
-			if err := job.CheckStatus(rts.ctx); !testutils.IsError(err, "cannot update progress on pause") {
-				t.Fatalf("unexpected %v", err)
-			}
+			rts.check(t, jobs.StatusPaused)
 		}
-		rts.progressCh <- struct{}{}
-		rts.mu.e.ResumeExit++
-		rts.check(t, jobs.StatusPaused)
 		// Rollback a RESUME.
 		{
 			txn, err := rts.outerDB.Begin()
@@ -579,7 +633,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
@@ -587,22 +640,26 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
+
 		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
 		rts.job = j
+
 		rts.mu.e.ResumeStart = true
 		rts.check(t, jobs.StatusRunning)
+
 		rts.resumeCheckCh <- struct{}{}
 		rts.resumeCh <- errors.New("resume failed")
 		rts.mu.e.ResumeExit++
 		rts.mu.e.OnFailOrCancelStart = true
+		rts.failOrCancelCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusReverting)
+
+		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
 		rts.mu.e.Terminal++
-		rts.failOrCancelCheckCh <- struct{}{}
-		rts.failOrCancelCh <- nil
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusFailed)
 	})
 
@@ -633,7 +690,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusFailed)
 	})
 
@@ -700,7 +756,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.OnFailOrCancelExit++
 		rts.failOrCancelCh <- errors.New("resume failed")
 		rts.mu.e.Terminal++
-		rts.termCh <- struct{}{}
 		rts.check(t, jobs.StatusFailed)
 	})
 
