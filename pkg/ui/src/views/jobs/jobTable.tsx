@@ -45,19 +45,45 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
 ];
 
-interface JobTableProps {
+export interface JobTableProps {
   sort: SortSetting;
   setSort: (value: SortSetting) => void;
   jobs: CachedDataReducerState<JobsResponse>;
+  pageSize?: number;
+  current?: number;
 }
 
-export class JobTable extends React.Component<JobTableProps> {
-  state = {
-    pagination: {
-      pageSize: 20,
-      current: 1,
-    },
+export interface JobTableState {
+  pagination: {
+    pageSize: number;
+    current: number;
   };
+}
+
+export class JobTable extends React.Component<JobTableProps, JobTableState> {
+  constructor(props: JobTableProps) {
+    super(props);
+
+    this.state = {
+      pagination: {
+        pageSize: props.pageSize || 20,
+        current: props.current || 1,
+      },
+    };
+  }
+
+  componentDidUpdate(prevProps: Readonly<JobTableProps>): void {
+    if (prevProps.jobs !== this.props.jobs) {
+      this.setState((prevState: Readonly<any>) => {
+        return {
+          pagination: {
+            ...prevState.pagination,
+            current: 1,
+          },
+        };
+      });
+    }
+  }
 
   onChangePage = (current: number) => {
     const { pagination } = this.state;
