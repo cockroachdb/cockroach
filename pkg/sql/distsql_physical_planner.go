@@ -2682,8 +2682,10 @@ func createDistinctSpec(n *distinctNode, cols []int) *execinfrapb.DistinctSpec {
 	}
 
 	return &execinfrapb.DistinctSpec{
-		OrderedColumns:  orderedColumns,
-		DistinctColumns: distinctColumns,
+		OrderedColumns:   orderedColumns,
+		DistinctColumns:  distinctColumns,
+		NullsAreDistinct: n.nullsAreDistinct,
+		ErrorOnDup:       n.errorOnDup,
 	}
 }
 

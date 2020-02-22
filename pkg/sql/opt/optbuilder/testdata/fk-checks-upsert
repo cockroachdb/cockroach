@@ -25,19 +25,27 @@ upsert child
  │    ├── columns: upsert_c:10(int) column1:4(int!null) column2:5(int!null) column6:6(int) child.c:7(int) child.p:8(int) i:9(int)
  │    ├── left-join (hash)
  │    │    ├── columns: column1:4(int!null) column2:5(int!null) column6:6(int) child.c:7(int) child.p:8(int) i:9(int)
- │    │    ├── project
- │    │    │    ├── columns: column6:6(int) column1:4(int!null) column2:5(int!null)
- │    │    │    ├── values
- │    │    │    │    ├── columns: column1:4(int!null) column2:5(int!null)
- │    │    │    │    ├── tuple [type=tuple{int, int}]
- │    │    │    │    │    ├── const: 100 [type=int]
- │    │    │    │    │    └── const: 1 [type=int]
- │    │    │    │    └── tuple [type=tuple{int, int}]
- │    │    │    │         ├── const: 200 [type=int]
- │    │    │    │         └── const: 1 [type=int]
- │    │    │    └── projections
- │    │    │         └── cast: INT8 [type=int]
- │    │    │              └── null [type=unknown]
+ │    │    ├── upsert-distinct-on
+ │    │    │    ├── columns: column1:4(int!null) column2:5(int!null) column6:6(int)
+ │    │    │    ├── grouping columns: column1:4(int!null)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column6:6(int) column1:4(int!null) column2:5(int!null)
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:4(int!null) column2:5(int!null)
+ │    │    │    │    │    ├── tuple [type=tuple{int, int}]
+ │    │    │    │    │    │    ├── const: 100 [type=int]
+ │    │    │    │    │    │    └── const: 1 [type=int]
+ │    │    │    │    │    └── tuple [type=tuple{int, int}]
+ │    │    │    │    │         ├── const: 200 [type=int]
+ │    │    │    │    │         └── const: 1 [type=int]
+ │    │    │    │    └── projections
+ │    │    │    │         └── cast: INT8 [type=int]
+ │    │    │    │              └── null [type=unknown]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column2 [type=int]
+ │    │    │         └── first-agg [type=int]
+ │    │    │              └── variable: column6 [type=int]
  │    │    ├── scan child
  │    │    │    └── columns: child.c:7(int!null) child.p:8(int!null) i:9(int)
  │    │    └── filters
@@ -105,15 +113,23 @@ upsert child
  │    ├── columns: upsert_c:11(int) xy.x:4(int) xy.y:5(int) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
  │    ├── left-join (hash)
  │    │    ├── columns: xy.x:4(int) xy.y:5(int) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
- │    │    ├── project
- │    │    │    ├── columns: column7:7(int) xy.x:4(int) xy.y:5(int)
+ │    │    ├── upsert-distinct-on
+ │    │    │    ├── columns: xy.x:4(int) xy.y:5(int) column7:7(int)
+ │    │    │    ├── grouping columns: xy.x:4(int)
  │    │    │    ├── project
- │    │    │    │    ├── columns: xy.x:4(int) xy.y:5(int)
- │    │    │    │    └── scan xy
- │    │    │    │         └── columns: xy.x:4(int) xy.y:5(int) rowid:6(int!null)
- │    │    │    └── projections
- │    │    │         └── cast: INT8 [type=int]
- │    │    │              └── null [type=unknown]
+ │    │    │    │    ├── columns: column7:7(int) xy.x:4(int) xy.y:5(int)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: xy.x:4(int) xy.y:5(int)
+ │    │    │    │    │    └── scan xy
+ │    │    │    │    │         └── columns: xy.x:4(int) xy.y:5(int) rowid:6(int!null)
+ │    │    │    │    └── projections
+ │    │    │    │         └── cast: INT8 [type=int]
+ │    │    │    │              └── null [type=unknown]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: xy.y [type=int]
+ │    │    │         └── first-agg [type=int]
+ │    │    │              └── variable: column7 [type=int]
  │    │    ├── scan child
  │    │    │    └── columns: child.c:8(int!null) child.p:9(int!null) i:10(int)
  │    │    └── filters
@@ -182,15 +198,23 @@ upsert child
  │    │    ├── columns: column11:11(int) uv.u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: uv.u:4(int!null) uv.v:5(int!null) column7:7(int) child.c:8(int) child.p:9(int) i:10(int)
- │    │    │    ├── project
- │    │    │    │    ├── columns: column7:7(int) uv.u:4(int!null) uv.v:5(int!null)
+ │    │    │    ├── upsert-distinct-on
+ │    │    │    │    ├── columns: uv.u:4(int!null) uv.v:5(int!null) column7:7(int)
+ │    │    │    │    ├── grouping columns: uv.u:4(int!null)
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: uv.u:4(int!null) uv.v:5(int!null)
- │    │    │    │    │    └── scan uv
- │    │    │    │    │         └── columns: uv.u:4(int!null) uv.v:5(int!null) rowid:6(int!null)
- │    │    │    │    └── projections
- │    │    │    │         └── cast: INT8 [type=int]
- │    │    │    │              └── null [type=unknown]
+ │    │    │    │    │    ├── columns: column7:7(int) uv.u:4(int!null) uv.v:5(int!null)
+ │    │    │    │    │    ├── project
+ │    │    │    │    │    │    ├── columns: uv.u:4(int!null) uv.v:5(int!null)
+ │    │    │    │    │    │    └── scan uv
+ │    │    │    │    │    │         └── columns: uv.u:4(int!null) uv.v:5(int!null) rowid:6(int!null)
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── cast: INT8 [type=int]
+ │    │    │    │    │              └── null [type=unknown]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [type=int]
+ │    │    │    │         │    └── variable: uv.v [type=int]
+ │    │    │    │         └── first-agg [type=int]
+ │    │    │    │              └── variable: column7 [type=int]
  │    │    │    ├── scan child
  │    │    │    │    └── columns: child.c:8(int!null) child.p:9(int!null) i:10(int)
  │    │    │    └── filters
@@ -280,12 +304,15 @@ upsert child2
  │    │    ├── columns: column4:4(int!null) column1:2(int!null) child2.c:3(int)
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:2(int!null) child2.c:3(int)
- │    │    │    ├── values
+ │    │    │    ├── upsert-distinct-on
  │    │    │    │    ├── columns: column1:2(int!null)
- │    │    │    │    ├── tuple [type=tuple{int}]
- │    │    │    │    │    └── const: 1 [type=int]
- │    │    │    │    └── tuple [type=tuple{int}]
- │    │    │    │         └── const: 2 [type=int]
+ │    │    │    │    ├── grouping columns: column1:2(int!null)
+ │    │    │    │    └── values
+ │    │    │    │         ├── columns: column1:2(int!null)
+ │    │    │    │         ├── tuple [type=tuple{int}]
+ │    │    │    │         │    └── const: 1 [type=int]
+ │    │    │    │         └── tuple [type=tuple{int}]
+ │    │    │    │              └── const: 2 [type=int]
  │    │    │    ├── scan child2
  │    │    │    │    └── columns: child2.c:3(int!null)
  │    │    │    └── filters
@@ -350,14 +377,20 @@ upsert child_nullable
  ├── input binding: &1
  ├── left-join (hash)
  │    ├── columns: column1:3(int!null) column2:4(int) child_nullable.c:5(int) child_nullable.p:6(int)
- │    ├── values
+ │    ├── upsert-distinct-on
  │    │    ├── columns: column1:3(int!null) column2:4(int)
- │    │    ├── tuple [type=tuple{int, int}]
- │    │    │    ├── const: 100 [type=int]
- │    │    │    └── const: 1 [type=int]
- │    │    └── tuple [type=tuple{int, int}]
- │    │         ├── const: 200 [type=int]
- │    │         └── null [type=int]
+ │    │    ├── grouping columns: column1:3(int!null)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:3(int!null) column2:4(int)
+ │    │    │    ├── tuple [type=tuple{int, int}]
+ │    │    │    │    ├── const: 100 [type=int]
+ │    │    │    │    └── const: 1 [type=int]
+ │    │    │    └── tuple [type=tuple{int, int}]
+ │    │    │         ├── const: 200 [type=int]
+ │    │    │         └── null [type=int]
+ │    │    └── aggregations
+ │    │         └── first-agg [type=int]
+ │    │              └── variable: column2 [type=int]
  │    ├── scan child_nullable
  │    │    └── columns: child_nullable.c:5(int!null) child_nullable.p:6(int)
  │    └── filters
@@ -426,16 +459,26 @@ upsert multi_col_child
  │    ├── columns: upsert_c:13(int) column1:5(int!null) column2:6(int) column3:7(int) column4:8(int) multi_col_child.c:9(int) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int) multi_col_child.c:9(int) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
- │    │    │    └── tuple [type=tuple{int, int, int, int}]
- │    │    │         ├── const: 4 [type=int]
- │    │    │         ├── cast: INT8 [type=int]
- │    │    │         │    └── null [type=unknown]
- │    │    │         ├── cast: INT8 [type=int]
- │    │    │         │    └── null [type=unknown]
- │    │    │         └── cast: INT8 [type=int]
- │    │    │              └── null [type=unknown]
+ │    │    │    ├── grouping columns: column1:5(int!null)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
+ │    │    │    │    └── tuple [type=tuple{int, int, int, int}]
+ │    │    │    │         ├── const: 4 [type=int]
+ │    │    │    │         ├── cast: INT8 [type=int]
+ │    │    │    │         │    └── null [type=unknown]
+ │    │    │    │         ├── cast: INT8 [type=int]
+ │    │    │    │         │    └── null [type=unknown]
+ │    │    │    │         └── cast: INT8 [type=int]
+ │    │    │    │              └── null [type=unknown]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column2 [type=int]
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column3 [type=int]
+ │    │    │         └── first-agg [type=int]
+ │    │    │              └── variable: column4 [type=int]
  │    │    ├── scan multi_col_child
  │    │    │    └── columns: multi_col_child.c:9(int!null) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
  │    │    └── filters
@@ -520,20 +563,30 @@ upsert multi_col_child
  │    ├── columns: upsert_c:13(int) column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null) multi_col_child.c:9(int) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null) multi_col_child.c:9(int) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null)
- │    │    │    ├── tuple [type=tuple{int, int, int, int}]
- │    │    │    │    ├── const: 2 [type=int]
- │    │    │    │    ├── cast: INT8 [type=int]
- │    │    │    │    │    └── null [type=unknown]
- │    │    │    │    ├── const: 20 [type=int]
- │    │    │    │    └── const: 20 [type=int]
- │    │    │    └── tuple [type=tuple{int, int, int, int}]
- │    │    │         ├── const: 3 [type=int]
- │    │    │         ├── const: 20 [type=int]
- │    │    │         ├── cast: INT8 [type=int]
- │    │    │         │    └── null [type=unknown]
- │    │    │         └── const: 20 [type=int]
+ │    │    │    ├── grouping columns: column1:5(int!null)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null)
+ │    │    │    │    ├── tuple [type=tuple{int, int, int, int}]
+ │    │    │    │    │    ├── const: 2 [type=int]
+ │    │    │    │    │    ├── cast: INT8 [type=int]
+ │    │    │    │    │    │    └── null [type=unknown]
+ │    │    │    │    │    ├── const: 20 [type=int]
+ │    │    │    │    │    └── const: 20 [type=int]
+ │    │    │    │    └── tuple [type=tuple{int, int, int, int}]
+ │    │    │    │         ├── const: 3 [type=int]
+ │    │    │    │         ├── const: 20 [type=int]
+ │    │    │    │         ├── cast: INT8 [type=int]
+ │    │    │    │         │    └── null [type=unknown]
+ │    │    │    │         └── const: 20 [type=int]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column2 [type=int]
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column3 [type=int]
+ │    │    │         └── first-agg [type=int]
+ │    │    │              └── variable: column4 [type=int]
  │    │    ├── scan multi_col_child
  │    │    │    └── columns: multi_col_child.c:9(int!null) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
  │    │    └── filters
@@ -615,13 +668,23 @@ upsert multi_col_child
  │    ├── columns: upsert_c:13(int) column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null) multi_col_child.c:9(int) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null) multi_col_child.c:9(int) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null)
- │    │    │    └── tuple [type=tuple{int, int, int, int}]
- │    │    │         ├── const: 1 [type=int]
- │    │    │         ├── const: 10 [type=int]
- │    │    │         ├── const: 10 [type=int]
- │    │    │         └── const: 10 [type=int]
+ │    │    │    ├── grouping columns: column1:5(int!null)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null)
+ │    │    │    │    └── tuple [type=tuple{int, int, int, int}]
+ │    │    │    │         ├── const: 1 [type=int]
+ │    │    │    │         ├── const: 10 [type=int]
+ │    │    │    │         ├── const: 10 [type=int]
+ │    │    │    │         └── const: 10 [type=int]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column2 [type=int]
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column3 [type=int]
+ │    │    │         └── first-agg [type=int]
+ │    │    │              └── variable: column4 [type=int]
  │    │    ├── scan multi_col_child
  │    │    │    └── columns: multi_col_child.c:9(int!null) multi_col_child.p:10(int) multi_col_child.q:11(int) multi_col_child.r:12(int)
  │    │    └── filters
@@ -712,16 +775,26 @@ upsert multi_ref_child
  │    ├── columns: upsert_k:13(int) column1:5(int!null) column2:6(int) column3:7(int) column4:8(int) multi_ref_child.k:9(int) multi_ref_child.a:10(int) multi_ref_child.b:11(int) multi_ref_child.c:12(int)
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int) multi_ref_child.k:9(int) multi_ref_child.a:10(int) multi_ref_child.b:11(int) multi_ref_child.c:12(int)
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
- │    │    │    └── tuple [type=tuple{int, int, int, int}]
- │    │    │         ├── const: 1 [type=int]
- │    │    │         ├── cast: INT8 [type=int]
- │    │    │         │    └── null [type=unknown]
- │    │    │         ├── cast: INT8 [type=int]
- │    │    │         │    └── null [type=unknown]
- │    │    │         └── cast: INT8 [type=int]
- │    │    │              └── null [type=unknown]
+ │    │    │    ├── grouping columns: column1:5(int!null)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
+ │    │    │    │    └── tuple [type=tuple{int, int, int, int}]
+ │    │    │    │         ├── const: 1 [type=int]
+ │    │    │    │         ├── cast: INT8 [type=int]
+ │    │    │    │         │    └── null [type=unknown]
+ │    │    │    │         ├── cast: INT8 [type=int]
+ │    │    │    │         │    └── null [type=unknown]
+ │    │    │    │         └── cast: INT8 [type=int]
+ │    │    │    │              └── null [type=unknown]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column2 [type=int]
+ │    │    │         ├── first-agg [type=int]
+ │    │    │         │    └── variable: column3 [type=int]
+ │    │    │         └── first-agg [type=int]
+ │    │    │              └── variable: column4 [type=int]
  │    │    ├── scan multi_ref_child
  │    │    │    └── columns: multi_ref_child.k:9(int!null) multi_ref_child.a:10(int) multi_ref_child.b:11(int) multi_ref_child.c:12(int)
  │    │    └── filters

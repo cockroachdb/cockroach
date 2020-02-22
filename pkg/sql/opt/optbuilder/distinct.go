@@ -50,8 +50,12 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 }
 
 // buildDistinctOn builds a set of memo groups that represent a DISTINCT ON
-// expression.
-func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (outScope *scope) {
+// expression. If forUpsert is true, then construct the UpsertDistinctOn
+// operator rather than the DistinctOn operator (see the UpsertDistinctOn
+// operator comment for details on the differences).
+func (b *Builder) buildDistinctOn(
+	distinctOnCols opt.ColSet, inScope *scope, forUpsert bool,
+) (outScope *scope) {
 	// When there is a DISTINCT ON clause, the ORDER BY clause is restricted to either:
 	//  1. Contain a subset of columns from the ON list, or
 	//  2. Start with a permutation of all columns from the ON list.
@@ -148,7 +152,11 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	}
 
 	input := inScope.expr.(memo.RelExpr)
-	outScope.expr = b.factory.ConstructDistinctOn(input, aggs, &private)
+	if forUpsert {
+		outScope.expr = b.factory.ConstructUpsertDistinctOn(input, aggs, &private)
+	} else {
+		outScope.expr = b.factory.ConstructDistinctOn(input, aggs, &private)
+	}
 	return outScope
 }
 

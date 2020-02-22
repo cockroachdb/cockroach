@@ -1790,20 +1790,27 @@ sort
       │         │    ├── key columns: [4 5 6] = [7 8 9]
       │         │    ├── lookup columns are key
       │         │    ├── key: (4-9)
-      │         │    ├── limit
+      │         │    ├── upsert-distinct-on
       │         │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    │    ├── grouping columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │         │    │    ├── internal-ordering: +5,+6
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (4-6)
-      │         │    │    ├── sort
-      │         │    │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-      │         │    │    │    ├── key: (4-6)
-      │         │    │    │    ├── ordering: +5,+6
-      │         │    │    │    ├── limit hint: 2.00
-      │         │    │    │    └── scan xyz
-      │         │    │    │         ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-      │         │    │    │         └── key: (4-6)
-      │         │    │    └── const: 2 [type=int]
+      │         │    │    └── limit
+      │         │    │         ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    │         ├── internal-ordering: +5,+6
+      │         │    │         ├── cardinality: [0 - 2]
+      │         │    │         ├── key: (4-6)
+      │         │    │         ├── ordering: +5,+6
+      │         │    │         ├── sort
+      │         │    │         │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    │         │    ├── key: (4-6)
+      │         │    │         │    ├── ordering: +5,+6
+      │         │    │         │    ├── limit hint: 2.00
+      │         │    │         │    └── scan xyz
+      │         │    │         │         ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    │         │         └── key: (4-6)
+      │         │    │         └── const: 2 [type=int]
       │         │    └── filters (true)
       │         └── projections
       │              ├── CASE WHEN abc.a IS NULL THEN x ELSE 10 END [type=int, outer=(4,7)]

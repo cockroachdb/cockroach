@@ -167,6 +167,12 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.Distinct != nil:
+		if core.Distinct.NullsAreDistinct {
+			return false, errors.Newf("distinct with unique nulls not supported")
+		}
+		if core.Distinct.ErrorOnDup != "" {
+			return false, errors.Newf("distinct with error on duplicates not supported")
+		}
 		return true, nil
 
 	case core.Ordinality != nil:

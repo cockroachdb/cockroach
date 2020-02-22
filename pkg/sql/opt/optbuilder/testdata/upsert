@@ -96,20 +96,30 @@ upsert abc
       │    │    ├── columns: column14:14(int!null) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int)
+      │    │    │    │    ├── grouping columns: x:5(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int)
+      │    │    │    │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: x:5(int!null) y:6(int)
-      │    │    │    │    │    │    └── scan xyz
-      │    │    │    │    │    │         └── columns: x:5(int!null) y:6(int) z:7(int)
+      │    │    │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    │    │    │    │    │    └── scan xyz
+      │    │    │    │    │    │    │         └── columns: x:5(int!null) y:6(int) z:7(int)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: y [type=int]
-      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: y [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: y [type=int]
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column8 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column9 [type=int]
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
       │    │    │    │    └── computed column expressions
@@ -198,14 +208,22 @@ project
            │    │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-           │    │    │    ├── project
-           │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int) z:7(int)
-           │    │    │    │    ├── scan xyz
-           │    │    │    │    │    └── columns: x:5(int!null) y:6(int) z:7(int)
-           │    │    │    │    └── projections
-           │    │    │    │         └── plus [type=int]
-           │    │    │    │              ├── variable: y [type=int]
-           │    │    │    │              └── const: 1 [type=int]
+           │    │    │    ├── upsert-distinct-on
+           │    │    │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) column8:8(int)
+           │    │    │    │    ├── grouping columns: y:6(int) column8:8(int)
+           │    │    │    │    ├── project
+           │    │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int) z:7(int)
+           │    │    │    │    │    ├── scan xyz
+           │    │    │    │    │    │    └── columns: x:5(int!null) y:6(int) z:7(int)
+           │    │    │    │    │    └── projections
+           │    │    │    │    │         └── plus [type=int]
+           │    │    │    │    │              ├── variable: y [type=int]
+           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    └── aggregations
+           │    │    │    │         ├── first-agg [type=int]
+           │    │    │    │         │    └── variable: x [type=int]
+           │    │    │    │         └── first-agg [type=int]
+           │    │    │    │              └── variable: z [type=int]
            │    │    │    ├── scan abc
            │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
            │    │    │    │    └── computed column expressions
@@ -292,20 +310,30 @@ upsert abc
       │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int)
+      │    │    │    │    │    ├── grouping columns: x:5(int!null)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int)
+      │    │    │    │    │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: x:5(int!null) y:6(int)
-      │    │    │    │    │    │    │    └── scan xyz
-      │    │    │    │    │    │    │         └── columns: x:5(int!null) y:6(int) z:7(int)
+      │    │    │    │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int)
+      │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    │    │    │    │    │    │    └── scan xyz
+      │    │    │    │    │    │    │    │         └── columns: x:5(int!null) y:6(int) z:7(int)
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── plus [type=int]
-      │    │    │    │    │              ├── variable: y [type=int]
-      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │    │              ├── variable: y [type=int]
+      │    │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: y [type=int]
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: column8 [type=int]
+      │    │    │    │    │         └── first-agg [type=int]
+      │    │    │    │    │              └── variable: column9 [type=int]
       │    │    │    │    ├── scan abc
       │    │    │    │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
       │    │    │    │    │    └── computed column expressions
@@ -403,24 +431,34 @@ sort
       │              │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
       │              │    │    ├── left-join (hash)
       │              │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
-      │              │    │    │    ├── project
-      │              │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │              │    │    │    ├── upsert-distinct-on
+      │              │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null)
+      │              │    │    │    │    ├── grouping columns: column1:5(int!null)
       │              │    │    │    │    ├── project
-      │              │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-      │              │    │    │    │    │    ├── values
-      │              │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-      │              │    │    │    │    │    │    ├── tuple [type=tuple{int, int}]
-      │              │    │    │    │    │    │    │    ├── const: 1 [type=int]
-      │              │    │    │    │    │    │    │    └── const: 2 [type=int]
-      │              │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │              │    │    │    │    │    │         ├── const: 3 [type=int]
-      │              │    │    │    │    │    │         └── const: 4 [type=int]
+      │              │    │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │              │    │    │    │    │    ├── project
+      │              │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │              │    │    │    │    │    │    ├── values
+      │              │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │              │    │    │    │    │    │    │    ├── tuple [type=tuple{int, int}]
+      │              │    │    │    │    │    │    │    │    ├── const: 1 [type=int]
+      │              │    │    │    │    │    │    │    │    └── const: 2 [type=int]
+      │              │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │              │    │    │    │    │    │    │         ├── const: 3 [type=int]
+      │              │    │    │    │    │    │    │         └── const: 4 [type=int]
+      │              │    │    │    │    │    │    └── projections
+      │              │    │    │    │    │    │         └── function: unique_rowid [type=int]
       │              │    │    │    │    │    └── projections
-      │              │    │    │    │    │         └── function: unique_rowid [type=int]
-      │              │    │    │    │    └── projections
-      │              │    │    │    │         └── plus [type=int]
-      │              │    │    │    │              ├── variable: column2 [type=int]
-      │              │    │    │    │              └── const: 1 [type=int]
+      │              │    │    │    │    │         └── plus [type=int]
+      │              │    │    │    │    │              ├── variable: column2 [type=int]
+      │              │    │    │    │    │              └── const: 1 [type=int]
+      │              │    │    │    │    └── aggregations
+      │              │    │    │    │         ├── first-agg [type=int]
+      │              │    │    │    │         │    └── variable: column2 [type=int]
+      │              │    │    │    │         ├── first-agg [type=int]
+      │              │    │    │    │         │    └── variable: column7 [type=int]
+      │              │    │    │    │         └── first-agg [type=int]
+      │              │    │    │    │              └── variable: column8 [type=int]
       │              │    │    │    ├── scan abc
       │              │    │    │    │    ├── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
       │              │    │    │    │    └── computed column expressions
@@ -505,21 +543,31 @@ upsert tab
       │    │    ├── columns: column13:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null)
+      │    │    │    │    ├── grouping columns: column1:5(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: column2 [type=int]
-      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column7 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column8 [type=int]
       │    │    │    ├── scan tab
       │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
       │    │    │    │    └── computed column expressions
@@ -600,21 +648,29 @@ upsert abc
       │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null)
+      │    │    │    │    ├── grouping columns: column2:6(int!null) column8:8(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: column2 [type=int]
-      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column1 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column7 [type=int]
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
       │    │    │    │    └── computed column expressions
@@ -857,16 +913,22 @@ project
  │         │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
  │         │    │    ├── left-join (hash)
  │         │    │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
- │         │    │    │    ├── values
+ │         │    │    │    ├── upsert-distinct-on
  │         │    │    │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
- │         │    │    │    │    ├── tuple [type=tuple{int, int, int}]
- │         │    │    │    │    │    ├── const: 1 [type=int]
- │         │    │    │    │    │    ├── const: 2 [type=int]
- │         │    │    │    │    │    └── const: 3 [type=int]
- │         │    │    │    │    └── tuple [type=tuple{int, int, int}]
- │         │    │    │    │         ├── const: -1 [type=int]
- │         │    │    │    │         ├── const: -1 [type=int]
- │         │    │    │    │         └── const: -1 [type=int]
+ │         │    │    │    │    ├── grouping columns: column2:5(int!null) column3:6(int!null)
+ │         │    │    │    │    ├── values
+ │         │    │    │    │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
+ │         │    │    │    │    │    ├── tuple [type=tuple{int, int, int}]
+ │         │    │    │    │    │    │    ├── const: 1 [type=int]
+ │         │    │    │    │    │    │    ├── const: 2 [type=int]
+ │         │    │    │    │    │    │    └── const: 3 [type=int]
+ │         │    │    │    │    │    └── tuple [type=tuple{int, int, int}]
+ │         │    │    │    │    │         ├── const: -1 [type=int]
+ │         │    │    │    │    │         ├── const: -1 [type=int]
+ │         │    │    │    │    │         └── const: -1 [type=int]
+ │         │    │    │    │    └── aggregations
+ │         │    │    │    │         └── first-agg [type=int]
+ │         │    │    │    │              └── variable: column1 [type=int]
  │         │    │    │    ├── scan xyz
  │         │    │    │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
  │         │    │    │    └── filters
@@ -978,21 +1040,31 @@ upsert abc
       │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null)
+      │    │    │    │    ├── grouping columns: column1:5(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: column2 [type=int]
-      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column7 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column8 [type=int]
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
       │    │    │    │    └── computed column expressions
@@ -1087,21 +1159,31 @@ upsert abc
       │    │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null)
+      │    │    │    │    ├── grouping columns: column1:5(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: column2 [type=int]
-      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column7 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column8 [type=int]
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
       │    │    │    │    └── computed column expressions
@@ -1188,21 +1270,31 @@ upsert mutation
       │    │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null)
+      │    │    │    │    │    ├── grouping columns: column1:6(int!null)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
-      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
+      │    │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── const: 10 [type=int]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── const: 10 [type=int]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── plus [type=int]
-      │    │    │    │    │              ├── variable: column8 [type=int]
-      │    │    │    │    │              └── variable: column2 [type=int]
+      │    │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │    │              ├── variable: column8 [type=int]
+      │    │    │    │    │    │              └── variable: column2 [type=int]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: column8 [type=int]
+      │    │    │    │    │         └── first-agg [type=int]
+      │    │    │    │    │              └── variable: column9 [type=int]
       │    │    │    │    ├── scan mutation
       │    │    │    │    │    ├── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    │    │    └── check constraint expressions
@@ -1282,15 +1374,21 @@ upsert xyz
       ├── columns: upsert_x:9(int) column1:4(int!null) column5:5(int) x:6(int) y:7(int) z:8(int)
       ├── left-join (hash)
       │    ├── columns: column1:4(int!null) column5:5(int) x:6(int) y:7(int) z:8(int)
-      │    ├── project
-      │    │    ├── columns: column5:5(int) column1:4(int!null)
-      │    │    ├── values
-      │    │    │    ├── columns: column1:4(int!null)
-      │    │    │    └── tuple [type=tuple{int}]
-      │    │    │         └── const: 1 [type=int]
-      │    │    └── projections
-      │    │         └── cast: INT8 [type=int]
-      │    │              └── null [type=unknown]
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:4(int!null) column5:5(int)
+      │    │    ├── grouping columns: column1:4(int!null)
+      │    │    ├── project
+      │    │    │    ├── columns: column5:5(int) column1:4(int!null)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:4(int!null)
+      │    │    │    │    └── tuple [type=tuple{int}]
+      │    │    │    │         └── const: 1 [type=int]
+      │    │    │    └── projections
+      │    │    │         └── cast: INT8 [type=int]
+      │    │    │              └── null [type=unknown]
+      │    │    └── aggregations
+      │    │         └── first-agg [type=int]
+      │    │              └── variable: column5 [type=int]
       │    ├── scan xyz
       │    │    └── columns: x:6(int!null) y:7(int) z:8(int)
       │    └── filters
@@ -1352,21 +1450,31 @@ with &1
  │              ├── columns: upsert_rowid:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
  │              ├── left-join (hash)
  │              │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
- │              │    ├── project
- │              │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+ │              │    ├── upsert-distinct-on
+ │              │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null)
+ │              │    │    ├── grouping columns: column7:7(int)
  │              │    │    ├── project
- │              │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
- │              │    │    │    ├── values
- │              │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
- │              │    │    │    │    └── tuple [type=tuple{int, int}]
- │              │    │    │    │         ├── const: 1 [type=int]
- │              │    │    │    │         └── const: 2 [type=int]
+ │              │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
+ │              │    │    │    ├── project
+ │              │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+ │              │    │    │    │    ├── values
+ │              │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+ │              │    │    │    │    │    └── tuple [type=tuple{int, int}]
+ │              │    │    │    │    │         ├── const: 1 [type=int]
+ │              │    │    │    │    │         └── const: 2 [type=int]
+ │              │    │    │    │    └── projections
+ │              │    │    │    │         └── function: unique_rowid [type=int]
  │              │    │    │    └── projections
- │              │    │    │         └── function: unique_rowid [type=int]
- │              │    │    └── projections
- │              │    │         └── plus [type=int]
- │              │    │              ├── variable: column2 [type=int]
- │              │    │              └── const: 1 [type=int]
+ │              │    │    │         └── plus [type=int]
+ │              │    │    │              ├── variable: column2 [type=int]
+ │              │    │    │              └── const: 1 [type=int]
+ │              │    │    └── aggregations
+ │              │    │         ├── first-agg [type=int]
+ │              │    │         │    └── variable: column1 [type=int]
+ │              │    │         ├── first-agg [type=int]
+ │              │    │         │    └── variable: column2 [type=int]
+ │              │    │         └── first-agg [type=int]
+ │              │    │              └── variable: column8 [type=int]
  │              │    ├── scan abc
  │              │    │    ├── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
  │              │    │    └── computed column expressions
@@ -1414,12 +1522,20 @@ upsert xyz
       ├── columns: upsert_x:10(int) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
       ├── left-join (hash)
       │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
-      │    ├── values
+      │    ├── upsert-distinct-on
       │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
-      │    │    └── tuple [type=tuple{int, int, int}]
-      │    │         ├── const: 1 [type=int]
-      │    │         ├── const: 2 [type=int]
-      │    │         └── const: 3 [type=int]
+      │    │    ├── grouping columns: column2:5(int!null)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
+      │    │    │    └── tuple [type=tuple{int, int, int}]
+      │    │    │         ├── const: 1 [type=int]
+      │    │    │         ├── const: 2 [type=int]
+      │    │    │         └── const: 3 [type=int]
+      │    │    └── aggregations
+      │    │         ├── first-agg [type=int]
+      │    │         │    └── variable: column1 [type=int]
+      │    │         └── first-agg [type=int]
+      │    │              └── variable: column3 [type=int]
       │    ├── scan xyz
       │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
       │    └── filters
@@ -1480,18 +1596,28 @@ upsert checks
       │    ├── columns: upsert_a:13(int) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int!null) a:9(int) b:10(int) c:11(int) d:12(int)
       │    ├── left-join (hash)
       │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int!null) a:9(int) b:10(int) c:11(int) d:12(int)
-      │    │    ├── project
-      │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column3:7(int!null)
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null)
-      │    │    │    │    └── tuple [type=tuple{int, int, int}]
-      │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │         ├── const: 2 [type=int]
-      │    │    │    │         └── const: 3 [type=int]
-      │    │    │    └── projections
-      │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: column3 [type=int]
-      │    │    │              └── const: 1 [type=int]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int!null)
+      │    │    │    ├── grouping columns: column1:5(int!null)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column3:7(int!null)
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null)
+      │    │    │    │    │    └── tuple [type=tuple{int, int, int}]
+      │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │         ├── const: 2 [type=int]
+      │    │    │    │    │         └── const: 3 [type=int]
+      │    │    │    │    └── projections
+      │    │    │    │         └── plus [type=int]
+      │    │    │    │              ├── variable: column3 [type=int]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [type=int]
+      │    │    │         │    └── variable: column2 [type=int]
+      │    │    │         ├── first-agg [type=int]
+      │    │    │         │    └── variable: column3 [type=int]
+      │    │    │         └── first-agg [type=int]
+      │    │    │              └── variable: column8 [type=int]
       │    │    ├── scan checks
       │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
       │    │    │    ├── check constraint expressions
@@ -1553,21 +1679,31 @@ upsert mutation
       │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null)
+      │    │    │    │    ├── grouping columns: column1:6(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
-      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
+      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── const: 10 [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── const: 10 [type=int]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: column8 [type=int]
-      │    │    │    │              └── variable: column2 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: column8 [type=int]
+      │    │    │    │    │              └── variable: column2 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column8 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column9 [type=int]
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    │    └── check constraint expressions
@@ -1638,21 +1774,31 @@ upsert mutation
       │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null)
+      │    │    │    │    ├── grouping columns: column1:6(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
-      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
+      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── const: 10 [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── const: 10 [type=int]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: column8 [type=int]
-      │    │    │    │              └── variable: column2 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: column8 [type=int]
+      │    │    │    │    │              └── variable: column2 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column8 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column9 [type=int]
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    │    └── check constraint expressions
@@ -1735,22 +1881,32 @@ upsert checks
       │    │    │    ├── columns: column13:13(int!null) column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int)
+      │    │    │    │    │    ├── grouping columns: column1:5(int!null)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── cast: INT8 [type=int]
-      │    │    │    │    │    │              └── null [type=unknown]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── plus [type=int]
-      │    │    │    │    │              ├── variable: column7 [type=int]
-      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │    │              ├── variable: column7 [type=int]
+      │    │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: column7 [type=int]
+      │    │    │    │    │         └── first-agg [type=int]
+      │    │    │    │    │              └── variable: column8 [type=int]
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
       │    │    │    │    │    ├── check constraint expressions
@@ -1908,22 +2064,32 @@ upsert checks
       │    │    ├── columns: column13:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int)
+      │    │    │    │    ├── grouping columns: column1:5(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── cast: INT8 [type=int]
-      │    │    │    │    │              └── null [type=unknown]
-      │    │    │    │    └── projections
-      │    │    │    │         └── plus [type=int]
-      │    │    │    │              ├── variable: column7 [type=int]
-      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: column7 [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column2 [type=int]
+      │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │         │    └── variable: column7 [type=int]
+      │    │    │    │         └── first-agg [type=int]
+      │    │    │    │              └── variable: column8 [type=int]
       │    │    │    ├── scan checks
       │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
       │    │    │    │    ├── check constraint expressions
@@ -2009,26 +2175,36 @@ upsert checks
       │    │    │    ├── columns: column18:18(int) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int)
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column10:10(int) abc.a:5(int!null) abc.b:6(int) column9:9(int)
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int)
+      │    │    │    │    │    ├── grouping columns: abc.a:5(int!null)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column9:9(int) abc.a:5(int!null) abc.b:6(int)
+      │    │    │    │    │    │    ├── columns: column10:10(int) abc.a:5(int!null) abc.b:6(int) column9:9(int)
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int)
-      │    │    │    │    │    │    │    └── scan abc
-      │    │    │    │    │    │    │         ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) rowid:8(int!null)
-      │    │    │    │    │    │    │         └── computed column expressions
-      │    │    │    │    │    │    │              └── abc.c:7(int)
-      │    │    │    │    │    │    │                   └── plus [type=int]
-      │    │    │    │    │    │    │                        ├── variable: abc.b [type=int]
-      │    │    │    │    │    │    │                        └── const: 1 [type=int]
+      │    │    │    │    │    │    │    ├── columns: column9:9(int) abc.a:5(int!null) abc.b:6(int)
+      │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int)
+      │    │    │    │    │    │    │    │    └── scan abc
+      │    │    │    │    │    │    │    │         ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) rowid:8(int!null)
+      │    │    │    │    │    │    │    │         └── computed column expressions
+      │    │    │    │    │    │    │    │              └── abc.c:7(int)
+      │    │    │    │    │    │    │    │                   └── plus [type=int]
+      │    │    │    │    │    │    │    │                        ├── variable: abc.b [type=int]
+      │    │    │    │    │    │    │    │                        └── const: 1 [type=int]
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── cast: INT8 [type=int]
-      │    │    │    │    │    │              └── null [type=unknown]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── plus [type=int]
-      │    │    │    │    │              ├── variable: column9 [type=int]
-      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │    │              ├── variable: column9 [type=int]
+      │    │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: abc.b [type=int]
+      │    │    │    │    │         ├── first-agg [type=int]
+      │    │    │    │    │         │    └── variable: column9 [type=int]
+      │    │    │    │    │         └── first-agg [type=int]
+      │    │    │    │    │              └── variable: column10 [type=int]
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: checks.a:11(int!null) checks.b:12(int) checks.c:13(int) d:14(int)
       │    │    │    │    │    ├── check constraint expressions
@@ -2098,6 +2274,80 @@ upsert checks
                 ├── variable: abc.a [type=int]
                 └── const: 0 [type=int]
 
+# Use ORDER BY in upsert input (should be ignored and not cause error).
+build
+INSERT INTO xyz
+SELECT a, b, c FROM abc ORDER BY a
+ON CONFLICT (z, y) DO UPDATE SET y=5
+----
+upsert xyz
+ ├── columns: <none>
+ ├── canary column: 8
+ ├── fetch columns: x:8(int) y:9(int) z:10(int)
+ ├── insert-mapping:
+ │    ├──  a:4 => x:1
+ │    ├──  b:5 => y:2
+ │    └──  c:6 => z:3
+ ├── update-mapping:
+ │    └──  upsert_y:13 => y:2
+ └── project
+      ├── columns: upsert_x:12(int) upsert_y:13(int) upsert_z:14(int) a:4(int!null) b:5(int) c:6(int) x:8(int) y:9(int) z:10(int) column11:11(int!null)
+      ├── project
+      │    ├── columns: column11:11(int!null) a:4(int!null) b:5(int) c:6(int) x:8(int) y:9(int) z:10(int)
+      │    ├── left-join (hash)
+      │    │    ├── columns: a:4(int!null) b:5(int) c:6(int) x:8(int) y:9(int) z:10(int)
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:4(int!null) b:5(int) c:6(int)
+      │    │    │    ├── grouping columns: b:5(int) c:6(int)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: a:4(int!null) b:5(int) c:6(int)
+      │    │    │    │    └── scan abc
+      │    │    │    │         ├── columns: a:4(int!null) b:5(int) c:6(int) rowid:7(int!null)
+      │    │    │    │         └── computed column expressions
+      │    │    │    │              └── c:6(int)
+      │    │    │    │                   └── plus [type=int]
+      │    │    │    │                        ├── variable: b [type=int]
+      │    │    │    │                        └── const: 1 [type=int]
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [type=int]
+      │    │    │              └── variable: a [type=int]
+      │    │    ├── scan xyz
+      │    │    │    └── columns: x:8(int!null) y:9(int) z:10(int)
+      │    │    └── filters
+      │    │         ├── eq [type=bool]
+      │    │         │    ├── variable: b [type=int]
+      │    │         │    └── variable: y [type=int]
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: c [type=int]
+      │    │              └── variable: z [type=int]
+      │    └── projections
+      │         └── const: 5 [type=int]
+      └── projections
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: x [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: a [type=int]
+           │    └── variable: x [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: x [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: b [type=int]
+           │    └── variable: column11 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: x [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: c [type=int]
+                └── variable: z [type=int]
+
 # ------------------------------------------------------------------------------
 # Test decimal column truncation.
 # ------------------------------------------------------------------------------
@@ -2127,26 +2377,36 @@ upsert decimals
       │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── project
-      │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
-      │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
-      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │    │         │    ├── const: 1.1 [type=decimal]
-      │    │    │    │         │    └── const: 0 [type=int]
-      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
-      │    │    │    │         │    ├── const: ARRAY[0.95] [type=decimal[]]
-      │    │    │    │         │    └── const: 1 [type=int]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal)
+      │    │    │    ├── grouping columns: a:8(decimal)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
+      │    │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │    │         │    ├── const: 1.1 [type=decimal]
+      │    │    │    │    │         │    └── const: 0 [type=int]
+      │    │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │    │    │    │    │         │    ├── const: ARRAY[0.95] [type=decimal[]]
+      │    │    │    │    │         │    └── const: 1 [type=int]
+      │    │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── projections
       │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │              ├── plus [type=decimal]
+      │    │    │    │              │    ├── variable: a [type=decimal]
+      │    │    │    │              │    └── variable: c [type=decimal]
       │    │    │    │              └── const: 1 [type=int]
-      │    │    │    └── projections
-      │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │              ├── plus [type=decimal]
-      │    │    │              │    ├── variable: a [type=decimal]
-      │    │    │              │    └── variable: c [type=decimal]
-      │    │    │              └── const: 1 [type=int]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [type=decimal[]]
+      │    │    │         │    └── variable: b [type=decimal[]]
+      │    │    │         ├── first-agg [type=decimal]
+      │    │    │         │    └── variable: c [type=decimal]
+      │    │    │         └── first-agg [type=decimal]
+      │    │    │              └── variable: d [type=decimal]
       │    │    └── filters (true)
       │    └── projections
       │         ├── case [type=decimal]
@@ -2204,26 +2464,36 @@ upsert decimals
       │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── project
-      │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
-      │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
-      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │    │         │    ├── const: 1.1 [type=decimal]
-      │    │    │    │         │    └── const: 0 [type=int]
-      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
-      │    │    │    │         │    ├── null [type=decimal[]]
-      │    │    │    │         │    └── const: 1 [type=int]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal)
+      │    │    │    ├── grouping columns: a:8(decimal)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
+      │    │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │    │         │    ├── const: 1.1 [type=decimal]
+      │    │    │    │    │         │    └── const: 0 [type=int]
+      │    │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │    │    │    │    │         │    ├── null [type=decimal[]]
+      │    │    │    │    │         │    └── const: 1 [type=int]
+      │    │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── projections
       │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │              ├── plus [type=decimal]
+      │    │    │    │              │    ├── variable: a [type=decimal]
+      │    │    │    │              │    └── variable: c [type=decimal]
       │    │    │    │              └── const: 1 [type=int]
-      │    │    │    └── projections
-      │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │              ├── plus [type=decimal]
-      │    │    │              │    ├── variable: a [type=decimal]
-      │    │    │              │    └── variable: c [type=decimal]
-      │    │    │              └── const: 1 [type=int]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [type=decimal[]]
+      │    │    │         │    └── variable: b [type=decimal[]]
+      │    │    │         ├── first-agg [type=decimal]
+      │    │    │         │    └── variable: c [type=decimal]
+      │    │    │         └── first-agg [type=decimal]
+      │    │    │              └── variable: d [type=decimal]
       │    │    └── filters (true)
       │    └── projections
       │         ├── case [type=decimal]
@@ -2292,26 +2562,36 @@ upsert decimals
       │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── project
-      │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
-      │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
-      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │    │         │    ├── const: 1.1 [type=decimal]
-      │    │    │    │         │    └── const: 0 [type=int]
-      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
-      │    │    │    │         │    ├── const: ARRAY[0.95] [type=decimal[]]
-      │    │    │    │         │    └── const: 1 [type=int]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal)
+      │    │    │    ├── grouping columns: a:8(decimal)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
+      │    │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │    │         │    ├── const: 1.1 [type=decimal]
+      │    │    │    │    │         │    └── const: 0 [type=int]
+      │    │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │    │    │    │    │         │    ├── const: ARRAY[0.95] [type=decimal[]]
+      │    │    │    │    │         │    └── const: 1 [type=int]
+      │    │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    └── projections
       │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │              ├── plus [type=decimal]
+      │    │    │    │              │    ├── variable: a [type=decimal]
+      │    │    │    │              │    └── variable: c [type=decimal]
       │    │    │    │              └── const: 1 [type=int]
-      │    │    │    └── projections
-      │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
-      │    │    │              ├── plus [type=decimal]
-      │    │    │              │    ├── variable: a [type=decimal]
-      │    │    │              │    └── variable: c [type=decimal]
-      │    │    │              └── const: 1 [type=int]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [type=decimal[]]
+      │    │    │         │    └── variable: b [type=decimal[]]
+      │    │    │         ├── first-agg [type=decimal]
+      │    │    │         │    └── variable: c [type=decimal]
+      │    │    │         └── first-agg [type=decimal]
+      │    │    │              └── variable: d [type=decimal]
       │    │    └── filters (true)
       │    └── projections
       │         ├── case [type=decimal]

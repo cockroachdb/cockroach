@@ -97,25 +97,36 @@ upsert xy
  ├── return-mapping:
  │    ├──  upsert_x:9 => x:1
  │    └──  upsert_y:10 => y:2
- ├── cardinality: [2 - ]
+ ├── cardinality: [1 - ]
  ├── side-effects, mutations
  └── project
       ├── columns: upsert_x:9(int) upsert_y:10(int) column1:3(int!null) column2:4(int!null) x:5(int) y:6(int)
-      ├── cardinality: [2 - ]
-      ├── fd: (5)-->(6)
+      ├── cardinality: [1 - ]
+      ├── fd: (3)-->(4), (5)-->(6)
       ├── left-join (hash)
       │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int) u:7(int) v:8(int)
-      │    ├── cardinality: [2 - ]
-      │    ├── fd: (5)-->(6), (7)-->(8)
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (3,5,7)
+      │    ├── fd: (3)-->(4), (5)-->(6), (7)-->(8)
       │    ├── left-join (hash)
       │    │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int)
-      │    │    ├── cardinality: [2 - ]
-      │    │    ├── fd: (5)-->(6)
-      │    │    ├── values
+      │    │    ├── cardinality: [1 - ]
+      │    │    ├── key: (3,5)
+      │    │    ├── fd: (3)-->(4), (5)-->(6)
+      │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: column1:3(int!null) column2:4(int!null)
-      │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    ├── (1, 2) [type=tuple{int, int}]
-      │    │    │    └── (3, 4) [type=tuple{int, int}]
+      │    │    │    ├── grouping columns: column1:3(int!null)
+      │    │    │    ├── cardinality: [1 - 2]
+      │    │    │    ├── key: (3)
+      │    │    │    ├── fd: (3)-->(4)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:3(int!null) column2:4(int!null)
+      │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    ├── (1, 2) [type=tuple{int, int}]
+      │    │    │    │    └── (3, 4) [type=tuple{int, int}]
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [type=int, outer=(4)]
+      │    │    │              └── variable: column2 [type=int]
       │    │    ├── scan xy
       │    │    │    ├── columns: x:5(int!null) y:6(int)
       │    │    │    ├── key: (5)
