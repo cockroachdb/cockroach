@@ -275,6 +275,24 @@ message DistinctSpec {
   // considered, so rows A1,B1,C1,D1 and A1,B1,C1,D2 are considered equal and
   // only one of them (the first) is output.
   repeated uint32 distinct_columns = 2;
+  // If true, then NULL values are treated as not equal to one another. Each NULL
+  // value will cause a new row group to be created. For example:
+  //
+  //   c
+  //   ----
+  //   NULL
+  //   NULL
+  //
+  // A distinct operation on column "c" will result in one output row if
+  // NullsAreDistinct is false, or two output rows if true. This is set to true
+  // for UPSERT and INSERT..ON CONFLICT statements, since they must treat NULL
+  // values as distinct.
+  optional bool nulls_are_distinct = 3 [(gogoproto.nullable) = false];
+  // If not empty, then an error with this text will be raised if there are two
+  // rows with duplicate distinct column values. This is used to implement the
+  // UPSERT and INSERT..ON CONFLICT statements, both of which prohibit the same
+  // row from being changed twice.
+  optional string error_on_dup = 4 [(gogoproto.nullable) = false];
 }
 
 // The specification for a WITH ORDINALITY processor. It adds a new column to

@@ -96,18 +96,28 @@ upsert abc
       │    │    ├── columns: column14:14!null x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9 x:5!null y:6 column8:8
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9
+      │    │    │    │    ├── grouping columns: x:5!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8 x:5!null y:6
+      │    │    │    │    │    ├── columns: column9:9 x:5!null y:6 column8:8
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: x:5!null y:6
-      │    │    │    │    │    │    └── scan xyz
-      │    │    │    │    │    │         └── columns: x:5!null y:6 z:7
+      │    │    │    │    │    │    ├── columns: column8:8 x:5!null y:6
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: x:5!null y:6
+      │    │    │    │    │    │    │    └── scan xyz
+      │    │    │    │    │    │    │         └── columns: x:5!null y:6 z:7
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── unique_rowid() [as=column8:8]
-      │    │    │    │    └── projections
-      │    │    │    │         └── y:6 + 1 [as=column9:9]
+      │    │    │    │    │         └── y:6 + 1 [as=column9:9]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=y:6]
+      │    │    │    │         │    └── y:6
+      │    │    │    │         ├── first-agg [as=column8:8]
+      │    │    │    │         │    └── column8:8
+      │    │    │    │         └── first-agg [as=column9:9]
+      │    │    │    │              └── column9:9
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:10!null b:11 c:12 rowid:13!null
       │    │    │    │    └── computed column expressions
@@ -162,12 +172,20 @@ project
            │    │    ├── columns: column13:13!null column14:14!null column15:15!null x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: x:5!null y:6 z:7 column8:8 a:9 b:10 c:11 rowid:12
-           │    │    │    ├── project
-           │    │    │    │    ├── columns: column8:8 x:5!null y:6 z:7
-           │    │    │    │    ├── scan xyz
-           │    │    │    │    │    └── columns: x:5!null y:6 z:7
-           │    │    │    │    └── projections
-           │    │    │    │         └── y:6 + 1 [as=column8:8]
+           │    │    │    ├── upsert-distinct-on
+           │    │    │    │    ├── columns: x:5!null y:6 z:7 column8:8
+           │    │    │    │    ├── grouping columns: y:6 column8:8
+           │    │    │    │    ├── project
+           │    │    │    │    │    ├── columns: column8:8 x:5!null y:6 z:7
+           │    │    │    │    │    ├── scan xyz
+           │    │    │    │    │    │    └── columns: x:5!null y:6 z:7
+           │    │    │    │    │    └── projections
+           │    │    │    │    │         └── y:6 + 1 [as=column8:8]
+           │    │    │    │    └── aggregations
+           │    │    │    │         ├── first-agg [as=x:5]
+           │    │    │    │         │    └── x:5
+           │    │    │    │         └── first-agg [as=z:7]
+           │    │    │    │              └── z:7
            │    │    │    ├── scan abc
            │    │    │    │    ├── columns: a:9!null b:10 c:11 rowid:12!null
            │    │    │    │    └── computed column expressions
@@ -218,18 +236,28 @@ upsert abc
       │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9 a:10 b:11 c:12 rowid:13
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9 x:5!null y:6 column8:8
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: x:5!null y:6 column8:8 column9:9
+      │    │    │    │    │    ├── grouping columns: x:5!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8 x:5!null y:6
+      │    │    │    │    │    │    ├── columns: column9:9 x:5!null y:6 column8:8
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: x:5!null y:6
-      │    │    │    │    │    │    │    └── scan xyz
-      │    │    │    │    │    │    │         └── columns: x:5!null y:6 z:7
+      │    │    │    │    │    │    │    ├── columns: column8:8 x:5!null y:6
+      │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    │    ├── columns: x:5!null y:6
+      │    │    │    │    │    │    │    │    └── scan xyz
+      │    │    │    │    │    │    │    │         └── columns: x:5!null y:6 z:7
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── y:6 + 1 [as=column9:9]
+      │    │    │    │    │    │         └── y:6 + 1 [as=column9:9]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [as=y:6]
+      │    │    │    │    │         │    └── y:6
+      │    │    │    │    │         ├── first-agg [as=column8:8]
+      │    │    │    │    │         │    └── column8:8
+      │    │    │    │    │         └── first-agg [as=column9:9]
+      │    │    │    │    │              └── column9:9
       │    │    │    │    ├── scan abc
       │    │    │    │    │    ├── columns: a:10!null b:11 c:12 rowid:13!null
       │    │    │    │    │    └── computed column expressions
@@ -287,18 +315,28 @@ sort
       │              │    │    ├── columns: column13:13!null column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
       │              │    │    ├── left-join (hash)
       │              │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
-      │              │    │    │    ├── project
-      │              │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │              │    │    │    ├── upsert-distinct-on
+      │              │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
+      │              │    │    │    │    ├── grouping columns: column1:5!null
       │              │    │    │    │    ├── project
-      │              │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │              │    │    │    │    │    ├── values
-      │              │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │              │    │    │    │    │    │    ├── (1, 2)
-      │              │    │    │    │    │    │    └── (3, 4)
+      │              │    │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │              │    │    │    │    │    ├── project
+      │              │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │              │    │    │    │    │    │    ├── values
+      │              │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │              │    │    │    │    │    │    │    ├── (1, 2)
+      │              │    │    │    │    │    │    │    └── (3, 4)
+      │              │    │    │    │    │    │    └── projections
+      │              │    │    │    │    │    │         └── unique_rowid() [as=column7:7]
       │              │    │    │    │    │    └── projections
-      │              │    │    │    │    │         └── unique_rowid() [as=column7:7]
-      │              │    │    │    │    └── projections
-      │              │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │              │    │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │              │    │    │    │    └── aggregations
+      │              │    │    │    │         ├── first-agg [as=column2:6]
+      │              │    │    │    │         │    └── column2:6
+      │              │    │    │    │         ├── first-agg [as=column7:7]
+      │              │    │    │    │         │    └── column7:7
+      │              │    │    │    │         └── first-agg [as=column8:8]
+      │              │    │    │    │              └── column8:8
       │              │    │    │    ├── scan abc
       │              │    │    │    │    ├── columns: abc.a:9!null abc.b:10 abc.c:11 rowid:12!null
       │              │    │    │    │    └── computed column expressions
@@ -349,17 +387,27 @@ upsert tab
       │    │    ├── columns: column13:13 column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
+      │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── unique_rowid() [as=column7:7]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── unique_rowid() [as=column7:7]
-      │    │    │    │    └── projections
-      │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:6]
+      │    │    │    │         │    └── column2:6
+      │    │    │    │         ├── first-agg [as=column7:7]
+      │    │    │    │         │    └── column7:7
+      │    │    │    │         └── first-agg [as=column8:8]
+      │    │    │    │              └── column8:8
       │    │    │    ├── scan tab
       │    │    │    │    ├── columns: a:9!null b:10 c:11 rowid:12!null
       │    │    │    │    └── computed column expressions
@@ -404,17 +452,25 @@ upsert abc
       │    │    ├── columns: column13:13!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
+      │    │    │    │    ├── grouping columns: column2:6!null column8:8!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── unique_rowid() [as=column7:7]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── unique_rowid() [as=column7:7]
-      │    │    │    │    └── projections
-      │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column1:5]
+      │    │    │    │         │    └── column1:5
+      │    │    │    │         └── first-agg [as=column7:7]
+      │    │    │    │              └── column7:7
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:9!null b:10 c:11 rowid:12!null
       │    │    │    │    └── computed column expressions
@@ -587,10 +643,16 @@ project
  │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
  │         │    │    ├── left-join (hash)
  │         │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
- │         │    │    │    ├── values
+ │         │    │    │    ├── upsert-distinct-on
  │         │    │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
- │         │    │    │    │    ├── (1, 2, 3)
- │         │    │    │    │    └── (-1, -1, -1)
+ │         │    │    │    │    ├── grouping columns: column2:5!null column3:6!null
+ │         │    │    │    │    ├── values
+ │         │    │    │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+ │         │    │    │    │    │    ├── (1, 2, 3)
+ │         │    │    │    │    │    └── (-1, -1, -1)
+ │         │    │    │    │    └── aggregations
+ │         │    │    │    │         └── first-agg [as=column1:4]
+ │         │    │    │    │              └── column1:4
  │         │    │    │    ├── scan xyz
  │         │    │    │    │    └── columns: x:7!null y:8 z:9
  │         │    │    │    └── filters
@@ -661,17 +723,27 @@ upsert abc
       │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12 x:13 "?column?":16
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
+      │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── unique_rowid() [as=column7:7]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── unique_rowid() [as=column7:7]
-      │    │    │    │    └── projections
-      │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:6]
+      │    │    │    │         │    └── column2:6
+      │    │    │    │         ├── first-agg [as=column7:7]
+      │    │    │    │         │    └── column7:7
+      │    │    │    │         └── first-agg [as=column8:8]
+      │    │    │    │              └── column8:8
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:9!null b:10 c:11 rowid:12!null
       │    │    │    │    └── computed column expressions
@@ -728,17 +800,27 @@ upsert abc
       │    │    ├── columns: column13:13 column14:14!null column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null a:9 b:10 c:11 rowid:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
+      │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── unique_rowid() [as=column7:7]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── unique_rowid() [as=column7:7]
-      │    │    │    │    └── projections
-      │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    │         └── column2:6 + 1 [as=column8:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:6]
+      │    │    │    │         │    └── column2:6
+      │    │    │    │         ├── first-agg [as=column7:7]
+      │    │    │    │         │    └── column7:7
+      │    │    │    │         └── first-agg [as=column8:8]
+      │    │    │    │              └── column8:8
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:9!null b:10 c:11 rowid:12!null
       │    │    │    │    └── computed column expressions
@@ -790,17 +872,27 @@ upsert mutation
       │    │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
+      │    │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
-      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── 10 [as=column8:8]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── 10 [as=column8:8]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [as=column2:7]
+      │    │    │    │    │         │    └── column2:7
+      │    │    │    │    │         ├── first-agg [as=column8:8]
+      │    │    │    │    │         │    └── column8:8
+      │    │    │    │    │         └── first-agg [as=column9:9]
+      │    │    │    │    │              └── column9:9
       │    │    │    │    ├── scan mutation
       │    │    │    │    │    ├── columns: m:10!null n:11 o:12 p:13 q:14
       │    │    │    │    │    └── check constraint expressions
@@ -842,13 +934,19 @@ upsert xyz
       ├── columns: upsert_x:9 column1:4!null column5:5 x:6 y:7 z:8
       ├── left-join (hash)
       │    ├── columns: column1:4!null column5:5 x:6 y:7 z:8
-      │    ├── project
-      │    │    ├── columns: column5:5 column1:4!null
-      │    │    ├── values
-      │    │    │    ├── columns: column1:4!null
-      │    │    │    └── (1,)
-      │    │    └── projections
-      │    │         └── NULL::INT8 [as=column5:5]
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:4!null column5:5
+      │    │    ├── grouping columns: column1:4!null
+      │    │    ├── project
+      │    │    │    ├── columns: column5:5 column1:4!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:4!null
+      │    │    │    │    └── (1,)
+      │    │    │    └── projections
+      │    │    │         └── NULL::INT8 [as=column5:5]
+      │    │    └── aggregations
+      │    │         └── first-agg [as=column5:5]
+      │    │              └── column5:5
       │    ├── scan xyz
       │    │    └── columns: x:6!null y:7 z:8
       │    └── filters
@@ -899,17 +997,27 @@ with &1
  │              ├── columns: upsert_rowid:13 column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
  │              ├── left-join (hash)
  │              │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null abc.a:9 abc.b:10 abc.c:11 rowid:12
- │              │    ├── project
- │              │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+ │              │    ├── upsert-distinct-on
+ │              │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8!null
+ │              │    │    ├── grouping columns: column7:7
  │              │    │    ├── project
- │              │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
- │              │    │    │    ├── values
- │              │    │    │    │    ├── columns: column1:5!null column2:6!null
- │              │    │    │    │    └── (1, 2)
+ │              │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column7:7
+ │              │    │    │    ├── project
+ │              │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+ │              │    │    │    │    ├── values
+ │              │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+ │              │    │    │    │    │    └── (1, 2)
+ │              │    │    │    │    └── projections
+ │              │    │    │    │         └── unique_rowid() [as=column7:7]
  │              │    │    │    └── projections
- │              │    │    │         └── unique_rowid() [as=column7:7]
- │              │    │    └── projections
- │              │    │         └── column2:6 + 1 [as=column8:8]
+ │              │    │    │         └── column2:6 + 1 [as=column8:8]
+ │              │    │    └── aggregations
+ │              │    │         ├── first-agg [as=column1:5]
+ │              │    │         │    └── column1:5
+ │              │    │         ├── first-agg [as=column2:6]
+ │              │    │         │    └── column2:6
+ │              │    │         └── first-agg [as=column8:8]
+ │              │    │              └── column8:8
  │              │    ├── scan abc
  │              │    │    ├── columns: abc.a:9!null abc.b:10 abc.c:11 rowid:12!null
  │              │    │    └── computed column expressions
@@ -946,9 +1054,17 @@ upsert xyz
       ├── columns: upsert_x:10 column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
       ├── left-join (hash)
       │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
-      │    ├── values
+      │    ├── upsert-distinct-on
       │    │    ├── columns: column1:4!null column2:5!null column3:6!null
-      │    │    └── (1, 2, 3)
+      │    │    ├── grouping columns: column2:5!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column1:4]
+      │    │         │    └── column1:4
+      │    │         └── first-agg [as=column3:6]
+      │    │              └── column3:6
       │    ├── scan xyz
       │    │    └── columns: x:7!null y:8 z:9
       │    └── filters
@@ -997,13 +1113,23 @@ upsert checks
       │    ├── columns: upsert_a:13 column1:5!null column2:6!null column3:7!null column8:8!null a:9 b:10 c:11 d:12
       │    ├── left-join (hash)
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null column8:8!null a:9 b:10 c:11 d:12
-      │    │    ├── project
-      │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column3:7!null
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │    │    │    │    └── (1, 2, 3)
-      │    │    │    └── projections
-      │    │    │         └── column3:7 + 1 [as=column8:8]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column8:8!null
+      │    │    │    ├── grouping columns: column1:5!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column8:8!null column1:5!null column2:6!null column3:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │    │    │    │    │    └── (1, 2, 3)
+      │    │    │    │    └── projections
+      │    │    │    │         └── column3:7 + 1 [as=column8:8]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:6]
+      │    │    │         │    └── column2:6
+      │    │    │         ├── first-agg [as=column3:7]
+      │    │    │         │    └── column3:7
+      │    │    │         └── first-agg [as=column8:8]
+      │    │    │              └── column8:8
       │    │    ├── scan checks
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12
       │    │    │    ├── check constraint expressions
@@ -1046,17 +1172,27 @@ upsert mutation
       │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
+      │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
-      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── 10 [as=column8:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── 10 [as=column8:8]
-      │    │    │    │    └── projections
-      │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:7]
+      │    │    │    │         │    └── column2:7
+      │    │    │    │         ├── first-agg [as=column8:8]
+      │    │    │    │         │    └── column8:8
+      │    │    │    │         └── first-agg [as=column9:9]
+      │    │    │    │              └── column9:9
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:10!null n:11 o:12 p:13 q:14
       │    │    │    │    └── check constraint expressions
@@ -1098,17 +1234,27 @@ upsert mutation
       │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
+      │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
-      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── 10 [as=column8:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── 10 [as=column8:8]
-      │    │    │    │    └── projections
-      │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:7]
+      │    │    │    │         │    └── column2:7
+      │    │    │    │         ├── first-agg [as=column8:8]
+      │    │    │    │         │    └── column8:8
+      │    │    │    │         └── first-agg [as=column9:9]
+      │    │    │    │              └── column9:9
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:10!null n:11 o:12 p:13 q:14
       │    │    │    │    └── check constraint expressions
@@ -1162,17 +1308,27 @@ upsert checks
       │    │    │    ├── columns: column13:13!null column14:14!null column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8 column1:5!null column2:6!null column7:7
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
+      │    │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    ├── columns: column8:8 column1:5!null column2:6!null column7:7
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── NULL::INT8 [as=column7:7]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── NULL::INT8 [as=column7:7]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column7:7 + 1 [as=column8:8]
+      │    │    │    │    │    │         └── column7:7 + 1 [as=column8:8]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [as=column2:6]
+      │    │    │    │    │         │    └── column2:6
+      │    │    │    │    │         ├── first-agg [as=column7:7]
+      │    │    │    │    │         │    └── column7:7
+      │    │    │    │    │         └── first-agg [as=column8:8]
+      │    │    │    │    │              └── column8:8
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12
       │    │    │    │    │    ├── check constraint expressions
@@ -1269,17 +1425,27 @@ upsert checks
       │    │    ├── columns: column13:13 column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8 column1:5!null column2:6!null column7:7
+      │    │    │    ├── upsert-distinct-on
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
+      │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    ├── columns: column8:8 column1:5!null column2:6!null column7:7
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── NULL::INT8 [as=column7:7]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── NULL::INT8 [as=column7:7]
-      │    │    │    │    └── projections
-      │    │    │    │         └── column7:7 + 1 [as=column8:8]
+      │    │    │    │    │         └── column7:7 + 1 [as=column8:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:6]
+      │    │    │    │         │    └── column2:6
+      │    │    │    │         ├── first-agg [as=column7:7]
+      │    │    │    │         │    └── column7:7
+      │    │    │    │         └── first-agg [as=column8:8]
+      │    │    │    │              └── column8:8
       │    │    │    ├── scan checks
       │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12
       │    │    │    │    ├── check constraint expressions
@@ -1330,21 +1496,31 @@ upsert checks
       │    │    │    ├── columns: column18:18 abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14
       │    │    │    ├── left-join (hash)
       │    │    │    │    ├── columns: abc.a:5!null abc.b:6 column9:9 column10:10 checks.a:11 checks.b:12 checks.c:13 d:14
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column10:10 abc.a:5!null abc.b:6 column9:9
+      │    │    │    │    ├── upsert-distinct-on
+      │    │    │    │    │    ├── columns: abc.a:5!null abc.b:6 column9:9 column10:10
+      │    │    │    │    │    ├── grouping columns: abc.a:5!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column9:9 abc.a:5!null abc.b:6
+      │    │    │    │    │    │    ├── columns: column10:10 abc.a:5!null abc.b:6 column9:9
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: abc.a:5!null abc.b:6
-      │    │    │    │    │    │    │    └── scan abc
-      │    │    │    │    │    │    │         ├── columns: abc.a:5!null abc.b:6 abc.c:7 rowid:8!null
-      │    │    │    │    │    │    │         └── computed column expressions
-      │    │    │    │    │    │    │              └── abc.c:7
-      │    │    │    │    │    │    │                   └── abc.b:6 + 1
+      │    │    │    │    │    │    │    ├── columns: column9:9 abc.a:5!null abc.b:6
+      │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    │    ├── columns: abc.a:5!null abc.b:6
+      │    │    │    │    │    │    │    │    └── scan abc
+      │    │    │    │    │    │    │    │         ├── columns: abc.a:5!null abc.b:6 abc.c:7 rowid:8!null
+      │    │    │    │    │    │    │    │         └── computed column expressions
+      │    │    │    │    │    │    │    │              └── abc.c:7
+      │    │    │    │    │    │    │    │                   └── abc.b:6 + 1
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── NULL::INT8 [as=column9:9]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── NULL::INT8 [as=column9:9]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column9:9 + 1 [as=column10:10]
+      │    │    │    │    │    │         └── column9:9 + 1 [as=column10:10]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [as=abc.b:6]
+      │    │    │    │    │         │    └── abc.b:6
+      │    │    │    │    │         ├── first-agg [as=column9:9]
+      │    │    │    │    │         │    └── column9:9
+      │    │    │    │    │         └── first-agg [as=column10:10]
+      │    │    │    │    │              └── column10:10
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: checks.a:11!null checks.b:12 checks.c:13 d:14
       │    │    │    │    │    ├── check constraint expressions
@@ -1377,6 +1553,53 @@ upsert checks
            ├── upsert_b:20 < upsert_d:22 [as=check1:23]
            └── abc.a:5 > 0 [as=check2:24]
 
+# Use ORDER BY in upsert input (should be ignored and not cause error).
+build
+INSERT INTO xyz
+SELECT a, b, c FROM abc ORDER BY a
+ON CONFLICT (z, y) DO UPDATE SET y=5
+----
+upsert xyz
+ ├── columns: <none>
+ ├── canary column: 8
+ ├── fetch columns: x:8 y:9 z:10
+ ├── insert-mapping:
+ │    ├── a:4 => x:1
+ │    ├── b:5 => y:2
+ │    └── c:6 => z:3
+ ├── update-mapping:
+ │    └── upsert_y:13 => y:2
+ └── project
+      ├── columns: upsert_x:12 upsert_y:13 upsert_z:14 a:4!null b:5 c:6 x:8 y:9 z:10 column11:11!null
+      ├── project
+      │    ├── columns: column11:11!null a:4!null b:5 c:6 x:8 y:9 z:10
+      │    ├── left-join (hash)
+      │    │    ├── columns: a:4!null b:5 c:6 x:8 y:9 z:10
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:4!null b:5 c:6
+      │    │    │    ├── grouping columns: b:5 c:6
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: a:4!null b:5 c:6
+      │    │    │    │    └── scan abc
+      │    │    │    │         ├── columns: a:4!null b:5 c:6 rowid:7!null
+      │    │    │    │         └── computed column expressions
+      │    │    │    │              └── c:6
+      │    │    │    │                   └── b:5 + 1
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=a:4]
+      │    │    │              └── a:4
+      │    │    ├── scan xyz
+      │    │    │    └── columns: x:8!null y:9 z:10
+      │    │    └── filters
+      │    │         ├── b:5 = y:9
+      │    │         └── c:6 = z:10
+      │    └── projections
+      │         └── 5 [as=column11:11]
+      └── projections
+           ├── CASE WHEN x:8 IS NULL THEN a:4 ELSE x:8 END [as=upsert_x:12]
+           ├── CASE WHEN x:8 IS NULL THEN b:5 ELSE column11:11 END [as=upsert_y:13]
+           └── CASE WHEN x:8 IS NULL THEN c:6 ELSE z:10 END [as=upsert_z:14]
+
 # ------------------------------------------------------------------------------
 # Test decimal column truncation.
 # ------------------------------------------------------------------------------
@@ -1406,13 +1629,23 @@ upsert decimals
       │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── project
-      │    │    │    ├── columns: d:12 a:8 b:9 c:10
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: a:8 b:9 c:10
-      │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(ARRAY[0.95], 1), crdb_internal.round_decimal_values(1.23, 1))
-      │    │    │    └── projections
-      │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:8 b:9 c:10 d:12
+      │    │    │    ├── grouping columns: a:8
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: a:8 b:9 c:10
+      │    │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(ARRAY[0.95], 1), crdb_internal.round_decimal_values(1.23, 1))
+      │    │    │    │    └── projections
+      │    │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=b:9]
+      │    │    │         │    └── b:9
+      │    │    │         ├── first-agg [as=c:10]
+      │    │    │         │    └── c:10
+      │    │    │         └── first-agg [as=d:12]
+      │    │    │              └── d:12
       │    │    └── filters (true)
       │    └── projections
       │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:19]
@@ -1445,13 +1678,23 @@ upsert decimals
       │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── project
-      │    │    │    ├── columns: d:12 a:8 b:9 c:10
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: a:8 b:9 c:10
-      │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(CAST(NULL AS DECIMAL(5,1)[]), 1), crdb_internal.round_decimal_values(1.23, 1))
-      │    │    │    └── projections
-      │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:8 b:9 c:10 d:12
+      │    │    │    ├── grouping columns: a:8
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: a:8 b:9 c:10
+      │    │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(CAST(NULL AS DECIMAL(5,1)[]), 1), crdb_internal.round_decimal_values(1.23, 1))
+      │    │    │    │    └── projections
+      │    │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=b:9]
+      │    │    │         │    └── b:9
+      │    │    │         ├── first-agg [as=c:10]
+      │    │    │         │    └── c:10
+      │    │    │         └── first-agg [as=d:12]
+      │    │    │              └── d:12
       │    │    └── filters (true)
       │    └── projections
       │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:19]
@@ -1488,13 +1731,23 @@ upsert decimals
       │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── key columns: [8] = [13]
       │    │    ├── lookup columns are key
-      │    │    ├── project
-      │    │    │    ├── columns: d:12 a:8 b:9 c:10
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: a:8 b:9 c:10
-      │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(ARRAY[0.95], 1), crdb_internal.round_decimal_values(1.23, 1))
-      │    │    │    └── projections
-      │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: a:8 b:9 c:10 d:12
+      │    │    │    ├── grouping columns: a:8
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: a:8 b:9 c:10
+      │    │    │    │    │    └── (crdb_internal.round_decimal_values(1.1, 0), crdb_internal.round_decimal_values(ARRAY[0.95], 1), crdb_internal.round_decimal_values(1.23, 1))
+      │    │    │    │    └── projections
+      │    │    │    │         └── crdb_internal.round_decimal_values(a:8 + c:10, 1) [as=d:12]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=b:9]
+      │    │    │         │    └── b:9
+      │    │    │         ├── first-agg [as=c:10]
+      │    │    │         │    └── c:10
+      │    │    │         └── first-agg [as=d:12]
+      │    │    │              └── d:12
       │    │    └── filters (true)
       │    └── projections
       │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:21]

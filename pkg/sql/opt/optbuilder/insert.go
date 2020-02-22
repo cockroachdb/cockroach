@@ -105,13 +105,30 @@ func init() {
 // used. Otherwise, the update value is used (or the existing value if there is
 // no update value for that column).
 //
+// In addition, upsert cases have another complication that arises from the
+// requirement that no mutation statement updates the same row more than once.
+// Primary key violations prevent INSERT statements from inserting the same row
+// twice. DELETE statements do not encounter a problem because their input never
+// contains duplicate rows. And UPDATE statements are equivalent to DELETE
+// followed by an INSERT, so they're safe as well. By contrast, UPSERT and
+// INSERT..ON CONFLICT statements can have duplicate input rows that trigger
+// updates of the same row after insertion conflicts.
+//
+// Detecting (and raising an error) or ignoring (in case of DO NOTHING)
+// duplicate rows requires wrapping the input with one or more DISTINCT ON
+// operators that ensure the input is distinct on at least one unique index.
+// Because the input is distinct on a unique index of the target table, the
+// statement will never attempt to update the same row twice.
+//
 // Putting it all together, if this is the schema and INSERT..ON CONFLICT
 // statement:
 //
 //   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
-//   INSERT INTO abc VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=10
+//   INSERT INTO abc VALUES (1, 2), (1, 3) ON CONFLICT (a) DO UPDATE SET b=10
 //
-// Then an input expression equivalent to this would be built:
+// Then an input expression roughly equivalent to this would be built (note that
+// the DISTINCT ON is really the UpsertDistinctOn operator, which behaves a bit
+// differently than the DistinctOn operator):
 //
 //   SELECT
 //     fetch_a,
@@ -120,30 +137,33 @@ func init() {
 //     CASE WHEN fetch_a IS NULL ins_a ELSE fetch_a END AS ups_a,
 //     CASE WHEN fetch_a IS NULL ins_b ELSE 10 END AS ups_b,
 //     CASE WHEN fetch_a IS NULL ins_c ELSE fetch_c END AS ups_c,
-//   FROM (VALUES (1, 2, NULL)) AS ins(ins_a, ins_b, ins_c)
+//   FROM (
+//     SELECT DISTINCT ON (ins_a) *
+//     FROM (VALUES (1, 2, NULL), (1, 3, NULL)) AS ins(ins_a, ins_b, ins_c)
+//   )
 //   LEFT OUTER JOIN abc AS fetch(fetch_a, fetch_b, fetch_c)
 //   ON ins_a = fetch_a
 //
 // Here, the fetch_a column has been designated as the canary column, since it
 // is NOT NULL in the schema. It is used as the CASE condition to decide between
-// the insert and update values for each row.
-//
-// The CASE expressions will often prevent the unnecessary evaluation of the
-// update expression in the case where an insertion needs to occur. In addition,
-// it simplifies logical property calculation, since a 1:1 mapping to each
-// target table column from a corresponding input column is maintained.
+// the insert and update values for each row. The CASE expressions will often
+// prevent the unnecessary evaluation of the update expression in the case where
+// an insertion needs to occur. In addition, it simplifies logical property
+// calculation, since a 1:1 mapping to each target table column from a
+// corresponding input column is maintained.
 //
 // If the ON CONFLICT clause contains a DO NOTHING clause, then each UNIQUE
-// index on the target table requires its own LEFT OUTER JOIN to check whether a
+// index on the target table requires its own DISTINCT ON to ensure that the
+// input has no duplicates, and its own LEFT OUTER JOIN to check whether a
 // conflict exists. For example:
 //
 //   CREATE TABLE ab (a INT PRIMARY KEY, b INT)
-//   INSERT INTO ab (a, b) VALUES (1, 2) ON CONFLICT DO NOTHING
+//   INSERT INTO ab (a, b) VALUES (1, 2), (1, 3) ON CONFLICT DO NOTHING
 //
-// Then an input expression equivalent to this would be built:
+// Then an input expression roughly equivalent to this would be built:
 //
 //   SELECT x, y
-//   FROM (VALUES (1, 2)) AS input(x, y)
+//   FROM (SELECT DISTINCT ON (x) * FROM (VALUES (1, 2), (1, 3))) AS input(x, y)
 //   LEFT OUTER JOIN ab
 //   ON input.x = ab.a
 //   WHERE ab.a IS NULL
@@ -732,6 +752,21 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// (otherwise result cardinality could increase). This is also a Postgres
 	// requirement.
 	mb.ensureUniqueConflictCols(conflictOrds)
+
+	// Ensure that input is distinct on the conflict columns. Otherwise, the
+	// Upsert could affect the same row more than once, which can lead to index
+	// corruption. See issue #44466 for more context.
+	//
+	// Ignore any ordering requested by the input. Since the UpsertDistinctOn
+	// operator does not allow multiple rows in distinct groupings, the internal
+	// ordering is meaningless (and can trigger a misleading error in
+	// buildDistinctOn if present).
+	var conflictCols opt.ColSet
+	for ord, ok := conflictOrds.Next(0); ok; ord, ok = conflictOrds.Next(ord + 1) {
+		conflictCols.Add(mb.outScope.cols[mb.insertOrds[ord]].id)
+	}
+	mb.outScope.ordering = nil
+	mb.outScope = mb.b.buildDistinctOn(conflictCols, mb.outScope, true /* forUpsert */)
 
 	// Re-alias all INSERT columns so that they are accessible as if they were
 	// part of a special data source named "crdb_internal.excluded".

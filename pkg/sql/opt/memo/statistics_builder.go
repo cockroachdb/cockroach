@@ -362,7 +362,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return sb.colStatSetNode(colSet, e)
 
-	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.UpsertDistinctOnOp:
 		return sb.colStatGroupBy(colSet, e)
 
 	case opt.LimitOp:
@@ -1494,16 +1494,21 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 			s.RowCount = min(1, inputStats.RowCount)
 		}
 	} else {
-		// Estimate the row count based on the distinct count of the grouping
-		// columns.
-		//
-		// TODO(itsbilal): Update null count here, using a formula similar to the
-		// ones in colStatGroupBy.
 		colStat := sb.copyColStatFromChild(groupingColSet, groupNode, s)
-
-		// Non-scalar GroupBy should never increase the number of rows.
 		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
-		s.RowCount = min(colStat.DistinctCount, inputStats.RowCount)
+
+		if groupNode.Op() == opt.UpsertDistinctOnOp {
+			// UpsertDistinctOp will fail if any input group has more than one row,
+			// so in non error cases it has the same number of rows as its input.
+			s.RowCount = inputStats.RowCount
+		} else {
+			// Estimate the row count based on the distinct count of the grouping
+			// columns. Non-scalar GroupBy should never increase the number of rows.
+			//
+			// TODO(itsbilal): Update null count here, using a formula similar to the
+			// ones in colStatGroupBy.
+			s.RowCount = min(colStat.DistinctCount, inputStats.RowCount)
+		}
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -1539,15 +1544,21 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		inputColStat = sb.colStatFromChild(colSet, groupNode, 0 /* childIdx */)
 	}
 
-	// For null counts - we either only have 1 possible null value (if we're
-	// grouping on a single column), or we have as many nulls as in the grouping
-	// col set, multiplied by DistinctCount/RowCount - an inverse of a rough
-	// duplicate factor.
-	if groupingColSet.Len() == 1 {
-		colStat.NullCount = min(1, inputColStat.NullCount)
+	if groupNode.Op() == opt.UpsertDistinctOnOp {
+		// UpsertDistinctOp inherits NullCount from child, since it does not
+		// group NULL values.
+		colStat.NullCount = inputColStat.NullCount
 	} else {
-		inputRowCount := sb.statsFromChild(groupNode, 0 /* childIdx */).RowCount
-		colStat.NullCount = (colStat.DistinctCount / inputRowCount) * inputColStat.NullCount
+		// For null counts - we either only have 1 possible null value (if we're
+		// grouping on a single column), or we have as many nulls as in the grouping
+		// col set, multiplied by DistinctCount/RowCount - an inverse of a rough
+		// duplicate factor.
+		if groupingColSet.Len() == 1 {
+			colStat.NullCount = min(1, inputColStat.NullCount)
+		} else {
+			inputRowCount := sb.statsFromChild(groupNode, 0 /* childIdx */).RowCount
+			colStat.NullCount = (colStat.DistinctCount / inputRowCount) * inputColStat.NullCount
+		}
 	}
 
 	if colSet.SubsetOf(relProps.NotNullCols) {

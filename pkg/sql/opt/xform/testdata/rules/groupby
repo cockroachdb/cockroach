@@ -1721,3 +1721,74 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G5: (first-agg G7)
  ├── G6: (variable u)
  └── G7: (variable v)
+
+# Ensure that streaming upsert-distinct-on will be used.
+memo
+INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
+----
+memo (optimized, ~19KB, required=[])
+ ├── G1: (upsert G2 G3 xyz)
+ │    └── []
+ │         ├── best: (upsert G2 G3 xyz)
+ │         └── cost: 2230.10
+ ├── G2: (project G4 G5 v w ?column? x y z)
+ │    └── []
+ │         ├── best: (project G4 G5 v w ?column? x y z)
+ │         └── cost: 2230.09
+ ├── G3: (f-k-checks)
+ ├── G4: (left-join G6 G7 G8) (right-join G7 G6 G8) (lookup-join G6 G9 xyz,keyCols=[6],outCols=(6-11)) (lookup-join G10 G9 xyz,keyCols=[9],outCols=(6-11)) (merge-join G7 G6 G9 right-join,+9,+6)
+ │    └── []
+ │         ├── best: (merge-join G7="[ordering: +9]" G6="[ordering: +6 opt(8)]" G9 right-join,+9,+6)
+ │         └── cost: 2210.08
+ ├── G5: (projections G11)
+ ├── G6: (upsert-distinct-on G12 G13 cols=(6)) (upsert-distinct-on G12 G13 cols=(6),ordering=+6 opt(8))
+ │    ├── [ordering: +6 opt(8)]
+ │    │    ├── best: (upsert-distinct-on G12="[ordering: +6 opt(8)]" G13 cols=(6))
+ │    │    └── cost: 1120.05
+ │    └── []
+ │         ├── best: (upsert-distinct-on G12="[ordering: +6 opt(8)]" G13 cols=(6),ordering=+6 opt(8))
+ │         └── cost: 1120.05
+ ├── G7: (scan xyz) (scan xyz@zyx)
+ │    ├── [ordering: +9]
+ │    │    ├── best: (scan xyz)
+ │    │    └── cost: 1060.02
+ │    └── []
+ │         ├── best: (scan xyz)
+ │         └── cost: 1060.02
+ ├── G8: (filters G14)
+ ├── G9: (filters)
+ ├── G10: (lookup-join G6 G9 xyz@xy,keyCols=[6],outCols=(6-10))
+ │    └── []
+ │         ├── best: (lookup-join G6 G9 xyz@xy,keyCols=[6],outCols=(6-10))
+ │         └── cost: 7160.06
+ ├── G11: (case G15 G16 G17)
+ ├── G12: (project G18 G19 v w)
+ │    ├── [ordering: +6 opt(8)]
+ │    │    ├── best: (project G18="[ordering: +6]" G19 v w)
+ │    │    └── cost: 1080.03
+ │    └── []
+ │         ├── best: (project G18 G19 v w)
+ │         └── cost: 1080.03
+ ├── G13: (aggregations G20 G21)
+ ├── G14: (eq G22 G23)
+ ├── G15: (true)
+ ├── G16: (scalar-list G24)
+ ├── G17: (const 2.0)
+ ├── G18: (scan kuvw,cols=(6,7)) (scan kuvw@uvw,cols=(6,7)) (scan kuvw@wvu,cols=(6,7)) (scan kuvw@vw,cols=(6,7)) (scan kuvw@w,cols=(6,7))
+ │    ├── [ordering: +6]
+ │    │    ├── best: (scan kuvw@vw,cols=(6,7))
+ │    │    └── cost: 1060.02
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(6,7))
+ │         └── cost: 1060.02
+ ├── G19: (projections G25)
+ ├── G20: (first-agg G26)
+ ├── G21: (first-agg G27)
+ ├── G22: (variable v)
+ ├── G23: (variable x)
+ ├── G24: (when G28 G27)
+ ├── G25: (const 1.0)
+ ├── G26: (variable w)
+ ├── G27: (variable "?column?")
+ ├── G28: (is G23 G29)
+ └── G29: (null)

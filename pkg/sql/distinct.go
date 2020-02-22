@@ -35,6 +35,27 @@ type distinctNode struct {
 	columnsInOrder util.FastIntSet
 
 	reqOrdering ReqOrdering
+
+	// nullsAreDistinct, if true, causes the distinct operation to treat NULL
+	// values as not equal to one another. Each NULL value will cause a new row
+	// group to be created. For example:
+	//
+	//   c
+	//   ----
+	//   NULL
+	//   NULL
+	//
+	// A distinct operation on column "c" will result in one output row if
+	// nullsAreDistinct is false, or two output rows if true. This is set to true
+	// for UPSERT and INSERT..ON CONFLICT statements, since they must treat NULL
+	// values as distinct.
+	nullsAreDistinct bool
+
+	// errorOnDup, if non-empty, is the text of the error that will be raised if
+	// the distinct operation finds two rows with duplicate grouping column
+	// values. This is used to implement the UPSERT and INSERT..ON CONFLICT
+	// statements, both of which prohibit the same row from being changed twice.
+	errorOnDup string
 }
 
 func (n *distinctNode) startExec(params runParams) error {

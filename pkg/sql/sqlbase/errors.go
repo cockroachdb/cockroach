@@ -19,6 +19,10 @@ import (
 )
 
 const (
+	// DuplicateUpsertErrText is error text used when a row is modified twice by
+	// an upsert statement.
+	DuplicateUpsertErrText = "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+
 	txnAbortedMsg = "current transaction is aborted, commands ignored " +
 		"until end of transaction block"
 	txnCommittedMsg = "current transaction is committed, commands ignored " +
