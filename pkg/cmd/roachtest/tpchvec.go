@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	tpchworkload "github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
@@ -48,12 +49,399 @@ func registerTPCHVec(r *testRegistry) {
 		9:  "can cause OOM",
 		19: "can cause OOM",
 	}
-	queriesToSkipByVersionPrefix["v20.1"] = map[int]string{}
+	queriesToSkipByVersionPrefix["v20.1"] = map[int]string{
+		// TODO(yuzefovich): remove this once disk spilling is in place.
+		9: "needs disk spilling",
+	}
 
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
 		TPCHTables := []string{
 			"nation", "region", "part", "supplier",
 			"partsupp", "customer", "orders", "lineitem",
+		}
+		TPCHTableStatsInjection := []string{
+			`ALTER TABLE region INJECT STATISTICS '[
+				{
+					"columns": ["r_regionkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 5,
+					"distinct_count": 5
+				},
+				{
+					"columns": ["r_name"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 5,
+					"distinct_count": 5
+				},
+				{
+					"columns": ["r_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 5,
+					"distinct_count": 5
+				}
+			]';`,
+			`ALTER TABLE nation INJECT STATISTICS '[
+				{
+					"columns": ["n_nationkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 25,
+					"distinct_count": 25
+				},
+				{
+					"columns": ["n_name"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 25,
+					"distinct_count": 25
+				},
+				{
+					"columns": ["n_regionkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 25,
+					"distinct_count": 5
+				},
+				{
+					"columns": ["n_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 25,
+					"distinct_count": 25
+				}
+			]';`,
+			`ALTER TABLE supplier INJECT STATISTICS '[
+				{
+					"columns": ["s_suppkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 10000,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["s_name"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 10000,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["s_address"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 10000,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["s_nationkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 10000,
+					"distinct_count": 25
+				},
+				{
+					"columns": ["s_phone"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 10000,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["s_acctbal"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 10000,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["s_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 10000,
+					"distinct_count": 10000
+				}
+			]';`,
+			`ALTER TABLE public.part INJECT STATISTICS '[
+				{
+					"columns": ["p_partkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 200000
+				},
+				{
+					"columns": ["p_name"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 200000
+				},
+				{
+					"columns": ["p_mfgr"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 5
+				},
+				{
+					"columns": ["p_brand"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 25
+				},
+				{
+					"columns": ["p_type"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 150
+				},
+				{
+					"columns": ["p_size"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 50
+				},
+				{
+					"columns": ["p_container"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 40
+				},
+				{
+					"columns": ["p_retailprice"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 20000
+				},
+				{
+					"columns": ["p_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 200000,
+					"distinct_count": 130000
+				}
+			]';`,
+			`ALTER TABLE partsupp INJECT STATISTICS '[
+				{
+					"columns": ["ps_partkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 800000,
+					"distinct_count": 200000
+				},
+				{
+					"columns": ["ps_suppkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 800000,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["ps_availqty"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 800000,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["ps_supplycost"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 800000,
+					"distinct_count": 100000
+				},
+				{
+					"columns": ["ps_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 800000,
+					"distinct_count": 800000
+				}
+			]';`,
+			`ALTER TABLE customer INJECT STATISTICS '[
+				{
+					"columns": ["c_custkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 150000
+				},
+				{
+					"columns": ["c_name"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 150000
+				},
+				{
+					"columns": ["c_address"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 150000
+				},
+				{
+					"columns": ["c_nationkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 25
+				},
+				{
+					"columns": ["c_phone"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 150000
+				},
+				{
+					"columns": ["c_acctbal"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 150000
+				},
+				{
+					"columns": ["c_mktsegment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 5
+				},
+				{
+					"columns": ["c_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 150000,
+					"distinct_count": 150000
+				}
+			]';`,
+			`ALTER TABLE orders INJECT STATISTICS '[
+				{
+					"columns": ["o_orderkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 1500000
+				},
+				{
+					"columns": ["o_custkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 100000
+				},
+				{
+					"columns": ["o_orderstatus"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 3
+				},
+				{
+					"columns": ["o_totalprice"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 1500000
+				},
+				{
+					"columns": ["o_orderdate"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 2500
+				},
+				{
+					"columns": ["o_orderpriority"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 5
+				},
+				{
+					"columns": ["o_clerk"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 1000
+				},
+				{
+					"columns": ["o_shippriority"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 1
+				},
+				{
+					"columns": ["o_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 1500000,
+					"distinct_count": 1500000
+				}
+			]';`,
+			`ALTER TABLE lineitem INJECT STATISTICS '[
+				{
+					"columns": ["l_orderkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 1500000
+				},
+				{
+					"columns": ["l_partkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 200000
+				},
+				{
+					"columns": ["l_suppkey"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 10000
+				},
+				{
+					"columns": ["l_linenumber"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 7
+				},
+				{
+					"columns": ["l_quantity"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 50
+				},
+				{
+					"columns": ["l_extendedprice"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 1000000
+				},
+				{
+					"columns": ["l_discount"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 11
+				},
+				{
+					"columns": ["l_tax"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 9
+				},
+				{
+					"columns": ["l_returnflag"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 3
+				},
+				{
+					"columns": ["l_linestatus"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 2
+				},
+				{
+					"columns": ["l_shipdate"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 2500
+				},
+				{
+					"columns": ["l_commitdate"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 2500
+				},
+				{
+					"columns": ["l_receiptdate"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 2500
+				},
+				{
+					"columns": ["l_shipinstruct"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 4
+				},
+				{
+					"columns": ["l_shipmode"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 7
+				},
+				{
+					"columns": ["l_comment"],
+					"created_at": "2018-01-01 1:00:00.00000+00:00",
+					"row_count": 6001215,
+					"distinct_count": 4500000
+				}
+			]';`,
 		}
 
 		firstNode := c.Node(1)
@@ -71,8 +459,9 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 			t.Fatal(err)
 		}
 
-		// TODO(yuzefovich): remove this once we have disk spilling.
-		workmem := "1GiB"
+		rng, _ := randutil.NewPseudoRand()
+		workmemInMiB := 1 + rng.Intn(64)
+		workmem := fmt.Sprintf("%dMiB", workmemInMiB)
 		t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
 		if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
 			t.Fatal(err)
@@ -90,7 +479,12 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		}
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, conn)
-		timeByQueryNum := make([]map[int][]float64, 2)
+		t.Status("injecting stats")
+		for _, injectStats := range TPCHTableStatsInjection {
+			if _, err := conn.Exec(injectStats); err != nil {
+				t.Fatal(err)
+			}
+		}
 		version, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
 		if err != nil {
 			t.Fatal(err)
@@ -102,89 +496,91 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				break
 			}
 		}
-		var queriesToRun string
-		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			if _, ok := queriesToSkip[queryNum]; !ok {
-				if queriesToRun == "" {
-					queriesToRun = fmt.Sprintf("%d", queryNum)
-				} else {
-					queriesToRun = fmt.Sprintf("%s,%d", queriesToRun, queryNum)
-				}
-			}
-		}
-		for configIdx, vectorize := range []bool{true, false} {
-			// To reduce the variance on the first query we're interested in, we'll
-			// do an aggregation over all tables. This will make comparison on two
-			// different configs more fair.
-			t.Status("reading all tables to populate the caches")
-			for _, table := range TPCHTables {
-				count := fmt.Sprintf("SELECT count(*) FROM %s;", table)
-				if _, err := conn.Exec(count); err != nil {
-					t.Fatal(err)
-				}
-			}
-			vectorizeSetting := "off"
-			if vectorize {
-				vectorizeSetting = "experimental_on"
-			}
-			operation := fmt.Sprintf(
-				"running TPCH queries %s with vectorize=%s %d times each",
-				queriesToRun, vectorizeSetting, numRunsPerQuery,
-			)
-			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-				"--max-ops=%d --queries=%s --vectorize=%s --tolerate-errors {pgurl:1-%d}",
-				numRunsPerQuery*(numTPCHQueries-len(queriesToSkip)),
-				queriesToRun, vectorizeSetting, nodeCount)
-			workloadOutput, err := repeatRunWithBuffer(ctx, c, t.l, firstNode, operation, cmd)
-			if err != nil {
-				// Note: if you see an error like "exit status 1", it is likely caused
-				// by the erroneous output of the query.
+		t.Status("setting vmodule=bytes_usage=1 on all nodes")
+		for node := 1; node <= nodeCount; node++ {
+			conn := c.Conn(ctx, node)
+			if _, err := conn.Exec("SELECT crdb_internal.set_vmodule('bytes_usage=1');"); err != nil {
 				t.Fatal(err)
 			}
-			t.l.Printf(string(workloadOutput))
-			timeByQueryNum[configIdx] = make(map[int][]float64)
-			parseOutput := func(output []byte, timeByQueryNum map[int][]float64) {
-				runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
-				scanner := bufio.NewScanner(bytes.NewReader(output))
-				for scanner.Scan() {
-					line := scanner.Bytes()
-					match := runtimeRegex.FindSubmatch(line)
-					if match != nil {
-						queryNum, err := strconv.Atoi(string(match[1]))
-						if err != nil {
-							t.Fatalf("failed parsing %q as int with %s", match[1], err)
-						}
-						queryTime, err := strconv.ParseFloat(string(match[2]), 64)
-						if err != nil {
-							t.Fatalf("failed parsing %q as float with %s", match[2], err)
-						}
-						timeByQueryNum[queryNum] = append(timeByQueryNum[queryNum], queryTime)
+		}
+		timeByQueryNum := []map[int][]float64{make(map[int][]float64), make(map[int][]float64)}
+		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
+			for configIdx, vectorize := range []bool{true, false} {
+				if reason, skip := queriesToSkip[queryNum]; skip {
+					t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
+					continue
+				}
+				vectorizeSetting := "off"
+				if vectorize {
+					vectorizeSetting = "experimental_on"
+				}
+				cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
+					"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
+					numRunsPerQuery, queryNum, vectorizeSetting, nodeCount)
+				workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
+				t.l.Printf("\n" + string(workloadOutput))
+				if err != nil {
+					// Note: if you see an error like "exit status 1", it is likely caused
+					// by the erroneous output of the query.
+					t.Status(fmt.Sprintf("\n%s", err))
+					// We expect that with low workmem limit some queries can hit OOM
+					// error, and we don't want to fail the test in such scenarios.
+					// TODO(yuzefovich): remove the condition once disk spilling is in
+					// place.
+					if !strings.Contains(string(workloadOutput), "memory budget exceeded") {
+						t.Fatal(err)
 					}
 				}
-			}
-			parseOutput(workloadOutput, timeByQueryNum[configIdx])
-			// We want to fail the test only if wrong results were returned (we
-			// ignore errors like OOM and unsupported features in order to not
-			// short-circuit the run of this test).
-			if strings.Contains(string(workloadOutput), tpchworkload.TPCHWrongOutputErrorPrefix) {
-				t.Fatal("tpch workload found wrong results")
+				parseOutput := func(output []byte, timeByQueryNum map[int][]float64) {
+					runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
+					scanner := bufio.NewScanner(bytes.NewReader(output))
+					for scanner.Scan() {
+						line := scanner.Bytes()
+						match := runtimeRegex.FindSubmatch(line)
+						if match != nil {
+							queryNum, err := strconv.Atoi(string(match[1]))
+							if err != nil {
+								t.Fatalf("failed parsing %q as int with %s", match[1], err)
+							}
+							queryTime, err := strconv.ParseFloat(string(match[2]), 64)
+							if err != nil {
+								t.Fatalf("failed parsing %q as float with %s", match[2], err)
+							}
+							timeByQueryNum[queryNum] = append(timeByQueryNum[queryNum], queryTime)
+						}
+					}
+				}
+				parseOutput(workloadOutput, timeByQueryNum[configIdx])
+				// We want to fail the test only if wrong results were returned (we
+				// ignore errors like OOM and unsupported features in order to not
+				// short-circuit the run of this test).
+				if strings.Contains(string(workloadOutput), tpchworkload.TPCHWrongOutputErrorPrefix) {
+					t.Fatal("tpch workload found wrong results")
+				}
 			}
 		}
 		// TODO(yuzefovich): remove the note when disk spilling is in place.
 		t.Status("comparing the runtimes (only median values for each query are compared).\n" +
 			"NOTE: the comparison might not be fair because vec ON doesn't spill to disk")
 		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			findMedianAndBest := func(times []float64) (float64, float64) {
+			if _, skipped := queriesToSkip[queryNum]; skipped {
+				continue
+			}
+			findMedian := func(times []float64) float64 {
 				sort.Float64s(times)
-				return times[len(times)/2], times[0]
+				return times[len(times)/2]
 			}
 			vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
 			vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
-			// It is possible that the query errored out on one of the configs. We
-			// want to compare the runtimes only if both have not errored out.
-			if len(vecOnTimes) > 0 && len(vecOffTimes) > 0 {
-				vecOnTime, vecOnBestTime := findMedianAndBest(vecOnTimes)
-				vecOffTime, vecOffBestTime := findMedianAndBest(vecOffTimes)
+			if len(vecOffTimes) != numRunsPerQuery {
+				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+					"recorded with vec OFF config: %v", queryNum, vecOffTimes))
+			}
+			// It is possible that the query errored out on vec ON config. We want to
+			// compare the run times only if that's not the case.
+			if len(vecOnTimes) > 0 {
+				vecOnTime := findMedian(vecOnTimes)
+				vecOffTime := findMedian(vecOffTimes)
 				if vecOffTime < vecOnTime {
 					t.l.Printf(
 						fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
@@ -196,19 +592,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 							"%.2fs ON vs %.2fs OFF",
 							queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime, vecOnTime, vecOffTime))
 				}
-				// Note that it is possible that some queries will hit memory limits on
-				// some of the runs when running with vec ON. In order to reduce the
-				// noise about regressions, we require that a query had at least 3
-				// successful runs (some queries might have 4 because of the memory
-				// limit errors - those do not count towards --max-ops flag of tpch
-				// workload).
-				// In order to further reduce noise, we also require that the best vec
-				// ON time is worse than the best vec OFF time.
-				// TODO(yuzefovich): remove the first condition once we have disk
-				// spilling in all components.
-				if len(vecOnTimes) >= numRunsPerQuery &&
-					vecOnTime >= vecOnSlowerFailFactor*vecOffTime &&
-					vecOnBestTime > vecOffBestTime {
+				if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
 					t.Fatal(fmt.Sprintf(
 						"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
 							"vec ON times: %v\nvec OFF times: %v",
