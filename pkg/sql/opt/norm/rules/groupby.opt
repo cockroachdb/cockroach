@@ -38,7 +38,7 @@
 # removing columns from its input (and not synthesizing new ones). That's
 # something the GroupBy operators can do on their own.
 [EliminateGroupByProject, Normalize]
-(GroupBy | ScalarGroupBy | DistinctOn
+(GroupBy | ScalarGroupBy | DistinctOn | UpsertDistinctOn
     $input:(Project $innerInput:*) & (ColsAreSubset (OutputCols $input) (OutputCols $innerInput))
     $aggregations:*
     $groupingPrivate:*
