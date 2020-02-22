@@ -11,7 +11,6 @@
 import { Col, Divider, Icon, Row } from "antd";
 import classNames from "classnames";
 import _ from "lodash";
-import moment from "moment";
 import { TimestampToMoment } from "oss/src/util/convert";
 import { Line } from "rc-progress";
 import React from "react";
@@ -22,7 +21,7 @@ import { cockroach } from "src/js/protos";
 import { CachedDataReducerState, jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
-import { formatDuration, showSetting, statusSetting, typeSetting } from ".";
+import { showSetting, statusSetting, typeSetting } from ".";
 import Loading from "../shared/components/loading";
 import SqlBox from "../shared/components/sql/box";
 import { SummaryCard } from "../shared/components/summaryCard";
@@ -32,11 +31,10 @@ import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import {
   JOB_STATUS_CANCELED, JOB_STATUS_FAILED,
-  JOB_STATUS_PAUSED,
-  JOB_STATUS_PENDING,
-  JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED, jobHasOneOfStatuses,
+  JOB_STATUS_SUCCEEDED, jobHasOneOfStatuses,
   renamedStatuses,
 } from "src/views/jobs/jobStatusOptions";
+import {Duration} from "oss/src/views/jobs/duration";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -93,37 +91,18 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
     );
   }
 
-  renderDuration() {
-    const { job } = this.props;
-    const started = TimestampToMoment(job.started);
-    const finished = TimestampToMoment(job.finished);
-    const modified = TimestampToMoment(job.modified);
-    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_PENDING, JOB_STATUS_PAUSED)) {
-      return _.capitalize(this.props.job.status);
-    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_RUNNING)) {
-      const fractionCompleted = this.props.job.fraction_completed;
-      if (fractionCompleted > 0) {
-        const duration = modified.diff(started);
-        const remaining = duration / fractionCompleted - duration;
-        return <span className="jobs-table__duration--right">{formatDuration(moment.duration(remaining)) + " remaining"}</span>;
-      }
-    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED)) {
-      return <span>{"Duration: " + formatDuration(moment.duration(finished.diff(started)))}</span>;
-    }
-  }
-
   renderStatus = () => {
     const { job } = this.props;
     const percent = job.fraction_completed * 100;
     switch (job.status) {
       case JOB_STATUS_SUCCEEDED:
-        return <div className="job-status__line">{this.renderProgress()} - {this.renderDuration()}</div>;
+        return <div className="job-status__line">{this.renderProgress()} - <Duration job={this.props.job} /></div>;
       case JOB_STATUS_FAILED || JOB_STATUS_CANCELED:
         return <div>{this.renderProgress()}</div>;
       default:
         return <div>
           {this.renderProgress()}
-          <div className="job-status__line--percentage"><span>{percent.toFixed() + "%"} done</span><Divider type="vertical" />{this.renderDuration()}</div>
+          <div className="job-status__line--percentage"><span>{percent.toFixed() + "%"} done</span><Divider type="vertical" /><Duration job={this.props.job} /></div>
         </div>;
     }
   }
