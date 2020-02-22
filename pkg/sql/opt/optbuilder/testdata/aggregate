@@ -259,6 +259,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: coalesce:7(int)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: coalesce:7(int)
                      ├── scalar-group-by
@@ -1736,6 +1737,7 @@ limit
  │              └── subquery [type=decimal]
  │                   └── max1-row
  │                        ├── columns: avg:5(decimal)
+ │                        ├── error: "more than one row returned by a subquery used as an expression"
  │                        └── scalar-group-by
  │                             ├── columns: avg:5(decimal)
  │                             ├── project
@@ -1766,6 +1768,7 @@ limit
  │              └── subquery [type=decimal]
  │                   └── max1-row
  │                        ├── columns: avg:7(decimal)
+ │                        ├── error: "more than one row returned by a subquery used as an expression"
  │                        └── scalar-group-by
  │                             ├── columns: avg:7(decimal)
  │                             ├── project
@@ -3871,6 +3874,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: v:6(int)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── group-by
                      ├── columns: v:6(int)
                      ├── grouping columns: v:6(int)

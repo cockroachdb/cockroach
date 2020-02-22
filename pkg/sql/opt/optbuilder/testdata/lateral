@@ -63,6 +63,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: y.b:3(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: y.b:3(int!null)
                      └── inner-join-apply
@@ -92,6 +93,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: y.b:3(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: y.b:3(int!null)
                      └── inner-join (cross)
@@ -268,6 +270,7 @@ inner-join-apply
  │              └── subquery [type=jsonb]
  │                   └── max1-row
  │                        ├── columns: members:5(jsonb)
+ │                        ├── error: "more than one row returned by a subquery used as an expression"
  │                        └── project
  │                             ├── columns: members:5(jsonb)
  │                             ├── select

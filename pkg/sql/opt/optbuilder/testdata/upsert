@@ -1006,6 +1006,7 @@ upsert abc
       │    │    │              └── variable: a [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: x:13(int!null) "?column?":16(int)
+      │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    │    └── project
       │    │    │         ├── columns: "?column?":16(int) x:13(int!null)
       │    │    │         ├── select
@@ -2051,6 +2052,7 @@ upsert checks
       │    │    │         └── subquery [type=int]
       │    │    │              └── max1-row
       │    │    │                   ├── columns: x:15(int!null)
+      │    │    │                   ├── error: "more than one row returned by a subquery used as an expression"
       │    │    │                   └── project
       │    │    │                        ├── columns: x:15(int!null)
       │    │    │                        └── select

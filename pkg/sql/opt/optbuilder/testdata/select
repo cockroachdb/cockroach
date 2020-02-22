@@ -523,6 +523,7 @@ limit
  │         ├── subquery [type=int]
  │         │    └── max1-row
  │         │         ├── columns: count_rows:8(int!null)
+ │         │         ├── error: "more than one row returned by a subquery used as an expression"
  │         │         └── scalar-group-by
  │         │              ├── columns: count_rows:8(int!null)
  │         │              ├── project
@@ -535,6 +536,7 @@ limit
       ├── subquery [type=int]
       │    └── max1-row
       │         ├── columns: count_rows:12(int!null)
+      │         ├── error: "more than one row returned by a subquery used as an expression"
       │         └── scalar-group-by
       │              ├── columns: count_rows:12(int!null)
       │              ├── project
@@ -1383,6 +1385,7 @@ with &1 (cte)
                      └── subquery [type=int]
                           └── max1-row
                                ├── columns: "?column?":10(int!null)
+                               ├── error: "more than one row returned by a subquery used as an expression"
                                └── with-scan &1 (cte)
                                     ├── columns: "?column?":10(int!null)
                                     └── mapping:
@@ -1403,6 +1406,7 @@ with &1
            └── subquery [type=int]
                 └── max1-row
                      ├── columns: "?column?":12(int)
+                     ├── error: "more than one row returned by a subquery used as an expression"
                      └── project
                           ├── columns: "?column?":12(int)
                           ├── with-scan &1

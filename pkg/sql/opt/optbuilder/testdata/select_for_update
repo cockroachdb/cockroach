@@ -298,6 +298,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: t.a:1(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: t.a:1(int!null)
                      └── scan t
@@ -314,6 +315,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: t.a:1(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: t.a:1(int!null)
                      └── scan t
@@ -336,6 +338,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: t.a:1(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: t.a:1(int!null)
                      └── scan t
@@ -353,6 +356,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: a:1(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: a:1(int!null)
                      └── scan t
@@ -369,6 +373,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: a:1(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: a:1(int!null)
                      └── scan t
@@ -391,6 +396,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: a:1(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project
                      ├── columns: a:1(int!null)
                      └── scan t

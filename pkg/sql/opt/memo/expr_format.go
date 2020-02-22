@@ -301,6 +301,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}
 
+	case *Max1RowExpr:
+		tp.Childf("error: \"%s\"", t.ErrorText)
+
 	// Special-case handling for set operators to show the left and right
 	// input columns that correspond to the output columns.
 	case *UnionExpr, *IntersectExpr, *ExceptExpr,

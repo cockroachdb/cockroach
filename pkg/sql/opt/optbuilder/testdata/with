@@ -762,6 +762,7 @@ with &1 (t)
                      └── subquery [type=int]
                           └── max1-row
                                ├── columns: a:10(int)
+                               ├── error: "more than one row returned by a subquery used as an expression"
                                └── with-scan &1 (t)
                                     ├── columns: a:10(int)
                                     └── mapping:
@@ -791,6 +792,7 @@ with &1 (t)
                           └── subquery [type=int]
                                └── max1-row
                                     ├── columns: a:10(int)
+                                    ├── error: "more than one row returned by a subquery used as an expression"
                                     └── with-scan &1 (t)
                                          ├── columns: a:10(int)
                                          └── mapping:
@@ -1435,6 +1437,7 @@ with &1 (foo)
            └── subquery [type=int]
                 └── max1-row
                      ├── columns: x:3(int)
+                     ├── error: "more than one row returned by a subquery used as an expression"
                      └── project
                           ├── columns: x:3(int)
                           ├── values

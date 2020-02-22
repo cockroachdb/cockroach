@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -315,7 +316,7 @@ func (b *Builder) buildSingleRowSubquery(
 	// Wrap the subquery in a Max1Row operator to enforce that it should return
 	// at most one row. Max1Row may be removed by the optimizer later if it can
 	// prove statically that the subquery always returns at most one row.
-	input = b.factory.ConstructMax1Row(input)
+	input = b.factory.ConstructMax1Row(input, sqlbase.MultiRowSubqueryErrText)
 
 	out = b.factory.ConstructSubquery(input, &subqueryPrivate)
 	return out, outScope

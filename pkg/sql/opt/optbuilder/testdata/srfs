@@ -380,6 +380,7 @@ project-set
            └── subquery [type=int]
                 └── max1-row
                      ├── columns: generate_series:1(int)
+                     ├── error: "more than one row returned by a subquery used as an expression"
                      └── project-set
                           ├── columns: generate_series:1(int)
                           ├── values
@@ -403,6 +404,7 @@ project-set
            └── subquery [type=string[]]
                 └── max1-row
                      ├── columns: current_schemas:4(string[])
+                     ├── error: "more than one row returned by a subquery used as an expression"
                      └── project
                           ├── columns: current_schemas:4(string[])
                           ├── values
@@ -412,6 +414,7 @@ project-set
                                     └── subquery [type=bool]
                                          └── max1-row
                                               ├── columns: isnan:3(bool)
+                                              ├── error: "more than one row returned by a subquery used as an expression"
                                               └── project
                                                    ├── columns: isnan:3(bool)
                                                    ├── values
@@ -421,6 +424,7 @@ project-set
                                                              └── subquery [type=decimal]
                                                                   └── max1-row
                                                                        ├── columns: round:2(decimal)
+                                                                       ├── error: "more than one row returned by a subquery used as an expression"
                                                                        └── project
                                                                             ├── columns: round:2(decimal)
                                                                             ├── values
@@ -431,6 +435,7 @@ project-set
                                                                                       └── subquery [type=int]
                                                                                            └── max1-row
                                                                                                 ├── columns: generate_series:1(int)
+                                                                                                ├── error: "more than one row returned by a subquery used as an expression"
                                                                                                 └── project-set
                                                                                                      ├── columns: generate_series:1(int)
                                                                                                      ├── values
@@ -869,6 +874,7 @@ project
                 └── subquery [type=int]
                      └── max1-row
                           ├── columns: generate_series:8(int)
+                          ├── error: "more than one row returned by a subquery used as an expression"
                           └── limit
                                ├── columns: generate_series:8(int)
                                ├── project
@@ -901,6 +907,7 @@ project
                 ├── subquery [type=int]
                 │    └── max1-row
                 │         ├── columns: generate_subscripts:7(int)
+                │         ├── error: "more than one row returned by a subquery used as an expression"
                 │         └── project
                 │              ├── columns: generate_subscripts:7(int)
                 │              └── project-set
@@ -946,6 +953,7 @@ project
       ├── subquery [type=tuple{string AS key, jsonb AS value}]
       │    └── max1-row
       │         ├── columns: jsonb_each:9(tuple{string AS key, jsonb AS value})
+      │         ├── error: "more than one row returned by a subquery used as an expression"
       │         └── project
       │              ├── columns: jsonb_each:9(tuple{string AS key, jsonb AS value})
       │              ├── project-set
@@ -962,6 +970,7 @@ project
       ├── subquery [type=string]
       │    └── max1-row
       │         ├── columns: jsonb_object_keys:15(string)
+      │         ├── error: "more than one row returned by a subquery used as an expression"
       │         └── project
       │              ├── columns: jsonb_object_keys:15(string)
       │              └── project-set
@@ -974,6 +983,7 @@ project
       └── subquery [type=int]
            └── max1-row
                 ├── columns: generate_series:18(int)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 └── project-set
                      ├── columns: generate_series:18(int)
                      ├── values
@@ -983,6 +993,7 @@ project
                                ├── subquery [type=int]
                                │    └── max1-row
                                │         ├── columns: generate_series:17(int)
+                               │         ├── error: "more than one row returned by a subquery used as an expression"
                                │         └── project
                                │              ├── columns: generate_series:17(int)
                                │              └── project-set
@@ -1033,6 +1044,7 @@ project-set
            └── subquery [type=string]
                 └── max1-row
                      ├── columns: tab31755.a:1(string)
+                     ├── error: "more than one row returned by a subquery used as an expression"
                      └── limit
                           ├── columns: tab31755.a:1(string)
                           ├── project

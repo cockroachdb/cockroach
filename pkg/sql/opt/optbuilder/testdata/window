@@ -131,6 +131,7 @@ project
       │         ├── subquery [type=int]
       │         │    └── max1-row
       │         │         ├── columns: kv2.k:8(int!null)
+      │         │         ├── error: "more than one row returned by a subquery used as an expression"
       │         │         └── project
       │         │              ├── columns: kv2.k:8(int!null)
       │         │              └── select
@@ -1026,6 +1027,7 @@ project
                      │    └── subquery [type=int]
                      │         └── max1-row
                      │              ├── columns: count_rows:15(int!null)
+                     │              ├── error: "more than one row returned by a subquery used as an expression"
                      │              └── scalar-group-by
                      │                   ├── columns: count_rows:15(int!null)
                      │                   ├── project

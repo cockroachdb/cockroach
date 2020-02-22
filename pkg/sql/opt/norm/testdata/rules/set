@@ -133,6 +133,7 @@ project
  │    │    └── columns: w:2(int)
  │    ├── max1-row
  │    │    ├── columns: k:16(int!null)
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── outer: (2)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()

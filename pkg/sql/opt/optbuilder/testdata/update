@@ -1167,6 +1167,7 @@ update abcde
       │    │              └── variable: a [type=int]
       │    ├── max1-row
       │    │    ├── columns: one:13(int!null)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    └── project
       │    │         ├── columns: one:13(int!null)
       │    │         ├── values
@@ -1212,6 +1213,7 @@ update abcde
       │    │              └── variable: a [type=int]
       │    ├── max1-row
       │    │    ├── columns: y:14(int) x:16(int!null) z:17(int) y1:18(int)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    └── project
       │    │         ├── columns: x:16(int!null) z:17(int) y1:18(int) y:14(int)
       │    │         ├── scan xyz
@@ -1265,6 +1267,7 @@ update abcde
       │    │    │              └── variable: a [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    │    └── project
       │    │    │         ├── columns: y1:16(int) y:14(int)
       │    │    │         ├── scan xyz
@@ -1317,6 +1320,7 @@ update abcde
       │    │    │              └── variable: a [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    │    └── project
       │    │    │         ├── columns: y1:16(int) y:14(int)
       │    │    │         ├── scan xyz
@@ -1369,6 +1373,7 @@ update abcde
       │    │    │              └── variable: a [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: y:14(int) y1:16(int)
+      │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    │    └── project
       │    │    │         ├── columns: y1:16(int) y:14(int)
       │    │    │         ├── scan xyz
@@ -1380,6 +1385,7 @@ update abcde
       │    │    └── filters (true)
       │    ├── max1-row
       │    │    ├── columns: one:17(int!null) two:18(int!null)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    └── project
       │    │         ├── columns: one:17(int!null) two:18(int!null)
       │    │         ├── values
@@ -1414,6 +1420,7 @@ update xyz
       │    │    └── columns: x:4(string!null) y:5(int) z:6(float)
       │    ├── max1-row
       │    │    ├── columns: two:7(float!null) three:8(int!null)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    └── project
       │    │         ├── columns: two:7(float!null) three:8(int!null)
       │    │         ├── values
@@ -1457,6 +1464,7 @@ project
            │         └── subquery [type=int]
            │              └── max1-row
            │                   ├── columns: abcde2.b:14(int)
+           │                   ├── error: "more than one row returned by a subquery used as an expression"
            │                   └── project
            │                        ├── columns: abcde2.b:14(int)
            │                        └── select
@@ -1593,6 +1601,7 @@ with &1 (a)
            │    │              └── variable: a [type=int]
            │    ├── max1-row
            │    │    ├── columns: y:17(int) y1:18(int)
+           │    │    ├── error: "more than one row returned by a subquery used as an expression"
            │    │    └── with-scan &1 (a)
            │    │         ├── columns: y:17(int) y1:18(int)
            │    │         └── mapping:
@@ -1930,6 +1939,7 @@ update checks
       │    │    │                   └── const: 1 [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: abcde.a:9(int!null) abcde.b:10(int)
+      │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    │    └── project
       │    │    │         ├── columns: abcde.a:9(int!null) abcde.b:10(int)
       │    │    │         └── select

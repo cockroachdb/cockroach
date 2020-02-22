@@ -19,6 +19,10 @@ import (
 )
 
 const (
+	// MultiRowSubqueryErrText is error text used when a subquery is used in a
+	// context where its input can be at most one row.
+	MultiRowSubqueryErrText = "more than one row returned by a subquery used as an expression"
+
 	txnAbortedMsg = "current transaction is aborted, commands ignored " +
 		"until end of transaction block"
 	txnCommittedMsg = "current transaction is committed, commands ignored " +

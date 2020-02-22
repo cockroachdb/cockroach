@@ -668,6 +668,7 @@ project
       │    │    └── fd: (6)-->(7)
       │    ├── max1-row
       │    │    ├── columns: "?column?":10(int)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
@@ -764,6 +765,7 @@ project
  │    │    └── key: (1)
  │    ├── max1-row
  │    │    ├── columns: b.x:4(int!null)
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── outer: (1)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
@@ -818,6 +820,7 @@ project
  │    │    └── key: (1)
  │    ├── max1-row
  │    │    ├── columns: b.x:9(int!null)
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── outer: (1)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
@@ -917,6 +920,7 @@ project
  │    │    │    │              ├── subquery [type=string]
  │    │    │    │              │    └── max1-row
  │    │    │    │              │         ├── columns: s:19(string)
+ │    │    │    │              │         ├── error: "more than one row returned by a subquery used as an expression"
  │    │    │    │              │         ├── cardinality: [0 - 1]
  │    │    │    │              │         ├── key: ()
  │    │    │    │              │         ├── fd: ()-->(19)
@@ -930,6 +934,7 @@ project
  │    │    │    │              ├── subquery [type=string]
  │    │    │    │              │    └── max1-row
  │    │    │    │              │         ├── columns: s:19(string)
+ │    │    │    │              │         ├── error: "more than one row returned by a subquery used as an expression"
  │    │    │    │              │         ├── cardinality: [0 - 1]
  │    │    │    │              │         ├── key: ()
  │    │    │    │              │         ├── fd: ()-->(19)
@@ -2725,6 +2730,7 @@ project
       │    │    └── fd: (3)-->(4)
       │    ├── max1-row
       │    │    ├── columns: k:5(int!null)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
@@ -2773,6 +2779,7 @@ project
       │    │    └── fd: (3)-->(4)
       │    ├── max1-row
       │    │    ├── columns: k:5(int!null)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    ├── outer: (3)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()

@@ -1036,6 +1036,7 @@ except
       │    └── subquery [type=int]
       │         └── max1-row
       │              ├── columns: "?column?":4(int!null)
+      │              ├── error: "more than one row returned by a subquery used as an expression"
       │              └── limit
       │                   ├── columns: "?column?":4(int!null)
       │                   ├── project

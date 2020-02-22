@@ -88,6 +88,7 @@ project
  │    │    └── columns: datname:2(name) pid:3(int) usesysid:4(oid) username:5(name) application_name:6(string) client_addr:7(inet) client_hostname:8(string) client_port:9(int) backend_start:10(timestamptz) xact_start:11(timestamptz) query_start:12(timestamptz) query:19(string)
  │    ├── max1-row
  │    │    ├── columns: "?column?":36(bool)
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── outer: (4)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()

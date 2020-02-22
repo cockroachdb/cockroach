@@ -749,10 +749,11 @@ func (ef *execFactory) ConstructLimit(
 }
 
 // ConstructMax1Row is part of the exec.Factory interface.
-func (ef *execFactory) ConstructMax1Row(input exec.Node) (exec.Node, error) {
+func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec.Node, error) {
 	plan := input.(planNode)
 	return &max1RowNode{
-		plan: plan,
+		plan:      plan,
+		errorText: errorText,
 	}, nil
 }
 
