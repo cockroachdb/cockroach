@@ -474,6 +474,220 @@ distinct-on
            └── variable: f [type=float]
 
 # --------------------------------------------------
+# ReduceNotNullGroupingCols
+# --------------------------------------------------
+
+# UpsertDistinctOn should reduce non-nullable constant grouping column.
+norm expect=ReduceNotNullGroupingCols
+INSERT INTO xy (x)
+SELECT y FROM xy WHERE y=0
+ON CONFLICT (x) DO UPDATE SET y=1
+----
+upsert xy
+ ├── columns: <none>
+ ├── canary column: 6
+ ├── fetch columns: x:6(int) y:7(int)
+ ├── insert-mapping:
+ │    ├──  y:4 => x:1
+ │    └──  column5:5 => y:2
+ ├── update-mapping:
+ │    └──  upsert_y:10 => y:2
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_y:10(int) y:4(int!null) column5:5(int) x:6(int) y:7(int)
+      ├── key: (6)
+      ├── fd: ()-->(4,5), (6)-->(7), (6)-->(10)
+      ├── left-join (hash)
+      │    ├── columns: y:4(int!null) column5:5(int) x:6(int) y:7(int)
+      │    ├── key: (6)
+      │    ├── fd: ()-->(4,5), (6)-->(7)
+      │    ├── max1-row
+      │    │    ├── columns: y:4(int!null) column5:5(int)
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(4,5)
+      │    │    └── project
+      │    │         ├── columns: column5:5(int) y:4(int!null)
+      │    │         ├── fd: ()-->(4,5)
+      │    │         ├── select
+      │    │         │    ├── columns: y:4(int!null)
+      │    │         │    ├── fd: ()-->(4)
+      │    │         │    ├── scan xy
+      │    │         │    │    └── columns: y:4(int)
+      │    │         │    └── filters
+      │    │         │         └── y = 0 [type=bool, outer=(4), constraints=(/4: [/0 - /0]; tight), fd=()-->(4)]
+      │    │         └── projections
+      │    │              └── null [type=int]
+      │    ├── scan xy
+      │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    └── filters
+      │         └── y = x [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      └── projections
+           └── CASE WHEN x IS NULL THEN column5 ELSE 1 END [type=int, outer=(5,6)]
+
+# UpsertDistinctOn should not reduce nullable constant grouping column.
+norm expect-not=ReduceNotNullGroupingCols
+INSERT INTO xy (x)
+SELECT y FROM xy WHERE y IS NULL
+ON CONFLICT (x) DO UPDATE SET y=1
+----
+upsert xy
+ ├── columns: <none>
+ ├── canary column: 6
+ ├── fetch columns: x:6(int) y:7(int)
+ ├── insert-mapping:
+ │    ├──  y:4 => x:1
+ │    └──  column5:5 => y:2
+ ├── update-mapping:
+ │    └──  upsert_y:10 => y:2
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_y:10(int) y:4(int) column5:5(int) x:6(int) y:7(int)
+      ├── lax-key: (4,6)
+      ├── fd: ()-->(4,5), (6)-->(7), (6)-->(10)
+      ├── left-join (hash)
+      │    ├── columns: y:4(int) column5:5(int) x:6(int) y:7(int)
+      │    ├── lax-key: (4,6)
+      │    ├── fd: ()-->(4,5), (6)-->(7)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: y:4(int) column5:5(int)
+      │    │    ├── grouping columns: y:4(int)
+      │    │    ├── lax-key: (4)
+      │    │    ├── fd: ()-->(4,5)
+      │    │    ├── project
+      │    │    │    ├── columns: column5:5(int) y:4(int)
+      │    │    │    ├── fd: ()-->(4,5)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: y:4(int)
+      │    │    │    │    ├── fd: ()-->(4)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    └── columns: y:4(int)
+      │    │    │    │    └── filters
+      │    │    │    │         └── y IS NULL [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
+      │    │    │    └── projections
+      │    │    │         └── null [type=int]
+      │    │    └── aggregations
+      │    │         └── first-agg [type=int, outer=(5)]
+      │    │              └── variable: column5 [type=int]
+      │    ├── scan xy
+      │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    └── filters
+      │         └── y = x [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      └── projections
+           └── CASE WHEN x IS NULL THEN column5 ELSE 1 END [type=int, outer=(5,6)]
+
+# Test removal of 2/3 grouping columns.
+norm expect=ReduceNotNullGroupingCols
+INSERT INTO abc (a, b, c)
+SELECT 1, b, 2 FROM abc
+ON CONFLICT (a, b, c) DO UPDATE SET a=1
+----
+upsert abc
+ ├── columns: <none>
+ ├── canary column: 9
+ ├── fetch columns: a:9(int) b:10(int) c:11(int)
+ ├── insert-mapping:
+ │    ├──  "?column?":7 => a:1
+ │    ├──  b:5 => b:2
+ │    └──  "?column?":8 => c:3
+ ├── update-mapping:
+ │    └──  "?column?":7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── left-join (hash)
+      ├── columns: b:5(int!null) "?column?":7(int!null) "?column?":8(int!null) a:9(int) b:10(int) c:11(int)
+      ├── key: (5,9-11)
+      ├── fd: ()-->(7,8)
+      ├── upsert-distinct-on
+      │    ├── columns: b:5(int!null) "?column?":7(int!null) "?column?":8(int!null)
+      │    ├── grouping columns: b:5(int!null)
+      │    ├── key: (5)
+      │    ├── fd: ()-->(7,8)
+      │    ├── project
+      │    │    ├── columns: "?column?":7(int!null) "?column?":8(int!null) b:5(int!null)
+      │    │    ├── fd: ()-->(7,8)
+      │    │    ├── scan abc
+      │    │    │    └── columns: b:5(int!null)
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    └── aggregations
+      │         ├── const-agg [type=int, outer=(7)]
+      │         │    └── variable: ?column? [type=int]
+      │         └── const-agg [type=int, outer=(8)]
+      │              └── variable: ?column? [type=int]
+      ├── scan abc
+      │    ├── columns: a:9(int!null) b:10(int!null) c:11(int!null)
+      │    └── key: (9-11)
+      └── filters
+           ├── ?column? = a [type=bool, outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+           ├── b = b [type=bool, outer=(5,10), constraints=(/5: (/NULL - ]; /10: (/NULL - ]), fd=(5)==(10), (10)==(5)]
+           └── ?column? = c [type=bool, outer=(8,11), constraints=(/8: (/NULL - ]; /11: (/NULL - ]), fd=(8)==(11), (11)==(8)]
+
+# Test removal of not-null column, but not nullable column.
+norm expect=ReduceNotNullGroupingCols
+INSERT INTO abc
+SELECT NULL, b, c FROM abc WHERE b=1
+ON CONFLICT (a, b, c) DO UPDATE SET c=2
+----
+upsert abc
+ ├── columns: <none>
+ ├── canary column: 8
+ ├── fetch columns: a:8(int) b:9(int) c:10(int)
+ ├── insert-mapping:
+ │    ├──  "?column?":7 => a:1
+ │    ├──  b:5 => b:2
+ │    └──  c:6 => c:3
+ ├── update-mapping:
+ │    └──  upsert_c:14 => c:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_c:14(int!null) b:5(int!null) c:6(int!null) "?column?":7(int) a:8(int) b:9(int) c:10(int)
+      ├── lax-key: (6-10)
+      ├── fd: ()-->(5,7), (6,8)-->(14)
+      ├── left-join (hash)
+      │    ├── columns: b:5(int!null) c:6(int!null) "?column?":7(int) a:8(int) b:9(int) c:10(int)
+      │    ├── lax-key: (6-10)
+      │    ├── fd: ()-->(5,7)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: b:5(int!null) c:6(int!null) "?column?":7(int)
+      │    │    ├── grouping columns: c:6(int!null) "?column?":7(int)
+      │    │    ├── lax-key: (6,7)
+      │    │    ├── fd: ()-->(5,7)
+      │    │    ├── project
+      │    │    │    ├── columns: "?column?":7(int) b:5(int!null) c:6(int!null)
+      │    │    │    ├── fd: ()-->(5,7)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: b:5(int!null) c:6(int!null)
+      │    │    │    │    ├── fd: ()-->(5)
+      │    │    │    │    ├── scan abc
+      │    │    │    │    │    └── columns: b:5(int!null) c:6(int!null)
+      │    │    │    │    └── filters
+      │    │    │    │         └── b = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      │    │    │    └── projections
+      │    │    │         └── null [type=int]
+      │    │    └── aggregations
+      │    │         └── const-agg [type=int, outer=(5)]
+      │    │              └── variable: b [type=int]
+      │    ├── scan abc
+      │    │    ├── columns: a:8(int!null) b:9(int!null) c:10(int!null)
+      │    │    └── key: (8-10)
+      │    └── filters
+      │         ├── ?column? = a [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
+      │         ├── b = b [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+      │         └── c = c [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
+      └── projections
+           └── CASE WHEN a IS NULL THEN c ELSE 2 END [type=int, outer=(6,8)]
+
+# --------------------------------------------------
 # EliminateAggDistinctForKeys
 # --------------------------------------------------
 
@@ -881,3 +1095,63 @@ limit
  │         └── filters
  │              └── b = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── const: 1 [type=int]
+
+# --------------------------------------------------
+# EliminateUpsertDistinctOnNoColumns
+# --------------------------------------------------
+norm expect=EliminateUpsertDistinctOnNoColumns
+INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
+ON CONFLICT (s, i) DO UPDATE SET f=1.1
+----
+upsert a
+ ├── columns: <none>
+ ├── canary column: 15
+ ├── fetch columns: k:15(int) i:16(int) f:17(float) s:18(string) j:19(jsonb)
+ ├── insert-mapping:
+ │    ├──  "?column?":11 => k:1
+ │    ├──  i:7 => i:2
+ │    ├──  column13:13 => f:3
+ │    ├──  "?column?":12 => s:4
+ │    └──  column14:14 => j:5
+ ├── update-mapping:
+ │    └──  upsert_f:23 => f:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_f:23(float) i:7(int!null) "?column?":11(int!null) "?column?":12(string!null) column13:13(float) column14:14(jsonb) k:15(int) i:16(int) f:17(float) s:18(string) j:19(jsonb)
+      ├── key: (15)
+      ├── fd: ()-->(7,11-14), (15)-->(16-19,23), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      ├── left-join (hash)
+      │    ├── columns: i:7(int!null) "?column?":11(int!null) "?column?":12(string!null) column13:13(float) column14:14(jsonb) k:15(int) i:16(int) f:17(float) s:18(string) j:19(jsonb)
+      │    ├── key: (15)
+      │    ├── fd: ()-->(7,11-14), (15)-->(16-19), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      │    ├── max1-row
+      │    │    ├── columns: i:7(int!null) "?column?":11(int!null) "?column?":12(string!null) column13:13(float) column14:14(jsonb)
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,11-14)
+      │    │    └── project
+      │    │         ├── columns: column13:13(float) column14:14(jsonb) "?column?":11(int!null) "?column?":12(string!null) i:7(int!null)
+      │    │         ├── fd: ()-->(7,11-14)
+      │    │         ├── select
+      │    │         │    ├── columns: i:7(int!null)
+      │    │         │    ├── fd: ()-->(7)
+      │    │         │    ├── scan a
+      │    │         │    │    └── columns: i:7(int!null)
+      │    │         │    └── filters
+      │    │         │         └── i = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │    │         └── projections
+      │    │              ├── null [type=float]
+      │    │              ├── null [type=jsonb]
+      │    │              ├── const: 1 [type=int]
+      │    │              └── const: 'foo' [type=string]
+      │    ├── scan a
+      │    │    ├── columns: k:15(int!null) i:16(int!null) f:17(float) s:18(string!null) j:19(jsonb)
+      │    │    ├── key: (15)
+      │    │    └── fd: (15)-->(16-19), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      │    └── filters
+      │         ├── i = i [type=bool, outer=(7,16), constraints=(/7: (/NULL - ]; /16: (/NULL - ]), fd=(7)==(16), (16)==(7)]
+      │         └── ?column? = s [type=bool, outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      └── projections
+           └── CASE WHEN k IS NULL THEN column13 ELSE 1.1 END [type=float, outer=(13,15)]

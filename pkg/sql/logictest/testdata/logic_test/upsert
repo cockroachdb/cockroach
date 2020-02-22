@@ -1067,6 +1067,31 @@ SELECT * FROM tdup@tdup_y_z_key
 statement error pq: duplicate key value \(y,z\)=\(1,2\) violates unique constraint "tdup_y_z_key"
 INSERT INTO tdup VALUES (6, 1, 1), (7, 1, 2) ON CONFLICT (y, z) DO UPDATE SET z=2
 
+# With constant grouping columns (no error).
+statement ok
+INSERT INTO tdup SELECT 6, 2, z FROM tdup WHERE z=1
+ON CONFLICT (y, z) DO UPDATE SET z=2
+
+query III rowsort
+SELECT * FROM tdup
+----
+1  1     1
+2  2     NULL
+3  2     NULL
+4  NULL  NULL
+5  NULL  NULL
+6  2     1
+
+# With constant grouping columns (error).
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup SELECT 6, 2, z FROM tdup WHERE z=1
+ON CONFLICT (y, z) DO UPDATE SET z=2
+
+# With constant nullable grouping columns.
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup SELECT x+100, y, y+1 FROM tdup WHERE z IS NULL
+ON CONFLICT (y, z) DO UPDATE SET z=3
+
 statement ok
 DROP TABLE tdup
 
