@@ -50,14 +50,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q12_sort_1
- ├── columns: l_shipmode:24(char!null) high_line_count:27(decimal) low_line_count:29(decimal)
+ ├── columns: l_shipmode:24(char!null) high_line_count:27(decimal!null) low_line_count:29(decimal!null)
  ├── stats: [rows=2, distinct(24)=2, null(24)=0, distinct(27)=2, null(27)=0, distinct(29)=2, null(29)=0]
  ├── key: (24)
  ├── fd: (24)-->(27,29)
  ├── ordering: +24
  └── group-by
       ├── save-table-name: q12_group_by_2
-      ├── columns: l_shipmode:24(char!null) sum:27(decimal) sum:29(decimal)
+      ├── columns: l_shipmode:24(char!null) sum:27(decimal!null) sum:29(decimal!null)
       ├── grouping columns: l_shipmode:24(char!null)
       ├── stats: [rows=2, distinct(24)=2, null(24)=0, distinct(27)=2, null(27)=0, distinct(29)=2, null(29)=0]
       ├── key: (24)

@@ -38,7 +38,7 @@ ORDER BY
     l_linestatus;
 ----
 group-by
- ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum_qty:17(float) sum_base_price:18(float) sum_disc_price:20(float) sum_charge:22(float) avg_qty:23(float) avg_price:24(float) avg_disc:25(float) count_order:26(int)
+ ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum_qty:17(float!null) sum_base_price:18(float!null) sum_disc_price:20(float!null) sum_charge:22(float!null) avg_qty:23(float!null) avg_price:24(float!null) avg_disc:25(float!null) count_order:26(int!null)
  ├── grouping columns: l_returnflag:9(char!null) l_linestatus:10(char!null)
  ├── key: (9,10)
  ├── fd: (9,10)-->(17,18,20,22-26)
@@ -141,29 +141,29 @@ ORDER BY
 LIMIT 100;
 ----
 project
- ├── columns: s_acctbal:15(float) s_name:11(char) n_name:23(char) p_partkey:1(int) p_mfgr:3(char) s_address:12(varchar) s_phone:14(char) s_comment:16(varchar)
+ ├── columns: s_acctbal:15(float!null) s_name:11(char!null) n_name:23(char!null) p_partkey:1(int!null) p_mfgr:3(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_comment:16(varchar!null)
  ├── cardinality: [0 - 100]
  ├── fd: (1)-->(3)
  ├── ordering: -15,+23,+11,+1
  └── limit
-      ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char) min:48(float!null)
+      ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       ├── internal-ordering: -15,+23,+11,+(1|17)
       ├── cardinality: [0 - 100]
       ├── key: (17,18)
       ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
       ├── ordering: -15,+23,+11,+(1|17) [actual: -15,+23,+11,+1]
       ├── sort
-      │    ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char) min:48(float!null)
+      │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       │    ├── key: (17,18)
       │    ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
       │    ├── ordering: -15,+23,+11,+(1|17) [actual: -15,+23,+11,+1]
       │    ├── limit hint: 100.00
       │    └── select
-      │         ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char) min:48(float!null)
+      │         ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       │         ├── key: (17,18)
       │         ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
       │         ├── group-by
-      │         │    ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float) n_name:23(char) min:48(float)
+      │         │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       │         │    ├── grouping columns: ps_partkey:17(int!null) ps_suppkey:18(int!null)
       │         │    ├── key: (17,18)
       │         │    ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23)
@@ -331,20 +331,20 @@ ORDER BY
 LIMIT 10;
 ----
 limit
- ├── columns: l_orderkey:18(int!null) revenue:35(float) o_orderdate:13(date) o_shippriority:16(int)
+ ├── columns: l_orderkey:18(int!null) revenue:35(float!null) o_orderdate:13(date!null) o_shippriority:16(int!null)
  ├── internal-ordering: -35,+13
  ├── cardinality: [0 - 10]
  ├── key: (18)
  ├── fd: (18)-->(13,16,35)
  ├── ordering: -35,+13
  ├── sort
- │    ├── columns: o_orderdate:13(date) o_shippriority:16(int) l_orderkey:18(int!null) sum:35(float)
+ │    ├── columns: o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null) sum:35(float!null)
  │    ├── key: (18)
  │    ├── fd: (18)-->(13,16,35)
  │    ├── ordering: -35,+13
  │    ├── limit hint: 10.00
  │    └── group-by
- │         ├── columns: o_orderdate:13(date) o_shippriority:16(int) l_orderkey:18(int!null) sum:35(float)
+ │         ├── columns: o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null) sum:35(float!null)
  │         ├── grouping columns: l_orderkey:18(int!null)
  │         ├── key: (18)
  │         ├── fd: (18)-->(13,16,35)
@@ -432,12 +432,12 @@ ORDER BY
     o_orderpriority;
 ----
 sort
- ├── columns: o_orderpriority:6(char!null) order_count:26(int)
+ ├── columns: o_orderpriority:6(char!null) order_count:26(int!null)
  ├── key: (6)
  ├── fd: (6)-->(26)
  ├── ordering: +6
  └── group-by
-      ├── columns: o_orderpriority:6(char!null) count_rows:26(int)
+      ├── columns: o_orderpriority:6(char!null) count_rows:26(int!null)
       ├── grouping columns: o_orderpriority:6(char!null)
       ├── key: (6)
       ├── fd: (6)-->(26)
@@ -513,12 +513,12 @@ ORDER BY
     revenue DESC;
 ----
 sort
- ├── columns: n_name:42(char!null) revenue:49(float)
+ ├── columns: n_name:42(char!null) revenue:49(float!null)
  ├── key: (42)
  ├── fd: (42)-->(49)
  ├── ordering: -49
  └── group-by
-      ├── columns: n_name:42(char!null) sum:49(float)
+      ├── columns: n_name:42(char!null) sum:49(float!null)
       ├── grouping columns: n_name:42(char!null)
       ├── key: (42)
       ├── fd: (42)-->(49)
@@ -698,7 +698,7 @@ ORDER BY
     l_year;
 ----
 group-by
- ├── columns: supp_nation:42(char!null) cust_nation:46(char!null) l_year:49(float) revenue:51(float)
+ ├── columns: supp_nation:42(char!null) cust_nation:46(char!null) l_year:49(float) revenue:51(float!null)
  ├── grouping columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float)
  ├── key: (42,46,49)
  ├── fd: (42,46,49)-->(51)
@@ -826,18 +826,18 @@ ORDER BY
     o_year;
 ----
 sort
- ├── columns: o_year:61(float) mkt_share:66(float)
+ ├── columns: o_year:61(float) mkt_share:66(float!null)
  ├── side-effects
  ├── key: (61)
  ├── fd: (61)-->(66)
  ├── ordering: +61
  └── project
-      ├── columns: mkt_share:66(float) o_year:61(float)
+      ├── columns: mkt_share:66(float!null) o_year:61(float)
       ├── side-effects
       ├── key: (61)
       ├── fd: (61)-->(66)
       ├── group-by
-      │    ├── columns: o_year:61(float) sum:64(float) sum:65(float)
+      │    ├── columns: o_year:61(float) sum:64(float!null) sum:65(float!null)
       │    ├── grouping columns: o_year:61(float)
       │    ├── key: (61)
       │    ├── fd: (61)-->(64,65)
@@ -987,12 +987,12 @@ ORDER BY
     o_year DESC;
 ----
 sort
- ├── columns: nation:48(char!null) o_year:51(float) sum_profit:53(float)
+ ├── columns: nation:48(char!null) o_year:51(float) sum_profit:53(float!null)
  ├── key: (48,51)
  ├── fd: (48,51)-->(53)
  ├── ordering: +48,-51
  └── group-by
-      ├── columns: n_name:48(char!null) o_year:51(float) sum:53(float)
+      ├── columns: n_name:48(char!null) o_year:51(float) sum:53(float!null)
       ├── grouping columns: n_name:48(char!null) o_year:51(float)
       ├── key: (48,51)
       ├── fd: (48,51)-->(53)
@@ -1097,20 +1097,20 @@ ORDER BY
 LIMIT 20;
 ----
 limit
- ├── columns: c_custkey:1(int!null) c_name:2(varchar) revenue:39(float) c_acctbal:6(float) n_name:35(char) c_address:3(varchar) c_phone:5(char) c_comment:8(varchar)
+ ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) revenue:39(float!null) c_acctbal:6(float!null) n_name:35(char!null) c_address:3(varchar!null) c_phone:5(char!null) c_comment:8(varchar!null)
  ├── internal-ordering: -39
  ├── cardinality: [0 - 20]
  ├── key: (1)
  ├── fd: (1)-->(2,3,5,6,8,35,39)
  ├── ordering: -39
  ├── sort
- │    ├── columns: c_custkey:1(int!null) c_name:2(varchar) c_address:3(varchar) c_phone:5(char) c_acctbal:6(float) c_comment:8(varchar) n_name:35(char) sum:39(float)
+ │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null) sum:39(float!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3,5,6,8,35,39)
  │    ├── ordering: -39
  │    ├── limit hint: 20.00
  │    └── group-by
- │         ├── columns: c_custkey:1(int!null) c_name:2(varchar) c_address:3(varchar) c_phone:5(char) c_acctbal:6(float) c_comment:8(varchar) n_name:35(char) sum:39(float)
+ │         ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null) sum:39(float!null)
  │         ├── grouping columns: c_custkey:1(int!null)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3,5,6,8,35,39)
@@ -1211,7 +1211,7 @@ sort
       ├── key: (1)
       ├── fd: (1)-->(18)
       ├── group-by
-      │    ├── columns: ps_partkey:1(int!null) sum:18(float)
+      │    ├── columns: ps_partkey:1(int!null) sum:18(float!null)
       │    ├── grouping columns: ps_partkey:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(18)
@@ -1340,12 +1340,12 @@ ORDER BY
     l_shipmode;
 ----
 sort
- ├── columns: l_shipmode:24(char!null) high_line_count:27(decimal) low_line_count:29(decimal)
+ ├── columns: l_shipmode:24(char!null) high_line_count:27(decimal!null) low_line_count:29(decimal!null)
  ├── key: (24)
  ├── fd: (24)-->(27,29)
  ├── ordering: +24
  └── group-by
-      ├── columns: l_shipmode:24(char!null) sum:27(decimal) sum:29(decimal)
+      ├── columns: l_shipmode:24(char!null) sum:27(decimal!null) sum:29(decimal!null)
       ├── grouping columns: l_shipmode:24(char!null)
       ├── key: (24)
       ├── fd: (24)-->(27,29)
@@ -1408,17 +1408,17 @@ ORDER BY
     c_count DESC;
 ----
 sort
- ├── columns: c_count:18(int) custdist:19(int)
+ ├── columns: c_count:18(int!null) custdist:19(int!null)
  ├── key: (18)
  ├── fd: (18)-->(19)
  ├── ordering: -19,-18
  └── group-by
-      ├── columns: count:18(int) count_rows:19(int)
-      ├── grouping columns: count:18(int)
+      ├── columns: count:18(int!null) count_rows:19(int!null)
+      ├── grouping columns: count:18(int!null)
       ├── key: (18)
       ├── fd: (18)-->(19)
       ├── group-by
-      │    ├── columns: c_custkey:1(int!null) count:18(int)
+      │    ├── columns: c_custkey:1(int!null) count:18(int!null)
       │    ├── grouping columns: c_custkey:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(18)
@@ -1578,7 +1578,7 @@ sort
            │    ├── key: (10)
            │    ├── fd: (10)-->(25)
            │    ├── group-by
-           │    │    ├── columns: l_suppkey:10(int!null) sum:25(float)
+           │    │    ├── columns: l_suppkey:10(int!null) sum:25(float!null)
            │    │    ├── grouping columns: l_suppkey:10(int!null)
            │    │    ├── key: (10)
            │    │    ├── fd: (10)-->(25)
@@ -1605,7 +1605,7 @@ sort
            │                        ├── key: ()
            │                        ├── fd: ()-->(44)
            │                        ├── group-by
-           │                        │    ├── columns: l_suppkey:28(int!null) sum:43(float)
+           │                        │    ├── columns: l_suppkey:28(int!null) sum:43(float!null)
            │                        │    ├── grouping columns: l_suppkey:28(int!null)
            │                        │    ├── key: (28)
            │                        │    ├── fd: (28)-->(43)
@@ -1674,12 +1674,12 @@ ORDER BY
     p_size;
 ----
 sort
- ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) supplier_cnt:22(int)
+ ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) supplier_cnt:22(int!null)
  ├── key: (9-11)
  ├── fd: (9-11)-->(22)
  ├── ordering: -22,+9,+10,+11
  └── group-by
-      ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) count:22(int)
+      ├── columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null) count:22(int!null)
       ├── grouping columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
       ├── key: (9-11)
       ├── fd: (9-11)-->(22)
@@ -1874,20 +1874,20 @@ ORDER BY
 LIMIT 100;
 ----
 limit
- ├── columns: c_name:2(varchar) c_custkey:1(int) o_orderkey:9(int!null) o_orderdate:13(date) o_totalprice:12(float) sum:51(float)
+ ├── columns: c_name:2(varchar!null) c_custkey:1(int!null) o_orderkey:9(int!null) o_orderdate:13(date!null) o_totalprice:12(float!null) sum:51(float!null)
  ├── internal-ordering: -12,+13
  ├── cardinality: [0 - 100]
  ├── key: (9)
  ├── fd: (1)-->(2), (9)-->(1,2,12,13,51)
  ├── ordering: -12,+13
  ├── sort
- │    ├── columns: c_custkey:1(int) c_name:2(varchar) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
+ │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) sum:51(float!null)
  │    ├── key: (9)
  │    ├── fd: (1)-->(2), (9)-->(1,2,12,13,51)
  │    ├── ordering: -12,+13
  │    ├── limit hint: 100.00
  │    └── group-by
- │         ├── columns: c_custkey:1(int) c_name:2(varchar) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
+ │         ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) sum:51(float!null)
  │         ├── grouping columns: o_orderkey:9(int!null)
  │         ├── internal-ordering: +(9|18)
  │         ├── key: (9)
@@ -1931,7 +1931,7 @@ limit
  │         │    │    │              │    ├── fd: (34)-->(50)
  │         │    │    │              │    ├── ordering: +34
  │         │    │    │              │    ├── group-by
- │         │    │    │              │    │    ├── columns: l_orderkey:34(int!null) sum:50(float)
+ │         │    │    │              │    │    ├── columns: l_orderkey:34(int!null) sum:50(float!null)
  │         │    │    │              │    │    ├── grouping columns: l_orderkey:34(int!null)
  │         │    │    │              │    │    ├── key: (34)
  │         │    │    │              │    │    ├── fd: (34)-->(50)
@@ -2127,7 +2127,7 @@ sort
            │         │         │         ├── key: (12,13)
            │         │         │         ├── fd: (12,13)-->(14,42)
            │         │         │         ├── group-by
-           │         │         │         │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int) sum:42(float)
+           │         │         │         │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) sum:42(float)
            │         │         │         │    ├── grouping columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
            │         │         │         │    ├── key: (12,13)
            │         │         │         │    ├── fd: (12,13)-->(14,42)
@@ -2223,20 +2223,20 @@ ORDER BY
 LIMIT 100;
 ----
 limit
- ├── columns: s_name:2(char!null) numwait:69(int)
+ ├── columns: s_name:2(char!null) numwait:69(int!null)
  ├── internal-ordering: -69,+2
  ├── cardinality: [0 - 100]
  ├── key: (2)
  ├── fd: (2)-->(69)
  ├── ordering: -69,+2
  ├── sort
- │    ├── columns: s_name:2(char!null) count_rows:69(int)
+ │    ├── columns: s_name:2(char!null) count_rows:69(int!null)
  │    ├── key: (2)
  │    ├── fd: (2)-->(69)
  │    ├── ordering: -69,+2
  │    ├── limit hint: 100.00
  │    └── group-by
- │         ├── columns: s_name:2(char!null) count_rows:69(int)
+ │         ├── columns: s_name:2(char!null) count_rows:69(int!null)
  │         ├── grouping columns: s_name:2(char!null)
  │         ├── key: (2)
  │         ├── fd: (2)-->(69)
@@ -2343,7 +2343,7 @@ ORDER BY
     cntrycode;
 ----
 group-by
- ├── columns: cntrycode:27(string) numcust:28(int) totacctbal:29(float)
+ ├── columns: cntrycode:27(string) numcust:28(int!null) totacctbal:29(float!null)
  ├── grouping columns: cntrycode:27(string)
  ├── key: (27)
  ├── fd: (27)-->(28,29)

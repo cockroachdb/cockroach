@@ -386,17 +386,17 @@ where
     and defaultaud0_.REVTYPE<>$2
 ----
 project
- ├── columns: id1_1_:1(int!null) rev2_1_:2(int4!null) revtype3_1_:3(int2) created_4_1_:4(timestamp) firstnam5_1_:5(varchar) lastname6_1_:6(varchar)
+ ├── columns: id1_1_:1(int!null) rev2_1_:2(int4!null) revtype3_1_:3(int2!null) created_4_1_:4(timestamp) firstnam5_1_:5(varchar) lastname6_1_:6(varchar)
  ├── has-placeholder
  ├── key: (1,2)
  ├── fd: (1,2)-->(3-6)
  └── select
-      ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int4!null) defaultaud0_.revtype:3(int2) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(varchar) defaultaud0_.lastname:6(varchar) max:13(int!null)
+      ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int4!null) defaultaud0_.revtype:3(int2!null) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(varchar) defaultaud0_.lastname:6(varchar) max:13(int!null)
       ├── has-placeholder
       ├── key: (1,2)
       ├── fd: (1,2)-->(3-6,13), (2)==(13), (13)==(2)
       ├── group-by
-      │    ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int4!null) defaultaud0_.revtype:3(int2) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(varchar) defaultaud0_.lastname:6(varchar) max:13(int)
+      │    ├── columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int4!null) defaultaud0_.revtype:3(int2!null) defaultaud0_.created_on:4(timestamp) defaultaud0_.firstname:5(varchar) defaultaud0_.lastname:6(varchar) max:13(int!null)
       │    ├── grouping columns: defaultaud0_.id:1(int!null) defaultaud0_.rev:2(int4!null)
       │    ├── has-placeholder
       │    ├── key: (1,2)
@@ -495,23 +495,23 @@ order by
     queryaudit0_.REV asc
 ----
 sort
- ├── columns: id1_3_:1(int!null) rev2_3_:2(int4!null) revtype3_3_:3(int2) revend4_3_:4(int4) created_5_3_:5(timestamp) firstnam6_3_:6(varchar) lastname7_3_:7(varchar) address_8_3_:8(int)
+ ├── columns: id1_3_:1(int!null) rev2_3_:2(int4!null) revtype3_3_:3(int2!null) revend4_3_:4(int4) created_5_3_:5(timestamp) firstnam6_3_:6(varchar) lastname7_3_:7(varchar) address_8_3_:8(int)
  ├── has-placeholder
  ├── key: (1,2)
  ├── fd: (1,2)-->(3-8)
  ├── ordering: +2
  └── project
-      ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int4!null) queryaudit0_.revtype:3(int2) queryaudit0_.revend:4(int4) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(varchar) queryaudit0_.lastname:7(varchar) queryaudit0_.address_id:8(int)
+      ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int4!null) queryaudit0_.revtype:3(int2!null) queryaudit0_.revend:4(int4) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(varchar) queryaudit0_.lastname:7(varchar) queryaudit0_.address_id:8(int)
       ├── has-placeholder
       ├── key: (1,2)
       ├── fd: (1,2)-->(3-8)
       └── select
-           ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int4!null) queryaudit0_.revtype:3(int2) queryaudit0_.revend:4(int4) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(varchar) queryaudit0_.lastname:7(varchar) queryaudit0_.address_id:8(int) max:17(int!null)
+           ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int4!null) queryaudit0_.revtype:3(int2!null) queryaudit0_.revend:4(int4) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(varchar) queryaudit0_.lastname:7(varchar) queryaudit0_.address_id:8(int) max:17(int!null)
            ├── has-placeholder
            ├── key: (1,2)
            ├── fd: (1,2)-->(3-8,17), (2)==(17), (17)==(2)
            ├── group-by
-           │    ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int4!null) queryaudit0_.revtype:3(int2) queryaudit0_.revend:4(int4) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(varchar) queryaudit0_.lastname:7(varchar) queryaudit0_.address_id:8(int) max:17(int)
+           │    ├── columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int4!null) queryaudit0_.revtype:3(int2!null) queryaudit0_.revend:4(int4) queryaudit0_.created_on:5(timestamp) queryaudit0_.firstname:6(varchar) queryaudit0_.lastname:7(varchar) queryaudit0_.address_id:8(int) max:17(int!null)
            │    ├── grouping columns: queryaudit0_.id:1(int!null) queryaudit0_.rev:2(int4!null)
            │    ├── has-placeholder
            │    ├── key: (1,2)
@@ -661,7 +661,7 @@ where
     )
 ----
 distinct-on
- ├── columns: id1_2_:10(int!null) address2_2_:11(varchar) createdo3_2_:12(timestamp) name4_2_:13(varchar) nickname5_2_:14(varchar) version6_2_:15(int4)
+ ├── columns: id1_2_:10(int!null) address2_2_:11(varchar) createdo3_2_:12(timestamp) name4_2_:13(varchar) nickname5_2_:14(varchar) version6_2_:15(int4!null)
  ├── grouping columns: person2_.id:10(int!null)
  ├── key: (10)
  ├── fd: (10)-->(11-15)
@@ -739,7 +739,7 @@ project
       ├── key: (1)
       ├── fd: (1)-->(2-4,10)
       ├── group-by
-      │    ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) person_id:4(int) max:10(int)
+      │    ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) person_id:4(int) max:10(int!null)
       │    ├── grouping columns: phone0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4,10)
@@ -790,15 +790,15 @@ where
     )=2
 ----
 project
- ├── columns: id1_2_:1(int!null) address2_2_:2(varchar) createdo3_2_:3(timestamp) name4_2_:4(varchar) nickname5_2_:5(varchar) version6_2_:6(int4)
+ ├── columns: id1_2_:1(int!null) address2_2_:2(varchar) createdo3_2_:3(timestamp) name4_2_:4(varchar) nickname5_2_:5(varchar) version6_2_:6(int4!null)
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  └── select
-      ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4) count:12(int!null)
+      ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) count:12(int!null)
       ├── key: (1)
       ├── fd: ()-->(12), (1)-->(2-6)
       ├── group-by
-      │    ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4) count:12(int)
+      │    ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) count:12(int!null)
       │    ├── grouping columns: person0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-6,12)
@@ -858,7 +858,7 @@ project
       ├── key: (1)
       ├── fd: (1)-->(2-4,10)
       ├── group-by
-      │    ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) person_id:4(int) min:10(int)
+      │    ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) person_id:4(int) min:10(int!null)
       │    ├── grouping columns: phone0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4,10)
@@ -909,15 +909,15 @@ where
     )=0
 ----
 project
- ├── columns: id1_2_:1(int!null) address2_2_:2(varchar) createdo3_2_:3(timestamp) name4_2_:4(varchar) nickname5_2_:5(varchar) version6_2_:6(int4)
+ ├── columns: id1_2_:1(int!null) address2_2_:2(varchar) createdo3_2_:3(timestamp) name4_2_:4(varchar) nickname5_2_:5(varchar) version6_2_:6(int4!null)
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  └── select
-      ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4) max:12(int!null)
+      ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) max:12(int!null)
       ├── key: (1)
       ├── fd: ()-->(12), (1)-->(2-6)
       ├── group-by
-      │    ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4) max:12(int)
+      │    ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) max:12(int!null)
       │    ├── grouping columns: person0_.id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-6,12)
@@ -1195,14 +1195,14 @@ where
     and phones2_.phone_type='LAND_LINE'
 ----
 project
- ├── columns: id1_2_:1(int) address2_2_:2(varchar) createdo3_2_:3(timestamp) name4_2_:4(varchar) nickname5_2_:5(varchar) version6_2_:6(int4)
+ ├── columns: id1_2_:1(int!null) address2_2_:2(varchar) createdo3_2_:3(timestamp) name4_2_:4(varchar) nickname5_2_:5(varchar) version6_2_:6(int4!null)
  ├── fd: (1)-->(2-6)
  └── select
-      ├── columns: person0_.id:1(int) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4) phones2_.id:7(int!null) phones2_.order_id:11(int4!null) max:17(int!null)
+      ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) phones2_.id:7(int!null) phones2_.order_id:11(int4!null) max:17(int!null)
       ├── key: (7)
       ├── fd: (1)-->(2-6), (7)-->(1-6,11,17), (11)==(17), (17)==(11)
       ├── group-by
-      │    ├── columns: person0_.id:1(int) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4) phones2_.id:7(int!null) phones2_.order_id:11(int4) max:17(int)
+      │    ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) phones2_.id:7(int!null) phones2_.order_id:11(int4) max:17(int!null)
       │    ├── grouping columns: phones2_.id:7(int!null)
       │    ├── key: (7)
       │    ├── fd: (1)-->(2-6), (7)-->(1-6,11,17)
@@ -1488,7 +1488,7 @@ project
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(2,3)
       ├── group-by
-      │    ├── columns: id:1(int!null) email:2(varchar) currentproject_id:3(int) count:7(int)
+      │    ├── columns: id:1(int!null) email:2(varchar) currentproject_id:3(int) count:7(int!null)
       │    ├── grouping columns: id:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3,7)
@@ -1853,12 +1853,12 @@ where
     bids0_.auctionId=$1
 ----
 project
- ├── columns: auctioni4_1_0_:4(int) id1_1_0_:1(int!null) id1_1_1_:1(int!null) amount2_1_1_:2(decimal) createdd3_1_1_:3(timestamp) auctioni4_1_1_:4(int) formula41_1_:9(bool!null)
+ ├── columns: auctioni4_1_0_:4(int!null) id1_1_0_:1(int!null) id1_1_1_:1(int!null) amount2_1_1_:2(decimal) createdd3_1_1_:3(timestamp) auctioni4_1_1_:4(int!null) formula41_1_:9(bool!null)
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4,9)
  ├── group-by
- │    ├── columns: bids0_.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int) true_agg:11(bool)
+ │    ├── columns: bids0_.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int!null) true_agg:11(bool)
  │    ├── grouping columns: bids0_.id:1(int!null)
  │    ├── has-placeholder
  │    ├── key: (1)
@@ -1978,11 +1978,11 @@ WHERE
   order0_.customerid = 'c111' AND order0_.ordernumber = 0;
 ----
 project
- ├── columns: customer1_1_0_:1(varchar) ordernum2_1_0_:2(int4) orderdat3_1_0_:3(date) formula101_0_:18(decimal) customer1_2_1_:4(varchar) ordernum2_2_1_:5(int4) producti3_2_1_:6(varchar) customer1_2_2_:4(varchar) ordernum2_2_2_:5(int4) producti3_2_2_:6(varchar) quantity4_2_2_:7(int4)
+ ├── columns: customer1_1_0_:1(varchar!null) ordernum2_1_0_:2(int4!null) orderdat3_1_0_:3(date!null) formula101_0_:18(decimal) customer1_2_1_:4(varchar) ordernum2_2_1_:5(int4) producti3_2_1_:6(varchar) customer1_2_2_:4(varchar) ordernum2_2_2_:5(int4) producti3_2_2_:6(varchar) quantity4_2_2_:7(int4)
  ├── key: (6)
  ├── fd: ()-->(1-3), (6)-->(4,5,7,18)
  ├── group-by
- │    ├── columns: order0_.customerid:1(varchar) order0_.ordernumber:2(int4) orderdate:3(date) lineitems1_.customerid:4(varchar) lineitems1_.ordernumber:5(int4) lineitems1_.productid:6(varchar) lineitems1_.quantity:7(int4) sum:17(decimal)
+ │    ├── columns: order0_.customerid:1(varchar!null) order0_.ordernumber:2(int4!null) orderdate:3(date!null) lineitems1_.customerid:4(varchar) lineitems1_.ordernumber:5(int4) lineitems1_.productid:6(varchar) lineitems1_.quantity:7(int4) sum:17(decimal)
  │    ├── grouping columns: lineitems1_.productid:6(varchar)
  │    ├── key: (6)
  │    ├── fd: ()-->(1-3), (6)-->(1-5,7,17)
@@ -2099,19 +2099,19 @@ FROM
   LEFT JOIN product AS product3_ ON lineitems2_.productid = product3_.productid;
 ----
 project
- ├── columns: customer1_0_0_:1(varchar!null) customer1_1_1_:4(varchar) ordernum2_1_1_:5(int4) customer1_2_2_:7(varchar) ordernum2_2_2_:8(int4) producti3_2_2_:9(varchar) producti1_3_3_:11(varchar) name2_0_0_:2(varchar) address3_0_0_:3(varchar) orderdat3_1_1_:6(date) formula103_1_:30(decimal) customer1_1_0__:4(varchar) ordernum2_1_0__:5(int4) ordernum2_0__:5(int4) quantity4_2_2_:10(int4) customer1_2_1__:7(varchar) ordernum2_2_1__:8(int4) producti3_2_1__:9(varchar) descript2_3_3_:12(varchar) cost3_3_3_:13(decimal) numberav4_3_3_:14(int4) formula104_3_:31(decimal)
+ ├── columns: customer1_0_0_:1(varchar!null) customer1_1_1_:4(varchar) ordernum2_1_1_:5(int4) customer1_2_2_:7(varchar) ordernum2_2_2_:8(int4) producti3_2_2_:9(varchar) producti1_3_3_:11(varchar) name2_0_0_:2(varchar!null) address3_0_0_:3(varchar!null) orderdat3_1_1_:6(date) formula103_1_:30(decimal) customer1_1_0__:4(varchar) ordernum2_1_0__:5(int4) ordernum2_0__:5(int4) quantity4_2_2_:10(int4) customer1_2_1__:7(varchar) ordernum2_2_1__:8(int4) producti3_2_1__:9(varchar) descript2_3_3_:12(varchar) cost3_3_3_:13(decimal) numberav4_3_3_:14(int4) formula104_3_:31(decimal)
  ├── key: (1,4,5,7-9,11)
  ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,30,31)
  ├── group-by
- │    ├── columns: customer0_.customerid:1(varchar!null) name:2(varchar) address:3(varchar) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) orderdate:6(date) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) lineitems2_.quantity:10(int4) product3_.productid:11(varchar) product3_.description:12(varchar) product3_.cost:13(decimal) product3_.numberavailable:14(int4) sum:24(decimal) sum:29(decimal)
+ │    ├── columns: customer0_.customerid:1(varchar!null) name:2(varchar!null) address:3(varchar!null) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) orderdate:6(date) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) lineitems2_.quantity:10(int4) product3_.productid:11(varchar) product3_.description:12(varchar) product3_.cost:13(decimal) product3_.numberavailable:14(int4) sum:24(decimal) sum:29(decimal)
  │    ├── grouping columns: customer0_.customerid:1(varchar!null) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) product3_.productid:11(varchar)
  │    ├── key: (1,4,5,7-9,11)
  │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24,29)
  │    ├── left-join (hash)
- │    │    ├── columns: customer0_.customerid:1(varchar!null) name:2(varchar) address:3(varchar) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) orderdate:6(date) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) lineitems2_.quantity:10(int4) product3_.productid:11(varchar) product3_.description:12(varchar) product3_.cost:13(decimal) product3_.numberavailable:14(int4) sum:24(decimal) li.productid:27(varchar) li.quantity:28(int4)
+ │    │    ├── columns: customer0_.customerid:1(varchar!null) name:2(varchar!null) address:3(varchar!null) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) orderdate:6(date) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) lineitems2_.quantity:10(int4) product3_.productid:11(varchar) product3_.description:12(varchar) product3_.cost:13(decimal) product3_.numberavailable:14(int4) sum:24(decimal) li.productid:27(varchar) li.quantity:28(int4)
  │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24)
  │    │    ├── group-by
- │    │    │    ├── columns: customer0_.customerid:1(varchar!null) name:2(varchar) address:3(varchar) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) orderdate:6(date) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) lineitems2_.quantity:10(int4) product3_.productid:11(varchar) product3_.description:12(varchar) product3_.cost:13(decimal) product3_.numberavailable:14(int4) sum:24(decimal)
+ │    │    │    ├── columns: customer0_.customerid:1(varchar!null) name:2(varchar!null) address:3(varchar!null) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) orderdate:6(date) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) lineitems2_.quantity:10(int4) product3_.productid:11(varchar) product3_.description:12(varchar) product3_.cost:13(decimal) product3_.numberavailable:14(int4) sum:24(decimal)
  │    │    │    ├── grouping columns: customer0_.customerid:1(varchar!null) orders1_.customerid:4(varchar) orders1_.ordernumber:5(int4) lineitems2_.customerid:7(varchar) lineitems2_.ordernumber:8(int4) lineitems2_.productid:9(varchar) product3_.productid:11(varchar)
  │    │    │    ├── key: (1,4,5,7-9,11)
  │    │    │    ├── fd: (1)-->(2,3), (4,5)-->(6), (7-9)-->(10), (11)-->(12-14), (1,4,5,7-9,11)-->(2,3,6,10,12-14,24)
@@ -2254,11 +2254,11 @@ WHERE
   order0_.customerid = 'c111' AND order0_.ordernumber = 0;
 ----
 project
- ├── columns: customer1_1_0_:1(varchar) ordernum2_1_0_:2(int4) orderdat3_1_0_:3(date) formula105_0_:18(decimal) customer1_2_1_:4(varchar) ordernum2_2_1_:5(int4) producti3_2_1_:6(varchar) customer1_2_2_:4(varchar) ordernum2_2_2_:5(int4) producti3_2_2_:6(varchar) quantity4_2_2_:7(int4)
+ ├── columns: customer1_1_0_:1(varchar!null) ordernum2_1_0_:2(int4!null) orderdat3_1_0_:3(date!null) formula105_0_:18(decimal) customer1_2_1_:4(varchar) ordernum2_2_1_:5(int4) producti3_2_1_:6(varchar) customer1_2_2_:4(varchar) ordernum2_2_2_:5(int4) producti3_2_2_:6(varchar) quantity4_2_2_:7(int4)
  ├── key: (6)
  ├── fd: ()-->(1-3), (6)-->(4,5,7,18)
  ├── group-by
- │    ├── columns: order0_.customerid:1(varchar) order0_.ordernumber:2(int4) orderdate:3(date) lineitems1_.customerid:4(varchar) lineitems1_.ordernumber:5(int4) lineitems1_.productid:6(varchar) lineitems1_.quantity:7(int4) sum:17(decimal)
+ │    ├── columns: order0_.customerid:1(varchar!null) order0_.ordernumber:2(int4!null) orderdate:3(date!null) lineitems1_.customerid:4(varchar) lineitems1_.ordernumber:5(int4) lineitems1_.productid:6(varchar) lineitems1_.quantity:7(int4) sum:17(decimal)
  │    ├── grouping columns: lineitems1_.productid:6(varchar)
  │    ├── key: (6)
  │    ├── fd: ()-->(1-3), (6)-->(1-5,7,17)
@@ -2342,11 +2342,11 @@ FROM
   customerorder AS order0_;
 ----
 project
- ├── columns: customer1_10_:1(varchar!null) ordernum2_10_:2(int4!null) orderdat3_10_:3(date) formula273_:14(decimal)
+ ├── columns: customer1_10_:1(varchar!null) ordernum2_10_:2(int4!null) orderdat3_10_:3(date!null) formula273_:14(decimal)
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,14)
  ├── group-by
- │    ├── columns: order0_.customerid:1(varchar!null) order0_.ordernumber:2(int4!null) orderdate:3(date) sum:13(decimal)
+ │    ├── columns: order0_.customerid:1(varchar!null) order0_.ordernumber:2(int4!null) orderdate:3(date!null) sum:13(decimal)
  │    ├── grouping columns: order0_.customerid:1(varchar!null) order0_.ordernumber:2(int4!null)
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3,13)
@@ -2443,16 +2443,16 @@ WHERE
   );
 ----
 group-by
- ├── columns: studenti1_26_0_:1(int!null) name2_26_0_:2(varchar) address_3_26_0_:3(varchar) address_4_26_0_:4(varchar) preferre5_26_0_:5(varchar)
+ ├── columns: studenti1_26_0_:1(int!null) name2_26_0_:2(varchar!null) address_3_26_0_:3(varchar) address_4_26_0_:4(varchar) preferre5_26_0_:5(varchar!null)
  ├── grouping columns: this_.studentid:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── select
- │    ├── columns: this_.studentid:1(int!null) name:2(varchar) address_city:3(varchar) address_state:4(varchar) preferredcoursecode:5(varchar) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(varchar!null) enrolment_.year:9(int2!null) max:14(int!null)
+ │    ├── columns: this_.studentid:1(int!null) name:2(varchar!null) address_city:3(varchar) address_state:4(varchar) preferredcoursecode:5(varchar!null) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(varchar!null) enrolment_.year:9(int2!null) max:14(int!null)
  │    ├── key: (1,6,7)
  │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14), (9)==(14), (14)==(9)
  │    ├── group-by
- │    │    ├── columns: this_.studentid:1(int!null) name:2(varchar) address_city:3(varchar) address_state:4(varchar) preferredcoursecode:5(varchar) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(varchar!null) enrolment_.year:9(int2) max:14(int)
+ │    │    ├── columns: this_.studentid:1(int!null) name:2(varchar!null) address_city:3(varchar) address_state:4(varchar) preferredcoursecode:5(varchar!null) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(varchar!null) enrolment_.year:9(int2!null) max:14(int!null)
  │    │    ├── grouping columns: this_.studentid:1(int!null) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(varchar!null)
  │    │    ├── key: (1,6,7)
  │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14)

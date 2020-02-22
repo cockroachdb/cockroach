@@ -282,7 +282,7 @@ opt
 select v.owner_id, count(*) from rides r, vehicles v where v.id = r.vehicle_id group by v.owner_id
 ----
 group-by
- ├── columns: owner_id:12(uuid) count:16(int)
+ ├── columns: owner_id:12(uuid) count:16(int!null)
  ├── grouping columns: owner_id:12(uuid)
  ├── key: (12)
  ├── fd: (12)-->(16)
@@ -494,7 +494,7 @@ opt
 SELECT count(l_orderkey) FROM orders, lineitem WHERE orders.o_orderkey = lineitem.l_orderkey
 ----
 scalar-group-by
- ├── columns: count:28(int)
+ ├── columns: count:28(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(28)

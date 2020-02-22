@@ -292,6 +292,16 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 	return false
 }
 
+// AggregateIsNeverNull returns true if the given aggregate operator never
+// returns NULL, even if the input is empty, or one more more inputs are NULL.
+func AggregateIsNeverNull(op Operator) bool {
+	switch op {
+	case CountOp, CountRowsOp:
+		return true
+	}
+	return false
+}
+
 // OpaqueMetadata is an object stored in OpaqueRelExpr and passed
 // through to the exec factory.
 type OpaqueMetadata interface {

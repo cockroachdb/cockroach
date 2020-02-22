@@ -59,14 +59,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q9_sort_1
- ├── columns: nation:48(char!null) o_year:51(float) sum_profit:53(float)
+ ├── columns: nation:48(char!null) o_year:51(float) sum_profit:53(float!null)
  ├── stats: [rows=1500.68104, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(53)=1500.68104, null(53)=0, distinct(48,51)=1500.68104, null(48,51)=0]
  ├── key: (48,51)
  ├── fd: (48,51)-->(53)
  ├── ordering: +48,-51
  └── group-by
       ├── save-table-name: q9_group_by_2
-      ├── columns: n_name:48(char!null) o_year:51(float) sum:53(float)
+      ├── columns: n_name:48(char!null) o_year:51(float) sum:53(float!null)
       ├── grouping columns: n_name:48(char!null) o_year:51(float)
       ├── stats: [rows=1500.68104, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(53)=1500.68104, null(53)=0, distinct(48,51)=1500.68104, null(48,51)=0]
       ├── key: (48,51)

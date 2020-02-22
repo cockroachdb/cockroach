@@ -153,7 +153,7 @@ norm expect=SimplifyGroupByOrdering
 SELECT DISTINCT ON (b, c) a, b, c FROM abcde ORDER BY b, c, a, d, e
 ----
 distinct-on
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── grouping columns: b:2(int) c:3(int)
  ├── internal-ordering: +1 opt(2,3)
  ├── key: (1)

@@ -6,7 +6,7 @@ opt format=show-all
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5(int) min:4(int)  [hidden: t.public.t.a:1(int)]
+ ├── columns: "?column?":5(int) min:4(int!null)  [hidden: t.public.t.a:1(int)]
  ├── stats: [rows=98.1771622]
  ├── cost: 1097.87224
  ├── key: (1)
@@ -14,14 +14,14 @@ sort
  ├── ordering: +1
  ├── prune: (1,4,5)
  └── project
-      ├── columns: "?column?":5(int) t.public.t.a:1(int) min:4(int)
+      ├── columns: "?column?":5(int) t.public.t.a:1(int) min:4(int!null)
       ├── stats: [rows=98.1771622]
       ├── cost: 1082.90531
       ├── key: (1)
       ├── fd: (1)-->(4,5)
       ├── prune: (1,4,5)
       ├── group-by
-      │    ├── columns: t.public.t.a:1(int) min:4(int)
+      │    ├── columns: t.public.t.a:1(int) min:4(int!null)
       │    ├── grouping columns: t.public.t.a:1(int)
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=3.3]
       │    ├── cost: 1080.93177
@@ -61,16 +61,16 @@ opt format=(hide-miscprops,hide-constraints,hide-funcdeps,hide-ruleprops)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5(int) min:4(int)  [hidden: t.public.t.a:1(int)]
+ ├── columns: "?column?":5(int) min:4(int!null)  [hidden: t.public.t.a:1(int)]
  ├── stats: [rows=98.1771622]
  ├── cost: 1097.87224
  ├── ordering: +1
  └── project
-      ├── columns: "?column?":5(int) t.public.t.a:1(int) min:4(int)
+      ├── columns: "?column?":5(int) t.public.t.a:1(int) min:4(int!null)
       ├── stats: [rows=98.1771622]
       ├── cost: 1082.90531
       ├── group-by
-      │    ├── columns: t.public.t.a:1(int) min:4(int)
+      │    ├── columns: t.public.t.a:1(int) min:4(int!null)
       │    ├── grouping columns: t.public.t.a:1(int)
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=3.3]
       │    ├── cost: 1080.93177
@@ -100,18 +100,18 @@ opt format=(hide-stats,hide-cost,hide-qual,hide-scalars)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5(int) min:4(int)  [hidden: a:1(int)]
+ ├── columns: "?column?":5(int) min:4(int!null)  [hidden: a:1(int)]
  ├── key: (1)
  ├── fd: (1)-->(4,5)
  ├── ordering: +1
  ├── prune: (1,4,5)
  └── project
-      ├── columns: "?column?":5(int) a:1(int) min:4(int)
+      ├── columns: "?column?":5(int) a:1(int) min:4(int!null)
       ├── key: (1)
       ├── fd: (1)-->(4,5)
       ├── prune: (1,4,5)
       ├── group-by
-      │    ├── columns: a:1(int) min:4(int)
+      │    ├── columns: a:1(int) min:4(int!null)
       │    ├── grouping columns: a:1(int)
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)

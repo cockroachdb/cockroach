@@ -1242,7 +1242,7 @@ SELECT ARRAY(SELECT k FROM a WHERE a.k = b.k) FROM a AS b
 project
  ├── columns: array:14(int[])
  ├── group-by
- │    ├── columns: b.k:1(int!null) a.k:7(int) array_agg:15(int[])
+ │    ├── columns: b.k:1(int!null) a.k:7(int!null) array_agg:15(int[]!null)
  │    ├── grouping columns: b.k:1(int!null)
  │    ├── key: (7)
  │    ├── fd: (1)==(7), (7)==(1), (7)-->(15), (1)-->(7,15)
@@ -1365,7 +1365,7 @@ SELECT ARRAY(SELECT ARRAY(SELECT k FROM a)[1] FROM a as b WHERE b.k = c.k) FROM 
 project
  ├── columns: array:21(int[])
  ├── group-by
- │    ├── columns: c.k:1(int!null) canary:22(bool) array_agg:23(int[])
+ │    ├── columns: c.k:1(int!null) canary:22(bool!null) array_agg:23(int[])
  │    ├── grouping columns: c.k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: ()-->(22), (1)-->(22,23)
@@ -1426,7 +1426,7 @@ project
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(20,24)
  │    │    │    ├── group-by
- │    │    │    │    ├── columns: a.k:13(int) array_agg:21(int[])
+ │    │    │    │    ├── columns: a.k:13(int!null) array_agg:21(int[]!null)
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()

@@ -674,9 +674,9 @@ SELECT v, row_number() OVER (PARTITION BY avg(k)) FROM kv GROUP BY v
 project
  ├── columns: v:2(int) row_number:9(int)
  └── window partition=(8)
-      ├── columns: v:2(int) avg:8(decimal) row_number:9(int)
+      ├── columns: v:2(int) avg:8(decimal!null) row_number:9(int)
       ├── group-by
-      │    ├── columns: v:2(int) avg:8(decimal)
+      │    ├── columns: v:2(int) avg:8(decimal!null)
       │    ├── grouping columns: v:2(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
@@ -1025,9 +1025,9 @@ project
                      │    │    └── variable: v [type=int]
                      │    └── subquery [type=int]
                      │         └── max1-row
-                     │              ├── columns: count_rows:15(int)
+                     │              ├── columns: count_rows:15(int!null)
                      │              └── scalar-group-by
-                     │                   ├── columns: count_rows:15(int)
+                     │                   ├── columns: count_rows:15(int!null)
                      │                   ├── project
                      │                   │    └── scan kv
                      │                   │         └── columns: k:8(int!null) v:9(int) w:10(int) f:11(float) d:12(decimal) s:13(string) b:14(bool)

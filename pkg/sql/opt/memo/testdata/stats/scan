@@ -112,7 +112,7 @@ opt
 SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 ----
 group-by
- ├── columns: count:6(int) y:2(int) x:1(int!null)
+ ├── columns: count:6(int!null) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
  ├── internal-ordering: +1
  ├── cardinality: [0 - 100]

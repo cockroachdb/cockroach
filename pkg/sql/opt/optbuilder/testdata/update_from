@@ -48,7 +48,7 @@ update abc
  │    ├──  other.b:8 => abc.b:2
  │    └──  other.c:9 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int) other.b:8(int) other.c:9(int) rowid:10(int)
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int) rowid:10(int!null)
       ├── grouping columns: abc.a:4(int!null)
       ├── inner-join (hash)
       │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int) rowid:10(int!null)
@@ -186,7 +186,7 @@ update abc
  │    ├──  column2:8 => b:2
  │    └──  column3:9 => c:3
  └── distinct-on
-      ├── columns: a:4(int!null) b:5(int) c:6(int) column1:7(int) column2:8(int) column3:9(int)
+      ├── columns: a:4(int!null) b:5(int) c:6(int) column1:7(int!null) column2:8(int!null) column3:9(int!null)
       ├── grouping columns: a:4(int!null)
       ├── inner-join (lookup abc)
       │    ├── columns: a:4(int!null) b:5(int) c:6(int) column1:7(int!null) column2:8(int!null) column3:9(int!null)
@@ -234,7 +234,7 @@ update abc
  │    ├──  ab.b:8 => abc.b:2
  │    └──  ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int) ac.rowid:12(int)
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
       ├── grouping columns: abc.a:4(int!null)
       ├── inner-join (hash)
       │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
@@ -292,7 +292,7 @@ update abc
  │    ├──  ab.b:8 => abc.b:2
  │    └──  ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ac.a:10(int) ac.c:11(int)
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ac.a:10(int!null) ac.c:11(int)
       ├── grouping columns: abc.a:4(int!null)
       ├── inner-join (hash)
       │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ac.a:10(int!null) ac.c:11(int)
@@ -345,7 +345,7 @@ update abc
  │    ├──  ab.b:8 => abc.b:2
  │    └──  ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int) ac.rowid:12(int)
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
       ├── grouping columns: abc.a:4(int!null)
       ├── inner-join (hash)
       │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
