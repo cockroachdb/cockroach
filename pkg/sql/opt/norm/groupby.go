@@ -14,45 +14,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// CanReduceGroupingCols is true if the given GroupBy operator has one or more
-// redundant grouping columns. A grouping column is redundant if it is
-// functionally determined by the other grouping columns.
-func (c *CustomFuncs) CanReduceGroupingCols(
-	input memo.RelExpr, private *memo.GroupingPrivate,
-) bool {
-	fdset := input.Relational().FuncDeps
-	return !fdset.ReduceCols(private.GroupingCols).Equals(private.GroupingCols)
-}
-
-// ReduceGroupingCols constructs a new GroupByDef private, based on an existing
-// definition. The new GroupByDef will not retain any grouping column that is
-// functionally determined by other grouping columns. CanReduceGroupingCols
-// should be called before calling this method, to ensure it has work to do.
-func (c *CustomFuncs) ReduceGroupingCols(
-	input memo.RelExpr, private *memo.GroupingPrivate,
+// RemoveGroupingCols returns a new grouping private struct with the given
+// columns removed from the window partition column set.
+func (c *CustomFuncs) RemoveGroupingCols(
+	private *memo.GroupingPrivate, cols opt.ColSet,
 ) *memo.GroupingPrivate {
-	fdset := input.Relational().FuncDeps
-	return &memo.GroupingPrivate{
-		GroupingCols: fdset.ReduceCols(private.GroupingCols),
-		Ordering:     private.Ordering,
-	}
-}
-
-// AppendReducedGroupingCols will take columns discarded by ReduceGroupingCols
-// and append them to the end of the given aggregate function list, wrapped in
-// ConstAgg aggregate functions. AppendReducedGroupingCols returns a new
-// Aggregations operator containing the combined set of existing aggregate
-// functions and the new ConstAgg aggregate functions.
-func (c *CustomFuncs) AppendReducedGroupingCols(
-	input memo.RelExpr, aggs memo.AggregationsExpr, private *memo.GroupingPrivate,
-) memo.AggregationsExpr {
-	fdset := input.Relational().FuncDeps
-	appendCols := private.GroupingCols.Difference(fdset.ReduceCols(private.GroupingCols))
-	return c.AppendAggCols(aggs, opt.ConstAggOp, appendCols)
+	p := *private
+	p.GroupingCols = private.GroupingCols.Difference(cols)
+	return &p
 }
 
 // AppendAggCols constructs a new Aggregations operator containing the aggregate
@@ -194,4 +168,10 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 		}
 	}
 	return c.f.ConstructProject(input, projections, passthrough)
+}
+
+// DuplicateUpsertErrText returns the error text used when duplicate input rows
+// to the Upsert operator are detected.
+func (c *CustomFuncs) DuplicateUpsertErrText() string {
+	return sqlbase.DuplicateUpsertErrText
 }

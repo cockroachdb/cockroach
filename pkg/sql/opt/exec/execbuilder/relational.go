@@ -987,7 +987,7 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 
 	if private.GroupingCols.Empty() {
 		// A DistinctOn with no grouping columns should have been converted to a
-		// LIMIT 1 by normalization rules.
+		// LIMIT 1 or Max1Row by normalization rules.
 		return execPlan{}, fmt.Errorf("cannot execute distinct on no columns")
 	}
 	input, err := b.buildGroupByInput(distinct)
@@ -1417,7 +1417,6 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
-
 }
 
 func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
