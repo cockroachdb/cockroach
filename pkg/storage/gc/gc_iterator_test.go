@@ -123,11 +123,13 @@ func TestGCIterator(t *testing.T) {
 	makeTest := func(tc testCase) func(t *testing.T) {
 		return func(t *testing.T) {
 			eng := engine.NewDefaultInMem()
+			defer eng.Close()
 			ds := makeLiteralDataDistribution(tc.data...)
 			ds.setupTest(t, eng, desc)
 			snap := eng.NewSnapshot()
 			defer snap.Close()
 			it := makeGCIterator(&desc, snap)
+			defer it.close()
 			expectations := tc.expectations
 			for i, ex := range expectations {
 				t.Run(fmt.Sprint(i), func(t *testing.T) {

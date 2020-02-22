@@ -88,6 +88,8 @@ func TestRunNewVsOld(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%v@%v,ttl=%v", tc.ds, tc.now, tc.ttl), func(t *testing.T) {
 			eng := engine.NewDefaultInMem()
+			defer eng.Close()
+
 			tc.ds.dist(N, rng).setupTest(t, eng, *tc.ds.desc())
 			snap := eng.NewSnapshot()
 
