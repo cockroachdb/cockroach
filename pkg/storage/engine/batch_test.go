@@ -563,7 +563,9 @@ func TestBatchProto(t *testing.T) {
 				t.Errorf("expected %v; got %v", &val, getVal)
 			}
 			// Before commit, proto will not be available via engine.
+			fmt.Printf("before\n")
 			if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); ok || err != nil {
+				fmt.Printf("after\n")
 				t.Fatalf("expected GetProto to fail ok=%t: %+v", ok, err)
 			}
 			// Commit and verify the proto can be read directly from the engine.
