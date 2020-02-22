@@ -189,6 +189,12 @@ func (c *CustomFuncs) OutputCols2(left, right memo.RelExpr) opt.ColSet {
 	return left.Relational().OutputCols.Union(right.Relational().OutputCols)
 }
 
+// NotNullCols returns the set of columns returned by the input expression that
+// are guaranteed to never be NULL.
+func (c *CustomFuncs) NotNullCols(input memo.RelExpr) opt.ColSet {
+	return input.Relational().NotNullCols
+}
+
 // CandidateKey returns the candidate key columns from the given input
 // expression. If there is no candidate key, CandidateKey returns ok=false.
 func (c *CustomFuncs) CandidateKey(input memo.RelExpr) (key opt.ColSet, ok bool) {
@@ -398,6 +404,18 @@ func (c *CustomFuncs) MutationTable(private *memo.MutationPrivate) opt.TableID {
 func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 	tabMeta := c.mem.Metadata().TableMeta(table)
 	return tabMeta.IndexKeyColumns(cat.PrimaryIndex)
+}
+
+// RedundantCols returns the subset of the given columns that are functionally
+// determined by the remaining columns. In many contexts (such as if they are
+// grouping columns), these columns can be dropped. The input expression's
+// functional dependencies are used to make the decision.
+func (c *CustomFuncs) RedundantCols(input memo.RelExpr, cols opt.ColSet) opt.ColSet {
+	reducedCols := input.Relational().FuncDeps.ReduceCols(cols)
+	if reducedCols.Equals(cols) {
+		return opt.ColSet{}
+	}
+	return cols.Difference(reducedCols)
 }
 
 // ----------------------------------------------------------------------
@@ -1465,24 +1483,13 @@ func (c *CustomFuncs) mapSetOpFilter(
 //
 // ----------------------------------------------------------------------
 
-// CanReduceWindowPartitionCols is true if the set of columns being partitioned
-// on can be made smaller via use of functional dependencies (for instance,
-// partitioning on (k, k+1) can be reduced to just (k)).
-func (c *CustomFuncs) CanReduceWindowPartitionCols(
-	input memo.RelExpr, private *memo.WindowPrivate,
-) bool {
-	fdset := input.Relational().FuncDeps
-	return !fdset.ReduceCols(private.Partition).Equals(private.Partition)
-}
-
-// ReduceWindowPartitionCols reduces the set of columns being partitioned on
-// to a smaller set.
-func (c *CustomFuncs) ReduceWindowPartitionCols(
-	input memo.RelExpr, private *memo.WindowPrivate,
+// RemoveWindowPartitionCols returns a new window private struct with the given
+// columns removed from the window partition column set.
+func (c *CustomFuncs) RemoveWindowPartitionCols(
+	private *memo.WindowPrivate, cols opt.ColSet,
 ) *memo.WindowPrivate {
-	fdset := input.Relational().FuncDeps
 	p := *private
-	p.Partition = fdset.ReduceCols(private.Partition)
+	p.Partition = p.Partition.Difference(cols)
 	return &p
 }
 
