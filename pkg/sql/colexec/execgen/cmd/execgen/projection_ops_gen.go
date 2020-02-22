@@ -17,6 +17,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // getProjConstOpTmplString returns a "projConstOp" template with isConstLeft
@@ -47,12 +48,14 @@ func replaceProjTmplVariables(tmpl string) string {
 	// The order in which variables are replaced is important - since some
 	// variable names are prefixes of others, we need to replace the longer names
 	// first.
-	tmpl = strings.Replace(tmpl, "_OP_NAME", "proj{{.Name}}{{.LTyp}}{{.RTyp}}Op", -1)
+	tmpl = strings.Replace(tmpl, "_OP_NAME", "proj{{.Name}}{{.LFamily}}{{.LTyp}}{{.RFamily}}{{.RTyp}}Op", -1)
 	tmpl = strings.Replace(tmpl, "_NAME", "{{.Name}}", -1)
 	tmpl = strings.Replace(tmpl, "_L_GO_TYPE", "{{.LGoType}}", -1)
 	tmpl = strings.Replace(tmpl, "_R_GO_TYPE", "{{.RGoType}}", -1)
-	tmpl = strings.Replace(tmpl, "_L_TYP_VAR", "{{$lTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_R_TYP_VAR", "{{$rTyp}}", -1)
+	tmpl = strings.Replace(tmpl, "_L_FAMILY_VAR", "{{$lTyp.Family}}", -1)
+	tmpl = strings.Replace(tmpl, "_R_FAMILY_VAR", "{{$rTyp.Family}}", -1)
+	tmpl = strings.Replace(tmpl, "_L_TYP_VAR", "{{$lTyp.PhysType}}", -1)
+	tmpl = strings.Replace(tmpl, "_R_TYP_VAR", "{{$rTyp.PhysType}}", -1)
 	tmpl = strings.Replace(tmpl, "_L_TYP", "{{.LTyp}}", -1)
 	tmpl = strings.Replace(tmpl, "_R_TYP", "{{.RTyp}}", -1)
 	tmpl = strings.Replace(tmpl, "_RET_TYP", "{{.RetTyp}}", -1)
@@ -76,12 +79,12 @@ func replaceProjConstTmplVariables(tmpl string, isConstLeft bool) string {
 	if isConstLeft {
 		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "L", -1)
 		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "true", -1)
-		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}Const{{.RTyp}}Op", -1)
+		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LFamily}}{{.LTyp}}Const{{.RFamily}}{{.RTyp}}Op", -1)
 		tmpl = replaceManipulationFuncs(".RTyp", tmpl)
 	} else {
 		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "R", -1)
 		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "false", -1)
-		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp", -1)
+		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LFamily}}{{.LTyp}}{{.RFamily}}{{.RTyp}}ConstOp", -1)
 		tmpl = replaceManipulationFuncs(".LTyp", tmpl)
 	}
 	return replaceProjTmplVariables(tmpl)
@@ -105,21 +108,26 @@ func genProjNonConstOps(wr io.Writer) error {
 	return tmpl.Execute(wr, getLTypToRTypToOverloads())
 }
 
-func getLTypToRTypToOverloads() map[coltypes.T]map[coltypes.T][]*overload {
+type typ struct {
+	Family   types.Family
+	PhysType coltypes.T
+}
+
+func getLTypToRTypToOverloads() map[typ]map[typ][]*overload {
 	var allOverloads []*overload
 	allOverloads = append(allOverloads, binaryOpOverloads...)
 	allOverloads = append(allOverloads, comparisonOpOverloads...)
 
-	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
+	lTypToRTypToOverloads := make(map[typ]map[typ][]*overload)
 	for _, ov := range allOverloads {
-		lTyp := ov.LTyp
-		rTyp := ov.RTyp
-		rTypToOverloads := lTypToRTypToOverloads[lTyp]
+		left := typ{ov.LFamily, ov.LTyp}
+		right := typ{ov.RFamily, ov.RTyp}
+		rTypToOverloads := lTypToRTypToOverloads[left]
 		if rTypToOverloads == nil {
-			rTypToOverloads = make(map[coltypes.T][]*overload)
-			lTypToRTypToOverloads[lTyp] = rTypToOverloads
+			rTypToOverloads = make(map[typ][]*overload)
+			lTypToRTypToOverloads[left] = rTypToOverloads
 		}
-		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)
+		rTypToOverloads[right] = append(rTypToOverloads[right], ov)
 	}
 	return lTypToRTypToOverloads
 }

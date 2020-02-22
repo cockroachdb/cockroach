@@ -16,6 +16,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // likeTemplate depends on the selConstOp template from selection_ops_gen. We
@@ -60,6 +61,8 @@ func genLikeOps(wr io.Writer) error {
 	overloads := []overload{
 		{
 			Name:    "Prefix",
+			LFamily: types.BytesFamily,
+			RFamily: types.BytesFamily,
 			LTyp:    coltypes.Bytes,
 			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
@@ -69,6 +72,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "Suffix",
+			LFamily: types.BytesFamily,
+			RFamily: types.BytesFamily,
 			LTyp:    coltypes.Bytes,
 			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
@@ -78,6 +83,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "Regexp",
+			LFamily: types.BytesFamily,
+			RFamily: types.BytesFamily,
 			LTyp:    coltypes.Bytes,
 			RTyp:    coltypes.Bytes,
 			RGoType: "*regexp.Regexp",
@@ -87,6 +94,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "NotPrefix",
+			LFamily: types.BytesFamily,
+			RFamily: types.BytesFamily,
 			LTyp:    coltypes.Bytes,
 			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
@@ -96,6 +105,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "NotSuffix",
+			LFamily: types.BytesFamily,
+			RFamily: types.BytesFamily,
 			LTyp:    coltypes.Bytes,
 			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
@@ -105,6 +116,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "NotRegexp",
+			LFamily: types.BytesFamily,
+			RFamily: types.BytesFamily,
 			LTyp:    coltypes.Bytes,
 			RTyp:    coltypes.Bytes,
 			RGoType: "*regexp.Regexp",

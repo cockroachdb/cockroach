@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
-{{define "opName"}}perform{{.Name}}{{.LTyp}}{{.RTyp}}{{end}}
+{{define "opName"}}perform{{.Name}}{{.LFamily}}{{.LTyp}}{{.RFamily}}{{.RTyp}}{{end}}
 
 {{/* The range is over all overloads */}}
 {{range .}}

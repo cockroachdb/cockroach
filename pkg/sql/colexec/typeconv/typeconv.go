@@ -26,7 +26,11 @@ import (
 // Note: if you're adding a new type here, add it to
 // colexec.allSupportedSQLTypes as well.
 func FromColumnType(logType *types.T) coltypes.T {
-	switch logType.Family() {
+	return FromColumnFamily(logType.Family(), logType.Width())
+}
+
+func FromColumnFamily(family types.Family, width int32) coltypes.T {
+	switch family {
 	case types.BoolFamily:
 		return coltypes.Bool
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
@@ -36,7 +40,7 @@ func FromColumnType(logType *types.T) coltypes.T {
 	case types.DecimalFamily:
 		return coltypes.Decimal
 	case types.IntFamily:
-		switch logType.Width() {
+		switch width {
 		case 16:
 			return coltypes.Int16
 		case 32:
@@ -44,12 +48,10 @@ func FromColumnType(logType *types.T) coltypes.T {
 		case 0, 64:
 			return coltypes.Int64
 		}
-		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", logType.Width()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", width))
 	case types.FloatFamily:
 		return coltypes.Float64
-	case types.TimestampFamily:
-		return coltypes.Timestamp
-	case types.TimestampTZFamily:
+	case types.TimestampFamily, types.TimestampTZFamily:
 		return coltypes.Timestamp
 	case types.IntervalFamily:
 		return coltypes.Interval
@@ -68,6 +70,16 @@ func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
 		}
 	}
 	return typs, nil
+}
+
+func IsColTypeRepresentativeFamily(family types.Family) bool {
+	switch family {
+	case types.BoolFamily, types.BytesFamily, types.DecimalFamily,
+		types.IntFamily, types.FloatFamily, types.TimestampFamily,
+		types.IntervalFamily:
+		return true
+	}
+	return false
 }
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given

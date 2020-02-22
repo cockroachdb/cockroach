@@ -99,44 +99,44 @@ func GetLikeOperator(
 	}
 	switch likeOpType {
 	case likeConstant:
-		return &selEQBytesBytesConstOp{
+		return &selEQBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
 	case likeConstantNegate:
-		return &selNEBytesBytesConstOp{
+		return &selNEBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
 	case likeNeverMatch:
 		// Use an empty not-prefix operator to get correct NULL behavior.
-		return &selNotPrefixBytesBytesConstOp{
+		return &selNotPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       []byte{},
 		}, nil
 	case likeAlwaysMatch:
 		// Use an empty prefix operator to get correct NULL behavior.
-		return &selPrefixBytesBytesConstOp{
+		return &selPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       []byte{},
 		}, nil
 	case likeSuffix:
-		return &selSuffixBytesBytesConstOp{
+		return &selSuffixBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
 	case likeSuffixNegate:
-		return &selNotSuffixBytesBytesConstOp{
+		return &selNotSuffixBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
 	case likePrefix:
-		return &selPrefixBytesBytesConstOp{
+		return &selPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
 	case likePrefixNegate:
-		return &selNotPrefixBytesBytesConstOp{
+		return &selNotPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
@@ -145,7 +145,7 @@ func GetLikeOperator(
 		if err != nil {
 			return nil, err
 		}
-		return &selRegexpBytesBytesConstOp{
+		return &selRegexpBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       re,
 		}, nil
@@ -154,7 +154,7 @@ func GetLikeOperator(
 		if err != nil {
 			return nil, err
 		}
-		return &selNotRegexpBytesBytesConstOp{
+		return &selNotRegexpBytesFamilyBytesBytesFamilyBytesConstOp{
 			selConstOpBase: base,
 			constArg:       re,
 		}, nil
@@ -192,44 +192,44 @@ func GetLikeProjectionOperator(
 	}
 	switch likeOpType {
 	case likeConstant:
-		return &projEQBytesBytesConstOp{
+		return &projEQBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
 	case likeConstantNegate:
-		return &projNEBytesBytesConstOp{
+		return &projNEBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
 	case likeNeverMatch:
 		// Use an empty not-prefix operator to get correct NULL behavior.
-		return &projNotPrefixBytesBytesConstOp{
+		return &projNotPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        []byte{},
 		}, nil
 	case likeAlwaysMatch:
 		// Use an empty prefix operator to get correct NULL behavior.
-		return &projPrefixBytesBytesConstOp{
+		return &projPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        []byte{},
 		}, nil
 	case likeSuffix:
-		return &projSuffixBytesBytesConstOp{
+		return &projSuffixBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
 	case likeSuffixNegate:
-		return &projNotSuffixBytesBytesConstOp{
+		return &projNotSuffixBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
 	case likePrefix:
-		return &projPrefixBytesBytesConstOp{
+		return &projPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
 	case likePrefixNegate:
-		return &projNotPrefixBytesBytesConstOp{
+		return &projNotPrefixBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
@@ -238,7 +238,7 @@ func GetLikeProjectionOperator(
 		if err != nil {
 			return nil, err
 		}
-		return &projRegexpBytesBytesConstOp{
+		return &projRegexpBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        re,
 		}, nil
@@ -247,7 +247,7 @@ func GetLikeProjectionOperator(
 		if err != nil {
 			return nil, err
 		}
-		return &projNotRegexpBytesBytesConstOp{
+		return &projNotRegexpBytesFamilyBytesBytesFamilyBytesConstOp{
 			projConstOpBase: base,
 			constArg:        re,
 		}, nil

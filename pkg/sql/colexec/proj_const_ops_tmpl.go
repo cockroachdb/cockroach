@@ -228,58 +228,68 @@ func GetProjection_CONST_SIDEConstOperator(
 	if err != nil {
 		return nil, err
 	}
-	switch leftPhysType := typeconv.FromColumnType(leftLogType); leftPhysType {
+	switch leftFamily := leftLogType.Family(); leftFamily {
 	// {{range $lTyp, $rTypToOverloads := .}}
-	case coltypes._L_TYP_VAR:
-		switch rightPhysType := typeconv.FromColumnType(rightLogType); rightPhysType {
-		// {{range $rTyp, $overloads := $rTypToOverloads}}
-		case coltypes._R_TYP_VAR:
-			switch op.(type) {
-			case tree.BinaryOperator:
-				switch op {
-				// {{range $overloads}}
-				// {{if .IsBinOp}}
-				case tree._NAME:
-					return &_OP_CONST_NAME{
-						projConstOpBase: projConstOpBase,
-						// {{if _IS_CONST_LEFT}}
-						constArg: c.(_L_GO_TYPE),
-						// {{else}}
-						constArg: c.(_R_GO_TYPE),
+	case types._L_FAMILY_VAR:
+		switch leftPhysType := typeconv.FromColumnType(leftLogType); leftPhysType {
+		case coltypes._L_TYP_VAR:
+			switch rightFamily := rightLogType.Family(); rightFamily {
+			// {{range $rTyp, $overloads := $rTypToOverloads}}
+			case types._R_FAMILY_VAR:
+				switch rightPhysType := typeconv.FromColumnType(rightLogType); rightPhysType {
+				case coltypes._R_TYP_VAR:
+					switch op.(type) {
+					case tree.BinaryOperator:
+						switch op {
+						// {{range $overloads}}
+						// {{if .IsBinOp}}
+						case tree._NAME:
+							return &_OP_CONST_NAME{
+								projConstOpBase: projConstOpBase,
+								// {{if _IS_CONST_LEFT}}
+								constArg: c.(_L_GO_TYPE),
+								// {{else}}
+								constArg: c.(_R_GO_TYPE),
+								// {{end}}
+							}, nil
 						// {{end}}
-					}, nil
-				// {{end}}
-				// {{end}}
-				default:
-					return nil, errors.Errorf("unhandled binary operator: %s", op)
-				}
-			case tree.ComparisonOperator:
-				switch op {
-				// {{range $overloads}}
-				// {{if .IsCmpOp}}
-				case tree._NAME:
-					return &_OP_CONST_NAME{
-						projConstOpBase: projConstOpBase,
-						// {{if _IS_CONST_LEFT}}
-						constArg: c.(_L_GO_TYPE),
-						// {{else}}
-						constArg: c.(_R_GO_TYPE),
 						// {{end}}
-					}, nil
-				// {{end}}
-				// {{end}}
+						default:
+							return nil, errors.Errorf("unhandled binary operator: %s", op)
+						}
+					case tree.ComparisonOperator:
+						switch op {
+						// {{range $overloads}}
+						// {{if .IsCmpOp}}
+						case tree._NAME:
+							return &_OP_CONST_NAME{
+								projConstOpBase: projConstOpBase,
+								// {{if _IS_CONST_LEFT}}
+								constArg: c.(_L_GO_TYPE),
+								// {{else}}
+								constArg: c.(_R_GO_TYPE),
+								// {{end}}
+							}, nil
+						// {{end}}
+						// {{end}}
+						default:
+							return nil, errors.Errorf("unhandled comparison operator: %s", op)
+						}
+					default:
+						return nil, errors.New("unhandled operator type")
+					}
 				default:
-					return nil, errors.Errorf("unhandled comparison operator: %s", op)
+					return nil, errors.Errorf("unhandled right type: %s", rightPhysType)
 				}
+				// {{end}}
 			default:
-				return nil, errors.New("unhandled operator type")
+				return nil, errors.Errorf("unhandled right family: %s", rightFamily)
 			}
-		// {{end}}
 		default:
-			return nil, errors.Errorf("unhandled right type: %s", rightPhysType)
+			return nil, errors.Errorf("unhandled left type: %s", leftPhysType)
 		}
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled left type: %s", leftPhysType)
+		return nil, errors.Errorf("unhandled left family: %s", leftFamily)
 	}
 }

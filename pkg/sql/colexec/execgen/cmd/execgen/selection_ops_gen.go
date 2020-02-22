@@ -26,8 +26,8 @@ func getSelectionOpsTmpl() (*template.Template, error) {
 	}
 
 	s := string(t)
-	s = strings.Replace(s, "_OP_CONST_NAME", "sel{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp", -1)
-	s = strings.Replace(s, "_OP_NAME", "sel{{.Name}}{{.LTyp}}{{.RTyp}}Op", -1)
+	s = strings.Replace(s, "_OP_CONST_NAME", "sel{{.Name}}{{.LFamily}}{{.LTyp}}{{.RFamily}}{{.RTyp}}ConstOp", -1)
+	s = strings.Replace(s, "_OP_NAME", "sel{{.Name}}{{.LFamily}}{{.LTyp}}{{.RFamily}}{{.RTyp}}Op", -1)
 	s = strings.Replace(s, "_R_GO_TYPE", "{{.RGoType}}", -1)
 	s = strings.Replace(s, "_L_TYP_VAR", "{{$lTyp}}", -1)
 	s = strings.Replace(s, "_R_TYP_VAR", "{{$rTyp}}", -1)

@@ -19,7 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 var binaryOpName = map[tree.BinaryOperator]string{
@@ -76,6 +78,8 @@ type overload struct {
 	BinOp tree.BinaryOperator
 	// OpStr is the string form of whichever of CmpOp and BinOp are set.
 	OpStr     string
+	LFamily   types.Family
+	RFamily   types.Family
 	LTyp      coltypes.T
 	RTyp      coltypes.T
 	LGoType   string
@@ -244,6 +248,13 @@ func floatToDecimal(to, from string) string {
 
 var castOverloads map[coltypes.T][]castOverload
 
+func widthsByFamily(family types.Family) []int32 {
+	if family == types.IntFamily {
+		return []int32{16, 32, 64}
+	}
+	return []int32{0}
+}
+
 func init() {
 	registerTypeCustomizers()
 	registerBinOpOutputTypes()
@@ -256,98 +267,139 @@ func init() {
 	anyTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
 	sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	anyTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
-	for _, leftType := range physTypes {
-		for _, rightType := range coltypes.CompatibleTypes[leftType] {
-			customizer := typeCustomizers[coltypePair{leftType, rightType}]
-			for _, op := range binOps {
-				// Skip types that don't have associated binary ops.
-				retType, ok := binOpOutputTypes[op][coltypePair{leftType, rightType}]
-				if !ok {
-					continue
-				}
-				ov := &overload{
-					Name:      binaryOpName[op],
-					BinOp:     op,
-					IsBinOp:   true,
-					OpStr:     binaryOpInfix[op],
-					LTyp:      leftType,
-					RTyp:      rightType,
-					LGoType:   leftType.GoTypeName(),
-					RGoType:   rightType.GoTypeName(),
-					RetTyp:    retType,
-					RetGoType: retType.GoTypeName(),
-				}
-				if customizer != nil {
-					if b, ok := customizer.(binOpTypeCustomizer); ok {
-						ov.AssignFunc = b.getBinOpAssignFunc()
-					}
-				}
-				binaryOpOverloads = append(binaryOpOverloads, ov)
-				anyTypeBinaryOpToOverloads[op] = append(anyTypeBinaryOpToOverloads[op], ov)
-				if leftType == rightType {
-					sameTypeBinaryOpToOverloads[op] = append(sameTypeBinaryOpToOverloads[op], ov)
-				}
+	for _, leftFamilyValue := range types.Family_value {
+		// TODO: integers.
+		leftFamily := types.Family(leftFamilyValue)
+		for _, leftWidth := range widthsByFamily(leftFamily) {
+			leftPhysType := typeconv.FromColumnFamily(leftFamily, leftWidth)
+			if leftPhysType == coltypes.Unhandled {
+				continue
 			}
-		}
-		for _, rightType := range coltypes.ComparableTypes[leftType] {
-			customizer := typeCustomizers[coltypePair{leftType, rightType}]
-			for _, op := range cmpOps {
-				opStr := comparisonOpInfix[op]
-				ov := &overload{
-					Name:      comparisonOpName[op],
-					CmpOp:     op,
-					IsCmpOp:   true,
-					OpStr:     opStr,
-					LTyp:      leftType,
-					RTyp:      rightType,
-					LGoType:   leftType.GoTypeName(),
-					RGoType:   rightType.GoTypeName(),
-					RetTyp:    coltypes.Bool,
-					RetGoType: coltypes.Bool.GoTypeName(),
-				}
-				if customizer != nil {
-					if b, ok := customizer.(cmpOpTypeCustomizer); ok {
-						ov.AssignFunc = func(op overload, target, l, r string) string {
-							cmp := b.getCmpOpCompareFunc()("cmpResult", l, r)
-							if cmp == "" {
-								return ""
+			for _, rightFamilyValue := range types.Family_value {
+				rightFamily := types.Family(rightFamilyValue)
+				for _, rightWidth := range widthsByFamily(rightFamily) {
+					rightPhysType := typeconv.FromColumnFamily(rightFamily, rightWidth)
+					if rightPhysType == coltypes.Unhandled {
+						continue
+					}
+					pair := typePair{leftFamily, leftPhysType, rightFamily, rightPhysType}
+					compatible := false
+					for _, compatiblePhysType := range coltypes.CompatibleTypes[leftPhysType] {
+						if rightPhysType == compatiblePhysType {
+							compatible = true
+							break
+						}
+					}
+					if compatible {
+						customizer := typeCustomizers[pair]
+						for _, op := range binOps {
+							// Skip types that don't have associated binary ops.
+							retType, ok := binOpOutputTypes[op][pair]
+							if !ok {
+								continue
 							}
-							args := map[string]string{"Target": target, "Cmp": cmp, "Op": op.OpStr}
-							buf := strings.Builder{}
-							t := template.Must(template.New("").Parse(`
+							ov := &overload{
+								Name:      binaryOpName[op],
+								BinOp:     op,
+								IsBinOp:   true,
+								OpStr:     binaryOpInfix[op],
+								LFamily:   leftFamily,
+								RFamily:   rightFamily,
+								LTyp:      leftPhysType,
+								RTyp:      rightPhysType,
+								LGoType:   leftPhysType.GoTypeName(),
+								RGoType:   rightPhysType.GoTypeName(),
+								RetTyp:    retType,
+								RetGoType: retType.GoTypeName(),
+							}
+							if customizer != nil {
+								if b, ok := customizer.(binOpTypeCustomizer); ok {
+									ov.AssignFunc = b.getBinOpAssignFunc()
+								}
+							}
+							binaryOpOverloads = append(binaryOpOverloads, ov)
+							anyTypeBinaryOpToOverloads[op] = append(anyTypeBinaryOpToOverloads[op], ov)
+							if leftPhysType == rightPhysType {
+								sameTypeBinaryOpToOverloads[op] = append(sameTypeBinaryOpToOverloads[op], ov)
+							}
+						}
+					}
+
+					comparable := false
+					for _, comparablePhysType := range coltypes.ComparableTypes[leftPhysType] {
+						if rightPhysType == comparablePhysType {
+							comparable = true
+							break
+						}
+					}
+					if comparable {
+						customizer := typeCustomizers[pair]
+						for _, op := range cmpOps {
+							opStr := comparisonOpInfix[op]
+							ov := &overload{
+								Name:      comparisonOpName[op],
+								CmpOp:     op,
+								IsCmpOp:   true,
+								OpStr:     opStr,
+								LFamily:   leftFamily,
+								RFamily:   rightFamily,
+								LTyp:      leftPhysType,
+								RTyp:      rightPhysType,
+								LGoType:   leftPhysType.GoTypeName(),
+								RGoType:   rightPhysType.GoTypeName(),
+								RetTyp:    coltypes.Bool,
+								RetGoType: coltypes.Bool.GoTypeName(),
+							}
+							if customizer != nil {
+								if b, ok := customizer.(cmpOpTypeCustomizer); ok {
+									ov.AssignFunc = func(op overload, target, l, r string) string {
+										cmp := b.getCmpOpCompareFunc()("cmpResult", l, r)
+										if cmp == "" {
+											return ""
+										}
+										args := map[string]string{"Target": target, "Cmp": cmp, "Op": op.OpStr}
+										buf := strings.Builder{}
+										t := template.Must(template.New("").Parse(`
 								{
 									var cmpResult int
 									{{.Cmp}}
 									{{.Target}} = cmpResult {{.Op}} 0
 								}
 							`))
-							if err := t.Execute(&buf, args); err != nil {
-								execerror.VectorizedInternalPanic(err)
+										if err := t.Execute(&buf, args); err != nil {
+											execerror.VectorizedInternalPanic(err)
+										}
+										return buf.String()
+									}
+									ov.CompareFunc = b.getCmpOpCompareFunc()
+								}
 							}
-							return buf.String()
+							if typeconv.IsColTypeRepresentativeFamily(leftFamily) && typeconv.IsColTypeRepresentativeFamily(rightFamily) {
+								comparisonOpOverloads = append(comparisonOpOverloads, ov)
+								anyTypeComparisonOpToOverloads[op] = append(anyTypeComparisonOpToOverloads[op], ov)
+								if leftPhysType == rightPhysType && leftFamily == rightFamily {
+									sameTypeComparisonOpToOverloads[op] = append(sameTypeComparisonOpToOverloads[op], ov)
+								}
+							}
 						}
-						ov.CompareFunc = b.getCmpOpCompareFunc()
 					}
 				}
-				comparisonOpOverloads = append(comparisonOpOverloads, ov)
-				anyTypeComparisonOpToOverloads[op] = append(anyTypeComparisonOpToOverloads[op], ov)
-				if leftType == rightType {
-					sameTypeComparisonOpToOverloads[op] = append(sameTypeComparisonOpToOverloads[op], ov)
+			}
+
+			sameTypeCustomizer := typeCustomizers[typePair{leftFamily, leftPhysType, leftFamily, leftPhysType}]
+			ov := &overload{
+				IsHashOp: true,
+				LFamily:  leftFamily,
+				LTyp:     leftPhysType,
+				OpStr:    "uint64",
+			}
+			if sameTypeCustomizer != nil && typeconv.IsColTypeRepresentativeFamily(leftFamily) {
+				if b, ok := sameTypeCustomizer.(hashTypeCustomizer); ok {
+					ov.AssignFunc = b.getHashAssignFunc()
 				}
+				hashOverloads = append(hashOverloads, ov)
 			}
 		}
-		sameTypeCustomizer := typeCustomizers[coltypePair{leftType, leftType}]
-		ov := &overload{
-			IsHashOp: true,
-			LTyp:     leftType,
-			OpStr:    "uint64",
-		}
-		if sameTypeCustomizer != nil {
-			if b, ok := sameTypeCustomizer.(hashTypeCustomizer); ok {
-				ov.AssignFunc = b.getHashAssignFunc()
-			}
-		}
-		hashOverloads = append(hashOverloads, ov)
 	}
 
 	// Build cast overloads. We omit cases of type casts that we do not support.
@@ -484,19 +536,21 @@ func init() {
 // (==, <, etc) or binary operator (+, -, etc) semantics.
 type typeCustomizer interface{}
 
-// coltypePair is used to key a map that holds all typeCustomizers.
-type coltypePair struct {
-	leftType  coltypes.T
-	rightType coltypes.T
+// typePair is used to key a map that holds all typeCustomizers.
+type typePair struct {
+	leftFamily    types.Family
+	leftPhysType  coltypes.T
+	rightFamily   types.Family
+	rightPhysType coltypes.T
 }
 
-var typeCustomizers map[coltypePair]typeCustomizer
+var typeCustomizers map[typePair]typeCustomizer
 
-var binOpOutputTypes map[tree.BinaryOperator]map[coltypePair]coltypes.T
+var binOpOutputTypes map[tree.BinaryOperator]map[typePair]coltypes.T
 
 // registerTypeCustomizer registers a particular type customizer to a
 // pair of types, for usage by templates.
-func registerTypeCustomizer(pair coltypePair, customizer typeCustomizer) {
+func registerTypeCustomizer(pair typePair, customizer typeCustomizer) {
 	typeCustomizers[pair] = customizer
 }
 
@@ -568,8 +622,13 @@ type timestampCustomizer struct{}
 type intervalCustomizer struct{}
 
 // timestampIntervalCustomizer supports mixed type expression with a timestamp
-// left-hand side and an interval right-hand side.
+// left-hand side (of Timestamp family) and an interval right-hand side.
 type timestampIntervalCustomizer struct{}
+
+// timestampTZIntervalCustomizer supports mixed type expression with a
+// timestamp left-hand side (of TimestampTZ family)and an interval right-hand
+// side.
+type timestampTZIntervalCustomizer struct{}
 
 // intervalTimestampCustomizer supports mixed type expression with an interval
 // left-hand side and a timestamp right-hand side.
@@ -598,6 +657,8 @@ type intervalDecimalCustomizer struct{}
 // decimalIntervalCustomizer supports mixed type expression with a decimal
 // left-hand side and an interval right-hand side.
 type decimalIntervalCustomizer struct{}
+
+type timestampTimestampTZCustomizer struct{}
 
 func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
@@ -1160,6 +1221,29 @@ func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
+func (c timestampTZIntervalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Plus:
+			return fmt.Sprintf(`
+        // TODO(yuzefovich): plumb actual evalCtx.
+        evalCtx := &tree.EvalContext{}
+        %[1]s = duration.Add(%[2]s.In(evalCtx.GetLocation()), %[3]s)`,
+				target, l, r)
+		case tree.Minus:
+			return fmt.Sprintf(`
+        // TODO(yuzefovich): plumb actual evalCtx.
+        evalCtx := &tree.EvalContext{}
+        %[1]s = duration.Add(%[2]s.In(evalCtx.GetLocation()), %[3]s.Mul(-1))`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
 func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
 		switch op.BinOp {
@@ -1277,83 +1361,86 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func registerTypeCustomizers() {
-	typeCustomizers = make(map[coltypePair]typeCustomizer)
-	registerTypeCustomizer(coltypePair{coltypes.Bool, coltypes.Bool}, boolCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Bytes, coltypes.Bytes}, bytesCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Decimal}, decimalCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Timestamp}, timestampCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Interval}, intervalCustomizer{})
+	typeCustomizers = make(map[typePair]typeCustomizer)
+	registerTypeCustomizer(typePair{types.BoolFamily, coltypes.Bool, types.BoolFamily, coltypes.Bool}, boolCustomizer{})
+	registerTypeCustomizer(typePair{types.BytesFamily, coltypes.Bytes, types.BytesFamily, coltypes.Bytes}, bytesCustomizer{})
+	registerTypeCustomizer(typePair{types.StringFamily, coltypes.Bytes, types.StringFamily, coltypes.Bytes}, bytesCustomizer{})
+	registerTypeCustomizer(typePair{types.UuidFamily, coltypes.Bytes, types.UuidFamily, coltypes.Bytes}, bytesCustomizer{})
+	registerTypeCustomizer(typePair{types.DecimalFamily, coltypes.Decimal, types.DecimalFamily, coltypes.Decimal}, decimalCustomizer{})
+	registerTypeCustomizer(typePair{types.TimestampFamily, coltypes.Timestamp, types.TimestampFamily, coltypes.Timestamp}, timestampCustomizer{})
+	registerTypeCustomizer(typePair{types.IntervalFamily, coltypes.Interval, types.IntervalFamily, coltypes.Interval}, intervalCustomizer{})
 	for _, leftFloatType := range coltypes.FloatTypes {
 		for _, rightFloatType := range coltypes.FloatTypes {
-			registerTypeCustomizer(coltypePair{leftFloatType, rightFloatType}, floatCustomizer{width: 64})
+			registerTypeCustomizer(typePair{types.FloatFamily, leftFloatType, types.FloatFamily, rightFloatType}, floatCustomizer{width: 64})
 		}
 	}
 	for _, leftIntType := range coltypes.IntTypes {
 		for _, rightIntType := range coltypes.IntTypes {
-			registerTypeCustomizer(coltypePair{leftIntType, rightIntType}, intCustomizer{width: 64})
+			registerTypeCustomizer(typePair{types.IntFamily, leftIntType, types.IntFamily, rightIntType}, intCustomizer{width: 64})
 		}
 	}
 	// Use a customizer of appropriate width when widths are the same.
-	registerTypeCustomizer(coltypePair{coltypes.Float64, coltypes.Float64}, floatCustomizer{width: 64})
-	registerTypeCustomizer(coltypePair{coltypes.Int16, coltypes.Int16}, intCustomizer{width: 16})
-	registerTypeCustomizer(coltypePair{coltypes.Int32, coltypes.Int32}, intCustomizer{width: 32})
-	registerTypeCustomizer(coltypePair{coltypes.Int64, coltypes.Int64}, intCustomizer{width: 64})
+	registerTypeCustomizer(typePair{types.FloatFamily, coltypes.Float64, types.FloatFamily, coltypes.Float64}, floatCustomizer{width: 64})
+	registerTypeCustomizer(typePair{types.IntFamily, coltypes.Int16, types.IntFamily, coltypes.Int16}, intCustomizer{width: 16})
+	registerTypeCustomizer(typePair{types.IntFamily, coltypes.Int32, types.IntFamily, coltypes.Int32}, intCustomizer{width: 32})
+	registerTypeCustomizer(typePair{types.IntFamily, coltypes.Int64, types.IntFamily, coltypes.Int64}, intCustomizer{width: 64})
 
 	for _, rightFloatType := range coltypes.FloatTypes {
-		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightFloatType}, decimalFloatCustomizer{})
-		registerTypeCustomizer(coltypePair{coltypes.Interval, rightFloatType}, intervalFloatCustomizer{})
+		registerTypeCustomizer(typePair{types.DecimalFamily, coltypes.Decimal, types.FloatFamily, rightFloatType}, decimalFloatCustomizer{})
+		registerTypeCustomizer(typePair{types.IntervalFamily, coltypes.Interval, types.FloatFamily, rightFloatType}, intervalFloatCustomizer{})
 	}
 	for _, rightIntType := range coltypes.IntTypes {
-		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightIntType}, decimalIntCustomizer{})
-		registerTypeCustomizer(coltypePair{coltypes.Interval, rightIntType}, intervalIntCustomizer{})
+		registerTypeCustomizer(typePair{types.DecimalFamily, coltypes.Decimal, types.IntFamily, rightIntType}, decimalIntCustomizer{})
+		registerTypeCustomizer(typePair{types.IntervalFamily, coltypes.Interval, types.IntFamily, rightIntType}, intervalIntCustomizer{})
 	}
 	for _, leftFloatType := range coltypes.FloatTypes {
-		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Decimal}, floatDecimalCustomizer{})
-		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Interval}, floatIntervalCustomizer{})
+		registerTypeCustomizer(typePair{types.FloatFamily, leftFloatType, types.DecimalFamily, coltypes.Decimal}, floatDecimalCustomizer{})
+		registerTypeCustomizer(typePair{types.FloatFamily, leftFloatType, types.IntervalFamily, coltypes.Interval}, floatIntervalCustomizer{})
 	}
 	for _, leftIntType := range coltypes.IntTypes {
-		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Decimal}, intDecimalCustomizer{})
-		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Interval}, intIntervalCustomizer{})
+		registerTypeCustomizer(typePair{types.IntFamily, leftIntType, types.DecimalFamily, coltypes.Decimal}, intDecimalCustomizer{})
+		registerTypeCustomizer(typePair{types.IntFamily, leftIntType, types.IntervalFamily, coltypes.Interval}, intIntervalCustomizer{})
 	}
 	for _, leftFloatType := range coltypes.FloatTypes {
 		for _, rightIntType := range coltypes.IntTypes {
-			registerTypeCustomizer(coltypePair{leftFloatType, rightIntType}, floatIntCustomizer{})
+			registerTypeCustomizer(typePair{types.FloatFamily, leftFloatType, types.IntFamily, rightIntType}, floatIntCustomizer{})
 		}
 	}
 	for _, leftIntType := range coltypes.IntTypes {
 		for _, rightFloatType := range coltypes.FloatTypes {
-			registerTypeCustomizer(coltypePair{leftIntType, rightFloatType}, intFloatCustomizer{})
+			registerTypeCustomizer(typePair{types.IntFamily, leftIntType, types.FloatFamily, rightFloatType}, intFloatCustomizer{})
 		}
 	}
-	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Interval}, timestampIntervalCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Timestamp}, intervalTimestampCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Decimal}, intervalDecimalCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Interval}, decimalIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.TimestampFamily, coltypes.Timestamp, types.IntervalFamily, coltypes.Interval}, timestampIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.TimestampTZFamily, coltypes.Timestamp, types.IntervalFamily, coltypes.Interval}, timestampTZIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.IntervalFamily, coltypes.Interval, types.TimestampFamily, coltypes.Timestamp}, intervalTimestampCustomizer{})
+	registerTypeCustomizer(typePair{types.IntervalFamily, coltypes.Interval, types.DecimalFamily, coltypes.Decimal}, intervalDecimalCustomizer{})
+	registerTypeCustomizer(typePair{types.DecimalFamily, coltypes.Decimal, types.IntervalFamily, coltypes.Interval}, decimalIntervalCustomizer{})
 }
 
 func registerBinOpOutputTypes() {
-	binOpOutputTypes = make(map[tree.BinaryOperator]map[coltypePair]coltypes.T)
+	binOpOutputTypes = make(map[tree.BinaryOperator]map[typePair]coltypes.T)
 	for binOp := range binaryOpName {
-		binOpOutputTypes[binOp] = make(map[coltypePair]coltypes.T)
+		binOpOutputTypes[binOp] = make(map[typePair]coltypes.T)
 		for _, leftFloatType := range coltypes.FloatTypes {
 			for _, rightFloatType := range coltypes.FloatTypes {
-				binOpOutputTypes[binOp][coltypePair{leftFloatType, rightFloatType}] = coltypes.Float64
+				binOpOutputTypes[binOp][typePair{types.FloatFamily, leftFloatType, types.FloatFamily, rightFloatType}] = coltypes.Float64
 			}
 		}
 		for _, leftIntType := range coltypes.IntTypes {
 			for _, rightIntType := range coltypes.IntTypes {
-				binOpOutputTypes[binOp][coltypePair{leftIntType, rightIntType}] = coltypes.Int64
+				binOpOutputTypes[binOp][typePair{types.IntFamily, leftIntType, types.IntFamily, rightIntType}] = coltypes.Int64
 			}
 		}
 		// Use an output type of the same width when input widths are the same.
-		binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, coltypes.Decimal}] = coltypes.Decimal
-		binOpOutputTypes[binOp][coltypePair{coltypes.Float64, coltypes.Float64}] = coltypes.Float64
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int16, coltypes.Int16}] = coltypes.Int16
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int32, coltypes.Int32}] = coltypes.Int32
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int64, coltypes.Int64}] = coltypes.Int64
+		binOpOutputTypes[binOp][typePair{types.DecimalFamily, coltypes.Decimal, types.DecimalFamily, coltypes.Decimal}] = coltypes.Decimal
+		binOpOutputTypes[binOp][typePair{types.FloatFamily, coltypes.Float64, types.FloatFamily, coltypes.Float64}] = coltypes.Float64
+		binOpOutputTypes[binOp][typePair{types.IntFamily, coltypes.Int16, types.IntFamily, coltypes.Int16}] = coltypes.Int16
+		binOpOutputTypes[binOp][typePair{types.IntFamily, coltypes.Int32, types.IntFamily, coltypes.Int32}] = coltypes.Int32
+		binOpOutputTypes[binOp][typePair{types.IntFamily, coltypes.Int64, types.IntFamily, coltypes.Int64}] = coltypes.Int64
 		for _, intType := range coltypes.IntTypes {
-			binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, intType}] = coltypes.Decimal
-			binOpOutputTypes[binOp][coltypePair{intType, coltypes.Decimal}] = coltypes.Decimal
+			binOpOutputTypes[binOp][typePair{types.DecimalFamily, coltypes.Decimal, types.IntFamily, intType}] = coltypes.Decimal
+			binOpOutputTypes[binOp][typePair{types.IntFamily, intType, types.DecimalFamily, coltypes.Decimal}] = coltypes.Decimal
 		}
 	}
 
@@ -1361,26 +1448,34 @@ func registerBinOpOutputTypes() {
 	// decimal result.
 	for _, leftIntType := range coltypes.IntTypes {
 		for _, rightIntType := range coltypes.IntTypes {
-			binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = coltypes.Decimal
+			binOpOutputTypes[tree.Div][typePair{types.IntFamily, leftIntType, types.IntFamily, rightIntType}] = coltypes.Decimal
 		}
 	}
 
-	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Timestamp, coltypes.Timestamp}] = coltypes.Interval
-	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Interval, coltypes.Interval}] = coltypes.Interval
-	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Interval, coltypes.Interval}] = coltypes.Interval
-	for _, numberType := range coltypes.NumberTypes {
-		binOpOutputTypes[tree.Mult][coltypePair{numberType, coltypes.Interval}] = coltypes.Interval
-		binOpOutputTypes[tree.Mult][coltypePair{coltypes.Interval, numberType}] = coltypes.Interval
+	binOpOutputTypes[tree.Minus][typePair{types.TimestampFamily, coltypes.Timestamp, types.TimestampFamily, coltypes.Timestamp}] = coltypes.Interval
+	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, coltypes.Interval, types.IntervalFamily, coltypes.Interval}] = coltypes.Interval
+	binOpOutputTypes[tree.Minus][typePair{types.IntervalFamily, coltypes.Interval, types.IntervalFamily, coltypes.Interval}] = coltypes.Interval
+	for _, intType := range coltypes.IntTypes {
+		binOpOutputTypes[tree.Mult][typePair{types.IntFamily, intType, types.IntervalFamily, coltypes.Interval}] = coltypes.Interval
+		binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, coltypes.Interval, types.IntFamily, intType}] = coltypes.Interval
 	}
+	for _, floatType := range coltypes.FloatTypes {
+		binOpOutputTypes[tree.Mult][typePair{types.FloatFamily, floatType, types.IntervalFamily, coltypes.Interval}] = coltypes.Interval
+		binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, coltypes.Interval, types.FloatFamily, floatType}] = coltypes.Interval
+	}
+	binOpOutputTypes[tree.Mult][typePair{types.DecimalFamily, coltypes.Decimal, types.IntervalFamily, coltypes.Interval}] = coltypes.Interval
+	binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, coltypes.Interval, types.DecimalFamily, coltypes.Decimal}] = coltypes.Interval
 	for _, rightIntType := range coltypes.IntTypes {
-		binOpOutputTypes[tree.Div][coltypePair{coltypes.Interval, rightIntType}] = coltypes.Interval
+		binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, coltypes.Interval, types.IntFamily, rightIntType}] = coltypes.Interval
 	}
 	for _, rightFloatType := range coltypes.FloatTypes {
-		binOpOutputTypes[tree.Div][coltypePair{coltypes.Interval, rightFloatType}] = coltypes.Interval
+		binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, coltypes.Interval, types.FloatFamily, rightFloatType}] = coltypes.Interval
 	}
-	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Timestamp, coltypes.Interval}] = coltypes.Timestamp
-	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Timestamp, coltypes.Interval}] = coltypes.Timestamp
-	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Interval, coltypes.Timestamp}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Plus][typePair{types.TimestampFamily, coltypes.Timestamp, types.IntervalFamily, coltypes.Interval}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Minus][typePair{types.TimestampFamily, coltypes.Timestamp, types.IntervalFamily, coltypes.Interval}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Plus][typePair{types.TimestampTZFamily, coltypes.Timestamp, types.IntervalFamily, coltypes.Interval}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, coltypes.Timestamp, types.IntervalFamily, coltypes.Interval}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, coltypes.Interval, types.TimestampFamily, coltypes.Timestamp}] = coltypes.Timestamp
 }
 
 // Avoid unused warning for functions which are only used in templates.
