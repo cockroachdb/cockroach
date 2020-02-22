@@ -319,7 +319,7 @@ export class JobsTable extends React.Component<JobsTableProps> {
       <div className="jobs-page">
         <Helmet title="Jobs" />
         <section className="section">
-          <h1 className="base-heading page-title">
+          <h1 className="base-heading">
             Jobs
             <div className="section-heading__tooltip">
               <ToolTipWrapper text={titleTooltip}>

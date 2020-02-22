@@ -229,7 +229,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
         <Helmet title={ app ? `${app} App | Statements` : "Statements"} />
 
         <section className="section">
-          <h1 className="base-heading page-title">Statements</h1>
+          <h1 className="base-heading">Statements</h1>
         </section>
 
         <Loading
