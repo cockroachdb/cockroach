@@ -48,6 +48,16 @@ CREATE TABLE s (
 )
 ----
 
+exec-ddl
+CREATE TABLE nullablecols (
+    c1 INT,
+    c2 INT,
+    c3 INT,
+    UNIQUE (c1),
+    UNIQUE (c2,c3)
+)
+----
+
 # --------------------------------------------------
 # ConvertGroupByToDistinct
 # --------------------------------------------------
@@ -254,6 +264,68 @@ distinct-on
  └── aggregations
       └── first-agg [as=s:14, outer=(14)]
            └── s:14
+
+# UpsertDistinctOn case.
+norm expect=EliminateGroupByProject
+INSERT INTO nullablecols (rowid, c1, c2, c3)
+SELECT i, i, i, i FROM (SELECT * FROM a WHERE EXISTS(SELECT * FROM a) AND k>0)
+ON CONFLICT (c1) DO UPDATE SET c3=1
+----
+upsert nullablecols
+ ├── columns: <none>
+ ├── canary column: 18
+ ├── fetch columns: c1:15(int) c2:16(int) c3:17(int) rowid:18(int)
+ ├── insert-mapping:
+ │    ├──  i:6 => c1:1
+ │    ├──  i:6 => c2:2
+ │    ├──  i:6 => c3:3
+ │    └──  i:6 => rowid:4
+ ├── update-mapping:
+ │    └──  upsert_c3:22 => c3:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_c3:22(int!null) i:6(int!null) c1:15(int) c2:16(int) c3:17(int) rowid:18(int)
+      ├── key: (6,18)
+      ├── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18), (6,18)-->(22)
+      ├── left-join (hash)
+      │    ├── columns: i:6(int!null) c1:15(int) c2:16(int) c3:17(int) rowid:18(int)
+      │    ├── key: (6,18)
+      │    ├── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: i:6(int!null)
+      │    │    ├── grouping columns: i:6(int!null)
+      │    │    ├── key: (6)
+      │    │    └── select
+      │    │         ├── columns: k:5(int!null) i:6(int!null)
+      │    │         ├── key: (5)
+      │    │         ├── fd: (5)-->(6)
+      │    │         ├── scan a
+      │    │         │    ├── columns: k:5(int!null) i:6(int!null)
+      │    │         │    ├── key: (5)
+      │    │         │    └── fd: (5)-->(6)
+      │    │         └── filters
+      │    │              ├── exists [type=bool, subquery]
+      │    │              │    └── limit
+      │    │              │         ├── columns: k:10(int!null) i:11(int!null) f:12(float) s:13(string!null) j:14(jsonb)
+      │    │              │         ├── cardinality: [0 - 1]
+      │    │              │         ├── key: ()
+      │    │              │         ├── fd: ()-->(10-14)
+      │    │              │         ├── scan a
+      │    │              │         │    ├── columns: k:10(int!null) i:11(int!null) f:12(float) s:13(string!null) j:14(jsonb)
+      │    │              │         │    ├── key: (10)
+      │    │              │         │    ├── fd: (10)-->(11-14), (11,13)-->(10,12,14), (11,12)~~>(10,13,14)
+      │    │              │         │    └── limit hint: 1.00
+      │    │              │         └── const: 1 [type=int]
+      │    │              └── k > 0 [type=bool, outer=(5), constraints=(/5: [/1 - ]; tight)]
+      │    ├── scan nullablecols
+      │    │    ├── columns: c1:15(int) c2:16(int) c3:17(int) rowid:18(int!null)
+      │    │    ├── key: (18)
+      │    │    └── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18)
+      │    └── filters
+      │         └── i = c1 [type=bool, outer=(6,15), constraints=(/6: (/NULL - ]; /15: (/NULL - ]), fd=(6)==(15), (15)==(6)]
+      └── projections
+           └── CASE WHEN rowid IS NULL THEN i ELSE 1 END [type=int, outer=(6,18)]
 
 # Don't eliminate project if it computes extra column(s).
 norm expect-not=EliminateGroupByProject
