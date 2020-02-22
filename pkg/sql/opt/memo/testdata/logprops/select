@@ -118,7 +118,7 @@ select
  ├── key: ()
  ├── fd: ()-->(3)
  ├── scalar-group-by
- │    ├── columns: count_rows:3(int)
+ │    ├── columns: count_rows:3(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
@@ -303,13 +303,13 @@ project
            └── gt [type=bool, outer=(2), correlated-subquery]
                 ├── subquery [type=int]
                 │    └── max1-row
-                │         ├── columns: count_rows:8(int)
+                │         ├── columns: count_rows:8(int!null)
                 │         ├── outer: (2)
                 │         ├── cardinality: [1 - 1]
                 │         ├── key: ()
                 │         ├── fd: ()-->(8)
                 │         └── scalar-group-by
-                │              ├── columns: count_rows:8(int)
+                │              ├── columns: count_rows:8(int!null)
                 │              ├── outer: (2)
                 │              ├── cardinality: [1 - 1]
                 │              ├── key: ()

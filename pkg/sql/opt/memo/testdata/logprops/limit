@@ -29,13 +29,13 @@ build
 SELECT count(*) FROM xyzs LIMIT 10
 ----
 limit
- ├── columns: count:5(int)
+ ├── columns: count:5(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── prune: (5)
  ├── scalar-group-by
- │    ├── columns: count_rows:5(int)
+ │    ├── columns: count_rows:5(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(5)

@@ -1700,7 +1700,7 @@ WHERE ol_w_id = 10
     AND s_quantity < 15
 ----
 scalar-group-by
- ├── columns: count:28(int)
+ ├── columns: count:28(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.283466667
@@ -1754,7 +1754,7 @@ ON (w_id = d_w_id)
 WHERE w_ytd != sum_d_ytd
 ----
 scalar-group-by
- ├── columns: count:22(int)
+ ├── columns: count:22(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 1762.42
@@ -1819,7 +1819,7 @@ GROUP BY no_d_id, no_w_id
 ORDER BY no_w_id, no_d_id
 ----
 group-by
- ├── columns: max:4(int)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
+ ├── columns: max:4(int!null)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
  ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
  ├── cost: 1100.04
@@ -1847,7 +1847,7 @@ GROUP BY o_d_id, o_w_id
 ORDER BY o_w_id, o_d_id
 ----
 group-by
- ├── columns: max:9(int)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── columns: max:9(int!null)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
  ├── cost: 1130.04
@@ -1879,7 +1879,7 @@ FROM
 WHERE nod != -1
 ----
 scalar-group-by
- ├── columns: count:8(int)
+ ├── columns: count:8(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 1133.41333
@@ -1887,14 +1887,14 @@ scalar-group-by
  ├── fd: ()-->(8)
  ├── prune: (8)
  ├── select
- │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
+ │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int!null) min:5(int!null) count_rows:6(int!null)
  │    ├── stats: [rows=333.333333]
  │    ├── cost: 1130.05
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(4-6)
  │    ├── interesting orderings: (+3,+2)
  │    ├── group-by
- │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
+ │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int!null) min:5(int!null) count_rows:6(int!null)
  │    │    ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  │    │    ├── internal-ordering: +3,+2
  │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(2,3)=1000, null(2,3)=0]
@@ -1962,7 +1962,7 @@ GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
 ----
 group-by
- ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
+ ├── columns: count:11(int!null)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
  ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
  ├── cost: 1160.04
@@ -2102,7 +2102,7 @@ except-all
  │    ├── prune: (1-3,7)
  │    └── interesting orderings: (+3,+2,-1)
  └── group-by
-      ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
+      ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int!null)
       ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       ├── stats: [rows=1000, distinct(9-11)=1000, null(9-11)=0]
       ├── cost: 1150.04
@@ -2140,7 +2140,7 @@ except-all
  ├── stats: [rows=1000]
  ├── cost: 2300.07
  ├── group-by
- │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int!null)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0]
  │    ├── cost: 1150.04
@@ -2183,7 +2183,7 @@ ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
 WHERE ol_o_id IS NULL OR o_id IS NULL
 ----
 scalar-group-by
- ├── columns: count:19(int)
+ ├── columns: count:19(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 2261.094

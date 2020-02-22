@@ -88,7 +88,7 @@ build
 SELECT y, sum(z) FROM a GROUP BY y
 ----
 group-by
- ├── columns: y:2(int) sum:5(float)
+ ├── columns: y:2(int) sum:5(float!null)
  ├── grouping columns: y:2(int)
  ├── stats: [rows=400, distinct(2)=400, null(2)=0]
  ├── key: (2)
@@ -109,10 +109,10 @@ build
 SELECT max(x) FROM a GROUP BY y, z, s
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5(int!null)
  ├── stats: [rows=600]
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
+      ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int!null)
       ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       ├── stats: [rows=600, distinct(2-4)=600, null(2-4)=0]
       ├── key: (2-4)
@@ -130,10 +130,10 @@ build
 SELECT min(x) FROM a GROUP BY y, z
 ----
 project
- ├── columns: min:5(int)
+ ├── columns: min:5(int!null)
  ├── stats: [rows=2000]
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) min:5(int)
+      ├── columns: y:2(int) z:3(float!null) min:5(int!null)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
       ├── key: (2,3)
@@ -156,17 +156,17 @@ build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5(int!null)
  ├── stats: [rows=120]
  └── select
-      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
+      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int!null)
       ├── stats: [rows=120, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
-      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
+      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int!null)
       │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
-      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=0, distinct(2-4)=600, null(2-4)=0]
+      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=0, distinct(5)=600, null(5)=0, distinct(2-4)=600, null(2-4)=0]
       │    ├── key: (2-4)
       │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
       │    ├── scan a
@@ -190,7 +190,7 @@ select
  ├── key: (4)
  ├── fd: ()-->(5)
  ├── group-by
- │    ├── columns: s:4(string) sum:5(decimal)
+ │    ├── columns: s:4(string) sum:5(decimal!null)
  │    ├── grouping columns: s:4(string)
  │    ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(5)=10, null(5)=0]
  │    ├── key: (4)
@@ -333,7 +333,7 @@ build
 SELECT y, sum(z) FROM a GROUP BY y
 ----
 group-by
- ├── columns: y:2(int) sum:5(float)
+ ├── columns: y:2(int) sum:5(float!null)
  ├── grouping columns: y:2(int)
  ├── stats: [rows=400, distinct(2)=400, null(2)=400]
  ├── key: (2)
@@ -354,10 +354,10 @@ build
 SELECT max(x) FROM a GROUP BY y, z, s
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5(int!null)
  ├── stats: [rows=600]
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
+      ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int!null)
       ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       ├── stats: [rows=600, distinct(2-4)=600, null(2-4)=600]
       ├── key: (2-4)
@@ -375,10 +375,10 @@ build
 SELECT min(x) FROM a GROUP BY y, z
 ----
 project
- ├── columns: min:5(int)
+ ├── columns: min:5(int!null)
  ├── stats: [rows=2000]
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) min:5(int)
+      ├── columns: y:2(int) z:3(float!null) min:5(int!null)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=1000]
       ├── key: (2,3)
@@ -401,17 +401,17 @@ build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5(int!null)
  ├── stats: [rows=132.222222]
  └── select
-      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
+      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int!null)
       ├── stats: [rows=132.222222, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
-      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
+      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int!null)
       │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
-      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=5, distinct(2-4)=600, null(2-4)=600]
+      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=5, distinct(5)=600, null(5)=0, distinct(2-4)=600, null(2-4)=600]
       │    ├── key: (2-4)
       │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
       │    ├── scan a
@@ -435,9 +435,9 @@ select
  ├── key: (4)
  ├── fd: ()-->(5)
  ├── group-by
- │    ├── columns: s:4(string) sum:5(decimal)
+ │    ├── columns: s:4(string) sum:5(decimal!null)
  │    ├── grouping columns: s:4(string)
- │    ├── stats: [rows=10, distinct(4)=10, null(4)=10, distinct(5)=10, null(5)=1]
+ │    ├── stats: [rows=10, distinct(4)=10, null(4)=10, distinct(5)=10, null(5)=0]
  │    ├── key: (4)
  │    ├── fd: (4)-->(5)
  │    ├── project
@@ -468,19 +468,19 @@ GROUP BY q.b
 project
  ├── columns: "?column?":6(int!null)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=0.292893219]
+ ├── stats: [rows=1]
  ├── fd: ()-->(6)
  ├── select
  │    ├── columns: b:4(int) bool_or:5(bool!null)
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=0.292893219, distinct(5)=0.292893219, null(5)=0]
+ │    ├── stats: [rows=1, distinct(5)=1, null(5)=0]
  │    ├── key: (4)
  │    ├── fd: ()-->(5)
  │    ├── group-by
- │    │    ├── columns: b:4(int) bool_or:5(bool)
+ │    │    ├── columns: b:4(int) bool_or:5(bool!null)
  │    │    ├── grouping columns: b:4(int)
  │    │    ├── cardinality: [0 - 3]
- │    │    ├── stats: [rows=1.29289322, distinct(4)=1.29289322, null(4)=1, distinct(5)=1.29289322, null(5)=1]
+ │    │    ├── stats: [rows=1.29289322, distinct(4)=1.29289322, null(4)=1, distinct(5)=1.29289322, null(5)=0]
  │    │    ├── key: (4)
  │    │    ├── fd: (4)-->(5)
  │    │    ├── project

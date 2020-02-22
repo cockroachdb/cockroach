@@ -52,7 +52,7 @@ LIMIT 100;
 ----
 limit
  ├── save-table-name: q18_limit_1
- ├── columns: c_name:2(varchar) c_custkey:1(int) o_orderkey:9(int!null) o_orderdate:13(date) o_totalprice:12(float) sum:51(float)
+ ├── columns: c_name:2(varchar!null) c_custkey:1(int!null) o_orderkey:9(int!null) o_orderdate:13(date!null) o_totalprice:12(float!null) sum:51(float!null)
  ├── internal-ordering: -12,+13
  ├── cardinality: [0 - 100]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0, distinct(9)=100, null(9)=0, distinct(12)=100, null(12)=0, distinct(13)=100, null(13)=0, distinct(51)=100, null(51)=0]
@@ -61,7 +61,7 @@ limit
  ├── ordering: -12,+13
  ├── sort
  │    ├── save-table-name: q18_sort_2
- │    ├── columns: c_custkey:1(int) c_name:2(varchar) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
+ │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) sum:51(float!null)
  │    ├── stats: [rows=499392.239, distinct(1)=499392.239, null(1)=0, distinct(2)=499392.239, null(2)=0, distinct(9)=499392.239, null(9)=0, distinct(12)=499392.239, null(12)=0, distinct(13)=499392.239, null(13)=0, distinct(51)=499392.239, null(51)=0]
  │    ├── key: (9)
  │    ├── fd: (1)-->(2), (9)-->(1,2,12,13,51)
@@ -69,7 +69,7 @@ limit
  │    ├── limit hint: 100.00
  │    └── group-by
  │         ├── save-table-name: q18_group_by_3
- │         ├── columns: c_custkey:1(int) c_name:2(varchar) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
+ │         ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) sum:51(float!null)
  │         ├── grouping columns: o_orderkey:9(int!null)
  │         ├── stats: [rows=499392.239, distinct(1)=499392.239, null(1)=0, distinct(2)=499392.239, null(2)=0, distinct(9)=499392.239, null(9)=0, distinct(12)=499392.239, null(12)=0, distinct(13)=499392.239, null(13)=0, distinct(51)=499392.239, null(51)=0]
  │         ├── key: (9)
@@ -121,7 +121,7 @@ limit
  │         │    │    │    │    ├── ordering: +34
  │         │    │    │    │    ├── group-by
  │         │    │    │    │    │    ├── save-table-name: q18_group_by_10
- │         │    │    │    │    │    ├── columns: l_orderkey:34(int!null) sum:50(float)
+ │         │    │    │    │    │    ├── columns: l_orderkey:34(int!null) sum:50(float!null)
  │         │    │    │    │    │    ├── grouping columns: l_orderkey:34(int!null)
  │         │    │    │    │    │    ├── stats: [rows=1527270, distinct(34)=1527270, null(34)=0, distinct(50)=1527270, null(50)=0]
  │         │    │    │    │    │    ├── key: (34)

@@ -55,14 +55,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q22_sort_1
- ├── columns: cntrycode:27(string) numcust:28(int) totacctbal:29(float)
+ ├── columns: cntrycode:27(string) numcust:28(int!null) totacctbal:29(float!null)
  ├── stats: [rows=1e-10, distinct(27)=1e-10, null(27)=0, distinct(28)=1e-10, null(28)=0, distinct(29)=1e-10, null(29)=0]
  ├── key: (27)
  ├── fd: (27)-->(28,29)
  ├── ordering: +27
  └── group-by
       ├── save-table-name: q22_group_by_2
-      ├── columns: cntrycode:27(string) count_rows:28(int) sum:29(float)
+      ├── columns: cntrycode:27(string) count_rows:28(int!null) sum:29(float!null)
       ├── grouping columns: cntrycode:27(string)
       ├── stats: [rows=1e-10, distinct(27)=1e-10, null(27)=0, distinct(28)=1e-10, null(28)=0, distinct(29)=1e-10, null(29)=0]
       ├── key: (27)

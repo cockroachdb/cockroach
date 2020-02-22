@@ -49,14 +49,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q5_sort_1
- ├── columns: n_name:42(char!null) revenue:49(float)
+ ├── columns: n_name:42(char!null) revenue:49(float!null)
  ├── stats: [rows=5, distinct(42)=5, null(42)=0, distinct(49)=5, null(49)=0]
  ├── key: (42)
  ├── fd: (42)-->(49)
  ├── ordering: -49
  └── group-by
       ├── save-table-name: q5_group_by_2
-      ├── columns: n_name:42(char!null) sum:49(float)
+      ├── columns: n_name:42(char!null) sum:49(float!null)
       ├── grouping columns: n_name:42(char!null)
       ├── stats: [rows=5, distinct(42)=5, null(42)=0, distinct(49)=5, null(49)=0]
       ├── key: (42)

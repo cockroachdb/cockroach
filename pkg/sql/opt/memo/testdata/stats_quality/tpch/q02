@@ -72,14 +72,14 @@ LIMIT 100;
 ----
 project
  ├── save-table-name: q2_project_1
- ├── columns: s_acctbal:15(float) s_name:11(char) n_name:23(char) p_partkey:1(int) p_mfgr:3(char) s_address:12(varchar) s_phone:14(char) s_comment:16(varchar)
+ ├── columns: s_acctbal:15(float!null) s_name:11(char!null) n_name:23(char!null) p_partkey:1(int!null) p_mfgr:3(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_comment:16(varchar!null)
  ├── cardinality: [0 - 100]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(23)=1, null(23)=0]
  ├── fd: (1)-->(3)
  ├── ordering: -15,+23,+11,+1
  └── limit
       ├── save-table-name: q2_limit_2
-      ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char) min:48(float!null)
+      ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       ├── internal-ordering: -15,+23,+11,+(1|17)
       ├── cardinality: [0 - 100]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=0.999910488, null(17)=0, distinct(18)=0.999982066, null(18)=0, distinct(20)=1, null(20)=0, distinct(23)=1, null(23)=0, distinct(48)=1, null(48)=0]
@@ -88,7 +88,7 @@ project
       ├── ordering: -15,+23,+11,+(1|17) [actual: -15,+23,+11,+1]
       ├── sort
       │    ├── save-table-name: q2_sort_3
-      │    ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char) min:48(float!null)
+      │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=0.999910488, null(17)=0, distinct(18)=0.999982066, null(18)=0, distinct(20)=1, null(20)=0, distinct(23)=1, null(23)=0, distinct(48)=1, null(48)=0]
       │    ├── key: (17,18)
       │    ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
@@ -96,13 +96,13 @@ project
       │    ├── limit hint: 100.00
       │    └── select
       │         ├── save-table-name: q2_select_4
-      │         ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char) min:48(float!null)
+      │         ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       │         ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=0.999910488, null(17)=0, distinct(18)=0.999982066, null(18)=0, distinct(20)=1, null(20)=0, distinct(23)=1, null(23)=0, distinct(48)=1, null(48)=0]
       │         ├── key: (17,18)
       │         ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
       │         ├── group-by
       │         │    ├── save-table-name: q2_group_by_5
-      │         │    ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float) n_name:23(char) min:48(float)
+      │         │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:11(char!null) s_address:12(varchar!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char!null) min:48(float!null)
       │         │    ├── grouping columns: ps_partkey:17(int!null) ps_suppkey:18(int!null)
       │         │    ├── stats: [rows=1487.22799, distinct(1)=1487.22799, null(1)=0, distinct(3)=1487.22799, null(3)=0, distinct(11)=1487.22799, null(11)=0, distinct(12)=1487.22799, null(12)=0, distinct(14)=1487.22799, null(14)=0, distinct(15)=1487.22799, null(15)=0, distinct(16)=1487.22799, null(16)=0, distinct(17)=1174.55443, null(17)=0, distinct(18)=1411.92479, null(18)=0, distinct(20)=1487.22799, null(20)=0, distinct(23)=1487.22799, null(23)=0, distinct(48)=1487.22799, null(48)=0, distinct(17,18)=1487.22799, null(17,18)=0]
       │         │    ├── key: (17,18)

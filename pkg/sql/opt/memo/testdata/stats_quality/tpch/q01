@@ -42,14 +42,14 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q1_sort_1
- ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum_qty:17(float) sum_base_price:18(float) sum_disc_price:20(float) sum_charge:22(float) avg_qty:23(float) avg_price:24(float) avg_disc:25(float) count_order:26(int)
+ ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum_qty:17(float!null) sum_base_price:18(float!null) sum_disc_price:20(float!null) sum_charge:22(float!null) avg_qty:23(float!null) avg_price:24(float!null) avg_disc:25(float!null) count_order:26(int!null)
  ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(17)=6, null(17)=0, distinct(18)=6, null(18)=0, distinct(20)=6, null(20)=0, distinct(22)=6, null(22)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(9,10)=6, null(9,10)=0]
  ├── key: (9,10)
  ├── fd: (9,10)-->(17,18,20,22-26)
  ├── ordering: +9,+10
  └── group-by
       ├── save-table-name: q1_group_by_2
-      ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum:17(float) sum:18(float) sum:20(float) sum:22(float) avg:23(float) avg:24(float) avg:25(float) count_rows:26(int)
+      ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum:17(float!null) sum:18(float!null) sum:20(float!null) sum:22(float!null) avg:23(float!null) avg:24(float!null) avg:25(float!null) count_rows:26(int!null)
       ├── grouping columns: l_returnflag:9(char!null) l_linestatus:10(char!null)
       ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(17)=6, null(17)=0, distinct(18)=6, null(18)=0, distinct(20)=6, null(20)=0, distinct(22)=6, null(22)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(9,10)=6, null(9,10)=0]
       ├── key: (9,10)
