@@ -1207,6 +1207,18 @@ func (c *CustomFuncs) addConjuncts(
 	return filters, true
 }
 
+// ----------------------------------------------------------------------
+//
+// Values Rules
+//   Custom match and replace functions used with Values rules.
+//
+// ----------------------------------------------------------------------
+
+// ValuesCols returns the Cols field of the ValuesPrivate struct.
+func (c *CustomFuncs) ValuesCols(valuesPrivate *memo.ValuesPrivate) opt.ColList {
+	return valuesPrivate.Cols
+}
+
 // ConstructEmptyValues constructs a Values expression with no rows.
 func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.RelExpr {
 	colList := make(opt.ColList, 0, cols.Len())
@@ -1905,11 +1917,6 @@ func (c *CustomFuncs) MakeLimited(sub *memo.SubqueryPrivate) *memo.SubqueryPriva
 	newSub := *sub
 	newSub.WasLimited = true
 	return &newSub
-}
-
-// ValuesCols returns the column list from a ValuesExpr.
-func (c *CustomFuncs) ValuesCols(values memo.RelExpr) opt.ColList {
-	return values.(*memo.ValuesExpr).Cols
 }
 
 // IsTupleOfVars returns true if the given tuple contains Variables

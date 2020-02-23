@@ -470,9 +470,7 @@ CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
 # Ensure this test stays synchronized to the test in logic_test/upsert.
 query TTTTT
 EXPLAIN (VERBOSE)
-INSERT INTO tdup
-VALUES (2, 2, NULL), (3, 2, NULL), (4, NULL, NULL), (5, NULL, NULL)
-ON CONFLICT (z, y) DO UPDATE SET z=1
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
 ----
 ·                                     distributed            false                                        ·                                                  ·
 ·                                     vectorized             false                                        ·                                                  ·
@@ -509,19 +507,13 @@ count                                 ·                      ·                
                           │           nulls are distinct     ·                                            ·                                                  ·
                           │           error on dups          ·                                            ·                                                  ·
                           └── values  ·                      ·                                            (column1, column2, column3)                        ·
-·                                     size                   3 columns, 4 rows                            ·                                                  ·
+·                                     size                   3 columns, 2 rows                            ·                                                  ·
 ·                                     row 0, expr 0          2                                            ·                                                  ·
 ·                                     row 0, expr 1          2                                            ·                                                  ·
-·                                     row 0, expr 2          CAST(NULL AS INT8)                           ·                                                  ·
+·                                     row 0, expr 2          2                                            ·                                                  ·
 ·                                     row 1, expr 0          3                                            ·                                                  ·
 ·                                     row 1, expr 1          2                                            ·                                                  ·
-·                                     row 1, expr 2          CAST(NULL AS INT8)                           ·                                                  ·
-·                                     row 2, expr 0          4                                            ·                                                  ·
-·                                     row 2, expr 1          CAST(NULL AS INT8)                           ·                                                  ·
-·                                     row 2, expr 2          CAST(NULL AS INT8)                           ·                                                  ·
-·                                     row 3, expr 0          5                                            ·                                                  ·
-·                                     row 3, expr 1          CAST(NULL AS INT8)                           ·                                                  ·
-·                                     row 3, expr 2          CAST(NULL AS INT8)                           ·                                                  ·
+·                                     row 1, expr 2          2                                            ·                                                  ·
 
 statement ok
 CREATE TABLE target (a INT PRIMARY KEY, b INT, c INT, UNIQUE (b, c))
