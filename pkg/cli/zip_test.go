@@ -166,6 +166,7 @@ requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
 requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
 requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginestats.json
 requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
+requesting threads for node 1... writing: debug/nodes/1/threads.txt
 requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
 requesting heap files for node 1... 0 found
 requesting goroutine files for node 1... 0 found
@@ -467,6 +468,7 @@ requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
 requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
 requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginestats.json
 requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
+requesting threads for node 1... writing: debug/nodes/1/threads.txt
 requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
 requesting heap files for node 1... 0 found
 requesting goroutine files for node 1... 0 found
@@ -572,6 +574,7 @@ requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
 requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
 requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginestats.json
 requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
+requesting threads for node 1... writing: debug/nodes/1/threads.txt
 requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
 requesting heap files for node 1... 0 found
 requesting goroutine files for node 1... 0 found
@@ -645,6 +648,8 @@ requesting data for debug/nodes/2/enginestats... writing: debug/nodes/2/enginest
   ^- resulted in ...
 requesting stacks for node 2... writing: debug/nodes/2/stacks.txt
   ^- resulted in ...
+requesting threads for node 2... writing: debug/nodes/2/threads.txt
+  ^- resulted in ...
 requesting heap profile for node 2... writing: debug/nodes/2/heap.pprof
   ^- resulted in ...
 requesting heap files for node 2... writing: debug/nodes/2/heapprof
@@ -674,6 +679,7 @@ requesting data for debug/nodes/3/details... writing: debug/nodes/3/details.json
 requesting data for debug/nodes/3/gossip... writing: debug/nodes/3/gossip.json
 requesting data for debug/nodes/3/enginestats... writing: debug/nodes/3/enginestats.json
 requesting stacks for node 3... writing: debug/nodes/3/stacks.txt
+requesting threads for node 3... writing: debug/nodes/3/threads.txt
 requesting heap profile for node 3... writing: debug/nodes/3/heap.pprof
 requesting heap files for node 3... 0 found
 requesting goroutine files for node 3... 0 found
