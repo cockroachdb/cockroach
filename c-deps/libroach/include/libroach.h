@@ -611,7 +611,13 @@ typedef struct {
 
 // DBEnvListDir lists the contents of the directory with name.
 DBListDirResults DBEnvListDir(DBEngine* db, DBSlice name);
-  
+
+
+// DBDumpThreadStacks returns the stacks for all threads. The stacks
+// are raw addresses, and do not contain symbols. Use addr2line (or
+// atos on Darwin) to symbolize.
+DBString DBDumpThreadStacks();
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
