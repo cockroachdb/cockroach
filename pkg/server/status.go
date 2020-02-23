@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -927,7 +928,7 @@ func (s *statusServer) Logs(
 // TODO(tschottdorf): significant overlap with /debug/pprof/goroutine, except
 // that this one allows querying by NodeID.
 //
-// Stacks returns goroutine stack traces.
+// Stacks returns goroutine or thread stack traces.
 func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
 ) (*serverpb.JSONResponse, error) {
@@ -950,17 +951,24 @@ func (s *statusServer) Stacks(
 		return status.Stacks(ctx, req)
 	}
 
-	bufSize := runtime.NumGoroutine() * stackTraceApproxSize
-	for {
-		buf := make([]byte, bufSize)
-		length := runtime.Stack(buf, true)
-		// If this wasn't large enough to accommodate the full set of
-		// stack traces, increase by 2 and try again.
-		if length == bufSize {
-			bufSize = bufSize * 2
-			continue
+	switch req.Type {
+	case serverpb.StacksType_GOROUTINE_STACKS:
+		bufSize := runtime.NumGoroutine() * stackTraceApproxSize
+		for {
+			buf := make([]byte, bufSize)
+			length := runtime.Stack(buf, true)
+			// If this wasn't large enough to accommodate the full set of
+			// stack traces, increase by 2 and try again.
+			if length == bufSize {
+				bufSize = bufSize * 2
+				continue
+			}
+			return &serverpb.JSONResponse{Data: buf[:length]}, nil
 		}
-		return &serverpb.JSONResponse{Data: buf[:length]}, nil
+	case serverpb.StacksType_THREAD_STACKS:
+		return &serverpb.JSONResponse{Data: []byte(engine.ThreadStacks())}, nil
+	default:
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}
 }
 
