@@ -300,16 +300,10 @@ upsert child_nullable
  ├── input binding: &1
  ├── left-join (hash)
  │    ├── columns: column1:3!null column2:4 child_nullable.c:5 child_nullable.p:6
- │    ├── upsert-distinct-on
+ │    ├── values
  │    │    ├── columns: column1:3!null column2:4
- │    │    ├── grouping columns: column1:3!null
- │    │    ├── values
- │    │    │    ├── columns: column1:3!null column2:4
- │    │    │    ├── (100, 1)
- │    │    │    └── (200, NULL)
- │    │    └── aggregations
- │    │         └── first-agg [as=column2:4]
- │    │              └── column2:4
+ │    │    ├── (100, 1)
+ │    │    └── (200, NULL)
  │    ├── scan child_nullable
  │    │    └── columns: child_nullable.c:5!null child_nullable.p:6
  │    └── filters
