@@ -377,20 +377,14 @@ upsert child_nullable
  ├── input binding: &1
  ├── left-join (hash)
  │    ├── columns: column1:3(int!null) column2:4(int) child_nullable.c:5(int) child_nullable.p:6(int)
- │    ├── upsert-distinct-on
+ │    ├── values
  │    │    ├── columns: column1:3(int!null) column2:4(int)
- │    │    ├── grouping columns: column1:3(int!null)
- │    │    ├── values
- │    │    │    ├── columns: column1:3(int!null) column2:4(int)
- │    │    │    ├── tuple [type=tuple{int, int}]
- │    │    │    │    ├── const: 100 [type=int]
- │    │    │    │    └── const: 1 [type=int]
- │    │    │    └── tuple [type=tuple{int, int}]
- │    │    │         ├── const: 200 [type=int]
- │    │    │         └── null [type=int]
- │    │    └── aggregations
- │    │         └── first-agg [type=int]
- │    │              └── variable: column2 [type=int]
+ │    │    ├── tuple [type=tuple{int, int}]
+ │    │    │    ├── const: 100 [type=int]
+ │    │    │    └── const: 1 [type=int]
+ │    │    └── tuple [type=tuple{int, int}]
+ │    │         ├── const: 200 [type=int]
+ │    │         └── null [type=int]
  │    ├── scan child_nullable
  │    │    └── columns: child_nullable.c:5(int!null) child_nullable.p:6(int)
  │    └── filters

@@ -1155,3 +1155,320 @@ upsert a
       │         └── ?column? = s [type=bool, outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
       └── projections
            └── CASE WHEN k IS NULL THEN column13 ELSE 1.1 END [type=float, outer=(13,15)]
+
+# --------------------------------------------------
+# EliminateDistinctOnValues
+# --------------------------------------------------
+
+# Eliminate DistinctOn when its immediate input is a Values operator.
+norm expect=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (1), (2)) t(x)
+----
+values
+ ├── columns: x:1(int!null)
+ ├── cardinality: [2 - 2]
+ ├── (1,) [type=tuple{int}]
+ └── (2,) [type=tuple{int}]
+
+# Eliminate DistinctOn when Values operator is below Project, Select, and
+# LeftJoin operators.
+norm expect=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) *, x+1
+FROM (VALUES (1), (2)) t(x)
+LEFT JOIN (SELECT a FROM abc)
+ON a=x
+WHERE x IS NOT NULL
+----
+project
+ ├── columns: x:1(int!null) a:2(int) "?column?":5(int!null)
+ ├── cardinality: [2 - ]
+ ├── fd: (1)-->(5)
+ ├── left-join (hash)
+ │    ├── columns: column1:1(int!null) a:2(int)
+ │    ├── cardinality: [2 - ]
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1,) [type=tuple{int}]
+ │    │    └── (2,) [type=tuple{int}]
+ │    ├── scan abc
+ │    │    └── columns: a:2(int!null)
+ │    └── filters
+ │         └── a = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ └── projections
+      └── column1 + 1 [type=int, outer=(1)]
+
+# Grouping columns are not passthrough Project columns.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (y) *
+FROM (SELECT x, x+1 AS y FROM (VALUES (1), (2)) t(x))
+----
+distinct-on
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── grouping columns: y:2(int!null)
+ ├── cardinality: [1 - 2]
+ ├── key: (2)
+ ├── fd: (1)-->(2), (2)-->(1)
+ ├── project
+ │    ├── columns: y:2(int!null) column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── fd: (1)-->(2)
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1,) [type=tuple{int}]
+ │    │    └── (2,) [type=tuple{int}]
+ │    └── projections
+ │         └── column1 + 1 [type=int, outer=(1)]
+ └── aggregations
+      └── first-agg [type=int, outer=(1)]
+           └── variable: column1 [type=int]
+
+# Grouping columns are on the right side of a LeftJoin.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) *
+FROM (SELECT k FROM a)
+LEFT JOIN (VALUES (1), (2)) t(x)
+ON k=x
+----
+distinct-on
+ ├── columns: k:1(int!null) x:6(int)
+ ├── grouping columns: column1:6(int)
+ ├── key: (6)
+ ├── fd: (6)-->(1)
+ ├── left-join (hash)
+ │    ├── columns: k:1(int!null) column1:6(int)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    ├── values
+ │    │    ├── columns: column1:6(int!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1,) [type=tuple{int}]
+ │    │    └── (2,) [type=tuple{int}]
+ │    └── filters
+ │         └── k = column1 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── aggregations
+      └── first-agg [type=int, outer=(1)]
+           └── variable: k [type=int]
+
+# DistinctOn with multiple grouping columns should be eliminated when there are
+# not duplicate rows.
+norm expect=EliminateDistinctOnValues
+SELECT DISTINCT ON (b, c) * FROM (VALUES (1, 1, 1, 1), (1, 2, 2, 1)) t(a, b, c, d)
+----
+values
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── cardinality: [2 - 2]
+ ├── (1, 1, 1, 1) [type=tuple{int, int, int, int}]
+ └── (1, 2, 2, 1) [type=tuple{int, int, int, int}]
+
+# Composite string type should be considered as not distinct.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES ('ä' COLLATE en), (e'a\u0308' COLLATE en)) t(x)
+----
+distinct-on
+ ├── columns: x:1(collatedstring{en}!null)
+ ├── grouping columns: column1:1(collatedstring{en}!null)
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1(collatedstring{en}!null)
+      ├── cardinality: [2 - 2]
+      ├── (e'\u00E4' COLLATE en,) [type=tuple{collatedstring{en}}]
+      └── (e'a\u0308' COLLATE en,) [type=tuple{collatedstring{en}}]
+
+# Composite decimal type should be considered as not distinct.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (1.0::decimal), (1.00::decimal)) t(x)
+----
+distinct-on
+ ├── columns: x:1(decimal!null)
+ ├── grouping columns: column1:1(decimal!null)
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1(decimal!null)
+      ├── cardinality: [2 - 2]
+      ├── (1.0,) [type=tuple{decimal}]
+      └── (1.00,) [type=tuple{decimal}]
+
+# Non-constant value should be considered as not distinct.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (1), (unique_rowid())) t(x)
+----
+distinct-on
+ ├── columns: x:1(int)
+ ├── grouping columns: column1:1(int)
+ ├── cardinality: [1 - 2]
+ ├── side-effects
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1(int)
+      ├── cardinality: [2 - 2]
+      ├── side-effects
+      ├── (1,) [type=tuple{int}]
+      └── (unique_rowid(),) [type=tuple{int}]
+
+# Tuple values are not handled.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES ((1, 2, 3)), ((1, 2, 3))) t(x)
+----
+distinct-on
+ ├── columns: x:1(tuple{int, int, int})
+ ├── grouping columns: column1:1(tuple{int, int, int})
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1(tuple{int, int, int})
+      ├── cardinality: [2 - 2]
+      ├── ((1, 2, 3),) [type=tuple{tuple{int, int, int}}]
+      └── ((1, 2, 3),) [type=tuple{tuple{int, int, int}}]
+
+# DistinctOn should not be eliminated when there are duplicate rows.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (y, z) * FROM (VALUES (1, 1, 1), (2, 1, 1)) t(x, y, z)
+----
+distinct-on
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+ ├── grouping columns: column2:2(int!null) column3:3(int!null)
+ ├── cardinality: [1 - 2]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(1)
+ ├── values
+ │    ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 1, 1) [type=tuple{int, int, int}]
+ │    └── (2, 1, 1) [type=tuple{int, int, int}]
+ └── aggregations
+      └── first-agg [type=int, outer=(1)]
+           └── variable: column1 [type=int]
+
+# DistinctOn treats NULL values as distinct, so it can't be eliminated.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (NULL), (NULL)) t(x)
+----
+distinct-on
+ ├── columns: x:1(unknown)
+ ├── grouping columns: column1:1(unknown)
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1(unknown)
+      ├── cardinality: [2 - 2]
+      ├── (NULL,) [type=tuple{unknown}]
+      └── (NULL,) [type=tuple{unknown}]
+
+# UpsertDistinctOn treats NULL values as not distinct, so it can be eliminated.
+norm expect=EliminateDistinctOnValues
+INSERT INTO a (k, s, i) VALUES (1, NULL, NULL), (1, NULL, NULL)
+ON CONFLICT (s, i) DO UPDATE SET f=1.0
+----
+upsert a
+ ├── columns: <none>
+ ├── canary column: 11
+ ├── fetch columns: k:11(int) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+ ├── insert-mapping:
+ │    ├──  column1:6 => k:1
+ │    ├──  column3:8 => i:2
+ │    ├──  column9:9 => f:3
+ │    ├──  column2:7 => s:4
+ │    └──  column10:10 => j:5
+ ├── update-mapping:
+ │    └──  upsert_f:19 => f:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_f:19(float) column1:6(int!null) column2:7(string) column3:8(int) column9:9(float) column10:10(jsonb) k:11(int) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+      ├── cardinality: [2 - ]
+      ├── fd: ()-->(9,10), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      ├── left-join (hash)
+      │    ├── columns: column1:6(int!null) column2:7(string) column3:8(int) column9:9(float) column10:10(jsonb) k:11(int) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+      │    ├── cardinality: [2 - ]
+      │    ├── fd: ()-->(9,10), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    ├── project
+      │    │    ├── columns: column9:9(float) column10:10(jsonb) column1:6(int!null) column2:7(string) column3:8(int)
+      │    │    ├── cardinality: [2 - 2]
+      │    │    ├── fd: ()-->(9,10)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6(int!null) column2:7(string) column3:8(int)
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── (1, NULL, NULL) [type=tuple{int, string, int}]
+      │    │    │    └── (1, NULL, NULL) [type=tuple{int, string, int}]
+      │    │    └── projections
+      │    │         ├── null [type=float]
+      │    │         └── null [type=jsonb]
+      │    ├── scan a
+      │    │    ├── columns: k:11(int!null) i:12(int!null) f:13(float) s:14(string!null) j:15(jsonb)
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    └── filters
+      │         ├── column3 = i [type=bool, outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+      │         └── column2 = s [type=bool, outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
+      └── projections
+           └── CASE WHEN k IS NULL THEN column9 ELSE 1.0 END [type=float, outer=(9,11)]
+
+# UpsertDistinctOn is not removed when there are duplicates.
+norm expect-not=EliminateDistinctOnValues
+INSERT INTO a (k, s, i) VALUES (1, 'foo', 1), (2, 'bar', 2), (3, 'foo', 1)
+ON CONFLICT (s, i) DO UPDATE SET f=1.0
+----
+upsert a
+ ├── columns: <none>
+ ├── canary column: 11
+ ├── fetch columns: k:11(int) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+ ├── insert-mapping:
+ │    ├──  column1:6 => k:1
+ │    ├──  column3:8 => i:2
+ │    ├──  column9:9 => f:3
+ │    ├──  column2:7 => s:4
+ │    └──  column10:10 => j:5
+ ├── update-mapping:
+ │    └──  upsert_f:19 => f:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_f:19(float) column1:6(int!null) column2:7(string!null) column3:8(int!null) column9:9(float) column10:10(jsonb) k:11(int) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+      ├── cardinality: [1 - ]
+      ├── key: (7,8,11)
+      ├── fd: ()-->(9,10), (7,8)-->(6), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15), (7,8,11)-->(19)
+      ├── left-join (hash)
+      │    ├── columns: column1:6(int!null) column2:7(string!null) column3:8(int!null) column9:9(float) column10:10(jsonb) k:11(int) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (7,8,11)
+      │    ├── fd: ()-->(9,10), (7,8)-->(6), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:6(int!null) column2:7(string!null) column3:8(int!null) column9:9(float) column10:10(jsonb)
+      │    │    ├── grouping columns: column2:7(string!null) column3:8(int!null)
+      │    │    ├── cardinality: [1 - 3]
+      │    │    ├── key: (7,8)
+      │    │    ├── fd: ()-->(9,10), (7,8)-->(6,9,10)
+      │    │    ├── project
+      │    │    │    ├── columns: column9:9(float) column10:10(jsonb) column1:6(int!null) column2:7(string!null) column3:8(int!null)
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── fd: ()-->(9,10)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6(int!null) column2:7(string!null) column3:8(int!null)
+      │    │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    │    ├── (1, 'foo', 1) [type=tuple{int, string, int}]
+      │    │    │    │    ├── (2, 'bar', 2) [type=tuple{int, string, int}]
+      │    │    │    │    └── (3, 'foo', 1) [type=tuple{int, string, int}]
+      │    │    │    └── projections
+      │    │    │         ├── null [type=float]
+      │    │    │         └── null [type=jsonb]
+      │    │    └── aggregations
+      │    │         ├── first-agg [type=int, outer=(6)]
+      │    │         │    └── variable: column1 [type=int]
+      │    │         ├── first-agg [type=float, outer=(9)]
+      │    │         │    └── variable: column9 [type=float]
+      │    │         └── first-agg [type=jsonb, outer=(10)]
+      │    │              └── variable: column10 [type=jsonb]
+      │    ├── scan a
+      │    │    ├── columns: k:11(int!null) i:12(int!null) f:13(float) s:14(string!null) j:15(jsonb)
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    └── filters
+      │         ├── column3 = i [type=bool, outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+      │         └── column2 = s [type=bool, outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
+      └── projections
+           └── CASE WHEN k IS NULL THEN column9 ELSE 1.0 END [type=float, outer=(9,11)]
