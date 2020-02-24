@@ -232,13 +232,21 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
+	// In RocksDB, the concurrency setting corresponds to both flushes and
+	// compactions. In Pebble, there is always a slot for a flush, and
+	// compactions are counted separately.
+	maxConcurrentCompactions := rocksdbConcurrency - 1
+	if maxConcurrentCompactions < 1 {
+		maxConcurrentCompactions = 1
+	}
+
 	opts := &pebble.Options{
 		Comparer:                    MVCCComparer,
 		L0CompactionThreshold:       2,
 		L0StopWritesThreshold:       1000,
 		LBaseMaxBytes:               64 << 20, // 64 MB
 		Levels:                      make([]pebble.LevelOptions, 7),
-		MaxConcurrentCompactions:    2,
+		MaxConcurrentCompactions:    maxConcurrentCompactions,
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -506,7 +514,13 @@ func (p *Pebble) Get(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
-	ret, err := p.db.Get(EncodeKey(key))
+	ret, closer, err := p.db.Get(EncodeKey(key))
+	if closer != nil {
+		retCopy := make([]byte, len(ret))
+		copy(retCopy, ret)
+		ret = retCopy
+		closer.Close()
+	}
 	if err == pebble.ErrNotFound || len(ret) == 0 {
 		return nil, nil
 	}
@@ -534,15 +548,21 @@ func (p *Pebble) GetProto(
 	if len(key.Key) == 0 {
 		return false, 0, 0, emptyKeyError()
 	}
-	val, err := p.Get(key)
-	if err != nil || val == nil {
-		return false, 0, 0, err
+	encodedKey := EncodeKey(key)
+	val, closer, err := p.db.Get(encodedKey)
+	if closer != nil {
+		if msg != nil {
+			err = protoutil.Unmarshal(val, msg)
+		}
+		keyBytes = int64(len(encodedKey))
+		valBytes = int64(len(val))
+		closer.Close()
+		return true, keyBytes, valBytes, err
 	}
-
-	err = protoutil.Unmarshal(val, msg)
-	keyBytes = int64(key.Len())
-	valBytes = int64(len(val))
-	return true, keyBytes, valBytes, err
+	if err == pebble.ErrNotFound {
+		return false, 0, 0, nil
+	}
+	return false, 0, 0, err
 }
 
 // Iterate implements the Engine interface.
@@ -1108,7 +1128,13 @@ func (p *pebbleSnapshot) Get(key MVCCKey) ([]byte, error) {
 		return nil, emptyKeyError()
 	}
 
-	ret, err := p.snapshot.Get(EncodeKey(key))
+	ret, closer, err := p.snapshot.Get(EncodeKey(key))
+	if closer != nil {
+		retCopy := make([]byte, len(ret))
+		copy(retCopy, ret)
+		ret = retCopy
+		closer.Close()
+	}
 	if err == pebble.ErrNotFound || len(ret) == 0 {
 		return nil, nil
 	}
@@ -1122,16 +1148,21 @@ func (p *pebbleSnapshot) GetProto(
 	if len(key.Key) == 0 {
 		return false, 0, 0, emptyKeyError()
 	}
-
-	val, err := p.snapshot.Get(EncodeKey(key))
-	if err != nil || val == nil {
-		return false, 0, 0, err
+	encodedKey := EncodeKey(key)
+	val, closer, err := p.snapshot.Get(encodedKey)
+	if closer != nil {
+		if msg != nil {
+			err = protoutil.Unmarshal(val, msg)
+		}
+		keyBytes = int64(len(encodedKey))
+		valBytes = int64(len(val))
+		closer.Close()
+		return true, keyBytes, valBytes, err
 	}
-
-	err = protoutil.Unmarshal(val, msg)
-	keyBytes = int64(key.Len())
-	valBytes = int64(len(val))
-	return true, keyBytes, valBytes, err
+	if err == pebble.ErrNotFound {
+		return false, 0, 0, nil
+	}
+	return false, 0, 0, err
 }
 
 // Iterate implements the Reader interface.
