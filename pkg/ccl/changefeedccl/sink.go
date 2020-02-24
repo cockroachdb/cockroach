@@ -68,6 +68,7 @@ type Sink interface {
 }
 
 func getSink(
+	ctx context.Context,
 	sinkURI string,
 	nodeID roachpb.NodeID,
 	opts map[string]string,
@@ -189,7 +190,7 @@ func getSink(
 		q = url.Values{}
 		makeSink = func() (Sink, error) {
 			return makeCloudStorageSink(
-				u.String(), nodeID, fileSize, settings,
+				ctx, u.String(), nodeID, fileSize, settings,
 				opts, timestampOracle, makeExternalStorageFromURI,
 			)
 		}
@@ -232,7 +233,10 @@ type errorWrapperSink struct {
 }
 
 func (s errorWrapperSink) EmitRow(
-	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	table *sqlbase.TableDescriptor,
+	key, value []byte,
+	updated hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitRow(ctx, table, key, value, updated); err != nil {
 		return MarkRetryableError(err)
