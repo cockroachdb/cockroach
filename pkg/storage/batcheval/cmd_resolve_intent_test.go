@@ -215,12 +215,12 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 
 			declareKeysResolveIntentRange(&desc, h, &rir, &spans)
 
+			h.MaxSpanRequestKeys = 10
 			if _, err := ResolveIntentRange(ctx, rbatch,
 				CommandArgs{
 					Header:  h,
 					EvalCtx: (&MockEvalCtx{}).EvalContext(),
 					Args:    &rir,
-					MaxKeys: 10,
 				},
 				&roachpb.ResolveIntentRangeResponse{},
 			); err != nil {
