@@ -116,7 +116,13 @@ func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
 		return nil, emptyKeyError()
 	}
 	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	ret, err := r.Get(p.buf)
+	ret, closer, err := r.Get(p.buf)
+	if closer != nil {
+		retCopy := make([]byte, len(ret))
+		copy(retCopy, ret)
+		ret = retCopy
+		closer.Close()
+	}
 	if err == pebble.ErrNotFound || len(ret) == 0 {
 		return nil, nil
 	}
@@ -142,15 +148,20 @@ func (p *pebbleBatch) GetProto(
 		return false, 0, 0, emptyKeyError()
 	}
 	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	val, err := r.Get(p.buf)
-	if err != nil || val == nil {
-		return false, 0, 0, err
+	val, closer, err := r.Get(p.buf)
+	if closer != nil {
+		if msg != nil {
+			err = protoutil.Unmarshal(val, msg)
+		}
+		keyBytes = int64(len(p.buf))
+		valBytes = int64(len(val))
+		closer.Close()
+		return true, keyBytes, valBytes, err
 	}
-
-	err = protoutil.Unmarshal(val, msg)
-	keyBytes = int64(len(p.buf))
-	valBytes = int64(len(val))
-	return true, keyBytes, valBytes, err
+	if err == pebble.ErrNotFound {
+		return false, 0, 0, nil
+	}
+	return false, 0, 0, err
 }
 
 // Iterate implements the Batch interface.
