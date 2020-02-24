@@ -35,18 +35,47 @@
         border-top 1px solid $table-border-color
 
   &__progress-bar
-    stroke $link-color
     padding-right .7em
     width 120px
 
   &__duration
-    font-style italic
+    font-family SourceSansPro-Regular
+    font-size 12px
+    line-height 1.67
+    letter-spacing 0.3px
+    color $colors--neutral-8
+    &--right
+      margin-left 48px
 
   &__status, &__running-status
     text-transform capitalize
-
+  &__progress
+    display flex
+    align-items center
+    justify-content flex-start
+  &__status
+    margin-bottom 8px
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    font-weight 600
+    line-height 1.71
+    letter-spacing 0.1px
+    color $colors--neutral-8
+    &--percentage
+      font-family SourceSansPro-Regular
+      font-size 12px
+      margin 0 6px 0 0
+      line-height 1.67
+      letter-spacing 0.3px
+      width 40px
+      text-align right
+    &--succeed
+      color $colors--primary-green-3
+    &--failed
+      color $colors--functional-red-3
+    &--canceled
+      color $colors--functional-orange-3
   .job-detail
-    max-width 1000px
     white-space pre-wrap
     padding 5px
     margin-top 5px
@@ -63,9 +92,48 @@
     max-width 500px
     word-wrap break-word
 
-  &__cell--sql
-    font-family Inconsolata-Regular
-
   &__status-icon
     display inline-block
     margin-right 7px
+
+.job-details
+  .summary--card__counting
+    margin-bottom 15px
+    &--value
+      margin-bottom 5px
+  .summary--card__status
+    &--title
+      font-family: SourceSansPro-Regular
+      font-size 16px
+      line-height 1.5
+      color $colors--neutral-7
+      margin-bottom 15px
+  .page--header__title
+    margin-bottom 30px
+  .job-status__line, .jobs-table__status
+    display flex
+    align-items: baseline
+    font-size 20px
+    line-height 1.6
+    letter-spacing -0.2px
+    margin-right 8px
+  .job-status__line
+    color $colors--neutral-7
+    span
+      &:last-child
+        margin-left 8px
+  .job-status__line--percentage
+    display flex
+    span
+      font-family SourceSansPro-Regular
+      font-size 14px
+      line-height 1.57
+      letter-spacing 0.1px
+      color $colors--neutral-7
+      margin 0
+  .ant-divider
+    margin-left 15px
+    margin-right 15px
+  .jobs-table__progress-bar
+    width 100%
+    margin-bottom 15px
