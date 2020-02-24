@@ -45,7 +45,7 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "scan without MaxSpanRequestKeys",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				req := scan("a", "z")
+				req := scanArgsString("a", "z")
 				d.ba.Add(req)
 			},
 			check: func(t *testing.T, r resp) {
@@ -57,7 +57,7 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "reverse scan without MaxSpanRequestKeys",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				req := rscan("a", "z")
+				req := revScanArgsString("a", "z")
 				d.ba.Add(req)
 			},
 			check: func(t *testing.T, r resp) {
@@ -69,7 +69,7 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "scan with giant MaxSpanRequestKeys",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				req := scan("a", "z")
+				req := scanArgsString("a", "z")
 				d.ba.Add(req)
 				d.ba.MaxSpanRequestKeys = 100000
 			},
@@ -82,7 +82,7 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "reverse scan with giant MaxSpanRequestKeys",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				req := rscan("a", "z")
+				req := revScanArgsString("a", "z")
 				d.ba.Add(req)
 				d.ba.MaxSpanRequestKeys = 100000
 			},
@@ -95,8 +95,8 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "scans with giant MaxSpanRequestKeys",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				d.ba.Add(scan("a", "c"))
-				d.ba.Add(scan("d", "g"))
+				d.ba.Add(scanArgsString("a", "c"))
+				d.ba.Add(scanArgsString("d", "g"))
 				d.ba.MaxSpanRequestKeys = 100000
 			},
 			check: func(t *testing.T, r resp) {
@@ -108,8 +108,8 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "reverse scans with giant MaxSpanRequestKeys",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				d.ba.Add(rscan("d", "g"))
-				d.ba.Add(rscan("a", "c"))
+				d.ba.Add(revScanArgsString("d", "g"))
+				d.ba.Add(revScanArgsString("a", "c"))
 				d.ba.MaxSpanRequestKeys = 100000
 			},
 			check: func(t *testing.T, r resp) {
@@ -131,9 +131,9 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "scans with MaxSpanRequestKeys=1",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				d.ba.Add(scan("a", "c"))
-				d.ba.Add(get("f"))
-				d.ba.Add(scan("d", "f"))
+				d.ba.Add(scanArgsString("a", "c"))
+				d.ba.Add(getArgsString("f"))
+				d.ba.Add(scanArgsString("d", "f"))
 				d.ba.MaxSpanRequestKeys = 1
 			},
 			check: func(t *testing.T, r resp) {
@@ -148,9 +148,9 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "reverse scans with MaxSpanRequestKeys=1",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				d.ba.Add(rscan("d", "f"))
-				d.ba.Add(get("f"))
-				d.ba.Add(rscan("a", "c"))
+				d.ba.Add(revScanArgsString("d", "f"))
+				d.ba.Add(getArgsString("f"))
+				d.ba.Add(revScanArgsString("a", "c"))
 				d.ba.MaxSpanRequestKeys = 1
 			},
 			check: func(t *testing.T, r resp) {
@@ -167,9 +167,9 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "scans with MaxSpanRequestKeys=3",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				d.ba.Add(scan("a", "c"))
-				d.ba.Add(get("e"))
-				d.ba.Add(scan("c", "e"))
+				d.ba.Add(scanArgsString("a", "c"))
+				d.ba.Add(getArgsString("e"))
+				d.ba.Add(scanArgsString("c", "e"))
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
@@ -184,9 +184,9 @@ func TestEvaluateBatch(t *testing.T) {
 			name: "reverse scans with MaxSpanRequestKeys=3",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
-				d.ba.Add(rscan("c", "e"))
-				d.ba.Add(get("e"))
-				d.ba.Add(rscan("a", "c"))
+				d.ba.Add(revScanArgsString("c", "e"))
+				d.ba.Add(getArgsString("e"))
+				d.ba.Add(revScanArgsString("a", "c"))
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
@@ -237,12 +237,14 @@ type data struct {
 	ms       enginepb.MVCCStats
 	readOnly bool
 }
+
 type resp struct {
 	d    *data
 	br   *roachpb.BatchResponse
 	res  result.Result
 	pErr *roachpb.Error
 }
+
 type testCase struct {
 	name  string
 	setup func(*testing.T, *data)
@@ -254,24 +256,6 @@ func writeABCDEF(t *testing.T, d *data) {
 		require.NoError(t, engine.MVCCPut(
 			context.Background(), d.eng, nil /* ms */, roachpb.Key(k), d.ba.Timestamp,
 			roachpb.MakeValueFromString("value-"+k), nil /* txn */))
-	}
-}
-
-func scan(s, e string) *roachpb.ScanRequest {
-	return &roachpb.ScanRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(s), EndKey: roachpb.Key(e)},
-	}
-}
-
-func rscan(s, e string) *roachpb.ReverseScanRequest {
-	return &roachpb.ReverseScanRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(s), EndKey: roachpb.Key(e)},
-	}
-}
-
-func get(k string) *roachpb.GetRequest {
-	return &roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(k)},
 	}
 }
 

@@ -1629,8 +1629,8 @@ func readOrWriteArgs(key roachpb.Key, read bool) roachpb.Request {
 	return &pArgs
 }
 
-func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
-	return roachpb.IncrementRequest{
+func incrementArgs(key []byte, inc int64) *roachpb.IncrementRequest {
+	return &roachpb.IncrementRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
@@ -1638,8 +1638,20 @@ func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 	}
 }
 
-func scanArgs(start, end []byte) roachpb.ScanRequest {
-	return roachpb.ScanRequest{
+func scanArgsString(s, e string) *roachpb.ScanRequest {
+	return &roachpb.ScanRequest{
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(s), EndKey: roachpb.Key(e)},
+	}
+}
+
+func getArgsString(k string) *roachpb.GetRequest {
+	return &roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(k)},
+	}
+}
+
+func scanArgs(start, end []byte) *roachpb.ScanRequest {
+	return &roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    start,
 			EndKey: end,
@@ -1647,8 +1659,14 @@ func scanArgs(start, end []byte) roachpb.ScanRequest {
 	}
 }
 
-func reverseScanArgs(start, end []byte) roachpb.ReverseScanRequest {
-	return roachpb.ReverseScanRequest{
+func revScanArgsString(s, e string) *roachpb.ReverseScanRequest {
+	return &roachpb.ReverseScanRequest{
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(s), EndKey: roachpb.Key(e)},
+	}
+}
+
+func revScanArgs(start, end []byte) *roachpb.ReverseScanRequest {
+	return &roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    start,
 			EndKey: end,
@@ -1887,7 +1905,7 @@ func TestOptimizePuts(t *testing.T) {
 			nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
-				&incArgs, &cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9],
+				incArgs, &cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9],
 			},
 			[]bool{
 				true, true, true, true, true, true, true, true, true, true,
@@ -3139,11 +3157,11 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	k := []byte("a")
 	txn := newTransaction("test", k, 10, tc.Clock())
 	args := incrementArgs(k, 1)
-	assignSeqNumsForReqs(txn, &args)
+	assignSeqNumsForReqs(txn, args)
 
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{
 		Txn: txn,
-	}, &args); pErr != nil {
+	}, args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -3157,7 +3175,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	// Now try increment again and verify error.
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
 		Txn: txn,
-	}, &args)
+	}, args)
 	if !testutils.IsPError(pErr, "replica corruption") {
 		t.Fatal(pErr)
 	}
@@ -3331,12 +3349,12 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
 				args := incrementArgs(key, 3)
 				args.Sequence = 2
-				return runWithTxn(txn, &args)
+				return runWithTxn(txn, args)
 			},
 			run: func(txn *roachpb.Transaction, key []byte) error {
 				args := incrementArgs(key, 3)
 				args.Sequence = 2
-				return runWithTxn(txn, &args)
+				return runWithTxn(txn, args)
 			},
 			validate: func(txn *roachpb.Transaction, key []byte) error {
 				return firstErr(
@@ -4433,7 +4451,7 @@ func TestReplicaLaziness(t *testing.T) {
 
 	testWithAction(func() roachpb.Request {
 		scan := scanArgs(roachpb.KeyMin, roachpb.KeyMax)
-		return &scan
+		return scan
 	})
 }
 
@@ -4917,7 +4935,7 @@ func TestReplicaTransactionRequires1PC(t *testing.T) {
 
 			// Do a consistent scan to verify no intents were created.
 			sArgs := scanArgs(key, key.Next())
-			_, pErr = tc.SendWrapped(&sArgs)
+			_, pErr = tc.SendWrapped(sArgs)
 			if pErr != nil {
 				t.Fatalf("error scanning to verify no intent present: %s", pErr)
 			}
@@ -5946,7 +5964,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 
 	// Do a consistent scan to verify intents have been cleared.
 	sArgs := scanArgs(roachpb.Key("a"), roachpb.Key("c"))
-	reply, pErr := tc.SendWrapped(&sArgs)
+	reply, pErr := tc.SendWrapped(sArgs)
 	if pErr != nil {
 		t.Fatalf("unexpected error on scan: %s", pErr)
 	}
@@ -6223,7 +6241,7 @@ func TestAppliedIndex(t *testing.T) {
 	for i := int64(1); i <= 10; i++ {
 		args := incrementArgs([]byte("a"), i)
 
-		resp, pErr := tc.SendWrapped(&args)
+		resp, pErr := tc.SendWrapped(args)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -6859,7 +6877,7 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	// Flush a write all the way through the Raft proposal pipeline to ensure
 	// that the replica becomes the Raft leader and sets up its quota pool.
 	iArgs := incrementArgs([]byte("a"), 1)
-	if _, pErr := tc.SendWrapped(&iArgs); pErr != nil {
+	if _, pErr := tc.SendWrapped(iArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -6945,7 +6963,7 @@ func TestEntries(t *testing.T) {
 		var newIndexes []uint64
 		for i := from; i < to; i++ {
 			args := incrementArgs([]byte("a"), int64(i))
-			if _, pErr := tc.SendWrapped(&args); pErr != nil {
+			if _, pErr := tc.SendWrapped(args); pErr != nil {
 				t.Fatal(pErr)
 			}
 			idx, err := repl.GetLastIndex()
@@ -7096,7 +7114,7 @@ func TestTerm(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		args := incrementArgs([]byte("a"), int64(i))
 
-		if _, pErr := tc.SendWrapped(&args); pErr != nil {
+		if _, pErr := tc.SendWrapped(args); pErr != nil {
 			t.Fatal(pErr)
 		}
 		idx, err := tc.repl.GetLastIndex()
@@ -7567,7 +7585,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	ba.Timestamp = tc.Clock().Now()
 	const expInc = 123
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
-	ba.Add(&iArg)
+	ba.Add(iArg)
 	{
 		_, pErr := tc.repl.executeBatchWithConcurrencyRetries(
 			context.WithValue(ctx, magicKey{}, "foo"),
@@ -7792,7 +7810,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	// proposals and that we don't see any unexpected proposal refreshes due to
 	// reasons like reasonNewLeaderOrConfigChange.
 	args := incrementArgs([]byte("a"), 1)
-	if _, pErr := tc.SendWrapped(&args); pErr != nil {
+	if _, pErr := tc.SendWrapped(args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -7931,7 +7949,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	// without going below 0).
 	for i := 0; i < 3; i++ {
 		inc := incrementArgs(key, 1)
-		if _, pErr := client.SendWrapped(ctx, tc.Sender(), &inc); pErr != nil {
+		if _, pErr := client.SendWrapped(ctx, tc.Sender(), inc); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -7953,7 +7971,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	// reevaluation it doesn't matter)
 	inc := incrementArgs(key, 1)
 	var ba roachpb.BatchRequest
-	ba.Add(&inc)
+	ba.Add(inc)
 	ba.Timestamp = tc.Clock().Now()
 
 	incCmdID = makeIDKey()
@@ -8088,7 +8106,7 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	key := roachpb.Key("a")
 	for i := 0; i < initCount; i++ {
 		iArg := incrementArgs(key, 1)
-		if _, pErr := tc.SendWrapped(&iArg); pErr != nil {
+		if _, pErr := tc.SendWrapped(iArg); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -8097,7 +8115,7 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	// will then hit the injected error when we attempt to repropose it.
 	var ba roachpb.BatchRequest
 	iArg := incrementArgs(key, 10)
-	ba.Add(&iArg)
+	ba.Add(iArg)
 	if _, pErr := tc.Sender().Send(magicCtx, ba); pErr == nil {
 		t.Fatal("expected a non-nil error")
 	} else if !testutils.IsPError(pErr, "boom") {
@@ -8332,7 +8350,7 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	minNewTS := func() hlc.Timestamp {
 		var ba roachpb.BatchRequest
 		scan := scanArgs(key, tc.repl.Desc().EndKey.AsRawKey())
-		ba.Add(&scan)
+		ba.Add(scan)
 
 		resp, pErr := tc.Sender().Send(ctx, ba)
 		if pErr != nil {
@@ -8703,7 +8721,7 @@ func TestCancelPendingCommands(t *testing.T) {
 	errChan := make(chan *roachpb.Error, 1)
 	go func() {
 		incArgs := incrementArgs(roachpb.Key("a"), 1)
-		_, pErr := client.SendWrapped(ctx, tc.Sender(), &incArgs)
+		_, pErr := client.SendWrapped(ctx, tc.Sender(), incArgs)
 		errChan <- pErr
 	}()
 
