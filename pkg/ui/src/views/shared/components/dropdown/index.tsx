@@ -42,12 +42,20 @@ interface DropdownOwnProps {
   content?: any;
   isTimeRange?: boolean;
   className?: string;
+  palette?: "default" | "blue";
+  focused?: boolean;
+  placeholder?: string;
 }
 
 /**
  * Dropdown component that uses the URL query string for state.
  */
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
+  static defaultProps: {
+    placeholder: string;
+    palette: string;
+  };
+
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
   titleRef: React.RefObject<HTMLDivElement> = React.createRef();
   selectRef: React.RefObject<ReactSelectClass> = React.createRef();
@@ -79,12 +87,14 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   }
 
   render() {
-    const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange } = this.props;
+    const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange, palette, placeholder, focused } = this.props;
 
     const className = classNames(
       "dropdown",
+      `dropdown__palette--${palette}`,
       isTimeRange ? "_range" : "",
       { "dropdown--side-arrows": !_.isNil(onArrowClick) },
+      { "focused": focused },
       this.props.className,
     );
     const leftClassName = classNames(
@@ -117,6 +127,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         value={selected}
         onChange={onChange}
         ref={this.selectRef}
+        placeholder={placeholder}
       />}
       <span
         className={rightClassName}
@@ -126,3 +137,8 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
     </div>;
   }
 }
+
+Dropdown.defaultProps = {
+  placeholder: "Select",
+  palette: "default",
+};

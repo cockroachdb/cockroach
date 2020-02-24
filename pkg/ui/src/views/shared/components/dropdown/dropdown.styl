@@ -127,4 +127,67 @@ $dropdown-hover-color = darken($background-color, 2.5%)
   .Select-menu-outer, .Select-menu
     max-height 450px
 
+.dropdown__palette--blue
+  background transparent
+  border 1px solid transparent
+  border-radius 3px
+  padding 8px 5px 8px 11px
+  &:hover
+    background transparent
+    .dropdown__title, .trigger .Select-value-label, .Select-arrow-zone
+      color $colors--primary-blue-4 !important
+  .trigger
+    padding 0
+    .Select-value-label
+      margin 0
+    .Select
+      justify-content flex-start
+  .dropdown__title, .trigger .Select-value-label
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    line-height 1.71 !important
+    letter-spacing 0.1px
+    color $colors--primary-blue-3 !important
+    text-transform inherit
+  .Select-placeholder, .trigger .Select-value-label, .trigger .Select-control
+    padding-left 2px
+    padding-right 2px
+    text-transform capitalize
+  .Select-arrow-zone
+    color $colors--primary-blue-3
+    vertical-align inherit
+    margin-top -2px
+  .Select-control > *:last-child
+    padding-right 0
+  .dropdown__select
+    &:hover
+      background transparent
+  .trigger-wrapper
+    position relative
+  .dropdown-options
+    display flex
+    flex-direction column
+    position absolute
+    border-radius 4px;
+    box-shadow 0 0 4px 0 rgba(154, 161, 171, 0.33);
+    border solid 0.5px $colors--neutral-2
+    background-color $colors--neutral-0
+    top 35px
+    .option
+      padding 10px 16px
+      min-width 142px
+      font-family SourceSansPro-Regular
+      font-size 14px
+      line-height 1.57
+      letter-spacing 0.1px
+      color $colors--neutral-7
+      &:hover
+        background $colors--primary-blue-3
+        color $colors--neutral-0
+    .selected
+      background rgba($colors--primary-blue-3, 0.7)
+      color $colors--neutral-0
+.dropdown__palette--blue.focused
+  border 1px solid $colors--primary-blue-3
+
 // NOTE: react-select styles can be found in styl/shame.styl

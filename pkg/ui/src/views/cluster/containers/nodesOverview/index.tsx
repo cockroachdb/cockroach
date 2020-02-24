@@ -35,7 +35,7 @@ import { FixLong } from "src/util/fixLong";
 import TableSection from "./tableSection";
 import "./nodes.styl";
 
-const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+export const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
 );
 
@@ -79,7 +79,7 @@ export interface NodeStatusRow {
   children?: Array<NodeStatusRow>;
 }
 
-interface DecommissionedNodeStatusRow {
+export interface DecommissionedNodeStatusRow {
   key: string;
   nodeId: number;
   nodeName: string;
