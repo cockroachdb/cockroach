@@ -9,6 +9,8 @@
 package changefeedccl
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -16,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -39,6 +42,19 @@ func TestCloudStorageSink(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
+	gzipDecompress := func(t *testing.T, compressed []byte) []byte {
+		r, err := gzip.NewReader(bytes.NewReader(compressed))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		decompressed, err := ioutil.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return decompressed
+	}
+
 	// slurpDir returns the contents of every file under root (relative to the
 	// temp dir created above), sorted by the name of the file.
 	slurpDir := func(t *testing.T, root string) []string {
@@ -54,6 +70,9 @@ func TestCloudStorageSink(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			if strings.HasSuffix(path, ".gz") {
+				file = gzipDecompress(t, file)
+			}
 			files = append(files, string(file))
 			return nil
 		}
@@ -68,9 +87,10 @@ func TestCloudStorageSink(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	settings.ExternalIODir = dir
 	opts := map[string]string{
-		changefeedbase.OptFormat:     string(changefeedbase.OptFormatJSON),
-		changefeedbase.OptEnvelope:   string(changefeedbase.OptEnvelopeWrapped),
-		changefeedbase.OptKeyInValue: ``,
+		changefeedbase.OptFormat:      string(changefeedbase.OptFormatJSON),
+		changefeedbase.OptEnvelope:    string(changefeedbase.OptEnvelopeWrapped),
+		changefeedbase.OptKeyInValue:  ``,
+		changefeedbase.OptCompression: ``, // NB: overridden in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
 	e, err := makeJSONEncoder(opts)
@@ -88,7 +108,7 @@ func TestCloudStorageSink(t *testing.T) {
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(
-			`nodelocal:///`+sinkDir, 1, unlimitedFileSize,
+			ctx, `nodelocal:///`+sinkDir, 1, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
@@ -108,77 +128,88 @@ func TestCloudStorageSink(t *testing.T) {
 		require.Equal(t, `{"resolved":"5.0000000000"}`, string(resolvedFile))
 	})
 	t.Run(`single-node`, func(t *testing.T) {
-		t1 := &sqlbase.TableDescriptor{Name: `t1`}
-		t2 := &sqlbase.TableDescriptor{Name: `t2`}
+		before := opts[changefeedbase.OptCompression]
+		// Compression codecs include buffering that interferes with other tests,
+		// e.g. the bucketing test that configures very small flush sizes.
+		defer func() {
+			opts[changefeedbase.OptCompression] = before
+		}()
+		for _, compression := range []string{"", "gzip"} {
+			opts[changefeedbase.OptCompression] = compression
+			t.Run("compress="+compression, func(t *testing.T) {
+				t1 := &sqlbase.TableDescriptor{Name: `t1`}
+				t2 := &sqlbase.TableDescriptor{Name: `t2`}
 
-		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
-		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
-		dir := `single-node`
-		s, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI,
-		)
-		require.NoError(t, err)
-		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+				testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+				sf := span.MakeFrontier(testSpan)
+				timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+				dir := `single-node` + compression
+				s, err := makeCloudStorageSink(
+					ctx, `nodelocal:///`+dir, 1, unlimitedFileSize,
+					settings, opts, timestampOracle, externalStorageFromURI,
+				)
+				require.NoError(t, err)
+				s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
-		// Empty flush emits no files.
-		require.NoError(t, s.Flush(ctx))
-		require.Equal(t, []string(nil), slurpDir(t, dir))
+				// Empty flush emits no files.
+				require.NoError(t, s.Flush(ctx))
+				require.Equal(t, []string(nil), slurpDir(t, dir))
 
-		// Emitting rows and flushing should write them out in one file per table. Note
-		// the ordering among these two files is non deterministic as either of them could
-		// be flushed first (and thus be assigned fileID 0).
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(1)))
-		require.NoError(t, s.EmitRow(ctx, t2, noKey, []byte(`w1`), ts(3)))
-		require.NoError(t, s.Flush(ctx))
-		expected := []string{
-			"v1\nv2\n",
-			"w1\n",
+				// Emitting rows and flushing should write them out in one file per table. Note
+				// the ordering among these two files is non deterministic as either of them could
+				// be flushed first (and thus be assigned fileID 0).
+				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
+				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(1)))
+				require.NoError(t, s.EmitRow(ctx, t2, noKey, []byte(`w1`), ts(3)))
+				require.NoError(t, s.Flush(ctx))
+				expected := []string{
+					"v1\nv2\n",
+					"w1\n",
+				}
+				actual := slurpDir(t, dir)
+				sort.Strings(actual)
+				require.Equal(t, expected, actual)
+
+				// Flushing with no new emits writes nothing new.
+				require.NoError(t, s.Flush(ctx))
+				actual = slurpDir(t, dir)
+				sort.Strings(actual)
+				require.Equal(t, expected, actual)
+
+				// Without a flush, nothing new shows up.
+				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(3)))
+				actual = slurpDir(t, dir)
+				sort.Strings(actual)
+				require.Equal(t, expected, actual)
+
+				// Note that since we haven't forwarded `testSpan` yet, all files initiated until
+				// this point must have the same `frontier` timestamp. Since fileID increases
+				// monotonically, the last file emitted should be ordered as such.
+				require.NoError(t, s.Flush(ctx))
+				require.Equal(t, []string{
+					"v3\n",
+				}, slurpDir(t, dir)[2:])
+
+				// Data from different versions of a table is put in different files, so that we
+				// can guarantee that all rows in any given file have the same schema.
+				// We also advance `testSpan` and `Flush` to make sure these new rows are read
+				// after the rows emitted above.
+				require.True(t, sf.Forward(testSpan, ts(4)))
+				require.NoError(t, s.Flush(ctx))
+				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v4`), ts(4)))
+				t1.Version = 2
+				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v5`), ts(5)))
+				require.NoError(t, s.Flush(ctx))
+				expected = []string{
+					"v4\n",
+					"v5\n",
+				}
+				actual = slurpDir(t, dir)
+				actual = actual[len(actual)-2:]
+				sort.Strings(actual)
+				require.Equal(t, expected, actual)
+			})
 		}
-		actual := slurpDir(t, dir)
-		sort.Strings(actual)
-		require.Equal(t, expected, actual)
-
-		// Flushing with no new emits writes nothing new.
-		require.NoError(t, s.Flush(ctx))
-		actual = slurpDir(t, dir)
-		sort.Strings(actual)
-		require.Equal(t, expected, actual)
-
-		// Without a flush, nothing new shows up.
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(3)))
-		actual = slurpDir(t, dir)
-		sort.Strings(actual)
-		require.Equal(t, expected, actual)
-
-		// Note that since we haven't forwarded `testSpan` yet, all files initiated until
-		// this point must have the same `frontier` timestamp. Since fileID increases
-		// monotonically, the last file emitted should be ordered as such.
-		require.NoError(t, s.Flush(ctx))
-		require.Equal(t, []string{
-			"v3\n",
-		}, slurpDir(t, dir)[2:])
-
-		// Data from different versions of a table is put in different files, so that we
-		// can guarantee that all rows in any given file have the same schema.
-		// We also advance `testSpan` and `Flush` to make sure these new rows are read
-		// after the rows emitted above.
-		require.True(t, sf.Forward(testSpan, ts(4)))
-		require.NoError(t, s.Flush(ctx))
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v4`), ts(4)))
-		t1.Version = 2
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v5`), ts(5)))
-		require.NoError(t, s.Flush(ctx))
-		expected = []string{
-			"v4\n",
-			"v5\n",
-		}
-		actual = slurpDir(t, dir)
-		actual = actual[len(actual)-2:]
-		sort.Strings(actual)
-		require.Equal(t, expected, actual)
 	})
 
 	t.Run(`multi-node`, func(t *testing.T) {
@@ -189,12 +220,12 @@ func TestCloudStorageSink(t *testing.T) {
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `multi-node`
 		s1, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 1, unlimitedFileSize,
+			ctx, `nodelocal:///`+dir, 1, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
 		s2, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 2, unlimitedFileSize,
+			ctx, `nodelocal:///`+dir, 2, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
@@ -223,12 +254,12 @@ func TestCloudStorageSink(t *testing.T) {
 		// this happens before checkpointing, some data is written again but
 		// this is unavoidable.
 		s1R, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 1, unlimitedFileSize,
+			ctx, `nodelocal:///`+dir, 1, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
 		s2R, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 2, unlimitedFileSize,
+			ctx, `nodelocal:///`+dir, 2, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
@@ -269,14 +300,14 @@ func TestCloudStorageSink(t *testing.T) {
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 1, unlimitedFileSize,
+			ctx, `nodelocal:///`+dir, 1, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
 		s1.(*cloudStorageSink).sinkID = 7         // Force a deterministic sinkID.
 		s1.(*cloudStorageSink).jobSessionID = "a" // Force deterministic job session ID.
 		s2, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 1, unlimitedFileSize,
+			ctx, `nodelocal:///`+dir, 1, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
@@ -311,7 +342,7 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `bucketing`
 		const targetMaxFileSize = 6
 		s, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 1, targetMaxFileSize,
+			ctx, `nodelocal:///`+dir, 1, targetMaxFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 		require.NoError(t, err)
@@ -398,7 +429,7 @@ func TestCloudStorageSink(t *testing.T) {
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(
-			`nodelocal:///`+dir, 1, unlimitedFileSize,
+			ctx, `nodelocal:///`+dir, 1, unlimitedFileSize,
 			settings, opts, timestampOracle, externalStorageFromURI,
 		)
 
@@ -457,7 +488,7 @@ func TestCloudStorageSink(t *testing.T) {
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `ordering-among-schema-versions`
 		var targetMaxFileSize int64 = 10
-		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, targetMaxFileSize, settings,
+		s, err := makeCloudStorageSink(ctx, `nodelocal:///`+dir, 1, targetMaxFileSize, settings,
 			opts, timestampOracle, externalStorageFromURI)
 		require.NoError(t, err)
 

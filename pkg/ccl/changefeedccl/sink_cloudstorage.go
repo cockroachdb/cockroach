@@ -10,11 +10,13 @@ package changefeedccl
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -50,7 +52,19 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	buf bytes.Buffer
+	codec   io.WriteCloser
+	rawSize int
+	buf     bytes.Buffer
+}
+
+var _ io.Writer = &cloudStorageSinkFile{}
+
+func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
+	f.rawSize += len(p)
+	if f.codec != nil {
+		return f.codec.Write(p)
+	}
+	return f.buf.Write(p)
 }
 
 // cloudStorageSink writes changefeed output to files in a cloud storage bucket
@@ -259,6 +273,8 @@ type cloudStorageSink struct {
 	ext           string
 	recordDelimFn func(io.Writer) error
 
+	compression string
+
 	es cloud.ExternalStorage
 
 	// These are fields to track information needed to output files based on the naming
@@ -276,9 +292,12 @@ type cloudStorageSink struct {
 	prevFilename      string
 }
 
+const sinkCompressionGzip = "gzip"
+
 var cloudStorageSinkIDAtomic int64
 
 func makeCloudStorageSink(
+	ctx context.Context,
 	baseURI string,
 	nodeID roachpb.NodeID,
 	targetMaxFileSize int64,
@@ -333,7 +352,15 @@ func makeCloudStorageSink(
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
-	ctx := context.TODO()
+	if codec, ok := opts[changefeedbase.OptCompression]; ok && codec != "" {
+		if strings.EqualFold(codec, "gzip") {
+			s.compression = sinkCompressionGzip
+			s.ext = s.ext + ".gz"
+		} else {
+			return nil, errors.Errorf(`unsupported compression codec %q`, codec)
+		}
+	}
+
 	var err error
 	if s.es, err = makeExternalStorageFromURI(ctx, baseURI); err != nil {
 		return nil, err
@@ -352,6 +379,10 @@ func (s *cloudStorageSink) getOrCreateFile(
 	f := &cloudStorageSinkFile{
 		cloudStorageSinkKey: key,
 	}
+	switch s.compression {
+	case sinkCompressionGzip:
+		f.codec = gzip.NewWriter(&f.buf)
+	}
 	s.files.ReplaceOrInsert(f)
 	return f
 }
@@ -367,10 +398,10 @@ func (s *cloudStorageSink) EmitRow(
 	file := s.getOrCreateFile(table.Name, table.Version)
 
 	// TODO(dan): Memory monitoring for this
-	if _, err := file.buf.Write(value); err != nil {
+	if _, err := file.Write(value); err != nil {
 		return err
 	}
-	if err := s.recordDelimFn(&file.buf); err != nil {
+	if err := s.recordDelimFn(file); err != nil {
 		return err
 	}
 
@@ -467,10 +498,18 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 
 // file should not be used after flushing.
 func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
-	if file.buf.Len() == 0 {
+	if file.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
 		// about not writing empty files anyway.
 		return nil
+	}
+
+	// If the file is written via compression codec, close the codec to ensure it
+	// has flushed to the underlying buffer.
+	if file.codec != nil {
+		if err := file.codec.Close(); err != nil {
+			return err
+		}
 	}
 
 	// We use this monotonically increasing fileID to ensure correct ordering
