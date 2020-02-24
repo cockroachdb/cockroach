@@ -75,7 +75,7 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 	},
 	types.DecimalFamily: {
 		// Decimals are always encoded as an apd.Decimal
-		types.DecimalFamily: classifierHardestOf(classifierPrecision, classifierWidth),
+		types.DecimalFamily: classifierHardestOf(classifierDecimalPrecision, classifierWidth),
 	},
 	types.FloatFamily: {
 		// Floats are always encoded as 64-bit values on disk and we don't
@@ -111,20 +111,18 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 		types.StringFamily: classifierWidth,
 	},
 	types.TimestampFamily: {
-		// TODO(otan): use classifierPrecision - this is currently blocked by
-		// the "change reports fields from timestamp to timestamptz" 19.2 migration.
-		types.TimestampTZFamily: ColumnConversionTrivial.classifier(),
-		types.TimestampFamily:   classifierPrecision,
+		types.TimestampTZFamily: classifierTimePrecision,
+		types.TimestampFamily:   classifierTimePrecision,
 	},
 	types.TimestampTZFamily: {
-		types.TimestampFamily:   classifierPrecision,
-		types.TimestampTZFamily: classifierPrecision,
+		types.TimestampFamily:   classifierTimePrecision,
+		types.TimestampTZFamily: classifierTimePrecision,
 	},
 	types.TimeFamily: {
-		types.TimeFamily: classifierPrecision,
+		types.TimeFamily: classifierTimePrecision,
 	},
 	types.TimeTZFamily: {
-		types.TimeTZFamily: classifierPrecision,
+		types.TimeTZFamily: classifierTimePrecision,
 	},
 }
 
@@ -149,10 +147,25 @@ func classifierHardestOf(classifiers ...classifier) classifier {
 	}
 }
 
-// classifierPrecision returns trivial only if the new type has a precision
+// classifierTimePrecision returns trivial only if the new type has a precision
 // greater than the existing precision.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
-func classifierPrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
+func classifierTimePrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
+	oldPrecision := oldType.Precision()
+	newPrecision := newType.Precision()
+
+	switch {
+	case newPrecision >= oldPrecision:
+		return ColumnConversionTrivial
+	default:
+		return ColumnConversionValidate
+	}
+}
+
+// classifierDecimalPrecision returns trivial only if the new type has a precision
+// greater than the existing precision.  If they are the same, it returns
+// no-op.  Otherwise, it returns validate.
+func classifierDecimalPrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
 	oldPrecision := oldType.Precision()
 	newPrecision := newType.Precision()
 
