@@ -331,6 +331,14 @@ func evaluateBatch(
 				baHeader.MaxSpanRequestKeys = -1
 			}
 		}
+		if baHeader.TargetBytes > 0 {
+			retBytes := reply.Header().NumBytes
+			if baHeader.TargetBytes > retBytes {
+				baHeader.TargetBytes -= retBytes
+			} else {
+				baHeader.TargetBytes = -1
+			}
+		}
 
 		// If transactional, we use ba.Txn for each individual command and
 		// accumulate updates to it. Once accumulated, we then remove the Txn
