@@ -200,6 +200,45 @@ func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool)
 	return s
 }
 
+// Add combines one appStats into another. Add manages locks on a, so taking
+// a lock on a will cause a deadlock.
+func (a *appStats) Add(other *appStats) {
+	other.Lock()
+	statMap := make(map[stmtKey]*stmtStats)
+	for k, v := range other.stmts {
+		statMap[k] = v
+	}
+	other.Unlock()
+
+	// Copy the statement stats for each statement key.
+	for k, v := range statMap {
+		v.Lock()
+		statCopy := &stmtStats{data: v.data}
+		v.Unlock()
+		statMap[k] = statCopy
+	}
+
+	// Merge the statement stats.
+	for k, v := range statMap {
+		s := a.getStatsForStmtWithKey(k, true)
+		s.Lock()
+		// Note that we don't need to take a lock on v because
+		// no other thread knows about v yet.
+		s.data.Add(&v.data)
+		s.Unlock()
+	}
+
+	// Create a copy of the other's transactions statistics.
+	other.txns.mu.Lock()
+	txnStats := other.txns.mu.TxnStats
+	other.txns.mu.Unlock()
+
+	// Merge the transaction stats.
+	a.txns.mu.Lock()
+	a.txns.mu.TxnStats.Add(txnStats)
+	a.txns.mu.Unlock()
+}
+
 func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
@@ -287,6 +326,20 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	}
 	s.apps[appName] = a
 	return a
+}
+
+func (s *sqlStats) Add(other *sqlStats) {
+	other.Lock()
+	appStatsCopy := make(map[string]*appStats)
+	for k, v := range other.apps {
+		appStatsCopy[k] = v
+	}
+	other.Unlock()
+	for k, v := range appStatsCopy {
+		stats := s.getStatsForApplication(k)
+		// Add manages locks for itself, so we don't need to guard it with locks.
+		stats.Add(v)
+	}
 }
 
 // resetStats clears all the stored per-app and per-statement

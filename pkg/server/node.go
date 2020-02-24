@@ -97,23 +97,12 @@ var (
 		"",
 	)
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
-	graphiteInterval = func() *settings.DurationSetting {
-		s := settings.RegisterValidatedDurationSetting(
-			graphiteIntervalKey,
-			"the interval at which metrics are pushed to Graphite (if enabled)",
-			10*time.Second,
-			func(v time.Duration) error {
-				if v < 0 {
-					return errors.Errorf("cannot set %s to a negative duration: %s", graphiteIntervalKey, v)
-				} else if v > maxGraphiteInterval {
-					return errors.Errorf("cannot set %s to more than %v: %s", graphiteIntervalKey, maxGraphiteInterval, v)
-				}
-				return nil
-			},
-		)
-		s.SetVisibility(settings.Public)
-		return s
-	}()
+	graphiteInterval = settings.RegisterPublicNonNegativeDurationSettingWithMaximum(
+		graphiteIntervalKey,
+		"the interval at which metrics are pushed to Graphite (if enabled)",
+		10*time.Second,
+		maxGraphiteInterval,
+	)
 )
 
 type nodeMetrics struct {
