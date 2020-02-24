@@ -193,7 +193,7 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     return (
       <div className="section">
         <Helmet title="Certificates | Debug" />
-        <h1 className="base-heading page-title">Certificates</h1>
+        <h1 className="base-heading">Certificates</h1>
 
         <section className="section">
           <Loading
