@@ -95,7 +95,7 @@ export class CustomChart extends React.Component<CustomChartProps & RouteCompone
     }
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
     this.props.refreshMetricMetadata();
   }

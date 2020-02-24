@@ -10,9 +10,11 @@
 
 import * as hljs from "highlight.js";
 import React from "react";
+import * as protos from "src/js/protos";
 
 interface SqlBoxProps {
   value: string;
+  zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 }
 
 export class Highlight extends React.Component<SqlBoxProps> {
@@ -34,12 +36,50 @@ export class Highlight extends React.Component<SqlBoxProps> {
     hljs.highlightBlock(this.preNode.current);
   }
 
-  render() {
-    const { value } = this.props;
+  renderZone = () => {
+    const { zone } = this.props;
+    const zoneConfig = zone.zone_config;
     return (
-      <span className="sql-highlight" ref={this.preNode}>
-        {value}
+      <span className="sql-highlight hljs">
+        <span className="hljs-keyword">CONFIGURE ZONE USING</span>
+        <br />
+        <span className="hljs-label">range_min_bytes = </span>
+        <span className="hljs-built_in">{`${String(zoneConfig.range_min_bytes)},`}</span>
+        <br />
+        <span className="hljs-label">range_max_bytes = </span>
+        <span className="hljs-built_in">{`${String(zoneConfig.range_max_bytes)},`}</span>
+        <br />
+        <span className="hljs-label">gc.ttlseconds = </span>
+        <span className="hljs-built_in">{`${zoneConfig.gc.ttl_seconds},`}</span>
+        <br />
+        <span className="hljs-label">num_replicas = </span>
+        <span className="hljs-built_in">{`${zoneConfig.num_replicas},`}</span>
+        <br />
+        <span className="hljs-label">constraints = ['</span>
+        <span className="hljs-built_in">{String(zoneConfig.constraints)}</span>
+        '],
+        <br />
+        <span className="hljs-label">lease_preferences = [['</span>
+        <span className="hljs-built_in">{String(zoneConfig.lease_preferences)}</span>
+        ']]
       </span>
+    );
+  }
+
+  render() {
+    const { value, zone } = this.props;
+    return (
+      <>
+        <span className="sql-highlight" ref={this.preNode}>
+          {value}
+        </span>
+        {zone && (
+          <>
+            <div className="higlight-divider" />
+            {this.renderZone()}
+          </>
+        )}
+      </>
     );
   }
 }

@@ -139,7 +139,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     this.setClusterPath(getMatchParamByName(this.props.match, nodeIDAttr), selected.value);
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
   }
 
@@ -196,11 +196,9 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     const graphComponents = _.map(graphs, (graph, idx) => {
       const key = `nodes.${dashboard}.${idx}`;
       return (
-        <div key={key}>
-          <MetricsDataProvider id={key}>
-            { React.cloneElement(graph, forwardParams) }
-          </MetricsDataProvider>
-        </div>
+        <MetricsDataProvider id={key}>
+          { React.cloneElement(graph, forwardParams) }
+        </MetricsDataProvider>
       );
     });
 
@@ -223,6 +221,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               options={dashboardDropdownOptions}
               selected={dashboard}
               onChange={this.dashChange}
+              className="full-size"
             />
           </PageConfigItem>
           <PageConfigItem>
