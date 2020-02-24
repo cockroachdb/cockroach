@@ -857,6 +857,20 @@
   revision = "22125cfaa6ddc71e145b1535d4b7ee9744fefff2"
 
 [[projects]]
+  branch = "master"
+  digest = "1:9cf4b2d3c07de2ed0229e6b06b785e5e181df5aeb7a458cb75d75c45e8a7f088"
+  name = "github.com/golang/geo"
+  packages = [
+    "r1",
+    "r2",
+    "r3",
+    "s1",
+    "s2",
+  ]
+  pruneopts = "UT"
+  revision = "5b978397cfecc7280e598e9ac5854e9534b0918b"
+
+[[projects]]
   digest = "1:1ba1d79f2810270045c328ae5d674321db34e3aae468eb4233883b473c5c0467"
   name = "github.com/golang/glog"
   packages = ["."]
@@ -2077,6 +2091,7 @@
     "github.com/gogo/protobuf/vanity/command",
     "github.com/golang-commonmark/markdown",
     "github.com/golang/dep/cmd/dep",
+    "github.com/golang/geo/s2",
     "github.com/golang/protobuf/proto",
     "github.com/golang/snappy",
     "github.com/google/btree",
