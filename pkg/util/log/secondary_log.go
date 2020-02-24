@@ -88,9 +88,9 @@ func NewSecondaryLogger(
 }
 
 func (l *SecondaryLogger) output(
-	ctx context.Context, sev Severity, format string, args ...interface{},
+	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
 ) {
-	file, line, _ := caller.Lookup(2)
+	file, line, _ := caller.Lookup(depth + 1)
 	var buf strings.Builder
 	formatTags(ctx, &buf)
 
@@ -110,10 +110,18 @@ func (l *SecondaryLogger) output(
 
 // Logf logs an event on a secondary logger.
 func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...interface{}) {
-	l.output(ctx, Severity_INFO, format, args...)
+	l.output(ctx, 1, Severity_INFO, format, args...)
+}
+
+// LogfDepth logs an event on a secondary logger, offsetting the caller's stack
+// frame by 'depth'
+func (l *SecondaryLogger) LogfDepth(
+	ctx context.Context, depth int, format string, args ...interface{},
+) {
+	l.output(ctx, depth+1, Severity_INFO, format, args...)
 }
 
 // LogSev logs an event at the specified severity on a secondary logger.
 func (l *SecondaryLogger) LogSev(ctx context.Context, sev Severity, args ...interface{}) {
-	l.output(ctx, Severity_INFO, "", args...)
+	l.output(ctx, 1, Severity_INFO, "", args...)
 }
