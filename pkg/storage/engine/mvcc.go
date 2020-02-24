@@ -2447,7 +2447,9 @@ type MVCCScanOptions struct {
 	Txn              *roachpb.Transaction
 	// MaxKeys is the maximum number of kv pairs returned from this operation.
 	// The zero value represents an unbounded scan. If the limit stops the scan,
-	// a corresponding ResumeSpan is returned.
+	// a corresponding ResumeSpan is returned. As a special case, the value -1
+	// returns no keys in the result (returning the first key via the
+	// ResumeSpan).
 	MaxKeys int64
 	// TargetBytes is a byte threshold to limit the amount of data pulled into
 	// memory during a Scan operation. Once the target is satisfied (i.e. met or
