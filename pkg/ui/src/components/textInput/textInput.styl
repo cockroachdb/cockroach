@@ -1,0 +1,41 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-text-input
+  height $line-height--larger
+  border-radius 3px
+  border solid 1px $colors--neutral-4
+  background-color $colors--white
+  padding 0 $spacing-smaller
+
+  &:focus
+    border solid 1px $colors--primary-blue-3
+
+  &:hover
+    border solid 1px $colors--neutral-5
+
+  &--invalid
+    border: solid 1px $colors--functional-red-3
+    background-color $colors--functional-red-1
+    &:focus
+      border solid 1px $colors--functional-red-3
+
+  &__wrapper
+    display flex
+    flex-direction column
+
+  &__error-message
+    color $colors--functional-red-3
+    position absolute
+
+  &__validation-container
+    position relative
