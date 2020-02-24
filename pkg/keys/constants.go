@@ -361,6 +361,8 @@ const (
 	ProtectedTimestampsMetaTableID    = 31
 	ProtectedTimestampsRecordsTableID = 32
 
+	RoleOptionsTableID = 33
+
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
 	TableCommentType    = 1

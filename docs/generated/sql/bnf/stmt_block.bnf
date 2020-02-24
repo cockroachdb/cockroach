@@ -93,6 +93,7 @@ transaction_stmt ::=
 alter_stmt ::=
 	alter_ddl_stmt
 	| alter_user_stmt
+	| alter_role_stmt
 
 backup_stmt ::=
 	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
@@ -299,6 +300,10 @@ alter_ddl_stmt ::=
 alter_user_stmt ::=
 	alter_user_password_stmt
 
+alter_role_stmt ::=
+	'ALTER' role_or_group string_or_placeholder role_privileges
+	| 'ALTER' role_or_group string_or_placeholder 'WITH' role_privileges
+
 partitioned_backup ::=
 	string_or_placeholder
 	| '(' string_or_placeholder_list ')'
@@ -334,6 +339,10 @@ create_user_stmt ::=
 create_role_stmt ::=
 	'CREATE' role_or_group string_or_placeholder
 	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder
+	| 'CREATE' role_or_group string_or_placeholder role_privileges
+	| 'CREATE' role_or_group string_or_placeholder 'WITH' role_privileges
+	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder role_privileges
+	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder 'WITH' role_privileges
 
 create_ddl_stmt ::=
 	create_changefeed_stmt
@@ -648,6 +657,7 @@ unreserved_keyword ::=
 	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
+	| 'CREATEROLE'
 	| 'CUBE'
 	| 'CURRENT'
 	| 'CYCLE'
@@ -741,6 +751,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'NOCREATEROLE'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -1002,15 +1013,18 @@ alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder password_clause
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder password_clause
 
+role_or_group ::=
+	'ROLE'
+
+role_privileges ::=
+	role_privilege_list
+
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 opt_password ::=
 	password_clause
 	| 
-
-role_or_group ::=
-	'ROLE'
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
@@ -1363,6 +1377,10 @@ alter_zone_partition_stmt ::=
 password_clause ::=
 	opt_with 'PASSWORD' string_or_placeholder
 	| opt_with 'PASSWORD' 'NULL'
+
+role_privilege_list ::=
+	role_privilege
+	| role_privilege role_privilege_list
 
 changefeed_targets ::=
 	single_table_pattern_list
@@ -1761,6 +1779,10 @@ alter_index_cmds ::=
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
+
+role_privilege ::=
+	'CREATEROLE'
+	| 'NOCREATEROLE'
 
 single_table_pattern_list ::=
 	( table_name ) ( ( ',' table_name ) )*

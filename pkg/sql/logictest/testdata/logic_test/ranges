@@ -302,7 +302,8 @@ start_key                          start_pretty                   end_key       
 [165]                              /Table/29                      [166]                              /NamespaceTable/30             ·              ·                                ·           {1}       1
 [166]                              /NamespaceTable/30             [167]                              /NamespaceTable/Max            system         namespace                        ·           {1}       1
 [167]                              /NamespaceTable/Max            [168]                              /Table/32                      system         protected_ts_meta                ·           {1}       1
-[168]                              /Table/32                      [189 137]                          /Table/53/1                    system         protected_ts_records             ·           {1}       1
+[168]                              /Table/32                      [169]                              /Table/33                      system         protected_ts_records             ·           {1}       1
+[169]                              /Table/33                      [189 137]                          /Table/53/1                    system         role_options                     ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
@@ -353,7 +354,8 @@ start_key                          start_pretty                   end_key       
 [165]                              /Table/29                      [166]                              /NamespaceTable/30             ·              ·                                ·           {1}       1
 [166]                              /NamespaceTable/30             [167]                              /NamespaceTable/Max            system         namespace                        ·           {1}       1
 [167]                              /NamespaceTable/Max            [168]                              /Table/32                      system         protected_ts_meta                ·           {1}       1
-[168]                              /Table/32                      [189 137]                          /Table/53/1                    system         protected_ts_records             ·           {1}       1
+[168]                              /Table/32                      [169]                              /Table/33                      system         protected_ts_records             ·           {1}       1
+[169]                              /Table/33                      [189 137]                          /Table/53/1                    system         role_options                     ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1

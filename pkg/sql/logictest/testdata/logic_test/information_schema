@@ -627,6 +627,7 @@ system         public              reports_meta                       BASE TABLE
 system         public              namespace                          BASE TABLE   YES                 1
 system         public              protected_ts_meta                  BASE TABLE   YES                 1
 system         public              protected_ts_records               BASE TABLE   YES                 1
+system         public              role_options                       BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -764,6 +765,9 @@ system              public             630200280_23_1_not_null  system         p
 system              public             630200280_23_2_not_null  system         public        role_members                     CHECK            NO             NO
 system              public             630200280_23_3_not_null  system         public        role_members                     CHECK            NO             NO
 system              public             primary                  system         public        role_members                     PRIMARY KEY      NO             NO
+system              public             630200280_33_1_not_null  system         public        role_options                     CHECK            NO             NO
+system              public             630200280_33_2_not_null  system         public        role_options                     CHECK            NO             NO
+system              public             primary                  system         public        role_options                     PRIMARY KEY      NO             NO
 system              public             630200280_6_1_not_null   system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_2_not_null   system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_3_not_null   system         public        settings                         CHECK            NO             NO
@@ -878,6 +882,8 @@ system              public             630200280_32_3_not_null  meta_type IS NOT
 system              public             630200280_32_5_not_null  num_spans IS NOT NULL
 system              public             630200280_32_6_not_null  spans IS NOT NULL
 system              public             630200280_32_7_not_null  verified IS NOT NULL
+system              public             630200280_33_1_not_null  username IS NOT NULL
+system              public             630200280_33_2_not_null  option IS NOT NULL
 system              public             630200280_3_1_not_null   id IS NOT NULL
 system              public             630200280_4_1_not_null   username IS NOT NULL
 system              public             630200280_4_3_not_null   isRole IS NOT NULL
@@ -928,6 +934,8 @@ system         public        replication_stats                zone_id         sy
 system         public        reports_meta                     id              system              public             primary
 system         public        role_members                     member          system              public             primary
 system         public        role_members                     role            system              public             primary
+system         public        role_options                     option          system              public             primary
+system         public        role_options                     username        system              public             primary
 system         public        settings                         name            system              public             primary
 system         public        table_statistics                 statisticID     system              public             primary
 system         public        table_statistics                 tableID         system              public             primary
@@ -1094,6 +1102,9 @@ system         public        reports_meta                     id                
 system         public        role_members                     isAdmin                  3
 system         public        role_members                     member                   2
 system         public        role_members                     role                     1
+system         public        role_options                     option                   2
+system         public        role_options                     username                 1
+system         public        role_options                     value                    3
 system         public        settings                         lastUpdated              3
 system         public        settings                         name                     1
 system         public        settings                         value                    2
@@ -1677,6 +1688,16 @@ NULL     root     system         public              role_members               
 NULL     root     system         public              role_members                       INSERT          NULL          NO
 NULL     root     system         public              role_members                       SELECT          NULL          YES
 NULL     root     system         public              role_members                       UPDATE          NULL          NO
+NULL     admin    system         public              role_options                       DELETE          NULL          NO
+NULL     admin    system         public              role_options                       GRANT           NULL          NO
+NULL     admin    system         public              role_options                       INSERT          NULL          NO
+NULL     admin    system         public              role_options                       SELECT          NULL          YES
+NULL     admin    system         public              role_options                       UPDATE          NULL          NO
+NULL     root     system         public              role_options                       DELETE          NULL          NO
+NULL     root     system         public              role_options                       GRANT           NULL          NO
+NULL     root     system         public              role_options                       INSERT          NULL          NO
+NULL     root     system         public              role_options                       SELECT          NULL          YES
+NULL     root     system         public              role_options                       UPDATE          NULL          NO
 NULL     admin    system         public              settings                           DELETE          NULL          NO
 NULL     admin    system         public              settings                           GRANT           NULL          NO
 NULL     admin    system         public              settings                           INSERT          NULL          NO
@@ -2042,6 +2063,16 @@ NULL     admin    system         public              protected_ts_records       
 NULL     admin    system         public              protected_ts_records               SELECT          NULL          YES
 NULL     root     system         public              protected_ts_records               GRANT           NULL          NO
 NULL     root     system         public              protected_ts_records               SELECT          NULL          YES
+NULL     admin    system         public              role_options                       DELETE          NULL          NO
+NULL     admin    system         public              role_options                       GRANT           NULL          NO
+NULL     admin    system         public              role_options                       INSERT          NULL          NO
+NULL     admin    system         public              role_options                       SELECT          NULL          YES
+NULL     admin    system         public              role_options                       UPDATE          NULL          NO
+NULL     root     system         public              role_options                       DELETE          NULL          NO
+NULL     root     system         public              role_options                       GRANT           NULL          NO
+NULL     root     system         public              role_options                       INSERT          NULL          NO
+NULL     root     system         public              role_options                       SELECT          NULL          YES
+NULL     root     system         public              role_options                       UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

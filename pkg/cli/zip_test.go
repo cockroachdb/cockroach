@@ -164,7 +164,7 @@ requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
 requesting heap files for node 1... 0 found
 requesting goroutine files for node 1... 0 found
 requesting log file ...
-requesting ranges... 28 found
+requesting ranges... 29 found
 writing: debug/nodes/1/ranges/1.json
 writing: debug/nodes/1/ranges/2.json
 writing: debug/nodes/1/ranges/3.json
@@ -193,13 +193,14 @@ writing: debug/nodes/1/ranges/25.json
 writing: debug/nodes/1/ranges/26.json
 writing: debug/nodes/1/ranges/27.json
 writing: debug/nodes/1/ranges/28.json
+writing: debug/nodes/1/ranges/29.json
 requesting list of SQL databases... 3 found
 requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
 0 tables found
 requesting database details for postgres... writing: debug/schema/postgres@details.json
 0 tables found
 requesting database details for system... writing: debug/schema/system@details.json
-22 tables found
+23 tables found
 requesting table details for system.comments... writing: debug/schema/system/comments.json
 requesting table details for system.descriptor... writing: debug/schema/system/descriptor.json
 requesting table details for system.eventlog... writing: debug/schema/system/eventlog.json
@@ -216,6 +217,7 @@ requesting table details for system.replication_critical_localities... writing: 
 requesting table details for system.replication_stats... writing: debug/schema/system/replication_stats.json
 requesting table details for system.reports_meta... writing: debug/schema/system/reports_meta.json
 requesting table details for system.role_members... writing: debug/schema/system/role_members.json
+requesting table details for system.role_options... writing: debug/schema/system/role_options.json
 requesting table details for system.settings... writing: debug/schema/system/settings.json
 requesting table details for system.table_statistics... writing: debug/schema/system/table_statistics.json
 requesting table details for system.ui... writing: debug/schema/system/ui.json
@@ -282,7 +284,7 @@ requesting table details for defaultdb.pg_catalog.pg_class... writing: debug/sch
 requesting database details for postgres... writing: debug/schema/postgres@details.json
 0 tables found
 requesting database details for system... writing: debug/schema/system-1@details.json
-22 tables found
+23 tables found
 requesting table details for system.comments... writing: debug/schema/system-1/comments.json
 requesting table details for system.descriptor... writing: debug/schema/system-1/descriptor.json
 requesting table details for system.eventlog... writing: debug/schema/system-1/eventlog.json
@@ -299,6 +301,7 @@ requesting table details for system.replication_critical_localities... writing: 
 requesting table details for system.replication_stats... writing: debug/schema/system-1/replication_stats.json
 requesting table details for system.reports_meta... writing: debug/schema/system-1/reports_meta.json
 requesting table details for system.role_members... writing: debug/schema/system-1/role_members.json
+requesting table details for system.role_options... writing: debug/schema/system-1/role_options.json
 requesting table details for system.settings... writing: debug/schema/system-1/settings.json
 requesting table details for system.table_statistics... writing: debug/schema/system-1/table_statistics.json
 requesting table details for system.ui... writing: debug/schema/system-1/ui.json
@@ -558,7 +561,7 @@ requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
 requesting heap files for node 1... 0 found
 requesting goroutine files for node 1... 0 found
 requesting log file ...
-requesting ranges... 28 found
+requesting ranges... 29 found
 writing: debug/nodes/1/ranges/1.json
 writing: debug/nodes/1/ranges/2.json
 writing: debug/nodes/1/ranges/3.json
@@ -587,6 +590,7 @@ writing: debug/nodes/1/ranges/25.json
 writing: debug/nodes/1/ranges/26.json
 writing: debug/nodes/1/ranges/27.json
 writing: debug/nodes/1/ranges/28.json
+writing: debug/nodes/1/ranges/29.json
 writing: debug/nodes/2/status.json
 using SQL connection URL for node 2: postgresql://...
 retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/2/crdb_internal.feature_usage.txt
@@ -656,7 +660,7 @@ requesting heap profile for node 3... writing: debug/nodes/3/heap.pprof
 requesting heap files for node 3... 0 found
 requesting goroutine files for node 3... 0 found
 requesting log file ...
-requesting ranges... 28 found
+requesting ranges... 29 found
 writing: debug/nodes/3/ranges/1.json
 writing: debug/nodes/3/ranges/2.json
 writing: debug/nodes/3/ranges/3.json
@@ -685,13 +689,14 @@ writing: debug/nodes/3/ranges/25.json
 writing: debug/nodes/3/ranges/26.json
 writing: debug/nodes/3/ranges/27.json
 writing: debug/nodes/3/ranges/28.json
+writing: debug/nodes/3/ranges/29.json
 requesting list of SQL databases... 3 found
 requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
 0 tables found
 requesting database details for postgres... writing: debug/schema/postgres@details.json
 0 tables found
 requesting database details for system... writing: debug/schema/system@details.json
-22 tables found
+23 tables found
 requesting table details for system.comments... writing: debug/schema/system/comments.json
 requesting table details for system.descriptor... writing: debug/schema/system/descriptor.json
 requesting table details for system.eventlog... writing: debug/schema/system/eventlog.json
@@ -708,6 +713,7 @@ requesting table details for system.replication_critical_localities... writing: 
 requesting table details for system.replication_stats... writing: debug/schema/system/replication_stats.json
 requesting table details for system.reports_meta... writing: debug/schema/system/reports_meta.json
 requesting table details for system.role_members... writing: debug/schema/system/role_members.json
+requesting table details for system.role_options... writing: debug/schema/system/role_options.json
 requesting table details for system.settings... writing: debug/schema/system/settings.json
 requesting table details for system.table_statistics... writing: debug/schema/system/table_statistics.json
 requesting table details for system.ui... writing: debug/schema/system/ui.json

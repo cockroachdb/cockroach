@@ -25,6 +25,7 @@ replication_critical_localities
 replication_stats
 reports_meta
 role_members
+role_options
 settings
 table_statistics
 ui
@@ -58,6 +59,7 @@ SELECT id FROM system.descriptor
 30
 31
 32
+33
 50
 51
 52
@@ -308,6 +310,16 @@ system  public  role_members                     root    GRANT
 system  public  role_members                     root    INSERT
 system  public  role_members                     root    SELECT
 system  public  role_members                     root    UPDATE
+system  public  role_options                     admin   DELETE
+system  public  role_options                     admin   GRANT
+system  public  role_options                     admin   INSERT
+system  public  role_options                     admin   SELECT
+system  public  role_options                     admin   UPDATE
+system  public  role_options                     root    DELETE
+system  public  role_options                     root    GRANT
+system  public  role_options                     root    INSERT
+system  public  role_options                     root    SELECT
+system  public  role_options                     root    UPDATE
 system  public  settings                         admin   DELETE
 system  public  settings                         admin   GRANT
 system  public  settings                         admin   INSERT
