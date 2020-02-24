@@ -343,25 +343,25 @@ func (p *pebbleIterator) FindSplitKey(
 			mvccMinSplitKey.Key = nil
 		}
 
-		if mvccMinSplitKey.Key == nil &&
+		if mvccMinSplitKey.Key == nil && diff < bestDiff &&
 			(len(noSplitSpans) == 0 || isValidSplitKey(mvccKey.Key, noSplitSpans)) {
 			// This is a valid candidate for a split key.
-			if diff < bestDiff {
-				// Instead of copying bestSplitKey just yet, flip the found flag. In
-				// the most common case where the actual best split key is followed
-				// by a key that has diff > bestDiff (see the if statement with that
-				// predicate above), this lets us save a copy by reusing prevKey as the
-				// best split key.
-				bestDiff = diff
-				found = true
-				// Set length of bestSplitKey to 0, which the rest of this method relies
-				// on to check if the last key encountered was the best split key.
-				bestSplitKey.Key = bestSplitKey.Key[:0]
-			}
+			//
+			// Instead of copying bestSplitKey just yet, flip the found flag. In the
+			// most common case where the actual best split key is followed by a key
+			// that has diff > bestDiff (see the if statement with that predicate
+			// above), this lets us save a copy by reusing prevCandidateKey as the
+			// best split key.
+			bestDiff = diff
+			found = true
+			// Set length of bestSplitKey to 0, which the rest of this method relies
+			// on to check if the last key encountered was the best split key.
+			bestSplitKey.Key = bestSplitKey.Key[:0]
 		} else if found && len(bestSplitKey.Key) == 0 {
 			// We were just at a valid split key candidate, but then we came across
-			// a key that cannot be a split key (i.e. is in noSplitSpans). Copy the
-			// previous key as the bestSplitKey.
+			// a key that cannot be a split key (i.e. is in noSplitSpans), or was not
+			// an improvement over bestDiff. Copy the previous key as the
+			// bestSplitKey.
 			bestSplitKey.Timestamp = prevKey.Timestamp
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], prevKey.Key...)
 		}
