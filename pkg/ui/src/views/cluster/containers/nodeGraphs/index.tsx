@@ -223,6 +223,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               options={dashboardDropdownOptions}
               selected={dashboard}
               onChange={this.dashChange}
+              className="full-size"
             />
           </PageConfigItem>
           <PageConfigItem>
