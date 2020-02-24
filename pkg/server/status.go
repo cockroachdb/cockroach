@@ -634,7 +634,6 @@ func (s *statusServer) Details(
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
-	telemetry.Inc(telemetryHealthCheck)
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
@@ -662,18 +661,8 @@ func (s *statusServer) Details(
 		return resp, nil
 	}
 
-	serveMode := s.admin.server.grpc.mode.get()
-	if serveMode != modeOperational {
-		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
-	}
-
-	l, err := s.nodeLiveness.GetLiveness(nodeID)
-	if err != nil {
-		return nil, grpcstatus.Error(codes.Internal, err.Error())
-	}
-	isHealthy := l.IsLive(s.admin.server.clock.Now().GoTime()) && !l.Draining
-	if !isHealthy {
-		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
+	if err := s.admin.checkReadinessForHealthCheck(); err != nil {
+		return nil, err
 	}
 
 	return resp, nil
@@ -1943,15 +1932,11 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 func userFromContext(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		// If the incoming context has metadata but no attached web session user,
-		// it's a gRPC / internal SQL connection which has root on the cluster.
-		return security.RootUser, nil
+		return "", errors.New("no user metadata found in context")
 	}
 	usernames, ok := md[webSessionUserKeyStr]
 	if !ok {
-		// If the incoming context has metadata but no attached web session user,
-		// it's a gRPC / internal SQL connection which has root on the cluster.
-		return security.RootUser, nil
+		return "", errors.New("no username found in metadata")
 	}
 	if len(usernames) != 1 {
 		log.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)

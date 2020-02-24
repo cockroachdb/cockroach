@@ -109,8 +109,8 @@ func waitForClientReadinessAndGetClientGRPCConn(
 				// Access the /health endpoint. Until/unless this succeeds, the
 				// node is not yet fully initialized and ready to accept
 				// Bootstrap requests.
-				ac := serverpb.NewStatusClient(conn)
-				_, err := ac.Details(ctx, &serverpb.DetailsRequest{})
+				ac := serverpb.NewAdminClient(conn)
+				_, err := ac.Health(ctx, &serverpb.HealthRequest{})
 				return err
 			}); err != nil {
 			err = errors.Wrapf(err, "node not ready to perform cluster initialization")

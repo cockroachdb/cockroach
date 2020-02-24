@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1244,20 +1245,59 @@ func (s *adminServer) Cluster(
 }
 
 // Health returns liveness for the node target of the request.
-//
-// NB: this is deprecated. If you're looking for the code serving /health,
-// you want (*statusServer).Details.
+// Note: Health is non-privileged and non-authenticated and thus
+// must not report privileged information.
+// This is a simpler (non-privileged) version of Details().
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
-	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
+	telemetry.Inc(telemetryHealthCheck)
+
+	resp := &serverpb.HealthResponse{}
+	// If Ready is not set, the client doesn't want to know whether this node is
+	// ready to receive client traffic.
+	if !req.Ready {
+		return resp, nil
+	}
+
+	if err := s.checkReadinessForHealthCheck(); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *adminServer) checkReadinessForHealthCheck() error {
+	serveMode := s.server.grpc.mode.get()
+	switch serveMode {
+	case modeInitializing:
+		return status.Error(codes.Unavailable, "node is waiting for cluster initialization")
+	case modeDraining:
+		return status.Errorf(codes.Unavailable, "node is shutting down")
+	case modeOperational:
+		break
+	default:
+		return s.serverError(errors.Newf("unknown mode: %v", serveMode))
+	}
+
+	// TODO(knz): we'd like to use nodeLiveness.IsLive() here
+	// but we can't, see https://github.com/cockroachdb/cockroach/issues/45123
+	l, err := s.server.nodeLiveness.GetLiveness(s.server.NodeID())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return s.serverError(err)
 	}
-	if !isLive {
-		return nil, status.Errorf(codes.Unavailable, "node is not live")
+	if !l.IsLive(s.server.clock.Now().GoTime()) {
+		return status.Errorf(codes.Unavailable, "node is not healthy")
 	}
-	return &serverpb.HealthResponse{}, nil
+	if l.Draining {
+		// It's possible for liveness to indicate Draining before the grpc
+		// serving mode above has been adjusted. Conversely, we cannot use
+		// _only_ the liveness Draining flag because a node that has not
+		// yet joined the cluster can also be in the process of shutting
+		// down but has no liveness record.
+		return status.Errorf(codes.Unavailable, "node is shutting down")
+	}
+
+	return nil
 }
 
 // getLivenessStatusMap generates a map from NodeID to LivenessStatus for all

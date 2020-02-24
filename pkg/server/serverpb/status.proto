@@ -83,8 +83,12 @@ message DetailsRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
-  // ready specifies whether the client wants to know whether a node is ready to
-  // receive traffic. If a node is unready, an error will be returned.
+  // ready specifies whether the client wants to know whether the
+  // target node is ready to receive traffic. If a node is unready, an
+  // error will be returned.
+  //
+  // Note: this is a more general version of the ready flag on
+  // HealthRequest.
   bool ready = 2;
 }
 
@@ -776,7 +780,6 @@ service Status {
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
       get : "/_status/details/{node_id}"
-      additional_bindings {get : "/health"}
     };
   }
   rpc Nodes(NodesRequest) returns (NodesResponse) {
