@@ -11,6 +11,7 @@
 #include "file_registry.h"
 #include "env_manager.h"
 #include "fmt.h"
+#include "options.h"
 #include "utils.h"
 
 using namespace cockroach;
@@ -21,7 +22,13 @@ FileRegistry::FileRegistry(rocksdb::Env* env, const std::string& db_dir, bool re
     : env_(env),
       db_dir_(db_dir),
       read_only_(read_only),
-      registry_path_(PathAppend(db_dir_, kFileRegistryFilename)) {}
+      registry_path_(PathAppend(db_dir_, kFileRegistryFilename)) {
+  auto status = env_->NewDirectory(db_dir_, &registry_dir_);
+  if (!status.ok()) {
+    std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(true /* use_primary_log */));
+    rocksdb::Fatal(logger, "unable to open directory %s to sync: %s", db_dir.c_str(), status.ToString().c_str());
+  }
+}
 
 rocksdb::Status FileRegistry::CheckNoRegistryFile() const {
   rocksdb::Status status = env_->FileExists(registry_path_);
@@ -250,7 +257,7 @@ rocksdb::Status FileRegistry::PersistRegistryLocked(std::unique_ptr<enginepb::Fi
     return rocksdb::Status::InvalidArgument("failed to serialize key registry");
   }
 
-  auto status = SafeWriteStringToFile(env_, registry_path_, contents);
+  auto status = SafeWriteStringToFile(env_, registry_dir_.get(), registry_path_, contents);
   if (!status.ok()) {
     return status;
   }
