@@ -398,6 +398,11 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		tt.deleteOnlyIdxCount++
 	}
 
+	if def.PartialIndexPredicate != nil {
+		idx.partialIndexPredicate.Predicate = tree.Serialize(def.PartialIndexPredicate)
+		tt.partialIdxCount++
+	}
+
 	// Add explicit columns and mark primary key columns as not null.
 	notNullIndex := true
 	for _, colDef := range def.Columns {

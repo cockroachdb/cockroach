@@ -1358,7 +1358,7 @@ func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error 
 		values[i] = table.row[i].Datum
 	}
 
-	indexEntries, err := sqlbase.EncodeSecondaryIndex(table.desc.TableDesc(), table.index, table.colIdxMap, values)
+	indexEntries, err := sqlbase.EncodeSecondaryIndex(nil, table.desc.TableDesc(), table.index, nil, table.colIdxMap, values)
 	if err != nil {
 		return err
 	}

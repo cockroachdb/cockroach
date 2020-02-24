@@ -367,3 +367,9 @@ func checkMutationInput(
 	}
 	return nil
 }
+
+// partialIndexPredSet contains a subset of partial index predicates, as
+// ordinals into ImmutableTableDescriptor.PartialIndexOrds.
+// Each predicate has a boolean column produced as input to mutations,
+// indicating the result of evaluating the partial index predicate.
+type partialIndexPredSet = util.FastIntSet

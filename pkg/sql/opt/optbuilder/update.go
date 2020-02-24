@@ -314,6 +314,8 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
+	mb.addPartialIndexPredicateCols()
+
 	mb.buildFKChecksForUpdate()
 
 	private := mb.makeMutationPrivate(returning != nil)

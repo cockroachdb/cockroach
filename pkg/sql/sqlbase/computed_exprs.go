@@ -92,7 +92,6 @@ func MakeComputedExprs(
 	tn *tree.TableName,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
-	addingCols bool,
 ) ([]tree.TypedExpr, error) {
 	// Check to see if any of the columns have computed expressions. If there
 	// are none, we don't bother with constructing the map as the expressions
@@ -145,9 +144,7 @@ func MakeComputedExprs(
 		col := &cols[i]
 		if !col.IsComputed() {
 			computedExprs = append(computedExprs, tree.DNull)
-			if addingCols {
-				addColumnInfo(col)
-			}
+			addColumnInfo(col)
 			continue
 		}
 		expr, _, err := ResolveNames(
@@ -165,9 +162,72 @@ func MakeComputedExprs(
 		}
 		computedExprs = append(computedExprs, typedExpr)
 		compExprIdx++
-		if addingCols {
-			addColumnInfo(col)
-		}
+		addColumnInfo(col)
 	}
 	return computedExprs, nil
+}
+
+// MakePartialIndexFilterExprs returns a slice of evaluable expressions, one per
+// index in the input, that represent the partial index filter for that
+// particular index. If a particular index does not have a partial index
+// definition, there will be a nil in that position in the return slice.
+func MakePartialIndexFilterExprs(
+	addedIndexDescriptors []IndexDescriptor,
+	tableDesc *ImmutableTableDescriptor,
+	tn *tree.TableName,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]tree.TypedExpr, error) {
+	havePartialIndexes := false
+	for i := range addedIndexDescriptors {
+		partialIndexFilterStr := addedIndexDescriptors[i].PartialIndexPredicate
+		if partialIndexFilterStr != "" {
+			havePartialIndexes = true
+			break
+		}
+	}
+	if !havePartialIndexes {
+		return nil, nil
+	}
+
+	// We need an ivarHelper and sourceInfo, unlike DEFAULT, since computed
+	// columns can reference other columns and thus need to be able to resolve
+	// column names (at this stage they only need to resolve the types so that
+	// the expressions can be typechecked - we have no need to evaluate them).
+	iv := &descContainer{tableDesc.Columns}
+	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
+
+	source := NewSourceInfoForSingleTable(*tn, ResultColumnsFromColDescs(tableDesc.Columns))
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.IVarContainer = iv
+
+	// Build the computed expressions map from the parsed statement.
+	filterExprs := make([]tree.TypedExpr, len(addedIndexDescriptors))
+	// Check to see if any of the columns have computed expressions. If there
+	// are none, we don't bother with constructing the map as the expressions
+	// are all NULL.
+	for i := range addedIndexDescriptors {
+		partialIndexFilterStr := addedIndexDescriptors[i].PartialIndexPredicate
+		if partialIndexFilterStr != "" {
+			expr, err := parser.ParseExpr(partialIndexFilterStr)
+			if err != nil {
+				return nil, err
+			}
+			expr, _, err = ResolveNames(expr, source, ivarHelper, evalCtx.SessionData.SearchPath)
+			if err != nil {
+				return nil, err
+			}
+
+			typedExpr, err := tree.TypeCheck(expr, &semaCtx, types.Bool)
+			if err != nil {
+				return nil, err
+			}
+			if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
+				return nil, err
+			}
+			filterExprs[i] = typedExpr
+		}
+	}
+
+	return filterExprs, nil
 }

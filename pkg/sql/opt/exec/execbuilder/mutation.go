@@ -63,9 +63,10 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	}
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPredicateCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
+	colList = appendColsWhenPresent(colList, ins.PartialIndexPredicateCols)
 	input, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -76,17 +77,11 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
 	returnOrds := ordinalSetFromColList(ins.ReturnCols)
+	partialIndexPredicateCols := ordinalSetFromColList(ins.PartialIndexPredicateCols)
 	// If we planned FK checks, disable the execution code for FK checks.
 	disableExecFKs := !ins.FKFallback
-	node, err := b.factory.ConstructInsert(
-		input.root,
-		tab,
-		insertOrds,
-		returnOrds,
-		checkOrds,
-		b.allowAutoCommit && len(ins.Checks) == 0,
-		disableExecFKs,
-	)
+	node, err := b.factory.ConstructInsert(input.root, tab, insertOrds, returnOrds, checkOrds, partialIndexPredicateCols,
+		b.allowAutoCommit && len(ins.Checks) == 0, disableExecFKs)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -208,9 +203,10 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		}
 	}
 
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPredicateCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
+	colList = appendColsWhenPresent(colList, ins.PartialIndexPredicateCols)
 	if !colList.Equals(values.Cols) {
 		// We have a Values input, but the columns are not in the right order. For
 		// example:
@@ -231,14 +227,9 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
 	returnOrds := ordinalSetFromColList(ins.ReturnCols)
-	node, err := b.factory.ConstructInsertFastPath(
-		rows,
-		tab,
-		insertOrds,
-		returnOrds,
-		checkOrds,
-		fkChecks,
-	)
+	partialIndexPredicateCols := ordinalSetFromColList(ins.PartialIndexPredicateCols)
+	node, err := b.factory.ConstructInsertFastPath(rows, tab, insertOrds, returnOrds, checkOrds,
+		partialIndexPredicateCols, fkChecks)
 	if err != nil {
 		return execPlan{}, false, err
 	}
@@ -262,7 +253,8 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	cnt := len(upd.FetchCols) + len(upd.UpdateCols) + len(upd.PassthroughCols) + len(upd.CheckCols)
+	cnt := len(upd.FetchCols) + len(upd.UpdateCols) + len(upd.PassthroughCols) +
+		len(upd.CheckCols) + len(upd.PartialIndexPredicateCols)
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
@@ -274,7 +266,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		colList = appendColsWhenPresent(colList, upd.PassthroughCols)
 	}
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
-
+	colList = appendColsWhenPresent(colList, upd.PartialIndexPredicateCols)
 	input, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -287,6 +279,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
 	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
 	checkOrds := ordinalSetFromColList(upd.CheckCols)
+	partialIndexPredOrds := ordinalSetFromColList(upd.PartialIndexPredicateCols)
 
 	// Construct the result columns for the passthrough set.
 	var passthroughCols sqlbase.ResultColumns
@@ -305,6 +298,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
+		partialIndexPredOrds,
 		passthroughCols,
 		b.allowAutoCommit && len(upd.Checks) == 0,
 		disableExecFKs,
@@ -344,7 +338,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) + 1
+	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) +
+		len(ups.CheckCols) + len(ups.PartialIndexPredicateCols) + 1
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ups.InsertCols)
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
@@ -353,7 +348,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		colList = append(colList, ups.CanaryCol)
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
-
+	colList = appendColsWhenPresent(colList, ups.PartialIndexPredicateCols)
 	input, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -371,19 +366,10 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
 	returnColOrds := ordinalSetFromColList(ups.ReturnCols)
 	checkOrds := ordinalSetFromColList(ups.CheckCols)
+	partialIndexPredOrds := ordinalSetFromColList(ups.PartialIndexPredicateCols)
 	disableExecFKs := !ups.FKFallback
-	node, err := b.factory.ConstructUpsert(
-		input.root,
-		tab,
-		canaryCol,
-		insertColOrds,
-		fetchColOrds,
-		updateColOrds,
-		returnColOrds,
-		checkOrds,
-		b.allowAutoCommit && len(ups.Checks) == 0,
-		disableExecFKs,
-	)
+	node, err := b.factory.ConstructUpsert(input.root, tab, canaryCol, insertColOrds, fetchColOrds, updateColOrds,
+		returnColOrds, checkOrds, partialIndexPredOrds, b.allowAutoCommit && len(ups.Checks) == 0, disableExecFKs)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -413,9 +399,9 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(del.FetchCols))
+	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PartialIndexPredicateCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
-
+	colList = appendColsWhenPresent(colList, del.PartialIndexPredicateCols)
 	input, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -426,15 +412,10 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
+	partialIndexPredOrds := ordinalSetFromColList(del.PartialIndexPredicateCols)
 	disableExecFKs := !del.FKFallback
-	node, err := b.factory.ConstructDelete(
-		input.root,
-		tab,
-		fetchColOrds,
-		returnColOrds,
-		b.allowAutoCommit && len(del.Checks) == 0,
-		disableExecFKs,
-	)
+	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, returnColOrds, partialIndexPredOrds,
+		b.allowAutoCommit && len(del.Checks) == 0, disableExecFKs)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -477,6 +458,9 @@ func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 		// is possible, because the integrity of those references must be checked.
 		return false
 	}
+	// N.B.: If the table has partial indexes, it's okay to use delete range,
+	// because it doesn't matter if we delete the non-existent portion of the
+	// index with a range query.
 
 	// Check for simple Scan input operator without a limit; anything else is not
 	// supported by a range delete.

@@ -1249,3 +1249,26 @@ with &1
                           │         └──  xyzw.w:7 => w:11
                           └── projections
                                └── a:1 + x:8 [as="?column?":12]
+
+exec-ddl
+CREATE TABLE partialindexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX bidx(b) WHERE b > 0,
+    INDEX cidx(c) WHERE a > b AND c = 'foo'
+)
+----
+
+build
+SELECT a FROM partialindexes@bidx WHERE b > 1
+----
+project
+ ├── columns: a:1!null
+ └── select
+      ├── columns: a:1!null b:2!null c:3
+      ├── scan partialindexes
+      │    ├── columns: a:1!null b:2 c:3
+      │    └── flags: force-index=bidx
+      └── filters
+           └── b:2 > 1

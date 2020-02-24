@@ -185,6 +185,10 @@ type ImmutableTableDescriptor struct {
 	writeOnlyColCount   int
 	writeOnlyIndexCount int
 
+	// partialIndexOrds contains one ordinal (referencing the
+	// publicAndNonPublicIndexes slice) for every partial index in the table.
+	partialIndexOrds []int
+
 	allChecks []TableDescriptor_CheckConstraint
 
 	// ReadableColumns is a list of columns (including those undergoing a schema change)
@@ -265,6 +269,14 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 
 	desc := &ImmutableTableDescriptor{TableDescriptor: tbl}
 
+	// Count up the number of partial indexes.
+	for i := range tbl.Indexes {
+		index := &tbl.Indexes[i]
+		if index.PartialIndexPredicate != "" {
+			desc.partialIndexOrds = append(desc.partialIndexOrds, i)
+		}
+	}
+
 	if len(tbl.Mutations) > 0 {
 		publicAndNonPublicCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
 		publicAndNonPublicIndexes = make([]IndexDescriptor, 0, len(tbl.Indexes)+len(tbl.Mutations))
@@ -276,12 +288,16 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 
 		// Fill up mutations into the column/index lists by placing the writable columns/indexes
 		// before the delete only columns/indexes.
-		for _, m := range tbl.Mutations {
+		for i := range tbl.Mutations {
+			m := &tbl.Mutations[i]
 			switch m.State {
 			case DescriptorMutation_DELETE_AND_WRITE_ONLY:
 				if idx := m.GetIndex(); idx != nil {
 					publicAndNonPublicIndexes = append(publicAndNonPublicIndexes, *idx)
 					desc.writeOnlyIndexCount++
+					if idx.PartialIndexPredicate != "" {
+						desc.partialIndexOrds = append(desc.partialIndexOrds, i)
+					}
 				} else if col := m.GetColumn(); col != nil {
 					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
 					desc.writeOnlyColCount++
@@ -289,11 +305,15 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 			}
 		}
 
-		for _, m := range tbl.Mutations {
+		for i := range tbl.Mutations {
+			m := &tbl.Mutations[i]
 			switch m.State {
 			case DescriptorMutation_DELETE_ONLY:
 				if idx := m.GetIndex(); idx != nil {
 					publicAndNonPublicIndexes = append(publicAndNonPublicIndexes, *idx)
+					if idx.PartialIndexPredicate != "" {
+						desc.partialIndexOrds = append(desc.partialIndexOrds, i)
+					}
 				} else if col := m.GetColumn(); col != nil {
 					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
 				}
@@ -621,6 +641,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 			f.FormatNameP(&desc.StoreColumnNames[i])
 		}
 		f.WriteByte(')')
+	}
+
+	if desc.PartialIndexPredicate != "" {
+		f.WriteString(" WHERE ")
+		f.WriteString(desc.PartialIndexPredicate)
 	}
 	return f.CloseAndGetString()
 }
@@ -3913,6 +3938,12 @@ func (desc *ImmutableTableDescriptor) DeletableIndexes() []IndexDescriptor {
 // DeleteOnlyIndexes returns a list of delete-only mutation indexes.
 func (desc *ImmutableTableDescriptor) DeleteOnlyIndexes() []IndexDescriptor {
 	return desc.publicAndNonPublicIndexes[len(desc.Indexes)+desc.writeOnlyIndexCount:]
+}
+
+// PartialIndexCount returns a slice of ordinals into
+// desc.publicAndNonPublicIndexes, one per partial index on the table.
+func (desc *ImmutableTableDescriptor) PartialIndexOrds() []int {
+	return desc.partialIndexOrds
 }
 
 // TableDesc implements the ObjectDescriptor interface.

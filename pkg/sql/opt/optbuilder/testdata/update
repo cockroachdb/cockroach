@@ -45,6 +45,16 @@ CREATE TABLE checks (
 ----
 
 exec-ddl
+CREATE TABLE partialindexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX(b) WHERE b > 0,
+    INDEX(c) WHERE a > b AND c = 'foo'
+)
+----
+
+exec-ddl
 CREATE TABLE decimals (
     a DECIMAL(10,0) PRIMARY KEY CHECK (round(a) = a),
     b DECIMAL(5,1)[] CHECK (b[0] > 1),
@@ -1605,6 +1615,24 @@ update checks
       └── projections
            ├── abcde.b:10 < column15:15 [as=check1:16]
            └── abcde.a:9 > 0 [as=check2:17]
+
+opt
+UPDATE partialindexes SET b=1
+----
+update partialindexes
+ ├── columns: <none>
+ ├── fetch columns: a:4 b:5 c:6
+ ├── update-mapping:
+ │    └── column7:7 => b:2
+ ├── partial index pred columns: partialIndexPred1:8 partialIndexPred2:9
+ └── project
+      ├── columns: partialIndexPred1:8!null partialIndexPred2:9 column7:7!null a:4!null b:5 c:6
+      ├── scan partialindexes
+      │    └── columns: a:4!null b:5 c:6
+      └── projections
+           ├── true [as=partialIndexPred1:8]
+           ├── (a:4 > 1) AND (c:6 = 'foo') [as=partialIndexPred2:9]
+           └── 1 [as=column7:7]
 
 # ------------------------------------------------------------------------------
 # Test decimal column truncation.

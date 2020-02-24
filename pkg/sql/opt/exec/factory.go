@@ -334,6 +334,7 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checkCols CheckOrdinalSet,
+		partialIndexPredicateCols ColumnOrdinalSet,
 		allowAutoCommit bool,
 		skipFKChecks bool,
 	) (Node, error)
@@ -357,6 +358,7 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checkCols CheckOrdinalSet,
+		partialIndexPredicateCols ColumnOrdinalSet,
 		fkChecks []InsertFastPathFKCheck,
 	) (Node, error)
 
@@ -392,6 +394,7 @@ type Factory interface {
 		updateCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
+		partialIndexPredCols ColumnOrdinalSet,
 		passthrough sqlbase.ResultColumns,
 		allowAutoCommit bool,
 		skipFKChecks bool,
@@ -439,6 +442,7 @@ type Factory interface {
 		updateCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
+		partialIndexPredCols ColumnOrdinalSet,
 		allowAutoCommit bool,
 		skipFKChecks bool,
 	) (Node, error)
@@ -464,6 +468,7 @@ type Factory interface {
 		table cat.Table,
 		fetchCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
+		partialIndexPredCols ColumnOrdinalSet,
 		allowAutoCommit bool,
 		skipFKChecks bool,
 	) (Node, error)

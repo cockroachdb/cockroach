@@ -47,9 +47,7 @@ func MakeDeleter(
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
 ) (Deleter, error) {
-	rowDeleter, err := makeRowDeleterWithoutCascader(
-		ctx, txn, tableDesc, fkTables, requestedCols, checkFKs, alloc,
-	)
+	rowDeleter, err := makeRowDeleterWithoutCascader(ctx, evalCtx, txn, tableDesc, fkTables, requestedCols, checkFKs, alloc)
 	if err != nil {
 		return Deleter{}, err
 	}
@@ -67,6 +65,7 @@ func MakeDeleter(
 // additional cascader.
 func makeRowDeleterWithoutCascader(
 	ctx context.Context,
+	evalCtx *tree.EvalContext,
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
@@ -110,7 +109,7 @@ func makeRowDeleterWithoutCascader(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(tableDesc, indexes),
+		Helper:               newRowHelper(evalCtx, tableDesc, indexes),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
@@ -139,8 +138,13 @@ func (rd *Deleter) DeleteRow(
 
 	// Delete the row from any secondary indices.
 	for i := range rd.Helper.Indexes {
+		var partialIndexPred tree.TypedExpr
+		if rd.Helper.PartialIndexPredicates != nil {
+			partialIndexPred = rd.Helper.PartialIndexPredicates[i]
+		}
 		entries, err := sqlbase.EncodeSecondaryIndex(
-			rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i], rd.FetchColIDtoRowIndex, values)
+			nil, rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i],
+			partialIndexPred, rd.FetchColIDtoRowIndex, values)
 		if err != nil {
 			return err
 		}
@@ -212,8 +216,7 @@ func (rd *Deleter) DeleteIndexRow(
 			return err
 		}
 	}
-	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
-		rd.Helper.TableDesc.TableDesc(), idx, rd.FetchColIDtoRowIndex, values)
+	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(nil, rd.Helper.TableDesc.TableDesc(), idx, nil, rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}

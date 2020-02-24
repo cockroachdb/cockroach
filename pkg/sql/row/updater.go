@@ -83,9 +83,7 @@ func MakeUpdater(
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
 ) (Updater, error) {
-	rowUpdater, err := makeUpdaterWithoutCascader(
-		ctx, txn, tableDesc, fkTables, updateCols, requestedCols, updateType, checkFKs, alloc,
-	)
+	rowUpdater, err := makeUpdaterWithoutCascader(ctx, evalCtx, txn, tableDesc, fkTables, updateCols, requestedCols, updateType, checkFKs, alloc)
 	if err != nil {
 		return Updater{}, err
 	}
@@ -110,6 +108,7 @@ var returnTruePseudoError error = returnTrue{}
 // create a cascader.
 func makeUpdaterWithoutCascader(
 	ctx context.Context,
+	evalCtx *tree.EvalContext,
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
@@ -176,12 +175,12 @@ func makeUpdaterWithoutCascader(
 
 	var deleteOnlyHelper *rowHelper
 	if len(deleteOnlyIndexes) > 0 {
-		rh := newRowHelper(tableDesc, deleteOnlyIndexes)
+		rh := newRowHelper(evalCtx, tableDesc, deleteOnlyIndexes)
 		deleteOnlyHelper = &rh
 	}
 
 	ru := Updater{
-		Helper:                newRowHelper(tableDesc, includeIndexes),
+		Helper:                newRowHelper(evalCtx, tableDesc, includeIndexes),
 		DeleteHelper:          deleteOnlyHelper,
 		UpdateCols:            updateCols,
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
@@ -196,16 +195,14 @@ func makeUpdaterWithoutCascader(
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
 		var err error
-		if ru.rd, err = makeRowDeleterWithoutCascader(
-			ctx, txn, tableDesc, fkTables, tableCols, SkipFKs, alloc,
-		); err != nil {
+		if ru.rd, err = makeRowDeleterWithoutCascader(ctx, evalCtx, txn, tableDesc,
+			fkTables, tableCols, SkipFKs, alloc); err != nil {
 			return Updater{}, err
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
-		if ru.ri, err = MakeInserter(
-			ctx, txn, tableDesc, tableCols, SkipFKs, nil /* fkTables */, alloc,
-		); err != nil {
+		if ru.ri, err = MakeInserter(ctx, evalCtx, txn, tableDesc, tableCols,
+			SkipFKs, nil, alloc); err != nil {
 			return Updater{}, err
 		}
 	} else {
@@ -354,13 +351,11 @@ func (ru *Updater) UpdateRow(
 	for i := range ru.Helper.Indexes {
 		// TODO (rohany): include a version of sqlbase.EncodeSecondaryIndex that allocates index entries
 		//  into an argument list.
-		ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, oldValues)
+		ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(nil, ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], nil, ru.FetchColIDtoRowIndex, oldValues)
 		if err != nil {
 			return nil, err
 		}
-		ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, ru.newValues)
+		ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(nil, ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], nil, ru.FetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}

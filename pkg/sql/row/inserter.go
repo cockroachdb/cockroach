@@ -41,6 +41,7 @@ type Inserter struct {
 // insertCols must contain every column in the primary key.
 func MakeInserter(
 	ctx context.Context,
+	evalCtx *tree.EvalContext,
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
@@ -49,7 +50,7 @@ func MakeInserter(
 	alloc *sqlbase.DatumAlloc,
 ) (Inserter, error) {
 	ri := Inserter{
-		Helper:                newRowHelper(tableDesc, tableDesc.WritableIndexes()),
+		Helper:                newRowHelper(evalCtx, tableDesc, tableDesc.WritableIndexes()),
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),

@@ -306,11 +306,12 @@ func (n *createTableNode) startExec(params runParams) error {
 			// mapping to the definitions in the descriptor.
 			ri, err := row.MakeInserter(
 				params.ctx,
+				params.EvalContext(),
 				params.p.txn,
 				sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
 				desc.Columns,
 				row.SkipFKs,
-				nil, /* fkTables */
+				nil,
 				&params.p.alloc)
 			if err != nil {
 				return err
@@ -1352,6 +1353,16 @@ func MakeTableDesc(
 				}
 				idx.Partitioning = partitioning
 			}
+			if d.PartialIndexPredicate != nil {
+				expr, _, err := validateTablePredicate(ctx, d.PartialIndexPredicate, &desc,
+					semaCtx, n.Table)
+				if err != nil {
+					return desc, err
+				}
+
+				serialized := tree.Serialize(expr)
+				idx.PartialIndexPredicate = serialized
+			}
 
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
@@ -2012,38 +2023,18 @@ func MakeCheckConstraint(
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
 	name := string(d.Name)
 
+	expr := d.Expr
 	if name == "" {
 		var err error
-		name, err = generateNameForCheckConstraint(desc, d.Expr, inuseNames)
+		name, err = generateNameForCheckConstraint(desc, expr, inuseNames)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	expr, colIDsUsed, err := replaceVars(desc, d.Expr)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := sqlbase.SanitizeVarFreeExpr(
-		expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
-	); err != nil {
-		return nil, err
-	}
-
-	colIDs := make([]sqlbase.ColumnID, 0, len(colIDsUsed))
-	for colID := range colIDsUsed {
-		colIDs = append(colIDs, colID)
-	}
-	sort.Sort(sqlbase.ColumnIDs(colIDs))
-
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		tableName, sqlbase.ResultColumnsFromColDescs(desc.TableDesc().AllNonDropColumns()),
-	)
-
-	expr, err = dequalifyColumnRefs(ctx, sourceInfo, d.Expr)
-	if err != nil {
-		return nil, err
+	expr, colIDs, newExpr := validateTablePredicate(ctx, expr, desc, semaCtx, tableName)
+	if newExpr != nil {
+		return nil, newExpr
 	}
 
 	return &sqlbase.TableDescriptor_CheckConstraint{
@@ -2052,4 +2043,42 @@ func MakeCheckConstraint(
 		ColumnIDs: colIDs,
 		Hidden:    d.Hidden,
 	}, nil
+}
+
+// validateTablePredicate checks to see whether the input expression is:
+// 1. a predicate (aka returns bool)
+// 2. contains only column references to the table
+// It returns the validated expression with the column references replaced with
+// dummyColumnItems that facilitate later type checking. The returned expression
+// can't be evaluated because of these dummyColumnItems. It also returns a list
+// of the column ids that were referenced.
+func validateTablePredicate(
+	ctx context.Context,
+	expr tree.Expr,
+	desc *sqlbase.MutableTableDescriptor,
+	semaCtx *tree.SemaContext,
+	tableName tree.TableName,
+) (tree.Expr, []sqlbase.ColumnID, error) {
+	expr, colIDsUsed, err := replaceVars(desc, expr)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := sqlbase.SanitizeVarFreeExpr(
+		expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
+	); err != nil {
+		return nil, nil, err
+	}
+	colIDs := make([]sqlbase.ColumnID, 0, len(colIDsUsed))
+	for colID := range colIDsUsed {
+		colIDs = append(colIDs, colID)
+	}
+	sort.Sort(sqlbase.ColumnIDs(colIDs))
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
+		tableName, sqlbase.ResultColumnsFromColDescs(desc.TableDesc().AllNonDropColumns()),
+	)
+	expr, err = dequalifyColumnRefs(ctx, sourceInfo, expr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return expr, colIDs, nil
 }

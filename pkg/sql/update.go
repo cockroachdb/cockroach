@@ -43,7 +43,8 @@ type updateRun struct {
 	tu         tableUpdater
 	rowsNeeded bool
 
-	checkOrds checkSet
+	checkOrds            checkSet
+	partialIndexPredOrds partialIndexPredSet
 
 	// rowCount is the number of rows in the current batch.
 	rowCount int
@@ -297,6 +298,28 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// processing the CHECK constraints.
 	if err := enforceLocalColumnConstraints(u.run.updateValues, u.run.tu.ru.UpdateCols); err != nil {
 		return err
+	}
+
+	if !u.run.partialIndexPredOrds.Empty() {
+		tabDesc := u.run.tu.tableDesc()
+		nOtherCols := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.numPassthrough + u.run.checkOrds.Len()
+		partialIndexPredNewVals := sourceVals[nOtherCols:]
+		var colIdx int
+		for i, ord := range tabDesc.PartialIndexOrds() {
+			if res, err := tree.GetBool(partialIndexPredNewVals[i]); err != nil {
+				return err
+			} else if !res && partialIndexPredNewVals[colIdx] != tree.DNull {
+				// Row isn't part of the index.
+				u.run.tu.ru.Helper.PartialIndexPredicates[ord] = tree.DBoolFalse
+			} else {
+				u.run.tu.ru.Helper.PartialIndexPredicates[ord] = tree.DBoolTrue
+			}
+			colIdx++
+		}
+		if err := checkMutationInput(tabDesc, u.run.partialIndexPredOrds, partialIndexPredNewVals); err != nil {
+			return err
+		}
+		sourceVals = sourceVals[:nOtherCols]
 	}
 
 	// Run the CHECK constraints, if any. CheckHelper will either evaluate the

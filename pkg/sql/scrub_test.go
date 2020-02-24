@@ -63,8 +63,7 @@ INSERT INTO t."tEst" VALUES (10, 20);
 
 	// Construct the secondary index key that is currently in the
 	// database.
-	secondaryIndexKey, err := sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndex, colIDtoRowIndex, values)
+	secondaryIndexKey, err := sqlbase.EncodeSecondaryIndex(nil, tableDesc, secondaryIndex, nil, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -131,8 +130,7 @@ CREATE INDEX secondary ON t.test (v);
 
 	// Construct datums and secondary k/v for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
-	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
+	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(nil, tableDesc, secondaryIndexDesc, nil, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -225,8 +223,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 
 	// Generate the existing secondary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
-	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
+	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(nil, tableDesc, secondaryIndexDesc, nil, colIDtoRowIndex, values)
 
 	if len(secondaryIndex) != 1 {
 		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndex), secondaryIndex)
@@ -242,8 +239,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 
 	// Generate a secondary index k/v that has a different value.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(314)}
-	secondaryIndex, err = sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
+	secondaryIndex, err = sqlbase.EncodeSecondaryIndex(nil, tableDesc, secondaryIndexDesc, nil, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -443,8 +439,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 
 	// Construct the secondary index key entry as it exists in the
 	// database.
-	secondaryIndexKey, err := sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndex, colIDtoRowIndex, values)
+	secondaryIndexKey, err := sqlbase.EncodeSecondaryIndex(nil, tableDesc, secondaryIndex, nil, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -463,8 +458,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	values[1] = tree.NewDInt(0)
 
 	// Construct the new secondary index key that will be inserted.
-	secondaryIndexKey, err = sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndex, colIDtoRowIndex, values)
+	secondaryIndexKey, err = sqlbase.EncodeSecondaryIndex(nil, tableDesc, secondaryIndex, nil, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

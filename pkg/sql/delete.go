@@ -56,6 +56,8 @@ type deleteRun struct {
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
+	partialIndexPredOrds partialIndexPredSet
+
 	// rowIdxToRetIdx is the mapping from the columns returned by the deleter
 	// to the columns in the resultRowBuffer. A value of -1 is used to indicate
 	// that the column at that index is not part of the resultRowBuffer
@@ -173,6 +175,27 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 // processSourceRow processes one row from the source for deletion and, if
 // result rows are needed, saves it in the result row container
 func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
+	tabDesc := d.run.td.tableDesc()
+	if !d.run.partialIndexPredOrds.Empty() {
+		nFetchCols := len(sourceVals) - d.run.partialIndexPredOrds.Len()
+		partialIndexPredVals := sourceVals[nFetchCols:]
+		var colIdx int
+		for i, ord := range tabDesc.PartialIndexOrds() {
+			if res, err := tree.GetBool(partialIndexPredVals[i]); err != nil {
+				return err
+			} else if !res && partialIndexPredVals[colIdx] != tree.DNull {
+				// Row isn't part of the index.
+				d.run.td.rd.Helper.PartialIndexPredicates[ord] = tree.DBoolFalse
+			} else {
+				d.run.td.rd.Helper.PartialIndexPredicates[ord] = tree.DBoolTrue
+			}
+			colIdx++
+		}
+		if err := checkMutationInput(tabDesc, d.run.partialIndexPredOrds, partialIndexPredVals); err != nil {
+			return err
+		}
+		sourceVals = sourceVals[:nFetchCols]
+	}
 	// Queue the deletion in the KV batch.
 	if err := d.run.td.row(params.ctx, sourceVals, d.run.traceKV); err != nil {
 		return err

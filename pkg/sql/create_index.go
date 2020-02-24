@@ -170,6 +170,17 @@ func MakeIndexDescriptor(
 		}
 	}
 
+	if n.PartialIndexPredicate != nil {
+		expr, _, err := validateTablePredicate(params.ctx, n.PartialIndexPredicate, tableDesc,
+			&params.p.semaCtx, n.Table)
+		if err != nil {
+			return nil, err
+		}
+
+		serialized := tree.Serialize(expr)
+		indexDesc.PartialIndexPredicate = serialized
+	}
+
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
 		return nil, err
 	}

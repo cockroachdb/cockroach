@@ -87,7 +87,7 @@ func (cb *ColumnBackfiller) Init(
 	}
 	var txCtx transform.ExprTransformContext
 	computedExprs, err := sqlbase.MakeComputedExprs(cb.added, desc,
-		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.evalCtx, true /* addingCols */)
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.evalCtx)
 	if err != nil {
 		return err
 	}
@@ -297,6 +297,12 @@ type IndexBackfiller struct {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[sqlbase.ColumnID]int
 
+	// partialIndexPredicates is a list of predicates to run, one per
+	// added Index, that determines for a given row whether that row should be
+	// included in the index.
+	partialIndexPredicates []tree.TypedExpr
+
+	evalCtx *tree.EvalContext
 	types   []types.T
 	rowVals tree.Datums
 }
@@ -312,7 +318,10 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 }
 
 // Init initializes an IndexBackfiller.
-func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
+func (ib *IndexBackfiller) Init(
+	evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
+) error {
+	ib.evalCtx = evalCtx
 	numCols := len(desc.Columns)
 	cols := desc.Columns
 	if len(desc.Mutations) > 0 {
@@ -355,6 +364,16 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 	for i := range cols {
 		ib.colIdxMap[cols[i].ID] = i
 	}
+
+	var txCtx transform.ExprTransformContext
+	partialIndexFilterExprs, err := sqlbase.MakePartialIndexFilterExprs(
+		ib.added, desc,
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, ib.evalCtx)
+	if err != nil {
+		return err
+	}
+
+	ib.partialIndexPredicates = partialIndexFilterExprs
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
@@ -402,6 +421,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, err
 	}
+	iv := &sqlbase.RowIndexedVarContainer{
+		Cols:    tableDesc.Columns,
+		Mapping: row.ColIDtoRowIndexFromCols(tableDesc.Columns),
+	}
+	ib.evalCtx.IVarContainer = iv
 
 	buffer := make([]sqlbase.IndexEntry, len(ib.added))
 	for i := int64(0); i < chunkSize; i++ {
@@ -419,14 +443,16 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			return nil, nil, err
 		}
 
+		iv.CurSourceRow = ib.rowVals
+
 		// We're resetting the length of this slice for variable length indexes such as inverted
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
 		// EncodeSecondaryIndexes appends to secondaryIndexEntries for a row, would stay in the slice for
 		// subsequent rows and we would then have duplicates in entries on output.
 		buffer = buffer[:0]
 		if buffer, err = sqlbase.EncodeSecondaryIndexes(
-			tableDesc.TableDesc(), ib.added, ib.colIdxMap,
-			ib.rowVals, buffer); err != nil {
+			ib.evalCtx, tableDesc.TableDesc(), ib.added, ib.partialIndexPredicates,
+			ib.colIdxMap, ib.rowVals, buffer); err != nil {
 			return nil, nil, err
 		}
 		entries = append(entries, buffer...)

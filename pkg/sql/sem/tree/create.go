@@ -114,6 +114,10 @@ type CreateIndex struct {
 	Storing     NameList
 	Interleave  *InterleaveDef
 	PartitionBy *PartitionBy
+
+	// PartialIndexPredicate is the partial index predicate. It constrains
+	// what elements in the table that this index will actually index.
+	PartialIndexPredicate Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -159,6 +163,11 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+
+	if node.PartialIndexPredicate != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.PartialIndexPredicate)
 	}
 }
 
@@ -576,6 +585,10 @@ type IndexTableDef struct {
 	Interleave  *InterleaveDef
 	Inverted    bool
 	PartitionBy *PartitionBy
+
+	// PartialIndexPredicate is the partial index predicate. It constrains
+	// what elements in the table that this index will actually index.
+	PartialIndexPredicate Expr
 }
 
 // SetName implements the TableDef interface.
@@ -609,6 +622,10 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.PartitionBy != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.PartialIndexPredicate)
 	}
 }
 

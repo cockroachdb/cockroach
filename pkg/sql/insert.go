@@ -50,6 +50,8 @@ type insertRun struct {
 
 	checkOrds checkSet
 
+	partialIndexPredOrds partialIndexPredSet
+
 	// insertCols are the columns being inserted into.
 	insertCols []sqlbase.ColumnDescriptor
 
@@ -136,6 +138,27 @@ func (r *insertRun) initRowContainer(
 func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
 	if err := enforceLocalColumnConstraints(rowVals, r.insertCols); err != nil {
 		return err
+	}
+
+	tabDesc := r.ti.tableDesc()
+	if !r.partialIndexPredOrds.Empty() {
+		partialIndexPredVals := rowVals[len(r.insertCols)+r.checkOrds.Len():]
+		var colIdx int
+		for i, ord := range tabDesc.PartialIndexOrds() {
+			if res, err := tree.GetBool(partialIndexPredVals[i]); err != nil {
+				return err
+			} else if !res && partialIndexPredVals[colIdx] != tree.DNull {
+				// Row isn't part of the index.
+				r.ti.ri.Helper.PartialIndexPredicates[ord] = tree.DBoolFalse
+			} else {
+				r.ti.ri.Helper.PartialIndexPredicates[ord] = tree.DBoolTrue
+			}
+			colIdx++
+		}
+		if err := checkMutationInput(tabDesc, r.partialIndexPredOrds, partialIndexPredVals); err != nil {
+			return err
+		}
+		rowVals = rowVals[:len(r.insertCols)+r.checkOrds.Len()]
 	}
 
 	// Verify the CHECK constraint results, if any.

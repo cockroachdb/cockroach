@@ -165,6 +165,14 @@ type Index interface {
 	//   [ /us/seattle\x00 -               ]
 	//
 	PartitionByListPrefixes() []tree.Datums
+
+	// IsPartialIndex returns true if this index is a partial index. A partial
+	// index is an index that only contains rows that satisfy a predicate.
+	IsPartialIndex() bool
+
+	// PartialIndexPredicate returns the predicate for this index, if it's a
+	// partial index.
+	PartialIndexPredicate() PartialIndexPredicate
 }
 
 // IndexColumn describes a single column that is part of an index definition.

@@ -31,7 +31,6 @@ import (
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
 // Upsert, and Delete operators in stages.
-// TODO(andyk): Add support for Delete.
 type mutationBuilder struct {
 	b  *Builder
 	md *opt.Metadata
@@ -54,9 +53,9 @@ type mutationBuilder struct {
 	// expression is completed, it will be contained in outScope.expr. Columns,
 	// when present, are arranged in this order:
 	//
-	//   +--------+-------+--------+--------+-------+
-	//   | Insert | Fetch | Update | Upsert | Check |
-	//   +--------+-------+--------+--------+-------+
+	//   +--------+-------+--------+--------+-------+------------+
+	//   | Insert | Fetch | Update | Upsert | Check | IndexPreds |
+	//   +--------+-------+--------+--------+-------+------------+
 	//
 	// Each column is identified by its ordinal position in outScope, and those
 	// ordinals are stored in the corresponding ScopeOrds fields (see below).
@@ -109,6 +108,12 @@ type mutationBuilder struct {
 	// (see opt.Table.CheckCount).
 	checkOrds []scopeOrdinal
 
+	// partialIndexPredicateOrds lists the outScope columns storing the boolean
+	// results of evaluating partial index predicate expressions defined on the
+	// indexes of the target table. Its length is always equal to the number of
+	// partial indexes on the table.
+	partialIndexPredicateOrds []scopeOrdinal
+
 	// canaryColID is the ID of the column that is used to decide whether to
 	// insert or update each row. If the canary column's value is null, then it's
 	// an insert; otherwise it's an update.
@@ -150,7 +155,7 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 
 	// Allocate segmented array of scope column ordinals.
 	n := tab.DeletableColumnCount()
-	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount())
+	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount()+tab.PartialIndexCount())
 	for i := range scopeOrds {
 		scopeOrds[i] = -1
 	}
@@ -158,7 +163,8 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.fetchOrds = scopeOrds[n : n*2]
 	mb.updateOrds = scopeOrds[n*2 : n*3]
 	mb.upsertOrds = scopeOrds[n*3 : n*4]
-	mb.checkOrds = scopeOrds[n*4:]
+	mb.checkOrds = scopeOrds[n*4 : n*4+tab.CheckCount()]
+	mb.partialIndexPredicateOrds = scopeOrds[n*4+tab.CheckCount():]
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab, &mb.alias)
@@ -684,6 +690,49 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 	}
 }
 
+// addPartialIndexPredicateCols synthesizes one boolean column per index on the
+// table we're inserting into that has a partial index predicate. Later, the
+// execution code will use the value of these booleans to determine whether or
+// not to actually delete or insert any given row into the partial index.
+func (mb *mutationBuilder) addPartialIndexPredicateCols() {
+	nPartialIndex := 0
+
+	// Disambiguate names so that references in the constraint expression refer
+	// to the correct columns.
+	mb.disambiguateColumns()
+
+	projectionsScope := mb.outScope.replace()
+	projectionsScope.appendColumnsFromScope(mb.outScope)
+
+	for i := 0; i < mb.tab.IndexCount(); i++ {
+		mb.tab.PartialIndexCount()
+		index := mb.tab.Index(i)
+		if !index.IsPartialIndex() {
+			continue
+		}
+
+		predicate := index.PartialIndexPredicate()
+		expr, err := parser.ParseExpr(predicate.Predicate)
+		if err != nil {
+			panic(err)
+		}
+
+		alias := fmt.Sprintf("partialIndexPred%d", nPartialIndex+1)
+		texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+		scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
+
+		// TODO(ridwanmsharif): Maybe we can avoid building constraints here
+		// and instead use the constraints stored in the table metadata.
+		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
+		mb.partialIndexPredicateOrds[nPartialIndex] = scopeOrdinal(len(projectionsScope.cols) - 1)
+
+		nPartialIndex++
+	}
+
+	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+	mb.outScope = projectionsScope
+}
+
 // disambiguateColumns ranges over the scope and ensures that at most one column
 // has each table column name, and that name refers to the column with the final
 // value that the mutation applies.
@@ -723,13 +772,14 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	private := &memo.MutationPrivate{
-		Table:      mb.tabID,
-		InsertCols: makeColList(mb.insertOrds),
-		FetchCols:  makeColList(mb.fetchOrds),
-		UpdateCols: makeColList(mb.updateOrds),
-		CanaryCol:  mb.canaryColID,
-		CheckCols:  makeColList(mb.checkOrds),
-		FKFallback: mb.fkFallback,
+		Table:                     mb.tabID,
+		InsertCols:                makeColList(mb.insertOrds),
+		FetchCols:                 makeColList(mb.fetchOrds),
+		UpdateCols:                makeColList(mb.updateOrds),
+		CanaryCol:                 mb.canaryColID,
+		CheckCols:                 makeColList(mb.checkOrds),
+		PartialIndexPredicateCols: makeColList(mb.partialIndexPredicateOrds),
+		FKFallback:                mb.fkFallback,
 	}
 
 	// If we didn't actually plan any checks (e.g. because of cascades), don't

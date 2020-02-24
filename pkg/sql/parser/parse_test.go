@@ -81,6 +81,7 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN CREATE INDEX a ON b (c)`},
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
+		{`CREATE INDEX ON a (b) WHERE b > 3`},
 		{`CREATE INDEX ON a (b) STORING (c)`},
 		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d)`},
 		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e)`},
@@ -202,6 +203,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT ON UPDATE RESTRICT)`},
 		{`CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar) MATCH FULL)`},
 		{`CREATE TABLE a (b INT8, INDEX (b) STORING (c))`},
+		{`CREATE TABLE a (b INT8, INDEX (b) STORING (c) WHERE b > 3)`},
 		{`CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c))`},
 		{`CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))`},
 		{`CREATE TABLE a (b INT8, FAMILY (b))`},
@@ -3176,7 +3178,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TYPE a`, 27793, `shell`},
 		{`CREATE DOMAIN a`, 27796, `create`},
 
-		{`CREATE INDEX a ON b(c) WHERE d > 0`, 9683, ``},
 		{`CREATE INDEX a ON b USING HASH (c)`, 0, `index using hash`},
 		{`CREATE INDEX a ON b USING GIST (c)`, 0, `index using gist`},
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`},

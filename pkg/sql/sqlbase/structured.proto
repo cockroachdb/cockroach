@@ -428,7 +428,11 @@ message IndexDescriptor {
     [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexDescriptorEncodingType"];
 
   // Sharded, if it's not the zero value, describes how this index is sharded.
-  optional ShardedDescriptor sharded = 20 [(gogoproto.nullable) = false]; 
+  optional ShardedDescriptor sharded = 20 [(gogoproto.nullable) = false];
+
+  // If PartialIndexPredicate is not the empty string, describes a predicate for
+  // rows that will actually be stored by this index.
+  optional string partial_index_predicate = 21 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

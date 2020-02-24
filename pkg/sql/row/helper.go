@@ -26,8 +26,9 @@ type rowHelper struct {
 	indexEntries []sqlbase.IndexEntry
 
 	// Computed during initialization for pretty-printing.
-	primIndexValDirs []encoding.Direction
-	secIndexValDirs  [][]encoding.Direction
+	primIndexValDirs       []encoding.Direction
+	secIndexValDirs        [][]encoding.Direction
+	PartialIndexPredicates []tree.TypedExpr
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
@@ -36,9 +37,23 @@ type rowHelper struct {
 }
 
 func newRowHelper(
-	desc *sqlbase.ImmutableTableDescriptor, indexes []sqlbase.IndexDescriptor,
+	evalCtx *tree.EvalContext,
+	desc *sqlbase.ImmutableTableDescriptor,
+	indexes []sqlbase.IndexDescriptor,
 ) rowHelper {
 	rh := rowHelper{TableDesc: desc, Indexes: indexes}
+
+	/*
+				var txCtx transform.ExprTransformContext
+		partialIndexFilterExprs, err := sqlbase.MakePartialIndexFilterExprs(
+			indexes, desc,
+			tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, evalCtx)
+		if err != nil {
+			panic(err)
+		}
+	*/
+
+	rh.PartialIndexPredicates = make([]tree.TypedExpr, len(desc.AllNonDropIndexes()))
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
@@ -92,7 +107,8 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 		rh.indexEntries = make([]sqlbase.IndexEntry, 0, len(rh.Indexes))
 	}
 	rh.indexEntries, err = sqlbase.EncodeSecondaryIndexes(
-		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries[:0])
+		nil,
+		rh.TableDesc.TableDesc(), rh.Indexes, rh.PartialIndexPredicates, colIDtoRowIndex, values, rh.indexEntries[:0])
 	if err != nil {
 		return nil, err
 	}

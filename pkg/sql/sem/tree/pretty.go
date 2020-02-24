@@ -1525,6 +1525,9 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.PartitionBy != nil {
 		clauses = append(clauses, p.Doc(node.PartitionBy))
 	}
+	if node.PartialIndexPredicate != nil {
+		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.PartialIndexPredicate)))
+	}
 	return p.nestUnder(
 		pretty.Fold(pretty.ConcatSpace, title...),
 		pretty.Group(pretty.Stack(clauses...)))
@@ -1594,6 +1597,9 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	}
 	if node.PartitionBy != nil {
 		clauses = append(clauses, p.Doc(node.PartitionBy))
+	}
+	if node.PartialIndexPredicate != nil {
+		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.PartialIndexPredicate)))
 	}
 
 	if len(clauses) == 0 {

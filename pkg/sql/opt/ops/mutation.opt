@@ -105,6 +105,24 @@ define MutationPrivate {
     # TODO(radu): we don't actually implement this optimization currently.
     CheckCols ColList
 
+    # PartialIndexPredicateCols are columns from the Input expression containing
+    # the results of every partial index predicate for the target of the
+    # mutation. Each column in this list will contain a boolean value that is
+    # true if the predicate is satisfied for a row, indicating that the index
+    # corresponding to this particular predicate requires an entry for the row.
+    # The count and order of columns corresponds to the count and order of the
+    # target table's partial indexes. For example,
+    #
+    #   CREATE TABLE abc (a INT, b INT, c INT,
+    #                     INDEX(a) WHERE a > 0,
+    #                     INDEX(b),
+    #                     INDEX(c) WHERE a > 0)
+    #
+    # In this case, the 0th column is the partial index predicate column for
+    # the index on a, and the 1st column is the predicate column for the index
+    # on c, since the index on b isn't a partial idnex.
+    PartialIndexPredicateCols ColList
+
     # CanaryCol is used only with the Upsert operator. It identifies the column
     # that the execution engine uses to decide whether to insert or to update.
     # If the canary column value is null for a particular input row, then a new

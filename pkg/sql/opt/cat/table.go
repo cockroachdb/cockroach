@@ -88,9 +88,14 @@ type Table interface {
 	WritableIndexCount() int
 
 	// DeletableIndexCount returns the number of public, write-only, and
-	// delete-onlyindexes defined on this table. DeletableIndexCount is always
+	// delete-only indexes defined on this table. DeletableIndexCount is always
 	// >= WritableIndexCount.
 	DeletableIndexCount() int
+
+	// PartialIndexCount returns the number of partial indexes on this table.
+	// The number of partial indexes returned always includes the public,
+	// write-only, and delete-only indexes defined on this table.
+	PartialIndexCount() int
 
 	// Index returns the ith index, where i < DeletableIndexCount. Except for
 	// virtual tables, the table's primary index is always the 0th index, and is
@@ -148,6 +153,13 @@ type Table interface {
 type CheckConstraint struct {
 	Constraint string
 	Validated  bool
+}
+
+// PartialIndexPredicate contains the SQL text for the predicate on a partial
+// index. The predicate determines whether any given row belongs in the index
+// or not.
+type PartialIndexPredicate struct {
+	Predicate string
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is

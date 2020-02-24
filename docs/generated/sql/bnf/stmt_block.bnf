@@ -1034,10 +1034,10 @@ create_database_stmt ::=
 	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
-	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
-	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'CREATE' opt_unique 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'CREATE' opt_unique 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 
 create_table_stmt ::=
 	'CREATE' opt_temp_create_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
@@ -1516,9 +1516,9 @@ column_def ::=
 	column_name typename col_qual_list
 
 index_def ::=
-	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
-	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
-	| 'INVERTED' 'INDEX' opt_name '(' index_params ')'
+	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_where_clause
 
 family_def ::=
 	'FAMILY' opt_family_name '(' name_list ')'

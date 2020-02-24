@@ -57,6 +57,16 @@ CREATE TABLE checks (
 ----
 
 exec-ddl
+CREATE TABLE partialindexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX(b) WHERE b > 0,
+    INDEX(c) WHERE a > b AND c = 'foo'
+)
+----
+
+exec-ddl
 CREATE TABLE decimals (
     a DECIMAL(10,0) PRIMARY KEY CHECK (round(a) = a),
     b DECIMAL(5,1)[] CHECK (b[0] > 1),
@@ -1756,3 +1766,49 @@ upsert decimals
       └── projections
            ├── upsert_a:21 = round(upsert_a:21) [as=check1:25]
            └── upsert_b:22[0] > 1 [as=check2:26]
+
+build
+UPSERT INTO partialindexes VALUES(0, 0)
+----
+upsert partialindexes
+ ├── columns: <none>
+ ├── canary column: 7
+ ├── fetch columns: a:7 b:8 c:9
+ ├── insert-mapping:
+ │    ├── column1:4 => a:1
+ │    ├── column2:5 => b:2
+ │    └── column6:6 => c:3
+ ├── update-mapping:
+ │    ├── column2:5 => b:2
+ │    └── column6:6 => c:3
+ ├── partial index pred columns: partialIndexPred1:11 partialIndexPred2:12
+ └── project
+      ├── columns: partialIndexPred1:11!null partialIndexPred2:12 column1:4!null column2:5!null column6:6 a:7 b:8 c:9 upsert_a:10
+      ├── project
+      │    ├── columns: upsert_a:10 column1:4!null column2:5!null column6:6 a:7 b:8 c:9
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:4!null column2:5!null column6:6 a:7 b:8 c:9
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: column1:4!null column2:5!null column6:6
+      │    │    │    ├── grouping columns: column1:4!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column6:6 column1:4!null column2:5!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:4!null column2:5!null
+      │    │    │    │    │    └── (0, 0)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::STRING [as=column6:6]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:5]
+      │    │    │         │    └── column2:5
+      │    │    │         └── first-agg [as=column6:6]
+      │    │    │              └── column6:6
+      │    │    ├── scan partialindexes
+      │    │    │    └── columns: a:7!null b:8 c:9
+      │    │    └── filters
+      │    │         └── column1:4 = a:7
+      │    └── projections
+      │         └── CASE WHEN a:7 IS NULL THEN column1:4 ELSE a:7 END [as=upsert_a:10]
+      └── projections
+           ├── column2:5 > 0 [as=partialIndexPred1:11]
+           └── (upsert_a:10 > column2:5) AND (column6:6 = 'foo') [as=partialIndexPred2:12]

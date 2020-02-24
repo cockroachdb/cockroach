@@ -544,12 +544,18 @@ type Table struct {
 	writeOnlyIdxCount  int
 	deleteOnlyIdxCount int
 
+	partialIdxCount int
+
 	// interleaved is true if the table's rows are interleaved with rows from
 	// other table(s).
 	interleaved bool
 
 	outboundFKs []ForeignKeyConstraint
 	inboundFKs  []ForeignKeyConstraint
+}
+
+func (tt *Table) PartialIndexCount() int {
+	return tt.partialIdxCount
 }
 
 var _ cat.Table = &Table{}
@@ -737,6 +743,17 @@ type Index struct {
 	// partitionBy is the partitioning clause that corresponds to this index. Used
 	// to implement PartitionByListPrefixes.
 	partitionBy *tree.PartitionBy
+
+	// partialIndexPredicate is set if this index is partial.
+	partialIndexPredicate cat.PartialIndexPredicate
+}
+
+func (ti *Index) IsPartialIndex() bool {
+	return ti.partialIndexPredicate.Predicate != ""
+}
+
+func (ti *Index) PartialIndexPredicate() cat.PartialIndexPredicate {
+	return ti.partialIndexPredicate
 }
 
 // ID is part of the cat.Index interface.
