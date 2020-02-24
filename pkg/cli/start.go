@@ -1136,7 +1136,8 @@ func setupAndInitializeLoggingAndProfiling(
 		// directory too large.
 		log.StartGCDaemon(ctx)
 
-		// We have a valid logging directory. Configure RocksDB to log into it.
+		// We have a valid logging directory. Configure Pebble/RocksDB to log into it.
+		engine.InitPebbleLogger(ctx)
 		engine.InitRocksDBLogger(ctx)
 	}
 
