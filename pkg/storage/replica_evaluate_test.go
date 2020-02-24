@@ -30,6 +30,9 @@ func TestEvaluateBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tcs := []testCase{
+		//
+		// Test suite for MaxRequestSpans.
+		//
 		{
 			// We should never evaluate empty batches, but here's what would happen
 			// if we did.
@@ -196,7 +199,52 @@ func TestEvaluateBatch(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "value-e", string(b))
 			},
-		}}
+		},
+		//
+		// Test suite for TargetBytes.
+		//
+		{
+			// Two scans and a target bytes limit that saturates during the
+			// first.
+			name: "scans with TargetBytes=1",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(scanArgsString("a", "c"))
+				d.ba.Add(getArgsString("e"))
+				d.ba.Add(scanArgsString("c", "e"))
+				d.ba.TargetBytes = 1
+				// Also set a nontrivial MaxSpanRequestKeys, just to make sure
+				// there's no weird interaction (like it overriding TargetBytes).
+				// The stricter one ought to win.
+				d.ba.MaxSpanRequestKeys = 3
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"}, []string{"e"}, nil)
+				verifyResumeSpans(t, r, "b-c", "", "c-e")
+				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
+				require.NoError(t, err)
+				require.Equal(t, "value-e", string(b))
+			},
+		}, {
+			// Ditto in reverse.
+			name: "reverse scans with TargetBytes=1",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(revScanArgsString("c", "e"))
+				d.ba.Add(getArgsString("e"))
+				d.ba.Add(revScanArgsString("a", "c"))
+				d.ba.TargetBytes = 1
+				d.ba.MaxSpanRequestKeys = 3
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"d"}, []string{"e"}, nil)
+				verifyResumeSpans(t, r, "c-c\x00", "", "a-c")
+				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
+				require.NoError(t, err)
+				require.Equal(t, "value-e", string(b))
+			},
+		},
+	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
