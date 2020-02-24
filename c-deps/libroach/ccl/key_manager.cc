@@ -239,7 +239,12 @@ DataKeyManager::DataKeyManager(rocksdb::Env* env, std::shared_ptr<rocksdb::Logge
       logger_(logger),
       registry_path_(db_dir + "/" + kKeyRegistryFilename),
       rotation_period_(rotation_period),
-      read_only_(read_only) {}
+      read_only_(read_only) {
+  auto status = env_->NewDirectory(db_dir, &registry_dir_);
+  if (!status.ok()) {
+    rocksdb::Fatal(logger_, "unable to open directory %s to sync: %s", db_dir.c_str(), status.ToString().c_str());
+  }
+}
 
 rocksdb::Status DataKeyManager::LoadKeysHelper(enginepbccl::DataKeysRegistry* registry) {
   rocksdb::Status status = env_->FileExists(registry_path_);
@@ -485,7 +490,7 @@ DataKeyManager::PersistRegistryLocked(std::unique_ptr<enginepbccl::DataKeysRegis
     return rocksdb::Status::InvalidArgument("failed to serialize key registry");
   }
 
-  status = SafeWriteStringToFile(env_, registry_path_, contents);
+  status = SafeWriteStringToFile(env_, registry_dir_.get(), registry_path_, contents);
   if (!status.ok()) {
     return status;
   }

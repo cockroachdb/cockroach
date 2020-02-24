@@ -151,6 +151,7 @@ class DataKeyManager : public KeyManager {
   // These do not change after initialization. env_ is thread safe.
   rocksdb::Env* env_;
   std::shared_ptr<rocksdb::Logger> logger_;
+  std::unique_ptr<rocksdb::Directory> registry_dir_;
   std::string registry_path_;
   int64_t rotation_period_;
   bool read_only_;

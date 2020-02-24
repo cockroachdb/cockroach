@@ -12,8 +12,8 @@
 
 static const std::string kTempFileNameSuffix = ".crdbtmp";
 
-rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& filename,
-                                      const std::string& contents) {
+rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, rocksdb::Directory* dir,
+                                      const std::string& filename, const std::string& contents) {
   std::string tmpname = filename + kTempFileNameSuffix;
   auto status = rocksdb::WriteStringToFile(env, contents, tmpname, true /* should_sync */);
   if (status.ok()) {
@@ -21,8 +21,9 @@ rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& file
   }
   if (!status.ok()) {
     env->DeleteFile(tmpname);
+    return status;
   }
-  return status;
+  return dir->Fsync();
 }
 
 std::string PathAppend(const std::string& path1, const std::string& path2) {
