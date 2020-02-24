@@ -6,9 +6,10 @@
 <tr><td><code>cloudstorage.timeout</code></td><td>duration</td><td><code>10m0s</code></td><td>the timeout for import/export storage operations</td></tr>
 <tr><td><code>cluster.organization</code></td><td>string</td><td><code></code></td><td>organization name</td></tr>
 <tr><td><code>cluster.preserve_downgrade_option</code></td><td>string</td><td><code></code></td><td>disable (automatic or manual) cluster version upgrade from the specified version until reset</td></tr>
-<tr><td><code>diagnostics.forced_stat_reset.interval</code></td><td>duration</td><td><code>2h0m0s</code></td><td>interval after which pending diagnostics statistics should be discarded even if not reported</td></tr>
+<tr><td><code>diagnostics.forced_sql_stat_reset.interval</code></td><td>duration</td><td><code>2h0m0s</code></td><td>interval after which SQL statement statistics are refreshed even if not collected (should be more than diagnostics.sql_stat_reset.interval). It has a max value of 24H.</td></tr>
 <tr><td><code>diagnostics.reporting.enabled</code></td><td>boolean</td><td><code>true</code></td><td>enable reporting diagnostic metrics to cockroach labs</td></tr>
-<tr><td><code>diagnostics.reporting.interval</code></td><td>duration</td><td><code>1h0m0s</code></td><td>interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)</td></tr>
+<tr><td><code>diagnostics.reporting.interval</code></td><td>duration</td><td><code>1h0m0s</code></td><td>interval at which diagnostics data should be reported</td></tr>
+<tr><td><code>diagnostics.sql_stat_reset.interval</code></td><td>duration</td><td><code>1h0m0s</code></td><td>interval controlling how often SQL statement statistics should be reset (should be less than diagnostics.forced_sql_stat_reset.interval). It has a max value of 24H.</td></tr>
 <tr><td><code>enterprise.license</code></td><td>string</td><td><code></code></td><td>the encoded cluster license</td></tr>
 <tr><td><code>external.graphite.endpoint</code></td><td>string</td><td><code></code></td><td>if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port</td></tr>
 <tr><td><code>external.graphite.interval</code></td><td>duration</td><td><code>10s</code></td><td>the interval at which metrics are pushed to Graphite (if enabled)</td></tr>

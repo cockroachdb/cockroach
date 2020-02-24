@@ -15,6 +15,9 @@ option go_package = "roachpb";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
+// N.B. When fields are added to this struct, make sure to update
+// (*StatementStatistics).Add and (*StatementStatistics).AlmostEqual
+// in app_stats.go.
 message StatementStatistics {
   // Count is the total number of times this statement was executed
   // since the begin of the reporting period.
@@ -83,6 +86,7 @@ message StatementStatistics {
 }
 
 message SensitiveInfo {
+  option (gogoproto.equal) = true;
   // LastErr collects the last error encountered.
   // It is only reported once it's been redacted.
   optional string last_err = 1 [(gogoproto.nullable) = false];
@@ -94,6 +98,8 @@ message SensitiveInfo {
   optional google.protobuf.Timestamp most_recent_plan_timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
+// N.B. When this changes, make sure to update (*NumericStat).AlmostEqual
+// in app_stats.go.
 message NumericStat {
   // NumericStat keeps track of two running values --- the running mean and
   // the running sum of squared differences from the mean. Using this along
@@ -122,10 +128,12 @@ message CollectedStatementStatistics {
 
 // ExplainTreePlanNode is a serialized representation of an EXPLAIN tree for a logical plan.
 message ExplainTreePlanNode {
+  option (gogoproto.equal) = true;
   // Name is the type of node this is, e.g. "scan" or "index-join".
   optional string name = 1 [(gogoproto.nullable) = false];
 
   message Attr {
+    option (gogoproto.equal) = true;
     optional string key = 1 [(gogoproto.nullable) = false];
     optional string value = 2 [(gogoproto.nullable) = false];
   }
@@ -139,6 +147,8 @@ message ExplainTreePlanNode {
 }
 
 // TxnStats contains statistics about transactions of one application.
+// N.B. When field are added to this struct, make sure to updated
+// (*TxnStats).Add in app_stats.go.
 message TxnStats {
   optional int64 txn_count = 1 [(gogoproto.nullable) = false];
 
