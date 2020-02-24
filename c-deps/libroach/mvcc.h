@@ -134,7 +134,7 @@ template <bool reverse> class mvccScanner {
     while (getAndAdvance()) {
     }
 
-    if (kvs_->Count() == max_keys_ && advanceKey()) {
+    if (max_keys_ > 0 && kvs_->Count() == max_keys_ && advanceKey()) {
       if (reverse) {
         // It is possible for cur_key_ to be pointing into mvccScanner.saved_buf_
         // instead of iter_rep_'s underlying storage if iterating in reverse (see
@@ -363,7 +363,7 @@ template <bool reverse> class mvccScanner {
       // historical timestamp < the intent timestamp. However, we
       // return the intent separately; the caller may want to resolve
       // it.
-      if (kvs_->Count() == max_keys_) {
+      if (max_keys_ > 0 && kvs_->Count() == max_keys_) {
         // We've already retrieved the desired number of keys and now
         // we're adding the resume key. We don't want to add the
         // intent here as the intents should only correspond to KVs
@@ -562,7 +562,7 @@ template <bool reverse> class mvccScanner {
       if (target_bytes_ > 0 && kvs_->NumBytes() >= target_bytes_) {
         max_keys_ = kvs_->Count();
       }
-      if (kvs_->Count() == max_keys_) {
+      if (max_keys_ > 0 && kvs_->Count() == max_keys_) {
         return false;
       }
     }

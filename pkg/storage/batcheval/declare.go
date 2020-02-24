@@ -63,12 +63,6 @@ type CommandArgs struct {
 	EvalCtx EvalContext
 	Header  roachpb.Header
 	Args    roachpb.Request
-
-	// If MaxKeys is non-zero, span requests should limit themselves to
-	// that many keys. Commands using this feature should also set
-	// NumKeys and ResumeSpan in their responses.
-	MaxKeys int64
-
 	// *Stats should be mutated to reflect any writes made by the command.
 	Stats *enginepb.MVCCStats
 }

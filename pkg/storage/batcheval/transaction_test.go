@@ -12,7 +12,6 @@ package batcheval
 
 import (
 	"context"
-	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -129,7 +128,6 @@ func TestUpdateAbortSpan(t *testing.T) {
 		args := CommandArgs{
 			EvalCtx: rec,
 			Args:    &req,
-			MaxKeys: math.MaxInt64,
 		}
 
 		var resp roachpb.ResolveIntentRangeResponse

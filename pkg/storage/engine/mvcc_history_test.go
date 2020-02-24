@@ -697,18 +697,17 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
-	max := int64(-1)
 	if e.hasArg("max") {
-		var imax int
-		e.scanArg("max", &imax)
-		max = int64(imax)
+		var n int
+		e.scanArg("max", &n)
+		opts.MaxKeys = int64(n)
 	}
 	if key := "targetbytes"; e.hasArg(key) {
 		var tb int
 		e.scanArg(key, &tb)
 		opts.TargetBytes = int64(tb)
 	}
-	res, err := MVCCScan(e.ctx, e.engine, key, endKey, max, ts, opts)
+	res, err := MVCCScan(e.ctx, e.engine, key, endKey, ts, opts)
 	// NB: the error is returned below. This ensures the test can
 	// ascertain no result is populated in the intents when an error
 	// occurs.

@@ -249,7 +249,7 @@ func (i *Iterator) MVCCGet(
 
 // MVCCScan is part of the engine.MVCCIterator interface.
 func (i *Iterator) MVCCScan(
-	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts engine.MVCCScanOptions,
+	start, end roachpb.Key, timestamp hlc.Timestamp, opts engine.MVCCScanOptions,
 ) (engine.MVCCScanResult, error) {
 	if i.spansOnly {
 		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
@@ -260,7 +260,7 @@ func (i *Iterator) MVCCScan(
 			return engine.MVCCScanResult{}, err
 		}
 	}
-	return i.i.(engine.MVCCIterator).MVCCScan(start, end, max, timestamp, opts)
+	return i.i.(engine.MVCCIterator).MVCCScan(start, end, timestamp, opts)
 }
 
 type spanSetReader struct {

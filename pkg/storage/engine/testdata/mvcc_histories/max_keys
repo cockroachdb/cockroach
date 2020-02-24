@@ -1,0 +1,88 @@
+# Test opts.MaxKeys.
+
+# Put some test data.
+run ok
+with ts=1,0
+  put      k=a v=val-a
+  put      k=aa v=val-aa
+  put      k=c v=val-c
+  put      k=e v=val-e
+del        k=aa ts=2,0
+----
+>> at end:
+data: "a"/0.000000001,0 -> /BYTES/val-a
+data: "aa"/0.000000002,0 -> /<empty>
+data: "aa"/0.000000001,0 -> /BYTES/val-aa
+data: "c"/0.000000001,0 -> /BYTES/val-c
+data: "e"/0.000000001,0 -> /BYTES/val-e
+
+# Limit 1 works.
+run ok
+with ts=300,0 k=a end=z max=1
+  scan
+  scan reverse=true
+----
+scan: "a" -> /BYTES/val-a @0.000000001,0
+scan: resume span ["aa","z")
+scan: "e" -> /BYTES/val-e @0.000000001,0
+scan: resume span ["a","c\x00")
+
+# Limit -1 works: nothing is returned, go straight to resume span. We use this
+# when executing the remaining scans in a batch after already exhausting the
+# batch-wide allowable number of rows returned.
+run ok
+with ts=300,0 k=a end=z max=-1
+  scan
+  scan reverse=true
+----
+scan: resume span ["a","z")
+scan: "a"-"z" -> <no data>
+scan: resume span ["a","z")
+scan: "a"-"z" -> <no data>
+
+# Limit and tombstones: the tombstones count.
+run ok
+with ts=300,0 k=a end=z max=2 tombstones=true
+  scan
+----
+scan: "a" -> /BYTES/val-a @0.000000001,0
+scan: "aa" -> /<empty> @0.000000002,0
+scan: resume span ["c","z")
+
+# Ditto in reverse.
+run ok
+with ts=300,0 k=a end=d max=2 tombstones=true reverse=true
+  scan
+----
+scan: "c" -> /BYTES/val-c @0.000000001,0
+scan: "aa" -> /<empty> @0.000000002,0
+scan: resume span ["a","a\x00")
+
+# No limit = zero limit = infinity limit (zero is preferred).
+run ok
+with ts=300,0 k=a end=z
+  scan
+  scan reverse=true
+  scan max=0
+  scan reverse=true max=0
+  scan max=99999
+  scan reverse=true max=9999
+----
+scan: "a" -> /BYTES/val-a @0.000000001,0
+scan: "c" -> /BYTES/val-c @0.000000001,0
+scan: "e" -> /BYTES/val-e @0.000000001,0
+scan: "e" -> /BYTES/val-e @0.000000001,0
+scan: "c" -> /BYTES/val-c @0.000000001,0
+scan: "a" -> /BYTES/val-a @0.000000001,0
+scan: "a" -> /BYTES/val-a @0.000000001,0
+scan: "c" -> /BYTES/val-c @0.000000001,0
+scan: "e" -> /BYTES/val-e @0.000000001,0
+scan: "e" -> /BYTES/val-e @0.000000001,0
+scan: "c" -> /BYTES/val-c @0.000000001,0
+scan: "a" -> /BYTES/val-a @0.000000001,0
+scan: "a" -> /BYTES/val-a @0.000000001,0
+scan: "c" -> /BYTES/val-c @0.000000001,0
+scan: "e" -> /BYTES/val-e @0.000000001,0
+scan: "e" -> /BYTES/val-e @0.000000001,0
+scan: "c" -> /BYTES/val-c @0.000000001,0
+scan: "a" -> /BYTES/val-a @0.000000001,0

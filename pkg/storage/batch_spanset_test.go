@@ -13,7 +13,6 @@ package storage
 import (
 	"bytes"
 	"context"
-	"math"
 	"reflect"
 	"testing"
 
@@ -556,7 +555,7 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	defer iterAndBuf.Cleanup()
 
 	if _, _, err := engine.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, batch, iterAndBuf, nil /* ms */, intent, math.MaxInt64,
+		ctx, batch, iterAndBuf, nil /* ms */, intent, 0,
 	); err != nil {
 		t.Fatal(err)
 	}

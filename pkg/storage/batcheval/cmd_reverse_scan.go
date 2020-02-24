@@ -40,6 +40,7 @@ func ReverseScan(
 	opts := engine.MVCCScanOptions{
 		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:          h.Txn,
+		MaxKeys:      h.MaxSpanRequestKeys,
 		TargetBytes:  h.TargetBytes,
 		Reverse:      true,
 	}
@@ -47,14 +48,14 @@ func ReverseScan(
 	switch args.ScanFormat {
 	case roachpb.BATCH_RESPONSE:
 		res, err = engine.MVCCScanToBytes(
-			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, opts)
+			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
 		reply.BatchResponses = res.KVData
 	case roachpb.KEY_VALUES:
 		res, err = engine.MVCCScan(
-			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, opts)
+			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}

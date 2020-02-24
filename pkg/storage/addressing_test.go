@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"testing"
@@ -167,7 +166,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		var kvs []roachpb.KeyValue
 		testutils.SucceedsSoon(t, func() error {
 			res, err := engine.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax,
-				math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
+				hlc.MaxTimestamp, engine.MVCCScanOptions{})
 			if err != nil {
 				// Wait for the intent to be resolved.
 				if _, ok := err.(*roachpb.WriteIntentError); ok {

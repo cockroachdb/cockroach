@@ -1585,10 +1585,10 @@ func (r *batchIterator) MVCCGet(
 }
 
 func (r *batchIterator) MVCCScan(
-	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+	start, end roachpb.Key, timestamp hlc.Timestamp, opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
 	r.batch.flushMutations()
-	return r.iter.MVCCScan(start, end, max, timestamp, opts)
+	return r.iter.MVCCScan(start, end, timestamp, opts)
 }
 
 func (r *batchIterator) SetUpperBound(key roachpb.Key) {
@@ -2471,7 +2471,7 @@ func (r *rocksDBIterator) MVCCGet(
 }
 
 func (r *rocksDBIterator) MVCCScan(
-	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+	start, end roachpb.Key, timestamp hlc.Timestamp, opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
 	if opts.Inconsistent && opts.Txn != nil {
 		return MVCCScanResult{}, errors.Errorf("cannot allow inconsistent reads within a transaction")
@@ -2479,7 +2479,7 @@ func (r *rocksDBIterator) MVCCScan(
 	if len(end) == 0 {
 		return MVCCScanResult{}, emptyKeyError()
 	}
-	if max == 0 {
+	if opts.MaxKeys < 0 {
 		resumeSpan := &roachpb.Span{Key: start, EndKey: end}
 		return MVCCScanResult{ResumeSpan: resumeSpan}, nil
 	}
@@ -2487,7 +2487,7 @@ func (r *rocksDBIterator) MVCCScan(
 	r.clearState()
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end), goToCTimestamp(timestamp),
-		C.int64_t(max), C.int64_t(opts.TargetBytes),
+		C.int64_t(opts.MaxKeys), C.int64_t(opts.TargetBytes),
 		goToCTxn(opts.Txn), C.bool(opts.Inconsistent),
 		C.bool(opts.Reverse), C.bool(opts.Tombstones),
 		C.bool(opts.FailOnMoreRecent),
