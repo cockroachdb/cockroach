@@ -1,3 +1,7 @@
 create_role_stmt ::=
 	'CREATE' 'ROLE' name
 	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' name
+	| 'CREATE' 'ROLE' name role_privileges
+	| 'CREATE' 'ROLE' name 'WITH' role_privileges
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' name role_privileges
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' name 'WITH' role_privileges
