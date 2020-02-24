@@ -184,9 +184,9 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
             />
           </PageConfigItem>
         </PageConfig>
-        <section className="statements-table-container">
-          <div className="statements-statistic">
-            <h4 className="statement-count-title">
+        <section className="cl-table-container">
+          <div className="cl-table-statistic">
+            <h4 className="cl-count-title">
               {this.renderCounts()}
             </h4>
             <h4 className="last-cleared-title">
@@ -201,7 +201,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
             />
           )}
           {(data.length > 0 || search.length > 0) && (
-            <div className="statements-table-wrapper">
+            <div className="cl-table-wrapper">
               <StatementsSortedTable
                 className="statements-table"
                 data={data}

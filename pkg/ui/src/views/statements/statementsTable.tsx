@@ -37,11 +37,11 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
   const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="statement__tooltip">
+      <div className="cl-table-link__tooltip">
         <Tooltip overlayClassName="preset-black" placement="bottom" title={
           <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
         }>
-          <div className="statement__tooltip-hover-area">
+          <div className="cl-table-link__tooltip-hover-area">
             { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }
           </div>
         </Tooltip>
@@ -66,7 +66,7 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
-      className: "statements-table__col-query-text",
+      className: "cl-table__col-query-text",
       cell: (stmt) => (
         <StatementLink
           statement={ stmt.label }

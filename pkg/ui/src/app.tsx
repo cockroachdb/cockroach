@@ -8,53 +8,47 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Action, Store } from "redux";
-import { Provider } from "react-redux";
-import { Route, Redirect, Switch } from "react-router-dom";
-import { History } from "history";
 import { ConnectedRouter } from "connected-react-router";
-
-import {
-  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr, implicitTxnAttr,
-} from "src/util/constants";
+import { History } from "history";
+import "nvd3/build/nv.d3.min.css";
+import React from "react";
+import { Provider } from "react-redux";
+import { Redirect, Route, Switch } from "react-router-dom";
+import "react-select/dist/react-select.css";
+import { Action, Store } from "redux";
 import { AdminUIState } from "src/redux/state";
-
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
-
+import { appAttr, dashboardNameAttr, databaseNameAttr, implicitTxnAttr, nodeIDAttr, rangeIDAttr, statementAttr, tableNameAttr } from "src/util/constants";
 import NotFound from "src/views/app/components/NotFound";
 import Layout from "src/views/app/containers/layout";
+import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
+import { EventPage } from "src/views/cluster/containers/events";
+import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
+import NodeLogs from "src/views/cluster/containers/nodeLogs";
+import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import { DatabaseGrantsList, DatabaseTablesList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
-import { EventPage } from "src/views/cluster/containers/events";
-import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
 import Raft from "src/views/devtools/containers/raft";
-import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
-import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
-import NodeOverview from "src/views/cluster/containers/nodeOverview";
-import NodeLogs from "src/views/cluster/containers/nodeLogs";
+import RaftRanges from "src/views/devtools/containers/raftRanges";
 import JobsPage from "src/views/jobs";
+import JobDetails from "src/views/jobs/jobDetails";
+import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 import Certificates from "src/views/reports/containers/certificates";
 import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
 import EnqueueRange from "src/views/reports/containers/enqueueRange";
-import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Localities from "src/views/reports/containers/localities";
 import Network from "src/views/reports/containers/network";
 import Nodes from "src/views/reports/containers/nodes";
-import ReduxDebug from "src/views/reports/containers/redux";
+import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Range from "src/views/reports/containers/range";
+import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
-import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
-import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
-
-import "nvd3/build/nv.d3.min.css";
-import "react-select/dist/react-select.css";
-
+import StatementsPage from "src/views/statements/statementsPage";
 import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -104,7 +98,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
 
                   { /* events & jobs */ }
                   <Route path="/events" component={ EventPage } />
-                  <Route path="/jobs" component={ JobsPage } />
+                  <Route exact path="/jobs" component={ JobsPage } />
+                  <Route path="/jobs/:id" component={ JobDetails } />
 
                   { /* databases */ }
                   <Redirect exact from="/databases" to="/databases/tables" />
