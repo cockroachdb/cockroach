@@ -1199,6 +1199,7 @@ func (ef *execFactory) ConstructInsert(
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
+	partialIndexPredColOrdSet exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
@@ -1225,9 +1226,8 @@ func (ef *execFactory) ConstructInsert(
 		}
 	}
 	// Create the table inserter, which does the bulk of the work.
-	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, tabDesc, colDescs, checkFKs, fkTables, &ef.planner.alloc,
-	)
+	ri, err := row.MakeInserter(ctx, ef.planner.EvalContext(), ef.planner.txn, tabDesc, colDescs, checkFKs, fkTables,
+		&ef.planner.alloc)
 	if err != nil {
 		return nil, err
 	}
@@ -1237,9 +1237,10 @@ func (ef *execFactory) ConstructInsert(
 	*ins = insertNode{
 		source: input.(planNode),
 		run: insertRun{
-			ti:         tableInserter{ri: ri},
-			checkOrds:  checkOrdSet,
-			insertCols: ri.InsertCols,
+			ti:                   tableInserter{ri: ri},
+			partialIndexPredOrds: partialIndexPredColOrdSet,
+			checkOrds:            checkOrdSet,
+			insertCols:           ri.InsertCols,
 		},
 	}
 
@@ -1276,6 +1277,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
+	partialIndexPredColOrdSet exec.TableColumnOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
@@ -1290,9 +1292,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 	}
 
 	// Create the table inserter, which does the bulk of the work.
-	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, &ef.planner.alloc,
-	)
+	ri, err := row.MakeInserter(ctx, ef.planner.EvalContext(), ef.planner.txn, tabDesc, colDescs, row.SkipFKs, nil,
+		&ef.planner.alloc)
 	if err != nil {
 		return nil, err
 	}
@@ -1303,9 +1304,10 @@ func (ef *execFactory) ConstructInsertFastPath(
 		input: rows,
 		run: insertFastPathRun{
 			insertRun: insertRun{
-				ti:         tableInserter{ri: ri},
-				checkOrds:  checkOrdSet,
-				insertCols: ri.InsertCols,
+				ti:                   tableInserter{ri: ri},
+				checkOrds:            checkOrdSet,
+				partialIndexPredOrds: partialIndexPredColOrdSet,
+				insertCols:           ri.InsertCols,
 			},
 		},
 	}
@@ -1355,6 +1357,7 @@ func (ef *execFactory) ConstructUpdate(
 	updateColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	partialIndexPredCols exec.TableColumnOrdinalSet,
 	passthrough sqlbase.ResultColumns,
 	allowAutoCommit bool,
 	skipFKChecks bool,
@@ -1424,8 +1427,9 @@ func (ef *execFactory) ConstructUpdate(
 	*upd = updateNode{
 		source: input.(planNode),
 		run: updateRun{
-			tu:        tableUpdater{ru: ru},
-			checkOrds: checks,
+			tu:                   tableUpdater{ru: ru},
+			checkOrds:            checks,
+			partialIndexPredOrds: partialIndexPredCols,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
 				Cols:         ru.FetchCols,
@@ -1510,6 +1514,7 @@ func (ef *execFactory) ConstructUpsert(
 	updateColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	partialIndexPredCols exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
@@ -1540,9 +1545,8 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
-	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, tabDesc, insertColDescs, checkFKs, fkTables, &ef.planner.alloc,
-	)
+	ri, err := row.MakeInserter(ctx, ef.planner.EvalContext(), ef.planner.txn, tabDesc, insertColDescs, checkFKs, fkTables,
+		&ef.planner.alloc)
 	if err != nil {
 		return nil, err
 	}
@@ -1581,8 +1585,9 @@ func (ef *execFactory) ConstructUpsert(
 	*ups = upsertNode{
 		source: input.(planNode),
 		run: upsertRun{
-			checkOrds:  checks,
-			insertCols: ri.InsertCols,
+			checkOrds:            checks,
+			partialIndexPredOrds: partialIndexPredCols,
+			insertCols:           ri.InsertCols,
 			tw: optTableUpserter{
 				ri:            ri,
 				alloc:         &ef.planner.alloc,
@@ -1629,6 +1634,7 @@ func (ef *execFactory) ConstructDelete(
 	table cat.Table,
 	fetchColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
+	partialIndexPredColOrdSet exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
@@ -1688,7 +1694,8 @@ func (ef *execFactory) ConstructDelete(
 	*del = deleteNode{
 		source: input.(planNode),
 		run: deleteRun{
-			td: tableDeleter{rd: rd, alloc: &ef.planner.alloc},
+			partialIndexPredOrds: partialIndexPredColOrdSet,
+			td:                   tableDeleter{rd: rd, alloc: &ef.planner.alloc},
 		},
 	}
 

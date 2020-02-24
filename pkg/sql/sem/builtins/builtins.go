@@ -2872,7 +2872,8 @@ may increase either contention or retry errors, or both.`,
 					return tree.NewDBytes(tree.DBytes(res)), err
 				}
 				// We have a secondary index.
-				res, err := sqlbase.EncodeSecondaryIndex(tableDesc, indexDesc, colMap, datums, true /* includeEmpty */)
+				res, err := sqlbase.EncodeSecondaryIndex(ctx, tableDesc, indexDesc,
+					nil /* partialIndexPredicate */, colMap, datums, true /* includeEmpty */)
 				if err != nil {
 					return nil, err
 				}

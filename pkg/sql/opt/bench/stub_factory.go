@@ -244,6 +244,7 @@ func (f *stubFactory) ConstructInsert(
 	insertCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	partialIndexPredicateCols exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
@@ -256,6 +257,7 @@ func (f *stubFactory) ConstructInsertFastPath(
 	insertCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
+	partialIndexPredicateCols exec.ColumnOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
 ) (exec.Node, error) {
 	return struct{}{}, nil
@@ -268,6 +270,7 @@ func (f *stubFactory) ConstructUpdate(
 	updateCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	partialIndexPredCols exec.ColumnOrdinalSet,
 	passthrough sqlbase.ResultColumns,
 	allowAutoCommit bool,
 	skipFKChecks bool,
@@ -284,6 +287,7 @@ func (f *stubFactory) ConstructUpsert(
 	updateCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	partialIndexPredCols exec.ColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
@@ -295,6 +299,7 @@ func (f *stubFactory) ConstructDelete(
 	table cat.Table,
 	fetchCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
+	partialIndexPredCols exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {

@@ -1032,12 +1032,28 @@ func EncodePrimaryIndex(
 // empty values. For forward indexes the returned list of
 // index entries is in family sorted order.
 func EncodeSecondaryIndex(
+	evalCtx *tree.EvalContext,
 	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
+	partialIndexPredicate tree.TypedExpr,
 	colMap map[ColumnID]int,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
+
+	// If the index is a partial index, evaluate the predicate and only emit
+	// entries if the predicate is satisfied.
+	if partialIndexPredicate != nil {
+		shouldIndex, err := partialIndexPredicate.Eval(evalCtx)
+		if err != nil {
+			return nil, err
+		}
+		if shouldIndex != tree.DBoolTrue {
+			// This partial index didn't match the current value.
+			// Don't emit an index row.
+			return nil, nil
+		}
+	}
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
 
 	// Use the primary key encoding for covering indexes.
@@ -1286,8 +1302,10 @@ func writeColumnValues(
 // value (passed as a parameter so the caller can reuse between rows) and is
 // expected to be the same length as indexes.
 func EncodeSecondaryIndexes(
+	evalCtx *tree.EvalContext,
 	tableDesc *TableDescriptor,
 	indexes []IndexDescriptor,
+	partialIndexPredicates []tree.TypedExpr,
 	colMap map[ColumnID]int,
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
@@ -1297,7 +1315,11 @@ func EncodeSecondaryIndexes(
 		panic("Length of secondaryIndexEntries was non-zero")
 	}
 	for i := range indexes {
-		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values, includeEmpty)
+		var partialIndexPredicate tree.TypedExpr
+		if partialIndexPredicates != nil {
+			partialIndexPredicate = partialIndexPredicates[i]
+		}
+		entries, err := EncodeSecondaryIndex(evalCtx, tableDesc, &indexes[i], partialIndexPredicate, colMap, values, includeEmpty)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}

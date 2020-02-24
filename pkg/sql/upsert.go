@@ -38,8 +38,9 @@ type upsertNode struct {
 
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
-	tw        optTableUpserter
-	checkOrds checkSet
+	tw                   optTableUpserter
+	checkOrds            checkSet
+	partialIndexPredOrds partialIndexPredSet
 
 	// insertCols are the columns being inserted/upserted into.
 	insertCols []sqlbase.ColumnDescriptor
@@ -151,6 +152,28 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 	if err := enforceLocalColumnConstraints(rowVals, n.run.insertCols); err != nil {
 		return err
 	}
+	tabDesc := n.run.tw.tableDesc()
+
+	if !n.run.partialIndexPredOrds.Empty() {
+		nOtherCols := len(rowVals) - n.run.partialIndexPredOrds.Len()
+		partialIndexPredVals := rowVals[nOtherCols:]
+		var colIdx int
+		for i, ord := range tabDesc.PartialIndexOrds() {
+			if res, err := tree.GetBool(partialIndexPredVals[i]); err != nil {
+				return err
+			} else if !res && partialIndexPredVals[colIdx] != tree.DNull {
+				// Row isn't part of the index.
+				n.run.tw.ri.Helper.PartialIndexPredicates[ord] = tree.DBoolFalse
+			} else {
+				n.run.tw.ri.Helper.PartialIndexPredicates[ord] = tree.DBoolTrue
+			}
+			colIdx++
+		}
+		if err := checkMutationInput(tabDesc, n.run.partialIndexPredOrds, partialIndexPredVals); err != nil {
+			return err
+		}
+		rowVals = rowVals[:nOtherCols]
+	}
 
 	// Verify the CHECK constraints by inspecting boolean columns from the input that
 	// contain the results of evaluation.
@@ -160,7 +183,7 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 			ord++
 		}
 		checkVals := rowVals[ord:]
-		if err := checkMutationInput(n.run.tw.tableDesc(), n.run.checkOrds, checkVals); err != nil {
+		if err := checkMutationInput(tabDesc, n.run.checkOrds, checkVals); err != nil {
 			return err
 		}
 		rowVals = rowVals[:ord]

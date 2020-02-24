@@ -1159,6 +1159,10 @@ func (sc *SchemaChanger) validateForwardIndexes(
 	// Compute the size of each index.
 	for _, idx := range indexes {
 		idx := idx
+		if idx.PartialIndexPredicate != "" {
+			// Skip partial indexes for now
+			continue
+		}
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			// Make the mutations public in a private copy of the descriptor
@@ -1354,7 +1358,7 @@ func runSchemaChangesInTxn(
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexBackfillInTxn(ctx, planner.Txn(), immutDesc, traceKV); err != nil {
+				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), immutDesc, traceKV); err != nil {
 					return err
 				}
 
@@ -1706,10 +1710,14 @@ func columnBackfillInTxn(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func indexBackfillInTxn(
-	ctx context.Context, txn *kv.Txn, tableDesc *sqlbase.ImmutableTableDescriptor, traceKV bool,
+	ctx context.Context,
+	txn *kv.Txn,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.Init(tableDesc); err != nil {
+	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
 		return err
 	}
 	sp := tableDesc.PrimaryIndexSpan()

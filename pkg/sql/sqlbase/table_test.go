@@ -223,8 +223,8 @@ func TestIndexKey(t *testing.T) {
 		primaryValue := roachpb.MakeValueFromBytes(nil)
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
-		secondaryIndexEntry, err := EncodeSecondaryIndex(
-			&tableDesc, &tableDesc.Indexes[0], colMap, testValues, true /* includeEmpty */)
+		secondaryIndexEntry, err := EncodeSecondaryIndex(nil, &tableDesc, &tableDesc.Indexes[0],
+			nil, colMap, testValues, true /* includeEmpty */)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
 		}

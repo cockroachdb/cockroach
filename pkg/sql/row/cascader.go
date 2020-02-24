@@ -452,15 +452,8 @@ func (c *cascader) addRowDeleter(
 
 	// Create the row deleter. The row deleter is needed prior to the row fetcher
 	// as it will dictate what columns are required in the row fetcher.
-	rowDeleter, err := makeRowDeleterWithoutCascader(
-		ctx,
-		c.txn,
-		table,
-		c.fkTables,
-		nil, /* requestedCol */
-		CheckFKs,
-		c.alloc,
-	)
+	rowDeleter, err := makeRowDeleterWithoutCascader(ctx, c.evalCtx, c.txn, table,
+		c.fkTables, nil, CheckFKs, c.alloc)
 	if err != nil {
 		return Deleter{}, Fetcher{}, err
 	}
@@ -516,17 +509,8 @@ func (c *cascader) addRowUpdater(
 
 	// Create the row updater. The row updater requires all the columns in the
 	// table.
-	rowUpdater, err := makeUpdaterWithoutCascader(
-		ctx,
-		c.txn,
-		table,
-		c.fkTables,
-		table.Columns,
-		nil, /* requestedCol */
-		UpdaterDefault,
-		CheckFKs,
-		c.alloc,
-	)
+	rowUpdater, err := makeUpdaterWithoutCascader(ctx, c.evalCtx, c.txn, table, c.fkTables, table.Columns, nil,
+		UpdaterDefault, CheckFKs, c.alloc)
 	if err != nil {
 		return Updater{}, Fetcher{}, err
 	}

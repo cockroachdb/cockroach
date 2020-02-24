@@ -47,9 +47,7 @@ func MakeDeleter(
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
 ) (Deleter, error) {
-	rowDeleter, err := makeRowDeleterWithoutCascader(
-		ctx, txn, tableDesc, fkTables, requestedCols, checkFKs, alloc,
-	)
+	rowDeleter, err := makeRowDeleterWithoutCascader(ctx, evalCtx, txn, tableDesc, fkTables, requestedCols, checkFKs, alloc)
 	if err != nil {
 		return Deleter{}, err
 	}
@@ -89,6 +87,7 @@ func MakeDeleter(
 // additional cascader.
 func makeRowDeleterWithoutCascader(
 	ctx context.Context,
+	evalCtx *tree.EvalContext,
 	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
@@ -132,7 +131,7 @@ func makeRowDeleterWithoutCascader(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(tableDesc, indexes),
+		Helper:               newRowHelper(evalCtx, tableDesc, indexes),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
@@ -157,9 +156,14 @@ func (rd *Deleter) DeleteRow(
 
 	// Delete the row from any secondary indices.
 	for i := range rd.Helper.Indexes {
+		var partialIndexPred tree.TypedExpr
+		if rd.Helper.PartialIndexPredicates != nil {
+			partialIndexPred = rd.Helper.PartialIndexPredicates[i]
+		}
 		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
 		entries, err := sqlbase.EncodeSecondaryIndex(
-			rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i], rd.FetchColIDtoRowIndex, values, true /* includeEmpty */)
+			nil, rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i],
+			partialIndexPred, rd.FetchColIDtoRowIndex, values, true /* includeEmpty */)
 		if err != nil {
 			return err
 		}
@@ -231,8 +235,8 @@ func (rd *Deleter) DeleteIndexRow(
 	// to delete all k/v's for this row. By setting includeEmpty
 	// to true, we will get a k/v pair for each family in the row,
 	// which will guarantee that we delete all the k/v's in this row.
-	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
-		rd.Helper.TableDesc.TableDesc(), idx, rd.FetchColIDtoRowIndex, values, true /* includeEmpty */)
+	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(nil, rd.Helper.TableDesc.TableDesc(),
+		idx, nil, rd.FetchColIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		return err
 	}

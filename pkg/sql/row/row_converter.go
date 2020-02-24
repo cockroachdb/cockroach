@@ -274,15 +274,7 @@ func NewDatumRowConverter(
 		return nil, errors.Wrap(err, "process default columns")
 	}
 
-	ri, err := MakeInserter(
-		ctx,
-		nil, /* txn */
-		immutDesc,
-		cols,
-		SkipFKs,
-		nil, /* fkTables */
-		&sqlbase.DatumAlloc{},
-	)
+	ri, err := MakeInserter(ctx, evalCtx, nil, immutDesc, cols, SkipFKs, nil, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
 	}

@@ -32,6 +32,16 @@ CREATE TABLE mutation (
 )
 ----
 
+exec-ddl
+CREATE TABLE partialindexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX(b) WHERE b > 0,
+    INDEX(c) WHERE a > b AND c = 'foo'
+)
+----
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -178,24 +188,26 @@ DELETE FROM xyz WHERE x=$1 ORDER BY y+$2 DESC LIMIT 2
 delete xyz
  ├── columns: <none>
  ├── fetch columns: x:4 y:5 z:6
- └── limit
-      ├── columns: x:4!null y:5 z:6 column7:7
-      ├── internal-ordering: -7
-      ├── sort
-      │    ├── columns: x:4!null y:5 z:6 column7:7
-      │    ├── ordering: -7
-      │    ├── limit hint: 2.00
-      │    └── project
-      │         ├── columns: column7:7 x:4!null y:5 z:6
-      │         ├── select
-      │         │    ├── columns: x:4!null y:5 z:6
-      │         │    ├── scan xyz
-      │         │    │    └── columns: x:4!null y:5 z:6
-      │         │    └── filters
-      │         │         └── x:4 = $1
-      │         └── projections
-      │              └── y:5 + $2 [as=column7:7]
-      └── 2
+ └── project
+      ├── columns: x:4!null y:5 z:6
+      └── limit
+           ├── columns: x:4!null y:5 z:6 column7:7
+           ├── internal-ordering: -7
+           ├── sort
+           │    ├── columns: x:4!null y:5 z:6 column7:7
+           │    ├── ordering: -7
+           │    ├── limit hint: 2.00
+           │    └── project
+           │         ├── columns: column7:7 x:4!null y:5 z:6
+           │         ├── select
+           │         │    ├── columns: x:4!null y:5 z:6
+           │         │    ├── scan xyz
+           │         │    │    └── columns: x:4!null y:5 z:6
+           │         │    └── filters
+           │         │         └── x:4 = $1
+           │         └── projections
+           │              └── y:5 + $2 [as=column7:7]
+           └── 2
 
 
 # Use CTE within WHERE clause.
@@ -437,3 +449,22 @@ build
 DELETE FROM mutation ORDER BY p LIMIT 2
 ----
 error (42P10): column "p" is being backfilled
+
+build
+DELETE FROM partialindexes WHERE a=0
+----
+delete partialindexes
+ ├── columns: <none>
+ ├── fetch columns: a:4 b:5 c:6
+ ├── partial index pred columns: partialIndexPred1:7 partialIndexPred2:8
+ └── project
+      ├── columns: partialIndexPred1:7 partialIndexPred2:8 a:4!null b:5 c:6
+      ├── select
+      │    ├── columns: a:4!null b:5 c:6
+      │    ├── scan partialindexes
+      │    │    └── columns: a:4!null b:5 c:6
+      │    └── filters
+      │         └── a:4 = 0
+      └── projections
+           ├── b:5 > 0 [as=partialIndexPred1:7]
+           └── (a:4 > b:5) AND (c:6 = 'foo') [as=partialIndexPred2:8]

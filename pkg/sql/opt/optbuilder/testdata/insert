@@ -45,6 +45,16 @@ CREATE TABLE checks (
 ----
 
 exec-ddl
+CREATE TABLE partialindexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX(b) WHERE b > 0,
+    INDEX(c) WHERE a > b AND c = 'foo'
+)
+----
+
+exec-ddl
 CREATE TABLE decimals (
     a DECIMAL(10,0) PRIMARY KEY CHECK (round(a) = a),
     b DECIMAL(5,1)[] CHECK (b[0] > 1),
@@ -1216,3 +1226,27 @@ insert defvals2
       └── projections
            ├── ARRAY[NULL] [as=column5:5]
            └── ARRAY[NULL] [as=column6:6]
+
+
+build
+INSERT INTO partialindexes VALUES(0, 0)
+----
+insert partialindexes
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => a:1
+ │    ├── column2:5 => b:2
+ │    └── column6:6 => c:3
+ ├── partial index pred columns: partialIndexPred1:7 partialIndexPred2:8
+ └── project
+      ├── columns: partialIndexPred1:7!null partialIndexPred2:8 column1:4!null column2:5!null column6:6
+      ├── project
+      │    ├── columns: column6:6 column1:4!null column2:5!null
+      │    ├── values
+      │    │    ├── columns: column1:4!null column2:5!null
+      │    │    └── (0, 0)
+      │    └── projections
+      │         └── NULL::STRING [as=column6:6]
+      └── projections
+           ├── column2:5 > 0 [as=partialIndexPred1:7]
+           └── (column1:4 > column2:5) AND (column6:6 = 'foo') [as=partialIndexPred2:8]

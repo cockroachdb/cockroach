@@ -635,6 +635,9 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
+	// Add any partial index predicate columns to the input.
+	mb.addPartialIndexPredicateCols()
+
 	mb.buildFKChecksForInsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
@@ -923,6 +926,9 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
+
+	// Add any partial index predicate columns to the input.
+	mb.addPartialIndexPredicateCols()
 
 	mb.buildFKChecksForUpsert()
 

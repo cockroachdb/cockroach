@@ -222,9 +222,7 @@ func Load(
 				}
 			}
 
-			ri, err = row.MakeInserter(
-				ctx, nil, tableDesc, tableDesc.Columns, row.SkipFKs, nil /* fkTables */, &sqlbase.DatumAlloc{},
-			)
+			ri, err = row.MakeInserter(ctx, evalCtx, nil, tableDesc, tableDesc.Columns, row.SkipFKs, nil, &sqlbase.DatumAlloc{})
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make row inserter")
 			}

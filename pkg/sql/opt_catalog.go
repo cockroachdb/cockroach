@@ -758,6 +758,11 @@ func (ot *optTable) DeletableIndexCount() int {
 	return 1 + len(ot.desc.DeletableIndexes())
 }
 
+// PartialIndexCount is part of the cat.Table interface.
+func (ot *optTable) PartialIndexCount() int {
+	return len(ot.desc.PartialIndexOrds())
+}
+
 // Index is part of the cat.Table interface.
 func (ot *optTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ot.indexes[i]
@@ -846,6 +851,18 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+}
+
+// IsPartialIndex is part of the cat.Index interface.
+func (oi *optIndex) IsPartialIndex() bool {
+	return oi.desc.PartialIndexPredicate != ""
+}
+
+// PartialIndexPredicate is part of the cat.Index interface.
+func (oi *optIndex) PartialIndexPredicate() cat.PartialIndexPredicate {
+	return cat.PartialIndexPredicate{
+		Predicate: oi.desc.PartialIndexPredicate,
+	}
 }
 
 var _ cat.Index = &optIndex{}
@@ -1430,6 +1447,10 @@ func (ot *optVirtualTable) DeletableIndexCount() int {
 	return 1 + len(ot.desc.DeletableIndexes())
 }
 
+func (ot *optVirtualTable) PartialIndexCount() int {
+	return 0
+}
+
 // Index is part of the cat.Table interface.
 func (ot *optVirtualTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ot.indexes[i]
@@ -1569,6 +1590,8 @@ type optVirtualIndex struct {
 	indexOrdinal int
 }
 
+var _ cat.Index = &optVirtualIndex{}
+
 // ID is part of the cat.Index interface.
 func (oi *optVirtualIndex) ID() cat.StableID {
 	return cat.StableID(oi.desc.ID)
@@ -1602,6 +1625,14 @@ func (oi *optVirtualIndex) KeyColumnCount() int {
 // LaxKeyColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) LaxKeyColumnCount() int {
 	return 1
+}
+
+func (oi *optVirtualIndex) IsPartialIndex() bool {
+	return false
+}
+
+func (oi *optVirtualIndex) PartialIndexPredicate() cat.PartialIndexPredicate {
+	return cat.PartialIndexPredicate{}
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
