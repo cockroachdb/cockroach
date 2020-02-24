@@ -764,7 +764,18 @@ message JobRegistryStatusResponse {
                     (gogoproto.casttype) =
                     "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                     ];
-  repeated cockroach.sql.jobs.jobspb.Job running_jobs = 2;
+  message Job {
+    int64 id = 1;
+  }
+  repeated Job running_jobs = 2;
+}
+
+message JobStatusRequest {
+  int64 job_id = 1;
+}
+
+message JobStatusResponse {
+  cockroach.sql.jobs.jobspb.Job job = 1;
 }
 
 service Status {
@@ -920,6 +931,11 @@ service Status {
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {
     option (google.api.http) = {
       get : "/_status/job_registry/{node_id}"
+    };
+  }
+  rpc JobStatus(JobStatusRequest) returns (JobStatusResponse) {
+    option (google.api.http) = {
+      get : "/_status/job/{job_id}"
     };
   }
 }

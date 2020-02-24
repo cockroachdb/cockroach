@@ -56,8 +56,88 @@ func (t tuple) String() string {
 	return sb.String()
 }
 
+func (t tuple) less(other tuple) bool {
+	for i := range t {
+		// If either side is nil, we short circuit the comparison. For nil, we
+		// define: nil < {any_none_nil}
+		if t[i] == nil && other[i] == nil {
+			continue
+		} else if t[i] == nil && other[i] != nil {
+			return true
+		} else if t[i] != nil && other[i] == nil {
+			return false
+		}
+
+		lhsVal := reflect.ValueOf(t[i])
+		rhsVal := reflect.ValueOf(other[i])
+
+		// apd.Decimal are not comparable, so we check that first.
+		if lhsVal.Type().Name() == "Decimal" && lhsVal.CanInterface() {
+			lhsDecimal := lhsVal.Interface().(apd.Decimal)
+			rhsDecimal := rhsVal.Interface().(apd.Decimal)
+			cmp := (&lhsDecimal).CmpTotal(&rhsDecimal)
+			if cmp == 0 {
+				continue
+			} else if cmp == -1 {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		// coltypes.Bytes is represented as []uint8.
+		if lhsVal.Type().String() == "[]uint8" {
+			lhsStr := string(lhsVal.Interface().([]uint8))
+			rhsStr := string(rhsVal.Interface().([]uint8))
+			if lhsStr == rhsStr {
+				continue
+			} else if lhsStr < rhsStr {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		// No need to compare these two elements when they are the same.
+		if t[i] == other[i] {
+			continue
+		}
+
+		switch typ := lhsVal.Type().Name(); typ {
+		case "int", "int16", "int32", "int64":
+			return lhsVal.Int() < rhsVal.Int()
+		case "uint", "uint16", "uint32", "uint64":
+			return lhsVal.Uint() < rhsVal.Uint()
+		case "float", "float64":
+			return lhsVal.Float() < rhsVal.Float()
+		case "bool":
+			return lhsVal.Bool() == false && rhsVal.Bool() == true
+		case "string":
+			return lhsVal.String() < rhsVal.String()
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("Unhandled comparison type: %s", typ))
+		}
+	}
+	return false
+}
+
 // tuples represents a table with any-type columns.
 type tuples []tuple
+
+// sort returns a copy of sorted tuples.
+func (t tuples) sort() tuples {
+	b := make(tuples, len(t))
+	for i := range b {
+		b[i] = make(tuple, len(t[i]))
+		copy(b[i], t[i])
+	}
+	sort.SliceStable(b, func(i, j int) bool {
+		lhs := b[i]
+		rhs := b[j]
+		return lhs.less(rhs)
+	})
+	return b
+}
 
 type verifier func(output *opTestOutput) error
 
@@ -851,6 +931,8 @@ func tupleEquals(expected tuple, actual tuple) bool {
 				if f2, ok := actual[i].(float64); ok {
 					if math.IsNaN(f1) && math.IsNaN(f2) {
 						continue
+					} else if !math.IsNaN(f1) && !math.IsNaN(f2) && math.Abs(f1-f2) < 1e-6 {
+						continue
 					}
 				}
 			}
@@ -894,23 +976,9 @@ func assertTuplesSetsEqual(expected tuples, actual tuples) error {
 	if len(expected) != len(actual) {
 		return makeError(expected, actual)
 	}
-	actualTupleUsed := make([]bool, len(actual))
-	for _, te := range expected {
-		matched := false
-		for j, ta := range actual {
-			if !actualTupleUsed[j] {
-				if tupleEquals(te, ta) {
-					actualTupleUsed[j] = true
-					matched = true
-					break
-				}
-			}
-		}
-		if !matched {
-			return makeError(expected, actual)
-		}
-	}
-	return nil
+	actual = actual.sort()
+	expected = expected.sort()
+	return assertTuplesOrderedEqual(expected, actual)
 }
 
 // assertTuplesOrderedEqual asserts that two permutations of tuples are equal

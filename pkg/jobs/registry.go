@@ -183,9 +183,9 @@ func (r *Registry) MetricsStruct() *Metrics {
 
 // CurrentlyRunningJobs returns a slice of the ids of all jobs running on this node.
 func (r *Registry) CurrentlyRunningJobs() []int64 {
-	jobs := make([]int64, len(r.mu.jobs))
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	jobs := make([]int64, len(r.mu.jobs))
 	i := 0
 	for jID := range r.mu.jobs {
 		jobs[i] = jID
