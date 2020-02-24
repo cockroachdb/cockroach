@@ -279,6 +279,7 @@ type cloudStorageSink struct {
 var cloudStorageSinkIDAtomic int64
 
 func makeCloudStorageSink(
+	ctx context.Context,
 	baseURI string,
 	nodeID roachpb.NodeID,
 	targetMaxFileSize int64,
@@ -333,7 +334,6 @@ func makeCloudStorageSink(
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
-	ctx := context.TODO()
 	var err error
 	if s.es, err = makeExternalStorageFromURI(ctx, baseURI); err != nil {
 		return nil, err

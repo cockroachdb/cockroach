@@ -250,7 +250,7 @@ func changefeedPlanHook(
 			nodeID := p.ExtendedEvalContext().NodeID
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
-				details.SinkURI, nodeID, details.Opts, details.Targets,
+				ctx, details.SinkURI, nodeID, details.Opts, details.Targets,
 				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 			)
 			if err != nil {
