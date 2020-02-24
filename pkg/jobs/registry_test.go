@@ -265,7 +265,10 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 			Lease:       &jobspb.Lease{NodeID: 1, Epoch: 1},
 			// register a mutation on the table so that jobs that reference
 			// the table are not considered orphaned
-			DescriptorIDs:  []sqlbase.ID{descriptorID},
+			DescriptorIDs: []sqlbase.ID{
+				descriptorID,
+				sqlbase.InvalidID, // invalid id to test handling of missing descriptors.
+			},
 			Details:        jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
 			StartedMicros:  timeutil.ToUnixMicros(created),
 			FinishedMicros: timeutil.ToUnixMicros(finished),
