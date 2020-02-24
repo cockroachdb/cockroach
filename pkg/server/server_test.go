@@ -51,6 +51,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
@@ -415,9 +416,10 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 }
 
-// TestMultiRangeScanWithMaxResults tests that commands which access multiple
-// ranges with MaxResults parameter are carried out properly.
-func TestMultiRangeScanWithMaxResults(t *testing.T) {
+// TestMultiRangeScanWithPagination tests that specifying MaxSpanResultKeys
+// and/or TargetBytes to break up result sets works properly, even across
+// ranges.
+func TestMultiRangeScanWithPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		splitKeys []roachpb.Key
@@ -430,7 +432,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				roachpb.Key("r"), roachpb.Key("w"), roachpb.Key("y")}},
 	}
 
-	for i, tc := range testCases {
+	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
 			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
@@ -451,26 +453,87 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				}
 			}
 
-			// Try every possible ScanRequest startKey.
-			for start := 0; start < len(tc.keys); start++ {
-				// Try every possible maxResults, from 1 to beyond the size of key array.
-				for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
-					scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
-					reply, err := client.SendWrappedWith(
-						ctx, tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
-					)
-					if err != nil {
-						t.Fatal(err)
-					}
-					rows := reply.(*roachpb.ScanResponse).Rows
-					if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
-						t.Errorf("%d: start=%s: expected %d rows, but got %d", i, tc.keys[start], maxResults, len(rows))
-					} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
-						t.Errorf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
-					}
-				}
+			// The maximum TargetBytes to use in this test. We use the bytes in
+			// all kvs in this test case as a ceiling. Nothing interesting
+			// happens above this.
+			var maxTargetBytes int64
+			{
+				resp, pErr := client.SendWrapped(ctx, tds, roachpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next()))
+				require.Nil(t, pErr)
+				maxTargetBytes = resp.Header().NumBytes
 			}
 
+			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+				// Iterate through MaxSpanRequestKeys=1..n and TargetBytes=1..m
+				// and (where n and m are chosen to reveal the full result set
+				// in one page). At each(*) combination, paginate both the
+				// forward and reverse scan and make sure we get the right
+				// result.
+				//
+				// (*) we don't increase the limits when there's only one page,
+				// but short circuit to something more interesting instead.
+				msrq := int64(1)
+				for targetBytes := int64(1); ; targetBytes++ {
+					var numPages int
+					t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
+						req := func(span roachpb.Span) roachpb.Request {
+							if reverse {
+								return roachpb.NewReverseScan(span.Key, span.EndKey)
+							}
+							return roachpb.NewScan(span.Key, span.EndKey)
+						}
+						// Paginate.
+						resumeSpan := &roachpb.Span{Key: tc.keys[0], EndKey: tc.keys[len(tc.keys)-1].Next()}
+						var keys []roachpb.Key
+						for {
+							numPages++
+							scan := req(*resumeSpan)
+							var ba roachpb.BatchRequest
+							ba.Add(scan)
+							ba.Header.TargetBytes = targetBytes
+							ba.Header.MaxSpanRequestKeys = msrq
+							br, pErr := tds.Send(ctx, ba)
+							require.Nil(t, pErr)
+							var rows []roachpb.KeyValue
+							if reverse {
+								rows = br.Responses[0].GetReverseScan().Rows
+							} else {
+								rows = br.Responses[0].GetScan().Rows
+							}
+							for _, kv := range rows {
+								keys = append(keys, kv.Key)
+							}
+							resumeSpan = br.Responses[0].GetInner().Header().ResumeSpan
+							t.Logf("page #%d: scan %v -> keys (after) %v resume %v", scan.Header().Span(), numPages, keys, resumeSpan)
+							if resumeSpan == nil {
+								// Done with this pagination.
+								break
+							}
+						}
+						if reverse {
+							for i, n := 0, len(keys); i < n-i-1; i++ {
+								keys[i], keys[n-i-1] = keys[n-i-1], keys[i]
+							}
+						}
+						require.Equal(t, tc.keys, keys)
+						if targetBytes == 1 || msrq < int64(len(tc.keys)) {
+							// Definitely more than one page in this case.
+							require.Less(t, 1, numPages)
+						}
+						if targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
+							// Definitely one page if limits are larger than result set.
+							require.Equal(t, 1, numPages)
+						}
+					})
+					if targetBytes >= maxTargetBytes || numPages == 1 {
+						if msrq >= int64(len(tc.keys)) {
+							return
+						}
+						targetBytes = 0
+						msrq++
+					}
+				}
+			})
 		})
 	}
 }

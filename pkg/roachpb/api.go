@@ -232,6 +232,7 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	rh.ResumeSpan = otherRH.ResumeSpan
 	rh.ResumeReason = otherRH.ResumeReason
 	rh.NumKeys += otherRH.NumKeys
+	rh.NumBytes += otherRH.NumBytes
 	rh.RangeInfos = append(rh.RangeInfos, otherRH.RangeInfos...)
 	return nil
 }

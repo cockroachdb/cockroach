@@ -69,6 +69,16 @@ scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: 108 bytes (target 10000000)
 
+# Scans with target size -1 return no results.
+run ok
+with ts=300,0 k=a end=z targetbytes=-1
+  scan
+  scan reverse=true
+----
+scan: resume span ["a","z")
+scan: "a"-"z" -> <no data>
+scan: resume span ["a","z")
+scan: "a"-"z" -> <no data>
 
 run ok
 # Target size one byte returns one result (overshooting instead of returning nothing).
