@@ -51,7 +51,7 @@ func registerHotSpotSplits(r *testRegistry) {
 
 		m.Go(func() error {
 			t.Status(fmt.Sprintf("starting checks for range sizes"))
-			const sizeLimit = 3 * (1 << 26) // 192 MB
+			const sizeLimit = 3 * (1 << 29) // 3*512 MB (512 mb is default size)
 
 			db := c.Conn(ctx, 1)
 			defer db.Close()
