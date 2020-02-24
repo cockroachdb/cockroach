@@ -168,7 +168,7 @@ export class DataDistributionPage extends React.Component<DataDistributionPagePr
       <div>
         <Helmet title="Data Distribution" />
         <section className="section">
-          <h1 className="base-heading page-title">Data Distribution</h1>
+          <h1 className="base-heading">Data Distribution</h1>
         </section>
         <section className="section">
           <Loading
