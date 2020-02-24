@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Divider } from "antd";
 import _ from "lodash";
 import moment from "moment";
 import { queryByName, queryToObj, queryToString } from "oss/src/util/query";
@@ -24,7 +25,6 @@ import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/compo
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
-import { Divider } from "antd";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
@@ -172,9 +172,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const start = queryStart && moment.unix(Number(queryStart)).utc();
     const end = queryEnd && moment.unix(Number(queryEnd)).utc();
 
-    if (start || end) {
-      this.setDatesByQueryParams({ start, end });
-    }
+    this.setDatesByQueryParams({ start, end });
   }
 
   setQueryParams = (date: moment.Moment, type: DateTypes) => {
@@ -213,14 +211,15 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     });
   }
 
-  setDatesByQueryParams = (dates: timewindow.TimeWindow) => {
-    const selected = _.clone(this.props.currentScale);
-    const end  = dates.end || moment().set({hours: 23, minutes: 59, seconds: 0});
-    const start = dates.start || moment().set({hours: 0, minutes: 0, seconds: 0});
-
-    selected.key = "Custom";
-    this.props.setTimeScale(selected);
+  setDatesByQueryParams = (dates?: timewindow.TimeWindow) => {
+    const currentWindow = _.clone(this.props.currentWindow);
+    const end = dates.end || currentWindow.end;
+    const start = dates.start || currentWindow.start;
+    const seconds = moment.duration(moment(end).diff(start)).asSeconds();
+    const timeScale = timewindow.findClosestTimeScale(seconds);
+    timeScale.windowEnd = null;
     this.props.setTimeRange({ end, start });
+    this.props.setTimeScale(timeScale);
   }
 
   setDate = (date: moment.Moment, type: DateTypes) => {
