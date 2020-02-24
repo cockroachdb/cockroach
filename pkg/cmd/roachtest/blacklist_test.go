@@ -39,7 +39,7 @@ func TestBlacklists(t *testing.T) {
 		"sqlAlchemy": sqlAlchemyBlacklist20_1,
 		"libpq":      libPQBlacklist20_1,
 		"gopg":       gopgBlackList20_1,
-		"pgx":        pgxBlackList20_1,
+		"pgx":        pgxBlacklist20_1,
 	}
 	type reasonCount struct {
 		reason string
