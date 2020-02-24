@@ -128,16 +128,22 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		hookCallCount++
 		lock.Unlock()
 		return jobs.FakeResumer{
-			OnResume: func() error {
+			OnResume: func(ctx context.Context) error {
 				select {
+				case <-ctx.Done():
+					return ctx.Err()
 				case resumeCalled <- struct{}{}:
 				case <-done:
 				}
 				lock.Lock()
 				resumeCounts[*job.ID()]++
 				lock.Unlock()
-				<-done
-				return nil
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-done:
+					return nil
+				}
 			},
 		}
 	})
@@ -240,9 +246,13 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 	defer jobs.ResetConstructors()()
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func() error {
-				resumeCh <- *job.ID()
-				return nil
+			OnResume: func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case resumeCh <- *job.ID():
+					return nil
+				}
 			},
 		}
 	})
