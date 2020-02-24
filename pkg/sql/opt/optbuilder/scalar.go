@@ -308,7 +308,12 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructNot(input)
 
 	case *tree.NullIfExpr:
-		input := b.buildScalar(t.Expr1.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		// Ensure that the type of the first expression matches the resolved type
+		// of the NULLIF expression so that type inference will be correct in the
+		// CASE expression constructed below. For example, the type of
+		// NULLIF(NULL, 0) should be int.
+		expr1 := tree.ReType(t.Expr1.(tree.TypedExpr), t.ResolvedType())
+		input := b.buildScalar(expr1, inScope, nil, nil, colRefs)
 		cond := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{b.factory.ConstructWhen(cond, memo.NullSingleton)}
 		out = b.factory.ConstructCase(input, whens, input)

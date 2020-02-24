@@ -210,7 +210,7 @@ case [type=int]
  └── const: 2 [type=int]
 
 build-scalar
-if(false, null, 1)
+if(false, NULL, 1)
 ----
 case [type=int]
  ├── false [type=bool]
@@ -218,6 +218,26 @@ case [type=int]
  │    ├── true [type=bool]
  │    └── null [type=unknown]
  └── const: 1 [type=int]
+
+build-scalar
+if(true, NULL, 1)
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=unknown]
+ │    ├── true [type=bool]
+ │    └── null [type=unknown]
+ └── const: 1 [type=int]
+
+build-scalar
+if(false, 1, NULL)
+----
+case [type=int]
+ ├── false [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── const: 1 [type=int]
+ └── null [type=unknown]
 
 build-scalar
 nullif(1, 2)
@@ -229,6 +249,28 @@ case [type=int]
  │    └── null [type=unknown]
  └── const: 1 [type=int]
 
+build-scalar
+nullif(NULL, 0)
+----
+case [type=int]
+ ├── cast: INT8 [type=int]
+ │    └── null [type=unknown]
+ ├── when [type=unknown]
+ │    ├── const: 0 [type=int]
+ │    └── null [type=unknown]
+ └── cast: INT8 [type=int]
+      └── null [type=unknown]
+
+build-scalar
+nullif(0, NULL)
+----
+case [type=int]
+ ├── const: 0 [type=int]
+ ├── when [type=unknown]
+ │    ├── null [type=unknown]
+ │    └── null [type=unknown]
+ └── const: 0 [type=int]
+
 build-scalar vars=(string)
 length(@1) = 2
 ----
@@ -236,7 +278,6 @@ eq [type=bool]
  ├── function: length [type=int]
  │    └── variable: @1 [type=string]
  └── const: 2 [type=int]
-
 
 build-scalar vars=(jsonb)
 @1 @> '{"a":1}'
