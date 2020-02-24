@@ -476,6 +476,12 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 			pendingMutations = hasAnyMutations || hasDropJob
 			return nil
 		}); err != nil {
+			if err == sqlbase.ErrDescriptorNotFound {
+				// Treat missing table descriptors as no longer relevant for the
+				// job payload. See
+				// https://github.com/cockroachlabs/support/issues/365.
+				continue
+			}
 			return false, err
 		}
 		if pendingMutations {
