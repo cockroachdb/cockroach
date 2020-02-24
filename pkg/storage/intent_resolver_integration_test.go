@@ -479,7 +479,7 @@ func TestContendedIntentPushedByHighPriorityScan(t *testing.T) {
 	// Perform a scan over the same keyspace with a high priority transaction.
 	txnHigh := newTransaction("high-priority", nil, roachpb.MaxUserPriority, store.Clock())
 	scan := scanArgs(keyA, keyB)
-	scanResp, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txnHigh}, &scan)
+	scanResp, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txnHigh}, scan)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}

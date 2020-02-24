@@ -119,10 +119,10 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
 	cArgs := CommandArgs{
-		EvalCtx: &mockEvalCtx{
-			storeID: voterStoreID,
-			desc:    &desc,
-		},
+		EvalCtx: (&MockEvalCtx{
+			StoreID: voterStoreID,
+			Desc:    &desc,
+		}).EvalContext(),
 		Args: &roachpb.TransferLeaseRequest{
 			Lease: roachpb.Lease{
 				Replica: replicas[1],

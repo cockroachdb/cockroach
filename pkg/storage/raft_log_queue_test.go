@@ -695,7 +695,7 @@ func TestTruncateLog(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		args := incrementArgs([]byte("a"), int64(i))
 
-		if _, pErr := tc.SendWrapped(&args); pErr != nil {
+		if _, pErr := tc.SendWrapped(args); pErr != nil {
 			t.Fatal(pErr)
 		}
 		idx, err := tc.repl.GetLastIndex()
