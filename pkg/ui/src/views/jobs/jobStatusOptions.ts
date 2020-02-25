@@ -14,12 +14,11 @@ import Job = cockroach.server.serverpb.JobsResponse.IJob;
 
 export const statusOptions = [
   {value: "", label: "All"},
-  {value: "pending", label: "Pending"},
-  {value: "running", label: "Running"},
-  {value: "paused", label: "Paused"},
-  {value: "canceled", label: "Canceled"},
   {value: "succeeded", label: "Succeeded"},
   {value: "failed", label: "Failed"},
+  {value: "pending", label: "Pending"},
+  {value: "canceled", label: "Canceled"},
+  {value: "paused", label: "Paused"},
 ];
 
 export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
