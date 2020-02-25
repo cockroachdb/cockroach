@@ -1419,7 +1419,15 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 // check since we know that such spurious errors are possibly without any relation
 // to the check having failed.
 func (c *cluster) CheckReplicaDivergenceOnDB(ctx context.Context, db *gosql.DB) error {
-	rows, err := db.QueryContext(ctx, `
+	var stmtTimeout string
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = timeutil.Now().Add(10 * time.Minute)
+	}
+	// Context cancellation is not enough to interrupt QueryContext below.
+	// Do extra work.
+	stmtTimeout = fmt.Sprintf(`SET statement_timeout = '%.0fms'; `, deadline.Sub(timeutil.Now()).Seconds())
+	rows, err := db.QueryContext(ctx, stmtTimeout+`
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
 FROM
 crdb_internal.check_consistency(true, '', '') as t
