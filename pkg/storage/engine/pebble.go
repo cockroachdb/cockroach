@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -366,6 +367,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// cfg.FS and cfg.ReadOnly later on.
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
+	if settings := cfg.Settings; settings != nil {
+		cfg.Opts.WALMinSyncInterval = func() time.Duration {
+			return minWALSyncInterval.Get(&settings.SV)
+		}
+	}
 
 	var auxDir string
 	if cfg.Dir == "" {
