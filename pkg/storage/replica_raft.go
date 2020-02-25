@@ -765,8 +765,32 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// the fact that we'll refuse to process messages intended for a higher
 	// replica ID ensures that our replica ID could not have changed.
 	const expl = "during advance"
-	err = r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+
+	r.mu.Lock()
+	err = r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
+
+		if stats.numConfChangeEntries > 0 {
+			// If a config change was carried out, it's possible that the Raft
+			// leader was removed. Verify that, and if so, campaign if we are
+			// the first remaining voter replica. Without this, the range will
+			// be leaderless (and thus unavailable) for a few seconds.
+			//
+			// We can't campaign before the call to `.Advance` above because
+			// a RawNode will not campaign while there are outstanding conf
+			// changes.
+			// We can't (or rather shouldn't) campaign on all remaining voters
+			// because that can lead to a stalemate.
+			desc := r.descRLocked()
+			st := raftGroup.BasicStatus()
+			if st.Lead == 0 || !desc.IsInitialized() {
+				return true, nil
+			}
+			_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
+			if !leaderStillThere && sm.r.store.StoreID() == desc.Replicas().Voters()[0].StoreID {
+				_ = raftGroup.Campaign()
+			}
+		}
 
 		// If the Raft group still has more to process then we immediately
 		// re-enqueue it for another round of processing. This is possible if
@@ -777,6 +801,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		return true, nil
 	})
+	r.mu.Unlock()
 	if err != nil {
 		return stats, expl, errors.Wrap(err, expl)
 	}
