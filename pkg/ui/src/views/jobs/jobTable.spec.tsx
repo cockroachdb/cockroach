@@ -24,12 +24,14 @@ describe("<JobTable>", () => {
       jobs: {data: {jobs: [{}, {}, {}, {}], toJSON}, inFlight: false, valid: true},
       current: 2,
       pageSize: 2,
+      isUsedFilter: true,
     };
     const jobTable = shallow(<JobTable jobs={jobTableProps.jobs}
                                        sort={jobTableProps.sort}
                                        setSort={jobTableProps.setSort}
                                        current={jobTableProps.current}
-                                       pageSize={jobTableProps.pageSize}/>);
+                                       pageSize={jobTableProps.pageSize}
+                                       isUsedFilter={jobTableProps.isUsedFilter}/>);
     assert.equal(jobTable.state().pagination.current, 2);
     jobTable.setProps({jobs: {data: {jobs: [{}, {}], toJSON}}});
     assert.equal(jobTable.state().pagination.current, 1);

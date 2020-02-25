@@ -11,7 +11,6 @@
 import React from "react";
 import {TimestampToMoment} from "src/util/convert";
 import {
-  JOB_STATUS_PAUSED,
   JOB_STATUS_PENDING,
   JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED,
   jobHasOneOfStatuses,
