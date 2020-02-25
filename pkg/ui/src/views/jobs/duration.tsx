@@ -30,8 +30,8 @@ export class Duration extends React.PureComponent<{ job: Job }> {
     const started = TimestampToMoment(this.props.job.started);
     const finished = TimestampToMoment(this.props.job.finished);
     const modified = TimestampToMoment(this.props.job.modified);
-    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_PENDING, JOB_STATUS_PAUSED)) {
-      return _.capitalize(this.props.job.status);
+    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_PENDING)) {
+      return "Waiting for GG TCL";
     } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_RUNNING)) {
       const fractionCompleted = this.props.job.fraction_completed;
       if (fractionCompleted > 0) {
