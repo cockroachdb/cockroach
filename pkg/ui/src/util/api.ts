@@ -110,6 +110,12 @@ export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.Enque
 export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
 export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
 
+export type StatementDiagnosticsRequestsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequestsRequest;
+export type StatementDiagnosticsRequestsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequestsResponse;
+
+export type CreateStatementDiagnosticsRequestRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsRequestRequest;
+export type CreateStatementDiagnosticsRequestResponseMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsRequestResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -347,6 +353,15 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
 // getStatements returns statements the cluster has recently executed, and some stats about them.
 export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessage> {
   return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
+}
+
+export function getStatementDiagnosticsRequests(timeout?: moment.Duration): Promise<StatementDiagnosticsRequestsResponseMessage> {
+  return timeoutFetch(serverpb.StatementDiagnosticsRequestsResponse, `${STATUS_PREFIX}/statementsdiagnosticsrequests`, null, timeout);
+}
+
+// getStatements returns statements the cluster has recently executed, and some stats about them.
+export function createStatementDiagnosticsRequest(req: CreateStatementDiagnosticsRequestRequestMessage, timeout?: moment.Duration): Promise<CreateStatementDiagnosticsRequestResponseMessage> {
+  return timeoutFetch(serverpb.CreateStatementDiagnosticsRequestResponse, `${STATUS_PREFIX}/statementsdiagnosticsrequests`, req as any, timeout);
 }
 
 // getDataDistribution returns information about how replicas are distributed across nodes.
