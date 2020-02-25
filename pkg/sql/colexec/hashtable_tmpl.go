@@ -208,3 +208,71 @@ func (ht *hashTable) checkCol(
 		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", probeType))
 	}
 }
+
+// {{/*
+func _CHECK_BODY(_IS_HASHTABLE_IN_FULL_MODE bool) { // */}}
+	// {{define "checkBody" -}}
+	for i := uint16(0); i < nToCheck; i++ {
+		if !ht.differs[ht.toCheck[i]] {
+			// If the current key matches with the probe key, we want to update headID
+			// with the current key if it has not been set yet.
+			keyID := ht.groupID[ht.toCheck[i]]
+			if ht.headID[ht.toCheck[i]] == 0 {
+				ht.headID[ht.toCheck[i]] = keyID
+			}
+
+			// {{if .IsHashTableInFullMode}}
+			firstID := ht.headID[ht.toCheck[i]]
+
+			if !ht.visited[keyID] {
+				// We can then add this keyID into the same array at the end of the
+				// corresponding linked list and mark this ID as visited. Since there
+				// can be multiple keys that match this probe key, we want to mark
+				// differs at this position to be true. This way, the prober will
+				// continue probing for this key until it reaches the end of the next
+				// chain.
+				ht.differs[ht.toCheck[i]] = true
+				ht.visited[keyID] = true
+
+				if firstID != keyID {
+					ht.same[keyID] = ht.same[firstID]
+					ht.same[firstID] = keyID
+				}
+			}
+			// {{end}}
+		}
+
+		if ht.differs[ht.toCheck[i]] {
+			// Continue probing in this next chain for the probe key.
+			ht.differs[ht.toCheck[i]] = false
+			ht.toCheck[nDiffers] = ht.toCheck[i]
+			nDiffers++
+		}
+	}
+
+	// {{end}}
+	// {{/*
+} // */}}
+
+// check performs an equality check between the current key in the groupID bucket
+// and the probe key at that index. If there is a match, the hashTable's same
+// array is updated to lazily populate the linked list of identical build
+// table keys. The visited flag for corresponding build table key is also set. A
+// key is removed from toCheck if it has already been visited in a previous
+// probe, or the bucket has reached the end (key not found in build table). The
+// new length of toCheck is returned by this function.
+func (ht *hashTable) check(probeKeyTypes []coltypes.T, nToCheck uint16, sel []uint16) uint16 {
+	ht.checkCols(probeKeyTypes, nToCheck, sel)
+	nDiffers := uint16(0)
+
+	switch ht.mode {
+	case hashTableFullMode:
+		_CHECK_BODY(true)
+	case hashTableDistinctMode:
+		_CHECK_BODY(false)
+	default:
+		execerror.VectorizedInternalPanic("hashTable in unhandled state")
+	}
+
+	return nDiffers
+}
