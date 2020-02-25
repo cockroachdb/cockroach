@@ -124,7 +124,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Compaction Queue"
       sources={storeSources}
-      tooltip={`The completed (or estimated) bytes of storage that were (or could be) reclaimed by forcing RocksDB compactions.`}
+      tooltip={`The completed (or estimated) bytes of storage that were (or could be) reclaimed by forcing compactions.`}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric name="cr.store.compactor.suggestionbytes.compacted" title="Bytes compacted / sec" nonNegativeRate />

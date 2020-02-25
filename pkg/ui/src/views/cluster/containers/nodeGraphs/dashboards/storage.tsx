@@ -129,10 +129,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="RocksDB Read Amplification"
+      title="Read Amplification"
       sources={storeSources}
       tooltip={
-        `RocksDB read amplification statistic; measures the average number of real read operations
+        `Read amplification statistic; measures the average number of real read operations
            executed per logical read operation ${tooltipSelection}.`
       }
     >
@@ -142,9 +142,9 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="RocksDB SSTables"
+      title="SSTables"
       sources={storeSources}
-      tooltip={`The number of RocksDB SSTables in use ${tooltipSelection}.`}
+      tooltip={`The number of SSTables in use ${tooltipSelection}.`}
     >
       <Axis label="sstables">
         <Metric name="cr.store.rocksdb.num-sstables" title="SSTables" />
@@ -166,10 +166,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="RocksDB Compactions/Flushes"
+      title="Compactions/Flushes"
       sources={storeSources}
       tooltip={
-        `The number of RocksDB compactions and memtable flushes, per second ${tooltipSelection}.`
+        `The number of compactions and memtable flushes, per second ${tooltipSelection}.`
       }
     >
       <Axis label="count">
