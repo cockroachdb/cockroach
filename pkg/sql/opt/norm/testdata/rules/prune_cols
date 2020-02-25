@@ -2628,6 +2628,7 @@ project
            │    ├── upsert-distinct-on
            │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
            │    │    ├── grouping columns: column13:13
+           │    │    ├── error-on-dup
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── side-effects
            │    │    ├── key: ()

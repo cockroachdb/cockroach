@@ -295,6 +295,7 @@ upsert nullablecols
       │    ├── upsert-distinct-on
       │    │    ├── columns: i:6!null
       │    │    ├── grouping columns: i:6!null
+      │    │    ├── error-on-dup
       │    │    ├── key: (6)
       │    │    └── select
       │    │         ├── columns: k:5!null i:6!null
@@ -557,6 +558,7 @@ upsert xy
       │    ├── upsert-distinct-on
       │    │    ├── columns: y:4 column5:5
       │    │    ├── grouping columns: y:4
+      │    │    ├── error-on-dup
       │    │    ├── lax-key: (4)
       │    │    ├── fd: ()-->(4,5)
       │    │    ├── project
@@ -608,6 +610,7 @@ upsert abc
       ├── upsert-distinct-on
       │    ├── columns: b:5!null "?column?":7!null "?column?":8!null
       │    ├── grouping columns: b:5!null
+      │    ├── error-on-dup
       │    ├── key: (5)
       │    ├── fd: ()-->(7,8)
       │    ├── project
@@ -660,6 +663,7 @@ upsert abc
       │    ├── upsert-distinct-on
       │    │    ├── columns: b:5!null c:6!null "?column?":7
       │    │    ├── grouping columns: c:6!null "?column?":7
+      │    │    ├── error-on-dup
       │    │    ├── lax-key: (6,7)
       │    │    ├── fd: ()-->(5,7)
       │    │    ├── project
@@ -1173,16 +1177,50 @@ values
 # Eliminate DistinctOn when Values operator is below Project, Select, and
 # LeftJoin operators.
 norm expect=EliminateDistinctOnValues
-SELECT DISTINCT ON (x) *, x+1
+SELECT DISTINCT ON (x, y, z) *, x+1
+FROM (VALUES (1, 2, 3), (4, 5, 6)) t(x, y, z)
+LEFT JOIN (SELECT a, b, c FROM abc)
+ON a=x AND b=y AND c=z
+WHERE x > 100 OR b > 100
+----
+project
+ ├── columns: x:1!null y:2!null z:3!null a:4 b:5 c:6 "?column?":7!null
+ ├── fd: (1)-->(7)
+ ├── select
+ │    ├── columns: column1:1!null column2:2!null column3:3!null a:4 b:5 c:6
+ │    ├── left-join (hash)
+ │    │    ├── columns: column1:1!null column2:2!null column3:3!null a:4 b:5 c:6
+ │    │    ├── cardinality: [2 - ]
+ │    │    ├── values
+ │    │    │    ├── columns: column1:1!null column2:2!null column3:3!null
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── (1, 2, 3)
+ │    │    │    └── (4, 5, 6)
+ │    │    ├── scan abc
+ │    │    │    ├── columns: a:4!null b:5!null c:6!null
+ │    │    │    └── key: (4-6)
+ │    │    └── filters
+ │    │         ├── a:4 = column1:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │    │         ├── b:5 = column2:2 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ │    │         └── c:6 = column3:3 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+ │    └── filters
+ │         └── (column1:1 > 100) OR (b:5 > 100) [outer=(1,5)]
+ └── projections
+      └── column1:1 + 1 [as="?column?":7, outer=(1)]
+
+# Right input of left join does not have a key, so left side may have dups.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) *
 FROM (VALUES (1), (2)) t(x)
 LEFT JOIN (SELECT a FROM abc)
 ON a=x
-WHERE x IS NOT NULL
 ----
-project
- ├── columns: x:1!null a:2 "?column?":5!null
- ├── cardinality: [2 - ]
- ├── fd: (1)-->(5)
+distinct-on
+ ├── columns: x:1!null a:2
+ ├── grouping columns: column1:1!null
+ ├── cardinality: [1 - ]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  ├── left-join (hash)
  │    ├── columns: column1:1!null a:2
  │    ├── cardinality: [2 - ]
@@ -1195,8 +1233,45 @@ project
  │    │    └── columns: a:2!null
  │    └── filters
  │         └── a:2 = column1:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
- └── projections
-      └── column1:1 + 1 [as="?column?":5, outer=(1)]
+ └── aggregations
+      └── first-agg [as=a:2, outer=(2)]
+           └── a:2
+
+# Left join does not join on all columns of the right input's key, so dups are
+# possible.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x, y) *
+FROM (VALUES (1, 2), (3, 4)) t(x, y)
+LEFT JOIN (SELECT * FROM abc)
+ON x=a AND y=c
+----
+distinct-on
+ ├── columns: x:1!null y:2!null a:3 b:4 c:5
+ ├── grouping columns: column1:1!null column2:2!null
+ ├── cardinality: [1 - ]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3-5)
+ ├── left-join (hash)
+ │    ├── columns: column1:1!null column2:2!null a:3 b:4 c:5
+ │    ├── cardinality: [2 - ]
+ │    ├── values
+ │    │    ├── columns: column1:1!null column2:2!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1, 2)
+ │    │    └── (3, 4)
+ │    ├── scan abc
+ │    │    ├── columns: a:3!null b:4!null c:5!null
+ │    │    └── key: (3-5)
+ │    └── filters
+ │         ├── column1:1 = a:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │         └── column2:2 = c:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ └── aggregations
+      ├── first-agg [as=a:3, outer=(3)]
+      │    └── a:3
+      ├── first-agg [as=b:4, outer=(4)]
+      │    └── b:4
+      └── first-agg [as=c:5, outer=(5)]
+           └── c:5
 
 # Grouping columns are not passthrough Project columns.
 norm expect-not=EliminateDistinctOnValues
@@ -1441,6 +1516,7 @@ upsert a
       │    ├── upsert-distinct-on
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       │    │    ├── grouping columns: column2:7!null column3:8!null
+      │    │    ├── error-on-dup
       │    │    ├── cardinality: [1 - 3]
       │    │    ├── key: (7,8)
       │    │    ├── fd: ()-->(9,10), (7,8)-->(6,9,10)
@@ -1473,3 +1549,333 @@ upsert a
       │         └── column2:7 = s:14 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
       └── projections
            └── CASE WHEN k:11 IS NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]
+
+# DO NOTHING case where all distinct ops can be removed.
+norm expect=EliminateDistinctOnValues
+INSERT INTO a (k, s, i, f) VALUES (1, 'foo', 1, 1.0), (2, 'bar', 2, 2.0), (3, 'foo', 2, 1.0)
+ON CONFLICT DO NOTHING
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column3:8 => i:2
+ │    ├── column4:9 => f:3
+ │    ├── column2:7 => s:4
+ │    └── column10:10 => j:5
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10
+      ├── fd: ()-->(10)
+      └── select
+           ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19 i:22 f:23
+           ├── fd: ()-->(10,11,19,22)
+           ├── left-join (hash)
+           │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19 i:22 f:23
+           │    ├── fd: ()-->(10,11,19)
+           │    ├── select
+           │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
+           │    │    ├── fd: ()-->(10,11,19)
+           │    │    ├── left-join (hash)
+           │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
+           │    │    │    ├── fd: ()-->(10,11)
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11
+           │    │    │    │    ├── fd: ()-->(10,11)
+           │    │    │    │    ├── left-join (hash)
+           │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null column10:10 k:11
+           │    │    │    │    │    ├── cardinality: [3 - ]
+           │    │    │    │    │    ├── fd: ()-->(10)
+           │    │    │    │    │    ├── project
+           │    │    │    │    │    │    ├── columns: column10:10 column1:6!null column2:7!null column3:8!null column4:9!null
+           │    │    │    │    │    │    ├── cardinality: [3 - 3]
+           │    │    │    │    │    │    ├── fd: ()-->(10)
+           │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
+           │    │    │    │    │    │    │    ├── cardinality: [3 - 3]
+           │    │    │    │    │    │    │    ├── (1, 'foo', 1, 1.0)
+           │    │    │    │    │    │    │    ├── (2, 'bar', 2, 2.0)
+           │    │    │    │    │    │    │    └── (3, 'foo', 2, 1.0)
+           │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │         └── CAST(NULL AS JSONB) [as=column10:10]
+           │    │    │    │    │    ├── scan a
+           │    │    │    │    │    │    ├── columns: k:11!null
+           │    │    │    │    │    │    └── key: (11)
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
+           │    │    │    │    └── filters
+           │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+           │    │    │    ├── scan a
+           │    │    │    │    ├── columns: i:17!null s:19!null
+           │    │    │    │    └── key: (17,19)
+           │    │    │    └── filters
+           │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
+           │    │    │         └── column3:8 = i:17 [outer=(8,17), constraints=(/8: (/NULL - ]; /17: (/NULL - ]), fd=(8)==(17), (17)==(8)]
+           │    │    └── filters
+           │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
+           │    ├── scan a
+           │    │    ├── columns: i:22!null f:23
+           │    │    └── lax-key: (22,23)
+           │    └── filters
+           │         ├── column4:9 = f:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
+           │         └── column3:8 = i:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
+           └── filters
+                └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+
+# DO NOTHING case where one distinct op can be removed (k), but two others
+# can't: (s, i) and (f, i).
+norm expect=EliminateDistinctOnValues
+INSERT INTO a (k, s, f) VALUES (1, 'foo', 1.0), (2, 'bar', 2.0), (3, 'foo', 1.0)
+ON CONFLICT DO NOTHING
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column9:9 => i:2
+ │    ├── column3:8 => f:3
+ │    ├── column2:7 => s:4
+ │    └── column10:10 => j:5
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── upsert-distinct-on
+      ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
+      ├── grouping columns: column3:8!null column9:9
+      ├── lax-key: (8,9)
+      ├── fd: ()-->(9,10), (7,9)~~>(6,8), (8,9)~~>(6,7,10)
+      ├── select
+      │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 i:22 f:23
+      │    ├── lax-key: (7,9,22,23)
+      │    ├── fd: ()-->(9,10,22), (7,9)~~>(6,8)
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 i:22 f:23
+      │    │    ├── lax-key: (7,9,22,23)
+      │    │    ├── fd: ()-->(9,10), (7,9)~~>(6,8)
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
+      │    │    │    ├── grouping columns: column2:7!null column9:9
+      │    │    │    ├── lax-key: (7,9)
+      │    │    │    ├── fd: ()-->(9,10), (7,9)~~>(6,8,10)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19
+      │    │    │    │    ├── fd: ()-->(9-11,19)
+      │    │    │    │    ├── left-join (hash)
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19
+      │    │    │    │    │    ├── fd: ()-->(9-11)
+      │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11
+      │    │    │    │    │    │    ├── fd: ()-->(9-11)
+      │    │    │    │    │    │    ├── left-join (hash)
+      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11
+      │    │    │    │    │    │    │    ├── cardinality: [3 - ]
+      │    │    │    │    │    │    │    ├── fd: ()-->(9,10)
+      │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    │    ├── columns: column9:9 column10:10 column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(9,10)
+      │    │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    │    │    │    │    │    │    ├── (1, 'foo', 1.0)
+      │    │    │    │    │    │    │    │    │    ├── (2, 'bar', 2.0)
+      │    │    │    │    │    │    │    │    │    └── (3, 'foo', 1.0)
+      │    │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │    │         ├── CAST(NULL AS INT8) [as=column9:9]
+      │    │    │    │    │    │    │    │         └── CAST(NULL AS JSONB) [as=column10:10]
+      │    │    │    │    │    │    │    ├── scan a
+      │    │    │    │    │    │    │    │    ├── columns: k:11!null
+      │    │    │    │    │    │    │    │    └── key: (11)
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+      │    │    │    │    │    ├── scan a
+      │    │    │    │    │    │    ├── columns: i:17!null s:19!null
+      │    │    │    │    │    │    └── key: (17,19)
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
+      │    │    │    │    │         └── column9:9 = i:17 [outer=(9,17), constraints=(/9: (/NULL - ]; /17: (/NULL - ]), fd=(9)==(17), (17)==(9)]
+      │    │    │    │    └── filters
+      │    │    │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column1:6, outer=(6)]
+      │    │    │         │    └── column1:6
+      │    │    │         ├── first-agg [as=column3:8, outer=(8)]
+      │    │    │         │    └── column3:8
+      │    │    │         └── first-agg [as=column10:10, outer=(10)]
+      │    │    │              └── column10:10
+      │    │    ├── scan a
+      │    │    │    ├── columns: i:22!null f:23
+      │    │    │    └── lax-key: (22,23)
+      │    │    └── filters
+      │    │         ├── column3:8 = f:23 [outer=(8,23), constraints=(/8: (/NULL - ]; /23: (/NULL - ]), fd=(8)==(23), (23)==(8)]
+      │    │         └── column9:9 = i:22 [outer=(9,22), constraints=(/9: (/NULL - ]; /22: (/NULL - ]), fd=(9)==(22), (22)==(9)]
+      │    └── filters
+      │         └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+      └── aggregations
+           ├── first-agg [as=column1:6, outer=(6)]
+           │    └── column1:6
+           ├── first-agg [as=column2:7, outer=(7)]
+           │    └── column2:7
+           └── first-agg [as=column10:10, outer=(10)]
+                └── column10:10
+
+# DO NOTHING case where innermost distinct op cannot be removed (because it
+# groups on a non-constant column). Ensure that outer distinct ops can still be
+# removed.
+norm
+INSERT INTO a (k, s, i, f) VALUES (unique_rowid(), 'foo', 1, 1.0), (unique_rowid(), 'bar', 2, 2.0)
+ON CONFLICT DO NOTHING
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column3:8 => i:2
+ │    ├── column4:9 => f:3
+ │    ├── column2:7 => s:4
+ │    └── column10:10 => j:5
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
+      ├── side-effects
+      ├── fd: ()-->(10), (6)~~>(7-9)
+      └── select
+           ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
+           ├── side-effects
+           ├── lax-key: (6,17,19,22,23)
+           ├── fd: ()-->(10,19,22), (6)~~>(7-9)
+           ├── left-join (hash)
+           │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
+           │    ├── side-effects
+           │    ├── lax-key: (6,17,19,22,23)
+           │    ├── fd: ()-->(10,19), (6)~~>(7-9)
+           │    ├── select
+           │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
+           │    │    ├── side-effects
+           │    │    ├── lax-key: (6,17,19)
+           │    │    ├── fd: ()-->(10,19), (6)~~>(7-9)
+           │    │    ├── left-join (hash)
+           │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
+           │    │    │    ├── side-effects
+           │    │    │    ├── lax-key: (6,17,19)
+           │    │    │    ├── fd: ()-->(10), (6)~~>(7-9)
+           │    │    │    ├── upsert-distinct-on
+           │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
+           │    │    │    │    ├── grouping columns: column1:6
+           │    │    │    │    ├── side-effects
+           │    │    │    │    ├── lax-key: (6)
+           │    │    │    │    ├── fd: ()-->(10), (6)~~>(7-10)
+           │    │    │    │    ├── select
+           │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
+           │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    ├── fd: ()-->(10,11)
+           │    │    │    │    │    ├── left-join (hash)
+           │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
+           │    │    │    │    │    │    ├── cardinality: [2 - ]
+           │    │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    │    ├── fd: ()-->(10)
+           │    │    │    │    │    │    ├── project
+           │    │    │    │    │    │    │    ├── columns: column10:10 column1:6 column2:7!null column3:8!null column4:9!null
+           │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
+           │    │    │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    │    │    ├── fd: ()-->(10)
+           │    │    │    │    │    │    │    ├── values
+           │    │    │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null
+           │    │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
+           │    │    │    │    │    │    │    │    ├── side-effects
+           │    │    │    │    │    │    │    │    ├── (unique_rowid(), 'foo', 1, 1.0)
+           │    │    │    │    │    │    │    │    └── (unique_rowid(), 'bar', 2, 2.0)
+           │    │    │    │    │    │    │    └── projections
+           │    │    │    │    │    │    │         └── CAST(NULL AS JSONB) [as=column10:10]
+           │    │    │    │    │    │    ├── scan a
+           │    │    │    │    │    │    │    ├── columns: k:11!null
+           │    │    │    │    │    │    │    └── key: (11)
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+           │    │    │    │    └── aggregations
+           │    │    │    │         ├── first-agg [as=column2:7, outer=(7)]
+           │    │    │    │         │    └── column2:7
+           │    │    │    │         ├── first-agg [as=column3:8, outer=(8)]
+           │    │    │    │         │    └── column3:8
+           │    │    │    │         ├── first-agg [as=column4:9, outer=(9)]
+           │    │    │    │         │    └── column4:9
+           │    │    │    │         └── first-agg [as=column10:10, outer=(10)]
+           │    │    │    │              └── column10:10
+           │    │    │    ├── scan a
+           │    │    │    │    ├── columns: i:17!null s:19!null
+           │    │    │    │    └── key: (17,19)
+           │    │    │    └── filters
+           │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
+           │    │    │         └── column3:8 = i:17 [outer=(8,17), constraints=(/8: (/NULL - ]; /17: (/NULL - ]), fd=(8)==(17), (17)==(8)]
+           │    │    └── filters
+           │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
+           │    ├── scan a
+           │    │    ├── columns: i:22!null f:23
+           │    │    └── lax-key: (22,23)
+           │    └── filters
+           │         ├── column4:9 = f:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
+           │         └── column3:8 = i:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
+           └── filters
+                └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+
+# DO NOTHING case with explicit conflict columns (only add upsert-distinct-on
+# for one index).
+norm expect-not=EliminateDistinctOnValues
+INSERT INTO a (k, s, i) SELECT i, 'foo', i FROM a
+ON CONFLICT (s, i) DO NOTHING
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── i:7 => k:1
+ │    ├── i:7 => i:2
+ │    ├── column12:12 => f:3
+ │    ├── "?column?":11 => s:4
+ │    └── column13:13 => j:5
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── upsert-distinct-on
+      ├── columns: i:7!null "?column?":11!null column12:12 column13:13
+      ├── grouping columns: i:7!null
+      ├── key: (7)
+      ├── fd: ()-->(11-13)
+      ├── select
+      │    ├── columns: i:7!null "?column?":11!null column12:12 column13:13 i:15 s:17
+      │    ├── fd: ()-->(11-13,17)
+      │    ├── left-join (hash)
+      │    │    ├── columns: i:7!null "?column?":11!null column12:12 column13:13 i:15 s:17
+      │    │    ├── fd: ()-->(11-13)
+      │    │    ├── project
+      │    │    │    ├── columns: column12:12 column13:13 "?column?":11!null i:7!null
+      │    │    │    ├── fd: ()-->(11-13)
+      │    │    │    ├── scan a
+      │    │    │    │    └── columns: i:7!null
+      │    │    │    └── projections
+      │    │    │         ├── CAST(NULL AS FLOAT8) [as=column12:12]
+      │    │    │         ├── CAST(NULL AS JSONB) [as=column13:13]
+      │    │    │         └── 'foo' [as="?column?":11]
+      │    │    ├── select
+      │    │    │    ├── columns: i:15!null s:17!null
+      │    │    │    ├── key: (15)
+      │    │    │    ├── fd: ()-->(17)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: i:15!null s:17!null
+      │    │    │    │    └── key: (15,17)
+      │    │    │    └── filters
+      │    │    │         └── s:17 = 'foo' [outer=(17), constraints=(/17: [/'foo' - /'foo']; tight), fd=()-->(17)]
+      │    │    └── filters
+      │    │         └── i:7 = i:15 [outer=(7,15), constraints=(/7: (/NULL - ]; /15: (/NULL - ]), fd=(7)==(15), (15)==(7)]
+      │    └── filters
+      │         └── s:17 IS NULL [outer=(17), constraints=(/17: [/NULL - /NULL]; tight), fd=()-->(17)]
+      └── aggregations
+           ├── first-agg [as=column12:12, outer=(12)]
+           │    └── column12:12
+           ├── first-agg [as=column13:13, outer=(13)]
+           │    └── column13:13
+           └── const-agg [as="?column?":11, outer=(11)]
+                └── "?column?":11

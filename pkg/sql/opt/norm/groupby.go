@@ -207,13 +207,41 @@ func (c *CustomFuncs) AreValuesDistinct(
 		return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)
 
 	case *memo.ProjectExpr:
+		// Pass through call to input if grouping on passthrough columns.
 		if groupingCols.SubsetOf(t.Input.Relational().OutputCols) {
 			return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)
 		}
 
 	case *memo.LeftJoinExpr:
-		if groupingCols.SubsetOf(t.Left.Relational().OutputCols) {
-			return c.AreValuesDistinct(t.Left, groupingCols, nullsAreDistinct)
+		// Pass through call to left input if grouping on its columns. Also,
+		// ensure that the left join does not cause duplicate left rows.
+		leftCols := t.Left.Relational().OutputCols
+		rightCols := t.Right.Relational().OutputCols
+		if !groupingCols.SubsetOf(leftCols) {
+			break
+		}
+
+		// If all right input (lax or strict) key columns are equality joined to
+		// columns in the left input, then left join will never create duplicates.
+		var eqCols opt.ColSet
+		for i := range t.On {
+			condition := t.On[i].Condition
+			ok, _, rightColID := memo.ExtractJoinEquality(leftCols, rightCols, condition)
+			if ok {
+				eqCols.Add(rightColID)
+			}
+		}
+		if !t.Right.Relational().FuncDeps.ColsAreLaxKey(eqCols) {
+			// Not joining on a right input key.
+			break
+		}
+
+		return c.AreValuesDistinct(t.Left, groupingCols, nullsAreDistinct)
+
+	case *memo.UpsertDistinctOnExpr:
+		// Pass through call to input if grouping on passthrough columns.
+		if groupingCols.SubsetOf(t.Input.Relational().OutputCols) {
+			return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)
 		}
 	}
 	return false

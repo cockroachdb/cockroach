@@ -86,13 +86,14 @@ with &1
  │         │    ├── fd: ()-->(8,12), (5)~~>(4), (9)-->(10,11)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
- │         │    │    ├── stats: [rows=9.94974874, distinct(9)=6.31184239, null(9)=0]
+ │         │    │    ├── stats: [rows=9.94974874, distinct(9)=9.94974874, null(9)=0]
  │         │    │    ├── lax-key: (5,9)
  │         │    │    ├── fd: ()-->(8), (5)~~>(4), (9)-->(10,11)
  │         │    │    ├── upsert-distinct-on
  │         │    │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float)
  │         │    │    │    ├── grouping columns: b:5(string)
- │         │    │    │    ├── stats: [rows=9.94974874, distinct(4)=6.31184239, null(4)=0, distinct(5)=6.31184239, null(5)=0]
+ │         │    │    │    ├── error-on-dup
+ │         │    │    │    ├── stats: [rows=9.94974874, distinct(4)=9.94974874, null(4)=0, distinct(5)=9.94974874, null(5)=0]
  │         │    │    │    ├── lax-key: (5)
  │         │    │    │    ├── fd: ()-->(8), (5)~~>(4,8)
  │         │    │    │    ├── project
@@ -215,26 +216,27 @@ upsert uv
  └── project
       ├── columns: upsert_u:11(int) upsert_v:12(int) z:6(int) column7:7(int) u:8(int) v:9(int) column10:10(int!null)
       ├── side-effects
-      ├── stats: [rows=1009.08174]
+      ├── stats: [rows=1000]
       ├── lax-key: (6,8)
       ├── fd: ()-->(10), (6)~~>(7), (8)-->(9), (9)~~>(8), (7,8)-->(11), (6,8)-->(12), (6,8)~~>(7,11)
       ├── project
       │    ├── columns: column10:10(int!null) z:6(int) column7:7(int) u:8(int) v:9(int)
       │    ├── side-effects
-      │    ├── stats: [rows=1009.08174]
+      │    ├── stats: [rows=1000]
       │    ├── lax-key: (6,8)
       │    ├── fd: ()-->(10), (6)~~>(7), (8)-->(9), (9)~~>(8)
       │    ├── left-join (hash)
       │    │    ├── columns: z:6(int) column7:7(int) u:8(int) v:9(int)
       │    │    ├── side-effects
-      │    │    ├── stats: [rows=1009.08174, distinct(9)=100, null(9)=10.0908174]
+      │    │    ├── stats: [rows=1000, distinct(9)=991, null(9)=10]
       │    │    ├── lax-key: (6,8)
       │    │    ├── fd: (6)~~>(7), (8)-->(9), (9)~~>(8)
       │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: z:6(int) column7:7(int)
       │    │    │    ├── grouping columns: z:6(int)
+      │    │    │    ├── error-on-dup
       │    │    │    ├── side-effects
-      │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
+      │    │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=10]
       │    │    │    ├── lax-key: (6)
       │    │    │    ├── fd: (6)~~>(7)
       │    │    │    ├── project
