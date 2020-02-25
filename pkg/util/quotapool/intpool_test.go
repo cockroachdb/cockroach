@@ -299,6 +299,8 @@ func TestQuotaPoolCappedAcquisition(t *testing.T) {
 }
 
 func TestOnAcquisition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	const quota = 100
 	var called bool
 	qp := quotapool.NewIntPool("test", quota,
@@ -317,6 +319,8 @@ func TestOnAcquisition(t *testing.T) {
 // TestSlowAcquisition ensures that the SlowAcquisition callback is called
 // when an Acquire call takes longer than the configured timeout.
 func TestSlowAcquisition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// The test will set up an IntPool with 1 quota and a SlowAcquisition callback
 	// which closes channels when called by the second goroutine. An initial call
 	// to Acquire will take all of the quota. Then a second call with go should be
@@ -369,6 +373,8 @@ func TestSlowAcquisition(t *testing.T) {
 // Test that AcquireFunc() is called after IntAlloc.Freeze() is called - so that an ongoing acquisition gets
 // the chance to observe that there's no capacity for its request.
 func TestQuotaPoolCapacityDecrease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	qp := quotapool.NewIntPool("test", 100)
 	ctx := context.Background()
 
@@ -381,17 +387,16 @@ func TestQuotaPoolCapacityDecrease(t *testing.T) {
 	firstCh := make(chan struct{})
 	doneCh := make(chan struct{})
 	go func() {
-		_, err = qp.AcquireFunc(ctx,
-			func(_ context.Context, pi quotapool.PoolInfo) (took uint64, err error) {
-				if first {
-					first = false
-					close(firstCh)
-				}
-				if pi.Capacity < 100 {
-					return 0, fmt.Errorf("hopeless")
-				}
-				return 0, quotapool.ErrNotEnoughQuota
-			})
+		_, err = qp.AcquireFunc(ctx, func(_ context.Context, pi quotapool.PoolInfo) (took uint64, err error) {
+			if first {
+				first = false
+				close(firstCh)
+			}
+			if pi.Capacity < 100 {
+				return 0, fmt.Errorf("hopeless")
+			}
+			return 0, quotapool.ErrNotEnoughQuota
+		})
 		close(doneCh)
 	}()
 
@@ -405,9 +410,56 @@ func TestQuotaPoolCapacityDecrease(t *testing.T) {
 	}
 }
 
+func TestIntpoolNoWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	qp := quotapool.NewIntPool("test", 2)
+
+	acq1, err := qp.TryAcquire(ctx, 1)
+	require.NoError(t, err)
+
+	acq2, err := qp.TryAcquire(ctx, 1)
+	require.NoError(t, err)
+
+	failed, err := qp.TryAcquire(ctx, 1)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	acq1.Release()
+
+	failed, err = qp.TryAcquire(ctx, 2)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	acq2.Release()
+
+	acq5, err := qp.TryAcquire(ctx, 3)
+	require.NoError(t, err)
+	require.NotNil(t, acq5)
+
+	failed, err = qp.TryAcquireFunc(ctx, func(ctx context.Context, p quotapool.PoolInfo) (took uint64, err error) {
+		require.Equal(t, uint64(0), p.Available)
+		return 0, quotapool.ErrNotEnoughQuota
+	})
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	acq5.Release()
+
+	acq6, err := qp.TryAcquireFunc(ctx, func(ctx context.Context, p quotapool.PoolInfo) (took uint64, err error) {
+		return 1, nil
+	})
+	require.NoError(t, err)
+
+	acq6.Release()
+}
+
 // TestIntpoolRelease tests the Release method of intpool to ensure that it releases
 // what is expected and behaves as documented.
 func TestIntpoolRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
 	const numPools = 3
 	const capacity = 3
@@ -507,6 +559,8 @@ func TestIntpoolRelease(t *testing.T) {
 
 // TestLen verifies that the Len() method of the IntPool works as expected.
 func TestLen(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	qp := quotapool.NewIntPool("test", 1, quotapool.LogSlowAcquisition)
 	ctx := context.Background()
 	allocCh := make(chan *quotapool.IntAlloc)

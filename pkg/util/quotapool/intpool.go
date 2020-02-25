@@ -119,13 +119,29 @@ func NewIntPool(name string, capacity uint64, options ...Option) *IntPool {
 //
 // Safe for concurrent use.
 func (p *IntPool) Acquire(ctx context.Context, v uint64) (*IntAlloc, error) {
+	return p.acquireMaybeWait(ctx, v, true /* wait */)
+}
+
+// TryAcquire is like Acquire but if there is insufficient quota to acquire
+// immediately will return ErrNotEnoughQuota.
+func (p *IntPool) TryAcquire(ctx context.Context, v uint64) (*IntAlloc, error) {
+	return p.acquireMaybeWait(ctx, v, false /* wait */)
+}
+
+func (p *IntPool) acquireMaybeWait(ctx context.Context, v uint64, wait bool) (*IntAlloc, error) {
 	// Special case acquisitions of size 0.
 	if v == 0 {
 		return p.newIntAlloc(v), nil
 	}
 	r := p.newIntRequest(v)
 	defer p.putIntRequest(r)
-	if err := p.qp.Acquire(ctx, r); err != nil {
+	var req Request
+	if wait {
+		req = r
+	} else {
+		req = (*intRequestNoWait)(r)
+	}
+	if err := p.qp.Acquire(ctx, req); err != nil {
 		return nil, err
 	}
 	return p.newIntAlloc(r.want), nil
@@ -191,9 +207,27 @@ type PoolInfo struct {
 // AcquireFunc acquires a quantity of quota determined by a function which is
 // called with a quantity of available quota.
 func (p *IntPool) AcquireFunc(ctx context.Context, f IntRequestFunc) (*IntAlloc, error) {
+	return p.acquireFuncMaybeWait(ctx, f, true /* wait */)
+}
+
+// TryAcquireFunc is like AcquireFunc but if insufficient quota exists will
+// return ErrNotEnoughQuota rather than waiting for quota to become available.
+func (p *IntPool) TryAcquireFunc(ctx context.Context, f IntRequestFunc) (*IntAlloc, error) {
+	return p.acquireFuncMaybeWait(ctx, f, false /* wait */)
+}
+
+func (p *IntPool) acquireFuncMaybeWait(
+	ctx context.Context, f IntRequestFunc, wait bool,
+) (*IntAlloc, error) {
 	r := p.newIntFuncRequest(f)
 	defer p.putIntFuncRequest(r)
-	err := p.qp.Acquire(ctx, r)
+	var req Request
+	if wait {
+		req = r
+	} else {
+		req = (*intFuncRequestNoWait)(r)
+	}
+	err := p.qp.Acquire(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -309,6 +343,20 @@ func (r *intRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, e
 	return true, ia
 }
 
+func (r *intRequest) ShouldWait() bool {
+	return true
+}
+
+type intRequestNoWait intRequest
+
+func (r *intRequestNoWait) Acquire(
+	ctx context.Context, v Resource,
+) (fulfilled bool, extra Resource) {
+	return (*intRequest)(r).Acquire(ctx, v)
+}
+
+func (r *intRequestNoWait) ShouldWait() bool { return false }
+
 // intFuncRequest is used to acquire a quantity from the pool which is not
 // known ahead of time.
 type intFuncRequest struct {
@@ -351,3 +399,15 @@ func min(a, b uint64) (v uint64) {
 	}
 	return b
 }
+
+func (r *intFuncRequest) ShouldWait() bool { return true }
+
+type intFuncRequestNoWait intFuncRequest
+
+func (r *intFuncRequestNoWait) Acquire(
+	ctx context.Context, v Resource,
+) (fulfilled bool, extra Resource) {
+	return (*intFuncRequest)(r).Acquire(ctx, v)
+}
+
+func (r *intFuncRequestNoWait) ShouldWait() bool { return false }
