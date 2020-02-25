@@ -3019,7 +3019,7 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 
 // GetLocation returns the session timezone.
 func (ctx *EvalContext) GetLocation() *time.Location {
-	if ctx.SessionData.DataConversion.Location == nil {
+	if ctx.SessionData == nil || ctx.SessionData.DataConversion.Location == nil {
 		return time.UTC
 	}
 	return ctx.SessionData.DataConversion.Location

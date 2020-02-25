@@ -147,3 +147,15 @@ INSERT INTO test.order VALUES (0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 1, 1), (1, 0,
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE test.order WITH OPTIONS PHYSICAL
+
+# Test that scrubbing timestamp works as expected.
+subtest regression_44992
+
+statement ok
+CREATE TABLE t0(c0 TIMESTAMP UNIQUE); INSERT INTO t0(c0) VALUES(TIMESTAMP '1969-1-1'); INSERT INTO t0(c0) VALUES(TIMESTAMP '1969-1-2')
+
+statement ok
+EXPERIMENTAL SCRUB TABLE t0
+
+statement ok
+DROP TABLE t0
