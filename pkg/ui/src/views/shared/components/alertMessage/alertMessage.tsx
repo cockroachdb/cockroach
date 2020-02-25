@@ -52,11 +52,6 @@ const getIconType = (alertLevel: AlertLevel): string => {
 };
 
 export class AlertMessage extends React.Component<AlertMessageProps> {
-  static defaultProps: Partial<AlertMessageProps> = {
-    link: undefined,
-    text: undefined,
-  };
-
   render() {
     const {
       level,
