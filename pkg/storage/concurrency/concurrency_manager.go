@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,54 +38,66 @@ type managerImpl struct {
 	ltw lockTableWaiter
 	// Waits for transaction completion and detects deadlocks.
 	twq txnWaitQueue
-	// The Store and Range that the manager is responsible for.
-	str Store
-	rng *roachpb.RangeDescriptor
 }
 
-// Store provides some parts of a Store without incurring a dependency. It is a
-// superset of txnwait.StoreInterface.
-type Store interface {
+// Config contains the dependencies to construct a Manager.
+type Config struct {
 	// Identification.
-	NodeDescriptor() *roachpb.NodeDescriptor
+	NodeDesc  *roachpb.NodeDescriptor
+	RangeDesc *roachpb.RangeDescriptor
 	// Components.
-	DB() *client.DB
-	Clock() *hlc.Clock
-	Stopper() *stop.Stopper
-	IntentResolver() IntentResolver
-	// Knobs.
-	GetTxnWaitKnobs() txnwait.TestingKnobs
+	Settings       *cluster.Settings
+	DB             *client.DB
+	Clock          *hlc.Clock
+	Stopper        *stop.Stopper
+	IntentResolver IntentResolver
 	// Metrics.
-	GetTxnWaitMetrics() *txnwait.Metrics
-	GetSlowLatchGauge() *metric.Gauge
+	TxnWaitMetrics *txnwait.Metrics
+	SlowLatchGauge *metric.Gauge
+	// Configs + Knobs.
+	MaxLockTableSize int64
+	TxnWaitKnobs     txnwait.TestingKnobs
+}
+
+func (c *Config) initDefaults() {
+	if c.MaxLockTableSize == 0 {
+		c.MaxLockTableSize = defaultLockTableSize
+	}
 }
 
 // NewManager creates a new concurrency Manager structure.
-func NewManager(store Store, rng *roachpb.RangeDescriptor) Manager {
-	// TODO(nvanbenschoten): make the lockTable size and lockTableWaiter
-	// dependencyCyclePushDelay configurable.
-	m := new(managerImpl)
-	*m = managerImpl{
+func NewManager(cfg Config) Manager {
+	cfg.initDefaults()
+	return &managerImpl{
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
 		// latchManager interface directly, if possible.
 		lm: &latchManagerImpl{
-			m: spanlatch.Make(store.Stopper(), store.GetSlowLatchGauge()),
+			m: spanlatch.Make(
+				cfg.Stopper,
+				cfg.SlowLatchGauge,
+			),
 		},
-		lt: &lockTableImpl{maxLocks: 10000 /* arbitrary */},
+		lt: &lockTableImpl{
+			maxLocks: cfg.MaxLockTableSize,
+		},
 		ltw: &lockTableWaiterImpl{
-			nodeID:                   store.NodeDescriptor().NodeID,
-			stopper:                  store.Stopper(),
-			ir:                       store.IntentResolver(),
-			dependencyCyclePushDelay: defaultDependencyCyclePushDelay,
+			nodeID:  cfg.NodeDesc.NodeID,
+			st:      cfg.Settings,
+			stopper: cfg.Stopper,
+			ir:      cfg.IntentResolver,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
-		twq: txnwait.NewQueue(store, m),
-		str: store,
-		rng: rng,
+		twq: txnwait.NewQueue(txnwait.Config{
+			RangeDesc: cfg.RangeDesc,
+			DB:        cfg.DB,
+			Clock:     cfg.Clock,
+			Stopper:   cfg.Stopper,
+			Metrics:   cfg.TxnWaitMetrics,
+			Knobs:     cfg.TxnWaitKnobs,
+		}),
 	}
-	return m
 }
 
 // SequenceReq implements the RequestSequencer interface.
@@ -308,13 +320,13 @@ func (m *managerImpl) GetDependents(txnID uuid.UUID) []uuid.UUID {
 	return m.twq.GetDependents(txnID)
 }
 
-// OnDescriptorUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnDescriptorUpdated(desc *roachpb.RangeDescriptor) {
-	m.rng = desc
+// OnRangeDescUpdated implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
+	m.twq.OnRangeDescUpdated(desc)
 }
 
-// OnLeaseUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnLeaseUpdated(iAmTheLeaseHolder bool) {
+// OnRangeLeaseUpdated implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeLeaseUpdated(iAmTheLeaseHolder bool) {
 	if iAmTheLeaseHolder {
 		m.twq.Enable()
 	} else {
@@ -323,8 +335,8 @@ func (m *managerImpl) OnLeaseUpdated(iAmTheLeaseHolder bool) {
 	}
 }
 
-// OnSplit implements the RangeStateListener interface.
-func (m *managerImpl) OnSplit() {
+// OnRangeSplit implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeSplit() {
 	// TODO(nvanbenschoten): it only essential that we clear the half of the
 	// lockTable which contains locks in the key range that is being split off
 	// from the current range. For now though, we clear it all.
@@ -332,8 +344,8 @@ func (m *managerImpl) OnSplit() {
 	m.twq.Clear(false /* disable */)
 }
 
-// OnMerge implements the RangeStateListener interface.
-func (m *managerImpl) OnMerge() {
+// OnRangeMerge implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeMerge() {
 	m.lt.Clear()
 	m.twq.Clear(true /* disable */)
 }
@@ -346,11 +358,6 @@ func (m *managerImpl) LatchMetrics() (global, local storagepb.LatchManagerInfo) 
 // LockTableDebug implements the MetricExporter interface.
 func (m *managerImpl) LockTableDebug() string {
 	return m.lt.String()
-}
-
-// ContainsKey implements the txnwait.ReplicaInterface interface.
-func (m *managerImpl) ContainsKey(key roachpb.Key) bool {
-	return storagebase.ContainsKey(m.rng, key)
 }
 
 func (r *Request) isSingle(m roachpb.Method) bool {
