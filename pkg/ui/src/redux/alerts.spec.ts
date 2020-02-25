@@ -22,9 +22,14 @@ import { AdminUIState, createAdminUIStore } from "./state";
 import {
   AlertLevel,
   alertDataSync,
-  staggeredVersionWarningSelector, staggeredVersionDismissedSetting,
-  newVersionNotificationSelector, newVersionDismissedLocalSetting,
-  disconnectedAlertSelector, disconnectedDismissedLocalSetting,
+  staggeredVersionWarningSelector,
+  staggeredVersionDismissedSetting,
+  newVersionNotificationSelector,
+  newVersionDismissedLocalSetting,
+  disconnectedAlertSelector,
+  disconnectedDismissedLocalSetting,
+  emailSubscriptionAlertLocalSetting,
+  emailSubscriptionAlertSelector,
 } from "./alerts";
 import { versionsSelector } from "src/redux/nodes";
 import {
@@ -348,6 +353,26 @@ describe("alerts", function() {
           );
           done();
         });
+      });
+    });
+
+    describe("email signup for release notes alert", () => {
+      it("initialized with default 'false' (hidden) state", () => {
+        const settingState = emailSubscriptionAlertLocalSetting.selector(state());
+        assert.isFalse(settingState);
+      });
+
+      it("dismissed by alert#dismiss", async () => {
+        // set alert to open state
+        dispatch(emailSubscriptionAlertLocalSetting.set(true));
+        let openState = emailSubscriptionAlertLocalSetting.selector(state());
+        assert.isTrue(openState);
+
+        // dismiss alert
+        const alert = emailSubscriptionAlertSelector(state());
+        await alert.dismiss(dispatch, state);
+        openState = emailSubscriptionAlertLocalSetting.selector(state());
+        assert.isFalse(openState);
       });
     });
   });
