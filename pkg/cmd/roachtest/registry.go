@@ -32,6 +32,7 @@ func registerTests(r *testRegistry) {
 	registerDrop(r)
 	registerElectionAfterRestart(r)
 	registerEncryption(r)
+	registerEngineSwitch(r)
 	registerFlowable(r)
 	registerFollowerReads(r)
 	registerGopg(r)
