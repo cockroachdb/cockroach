@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-
+import { RequestError } from "src/util/api";
 import spinner from "assets/spinner.gif";
 import "./index.styl";
 
@@ -43,6 +43,18 @@ function getValidErrorsList (errors?: Error | Error[] | null): Error[] | null {
 }
 
 /**
+ * getDetails produces a hint for the given error object.
+ */
+function getDetails (error: Error): string {
+  if (error instanceof RequestError) {
+     if (error.status === 403) {
+       return "insufficient privileges to view this resource";
+     }
+  }
+  return "no details available";
+}
+
+/**
  * Loading will display a background image instead of the content if the
  * loading prop is true.
  */
@@ -64,9 +76,8 @@ export default function Loading(props: LoadingProps) {
         <p>{errorCountMessage} while loading this data:</p>
         <ul>
           {errors.map((error, idx) => (
-            <li key={idx}>
-              <pre>{error.message}</pre>
-            </li>
+            <li key={idx}><b>{error.message}</b>
+            <p>{getDetails(error)}</p></li>
           ))}
         </ul>
       </div>
