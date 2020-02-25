@@ -532,48 +532,68 @@ insert xyz
  │    ├── column1:4 => x:1
  │    ├── column2:5 => y:2
  │    └── column3:6 => z:3
- └── project
+ └── upsert-distinct-on
       ├── columns: column1:4!null column2:5!null column3:6!null
-      └── select
-           ├── columns: column1:4!null column2:5!null column3:6!null x:13 y:14 z:15
-           ├── left-join (hash)
-           │    ├── columns: column1:4!null column2:5!null column3:6!null x:13 y:14 z:15
-           │    ├── project
-           │    │    ├── columns: column1:4!null column2:5!null column3:6!null
-           │    │    └── select
-           │    │         ├── columns: column1:4!null column2:5!null column3:6!null x:10 y:11 z:12
-           │    │         ├── left-join (hash)
-           │    │         │    ├── columns: column1:4!null column2:5!null column3:6!null x:10 y:11 z:12
-           │    │         │    ├── project
-           │    │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null
-           │    │         │    │    └── select
-           │    │         │    │         ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
-           │    │         │    │         ├── left-join (hash)
-           │    │         │    │         │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
-           │    │         │    │         │    ├── values
-           │    │         │    │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null
-           │    │         │    │         │    │    ├── (1, 2, 3)
-           │    │         │    │         │    │    └── (4, 5, 6)
-           │    │         │    │         │    ├── scan xyz
-           │    │         │    │         │    │    └── columns: x:7!null y:8 z:9
-           │    │         │    │         │    └── filters
-           │    │         │    │         │         └── column1:4 = x:7
-           │    │         │    │         └── filters
-           │    │         │    │              └── x:7 IS NULL
-           │    │         │    ├── scan xyz
-           │    │         │    │    └── columns: x:10!null y:11 z:12
-           │    │         │    └── filters
-           │    │         │         ├── column2:5 = y:11
-           │    │         │         └── column3:6 = z:12
-           │    │         └── filters
-           │    │              └── x:10 IS NULL
-           │    ├── scan xyz
-           │    │    └── columns: x:13!null y:14 z:15
-           │    └── filters
-           │         ├── column3:6 = z:15
-           │         └── column2:5 = y:14
-           └── filters
-                └── x:13 IS NULL
+      ├── grouping columns: column2:5!null column3:6!null
+      ├── project
+      │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │    └── select
+      │         ├── columns: column1:4!null column2:5!null column3:6!null x:13 y:14 z:15
+      │         ├── left-join (hash)
+      │         │    ├── columns: column1:4!null column2:5!null column3:6!null x:13 y:14 z:15
+      │         │    ├── upsert-distinct-on
+      │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │         │    │    ├── grouping columns: column2:5!null column3:6!null
+      │         │    │    ├── project
+      │         │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │         │    │    │    └── select
+      │         │    │    │         ├── columns: column1:4!null column2:5!null column3:6!null x:10 y:11 z:12
+      │         │    │    │         ├── left-join (hash)
+      │         │    │    │         │    ├── columns: column1:4!null column2:5!null column3:6!null x:10 y:11 z:12
+      │         │    │    │         │    ├── upsert-distinct-on
+      │         │    │    │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │         │    │    │         │    │    ├── grouping columns: column1:4!null
+      │         │    │    │         │    │    ├── project
+      │         │    │    │         │    │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │         │    │    │         │    │    │    └── select
+      │         │    │    │         │    │    │         ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
+      │         │    │    │         │    │    │         ├── left-join (hash)
+      │         │    │    │         │    │    │         │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
+      │         │    │    │         │    │    │         │    ├── values
+      │         │    │    │         │    │    │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │         │    │    │         │    │    │         │    │    ├── (1, 2, 3)
+      │         │    │    │         │    │    │         │    │    └── (4, 5, 6)
+      │         │    │    │         │    │    │         │    ├── scan xyz
+      │         │    │    │         │    │    │         │    │    └── columns: x:7!null y:8 z:9
+      │         │    │    │         │    │    │         │    └── filters
+      │         │    │    │         │    │    │         │         └── column1:4 = x:7
+      │         │    │    │         │    │    │         └── filters
+      │         │    │    │         │    │    │              └── x:7 IS NULL
+      │         │    │    │         │    │    └── aggregations
+      │         │    │    │         │    │         ├── first-agg [as=column2:5]
+      │         │    │    │         │    │         │    └── column2:5
+      │         │    │    │         │    │         └── first-agg [as=column3:6]
+      │         │    │    │         │    │              └── column3:6
+      │         │    │    │         │    ├── scan xyz
+      │         │    │    │         │    │    └── columns: x:10!null y:11 z:12
+      │         │    │    │         │    └── filters
+      │         │    │    │         │         ├── column2:5 = y:11
+      │         │    │    │         │         └── column3:6 = z:12
+      │         │    │    │         └── filters
+      │         │    │    │              └── x:10 IS NULL
+      │         │    │    └── aggregations
+      │         │    │         └── first-agg [as=column1:4]
+      │         │    │              └── column1:4
+      │         │    ├── scan xyz
+      │         │    │    └── columns: x:13!null y:14 z:15
+      │         │    └── filters
+      │         │         ├── column3:6 = z:15
+      │         │         └── column2:5 = y:14
+      │         └── filters
+      │              └── x:13 IS NULL
+      └── aggregations
+           └── first-agg [as=column1:4]
+                └── column1:4
 
 # Conflict columns are explicitly specified.
 build
@@ -587,23 +607,29 @@ insert xyz
  │    ├── column1:4 => x:1
  │    ├── column2:5 => y:2
  │    └── column3:6 => z:3
- └── project
+ └── upsert-distinct-on
       ├── columns: column1:4!null column2:5!null column3:6!null
-      └── select
-           ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
-           ├── left-join (hash)
-           │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
-           │    ├── values
-           │    │    ├── columns: column1:4!null column2:5!null column3:6!null
-           │    │    ├── (1, 2, 3)
-           │    │    └── (4, 5, 6)
-           │    ├── scan xyz
-           │    │    └── columns: x:7!null y:8 z:9
-           │    └── filters
-           │         ├── column2:5 = y:8
-           │         └── column3:6 = z:9
-           └── filters
-                └── x:7 IS NULL
+      ├── grouping columns: column2:5!null column3:6!null
+      ├── project
+      │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │    └── select
+      │         ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
+      │         ├── left-join (hash)
+      │         │    ├── columns: column1:4!null column2:5!null column3:6!null x:7 y:8 z:9
+      │         │    ├── values
+      │         │    │    ├── columns: column1:4!null column2:5!null column3:6!null
+      │         │    │    ├── (1, 2, 3)
+      │         │    │    └── (4, 5, 6)
+      │         │    ├── scan xyz
+      │         │    │    └── columns: x:7!null y:8 z:9
+      │         │    └── filters
+      │         │         ├── column2:5 = y:8
+      │         │         └── column3:6 = z:9
+      │         └── filters
+      │              └── x:7 IS NULL
+      └── aggregations
+           └── first-agg [as=column1:4]
+                └── column1:4
 
 # ------------------------------------------------------------------------------
 # Test excluded columns.
@@ -1367,35 +1393,45 @@ insert checks
  ├── check columns: check1:13 check2:14
  └── project
       ├── columns: check1:13 check2:14!null column1:5!null column2:6!null column7:7 column8:8
-      ├── project
+      ├── upsert-distinct-on
       │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
-      │    └── select
-      │         ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
-      │         ├── left-join (hash)
-      │         │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
-      │         │    ├── project
-      │         │    │    ├── columns: column8:8 column1:5!null column2:6!null column7:7
-      │         │    │    ├── project
-      │         │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │         │    │    │    ├── values
-      │         │    │    │    │    ├── columns: column1:5!null column2:6!null
-      │         │    │    │    │    └── (1, 2)
-      │         │    │    │    └── projections
-      │         │    │    │         └── NULL::INT8 [as=column7:7]
-      │         │    │    └── projections
-      │         │    │         └── column7:7 + 1 [as=column8:8]
-      │         │    ├── scan checks
-      │         │    │    ├── columns: a:9!null b:10 c:11 d:12
-      │         │    │    ├── check constraint expressions
-      │         │    │    │    ├── b:10 < d:12
-      │         │    │    │    └── a:9 > 0
-      │         │    │    └── computed column expressions
-      │         │    │         └── d:12
-      │         │    │              └── c:11 + 1
-      │         │    └── filters
-      │         │         └── column1:5 = a:9
-      │         └── filters
-      │              └── a:9 IS NULL
+      │    ├── grouping columns: column1:5!null
+      │    ├── project
+      │    │    ├── columns: column1:5!null column2:6!null column7:7 column8:8
+      │    │    └── select
+      │    │         ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
+      │    │         ├── left-join (hash)
+      │    │         │    ├── columns: column1:5!null column2:6!null column7:7 column8:8 a:9 b:10 c:11 d:12
+      │    │         │    ├── project
+      │    │         │    │    ├── columns: column8:8 column1:5!null column2:6!null column7:7
+      │    │         │    │    ├── project
+      │    │         │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+      │    │         │    │    │    ├── values
+      │    │         │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │         │    │    │    │    └── (1, 2)
+      │    │         │    │    │    └── projections
+      │    │         │    │    │         └── NULL::INT8 [as=column7:7]
+      │    │         │    │    └── projections
+      │    │         │    │         └── column7:7 + 1 [as=column8:8]
+      │    │         │    ├── scan checks
+      │    │         │    │    ├── columns: a:9!null b:10 c:11 d:12
+      │    │         │    │    ├── check constraint expressions
+      │    │         │    │    │    ├── b:10 < d:12
+      │    │         │    │    │    └── a:9 > 0
+      │    │         │    │    └── computed column expressions
+      │    │         │    │         └── d:12
+      │    │         │    │              └── c:11 + 1
+      │    │         │    └── filters
+      │    │         │         └── column1:5 = a:9
+      │    │         └── filters
+      │    │              └── a:9 IS NULL
+      │    └── aggregations
+      │         ├── first-agg [as=column2:6]
+      │         │    └── column2:6
+      │         ├── first-agg [as=column7:7]
+      │         │    └── column7:7
+      │         └── first-agg [as=column8:8]
+      │              └── column8:8
       └── projections
            ├── column2:6 < column8:8 [as=check1:13]
            └── column1:5 > 0 [as=check2:14]

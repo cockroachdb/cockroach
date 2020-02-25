@@ -2190,37 +2190,31 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 		// equivalent).
 		newOrd.Simplify(&input.Relational().FuncDeps)
 
+		newPrivate := *private
+		newPrivate.Ordering = newOrd
+
 		switch op {
 		case opt.GroupByOp:
 			newExpr := memo.GroupByExpr{
-				Input:        input,
-				Aggregations: aggs,
-				GroupingPrivate: memo.GroupingPrivate{
-					GroupingCols: private.GroupingCols,
-					Ordering:     newOrd,
-				},
+				Input:           input,
+				Aggregations:    aggs,
+				GroupingPrivate: newPrivate,
 			}
 			c.e.mem.AddGroupByToGroup(&newExpr, grp)
 
 		case opt.DistinctOnOp:
 			newExpr := memo.DistinctOnExpr{
-				Input:        input,
-				Aggregations: aggs,
-				GroupingPrivate: memo.GroupingPrivate{
-					GroupingCols: private.GroupingCols,
-					Ordering:     newOrd,
-				},
+				Input:           input,
+				Aggregations:    aggs,
+				GroupingPrivate: newPrivate,
 			}
 			c.e.mem.AddDistinctOnToGroup(&newExpr, grp)
 
 		case opt.UpsertDistinctOnOp:
 			newExpr := memo.UpsertDistinctOnExpr{
-				Input:        input,
-				Aggregations: aggs,
-				GroupingPrivate: memo.GroupingPrivate{
-					GroupingCols: private.GroupingCols,
-					Ordering:     newOrd,
-				},
+				Input:           input,
+				Aggregations:    aggs,
+				GroupingPrivate: newPrivate,
 			}
 			c.e.mem.AddUpsertDistinctOnToGroup(&newExpr, grp)
 		}

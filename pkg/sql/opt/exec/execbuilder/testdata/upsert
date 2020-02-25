@@ -107,7 +107,7 @@ count                                         ·                      ·
                 └── distinct                  ·                      ·
                      │                        distinct on            k
                      │                        nulls are distinct     ·
-                     │                        error on dups          ·
+                     │                        error on duplicate     ·
                      └── render               ·                      ·
                           │                   render 0               CAST(NULL AS INT8)
                           │                   render 1               k
@@ -505,7 +505,7 @@ count                                 ·                      ·                
                      └── distinct     ·                      ·                                            (column1, column2, column3)                        ·
                           │           distinct on            column2, column3                             ·                                                  ·
                           │           nulls are distinct     ·                                            ·                                                  ·
-                          │           error on dups          ·                                            ·                                                  ·
+                          │           error on duplicate     ·                                            ·                                                  ·
                           └── values  ·                      ·                                            (column1, column2, column3)                        ·
 ·                                     size                   3 columns, 2 rows                            ·                                                  ·
 ·                                     row 0, expr 0          2                                            ·                                                  ·
@@ -561,7 +561,7 @@ count                               ·                      ·                  
                      └── distinct   ·                      ·                                      (x, y, z)                        ·
                           │         distinct on            y, z                                   ·                                ·
                           │         nulls are distinct     ·                                      ·                                ·
-                          │         error on dups          ·                                      ·                                ·
+                          │         error on duplicate     ·                                      ·                                ·
                           │         order key              y, z                                   ·                                ·
                           └── scan  ·                      ·                                      (x, y, z)                        +y,+z
 ·                                   table                  source@source_y_z_idx                  ·                                ·
