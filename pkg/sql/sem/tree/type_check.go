@@ -1711,10 +1711,14 @@ func typeCheckComparisonOp(
 	}
 	leftReturn := leftExpr.ResolvedType()
 	rightReturn := rightExpr.ResolvedType()
+	leftFamily := leftReturn.Family()
+	rightFamily := rightReturn.Family()
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn.Family() == types.UnknownFamily || rightReturn.Family() == types.UnknownFamily {
+	nullComparison := false
+	if leftFamily == types.UnknownFamily || rightFamily == types.UnknownFamily {
+		nullComparison = true
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -1729,13 +1733,23 @@ func typeCheckComparisonOp(
 		}
 	}
 
+	leftIsGeneric := leftFamily == types.CollatedStringFamily || leftFamily == types.ArrayFamily
+	rightIsGeneric := rightFamily == types.CollatedStringFamily || rightFamily == types.ArrayFamily
+	genericComparison := leftIsGeneric && rightIsGeneric
+
+	typeMismatch := false
+	if genericComparison && !nullComparison {
+		// A generic comparison (one between two generic types, like arrays) is not
+		// well-typed if the two input types are not equivalent, unless one of the
+		// sides is NULL.
+		typeMismatch = !leftReturn.Equivalent(rightReturn)
+	}
+
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
-	collationMismatch :=
-		leftReturn.Family() == types.CollatedStringFamily && !leftReturn.Equivalent(rightReturn)
-	if len(fns) != 1 || collationMismatch {
+	if len(fns) != 1 || typeMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
-		if len(fns) == 0 || collationMismatch {
+		if len(fns) == 0 || typeMismatch {
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
