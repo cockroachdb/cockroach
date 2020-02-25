@@ -12,30 +12,26 @@ UPDATE abc SET b = other.b + 1, c = other.c + 1 FROM abc AS other WHERE abc.a = 
 ----
 update abc
  ├── columns: <none>
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  column10:10 => abc.b:2
- │    └──  column11:11 => abc.c:3
+ │    ├── column10:10 => abc.b:2
+ │    └── column11:11 => abc.c:3
  └── project
-      ├── columns: column10:10(int) column11:11(int) abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int)
+      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 other.a:7!null other.b:8 other.c:9
       ├── inner-join (merge)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 other.a:7!null other.b:8 other.c:9
       │    ├── left ordering: +4
       │    ├── right ordering: +7
       │    ├── scan abc
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── ordering: +4
       │    ├── scan other
-      │    │    ├── columns: other.a:7(int!null) other.b:8(int) other.c:9(int)
+      │    │    ├── columns: other.a:7!null other.b:8 other.c:9
       │    │    └── ordering: +7
       │    └── filters (true)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: other.b [type=int]
-           │    └── const: 1 [type=int]
-           └── plus [type=int]
-                ├── variable: other.c [type=int]
-                └── const: 1 [type=int]
+           ├── other.b:8 + 1 [as=column10:10]
+           └── other.c:9 + 1 [as=column11:11]
 
 # Test when Update uses multiple tables.
 opt
@@ -43,36 +39,34 @@ UPDATE abc SET b = other.b, c = other.c FROM new_abc AS other WHERE abc.a = othe
 ----
 update abc
  ├── columns: <none>
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  other.b:8 => abc.b:2
- │    └──  other.c:9 => abc.c:3
+ │    ├── other.b:8 => abc.b:2
+ │    └── other.c:9 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int) rowid:10(int!null)
-      ├── grouping columns: abc.a:4(int!null)
+      ├── columns: abc.a:4!null abc.b:5 abc.c:6 other.a:7!null other.b:8 other.c:9 rowid:10!null
+      ├── grouping columns: abc.a:4!null
       ├── inner-join (hash)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int) rowid:10(int!null)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 other.a:7!null other.b:8 other.c:9 rowid:10!null
       │    ├── scan abc
-      │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    └── columns: abc.a:4!null abc.b:5 abc.c:6
       │    ├── scan other
-      │    │    └── columns: other.a:7(int) other.b:8(int) other.c:9(int) rowid:10(int!null)
+      │    │    └── columns: other.a:7 other.b:8 other.c:9 rowid:10!null
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: abc.a [type=int]
-      │              └── variable: other.a [type=int]
+      │         └── abc.a:4 = other.a:7
       └── aggregations
-           ├── first-agg [type=int]
-           │    └── variable: abc.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: abc.c [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: other.a [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: other.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: other.c [type=int]
-           └── first-agg [type=int]
-                └── variable: rowid [type=int]
+           ├── first-agg [as=abc.b:5]
+           │    └── abc.b:5
+           ├── first-agg [as=abc.c:6]
+           │    └── abc.c:6
+           ├── first-agg [as=other.a:7]
+           │    └── other.a:7
+           ├── first-agg [as=other.b:8]
+           │    └── other.b:8
+           ├── first-agg [as=other.c:9]
+           │    └── other.c:9
+           └── first-agg [as=rowid:10]
+                └── rowid:10
 
 # Check if UPDATE FROM works well with RETURNING expressions that reference the FROM tables.
 opt
@@ -87,62 +81,54 @@ RETURNING
   abc.a, abc.b AS new_b, old.b as old_b, abc.c as new_c, old.c as old_c
 ----
 update abc
- ├── columns: a:1(int!null) new_b:2(int) old_b:8(int) new_c:3(int) old_c:9(int)
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── columns: a:1!null new_b:2 old_b:8 new_c:3 old_c:9
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  column10:10 => abc.b:2
- │    └──  column11:11 => abc.c:3
+ │    ├── column10:10 => abc.b:2
+ │    └── column11:11 => abc.c:3
  └── project
-      ├── columns: column10:10(int) column11:11(int) abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.b:8(int) old.c:9(int)
+      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 old.b:8 old.c:9
       ├── inner-join (merge)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       │    ├── left ordering: +4
       │    ├── right ordering: +7
       │    ├── scan abc
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── ordering: +4
       │    ├── scan old
-      │    │    ├── columns: old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    │    ├── columns: old.a:7!null old.b:8 old.c:9
       │    │    └── ordering: +7
       │    └── filters (true)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: old.b [type=int]
-           │    └── const: 1 [type=int]
-           └── plus [type=int]
-                ├── variable: old.c [type=int]
-                └── const: 2 [type=int]
+           ├── old.b:8 + 1 [as=column10:10]
+           └── old.c:9 + 2 [as=column11:11]
 
 # Check if RETURNING * returns everything
 opt
 UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a RETURNING *
 ----
 update abc
- ├── columns: a:1(int!null) b:2(int) c:3(int) a:7(int) b:8(int) c:9(int)
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── columns: a:1!null b:2 c:3 a:7 b:8 c:9
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  column10:10 => abc.b:2
- │    └──  column11:11 => abc.c:3
+ │    ├── column10:10 => abc.b:2
+ │    └── column11:11 => abc.c:3
  └── project
-      ├── columns: column10:10(int) column11:11(int) abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
+      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       ├── inner-join (merge)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       │    ├── left ordering: +4
       │    ├── right ordering: +7
       │    ├── scan abc
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── ordering: +4
       │    ├── scan old
-      │    │    ├── columns: old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    │    ├── columns: old.a:7!null old.b:8 old.c:9
       │    │    └── ordering: +7
       │    └── filters (true)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: old.b [type=int]
-           │    └── const: 1 [type=int]
-           └── plus [type=int]
-                ├── variable: old.c [type=int]
-                └── const: 2 [type=int]
+           ├── old.b:8 + 1 [as=column10:10]
+           └── old.c:9 + 2 [as=column11:11]
 
 # Check if the joins are optimized (check if the filters are pushed down).
 opt
@@ -150,30 +136,26 @@ UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a 
 ----
 update abc
  ├── columns: <none>
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  column10:10 => abc.b:2
- │    └──  column11:11 => abc.c:3
+ │    ├── column10:10 => abc.b:2
+ │    └── column11:11 => abc.c:3
  └── project
-      ├── columns: column10:10(int) column11:11(int) abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
+      ├── columns: column10:10 column11:11 abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       ├── inner-join (merge)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 old.a:7!null old.b:8 old.c:9
       │    ├── left ordering: +4
       │    ├── right ordering: +7
       │    ├── scan abc
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── constraint: /4: [/2 - /2]
       │    ├── scan old
-      │    │    ├── columns: old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    │    ├── columns: old.a:7!null old.b:8 old.c:9
       │    │    └── constraint: /7: [/2 - /2]
       │    └── filters (true)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: old.b [type=int]
-           │    └── const: 1 [type=int]
-           └── plus [type=int]
-                ├── variable: old.c [type=int]
-                └── const: 2 [type=int]
+           ├── old.b:8 + 1 [as=column10:10]
+           └── old.c:9 + 2 [as=column11:11]
 
 # Update values of table from values expression
 opt
@@ -181,39 +163,33 @@ UPDATE abc SET b = other.b, c = other.c FROM (values (1, 2, 3), (2, 3, 4)) as ot
 ----
 update abc
  ├── columns: <none>
- ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── fetch columns: a:4 b:5 c:6
  ├── update-mapping:
- │    ├──  column2:8 => b:2
- │    └──  column3:9 => c:3
+ │    ├── column2:8 => b:2
+ │    └── column3:9 => c:3
  └── distinct-on
-      ├── columns: a:4(int!null) b:5(int) c:6(int) column1:7(int!null) column2:8(int!null) column3:9(int!null)
-      ├── grouping columns: a:4(int!null)
+      ├── columns: a:4!null b:5 c:6 column1:7!null column2:8!null column3:9!null
+      ├── grouping columns: a:4!null
       ├── inner-join (lookup abc)
-      │    ├── columns: a:4(int!null) b:5(int) c:6(int) column1:7(int!null) column2:8(int!null) column3:9(int!null)
+      │    ├── columns: a:4!null b:5 c:6 column1:7!null column2:8!null column3:9!null
       │    ├── key columns: [7] = [4]
       │    ├── lookup columns are key
       │    ├── values
-      │    │    ├── columns: column1:7(int!null) column2:8(int!null) column3:9(int!null)
-      │    │    ├── tuple [type=tuple{int, int, int}]
-      │    │    │    ├── const: 1 [type=int]
-      │    │    │    ├── const: 2 [type=int]
-      │    │    │    └── const: 3 [type=int]
-      │    │    └── tuple [type=tuple{int, int, int}]
-      │    │         ├── const: 2 [type=int]
-      │    │         ├── const: 3 [type=int]
-      │    │         └── const: 4 [type=int]
+      │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    ├── (1, 2, 3)
+      │    │    └── (2, 3, 4)
       │    └── filters (true)
       └── aggregations
-           ├── first-agg [type=int]
-           │    └── variable: b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: c [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: column1 [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: column2 [type=int]
-           └── first-agg [type=int]
-                └── variable: column3 [type=int]
+           ├── first-agg [as=b:5]
+           │    └── b:5
+           ├── first-agg [as=c:6]
+           │    └── c:6
+           ├── first-agg [as=column1:7]
+           │    └── column1:7
+           ├── first-agg [as=column2:8]
+           │    └── column2:8
+           └── first-agg [as=column3:9]
+                └── column3:9
 
 # Check if UPDATE ... FROM works with multiple tables.
 exec-ddl
@@ -229,48 +205,44 @@ UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.
 ----
 update abc
  ├── columns: <none>
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  ab.b:8 => abc.b:2
- │    └──  ac.c:11 => abc.c:3
+ │    ├── ab.b:8 => abc.b:2
+ │    └── ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
-      ├── grouping columns: abc.a:4(int!null)
+      ├── columns: abc.a:4!null abc.b:5 abc.c:6 ab.a:7!null ab.b:8 ab.rowid:9!null ac.a:10!null ac.c:11 ac.rowid:12!null
+      ├── grouping columns: abc.a:4!null
       ├── inner-join (hash)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 ab.a:7!null ab.b:8 ab.rowid:9!null ac.a:10!null ac.c:11 ac.rowid:12!null
       │    ├── scan ab
-      │    │    └── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
+      │    │    └── columns: ab.a:7 ab.b:8 ab.rowid:9!null
       │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
+      │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 ac.a:10!null ac.c:11 ac.rowid:12!null
       │    │    ├── scan ac
-      │    │    │    └── columns: ac.a:10(int) ac.c:11(int) ac.rowid:12(int!null)
+      │    │    │    └── columns: ac.a:10 ac.c:11 ac.rowid:12!null
       │    │    ├── scan abc
-      │    │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    │    └── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: abc.a [type=int]
-      │    │              └── variable: ac.a [type=int]
+      │    │         └── abc.a:4 = ac.a:10
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: ab.a [type=int]
-      │              └── variable: abc.a [type=int]
+      │         └── ab.a:7 = abc.a:4
       └── aggregations
-           ├── first-agg [type=int]
-           │    └── variable: abc.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: abc.c [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.a [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.rowid [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ac.a [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ac.c [type=int]
-           └── first-agg [type=int]
-                └── variable: ac.rowid [type=int]
+           ├── first-agg [as=abc.b:5]
+           │    └── abc.b:5
+           ├── first-agg [as=abc.c:6]
+           │    └── abc.c:6
+           ├── first-agg [as=ab.a:7]
+           │    └── ab.a:7
+           ├── first-agg [as=ab.b:8]
+           │    └── ab.b:8
+           ├── first-agg [as=ab.rowid:9]
+           │    └── ab.rowid:9
+           ├── first-agg [as=ac.a:10]
+           │    └── ac.a:10
+           ├── first-agg [as=ac.c:11]
+           │    └── ac.c:11
+           └── first-agg [as=ac.rowid:12]
+                └── ac.rowid:12
 
 # Make sure UPDATE ... FROM works with LATERAL.
 opt
@@ -286,45 +258,41 @@ RETURNING
   *
 ----
 update abc
- ├── columns: a:1(int!null) b:2(int) c:3(int) a:7(int) b:8(int) a:10(int) c:11(int)
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── columns: a:1!null b:2 c:3 a:7 b:8 a:10 c:11
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  ab.b:8 => abc.b:2
- │    └──  ac.c:11 => abc.c:3
+ │    ├── ab.b:8 => abc.b:2
+ │    └── ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ac.a:10(int!null) ac.c:11(int)
-      ├── grouping columns: abc.a:4(int!null)
+      ├── columns: abc.a:4!null abc.b:5 abc.c:6 ab.a:7!null ab.b:8 ac.a:10!null ac.c:11
+      ├── grouping columns: abc.a:4!null
       ├── inner-join (hash)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ac.a:10(int!null) ac.c:11(int)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 ab.a:7!null ab.b:8 ac.a:10!null ac.c:11
       │    ├── scan ab
-      │    │    └── columns: ab.a:7(int) ab.b:8(int)
+      │    │    └── columns: ab.a:7 ab.b:8
       │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ac.a:10(int!null) ac.c:11(int)
+      │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 ac.a:10!null ac.c:11
       │    │    ├── scan ac
-      │    │    │    └── columns: ac.a:10(int) ac.c:11(int)
+      │    │    │    └── columns: ac.a:10 ac.c:11
       │    │    ├── scan abc
-      │    │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    │    └── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: abc.a [type=int]
-      │    │              └── variable: ac.a [type=int]
+      │    │         └── abc.a:4 = ac.a:10
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: ab.a [type=int]
-      │              └── variable: abc.a [type=int]
+      │         └── ab.a:7 = abc.a:4
       └── aggregations
-           ├── first-agg [type=int]
-           │    └── variable: abc.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: abc.c [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.a [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ac.a [type=int]
-           └── first-agg [type=int]
-                └── variable: ac.c [type=int]
+           ├── first-agg [as=abc.b:5]
+           │    └── abc.b:5
+           ├── first-agg [as=abc.c:6]
+           │    └── abc.c:6
+           ├── first-agg [as=ab.a:7]
+           │    └── ab.a:7
+           ├── first-agg [as=ab.b:8]
+           │    └── ab.b:8
+           ├── first-agg [as=ac.a:10]
+           │    └── ac.a:10
+           └── first-agg [as=ac.c:11]
+                └── ac.c:11
 
 # Make sure UPDATE ... FROM can return hidden columns.
 opt
@@ -339,46 +307,42 @@ RETURNING
   *, ab.rowid, ac.rowid
 ----
 update abc
- ├── columns: a:1(int!null) b:2(int) c:3(int) a:7(int) b:8(int) a:10(int) c:11(int) rowid:9(int) rowid:12(int)
- ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── columns: a:1!null b:2 c:3 a:7 b:8 a:10 c:11 rowid:9 rowid:12
+ ├── fetch columns: abc.a:4 abc.b:5 abc.c:6
  ├── update-mapping:
- │    ├──  ab.b:8 => abc.b:2
- │    └──  ac.c:11 => abc.c:3
+ │    ├── ab.b:8 => abc.b:2
+ │    └── ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
-      ├── grouping columns: abc.a:4(int!null)
+      ├── columns: abc.a:4!null abc.b:5 abc.c:6 ab.a:7!null ab.b:8 ab.rowid:9!null ac.a:10!null ac.c:11 ac.rowid:12!null
+      ├── grouping columns: abc.a:4!null
       ├── inner-join (hash)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
+      │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 ab.a:7!null ab.b:8 ab.rowid:9!null ac.a:10!null ac.c:11 ac.rowid:12!null
       │    ├── scan ab
-      │    │    └── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
+      │    │    └── columns: ab.a:7 ab.b:8 ab.rowid:9!null
       │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
+      │    │    ├── columns: abc.a:4!null abc.b:5 abc.c:6 ac.a:10!null ac.c:11 ac.rowid:12!null
       │    │    ├── scan ac
-      │    │    │    └── columns: ac.a:10(int) ac.c:11(int) ac.rowid:12(int!null)
+      │    │    │    └── columns: ac.a:10 ac.c:11 ac.rowid:12!null
       │    │    ├── scan abc
-      │    │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    │    └── columns: abc.a:4!null abc.b:5 abc.c:6
       │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: abc.a [type=int]
-      │    │              └── variable: ac.a [type=int]
+      │    │         └── abc.a:4 = ac.a:10
       │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: ab.a [type=int]
-      │              └── variable: abc.a [type=int]
+      │         └── ab.a:7 = abc.a:4
       └── aggregations
-           ├── first-agg [type=int]
-           │    └── variable: abc.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: abc.c [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.a [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.b [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ab.rowid [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ac.a [type=int]
-           ├── first-agg [type=int]
-           │    └── variable: ac.c [type=int]
-           └── first-agg [type=int]
-                └── variable: ac.rowid [type=int]
+           ├── first-agg [as=abc.b:5]
+           │    └── abc.b:5
+           ├── first-agg [as=abc.c:6]
+           │    └── abc.c:6
+           ├── first-agg [as=ab.a:7]
+           │    └── ab.a:7
+           ├── first-agg [as=ab.b:8]
+           │    └── ab.b:8
+           ├── first-agg [as=ab.rowid:9]
+           │    └── ab.rowid:9
+           ├── first-agg [as=ac.a:10]
+           │    └── ac.a:10
+           ├── first-agg [as=ac.c:11]
+           │    └── ac.c:11
+           └── first-agg [as=ac.rowid:12]
+                └── ac.rowid:12

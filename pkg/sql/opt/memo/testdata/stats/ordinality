@@ -39,7 +39,7 @@ select
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
-      └── (ordinality > 0) AND (ordinality <= 10) [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
+      └── (ordinality:3 > 0) AND (ordinality:3 <= 10) [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
 
 norm
 SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE y > 0 AND y <= 10
@@ -60,7 +60,7 @@ select
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
-      └── (y > 0) AND (y <= 10) [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
+      └── (y:2 > 0) AND (y:2 <= 10) [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
 
 norm
 SELECT 1 x FROM a WITH ORDINALITY
@@ -76,7 +76,7 @@ project
  │    └── scan a
  │         └── stats: [rows=4000]
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as=x:4, type=int]
 
 norm
 SELECT x FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinality <= 10
@@ -102,7 +102,7 @@ project
       │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
       │         └── key: (1)
       └── filters
-           └── (ordinality > 0) AND (ordinality <= 10) [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
+           └── (ordinality:3 > 0) AND (ordinality:3 <= 10) [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
 
 
 norm
@@ -125,7 +125,7 @@ select
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
-      └── ordinality = 2 [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+      └── ordinality:3 = 2 [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
 build
 SELECT DISTINCT ordinality FROM (SELECT * FROM a WITH ORDINALITY)

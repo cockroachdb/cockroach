@@ -79,11 +79,11 @@ func grantRolePlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "GRANT <role>",
-		); err != nil {
-			return err
-		}
+		// Note: we do not check the license for GRANT <role>, only for
+		// CREATE/DROP <role>. This is because we want to allow
+		// non-licensed users to add/remove users from the admin role, so
+		// they can grant administrative privileges to user accounts that
+		// are not superusers like "root".
 
 		hasAdminRole, err := p.HasAdminRole(ctx)
 		if err != nil {
@@ -233,11 +233,11 @@ func revokeRolePlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "REVOKE <role>",
-		); err != nil {
-			return err
-		}
+		// Note: we do not check the license for REVOKE <role>, only for
+		// CREATE/DROP <role>. This is because we want to allow
+		// non-licensed users to add/remove users from the admin role, so
+		// they can grant administrative privileges to user accounts that
+		// are not superusers like "root".
 
 		hasAdminRole, err := p.HasAdminRole(ctx)
 		if err != nil {

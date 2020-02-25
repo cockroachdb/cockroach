@@ -86,9 +86,9 @@ project
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
-           ├── (rowid >= 5) AND (rowid <= 8) [type=bool, outer=(3), constraints=(/3: [/5 - /8]; tight)]
-           ├── x = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-           └── z = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+           ├── (rowid:3 >= 5) AND (rowid:3 <= 8) [type=bool, outer=(3), constraints=(/3: [/5 - /8]; tight)]
+           ├── x:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── z:2 = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
 
 # Can't determine stats from filter.
 norm
@@ -105,7 +105,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
-      └── (x + y) < 10 [type=bool, outer=(1,2)]
+      └── (x:1 + y:2) < 10 [type=bool, outer=(1,2)]
 
 # Remaining filter.
 norm
@@ -122,8 +122,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
-      ├── y = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      └── x < 5 [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+      ├── y:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── x:1 < 5 [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
 
 # Contradiction.
 norm
@@ -141,7 +141,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
-      └── x IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+      └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
 
 norm
 SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
@@ -162,10 +162,10 @@ project
       │    │    ├── columns: x:1(int) z:2(int!null)
       │    │    └── stats: [rows=10000, distinct(1)=5000, null(1)=0, distinct(2)=100, null(2)=0]
       │    └── filters
-      │         └── (x > 1000) AND (x <= 2000) [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
+      │         └── (x:1 > 1000) AND (x:1 <= 2000) [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
       └── aggregations
-           └── sum [type=decimal, outer=(1)]
-                └── variable: x [type=int]
+           └── sum [as=sum:4, type=decimal, outer=(1)]
+                └── x:1 [type=int]
 
 # Regression: statistics builder panics when end key is NULL when it's trying
 # to compute start/end int boundaries.
@@ -187,7 +187,7 @@ project
       │    ├── constraint: /-2/3/1: (/4/NULL - /NULL)
       │    └── stats: [rows=333.333333, distinct(2)=33.3333333, null(2)=0, distinct(3)=100, null(3)=10]
       └── filters
-           └── z < 10 [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
+           └── z:3 < 10 [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
 
 # Regression: certain queries could cause a NaN expected number of rows via a divide-by-zero.
 exec-ddl
@@ -249,9 +249,9 @@ project
       │    │    ├── columns: col0:2(int) col3:5(int)
       │    │    └── stats: [rows=100, distinct(2)=1, null(2)=100, distinct(5)=10, null(5)=0]
       │    └── filters
-      │         └── col3 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+      │         └── col3:5 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
       └── aggregations
-           └── count-rows [type=int]
+           └── count-rows [as=count_rows:8, type=int]
 
 
 exec-ddl
@@ -308,8 +308,8 @@ select
  │    ├── key: (1,2)
  │    └── fd: (1,2)-->(3)
  └── filters
-      ├── d_id = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      └── d_name = 'bobs_burgers' [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(3)]
+      ├── d_id:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── d_name:3 = 'bobs_burgers' [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(3)]
 
 norm
 SELECT * FROM district WHERE d_id = 1 and d_name LIKE 'bob'
@@ -325,8 +325,8 @@ select
  │    ├── key: (1,2)
  │    └── fd: (1,2)-->(3)
  └── filters
-      ├── d_id = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      └── d_name LIKE 'bob' [type=bool, outer=(3), constraints=(/3: [/'bob' - /'bob']; tight), fd=()-->(3)]
+      ├── d_id:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── d_name:3 LIKE 'bob' [type=bool, outer=(3), constraints=(/3: [/'bob' - /'bob']; tight), fd=()-->(3)]
 
 # This tests selectivityFromReducedCols.
 # Since (1,2)-->(3) in order to use selectivityFromReducedCols,
@@ -348,9 +348,9 @@ select
  │    ├── key: (1,2)
  │    └── fd: (1,2)-->(3)
  └── filters
-      ├── (d_id > 1) AND (d_id < 10) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
-      ├── d_w_id = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      └── d_name = 'bobs_burgers' [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(3)]
+      ├── (d_id:1 > 1) AND (d_id:1 < 10) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
+      ├── d_w_id:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── d_name:3 = 'bobs_burgers' [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(3)]
 
 # This tests selectivityFromReducedCols
 # We don't apply the selectivity on d_name since (1,2)-->3.
@@ -369,9 +369,9 @@ select
  │    ├── key: (1,2)
  │    └── fd: (1,2)-->(3)
  └── filters
-      ├── d_id = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      ├── d_w_id = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      └── d_name = 'hello' [type=bool, outer=(3), constraints=(/3: [/'hello' - /'hello']; tight), fd=()-->(3)]
+      ├── d_id:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      ├── d_w_id:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── d_name:3 = 'hello' [type=bool, outer=(3), constraints=(/3: [/'hello' - /'hello']; tight), fd=()-->(3)]
 
 exec-ddl
 ALTER TABLE customers INJECT STATISTICS '[
@@ -434,9 +434,9 @@ select
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── filters (true)
  │         └── filters
- │              └── id = customer_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── id:1 = customer_id:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── filters
-      └── name = 'andy' [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
+      └── name:2 = 'andy' [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
 
 # This tests selectivityFromReducedCols
 # The previous tests case and the following are paired together. The first has
@@ -482,9 +482,9 @@ select
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── filters (true)
  │         └── filters
- │              └── id = customer_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── id:1 = customer_id:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── filters
-      └── (id = 1) AND (name = 'andy') [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
+      └── (id:1 = 1) AND (name:2 = 'andy') [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
 
 # Test equality conditions where all have distinct count 1.
 norm
@@ -498,9 +498,9 @@ select
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
  │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10]
  └── filters
-      ├── order_id = 5 [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
-      ├── item_id = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      └── customer_id = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+      ├── order_id:1 = 5 [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      ├── item_id:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── customer_id:3 = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
 
 # Test equality condition with another condition on one of the attributes.
 norm
@@ -514,8 +514,8 @@ select
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
  │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
  └── filters
-      ├── (item_id < 5) AND (item_id > 0) [type=bool, outer=(2), constraints=(/2: [/1 - /4]; tight)]
-      └── item_id = order_id [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      ├── (item_id:2 < 5) AND (item_id:2 > 0) [type=bool, outer=(2), constraints=(/2: [/1 - /4]; tight)]
+      └── item_id:2 = order_id:1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
 
 # Test equality condition with another condition on a different attribute.
 norm
@@ -529,8 +529,8 @@ select
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
  │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10]
  └── filters
-      ├── (customer_id < 5) AND (customer_id > 0) [type=bool, outer=(3), constraints=(/3: [/1 - /4]; tight)]
-      └── item_id = order_id [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      ├── (customer_id:3 < 5) AND (customer_id:3 > 0) [type=bool, outer=(3), constraints=(/3: [/1 - /4]; tight)]
+      └── item_id:2 = order_id:1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
 
 # Test equality condition with another filter condition without a constraint.
 norm
@@ -544,8 +544,8 @@ select
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
  │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
  └── filters
-      ├── item_id = order_id [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
-      └── (customer_id % 2) = 0 [type=bool, outer=(3)]
+      ├── item_id:2 = order_id:1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      └── (customer_id:3 % 2) = 0 [type=bool, outer=(3)]
 
 exec-ddl
 CREATE TABLE c (x INT, z INT NOT NULL, UNIQUE INDEX x_idx (x))
@@ -568,7 +568,7 @@ select
  │    ├── lax-key: (1,2)
  │    └── fd: (1)~~>(2)
  └── filters
-      └── (x >= 0) AND (x < 100) [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
+      └── (x:1 >= 0) AND (x:1 < 100) [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
 
 exec-ddl
 CREATE TABLE uvw (u INT, v INT, w INT)
@@ -587,8 +587,8 @@ select
  │    ├── columns: u:1(int) v:2(int) w:3(int)
  │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
  └── filters
-      ├── v = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      ├── v:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── u:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
 
 norm disable=MergeSelects
 SELECT * FROM (SELECT * FROM uvw WHERE u=10) WHERE u=v
@@ -605,9 +605,9 @@ select
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
  │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
  │    └── filters
- │         └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+ │         └── u:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
  └── filters
-      └── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      └── u:1 = v:2 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
 
 norm disable=MergeSelects
 SELECT * FROM (SELECT * FROM uvw WHERE u=v) WHERE u=10
@@ -624,9 +624,9 @@ select
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
  │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
  │    └── filters
- │         └── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │         └── u:1 = v:2 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
  └── filters
-      └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      └── u:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
 
 exec-ddl
 CREATE TABLE lineitem
@@ -678,7 +678,7 @@ select
  │    ├── key: (1,4)
  │    └── fd: (1,4)-->(2,3,5-16)
  └── filters
-      └── (l_shipdate >= '1995-09-01') AND (l_shipdate < '1995-10-01') [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-30']; tight)]
+      └── (l_shipdate:11 >= '1995-09-01') AND (l_shipdate:11 < '1995-10-01') [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-30']; tight)]
 
 # We cannot determine the number of distinct values exactly since the upper
 # bound of the date range is compared to a timestamp rather than a date.
@@ -706,7 +706,7 @@ index-join lineitem
       │    ├── key: (1,4)
       │    └── fd: (1,4)-->(11)
       └── filters
-           └── l_shipdate::TIMESTAMPTZ < '1995-10-01' [type=bool, outer=(11)]
+           └── l_shipdate:11::TIMESTAMPTZ < '1995-10-01' [type=bool, outer=(11)]
 
 # These queries should generate zigzag joins in xform rules. The column statistics
 # should be comparable between the norm'd and fully optimized expressions.
@@ -726,8 +726,8 @@ inner-join (zigzag lineitem@l_sd lineitem@l_cd)
  ├── key: (1,4)
  ├── fd: ()-->(11,12)
  └── filters
-      ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
-      └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+      ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
 
 norm colstat=11 colstat=12 colstat=(11,12)
 SELECT l_shipdate, l_commitdate, l_orderkey, l_linenumber
@@ -747,8 +747,8 @@ select
  │    ├── key: (1,4)
  │    └── fd: (1,4)-->(11,12)
  └── filters
-      ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
-      └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+      ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
 
 # These queries should also generate zigzag joins in xform rules, like the
 # ones above. These zigzag joins should be nested inside a lookup join on
@@ -778,8 +778,8 @@ inner-join (lookup lineitem)
  │    ├── stats: [rows=0.1, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0]
  │    ├── fd: ()-->(11,12)
  │    └── filters
- │         ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
- │         └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+ │         ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+ │         └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
  └── filters (true)
 
 norm colstat=11 colstat=12 colstat=(11,12)
@@ -800,8 +800,8 @@ select
  │    ├── key: (1,4)
  │    └── fd: (1,4)-->(5,11,12)
  └── filters
-      ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
-      └── l_commitdate = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
+      ├── l_shipdate:11 = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
+      └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
 
 # Create a table with an inverted index to test statistics around
 # JSON containment filter operators and zigzag joins.
@@ -867,7 +867,7 @@ inner-join (lookup tjson)
  │    ├── stats: [rows=61.7283951, distinct(1)=61.7283951, null(1)=0]
  │    └── filters (true)
  └── filters
-      └── b @> '{"a": "b", "c": "d"}' [type=bool, outer=(2)]
+      └── b:2 @> '{"a": "b", "c": "d"}' [type=bool, outer=(2)]
 
 # Should generate a select on the table with a JSON filter, since c does not
 # have an inverted index.
@@ -885,7 +885,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters
-      └── c @> '{"a": "b"}' [type=bool, outer=(3)]
+      └── c:3 @> '{"a": "b"}' [type=bool, outer=(3)]
 
 # Should have a lower row count than the above case, due to a containment query
 # on 2 json paths.
@@ -903,7 +903,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters
-      └── c @> '{"a": "b", "c": "d"}' [type=bool, outer=(3)]
+      └── c:3 @> '{"a": "b", "c": "d"}' [type=bool, outer=(3)]
 
 # Bump up null counts.
 exec-ddl
@@ -987,9 +987,9 @@ project
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
-           ├── (rowid >= 5) AND (rowid <= 8) [type=bool, outer=(3), constraints=(/3: [/5 - /8]; tight)]
-           ├── x = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-           └── z = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+           ├── (rowid:3 >= 5) AND (rowid:3 <= 8) [type=bool, outer=(3), constraints=(/3: [/5 - /8]; tight)]
+           ├── x:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── z:2 = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
 
 # Can't determine stats from filter.
 norm
@@ -1006,7 +1006,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
-      └── (x + y) < 10 [type=bool, outer=(1,2)]
+      └── (x:1 + y:2) < 10 [type=bool, outer=(1,2)]
 
 # Remaining filter.
 norm
@@ -1023,8 +1023,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
-      ├── y = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      └── x < 5 [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+      ├── y:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── x:1 < 5 [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
 
 # Test that the null count for x is propagated correctly (since it's a weak
 # key).
@@ -1043,7 +1043,7 @@ select
  │    ├── lax-key: (1,2)
  │    └── fd: (1)~~>(2)
  └── filters
-      └── (x >= 0) AND (x < 100) [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
+      └── (x:1 >= 0) AND (x:1 < 100) [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
 
 # Bump up null counts
 exec-ddl
@@ -1108,9 +1108,9 @@ select
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── filters (true)
  │         └── filters
- │              └── id = customer_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── id:1 = customer_id:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── filters
-      └── name = 'andy' [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
+      └── name:2 = 'andy' [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
 
 # This tests selectivityFromReducedCols
 # The previous tests case and the following are paired together. The first has
@@ -1156,9 +1156,9 @@ select
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── filters (true)
  │         └── filters
- │              └── id = customer_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── id:1 = customer_id:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── filters
-      └── (id = 1) AND (name = 'andy') [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
+      └── (id:1 = 1) AND (name:2 = 'andy') [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
 
 exec-ddl
 CREATE TABLE nulls (x INT, y INT);
@@ -1194,7 +1194,7 @@ project
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
-           └── x = y [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+           └── x:1 = y:2 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
 
 build
 SELECT * FROM nulls WHERE x IS NULL
@@ -1214,7 +1214,7 @@ project
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
-           └── x IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+           └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
 
 
 # Regression test for #34440. Ensure the null count for x is less than or equal
@@ -1237,7 +1237,7 @@ project
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
-           └── y = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+           └── y:2 = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
 
 # Sample testcase using exprgen.
 expr colstat=1 colstat=2
@@ -1275,7 +1275,7 @@ select
  │    ├── columns: a:1(int) b:2(int) c:3(int)
  │    └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=20, null(2)=5]
  └── filters
-      └── b = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── b:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 # Regression test for #37754.
 norm
@@ -1318,12 +1318,12 @@ project
  │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
  │    │    │    └── (true, e'19\x1e', NULL) [type=tuple{bool, string, varbit}]
  │    │    └── aggregations
- │    │         └── min [type=bool, outer=(1)]
- │    │              └── variable: column1 [type=bool]
+ │    │         └── min [as=min:4, type=bool, outer=(1)]
+ │    │              └── column1:1 [type=bool]
  │    └── filters
- │         └── variable: min [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ │         └── min:4 [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as="?column?":5, type=int]
 
 # Test that distinct count estimates are correct for date ranges.
 exec-ddl
@@ -1379,7 +1379,7 @@ select
  │    ├── columns: d3:4(date!null)
  │    └── stats: [rows=1000, distinct(4)=100, null(4)=0]
  └── filters
-      └── (d3 >= '2003-10-01') AND (d3 < '2003-11-01') [type=bool, outer=(4), constraints=(/4: [/'2003-10-01' - /'2003-10-31']; tight)]
+      └── (d3:4 >= '2003-10-01') AND (d3:4 < '2003-11-01') [type=bool, outer=(4), constraints=(/4: [/'2003-10-01' - /'2003-10-31']; tight)]
 
 opt
 SELECT d3 FROM date_test WHERE d3 >= DATE '1903-10-01' AND d3 < DATE '2003-10-01'
@@ -1391,7 +1391,7 @@ select
  │    ├── columns: d3:4(date!null)
  │    └── stats: [rows=1000, distinct(4)=100, null(4)=0]
  └── filters
-      └── (d3 >= '1903-10-01') AND (d3 < '2003-10-01') [type=bool, outer=(4), constraints=(/4: [/'1903-10-01' - /'2003-09-30']; tight)]
+      └── (d3:4 >= '1903-10-01') AND (d3:4 < '2003-10-01') [type=bool, outer=(4), constraints=(/4: [/'1903-10-01' - /'2003-09-30']; tight)]
 
 # Regression test for #38344. Avoid floating point precision errors.
 exec-ddl
@@ -1435,7 +1435,7 @@ with &1 (t)
  │    │    │    └── stats: [rows=2e+10]
  │    │    └── filters (true)
  │    └── projections
- │         └── (t1.x::INT8 << 5533)::BOOL OR t2.x [type=bool, outer=(1,3)]
+ │         └── (t1.x:1::INT8 << 5533)::BOOL OR t2.x:3 [as=x:5, type=bool, outer=(1,3)]
  └── select
       ├── columns: x:6(bool!null)
       ├── stats: [rows=1.98e+20, distinct(6)=1, null(6)=0]
@@ -1446,7 +1446,7 @@ with &1 (t)
       │    │    └──  x:5(bool) => x:6(bool)
       │    └── stats: [rows=4e+20, distinct(6)=3, null(6)=4e+18]
       └── filters
-           └── variable: x [type=bool, outer=(6), constraints=(/6: [/true - /true]; tight), fd=()-->(6)]
+           └── x:6 [type=bool, outer=(6), constraints=(/6: [/true - /true]; tight), fd=()-->(6)]
 
 # Regression test for #38375. Avoid floating point precision errors.
 exec-ddl
@@ -1483,7 +1483,7 @@ select
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=2e+10, distinct(1)=2e+10, null(1)=2e+10, distinct(2)=10, null(2)=0]
  └── filters
-      └── x = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── x:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
 
 # Support OR constraints.
 exec-ddl
@@ -1523,7 +1523,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
-      └── (n_name = 'FRANCE') OR (n_name = 'GERMANY') [type=bool, outer=(2), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+      └── (n_name:2 = 'FRANCE') OR (n_name:2 = 'GERMANY') [type=bool, outer=(2), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
 
 opt
 SELECT * FROM nation WHERE (n_name = 'FRANCE' AND neighbor = 'GERMANY') OR (n_name = 'GERMANY' AND neighbor = 'FRANCE')
@@ -1539,7 +1539,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
-      └── ((n_name = 'FRANCE') AND (neighbor = 'GERMANY')) OR ((n_name = 'GERMANY') AND (neighbor = 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+      └── ((n_name:2 = 'FRANCE') AND (neighbor:4 = 'GERMANY')) OR ((n_name:2 = 'GERMANY') AND (neighbor:4 = 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
 
 opt
 SELECT * FROM nation WHERE (n_name, neighbor) in (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE'))
@@ -1555,7 +1555,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
-      └── (n_name, neighbor) IN (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2/4: [/'FRANCE'/'GERMANY' - /'FRANCE'/'GERMANY'] [/'GERMANY'/'FRANCE' - /'GERMANY'/'FRANCE']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]
+      └── (n_name:2, neighbor:4) IN (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2/4: [/'FRANCE'/'GERMANY' - /'FRANCE'/'GERMANY'] [/'GERMANY'/'FRANCE' - /'GERMANY'/'FRANCE']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]
 
 # Make sure the that histogram and distinct counts don't interfere with each
 # other during selectivity calculation.
@@ -1621,10 +1621,10 @@ select
  │        histogram(1)=  0  0  90  10  180  20  270  30  360  40
  │                     <--- 0 ---- 10 ----- 20 ----- 30 ----- 40
  └── filters
-      ├── (d >= 10) AND (d < 100) [type=bool, outer=(4), constraints=(/4: [/10 - /99]; tight)]
-      ├── a = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
-      ├── b = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      └── c = 10 [type=bool, outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
+      ├── (d:4 >= 10) AND (d:4 < 100) [type=bool, outer=(4), constraints=(/4: [/10 - /99]; tight)]
+      ├── a:1 = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      ├── b:2 = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── c:3 = 10 [type=bool, outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
 
 # Test that a histogram on a boolean column is used.
 exec-ddl
@@ -1668,7 +1668,7 @@ select
  │        histogram(2)=  0   900   0  100
  │                     <--- false --- true
  └── filters
-      └── b = false [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+      └── b:2 = false [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
 
 exec-ddl
 CREATE TABLE t0(c0 INT)
@@ -1729,6 +1729,6 @@ select
  │    │    ├── key: (2)
  │    │    └── fd: (2)-->(1)
  │    └── projections
- │         └── CASE WHEN c0 > 0 THEN 1 ELSE t0.rowid END [type=int, outer=(1,2)]
+ │         └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END [as=rowid:3, type=int, outer=(1,2)]
  └── filters
-      └── rowid > 0 [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+      └── rowid:3 > 0 [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]

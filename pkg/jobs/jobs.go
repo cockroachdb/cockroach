@@ -92,6 +92,10 @@ const (
 	StatusPauseRequested Status = "pause-requested"
 )
 
+var (
+	errJobCanceled = errors.New("job canceled by user")
+)
+
 // Terminal returns whether this status represents a "terminal" state: a state
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
@@ -351,12 +355,12 @@ func (j *Job) cancelRequested(
 		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
 			return nil
 		}
-		if md.Payload.FinalResumeError != nil {
-			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
-			return fmt.Errorf("job with error %s cannot be requested to be canceled", decodedErr.Error())
-		}
 		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
 			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
+		}
+		if md.Status == StatusPaused && md.Payload.FinalResumeError != nil {
+			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
+			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError %s hence cannot be canceled and should be reverted", j.ID(), decodedErr.Error())
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {

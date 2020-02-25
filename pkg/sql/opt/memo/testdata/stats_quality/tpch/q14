@@ -80,17 +80,17 @@ project
  │    │    │    │         ├── key: (1,4)
  │    │    │    │         └── fd: (1,4)-->(11)
  │    │    │    └── filters
- │    │    │         └── l_partkey = p_partkey [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
+ │    │    │         └── l_partkey:2 = p_partkey:17 [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
  │    │    └── projections
- │    │         ├── CASE WHEN p_type LIKE 'PROMO%' THEN l_extendedprice * (1.0 - l_discount) ELSE 0.0 END [type=float, outer=(6,7,21)]
- │    │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(6,7)]
+ │    │         ├── CASE WHEN p_type:21 LIKE 'PROMO%' THEN l_extendedprice:6 * (1.0 - l_discount:7) ELSE 0.0 END [as=column26:26, type=float, outer=(6,7,21)]
+ │    │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column28:28, type=float, outer=(6,7)]
  │    └── aggregations
- │         ├── sum [type=float, outer=(26)]
- │         │    └── variable: column26 [type=float]
- │         └── sum [type=float, outer=(28)]
- │              └── variable: column28 [type=float]
+ │         ├── sum [as=sum:27, type=float, outer=(26)]
+ │         │    └── column26:26 [type=float]
+ │         └── sum [as=sum:29, type=float, outer=(28)]
+ │              └── column28:28 [type=float]
  └── projections
-      └── (sum * 100.0) / sum [type=float, outer=(27,29), side-effects]
+      └── (sum:27 * 100.0) / sum:29 [as=promo_revenue:30, type=float, outer=(27,29), side-effects]
 
 stats table=q14_project_1
 ----

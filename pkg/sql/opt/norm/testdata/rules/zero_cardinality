@@ -10,7 +10,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT k FROM b WHERE false
 ----
 values
- ├── columns: k:1(int!null)
+ ├── columns: k:1!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -19,7 +19,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (VALUES (1) OFFSET 1)
 ----
 values
- ├── columns: column1:1(int!null)
+ ├── columns: column1:1!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -28,7 +28,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM b INNER JOIN b b2 ON False
 ----
 values
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) k:6(int!null) i:7(int!null) f:8(float!null) s:9(string!null) j:10(jsonb!null)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null k:6!null i:7!null f:8!null s:9!null j:10!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-10)
@@ -37,7 +37,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM b LIMIT 0
 ----
 values
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -46,7 +46,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (SELECT * FROM b WHERE i=1) WHERE False
 ----
 values
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -55,7 +55,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (SELECT * FROM b WHERE False) WHERE s='foo'
 ----
 values
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -64,7 +64,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (SELECT * FROM b WHERE False) WHERE s='foo'
 ----
 values
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -73,15 +73,15 @@ norm
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
 project
- ├── columns: case:6(decimal!null)
+ ├── columns: case:6!null
  ├── cardinality: [0 - 0]
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(6)
  ├── values
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── projections
-      └── CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END [type=decimal, outer=(1), side-effects]
+      └── CASE WHEN k:1 < 0 THEN 3 / 0 ELSE 3 END [as=case:6, outer=(1), side-effects]

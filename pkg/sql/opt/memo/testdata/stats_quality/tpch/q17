@@ -115,23 +115,23 @@ project
  │    │    │    │    │    │    │    │    │    ├── fd: (17)-->(20,23)
  │    │    │    │    │    │    │    │    │    └── ordering: +17 opt(20,23) [actual: +17]
  │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │         ├── p_brand = 'Brand#23' [type=bool, outer=(20), constraints=(/20: [/'Brand#23' - /'Brand#23']; tight), fd=()-->(20)]
- │    │    │    │    │    │    │    │         └── p_container = 'MED BOX' [type=bool, outer=(23), constraints=(/23: [/'MED BOX' - /'MED BOX']; tight), fd=()-->(23)]
+ │    │    │    │    │    │    │    │         ├── p_brand:20 = 'Brand#23' [type=bool, outer=(20), constraints=(/20: [/'Brand#23' - /'Brand#23']; tight), fd=()-->(20)]
+ │    │    │    │    │    │    │    │         └── p_container:23 = 'MED BOX' [type=bool, outer=(23), constraints=(/23: [/'MED BOX' - /'MED BOX']; tight), fd=()-->(23)]
  │    │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    └── aggregations
- │    │    │    │    │         └── avg [type=float, outer=(30)]
- │    │    │    │    │              └── variable: l_quantity [type=float]
+ │    │    │    │    │         └── avg [as=avg:42, type=float, outer=(30)]
+ │    │    │    │    │              └── l_quantity:30 [type=float]
  │    │    │    │    └── projections
- │    │    │    │         └── avg * 0.2 [type=float, outer=(42)]
+ │    │    │    │         └── avg:42 * 0.2 [as="?column?":43, type=float, outer=(42)]
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         └── l_quantity < ?column? [type=bool, outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]
+ │    │         └── l_quantity:5 < "?column?":43 [type=bool, outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]
  │    └── aggregations
- │         └── sum [type=float, outer=(6)]
- │              └── variable: l_extendedprice [type=float]
+ │         └── sum [as=sum:44, type=float, outer=(6)]
+ │              └── l_extendedprice:6 [type=float]
  └── projections
-      └── sum / 7.0 [type=float, outer=(44), side-effects]
+      └── sum:44 / 7.0 [as=avg_yearly:45, type=float, outer=(44), side-effects]
 
 stats table=q17_project_1
 ----

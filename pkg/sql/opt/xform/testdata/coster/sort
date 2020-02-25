@@ -13,12 +13,12 @@ opt
 SELECT f FROM a ORDER BY f DESC
 ----
 sort
- ├── columns: f:2(float!null)
+ ├── columns: f:2!null
  ├── stats: [rows=1000]
  ├── cost: 1269.34569
  ├── ordering: -2
  └── scan a
-      ├── columns: f:2(float!null)
+      ├── columns: f:2!null
       ├── stats: [rows=1000]
       └── cost: 1050.02
 
@@ -27,7 +27,7 @@ opt
 SELECT f FROM a WHERE k IN () ORDER BY f DESC
 ----
 values
- ├── columns: f:2(float!null)
+ ├── columns: f:2!null
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── cost: 0.01
@@ -51,12 +51,12 @@ opt
 SELECT * FROM abc ORDER BY b, c, a
 ----
 sort
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000]
  ├── cost: 1301.40805
  ├── ordering: +2,+3,+1
  └── scan abc
-      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000]
       └── cost: 1070.02
 
@@ -65,12 +65,12 @@ opt
 SELECT * FROM abc ORDER BY a, b, c
 ----
 sort (segmented)
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
  ├── cost: 1090.43
  ├── ordering: +1,+2,+3
  └── scan abc@ab
-      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
       ├── cost: 1070.02
       └── ordering: +1,+2
@@ -80,12 +80,12 @@ opt
 SELECT * FROM abc ORDER BY c, b, a
 ----
 sort (segmented)
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
  ├── cost: 1090.43
  ├── ordering: +3,+2,+1
  └── scan abc@cb
-      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
       ├── cost: 1070.02
       └── ordering: +3,+2
@@ -95,12 +95,12 @@ opt
 SELECT * FROM abc ORDER BY c, a, b
 ----
 sort (segmented)
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
  ├── cost: 1161.00049
  ├── ordering: +3,+1,+2
  └── scan abc@cb
-      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
       ├── cost: 1070.02
       └── ordering: +3
@@ -128,12 +128,12 @@ opt
 SELECT * FROM abc ORDER BY a, b, c
 ----
 sort (segmented)
- ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── columns: a:1 b:2 c:3
  ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
  ├── cost: 12897.1869
  ├── ordering: +1,+2,+3
  └── scan abc@ab
-      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── columns: a:1 b:2 c:3
       ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
       ├── cost: 10700.02
       └── ordering: +1,+2
@@ -143,22 +143,22 @@ opt
 SELECT * FROM abc  WHERE a = b ORDER BY b, a, c
 ----
 sort (segmented)
- ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── columns: a:1!null b:2!null c:3
  ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
  ├── cost: 11239.0614
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2),+3 [actual: +1,+3]
  └── select
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+      ├── columns: a:1!null b:2!null c:3
       ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
       ├── cost: 10800.02
       ├── fd: (1)==(2), (2)==(1)
       ├── ordering: +1
       ├── scan abc@ab
-      │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+      │    ├── columns: a:1!null b:2 c:3
       │    ├── constraint: /1/2/4: (/NULL - ]
       │    ├── stats: [rows=10000, distinct(1)=5, null(1)=0]
       │    ├── cost: 10700.01
       │    └── ordering: +1
       └── filters
-           └── a = b [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+           └── a:1 = b:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]

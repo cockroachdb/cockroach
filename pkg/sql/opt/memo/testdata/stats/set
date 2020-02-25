@@ -248,7 +248,7 @@ intersect
            │    ├── key: (7)
            │    └── fd: (7)-->(4-6)
            └── filters
-                └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+                └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT x, y, x FROM a INTERSECT ALL SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
@@ -284,7 +284,7 @@ intersect-all
            │    ├── key: (7)
            │    └── fd: (7)-->(4-6)
            └── filters
-                └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+                └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT y, s FROM a INTERSECT SELECT z, s FROM c
@@ -401,7 +401,7 @@ except
                 │    ├── key: (7)
                 │    └── fd: (7)-->(4-6)
                 └── filters
-                     └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+                     └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT x, x, y FROM a EXCEPT ALL SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
@@ -440,7 +440,7 @@ except-all
                 │    ├── key: (7)
                 │    └── fd: (7)-->(4-6)
                 └── filters
-                     └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+                     └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT y, s FROM a EXCEPT SELECT z, s FROM c
@@ -548,7 +548,7 @@ select
  │              ├── key: (7)
  │              └── fd: (7)-->(4-6)
  └── filters
-      └── y = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── y:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
 
 # Bump up null counts.
 exec-ddl
@@ -891,7 +891,7 @@ except
  │    │    ├── (NULL, 1) [type=tuple{int, int}]
  │    │    └── (2, NULL) [type=tuple{int, int}]
  │    └── filters
- │         └── column1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ │         └── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  └── select
       ├── columns: column1:3(int!null) column2:4(int!null)
       ├── cardinality: [0 - 3]
@@ -905,7 +905,7 @@ except
       │    ├── (2, 3) [type=tuple{int, int}]
       │    └── (3, 4) [type=tuple{int, int}]
       └── filters
-           └── column1 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+           └── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
 
 # Make sure that we estimate at least 1 row for the intersect.
 opt

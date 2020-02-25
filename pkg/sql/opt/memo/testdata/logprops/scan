@@ -178,12 +178,12 @@ select
  └── filters
       └── or [type=bool, outer=(1), constraints=(/1: (/NULL - /'2017-01-04'] [/'2019-08-07' - /'2019-08-07'] [/'2019-08-08' - /'2019-08-08'])]
            ├── in [type=bool]
-           │    ├── variable: d [type=date]
+           │    ├── variable: d:1 [type=date]
            │    └── tuple [type=tuple{date, date}]
            │         ├── const: '2019-08-07' [type=date]
            │         └── const: '2019-08-08' [type=date]
            └── lt [type=bool]
-                ├── variable: d [type=date]
+                ├── variable: d:1 [type=date]
                 └── const: '2017-01-05' [type=date]
 
 
@@ -209,8 +209,8 @@ select
  │    └── interesting orderings: (+1) (+2,+1)
  └── filters
       ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
-      │    ├── variable: unique_value [type=int]
+      │    ├── variable: unique_value:2 [type=int]
       │    └── null [type=unknown]
       └── eq [type=bool, outer=(3), constraints=(/3: [/2000 - /2000]; tight), fd=()-->(3)]
-           ├── variable: notnull_value [type=int]
+           ├── variable: notnull_value:3 [type=int]
            └── const: 2000 [type=int]

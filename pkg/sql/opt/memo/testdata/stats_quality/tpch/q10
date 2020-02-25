@@ -127,9 +127,9 @@ limit
  │         │    │    │    │    │         ├── key: (9)
  │         │    │    │    │    │         └── fd: (9)-->(13)
  │         │    │    │    │    └── filters
- │         │    │    │    │         └── l_returnflag = 'R' [type=bool, outer=(26), constraints=(/26: [/'R' - /'R']; tight), fd=()-->(26)]
+ │         │    │    │    │         └── l_returnflag:26 = 'R' [type=bool, outer=(26), constraints=(/26: [/'R' - /'R']; tight), fd=()-->(26)]
  │         │    │    │    └── filters
- │         │    │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         │    │    │         └── c_custkey:1 = o_custkey:10 [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │         │    │    ├── scan nation
  │         │    │    │    ├── save-table-name: q10_scan_11
  │         │    │    │    ├── columns: n_nationkey:34(int!null) n_name:35(char!null)
@@ -139,25 +139,25 @@ limit
  │         │    │    │    ├── key: (34)
  │         │    │    │    └── fd: (34)-->(35)
  │         │    │    └── filters
- │         │    │         └── c_nationkey = n_nationkey [type=bool, outer=(4,34), constraints=(/4: (/NULL - ]; /34: (/NULL - ]), fd=(4)==(34), (34)==(4)]
+ │         │    │         └── c_nationkey:4 = n_nationkey:34 [type=bool, outer=(4,34), constraints=(/4: (/NULL - ]; /34: (/NULL - ]), fd=(4)==(34), (34)==(4)]
  │         │    └── projections
- │         │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
+ │         │         └── l_extendedprice:23 * (1.0 - l_discount:24) [as=column38:38, type=float, outer=(23,24)]
  │         └── aggregations
- │              ├── sum [type=float, outer=(38)]
- │              │    └── variable: column38 [type=float]
- │              ├── const-agg [type=varchar, outer=(2)]
- │              │    └── variable: c_name [type=varchar]
- │              ├── const-agg [type=varchar, outer=(3)]
- │              │    └── variable: c_address [type=varchar]
- │              ├── const-agg [type=char, outer=(5)]
- │              │    └── variable: c_phone [type=char]
- │              ├── const-agg [type=float, outer=(6)]
- │              │    └── variable: c_acctbal [type=float]
- │              ├── const-agg [type=varchar, outer=(8)]
- │              │    └── variable: c_comment [type=varchar]
- │              └── const-agg [type=char, outer=(35)]
- │                   └── variable: n_name [type=char]
- └── const: 20 [type=int]
+ │              ├── sum [as=sum:39, type=float, outer=(38)]
+ │              │    └── column38:38 [type=float]
+ │              ├── const-agg [as=c_name:2, type=varchar, outer=(2)]
+ │              │    └── c_name:2 [type=varchar]
+ │              ├── const-agg [as=c_address:3, type=varchar, outer=(3)]
+ │              │    └── c_address:3 [type=varchar]
+ │              ├── const-agg [as=c_phone:5, type=char, outer=(5)]
+ │              │    └── c_phone:5 [type=char]
+ │              ├── const-agg [as=c_acctbal:6, type=float, outer=(6)]
+ │              │    └── c_acctbal:6 [type=float]
+ │              ├── const-agg [as=c_comment:8, type=varchar, outer=(8)]
+ │              │    └── c_comment:8 [type=varchar]
+ │              └── const-agg [as=n_name:35, type=char, outer=(35)]
+ │                   └── n_name:35 [type=char]
+ └── 20 [type=int]
 
 stats table=q10_limit_1
 ----

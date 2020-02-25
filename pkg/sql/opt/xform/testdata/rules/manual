@@ -16,7 +16,7 @@ opt
 SELECT * FROM abcde ORDER BY a, b, c, d
 ----
 scan abcde
- ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
  ├── key: (1)
  ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
  └── ordering: +1
@@ -25,13 +25,13 @@ opt
 SELECT * FROM abcde ORDER BY b, c, a, d LIMIT 10
 ----
 index-join abcde
- ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
  ├── ordering: +2,+3,+1
  └── scan abcde@bc
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── columns: a:1!null b:2 c:3
       ├── limit: 10
       ├── key: (1)
       ├── fd: (1)-->(2,3), (2,3)~~>(1)
@@ -42,12 +42,12 @@ opt
 SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
 ----
 project
- ├── columns: a:1(int!null)  [hidden: c:3(int!null)]
+ ├── columns: a:1!null  [hidden: c:3!null]
  ├── key: (1)
  ├── fd: (1)-->(3), (3)-->(1)
  ├── ordering: +3
  └── scan abcde@bc
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── columns: a:1!null b:2!null c:3!null
       ├── constraint: /2/3: (/1/NULL - /1]
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
@@ -58,16 +58,16 @@ opt
 SELECT a FROM abcde WHERE b=1 ORDER BY c, b, d
 ----
 sort
- ├── columns: a:1(int!null)  [hidden: b:2(int!null) c:3(int) d:4(int)]
+ ├── columns: a:1!null  [hidden: b:2!null c:3 d:4]
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
  ├── ordering: +3,+4 opt(2) [actual: +3,+4]
  └── index-join abcde
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+      ├── columns: a:1!null b:2!null c:3 d:4
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
       └── scan abcde@bc
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+           ├── columns: a:1!null b:2!null c:3
            ├── constraint: /2/3: [/1 - /1]
            ├── key: (1)
            └── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -82,7 +82,7 @@ opt
 SELECT c FROM abcde ORDER BY b, c, a, d LIMIT 10
 ----
 scan abcde@bc
- ├── columns: c:3(int)  [hidden: a:1(int!null) b:2(int)]
+ ├── columns: c:3  [hidden: a:1!null b:2]
  ├── limit: 10
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
@@ -92,15 +92,15 @@ opt
 SELECT d FROM (SELECT d, d+1 AS one FROM abcde) GROUP BY d, one ORDER BY d, one
 ----
 sort
- ├── columns: d:4(int)
+ ├── columns: d:4
  ├── key: (4)
  ├── ordering: +4
  └── distinct-on
-      ├── columns: d:4(int)
-      ├── grouping columns: d:4(int)
+      ├── columns: d:4
+      ├── grouping columns: d:4
       ├── key: (4)
       └── scan abcde
-           └── columns: d:4(int)
+           └── columns: d:4
 
 # --------------------------------------------------
 # SimplifyProjectOrdering
@@ -110,12 +110,12 @@ opt
 SELECT a FROM abcde WHERE b=1 ORDER BY c
 ----
 project
- ├── columns: a:1(int!null)  [hidden: c:3(int)]
+ ├── columns: a:1!null  [hidden: c:3]
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── ordering: +3
  └── scan abcde@bc
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+      ├── columns: a:1!null b:2!null c:3
       ├── constraint: /2/3: [/1 - /1]
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -127,20 +127,20 @@ opt
 SELECT a FROM abcde WHERE b=1 ORDER BY c, d
 ----
 sort
- ├── columns: a:1(int!null)  [hidden: c:3(int) d:4(int)]
+ ├── columns: a:1!null  [hidden: c:3 d:4]
  ├── key: (1)
  ├── fd: (1)-->(3,4)
  ├── ordering: +3,+4
  └── project
-      ├── columns: a:1(int!null) c:3(int) d:4(int)
+      ├── columns: a:1!null c:3 d:4
       ├── key: (1)
       ├── fd: (1)-->(3,4)
       └── index-join abcde
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+           ├── columns: a:1!null b:2!null c:3 d:4
            ├── key: (1)
            ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
            └── scan abcde@bc
-                ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+                ├── columns: a:1!null b:2!null c:3
                 ├── constraint: /2/3: [/1 - /1]
                 ├── key: (1)
                 └── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)

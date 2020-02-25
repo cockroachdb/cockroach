@@ -40,92 +40,92 @@ opt
 SELECT min(a) FROM abc
 ----
 scalar-group-by
- ├── columns: min:5(string)
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc
- │    ├── columns: a:1(char!null)
+ │    ├── columns: a:1!null
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=char, outer=(1)]
-           └── variable: a [type=char]
+      └── const-agg [as=min:5, outer=(1)]
+           └── a:1
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
 SELECT min(DISTINCT a) FROM abc
 ----
 scalar-group-by
- ├── columns: min:5(string)
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc
- │    ├── columns: a:1(char!null)
+ │    ├── columns: a:1!null
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=char, outer=(1)]
-           └── variable: a [type=char]
+      └── const-agg [as=min:5, outer=(1)]
+           └── a:1
 
 # Verify the rule does not fire when FILTER is used.
 opt
 SELECT min(a) FILTER (WHERE a > 'a') FROM abc
 ----
 scalar-group-by
- ├── columns: min:6(string)
+ ├── columns: min:6
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
  ├── project
- │    ├── columns: column5:5(bool!null) a:1(char!null)
+ │    ├── columns: column5:5!null a:1!null
  │    ├── key: (1)
  │    ├── fd: (1)-->(5)
  │    ├── scan abc
- │    │    ├── columns: a:1(char!null)
+ │    │    ├── columns: a:1!null
  │    │    └── key: (1)
  │    └── projections
- │         └── a > 'a' [type=bool, outer=(1)]
+ │         └── a:1 > 'a' [as=column5:5, outer=(1)]
  └── aggregations
-      └── agg-filter [type=char, outer=(1,5)]
-           ├── min [type=char]
-           │    └── variable: a [type=char]
-           └── variable: column5 [type=bool]
+      └── agg-filter [as=min:6, outer=(1,5)]
+           ├── min
+           │    └── a:1
+           └── column5:5
 
 opt
 SELECT min(b) FROM abc
 ----
 scalar-group-by
- ├── columns: min:5(float)
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc
- │    └── columns: b:2(float)
+ │    └── columns: b:2
  └── aggregations
-      └── min [type=float, outer=(2)]
-           └── variable: b [type=float]
+      └── min [as=min:5, outer=(2)]
+           └── b:2
 
 opt
 SELECT min(y) FROM xyz where z=7
 ----
 scalar-group-by
- ├── columns: min:4(int)
+ ├── columns: min:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@zyx
- │    ├── columns: y:2(int!null) z:3(float!null)
+ │    ├── columns: y:2!null z:3!null
  │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(2,3)
  └── aggregations
-      └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── const-agg [as=min:4, outer=(2)]
+           └── y:2
 
 # ReplaceScalarMaxWithLimit has the same behavior with max() as
 # the previous min() query because z is the prefix of a unique key
@@ -133,19 +133,19 @@ opt
 SELECT max(y) FROM xyz where z=7
 ----
 scalar-group-by
- ├── columns: max:4(int)
+ ├── columns: max:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@zyx,rev
- │    ├── columns: y:2(int!null) z:3(float!null)
+ │    ├── columns: y:2!null z:3!null
  │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(2,3)
  └── aggregations
-      └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── const-agg [as=max:4, outer=(2)]
+           └── y:2
 
 # We expect ReplaceScalarMinWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
@@ -154,18 +154,18 @@ opt
 SELECT min(y) FROM xyz WHERE x>7
 ----
 scalar-group-by
- ├── columns: min:4(int)
+ ├── columns: min:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
  │    ├── constraint: /1/2: [/8 - ]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      └── min [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── min [as=min:4, outer=(2)]
+           └── y:2
 
 # We expect ReplaceMaxWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
@@ -174,63 +174,63 @@ opt
 SELECT max(y) FROM xyz WHERE x>7
 ----
 scalar-group-by
- ├── columns: max:4(int)
+ ├── columns: max:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
  │    ├── constraint: /1/2: [/8 - ]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      └── max [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── max [as=max:4, outer=(2)]
+           └── y:2
 
 opt
 SELECT max(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: max:4(int)
+ ├── columns: max:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@xy,rev
- │    ├── columns: x:1(int!null)
+ │    ├── columns: x:1!null
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int]
+      └── const-agg [as=max:4, outer=(1)]
+           └── x:1
 
 opt
 SELECT min(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4(int)
+ ├── columns: min:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null)
+ │    ├── columns: x:1!null
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int]
+      └── const-agg [as=min:4, outer=(1)]
+           └── x:1
 
 opt
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 scalar-group-by
- ├── columns: min:4(int)
+ ├── columns: min:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null)
+ │    ├── columns: x:1!null
  │    ├── constraint: /1/2
  │    │    ├── [/0 - /0]
  │    │    ├── [/4 - /4]
@@ -239,19 +239,19 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int]
+      └── const-agg [as=min:4, outer=(1)]
+           └── x:1
 
 opt
 SELECT max(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 scalar-group-by
- ├── columns: max:4(int)
+ ├── columns: max:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@xy,rev
- │    ├── columns: x:1(int!null)
+ │    ├── columns: x:1!null
  │    ├── constraint: /1/2
  │    │    ├── [/0 - /0]
  │    │    ├── [/4 - /4]
@@ -260,44 +260,44 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int]
+      └── const-agg [as=max:4, outer=(1)]
+           └── x:1
 
 opt
 SELECT min(y) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4(int)
+ ├── columns: min:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@yy
- │    ├── columns: y:2(int!null)
+ │    ├── columns: y:2!null
  │    ├── constraint: /2/1: (/NULL - ]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── aggregations
-      └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── const-agg [as=min:4, outer=(2)]
+           └── y:2
 
 opt
 SELECT min(y), min(y) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4(int) min:4(int)
+ ├── columns: min:4 min:4
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
  ├── scan xyz@yy
- │    ├── columns: y:2(int!null)
+ │    ├── columns: y:2!null
  │    ├── constraint: /2/1: (/NULL - ]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── aggregations
-      └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── const-agg [as=min:4, outer=(2)]
+           └── y:2
 
 # ReplaceScalarMinWithLimit does not apply when there is
 # a grouping column
@@ -305,19 +305,19 @@ opt
 SELECT min(y) FROM xyz GROUP BY y
 ----
 project
- ├── columns: min:4(int)
+ ├── columns: min:4
  └── group-by
-      ├── columns: y:2(int) min:4(int)
-      ├── grouping columns: y:2(int)
+      ├── columns: y:2 min:4
+      ├── grouping columns: y:2
       ├── internal-ordering: +2
       ├── key: (2)
       ├── fd: (2)-->(4)
       ├── scan xyz@yy
-      │    ├── columns: y:2(int)
+      │    ├── columns: y:2
       │    └── ordering: +2
       └── aggregations
-           └── min [type=int, outer=(2)]
-                └── variable: y [type=int]
+           └── min [as=min:4, outer=(2)]
+                └── y:2
 
 # ReplaceScalarMaxWithLimit does not apply when there is
 # a grouping column
@@ -325,19 +325,19 @@ opt
 SELECT max(y) FROM xyz GROUP BY y
 ----
 project
- ├── columns: max:4(int)
+ ├── columns: max:4
  └── group-by
-      ├── columns: y:2(int) max:4(int)
-      ├── grouping columns: y:2(int)
+      ├── columns: y:2 max:4
+      ├── grouping columns: y:2
       ├── internal-ordering: +2
       ├── key: (2)
       ├── fd: (2)-->(4)
       ├── scan xyz@yy
-      │    ├── columns: y:2(int)
+      │    ├── columns: y:2
       │    └── ordering: +2
       └── aggregations
-           └── max [type=int, outer=(2)]
-                └── variable: y [type=int]
+           └── max [as=max:4, outer=(2)]
+                └── y:2
 
 # ReplaceScalarMinWithLimit does not apply when there is
 # a grouping column
@@ -345,21 +345,21 @@ opt
 SELECT min(y) FROM xyz GROUP BY x
 ----
 project
- ├── columns: min:4(int)
+ ├── columns: min:4
  └── group-by
-      ├── columns: x:1(int!null) min:4(int)
-      ├── grouping columns: x:1(int!null)
+      ├── columns: x:1!null min:4
+      ├── grouping columns: x:1!null
       ├── internal-ordering: +1
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── scan xyz@xy
-      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    └── ordering: +1
       └── aggregations
-           └── min [type=int, outer=(2)]
-                └── variable: y [type=int]
+           └── min [as=min:4, outer=(2)]
+                └── y:2
 
 # ReplaceScalarMinWithLimit does not apply on multiple aggregations
 # on different columns
@@ -367,19 +367,19 @@ opt
 SELECT min(y), min(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4(int) min:5(int)
+ ├── columns: min:4 min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4,5)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      ├── min [type=int, outer=(2)]
-      │    └── variable: y [type=int]
-      └── min [type=int, outer=(1)]
-           └── variable: x [type=int]
+      ├── min [as=min:4, outer=(2)]
+      │    └── y:2
+      └── min [as=min:5, outer=(1)]
+           └── x:1
 
 
 # ReplaceScalarMaxWithLimit does not apply on multiple aggregations
@@ -388,19 +388,19 @@ opt
 SELECT max(y), max(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: max:4(int) max:5(int)
+ ├── columns: max:4 max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4,5)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      ├── max [type=int, outer=(2)]
-      │    └── variable: y [type=int]
-      └── max [type=int, outer=(1)]
-           └── variable: x [type=int]
+      ├── max [as=max:4, outer=(2)]
+      │    └── y:2
+      └── max [as=max:5, outer=(1)]
+           └── x:1
 
 # ReplaceScalarMinWithLimit does not apply with
 # multiple grouping columns
@@ -408,19 +408,19 @@ opt
 SELECT x,min(y) FROM xyz GROUP BY x,y
 ----
 group-by
- ├── columns: x:1(int!null) min:4(int)
- ├── grouping columns: x:1(int!null)
+ ├── columns: x:1!null min:4
+ ├── grouping columns: x:1!null
  ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      └── min [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── min [as=min:4, outer=(2)]
+           └── y:2
 
 # ReplaceScalarMaxWithLimit does not apply with
 # multiple grouping columns
@@ -428,19 +428,19 @@ opt
 SELECT x,max(y) FROM xyz GROUP BY x,y
 ----
 group-by
- ├── columns: x:1(int!null) max:4(int)
- ├── grouping columns: x:1(int!null)
+ ├── columns: x:1!null max:4
+ ├── grouping columns: x:1!null
  ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── scan xyz@xy
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      └── max [type=int, outer=(2)]
-           └── variable: y [type=int]
+      └── max [as=max:4, outer=(2)]
+           └── y:2
 
 # ReplaceScalarMinWithLimit does not apply to non-scalar
 # aggregates
@@ -448,23 +448,23 @@ opt
 SELECT min(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
- ├── columns: min:4(int!null) count:5(int!null)
+ ├── columns: min:4!null count:5!null
  └── group-by
-      ├── columns: x:1(int!null) min:4(int!null) count:5(int!null)
-      ├── grouping columns: x:1(int!null)
+      ├── columns: x:1!null min:4!null count:5!null
+      ├── grouping columns: x:1!null
       ├── internal-ordering: +1
       ├── key: (1)
       ├── fd: (1)-->(4,5)
       ├── scan xyz@xy
-      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    └── ordering: +1
       └── aggregations
-           ├── min [type=int, outer=(1)]
-           │    └── variable: x [type=int]
-           └── count [type=int, outer=(2)]
-                └── variable: y [type=int]
+           ├── min [as=min:4, outer=(1)]
+           │    └── x:1
+           └── count [as=count:5, outer=(2)]
+                └── y:2
 
 # ReplaceScalarMaxWithLimit does not apply to non-scalar
 # aggregates
@@ -472,23 +472,23 @@ opt
 SELECT max(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
- ├── columns: max:4(int!null) count:5(int!null)
+ ├── columns: max:4!null count:5!null
  └── group-by
-      ├── columns: x:1(int!null) max:4(int!null) count:5(int!null)
-      ├── grouping columns: x:1(int!null)
+      ├── columns: x:1!null max:4!null count:5!null
+      ├── grouping columns: x:1!null
       ├── internal-ordering: +1
       ├── key: (1)
       ├── fd: (1)-->(4,5)
       ├── scan xyz@xy
-      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    └── ordering: +1
       └── aggregations
-           ├── max [type=int, outer=(1)]
-           │    └── variable: x [type=int]
-           └── count [type=int, outer=(2)]
-                └── variable: y [type=int]
+           ├── max [as=max:4, outer=(1)]
+           │    └── x:1
+           └── count [as=count:5, outer=(2)]
+                └── y:2
 
 memo
 SELECT min(a) FROM abc
@@ -622,74 +622,74 @@ opt
 SELECT max(a) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5(string)
+ ├── columns: max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc,rev
- │    ├── columns: a:1(char!null)
+ │    ├── columns: a:1!null
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=char, outer=(1)]
-           └── variable: a [type=char]
+      └── const-agg [as=max:5, outer=(1)]
+           └── a:1
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
 SELECT max(DISTINCT a) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5(string)
+ ├── columns: max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc,rev
- │    ├── columns: a:1(char!null)
+ │    ├── columns: a:1!null
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=char, outer=(1)]
-           └── variable: a [type=char]
+      └── const-agg [as=max:5, outer=(1)]
+           └── a:1
 
 # Verify the rule does not fire when FILTER is used.
 opt
 SELECT max(a) FILTER (WHERE a > 'a') FROM abc
 ----
 scalar-group-by
- ├── columns: max:6(string)
+ ├── columns: max:6
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
  ├── project
- │    ├── columns: column5:5(bool!null) a:1(char!null)
+ │    ├── columns: column5:5!null a:1!null
  │    ├── key: (1)
  │    ├── fd: (1)-->(5)
  │    ├── scan abc
- │    │    ├── columns: a:1(char!null)
+ │    │    ├── columns: a:1!null
  │    │    └── key: (1)
  │    └── projections
- │         └── a > 'a' [type=bool, outer=(1)]
+ │         └── a:1 > 'a' [as=column5:5, outer=(1)]
  └── aggregations
-      └── agg-filter [type=char, outer=(1,5)]
-           ├── max [type=char]
-           │    └── variable: a [type=char]
-           └── variable: column5 [type=bool]
+      └── agg-filter [as=max:6, outer=(1,5)]
+           ├── max
+           │    └── a:1
+           └── column5:5
 
 opt
 SELECT max(b) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5(float)
+ ├── columns: max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc
- │    └── columns: b:2(float)
+ │    └── columns: b:2
  └── aggregations
-      └── max [type=float, outer=(2)]
-           └── variable: b [type=float]
+      └── max [as=max:5, outer=(2)]
+           └── b:2
 
 memo
 SELECT max(b) FROM abc
@@ -736,238 +736,238 @@ opt expect=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE w = 5 GROUP BY w
 ----
 project
- ├── columns: min:5(int!null)
+ ├── columns: min:5!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan kuvw@w
- │    ├── columns: k:1(int!null) w:4(int!null)
+ │    ├── columns: k:1!null w:4!null
  │    ├── constraint: /4/1: [/5 - /5]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1,4)
  └── projections
-      └── variable: k [type=int, outer=(1)]
+      └── k:1 [as=min:5, outer=(1)]
 
 # Basic max case.
 opt expect=ReplaceMaxWithLimit
 SELECT max(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan kuvw@vw,rev
- │    ├── columns: v:3(int!null) w:4(int)
+ │    ├── columns: v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(3,4)
  └── projections
-      └── variable: w [type=int, outer=(4)]
+      └── w:4 [as=max:5, outer=(4)]
 
 # Add const_agg function, as well as min function.
 opt expect=ReplaceMinWithLimit
 SELECT v + 1, min(w), v FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 ----
 project
- ├── columns: "?column?":6(int!null) min:5(int!null) v:3(int!null)
+ ├── columns: "?column?":6!null min:5!null v:3!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,5,6)
  ├── project
- │    ├── columns: min:5(int!null) v:3(int!null)
+ │    ├── columns: min:5!null v:3!null
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3,5)
  │    ├── scan kuvw@vw
- │    │    ├── columns: v:3(int!null) w:4(int!null)
+ │    │    ├── columns: v:3!null w:4!null
  │    │    ├── constraint: /3/4/1: (/5/NULL - /5]
  │    │    ├── limit: 1
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    └── projections
- │         └── variable: w [type=int, outer=(4)]
+ │         └── w:4 [as=min:5, outer=(4)]
  └── projections
-      └── v + 1 [type=int, outer=(3)]
+      └── v:3 + 1 [as="?column?":6, outer=(3)]
 
 # Add const_agg function, as well as max function.
 opt expect=ReplaceMaxWithLimit
 SELECT v + 1, max(w), v FROM kuvw WHERE v = 5 GROUP BY v
 ----
 project
- ├── columns: "?column?":6(int!null) max:5(int) v:3(int!null)
+ ├── columns: "?column?":6!null max:5 v:3!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,5,6)
  ├── project
- │    ├── columns: max:5(int) v:3(int!null)
+ │    ├── columns: max:5 v:3!null
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3,5)
  │    ├── scan kuvw@vw,rev
- │    │    ├── columns: v:3(int!null) w:4(int)
+ │    │    ├── columns: v:3!null w:4
  │    │    ├── constraint: /3/4/1: [/5 - /5]
  │    │    ├── limit: 1(rev)
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    └── projections
- │         └── variable: w [type=int, outer=(4)]
+ │         └── w:4 [as=max:5, outer=(4)]
  └── projections
-      └── v + 1 [type=int, outer=(3)]
+      └── v:3 + 1 [as="?column?":6, outer=(3)]
 
 # Use multiple grouping columns with min function.
 opt expect=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: min:5(int!null)
+ ├── columns: min:5!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan kuvw@vw
- │    ├── columns: k:1(int!null) v:3(int!null) w:4(int!null)
+ │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── variable: k [type=int, outer=(1)]
+      └── k:1 [as=min:5, outer=(1)]
 
 # Use multiple grouping columns with max function.
 opt expect=ReplaceMaxWithLimit
 SELECT max(k) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: max:5(int!null)
+ ├── columns: max:5!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan kuvw@vw,rev
- │    ├── columns: k:1(int!null) v:3(int!null) w:4(int!null)
+ │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── variable: k [type=int, outer=(1)]
+      └── k:1 [as=max:5, outer=(1)]
 
 # Use multiple grouping columns with min function, and project them.
 opt expect=ReplaceMinWithLimit
 SELECT v, min(k), w FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: v:3(int!null) min:5(int!null) w:4(int!null)
+ ├── columns: v:3!null min:5!null w:4!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3-5)
  ├── scan kuvw@vw
- │    ├── columns: k:1(int!null) v:3(int!null) w:4(int!null)
+ │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── variable: k [type=int, outer=(1)]
+      └── k:1 [as=min:5, outer=(1)]
 
 # Use multiple grouping columns with max function, and project them.
 opt expect=ReplaceMaxWithLimit
 SELECT v, max(k), w FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: v:3(int!null) max:5(int!null) w:4(int!null)
+ ├── columns: v:3!null max:5!null w:4!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3-5)
  ├── scan kuvw@vw,rev
- │    ├── columns: k:1(int!null) v:3(int!null) w:4(int!null)
+ │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── variable: k [type=int, outer=(1)]
+      └── k:1 [as=max:5, outer=(1)]
 
 # Multiple grouping columns, but different min column; use different index.
 opt expect=ReplaceMinWithLimit
 SELECT min(u) FROM kuvw WHERE v = 5 AND w = 10 AND u > 0 GROUP BY v, w
 ----
 project
- ├── columns: min:5(int!null)
+ ├── columns: min:5!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan kuvw@wvu
- │    ├── columns: u:2(int!null) v:3(int!null) w:4(int!null)
+ │    ├── columns: u:2!null v:3!null w:4!null
  │    ├── constraint: /4/3/2/1: [/10/5/1 - /10/5]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(2-4)
  └── projections
-      └── variable: u [type=int, outer=(2)]
+      └── u:2 [as=min:5, outer=(2)]
 
 # Multiple grouping columns, but different max column; use different index.
 opt expect=ReplaceMaxWithLimit
 SELECT max(u) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan kuvw@wvu,rev
- │    ├── columns: u:2(int) v:3(int!null) w:4(int!null)
+ │    ├── columns: u:2 v:3!null w:4!null
  │    ├── constraint: /4/3/2/1: [/10/5 - /10/5]
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(2-4)
  └── projections
-      └── variable: u [type=int, outer=(2)]
+      └── u:2 [as=max:5, outer=(2)]
 
 # One of grouping columns is not constant, with min function.
 opt expect-not=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
- ├── columns: min:5(int!null)
+ ├── columns: min:5!null
  └── group-by
-      ├── columns: w:4(int) min:5(int!null)
-      ├── grouping columns: w:4(int)
+      ├── columns: w:4 min:5!null
+      ├── grouping columns: w:4
       ├── internal-ordering: +4 opt(3)
       ├── key: (4)
       ├── fd: (4)-->(5)
       ├── scan kuvw@vw
-      │    ├── columns: k:1(int!null) v:3(int!null) w:4(int)
+      │    ├── columns: k:1!null v:3!null w:4
       │    ├── constraint: /3/4/1: [/5 - /5]
       │    ├── key: (1)
       │    ├── fd: ()-->(3), (1)-->(4)
       │    └── ordering: +4 opt(3) [actual: +4]
       └── aggregations
-           └── min [type=int, outer=(1)]
-                └── variable: k [type=int]
+           └── min [as=min:5, outer=(1)]
+                └── k:1
 
 # One of grouping columns is not constant, with max function.
 opt expect-not=ReplaceMaxWithLimit
 SELECT max(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
- ├── columns: max:5(int!null)
+ ├── columns: max:5!null
  └── group-by
-      ├── columns: w:4(int) max:5(int!null)
-      ├── grouping columns: w:4(int)
+      ├── columns: w:4 max:5!null
+      ├── grouping columns: w:4
       ├── internal-ordering: +4 opt(3)
       ├── key: (4)
       ├── fd: (4)-->(5)
       ├── scan kuvw@vw
-      │    ├── columns: k:1(int!null) v:3(int!null) w:4(int)
+      │    ├── columns: k:1!null v:3!null w:4
       │    ├── constraint: /3/4/1: [/5 - /5]
       │    ├── key: (1)
       │    ├── fd: ()-->(3), (1)-->(4)
       │    └── ordering: +4 opt(3) [actual: +4]
       └── aggregations
-           └── max [type=int, outer=(1)]
-                └── variable: k [type=int]
+           └── max [as=max:5, outer=(1)]
+                └── k:1
 
 # We expect ReplaceMinWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of w
@@ -976,25 +976,25 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w) FROM kuvw WHERE v > 5 AND w IS NOT NULL GROUP BY v
 ----
 project
- ├── columns: min:5(int!null)
+ ├── columns: min:5!null
  └── group-by
-      ├── columns: v:3(int!null) min:5(int!null)
-      ├── grouping columns: v:3(int!null)
+      ├── columns: v:3!null min:5!null
+      ├── grouping columns: v:3!null
       ├── internal-ordering: +3
       ├── key: (3)
       ├── fd: (3)-->(5)
       ├── select
-      │    ├── columns: v:3(int!null) w:4(int!null)
+      │    ├── columns: v:3!null w:4!null
       │    ├── ordering: +3
       │    ├── scan kuvw@vw
-      │    │    ├── columns: v:3(int!null) w:4(int)
+      │    │    ├── columns: v:3!null w:4
       │    │    ├── constraint: /3/4/1: (/6/NULL - ]
       │    │    └── ordering: +3
       │    └── filters
-      │         └── w IS NOT NULL [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
+      │         └── w:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
       └── aggregations
-           └── min [type=int, outer=(4)]
-                └── variable: w [type=int]
+           └── min [as=min:5, outer=(4)]
+                └── w:4
 
 # We expect ReplaceMaxWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of w
@@ -1003,20 +1003,20 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(w) FROM kuvw WHERE v > 5 GROUP BY v
 ----
 project
- ├── columns: max:5(int)
+ ├── columns: max:5
  └── group-by
-      ├── columns: v:3(int!null) max:5(int)
-      ├── grouping columns: v:3(int!null)
+      ├── columns: v:3!null max:5
+      ├── grouping columns: v:3!null
       ├── internal-ordering: +3
       ├── key: (3)
       ├── fd: (3)-->(5)
       ├── scan kuvw@vw
-      │    ├── columns: v:3(int!null) w:4(int)
+      │    ├── columns: v:3!null w:4
       │    ├── constraint: /3/4/1: [/6 - ]
       │    └── ordering: +3
       └── aggregations
-           └── max [type=int, outer=(4)]
-                └── variable: w [type=int]
+           └── max [as=max:5, outer=(4)]
+                └── w:4
 
 # ReplaceMinWithLimit does not apply on multiple aggregations
 # on different columns
@@ -1024,20 +1024,20 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w), min(k) FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 ----
 group-by
- ├── columns: min:5(int!null) min:6(int!null)
+ ├── columns: min:5!null min:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── scan kuvw@vw
- │    ├── columns: k:1(int!null) v:3(int!null) w:4(int!null)
+ │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: (/5/NULL - /5]
  │    ├── key: (1)
  │    └── fd: ()-->(3), (1)-->(4)
  └── aggregations
-      ├── min [type=int, outer=(4)]
-      │    └── variable: w [type=int]
-      └── min [type=int, outer=(1)]
-           └── variable: k [type=int]
+      ├── min [as=min:5, outer=(4)]
+      │    └── w:4
+      └── min [as=min:6, outer=(1)]
+           └── k:1
 
 # ReplaceMaxWithLimit does not apply on multiple aggregations
 # on different columns
@@ -1045,59 +1045,59 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), max(k) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: max:5(int) max:6(int!null)
+ ├── columns: max:5 max:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── scan kuvw@vw
- │    ├── columns: k:1(int!null) v:3(int!null) w:4(int)
+ │    ├── columns: k:1!null v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
  │    ├── key: (1)
  │    └── fd: ()-->(3), (1)-->(4)
  └── aggregations
-      ├── max [type=int, outer=(4)]
-      │    └── variable: w [type=int]
-      └── max [type=int, outer=(1)]
-           └── variable: k [type=int]
+      ├── max [as=max:5, outer=(4)]
+      │    └── w:4
+      └── max [as=max:6, outer=(1)]
+           └── k:1
 
 # ReplaceMinWithLimit does not apply when other aggregates are present.
 opt expect-not=ReplaceMinWithLimit
 SELECT min(k), max(k) FROM kuvw WHERE w = 5 GROUP BY w
 ----
 group-by
- ├── columns: min:5(int!null) max:6(int!null)
+ ├── columns: min:5!null max:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── scan kuvw@wvu
- │    ├── columns: k:1(int!null) w:4(int!null)
+ │    ├── columns: k:1!null w:4!null
  │    ├── constraint: /4/3/2/1: [/5 - /5]
  │    ├── key: (1)
  │    └── fd: ()-->(4)
  └── aggregations
-      ├── min [type=int, outer=(1)]
-      │    └── variable: k [type=int]
-      └── max [type=int, outer=(1)]
-           └── variable: k [type=int]
+      ├── min [as=min:5, outer=(1)]
+      │    └── k:1
+      └── max [as=max:6, outer=(1)]
+           └── k:1
 
 # ReplaceMaxWithLimit does not apply when other aggregates are present.
 opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), count(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: max:5(int) count:6(int!null)
+ ├── columns: max:5 count:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── scan kuvw@vw
- │    ├── columns: v:3(int!null) w:4(int)
+ │    ├── columns: v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
  │    └── fd: ()-->(3)
  └── aggregations
-      ├── max [type=int, outer=(4)]
-      │    └── variable: w [type=int]
-      └── count [type=int, outer=(4)]
-           └── variable: w [type=int]
+      ├── max [as=max:5, outer=(4)]
+      │    └── w:4
+      └── count [as=count:6, outer=(4)]
+           └── w:4
 
 # min/max functions are not symmetric because of NULL ordering (NULL values
 # always sort first, which interferes with MIN calculation). Ensure that min
@@ -1106,17 +1106,17 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: min:5(int)
+ ├── columns: min:5
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan kuvw@vw
- │    ├── columns: v:3(int!null) w:4(int)
+ │    ├── columns: v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
  │    └── fd: ()-->(3)
  └── aggregations
-      └── min [type=int, outer=(4)]
-           └── variable: w [type=int]
+      └── min [as=min:5, outer=(4)]
+           └── w:4
 
 # --------------------------------------------------
 # GenerateStreamingGroupBy

@@ -19,7 +19,7 @@ opt
 SELECT * FROM a LIMIT 1
 ----
 scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── limit: 1
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -29,7 +29,7 @@ opt
 SELECT s FROM a LIMIT 1
 ----
 scan a@s_idx
- ├── columns: s:4(string)
+ ├── columns: s:4
  ├── limit: 1
  ├── key: ()
  └── fd: ()-->(4)
@@ -39,7 +39,7 @@ opt
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
 scan a@s_idx
- ├── columns: s:4(string!null)
+ ├── columns: s:4!null
  ├── constraint: /4/1: [/'foo' - /'foo']
  ├── limit: 1
  ├── key: ()
@@ -50,52 +50,52 @@ opt
 SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
 ----
 limit
- ├── columns: s:4(string)  [hidden: i:2(int)]
+ ├── columns: s:4  [hidden: i:2]
  ├── internal-ordering: +4,+2
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,4)
  ├── sort (segmented)
- │    ├── columns: i:2(int) s:4(string)
+ │    ├── columns: i:2 s:4
  │    ├── cardinality: [0 - 10]
  │    ├── ordering: +4,+2
  │    ├── limit hint: 1.00
  │    └── scan a@s_idx
- │         ├── columns: i:2(int) s:4(string)
+ │         ├── columns: i:2 s:4
  │         ├── limit: 10
  │         └── ordering: +4
- └── const: 1 [type=int]
+ └── 1
 
 # Don't push when scan doesn't satisfy limit's ordering.
 opt
 SELECT s FROM a ORDER BY f LIMIT 1
 ----
 limit
- ├── columns: s:4(string)  [hidden: f:3(float)]
+ ├── columns: s:4  [hidden: f:3]
  ├── internal-ordering: +3
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3,4)
  ├── sort
- │    ├── columns: f:3(float) s:4(string)
+ │    ├── columns: f:3 s:4
  │    ├── ordering: +3
  │    ├── limit hint: 1.00
  │    └── scan a@s_idx
- │         └── columns: f:3(float) s:4(string)
- └── const: 1 [type=int]
+ │         └── columns: f:3 s:4
+ └── 1
 
 # Don't push when limit is not a constant.
 opt
 SELECT s FROM a LIMIT (SELECT k FROM a LIMIT 1)
 ----
 limit
- ├── columns: s:4(string)
+ ├── columns: s:4
  ├── side-effects
  ├── scan a@s_idx
- │    └── columns: s:4(string)
- └── subquery [type=int]
+ │    └── columns: s:4
+ └── subquery
       └── scan a@s_idx
-           ├── columns: k:6(int!null)
+           ├── columns: k:6!null
            ├── limit: 1
            ├── key: ()
            └── fd: ()-->(6)
@@ -127,7 +127,7 @@ opt
 SELECT * FROM a LIMIT 1 FOR UPDATE
 ----
 scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── limit: 1
  ├── locking: for-update
  ├── key: ()
@@ -138,7 +138,7 @@ opt
 SELECT s FROM a WHERE s='foo' LIMIT 1 FOR UPDATE
 ----
 scan a@s_idx
- ├── columns: s:4(string!null)
+ ├── columns: s:4!null
  ├── constraint: /4/1: [/'foo' - /'foo']
  ├── limit: 1
  ├── locking: for-update
@@ -157,13 +157,13 @@ opt
 SELECT * FROM kuv ORDER BY u LIMIT 5
 ----
 index-join kuv
- ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── columns: k:1!null u:2 v:3
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +2
  └── scan kuv@secondary
-      ├── columns: k:1(int!null) u:2(int)
+      ├── columns: k:1!null u:2
       ├── limit: 5
       ├── key: (1)
       ├── fd: (1)-->(2)
@@ -175,30 +175,30 @@ opt
 SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v LIMIT 5
 ----
 limit
- ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+ ├── columns: k:1!null u:2!null v:3
  ├── internal-ordering: +2,+3
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +2,+3
  ├── sort (segmented)
- │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+ │    ├── columns: k:1!null u:2!null v:3
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── ordering: +2,+3
  │    ├── limit hint: 5.00
  │    └── index-join kuv
- │         ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+ │         ├── columns: k:1!null u:2!null v:3
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3)
  │         ├── ordering: +2
  │         └── scan kuv@secondary
- │              ├── columns: k:1(int!null) u:2(int!null)
+ │              ├── columns: k:1!null u:2!null
  │              ├── constraint: /2/1: [/2 - /9]
  │              ├── key: (1)
  │              ├── fd: (1)-->(2)
  │              └── ordering: +2
- └── const: 5 [type=int]
+ └── 5
 
 exec-ddl
 CREATE TABLE abcd (
@@ -216,38 +216,38 @@ opt
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30 ORDER BY b DESC LIMIT 5
 ----
 explain
- ├── columns: tree:5(string) field:6(string) description:7(string)
+ ├── columns: tree:5 field:6 description:7
  └── limit
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      ├── columns: a:1!null b:2 c:3 d:4
       ├── internal-ordering: -2
       ├── cardinality: [0 - 5]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (2-4)~~>(1)
       ├── ordering: -2
       ├── sort
-      │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      │    ├── columns: a:1!null b:2 c:3 d:4
       │    ├── cardinality: [0 - 11]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
       │    ├── ordering: -2
       │    ├── limit hint: 5.00
       │    └── select
-      │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      │         ├── columns: a:1!null b:2 c:3 d:4
       │         ├── cardinality: [0 - 11]
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
       │         ├── index-join abcd
-      │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      │         │    ├── columns: a:1!null b:2 c:3 d:4
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
       │         │    └── scan abcd@b
-      │         │         ├── columns: a:1(int!null) b:2(int)
+      │         │         ├── columns: a:1!null b:2
       │         │         ├── flags: force-index=b
       │         │         ├── key: (1)
       │         │         └── fd: (1)-->(2)
       │         └── filters
-      │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
-      └── const: 5 [type=int]
+      │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+      └── 5
 
 optsteps
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30 ORDER BY b DESC LIMIT 5
@@ -257,183 +257,183 @@ Initial expression
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
   explain
-   ├── columns: tree:5(string) field:6(string) description:7(string)
+   ├── columns: tree:5 field:6 description:7
    └── sort
-        ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+        ├── columns: a:1!null b:2 c:3 d:4
         ├── cardinality: [0 - 5]
         ├── key: (1)
         ├── fd: (1)-->(2-4), (2-4)~~>(1)
         ├── ordering: -2
         └── limit
-             ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+             ├── columns: a:1!null b:2 c:3 d:4
              ├── internal-ordering: -2
              ├── cardinality: [0 - 5]
              ├── key: (1)
              ├── fd: (1)-->(2-4), (2-4)~~>(1)
              ├── sort
-             │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+             │    ├── columns: a:1!null b:2 c:3 d:4
              │    ├── cardinality: [0 - 11]
              │    ├── key: (1)
              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
              │    ├── ordering: -2
              │    ├── limit hint: 5.00
              │    └── select
-             │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+             │         ├── columns: a:1!null b:2 c:3 d:4
              │         ├── cardinality: [0 - 11]
              │         ├── key: (1)
              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
              │         ├── scan abcd
-             │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+             │         │    ├── columns: a:1!null b:2 c:3 d:4
              │         │    ├── flags: force-index=b
              │         │    ├── key: (1)
              │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
              │         └── filters
-             │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
-             └── const: 5 [type=int]
+             │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+             └── 5
 ================================================================================
 SimplifySelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:5(string) field:6(string) description:7(string)
+    ├── columns: tree:5 field:6 description:7
     └── sort
-         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+         ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
          ├── key: (1)
          ├── fd: (1)-->(2-4), (2-4)~~>(1)
          ├── ordering: -2
          └── limit
-              ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              ├── columns: a:1!null b:2 c:3 d:4
               ├── internal-ordering: -2
               ├── cardinality: [0 - 5]
               ├── key: (1)
               ├── fd: (1)-->(2-4), (2-4)~~>(1)
               ├── sort
-              │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │    ├── columns: a:1!null b:2 c:3 d:4
   -           │    ├── cardinality: [0 - 11]
               │    ├── key: (1)
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    ├── limit hint: 5.00
               │    └── select
-              │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │         ├── columns: a:1!null b:2 c:3 d:4
   -           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │         ├── scan abcd
-              │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │         │    ├── columns: a:1!null b:2 c:3 d:4
               │         │    ├── flags: force-index=b
               │         │    ├── key: (1)
               │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
               │         └── filters
-  -           │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
-  +           │              ├── a >= 20 [type=bool, outer=(1), constraints=(/1: [/20 - ]; tight)]
-  +           │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
-              └── const: 5 [type=int]
+  -           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  +           │              ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
+  +           │              └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+              └── 5
 ================================================================================
 ConsolidateSelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:5(string) field:6(string) description:7(string)
+    ├── columns: tree:5 field:6 description:7
     └── sort
-         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+         ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
          ├── key: (1)
          ├── fd: (1)-->(2-4), (2-4)~~>(1)
          ├── ordering: -2
          └── limit
-              ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              ├── columns: a:1!null b:2 c:3 d:4
               ├── internal-ordering: -2
               ├── cardinality: [0 - 5]
               ├── key: (1)
               ├── fd: (1)-->(2-4), (2-4)~~>(1)
               ├── sort
-              │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │    ├── columns: a:1!null b:2 c:3 d:4
   +           │    ├── cardinality: [0 - 11]
               │    ├── key: (1)
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    ├── limit hint: 5.00
               │    └── select
-              │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │         ├── columns: a:1!null b:2 c:3 d:4
   +           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │         ├── scan abcd
-              │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │         │    ├── columns: a:1!null b:2 c:3 d:4
               │         │    ├── flags: force-index=b
               │         │    ├── key: (1)
               │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
               │         └── filters
-  -           │              ├── a >= 20 [type=bool, outer=(1), constraints=(/1: [/20 - ]; tight)]
-  -           │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
-  +           │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
-              └── const: 5 [type=int]
+  -           │              ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
+  -           │              └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+  +           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+              └── 5
 ================================================================================
 GenerateIndexScans
   Cost: 5141.10
 ================================================================================
    explain
-    ├── columns: tree:5(string) field:6(string) description:7(string)
+    ├── columns: tree:5 field:6 description:7
   - └── sort
   + └── limit
-         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+         ├── columns: a:1!null b:2 c:3 d:4
   +      ├── internal-ordering: -2
          ├── cardinality: [0 - 5]
          ├── key: (1)
          ├── fd: (1)-->(2-4), (2-4)~~>(1)
          ├── ordering: -2
   -      └── limit
-  -           ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           ├── columns: a:1!null b:2 c:3 d:4
   -           ├── internal-ordering: -2
   -           ├── cardinality: [0 - 5]
   -           ├── key: (1)
   -           ├── fd: (1)-->(2-4), (2-4)~~>(1)
   -           ├── sort
-  -           │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           │    ├── columns: a:1!null b:2 c:3 d:4
   -           │    ├── cardinality: [0 - 11]
   -           │    ├── key: (1)
   -           │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   -           │    ├── ordering: -2
   -           │    ├── limit hint: 5.00
   -           │    └── select
-  -           │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           │         ├── columns: a:1!null b:2 c:3 d:4
   -           │         ├── cardinality: [0 - 11]
   -           │         ├── key: (1)
   -           │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
   -           │         ├── scan abcd
-  -           │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           │         │    ├── columns: a:1!null b:2 c:3 d:4
   -           │         │    ├── flags: force-index=b
   -           │         │    ├── key: (1)
   -           │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
   -           │         └── filters
-  -           │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
-  -           └── const: 5 [type=int]
+  -           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  -           └── 5
   +      ├── sort
-  +      │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  +      │    ├── columns: a:1!null b:2 c:3 d:4
   +      │    ├── cardinality: [0 - 11]
   +      │    ├── key: (1)
   +      │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   +      │    ├── ordering: -2
   +      │    ├── limit hint: 5.00
   +      │    └── select
-  +      │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  +      │         ├── columns: a:1!null b:2 c:3 d:4
   +      │         ├── cardinality: [0 - 11]
   +      │         ├── key: (1)
   +      │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
   +      │         ├── index-join abcd
-  +      │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  +      │         │    ├── columns: a:1!null b:2 c:3 d:4
   +      │         │    ├── key: (1)
   +      │         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   +      │         │    └── scan abcd@b
-  +      │         │         ├── columns: a:1(int!null) b:2(int)
+  +      │         │         ├── columns: a:1!null b:2
   +      │         │         ├── flags: force-index=b
   +      │         │         ├── key: (1)
   +      │         │         └── fd: (1)-->(2)
   +      │         └── filters
-  +      │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
-  +      └── const: 5 [type=int]
+  +      │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  +      └── 5
 --------------------------------------------------------------------------------
 GenerateZigzagJoins (no changes)
 --------------------------------------------------------------------------------
@@ -445,38 +445,38 @@ Final best expression
   Cost: 5141.10
 ================================================================================
   explain
-   ├── columns: tree:5(string) field:6(string) description:7(string)
+   ├── columns: tree:5 field:6 description:7
    └── limit
-        ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+        ├── columns: a:1!null b:2 c:3 d:4
         ├── internal-ordering: -2
         ├── cardinality: [0 - 5]
         ├── key: (1)
         ├── fd: (1)-->(2-4), (2-4)~~>(1)
         ├── ordering: -2
         ├── sort
-        │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+        │    ├── columns: a:1!null b:2 c:3 d:4
         │    ├── cardinality: [0 - 11]
         │    ├── key: (1)
         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
         │    ├── ordering: -2
         │    ├── limit hint: 5.00
         │    └── select
-        │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+        │         ├── columns: a:1!null b:2 c:3 d:4
         │         ├── cardinality: [0 - 11]
         │         ├── key: (1)
         │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
         │         ├── index-join abcd
-        │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+        │         │    ├── columns: a:1!null b:2 c:3 d:4
         │         │    ├── key: (1)
         │         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
         │         │    └── scan abcd@b
-        │         │         ├── columns: a:1(int!null) b:2(int)
+        │         │         ├── columns: a:1!null b:2
         │         │         ├── flags: force-index=b
         │         │         ├── key: (1)
         │         │         └── fd: (1)-->(2)
         │         └── filters
-        │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
-        └── const: 5 [type=int]
+        │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+        └── 5
 
 # --------------------------------------------------
 # PushLimitIntoOffset + GenerateLimitedScans
@@ -489,63 +489,63 @@ opt
 SELECT * from a ORDER BY s LIMIT 10 OFFSET 10
 ----
 offset
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── internal-ordering: +4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── ordering: +4
  ├── index-join a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── cardinality: [0 - 20]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    ├── ordering: +4
  │    └── scan a@s_idx
- │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │         ├── columns: k:1!null i:2 f:3 s:4
  │         ├── limit: 20
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-4)
  │         └── ordering: +4
- └── const: 10 [type=int]
+ └── 10
 
 # The right index is used for the limited scan based on the order.
 opt
 SELECT * from a ORDER BY s DESC LIMIT 10 OFFSET 10
 ----
 offset
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── internal-ordering: -4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── ordering: -4
  ├── index-join a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── cardinality: [0 - 20]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    ├── ordering: -4
  │    └── scan a@si_idx
- │         ├── columns: k:1(int!null) i:2(int) s:4(string) j:5(jsonb)
+ │         ├── columns: k:1!null i:2 s:4 j:5
  │         ├── limit: 20
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,4,5)
  │         └── ordering: -4
- └── const: 10 [type=int]
+ └── 10
 
 # PushLimitIntoIndexJoin propagates row-level locking information.
 opt
 SELECT * FROM kuv ORDER BY u LIMIT 5 FOR UPDATE
 ----
 index-join kuv
- ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── columns: k:1!null u:2 v:3
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +2
  └── scan kuv@secondary
-      ├── columns: k:1(int!null) u:2(int)
+      ├── columns: k:1!null u:2
       ├── limit: 5
       ├── locking: for-update
       ├── key: (1)

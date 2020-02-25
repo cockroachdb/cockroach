@@ -42,18 +42,14 @@ DELETE FROM abcde
 ----
 delete abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  └── scan abcde
-      ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       └── computed column expressions
-           ├── d:10(int)
-           │    └── plus [type=int]
-           │         ├── plus [type=int]
-           │         │    ├── variable: b [type=int]
-           │         │    └── variable: c [type=int]
-           │         └── const: 1 [type=int]
-           └── e:11(int)
-                └── variable: a [type=int]
+           ├── d:10
+           │    └── (b:8 + c:9) + 1
+           └── e:11
+                └── a:7
 
 # Use WHERE, ORDER BY, LIMIT.
 build
@@ -61,32 +57,26 @@ DELETE FROM abcde WHERE a>0 ORDER BY a LIMIT 10
 ----
 delete abcde
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  └── limit
-      ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       ├── internal-ordering: +7
       ├── sort
-      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── ordering: +7
       │    ├── limit hint: 10.00
       │    └── select
-      │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │         ├── scan abcde
-      │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │         │    └── computed column expressions
-      │         │         ├── d:10(int)
-      │         │         │    └── plus [type=int]
-      │         │         │         ├── plus [type=int]
-      │         │         │         │    ├── variable: b [type=int]
-      │         │         │         │    └── variable: c [type=int]
-      │         │         │         └── const: 1 [type=int]
-      │         │         └── e:11(int)
-      │         │              └── variable: a [type=int]
+      │         │         ├── d:10
+      │         │         │    └── (b:8 + c:9) + 1
+      │         │         └── e:11
+      │         │              └── a:7
       │         └── filters
-      │              └── gt [type=bool]
-      │                   ├── variable: a [type=int]
-      │                   └── const: 0 [type=int]
-      └── const: 10 [type=int]
+      │              └── a:7 > 0
+      └── 10
 
 # Use aliased table name.
 build
@@ -94,32 +84,26 @@ DELETE FROM abcde AS foo WHERE foo.a>0 ORDER BY foo.a LIMIT 10
 ----
 delete foo
  ├── columns: <none>
- ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  └── limit
-      ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       ├── internal-ordering: +7
       ├── sort
-      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │    ├── ordering: +7
       │    ├── limit hint: 10.00
       │    └── select
-      │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │         ├── scan foo
-      │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
       │         │    └── computed column expressions
-      │         │         ├── d:10(int)
-      │         │         │    └── plus [type=int]
-      │         │         │         ├── plus [type=int]
-      │         │         │         │    ├── variable: b [type=int]
-      │         │         │         │    └── variable: c [type=int]
-      │         │         │         └── const: 1 [type=int]
-      │         │         └── e:11(int)
-      │         │              └── variable: a [type=int]
+      │         │         ├── d:10
+      │         │         │    └── (b:8 + c:9) + 1
+      │         │         └── e:11
+      │         │              └── a:7
       │         └── filters
-      │              └── gt [type=bool]
-      │                   ├── variable: a [type=int]
-      │                   └── const: 0 [type=int]
-      └── const: 10 [type=int]
+      │              └── a:7 > 0
+      └── 10
 
 # DELETE with index hints.
 exec-ddl
@@ -137,9 +121,9 @@ DELETE FROM xyzw@primary
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  └── scan xyzw
-      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      ├── columns: x:5!null y:6 z:7 w:8
       └── flags: force-index=primary
 
 build
@@ -147,9 +131,9 @@ DELETE FROM xyzw@foo
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  └── scan xyzw
-      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      ├── columns: x:5!null y:6 z:7 w:8
       └── flags: force-index=foo
 
 build
@@ -157,9 +141,9 @@ DELETE FROM xyzw@{FORCE_INDEX=foo,ASC}
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  └── scan xyzw
-      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      ├── columns: x:5!null y:6 z:7 w:8
       └── flags: force-index=foo,fwd
 
 build
@@ -167,9 +151,9 @@ DELETE FROM xyzw@{FORCE_INDEX=foo,DESC}
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  └── scan xyzw,rev
-      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      ├── columns: x:5!null y:6 z:7 w:8
       └── flags: force-index=foo,rev
 
 build
@@ -177,9 +161,9 @@ DELETE FROM xyzw@{NO_INDEX_JOIN}
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── fetch columns: x:5 y:6 z:7 w:8
  └── scan xyzw
-      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      ├── columns: x:5!null y:6 z:7 w:8
       └── flags: no-index-join
 
 build
@@ -193,29 +177,25 @@ DELETE FROM xyz WHERE x=$1 ORDER BY y+$2 DESC LIMIT 2
 ----
 delete xyz
  ├── columns: <none>
- ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── fetch columns: x:4 y:5 z:6
  └── limit
-      ├── columns: x:4(string!null) y:5(int) z:6(float) column7:7(int)
+      ├── columns: x:4!null y:5 z:6 column7:7
       ├── internal-ordering: -7
       ├── sort
-      │    ├── columns: x:4(string!null) y:5(int) z:6(float) column7:7(int)
+      │    ├── columns: x:4!null y:5 z:6 column7:7
       │    ├── ordering: -7
       │    ├── limit hint: 2.00
       │    └── project
-      │         ├── columns: column7:7(int) x:4(string!null) y:5(int) z:6(float)
+      │         ├── columns: column7:7 x:4!null y:5 z:6
       │         ├── select
-      │         │    ├── columns: x:4(string!null) y:5(int) z:6(float)
+      │         │    ├── columns: x:4!null y:5 z:6
       │         │    ├── scan xyz
-      │         │    │    └── columns: x:4(string!null) y:5(int) z:6(float)
+      │         │    │    └── columns: x:4!null y:5 z:6
       │         │    └── filters
-      │         │         └── eq [type=bool]
-      │         │              ├── variable: x [type=string]
-      │         │              └── placeholder: $1 [type=string]
+      │         │         └── x:4 = $1
       │         └── projections
-      │              └── plus [type=int]
-      │                   ├── variable: y [type=int]
-      │                   └── placeholder: $2 [type=int]
-      └── const: 2 [type=int]
+      │              └── y:5 + $2 [as=column7:7]
+      └── 2
 
 
 # Use CTE within WHERE clause.
@@ -224,31 +204,27 @@ WITH cte AS (SELECT x FROM xyz) DELETE FROM abcde WHERE EXISTS(SELECT * FROM cte
 ----
 with &1 (cte)
  ├── project
- │    ├── columns: xyz.x:1(string!null)
+ │    ├── columns: xyz.x:1!null
  │    └── scan xyz
- │         └── columns: xyz.x:1(string!null) y:2(int) z:3(float)
+ │         └── columns: xyz.x:1!null y:2 z:3
  └── delete abcde
       ├── columns: <none>
-      ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
+      ├── fetch columns: a:10 b:11 c:12 d:13 e:14 rowid:15
       └── select
-           ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           ├── columns: a:10!null b:11 c:12 d:13 e:14 rowid:15!null
            ├── scan abcde
-           │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    ├── columns: a:10!null b:11 c:12 d:13 e:14 rowid:15!null
            │    └── computed column expressions
-           │         ├── d:13(int)
-           │         │    └── plus [type=int]
-           │         │         ├── plus [type=int]
-           │         │         │    ├── variable: b [type=int]
-           │         │         │    └── variable: c [type=int]
-           │         │         └── const: 1 [type=int]
-           │         └── e:14(int)
-           │              └── variable: a [type=int]
+           │         ├── d:13
+           │         │    └── (b:11 + c:12) + 1
+           │         └── e:14
+           │              └── a:10
            └── filters
-                └── exists [type=bool]
+                └── exists
                      └── with-scan &1 (cte)
-                          ├── columns: x:16(string!null)
+                          ├── columns: x:16!null
                           └── mapping:
-                               └──  xyz.x:1(string) => x:16(string)
+                               └──  xyz.x:1 => x:16
 
 # Unknown target table.
 build
@@ -268,58 +244,46 @@ WITH cte AS (SELECT b FROM [DELETE FROM abcde WHERE a=b RETURNING *]) DELETE FRO
 ----
 with &1
  ├── project
- │    ├── columns: abcde.a:1(int!null) abcde.b:2(int!null) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int)
+ │    ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5
  │    └── delete abcde
- │         ├── columns: abcde.a:1(int!null) abcde.b:2(int!null) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int) rowid:6(int!null)
- │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
+ │         ├── fetch columns: abcde.a:7 abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12
  │         └── select
- │              ├── columns: abcde.a:7(int!null) abcde.b:8(int!null) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              ├── columns: abcde.a:7!null abcde.b:8!null abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              ├── scan abcde
- │              │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    └── computed column expressions
- │              │         ├── abcde.d:10(int)
- │              │         │    └── plus [type=int]
- │              │         │         ├── plus [type=int]
- │              │         │         │    ├── variable: abcde.b [type=int]
- │              │         │         │    └── variable: abcde.c [type=int]
- │              │         │         └── const: 1 [type=int]
- │              │         └── abcde.e:11(int)
- │              │              └── variable: abcde.a [type=int]
+ │              │         ├── abcde.d:10
+ │              │         │    └── (abcde.b:8 + abcde.c:9) + 1
+ │              │         └── abcde.e:11
+ │              │              └── abcde.a:7
  │              └── filters
- │                   └── eq [type=bool]
- │                        ├── variable: abcde.a [type=int]
- │                        └── variable: abcde.b [type=int]
+ │                   └── abcde.a:7 = abcde.b:8
  └── with &2 (cte)
       ├── project
-      │    ├── columns: b:14(int!null)
+      │    ├── columns: b:14!null
       │    └── with-scan &1
-      │         ├── columns: a:13(int!null) b:14(int!null) c:15(int) d:16(int) e:17(int)
+      │         ├── columns: a:13!null b:14!null c:15 d:16 e:17
       │         └── mapping:
-      │              ├──  abcde.a:1(int) => a:13(int)
-      │              ├──  abcde.b:2(int) => b:14(int)
-      │              ├──  abcde.c:3(int) => c:15(int)
-      │              ├──  abcde.d:4(int) => d:16(int)
-      │              └──  abcde.e:5(int) => e:17(int)
+      │              ├──  abcde.a:1 => a:13
+      │              ├──  abcde.b:2 => b:14
+      │              ├──  abcde.c:3 => c:15
+      │              ├──  abcde.d:4 => d:16
+      │              └──  abcde.e:5 => e:17
       └── delete abcde
            ├── columns: <none>
-           ├── fetch columns: abcde.a:24(int) abcde.b:25(int) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int)
+           ├── fetch columns: abcde.a:24 abcde.b:25 abcde.c:26 abcde.d:27 abcde.e:28 rowid:29
            └── select
-                ├── columns: abcde.a:24(int!null) abcde.b:25(int!null) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int!null)
+                ├── columns: abcde.a:24!null abcde.b:25!null abcde.c:26 abcde.d:27 abcde.e:28 rowid:29!null
                 ├── scan abcde
-                │    ├── columns: abcde.a:24(int!null) abcde.b:25(int) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int!null)
+                │    ├── columns: abcde.a:24!null abcde.b:25 abcde.c:26 abcde.d:27 abcde.e:28 rowid:29!null
                 │    └── computed column expressions
-                │         ├── abcde.d:27(int)
-                │         │    └── plus [type=int]
-                │         │         ├── plus [type=int]
-                │         │         │    ├── variable: abcde.b [type=int]
-                │         │         │    └── variable: abcde.c [type=int]
-                │         │         └── const: 1 [type=int]
-                │         └── abcde.e:28(int)
-                │              └── variable: abcde.a [type=int]
+                │         ├── abcde.d:27
+                │         │    └── (abcde.b:25 + abcde.c:26) + 1
+                │         └── abcde.e:28
+                │              └── abcde.a:24
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: abcde.a [type=int]
-                          └── variable: abcde.b [type=int]
+                     └── abcde.a:24 = abcde.b:25
 
 # With alias, original table name should be inaccessible.
 build
@@ -342,108 +306,86 @@ build
 DELETE FROM abcde WHERE a=1 RETURNING *
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
  └── delete abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
-      ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+      ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
+      ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
       └── select
-           ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            ├── scan abcde
-           │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
            │    └── computed column expressions
-           │         ├── d:10(int)
-           │         │    └── plus [type=int]
-           │         │         ├── plus [type=int]
-           │         │         │    ├── variable: b [type=int]
-           │         │         │    └── variable: c [type=int]
-           │         │         └── const: 1 [type=int]
-           │         └── e:11(int)
-           │              └── variable: a [type=int]
+           │         ├── d:10
+           │         │    └── (b:8 + c:9) + 1
+           │         └── e:11
+           │              └── a:7
            └── filters
-                └── eq [type=bool]
-                     ├── variable: a [type=int]
-                     └── const: 1 [type=int]
+                └── a:7 = 1
 
 # Return values from aliased table.
 build
 DELETE FROM abcde AS foo WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 ----
 project
- ├── columns: "?column?":13(int!null) "?column?":14(int)
+ ├── columns: "?column?":13!null "?column?":14
  ├── delete foo
- │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
- │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ │    ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
+ │    ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
  │    └── select
- │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
  │         ├── scan foo
- │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
  │         │    └── computed column expressions
- │         │         ├── d:10(int)
- │         │         │    └── plus [type=int]
- │         │         │         ├── plus [type=int]
- │         │         │         │    ├── variable: b [type=int]
- │         │         │         │    └── variable: c [type=int]
- │         │         │         └── const: 1 [type=int]
- │         │         └── e:11(int)
- │         │              └── variable: a [type=int]
+ │         │         ├── d:10
+ │         │         │    └── (b:8 + c:9) + 1
+ │         │         └── e:11
+ │         │              └── a:7
  │         └── filters
- │              └── eq [type=bool]
- │                   ├── variable: a [type=int]
- │                   └── const: 1 [type=int]
+ │              └── a:7 = 1
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: a [type=int]
-      │    └── const: 1 [type=int]
-      └── mult [type=int]
-           ├── variable: b [type=int]
-           └── variable: d [type=int]
+      ├── a:1 + 1 [as="?column?":13]
+      └── b:2 * d:4 [as="?column?":14]
 
 # Use returning DELETE as a FROM expression.
 build
 SELECT a, d FROM [DELETE FROM abcde WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
 ----
 with &1
- ├── columns: a:13(int!null) d:16(int)
+ ├── columns: a:13!null d:16
  ├── project
- │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int)
+ │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5
  │    └── delete abcde
- │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int) rowid:6(int!null)
- │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
+ │         ├── fetch columns: abcde.a:7 abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12
  │         └── limit
- │              ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              ├── internal-ordering: +8
  │              ├── sort
- │              │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │    ├── ordering: +8
  │              │    ├── limit hint: 10.00
  │              │    └── select
- │              │         ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │         ├── scan abcde
- │              │         │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │         │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
  │              │         │    └── computed column expressions
- │              │         │         ├── abcde.d:10(int)
- │              │         │         │    └── plus [type=int]
- │              │         │         │         ├── plus [type=int]
- │              │         │         │         │    ├── variable: abcde.b [type=int]
- │              │         │         │         │    └── variable: abcde.c [type=int]
- │              │         │         │         └── const: 1 [type=int]
- │              │         │         └── abcde.e:11(int)
- │              │         │              └── variable: abcde.a [type=int]
+ │              │         │         ├── abcde.d:10
+ │              │         │         │    └── (abcde.b:8 + abcde.c:9) + 1
+ │              │         │         └── abcde.e:11
+ │              │         │              └── abcde.a:7
  │              │         └── filters
- │              │              └── gt [type=bool]
- │              │                   ├── variable: abcde.a [type=int]
- │              │                   └── const: 0 [type=int]
- │              └── const: 10 [type=int]
+ │              │              └── abcde.a:7 > 0
+ │              └── 10
  └── project
-      ├── columns: a:13(int!null) d:16(int)
+      ├── columns: a:13!null d:16
       └── with-scan &1
-           ├── columns: a:13(int!null) b:14(int) c:15(int) d:16(int) e:17(int)
+           ├── columns: a:13!null b:14 c:15 d:16 e:17
            └── mapping:
-                ├──  abcde.a:1(int) => a:13(int)
-                ├──  abcde.b:2(int) => b:14(int)
-                ├──  abcde.c:3(int) => c:15(int)
-                ├──  abcde.d:4(int) => d:16(int)
-                └──  abcde.e:5(int) => e:17(int)
+                ├──  abcde.a:1 => a:13
+                ├──  abcde.b:2 => b:14
+                ├──  abcde.c:3 => c:15
+                ├──  abcde.d:4 => d:16
+                └──  abcde.e:5 => e:17
 
 # ------------------------------------------------------------------------------
 # Tests with mutations.
@@ -455,31 +397,27 @@ DELETE FROM mutation WHERE m=1
 ----
 delete mutation
  ├── columns: <none>
- ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── fetch columns: m:5 n:6 o:7 p:8
  └── select
-      ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      ├── columns: m:5!null n:6 o:7 p:8
       ├── scan mutation
-      │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    └── columns: m:5!null n:6 o:7 p:8
       └── filters
-           └── eq [type=bool]
-                ├── variable: m [type=int]
-                └── const: 1 [type=int]
+           └── m:5 = 1
 
 # With RETURNING clause.
 build
 DELETE FROM mutation WHERE m=1 RETURNING *
 ----
 delete mutation
- ├── columns: m:1(int!null) n:2(int)
- ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── columns: m:1!null n:2
+ ├── fetch columns: m:5 n:6 o:7 p:8
  └── select
-      ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      ├── columns: m:5!null n:6 o:7 p:8
       ├── scan mutation
-      │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    └── columns: m:5!null n:6 o:7 p:8
       └── filters
-           └── eq [type=bool]
-                ├── variable: m [type=int]
-                └── const: 1 [type=int]
+           └── m:5 = 1
 
 
 # Try to return a mutation column.

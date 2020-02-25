@@ -13,7 +13,7 @@ opt
 SELECT * FROM usertable WHERE ycsb_key = 'user123'
 ----
 scan usertable
- ├── columns: ycsb_key:1(varchar!null) field0:2(string) field1:3(string) field2:4(string) field3:5(string) field4:6(string) field5:7(string) field6:8(string) field7:9(string) field8:10(string) field9:11(string)
+ ├── columns: ycsb_key:1!null field0:2 field1:3 field2:4 field3:5 field4:6 field5:7 field6:8 field7:9 field8:10 field9:11
  ├── constraint: /1: [/'user123' - /'user123']
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -25,24 +25,24 @@ UPDATE usertable SET field5 = 'field5data' WHERE ycsb_key = 'user123'
 ----
 update usertable
  ├── columns: <none>
- ├── fetch columns: ycsb_key:12(varchar) field5:18(string)
+ ├── fetch columns: ycsb_key:12 field5:18
  ├── update-mapping:
- │    └──  column23:23 => field5:7
+ │    └── column23:23 => field5:7
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column23:23(string!null) ycsb_key:12(varchar!null) field5:18(string)
+      ├── columns: column23:23!null ycsb_key:12!null field5:18
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(12,18,23)
       ├── scan usertable
-      │    ├── columns: ycsb_key:12(varchar!null) field5:18(string)
+      │    ├── columns: ycsb_key:12!null field5:18
       │    ├── constraint: /12: [/'user123' - /'user123']
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(12,18)
       └── projections
-           └── const: 'field5data' [type=string]
+           └── 'field5data' [as=column23:23]
 
 # --------------------------------------------------
 # Workload B: Read mostly
@@ -93,25 +93,25 @@ INSERT INTO usertable VALUES (
 insert usertable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:12 => ycsb_key:1
- │    ├──  column2:13 => field0:2
- │    ├──  column3:14 => field1:3
- │    ├──  column4:15 => field2:4
- │    ├──  column5:16 => field3:5
- │    ├──  column6:17 => field4:6
- │    ├──  column7:18 => field5:7
- │    ├──  column8:19 => field6:8
- │    ├──  column9:20 => field7:9
- │    ├──  column10:21 => field8:10
- │    └──  column11:22 => field9:11
+ │    ├── column1:12 => ycsb_key:1
+ │    ├── column2:13 => field0:2
+ │    ├── column3:14 => field1:3
+ │    ├── column4:15 => field2:4
+ │    ├── column5:16 => field3:5
+ │    ├── column6:17 => field4:6
+ │    ├── column7:18 => field5:7
+ │    ├── column8:19 => field6:8
+ │    ├── column9:20 => field7:9
+ │    ├── column10:21 => field8:10
+ │    └── column11:22 => field9:11
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── values
-      ├── columns: column1:12(string!null) column2:13(string!null) column3:14(string!null) column4:15(string!null) column5:16(string!null) column6:17(string!null) column7:18(string!null) column8:19(string!null) column9:20(string!null) column10:21(string!null) column11:22(string!null)
+      ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column8:19!null column9:20!null column10:21!null column11:22!null
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(12-22)
-      └── ('user123', 'field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data') [type=tuple{string, string, string, string, string, string, string, string, string, string, string}]
+      └── ('user123', 'field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data')
 
 # --------------------------------------------------
 # Workload E: Short ranges
@@ -129,7 +129,7 @@ opt
 SELECT * FROM usertable WHERE ycsb_key >= 'user123' LIMIT 321
 ----
 scan usertable
- ├── columns: ycsb_key:1(varchar!null) field0:2(string) field1:3(string) field2:4(string) field3:5(string) field4:6(string) field5:7(string) field6:8(string) field7:9(string) field8:10(string) field9:11(string)
+ ├── columns: ycsb_key:1!null field0:2 field1:3 field2:4 field3:5 field4:6 field5:7 field6:8 field7:9 field8:10 field9:11
  ├── constraint: /1: [/'user123' - ]
  ├── limit: 321
  ├── key: (1)
@@ -153,12 +153,12 @@ opt
 SELECT field5 FROM usertable WHERE ycsb_key = 'user123'
 ----
 project
- ├── columns: field5:7(string)
+ ├── columns: field5:7
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
  └── scan usertable
-      ├── columns: ycsb_key:1(varchar!null) field5:7(string)
+      ├── columns: ycsb_key:1!null field5:7
       ├── constraint: /1: [/'user123' - /'user123']
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -169,21 +169,21 @@ UPDATE usertable SET field5 = 'field5data' WHERE ycsb_key = 'user123'
 ----
 update usertable
  ├── columns: <none>
- ├── fetch columns: ycsb_key:12(varchar) field5:18(string)
+ ├── fetch columns: ycsb_key:12 field5:18
  ├── update-mapping:
- │    └──  column23:23 => field5:7
+ │    └── column23:23 => field5:7
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column23:23(string!null) ycsb_key:12(varchar!null) field5:18(string)
+      ├── columns: column23:23!null ycsb_key:12!null field5:18
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(12,18,23)
       ├── scan usertable
-      │    ├── columns: ycsb_key:12(varchar!null) field5:18(string)
+      │    ├── columns: ycsb_key:12!null field5:18
       │    ├── constraint: /12: [/'user123' - /'user123']
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(12,18)
       └── projections
-           └── const: 'field5data' [type=string]
+           └── 'field5data' [as=column23:23]

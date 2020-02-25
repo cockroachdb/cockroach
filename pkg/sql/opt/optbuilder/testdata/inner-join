@@ -14,61 +14,53 @@ build
 SELECT * FROM a, b
 ----
 project
- ├── columns: x:1(int!null) y:2(float) x:3(int) y:4(float)
+ ├── columns: x:1!null y:2 x:3 y:4
  └── inner-join (cross)
-      ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) rowid:5(int!null)
+      ├── columns: a.x:1!null a.y:2 b.x:3 b.y:4 rowid:5!null
       ├── scan a
-      │    └── columns: a.x:1(int!null) a.y:2(float)
+      │    └── columns: a.x:1!null a.y:2
       ├── scan b
-      │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
+      │    └── columns: b.x:3 b.y:4 rowid:5!null
       └── filters (true)
 
 build
 SELECT a.x, b.y FROM a, b WHERE a.x = b.x
 ----
 project
- ├── columns: x:1(int!null) y:4(float)
+ ├── columns: x:1!null y:4
  └── select
-      ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int!null) b.y:4(float) rowid:5(int!null)
+      ├── columns: a.x:1!null a.y:2 b.x:3!null b.y:4 rowid:5!null
       ├── inner-join (cross)
-      │    ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) rowid:5(int!null)
+      │    ├── columns: a.x:1!null a.y:2 b.x:3 b.y:4 rowid:5!null
       │    ├── scan a
-      │    │    └── columns: a.x:1(int!null) a.y:2(float)
+      │    │    └── columns: a.x:1!null a.y:2
       │    ├── scan b
-      │    │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
+      │    │    └── columns: b.x:3 b.y:4 rowid:5!null
       │    └── filters (true)
       └── filters
-           └── eq [type=bool]
-                ├── variable: a.x [type=int]
-                └── variable: b.x [type=int]
+           └── a.x:1 = b.x:3
 
 build
 SELECT * FROM c, b, a WHERE c.x = a.x AND b.x = a.x
 ----
 project
- ├── columns: x:1(int!null) y:2(float) z:3(varchar) x:5(int!null) y:6(float) x:8(int!null) y:9(float)
+ ├── columns: x:1!null y:2 z:3 x:5!null y:6 x:8!null y:9
  └── select
-      ├── columns: c.x:1(int!null) c.y:2(float) z:3(varchar) c.rowid:4(int!null) b.x:5(int!null) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
+      ├── columns: c.x:1!null c.y:2 z:3 c.rowid:4!null b.x:5!null b.y:6 b.rowid:7!null a.x:8!null a.y:9
       ├── inner-join (cross)
-      │    ├── columns: c.x:1(int) c.y:2(float) z:3(varchar) c.rowid:4(int!null) b.x:5(int) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
+      │    ├── columns: c.x:1 c.y:2 z:3 c.rowid:4!null b.x:5 b.y:6 b.rowid:7!null a.x:8!null a.y:9
       │    ├── scan c
-      │    │    └── columns: c.x:1(int) c.y:2(float) z:3(varchar) c.rowid:4(int!null)
+      │    │    └── columns: c.x:1 c.y:2 z:3 c.rowid:4!null
       │    ├── inner-join (cross)
-      │    │    ├── columns: b.x:5(int) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
+      │    │    ├── columns: b.x:5 b.y:6 b.rowid:7!null a.x:8!null a.y:9
       │    │    ├── scan b
-      │    │    │    └── columns: b.x:5(int) b.y:6(float) b.rowid:7(int!null)
+      │    │    │    └── columns: b.x:5 b.y:6 b.rowid:7!null
       │    │    ├── scan a
-      │    │    │    └── columns: a.x:8(int!null) a.y:9(float)
+      │    │    │    └── columns: a.x:8!null a.y:9
       │    │    └── filters (true)
       │    └── filters (true)
       └── filters
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: c.x [type=int]
-                │    └── variable: a.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: b.x [type=int]
-                     └── variable: a.x [type=int]
+           └── (c.x:1 = a.x:8) AND (b.x:5 = a.x:8)
 
 exec-ddl
 CREATE TABLE db1.a (x INT PRIMARY KEY, y FLOAT, z STRING)
@@ -92,11 +84,11 @@ build fully-qualify-names
 SELECT * FROM db1.a, db2.a
 ----
 inner-join (cross)
- ├── columns: x:1(int!null) y:2(float) z:3(string) x:4(int!null) y:5(float)
+ ├── columns: x:1!null y:2 z:3 x:4!null y:5
  ├── scan db1.public.a
- │    └── columns: db1.public.a.x:1(int!null) db1.public.a.y:2(float) db1.public.a.z:3(string)
+ │    └── columns: db1.public.a.x:1!null db1.public.a.y:2 db1.public.a.z:3
  ├── scan db2.public.a
- │    └── columns: db2.public.a.x:4(int!null) db2.public.a.y:5(float)
+ │    └── columns: db2.public.a.x:4!null db2.public.a.y:5
  └── filters (true)
 
 build fully-qualify-names
@@ -109,11 +101,11 @@ build fully-qualify-names
 SELECT * FROM a, (SELECT * FROM a) AS a
 ----
 inner-join (cross)
- ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
+ ├── columns: x:1!null y:2 x:3!null y:4
  ├── scan t.public.a
- │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)
+ │    └── columns: t.public.a.x:1!null t.public.a.y:2
  ├── scan t.public.a
- │    └── columns: t.public.a.x:3(int!null) t.public.a.y:4(float)
+ │    └── columns: t.public.a.x:3!null t.public.a.y:4
  └── filters (true)
 
 build fully-qualify-names
@@ -125,11 +117,11 @@ build fully-qualify-names
 SELECT * FROM t.a, a AS a
 ----
 inner-join (cross)
- ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
+ ├── columns: x:1!null y:2 x:3!null y:4
  ├── scan t.public.a
- │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)
+ │    └── columns: t.public.a.x:1!null t.public.a.y:2
  ├── scan t.public.a
- │    └── columns: t.public.a.x:3(int!null) t.public.a.y:4(float)
+ │    └── columns: t.public.a.x:3!null t.public.a.y:4
  └── filters (true)
 
 build fully-qualify-names

@@ -19,32 +19,32 @@ norm expect=NormalizeNestedAnds
 SELECT a AND (b AND (c AND (d AND e))) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── projections
-      └── (((a AND b) AND c) AND d) AND e [type=bool, outer=(1-5)]
+      └── (((a:1 AND b:2) AND c:3) AND d:4) AND e:5 [as="?column?":7, outer=(1-5)]
 
 norm expect=NormalizeNestedAnds
 SELECT (a AND b) AND (c AND (d OR e)) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── projections
-      └── ((a AND b) AND c) AND (d OR e) [type=bool, outer=(1-5)]
+      └── ((a:1 AND b:2) AND c:3) AND (d:4 OR e:5) [as="?column?":7, outer=(1-5)]
 
 # Already normalized.
 norm expect-not=NormalizeNestedAnds
 SELECT a AND b AND c FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool)
+ │    └── columns: a:1 b:2 c:3
  └── projections
-      └── (a AND b) AND c [type=bool, outer=(1-3)]
+      └── (a:1 AND b:2) AND c:3 [as="?column?":7, outer=(1-3)]
 
 # --------------------------------------------------
 # SimplifyTrueAnd + SimplifyAndTrue
@@ -54,42 +54,42 @@ norm expect=SimplifyTrueAnd
 SELECT true AND k=1 AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── k = 1 [type=bool, outer=(1)]
+      └── k:1 = 1 [as=r:6, outer=(1)]
 
 norm expect=SimplifyAndTrue
 SELECT k=1 AND true AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── k = 1 [type=bool, outer=(1)]
+      └── k:1 = 1 [as=r:6, outer=(1)]
 
 norm expect=(SimplifyTrueAnd,SimplifyAndTrue)
 SELECT true AND k=1 AND true AND i=2 AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      └── (k = 1) AND (i = 2) [type=bool, outer=(1,2)]
+      └── (k:1 = 1) AND (i:2 = 2) [as=r:6, outer=(1,2)]
 
 # No conditions left after rule.
 norm expect=SimplifyTrueAnd
 SELECT * FROM a WHERE true AND (true AND true)
 ----
 scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -101,31 +101,31 @@ norm expect=SimplifyFalseAnd
 SELECT false AND s='foo' AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── false [type=bool]
+      └── false [as=r:6]
 
 norm expect=SimplifyAndFalse
 SELECT s='foo' AND false AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── false [type=bool]
+      └── false [as=r:6]
 
 norm expect=(SimplifyAndFalse,SimplifyFalseAnd)
 SELECT k=1 AND false AND (f=3.5 AND false) AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── false [type=bool]
+      └── false [as=r:6]
 
 # --------------------------------------------------
 # SimplifyTrueOr + SimplifyOrTrue
@@ -135,31 +135,31 @@ norm expect=SimplifyTrueOr
 SELECT true OR s='foo' AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── true [type=bool]
+      └── true [as=r:6]
 
 norm expect=SimplifyOrTrue
 SELECT s='foo' OR true AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── true [type=bool]
+      └── true [as=r:6]
 
 norm expect=(SimplifyTrueOr,SimplifyOrTrue)
 SELECT k=1 OR true OR (true OR f=3.5) AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── true [type=bool]
+      └── true [as=r:6]
 
 # --------------------------------------------------
 # SimplifyFalseOr + SimplifyOrFalse
@@ -169,42 +169,42 @@ norm expect=SimplifyFalseOr
 SELECT false OR k=1 AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── k = 1 [type=bool, outer=(1)]
+      └── k:1 = 1 [as=r:6, outer=(1)]
 
 norm expect=SimplifyOrFalse
 SELECT k=1 OR false AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── k = 1 [type=bool, outer=(1)]
+      └── k:1 = 1 [as=r:6, outer=(1)]
 
 norm expect=(SimplifyFalseOr,SimplifyOrFalse)
 SELECT (false OR k=1) OR (i=2 OR false) AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      └── (k = 1) OR (i = 2) [type=bool, outer=(1,2)]
+      └── (k:1 = 1) OR (i:2 = 2) [as=r:6, outer=(1,2)]
 
 # No conditions left after rule.
 norm expect=SimplifyFalseOr
 SELECT * FROM a WHERE false OR false OR false
 ----
 values
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -216,12 +216,12 @@ norm expect=(SimplifyOrFalse,SimplifyFalseOr,SimplifyAndTrue)
 SELECT (k=1 OR false) AND (false OR k=2 OR false) AND true AS r FROM a
 ----
 project
- ├── columns: r:6(bool!null)
+ ├── columns: r:6!null
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k = 1) AND (k = 2) [type=bool, outer=(1)]
+      └── (k:1 = 1) AND (k:1 = 2) [as=r:6, outer=(1)]
 
 # --------------------------------------------------
 # SimplifyRange
@@ -231,16 +231,16 @@ norm expect=SimplifyRange disable=InlineConstVar
 SELECT * FROM a WHERE k = 1 AND k = 2-1
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
 
 # --------------------------------------------------
 # FoldNullAndOr
@@ -249,44 +249,44 @@ norm expect=FoldNullAndOr
 SELECT null and null AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── null [type=bool]
+      └── CAST(NULL AS BOOL) [as=r:6]
 
 norm expect=FoldNullAndOr
 SELECT null or null AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── null [type=bool]
+      └── CAST(NULL AS BOOL) [as=r:6]
 
 norm expect=FoldNullAndOr
 SELECT null or (null and null and null) or null AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── null [type=bool]
+      └── CAST(NULL AS BOOL) [as=r:6]
 
 # Don't fold.
 norm expect-not=FoldNullAndOr
 SELECT (null or k=1) AS r, (null and k=1) AS s FROM a
 ----
 project
- ├── columns: r:6(bool) s:7(bool)
+ ├── columns: r:6 s:7
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      ├── NULL OR (k = 1) [type=bool, outer=(1)]
-      └── NULL AND (k = 1) [type=bool, outer=(1)]
+      ├── NULL OR (k:1 = 1) [as=r:6, outer=(1)]
+      └── NULL AND (k:1 = 1) [as=s:7, outer=(1)]
 
 # --------------------------------------------------
 # FoldNotTrue + FoldNotFalse + FoldNotNull
@@ -296,11 +296,11 @@ norm expect=(FoldNotTrue,FoldNotFalse,FoldNotNull)
 SELECT NOT(1=1), NOT(1=2), NOT(NULL)
 ----
 values
- ├── columns: "?column?":1(bool!null) "?column?":2(bool!null) "?column?":3(bool)
+ ├── columns: "?column?":1!null "?column?":2!null "?column?":3
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-3)
- └── (false, true, NULL) [type=tuple{bool, bool, bool}]
+ └── (false, true, NULL)
 
 # --------------------------------------------------
 # NegateComparison
@@ -311,19 +311,19 @@ norm expect=NegateComparison
 SELECT * FROM a WHERE NOT(i=1) AND NOT(f<>i) AND NOT(i>k) AND NOT(i>=f) AND NOT(f<1) AND NOT(i<=1)
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3!null s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── (i != 1) AND (i > 1) [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
-      ├── f = i [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
-      ├── i <= k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── i < f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      └── f >= 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - ]; tight)]
+      ├── (i:2 != 1) AND (i:2 > 1) [outer=(2), constraints=(/2: [/2 - ]; tight)]
+      ├── f:3 = i:2 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+      ├── i:2 <= k:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      ├── i:2 < f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      └── f:3 >= 1.0 [outer=(3), constraints=(/3: [/1.0 - ]; tight)]
 
 # IN and IS comparisons.
 norm expect=NegateComparison
@@ -332,17 +332,17 @@ FROM a
 WHERE NOT(i IN (1,2)) AND NOT(f NOT IN (3,4)) AND NOT(f IS NULL) AND NOT(s IS NOT NULL)
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── (f IN (3.0, 4.0)) AND (f IS NOT NULL) [type=bool, outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
-      ├── i NOT IN (1, 2) [type=bool, outer=(2)]
-      └── s IS NULL [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
+      ├── (f:3 IN (3.0, 4.0)) AND (f:3 IS NOT NULL) [outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
+      ├── i:2 NOT IN (1, 2) [outer=(2)]
+      └── s:4 IS NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
 
 # Like comparisons.
 norm expect=NegateComparison
@@ -351,52 +351,52 @@ FROM a
 WHERE NOT(s LIKE 'foo') AND NOT(s NOT LIKE 'foo') AND NOT(s ILIKE 'foo') AND NOT(s NOT ILIKE 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── s NOT LIKE 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
-      ├── s LIKE 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-      ├── s NOT ILIKE 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
-      └── s ILIKE 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s:4 NOT LIKE 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s:4 LIKE 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── s:4 NOT ILIKE 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
+      └── s:4 ILIKE 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
 
 # SimilarTo comparisons.
 norm expect=NegateComparison
 SELECT * FROM a WHERE NOT(s SIMILAR TO 'foo') AND NOT(s NOT SIMILAR TO 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── s NOT SIMILAR TO 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
-      └── s SIMILAR TO 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── s:4 NOT SIMILAR TO 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
+      └── s:4 SIMILAR TO 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # RegMatch comparisons.
 norm expect=NegateComparison
 SELECT * FROM a WHERE NOT(s ~ 'foo') AND NOT(s !~ 'foo') AND NOT(s ~* 'foo') AND NOT (s !~* 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── s !~ 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
-      ├── s ~ 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
-      ├── s !~* 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
-      └── s ~* 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s:4 !~ 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s:4 ~ 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
+      ├── s:4 !~* 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
+      └── s:4 ~* 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
 
 norm expect-not=NegateComparison
 SELECT * FROM a WHERE
@@ -407,20 +407,20 @@ SELECT * FROM a WHERE
   NOT(ARRAY[i] && ARRAY[1])
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── NOT ('[1, 2]' @> j) [type=bool, outer=(5)]
-      ├── NOT ('[3, 4]' @> j) [type=bool, outer=(5)]
-      ├── NOT (j ? 'foo') [type=bool, outer=(5)]
-      ├── NOT (j ?| ARRAY['foo']) [type=bool, outer=(5)]
-      ├── NOT (j ?& ARRAY['foo']) [type=bool, outer=(5)]
-      └── NOT (ARRAY[i] && ARRAY[1]) [type=bool, outer=(2)]
+      ├── NOT ('[1, 2]' @> j:5) [outer=(5)]
+      ├── NOT ('[3, 4]' @> j:5) [outer=(5)]
+      ├── NOT (j:5 ? 'foo') [outer=(5)]
+      ├── NOT (j:5 ?| ARRAY['foo']) [outer=(5)]
+      ├── NOT (j:5 ?& ARRAY['foo']) [outer=(5)]
+      └── NOT (ARRAY[i:2] && ARRAY[1]) [outer=(2)]
 
 # --------------------------------------------------
 # EliminateNot
@@ -429,12 +429,12 @@ norm expect=EliminateNot
 SELECT * FROM c WHERE NOT(NOT(a))
 ----
 select
- ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
  ├── fd: ()-->(1)
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── filters
-      └── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
 
 # --------------------------------------------------
 # NegateAnd + NegateComparison
@@ -443,29 +443,29 @@ norm expect=(NegateAnd,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i AND i < f)
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── (k < i) OR (i >= f) [type=bool, outer=(1-3), constraints=(/2: (/NULL - ])]
+      └── (k:1 < i:2) OR (i:2 >= f:3) [outer=(1-3), constraints=(/2: (/NULL - ])]
 
 norm expect=(NegateAnd,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i AND i < f AND (i > 5 AND i < 10 AND f > 1))
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── ((((k < i) OR (i >= f)) OR (i <= 5)) OR (i >= 10)) OR (f <= 1.0) [type=bool, outer=(1-3)]
+      └── ((((k:1 < i:2) OR (i:2 >= f:3)) OR (i:2 <= 5)) OR (i:2 >= 10)) OR (f:3 <= 1.0) [outer=(1-3)]
 
 
 # --------------------------------------------------
@@ -475,34 +475,34 @@ norm expect=(NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR k + i < f)
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3!null s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── k < i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── i >= f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      └── f <= (k + i) [type=bool, outer=(1-3), constraints=(/3: (/NULL - ])]
+      ├── k:1 < i:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      ├── i:2 >= f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      └── f:3 <= (k:1 + i:2) [outer=(1-3), constraints=(/3: (/NULL - ])]
 
 norm expect=(NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR (i > 10 OR i < 5 OR f > 1))
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3!null s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── (i <= 10) AND (i >= 5) [type=bool, outer=(2), constraints=(/2: [/5 - /10]; tight)]
-      ├── k < i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── i >= f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      └── f <= 1.0 [type=bool, outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
+      ├── (i:2 <= 10) AND (i:2 >= 5) [outer=(2), constraints=(/2: [/5 - /10]; tight)]
+      ├── k:1 < i:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      ├── i:2 >= f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      └── f:3 <= 1.0 [outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
 
 # --------------------------------------------------
 # NegateAnd + NegateOr + NegateComparison
@@ -511,30 +511,30 @@ norm expect=(NegateAnd,NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT ((k >= i OR i < f) AND (i > 5 OR f > 1))
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3!null s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── ((k < i) AND (i >= f)) OR ((i <= 5) AND (f <= 1.0)) [type=bool, outer=(1-3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      └── ((k:1 < i:2) AND (i:2 >= f:3)) OR ((i:2 <= 5) AND (f:3 <= 1.0)) [outer=(1-3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
 
 norm expect=(NegateAnd,NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT ((k >= i AND i < f) OR (i > 5 AND f > 1))
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── (k < i) OR (i >= f) [type=bool, outer=(1-3), constraints=(/2: (/NULL - ])]
-      └── (i <= 5) OR (f <= 1.0) [type=bool, outer=(2,3)]
+      ├── (k:1 < i:2) OR (i:2 >= f:3) [outer=(1-3), constraints=(/2: (/NULL - ])]
+      └── (i:2 <= 5) OR (f:3 <= 1.0) [outer=(2,3)]
 
 # --------------------------------------------------
 # ExtractRedundantConjunct
@@ -543,167 +543,167 @@ norm expect=(ExtractRedundantConjunct)
 SELECT b OR b FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: b:2(bool)
+ │    └── columns: b:2
  └── projections
-      └── variable: b [type=bool, outer=(2)]
+      └── b:2 [as="?column?":7, outer=(2)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT a OR (a AND b) OR (a AND c) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool)
+ │    └── columns: a:1
  └── projections
-      └── variable: a [type=bool, outer=(1)]
+      └── a:1 [as="?column?":7, outer=(1)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR a OR (a AND c) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool)
+ │    └── columns: a:1
  └── projections
-      └── variable: a [type=bool, outer=(1)]
+      └── a:1 [as="?column?":7, outer=(1)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (b AND a) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool)
+ │    └── columns: a:1 b:2
  └── projections
-      └── b AND a [type=bool, outer=(1,2)]
+      └── b:2 AND a:1 [as="?column?":7, outer=(1,2)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (c AND a) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool)
+ │    └── columns: a:1 b:2 c:3
  └── projections
-      └── a AND (b OR c) [type=bool, outer=(1-3)]
+      └── a:1 AND (b:2 OR c:3) [as="?column?":7, outer=(1-3)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT * FROM c WHERE (a AND b) OR (a AND b AND c) OR (b AND a)
 ----
 select
- ├── columns: a:1(bool!null) b:2(bool!null) c:3(bool) d:4(bool) e:5(bool)
+ ├── columns: a:1!null b:2!null c:3 d:4 e:5
  ├── fd: ()-->(1,2)
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── filters
-      ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
-      └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── b:2 [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT * FROM c WHERE (b AND (a AND c)) OR (d AND (e AND a))
 ----
 select
- ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
  ├── fd: ()-->(1)
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── filters
-      ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
-      └── (b AND c) OR (d AND e) [type=bool, outer=(2-5)]
+      ├── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── (b:2 AND c:3) OR (d:4 AND e:5) [outer=(2-5)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT * FROM c WHERE (b AND a) OR (c AND (a AND e) OR (e AND a AND d))
 ----
 select
- ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
  ├── fd: ()-->(1)
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── filters
-      ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
-      └── b OR (e AND (c OR d)) [type=bool, outer=(2-5)]
+      ├── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── b:2 OR (e:5 AND (c:3 OR d:4)) [outer=(2-5)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT * FROM a WHERE ((k > 5) AND (i < 2) AND (i > 0)) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── i < 2 [type=bool, outer=(2), constraints=(/2: (/NULL - /1]; tight)]
-      ├── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
-      └── (i > 0) OR (s = 'foo') [type=bool, outer=(2,4)]
+      ├── i:2 < 2 [outer=(2), constraints=(/2: (/NULL - /1]; tight)]
+      ├── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+      └── (i:2 > 0) OR (s:4 = 'foo') [outer=(2,4)]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT * FROM a WHERE (k > 5) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 # Works with nulls too.
 norm expect=(ExtractRedundantConjunct)
 SELECT null or (null and k=1) AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── null [type=unknown]
+      └── NULL [as=r:6]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT (null and k=2) or (null and k=1) AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── NULL AND ((k = 2) OR (k = 1)) [type=bool, outer=(1)]
+      └── NULL AND ((k:1 = 2) OR (k:1 = 1)) [as=r:6, outer=(1)]
 
 # Check that we don't match non-redundant cases.
 norm expect-not=(ExtractRedundantConjunct)
 SELECT a OR b OR b FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool)
+ │    └── columns: a:1 b:2
  └── projections
-      └── (a OR b) OR b [type=bool, outer=(1,2)]
+      └── (a:1 OR b:2) OR b:2 [as="?column?":7, outer=(1,2)]
 
 norm expect-not=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (a OR c) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool)
+ │    └── columns: a:1 b:2 c:3
  └── projections
-      └── (a AND b) OR (a OR c) [type=bool, outer=(1-3)]
+      └── (a:1 AND b:2) OR (a:1 OR c:3) [as="?column?":7, outer=(1-3)]
 
 norm expect-not=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (NOT a AND c) FROM c
 ----
 project
- ├── columns: "?column?":7(bool)
+ ├── columns: "?column?":7
  ├── scan c
- │    └── columns: a:1(bool) b:2(bool) c:3(bool)
+ │    └── columns: a:1 b:2 c:3
  └── projections
-      └── (a AND b) OR ((NOT a) AND c) [type=bool, outer=(1-3)]
+      └── (a:1 AND b:2) OR ((NOT a:1) AND c:3) [as="?column?":7, outer=(1-3)]

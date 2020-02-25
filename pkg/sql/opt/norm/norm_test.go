@@ -38,7 +38,7 @@ import (
 //   ...
 func TestNormRules(t *testing.T) {
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
-		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
 	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

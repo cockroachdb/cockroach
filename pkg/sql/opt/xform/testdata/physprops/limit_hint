@@ -55,30 +55,30 @@ opt
 SELECT * FROM (SELECT * FROM t OFFSET 5) WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) ordinality:4(int!null)
+ ├── columns: x:1!null y:2 z:3 ordinality:4!null
  ├── internal-ordering: +4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (4)-->(1-3)
  ├── ordering: +4
  ├── ordinality
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) ordinality:4(int!null)
+ │    ├── columns: x:1!null y:2 z:3 ordinality:4!null
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (4)-->(1-3)
  │    ├── ordering: +4
  │    ├── limit hint: 10.00
  │    └── offset
- │         ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │         ├── columns: x:1!null y:2 z:3
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3)
  │         ├── limit hint: 10.00
  │         ├── scan t
- │         │    ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │         │    ├── columns: x:1!null y:2 z:3
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2,3)
  │         │    └── limit hint: 15.00
- │         └── const: 5 [type=int]
- └── const: 10 [type=int]
+ │         └── 5
+ └── 10
 
 
 # --------------------------------------------------
@@ -89,129 +89,129 @@ opt
 SELECT * FROM (SELECT * FROM t UNION SELECT * from t) LIMIT 10
 ----
 limit
- ├── columns: x:7(int!null) y:8(int) z:9(int)
+ ├── columns: x:7!null y:8 z:9
  ├── cardinality: [0 - 10]
  ├── key: (7-9)
  ├── union
- │    ├── columns: x:7(int!null) y:8(int) z:9(int)
- │    ├── left columns: t.x:1(int) t.y:2(int) t.z:3(int)
- │    ├── right columns: t.x:4(int) t.y:5(int) t.z:6(int)
+ │    ├── columns: x:7!null y:8 z:9
+ │    ├── left columns: t.x:1 t.y:2 t.z:3
+ │    ├── right columns: t.x:4 t.y:5 t.z:6
  │    ├── key: (7-9)
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: t.x:1(int!null) t.y:2(int) t.z:3(int)
+ │    │    ├── columns: t.x:1!null t.y:2 t.z:3
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,3)
  │    │    └── limit hint: 10.00
  │    └── scan t
- │         ├── columns: t.x:4(int!null) t.y:5(int) t.z:6(int)
+ │         ├── columns: t.x:4!null t.y:5 t.z:6
  │         ├── key: (4)
  │         ├── fd: (4)-->(5,6)
  │         └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 opt
 SELECT * FROM (SELECT * FROM t UNION ALL SELECT * from t) LIMIT 10
 ----
 limit
- ├── columns: x:7(int!null) y:8(int) z:9(int)
+ ├── columns: x:7!null y:8 z:9
  ├── cardinality: [0 - 10]
  ├── union-all
- │    ├── columns: x:7(int!null) y:8(int) z:9(int)
- │    ├── left columns: t.x:1(int) t.y:2(int) t.z:3(int)
- │    ├── right columns: t.x:4(int) t.y:5(int) t.z:6(int)
+ │    ├── columns: x:7!null y:8 z:9
+ │    ├── left columns: t.x:1 t.y:2 t.z:3
+ │    ├── right columns: t.x:4 t.y:5 t.z:6
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: t.x:1(int!null) t.y:2(int) t.z:3(int)
+ │    │    ├── columns: t.x:1!null t.y:2 t.z:3
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,3)
  │    │    └── limit hint: 10.00
  │    └── scan t
- │         ├── columns: t.x:4(int!null) t.y:5(int) t.z:6(int)
+ │         ├── columns: t.x:4!null t.y:5 t.z:6
  │         ├── key: (4)
  │         ├── fd: (4)-->(5,6)
  │         └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 opt
 SELECT * FROM (SELECT z FROM t INTERSECT SELECT y from t) LIMIT 10
 ----
 limit
- ├── columns: z:3(int)
+ ├── columns: z:3
  ├── cardinality: [0 - 10]
  ├── key: (3)
  ├── intersect
- │    ├── columns: z:3(int)
- │    ├── left columns: z:3(int)
- │    ├── right columns: y:5(int)
+ │    ├── columns: z:3
+ │    ├── left columns: z:3
+ │    ├── right columns: y:5
  │    ├── key: (3)
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: z:3(int)
+ │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5(int)
+ │         ├── columns: y:5
  │         └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 opt
 SELECT * FROM (SELECT z FROM t INTERSECT ALL SELECT y from t) LIMIT 10
 ----
 limit
- ├── columns: z:3(int)
+ ├── columns: z:3
  ├── cardinality: [0 - 10]
  ├── intersect-all
- │    ├── columns: z:3(int)
- │    ├── left columns: z:3(int)
- │    ├── right columns: y:5(int)
+ │    ├── columns: z:3
+ │    ├── left columns: z:3
+ │    ├── right columns: y:5
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: z:3(int)
+ │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5(int)
+ │         ├── columns: y:5
  │         └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 opt
 SELECT * FROM (SELECT z FROM t EXCEPT SELECT y from t) LIMIT 10
 ----
 limit
- ├── columns: z:3(int)
+ ├── columns: z:3
  ├── cardinality: [0 - 10]
  ├── key: (3)
  ├── except
- │    ├── columns: z:3(int)
- │    ├── left columns: z:3(int)
- │    ├── right columns: y:5(int)
+ │    ├── columns: z:3
+ │    ├── left columns: z:3
+ │    ├── right columns: y:5
  │    ├── key: (3)
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: z:3(int)
+ │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5(int)
+ │         ├── columns: y:5
  │         └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 opt
 SELECT * FROM (SELECT z FROM t EXCEPT ALL SELECT y from t) LIMIT 10
 ----
 limit
- ├── columns: z:3(int)
+ ├── columns: z:3
  ├── cardinality: [0 - 10]
  ├── except-all
- │    ├── columns: z:3(int)
- │    ├── left columns: z:3(int)
- │    ├── right columns: y:5(int)
+ │    ├── columns: z:3
+ │    ├── left columns: z:3
+ │    ├── right columns: y:5
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: z:3(int)
+ │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5(int)
+ │         ├── columns: y:5
  │         └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 # --------------------------------------------------
 # Limit hint depends on statistics.
@@ -222,79 +222,79 @@ opt
 SELECT * FROM t WHERE z=1 LIMIT 10
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ ├── columns: x:1!null y:2 z:3!null
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── select
- │    ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ │    ├── columns: x:1!null y:2 z:3!null
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2)
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │    │    ├── columns: x:1!null y:2 z:3
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,3)
  │    │    └── limit hint: 50.00
  │    └── filters
- │         └── z = 1 [type=bool, outer=(3), fd=()-->(3)]
- └── const: 10 [type=int]
+ │         └── z:3 = 1 [outer=(3), fd=()-->(3)]
+ └── 10
 
 # DistinctOn operator.
 opt
 SELECT DISTINCT z FROM t LIMIT 2
 ----
 limit
- ├── columns: z:3(int)
+ ├── columns: z:3
  ├── cardinality: [0 - 2]
  ├── key: (3)
  ├── distinct-on
- │    ├── columns: z:3(int)
- │    ├── grouping columns: z:3(int)
+ │    ├── columns: z:3
+ │    ├── grouping columns: z:3
  │    ├── key: (3)
  │    ├── limit hint: 2.00
  │    └── scan t
- │         ├── columns: z:3(int)
+ │         ├── columns: z:3
  │         └── limit hint: 3.44
- └── const: 2 [type=int]
+ └── 2
 
 # No limit hint propagation if number of distinct rows < required number of rows.
 opt
 SELECT DISTINCT z FROM t LIMIT 10
 ----
 limit
- ├── columns: z:3(int)
+ ├── columns: z:3
  ├── cardinality: [0 - 10]
  ├── key: (3)
  ├── distinct-on
- │    ├── columns: z:3(int)
- │    ├── grouping columns: z:3(int)
+ │    ├── columns: z:3
+ │    ├── grouping columns: z:3
  │    ├── key: (3)
  │    ├── limit hint: 10.00
  │    └── scan t
- │         └── columns: z:3(int)
- └── const: 10 [type=int]
+ │         └── columns: z:3
+ └── 10
 
 opt
 SELECT * FROM t WHERE z=4 LIMIT 10
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ ├── columns: x:1!null y:2 z:3!null
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── select
- │    ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ │    ├── columns: x:1!null y:2 z:3!null
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2)
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │    │    ├── columns: x:1!null y:2 z:3
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3)
  │    └── filters
- │         └── z = 4 [type=bool, outer=(3), fd=()-->(3)]
- └── const: 10 [type=int]
+ │         └── z:3 = 4 [outer=(3), fd=()-->(3)]
+ └── 10
 
 
 # --------------------------------------------------
@@ -306,103 +306,101 @@ opt
 SELECT z FROM t@y_idx WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: z:3(int)  [hidden: ordinality:4(int!null)]
+ ├── columns: z:3  [hidden: ordinality:4!null]
  ├── internal-ordering: +4
  ├── cardinality: [0 - 10]
  ├── key: (4)
  ├── fd: (4)-->(3)
  ├── ordering: +4
  ├── ordinality
- │    ├── columns: z:3(int) ordinality:4(int!null)
+ │    ├── columns: z:3 ordinality:4!null
  │    ├── key: (4)
  │    ├── fd: (4)-->(3)
  │    ├── ordering: +4
  │    ├── limit hint: 10.00
  │    └── index-join t
- │         ├── columns: z:3(int)
+ │         ├── columns: z:3
  │         ├── limit hint: 10.00
  │         └── scan t@y_idx
- │              ├── columns: x:1(int!null)
+ │              ├── columns: x:1!null
  │              ├── flags: force-index=y_idx
  │              ├── key: (1)
  │              └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 # Ordinality operator.
 opt
 SELECT * FROM t WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) ordinality:4(int!null)
+ ├── columns: x:1!null y:2 z:3 ordinality:4!null
  ├── internal-ordering: +4
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (4)-->(1-3)
  ├── ordering: +4
  ├── ordinality
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) ordinality:4(int!null)
+ │    ├── columns: x:1!null y:2 z:3 ordinality:4!null
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (4)-->(1-3)
  │    ├── ordering: +4
  │    ├── limit hint: 10.00
  │    └── scan t
- │         ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │         ├── columns: x:1!null y:2 z:3
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3)
  │         └── limit hint: 10.00
- └── const: 10 [type=int]
+ └── 10
 
 # Project operator.
 opt
 SELECT * FROM (SELECT 1 FROM t) WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: "?column?":4(int!null) ordinality:5(int!null)
+ ├── columns: "?column?":4!null ordinality:5!null
  ├── internal-ordering: +5 opt(4)
  ├── cardinality: [0 - 10]
  ├── key: (5)
  ├── fd: ()-->(4)
  ├── ordering: +5 opt(4) [actual: +5]
  ├── ordinality
- │    ├── columns: "?column?":4(int!null) ordinality:5(int!null)
+ │    ├── columns: "?column?":4!null ordinality:5!null
  │    ├── key: (5)
  │    ├── fd: ()-->(4)
  │    ├── ordering: +5 opt(4) [actual: +5]
  │    ├── limit hint: 10.00
  │    └── project
- │         ├── columns: "?column?":4(int!null)
+ │         ├── columns: "?column?":4!null
  │         ├── fd: ()-->(4)
  │         ├── limit hint: 10.00
  │         ├── scan t@y_idx
  │         │    └── limit hint: 10.00
  │         └── projections
- │              └── const: 1 [type=int]
- └── const: 10 [type=int]
+ │              └── 1 [as="?column?":4]
+ └── 10
 
 # ProjectSet operator.
 opt
 SELECT *, generate_series(1, t.x) FROM t LIMIT 10
 ----
 limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) generate_series:4(int)
+ ├── columns: x:1!null y:2 z:3 generate_series:4
  ├── cardinality: [0 - 10]
  ├── side-effects
  ├── fd: (1)-->(2,3)
  ├── project-set
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) generate_series:4(int)
+ │    ├── columns: x:1!null y:2 z:3 generate_series:4
  │    ├── side-effects
  │    ├── fd: (1)-->(2,3)
  │    ├── limit hint: 10.00
  │    ├── scan t
- │    │    ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │    │    ├── columns: x:1!null y:2 z:3
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,3)
  │    │    └── limit hint: 10.00
  │    └── zip
- │         └── function: generate_series [type=int, outer=(1), side-effects]
- │              ├── const: 1 [type=int]
- │              └── variable: x [type=int]
- └── const: 10 [type=int]
+ │         └── generate_series(1, x:1) [outer=(1), side-effects]
+ └── 10
 
 # Regression test for #44683.
 exec-ddl
@@ -417,30 +415,30 @@ opt
 SELECT DISTINCT t44683.c0 FROM t44683, v44683 LIMIT -1;
 ----
 limit
- ├── columns: c0:1(int)
+ ├── columns: c0:1
  ├── cardinality: [0 - 0]
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1)
  ├── distinct-on
- │    ├── columns: c0:1(int)
- │    ├── grouping columns: c0:1(int)
+ │    ├── columns: c0:1
+ │    ├── grouping columns: c0:1
  │    ├── cardinality: [0 - 0]
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── limit hint: 1.00
  │    └── inner-join (cross)
- │         ├── columns: c0:1(int)
+ │         ├── columns: c0:1
  │         ├── cardinality: [0 - 0]
  │         ├── side-effects
  │         ├── scan t44683
- │         │    └── columns: c0:1(int)
+ │         │    └── columns: c0:1
  │         ├── limit
  │         │    ├── cardinality: [0 - 0]
  │         │    ├── side-effects
  │         │    ├── key: ()
  │         │    ├── scan t44683
  │         │    │    └── limit hint: 1.00
- │         │    └── const: -1 [type=int]
+ │         │    └── -1
  │         └── filters (true)
- └── const: -1 [type=int]
+ └── -1

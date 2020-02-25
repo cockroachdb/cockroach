@@ -13,81 +13,81 @@ norm expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
 ----
 values
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- └── tuple [type=tuple{bool}]
-      └── gt [type=bool]
-           ├── subquery [type=int]
+ └── tuple
+      └── gt
+           ├── subquery
            │    └── limit
-           │         ├── columns: i:2(int)
+           │         ├── columns: i:2
            │         ├── cardinality: [0 - 1]
            │         ├── key: ()
            │         ├── fd: ()-->(2)
            │         ├── scan a
-           │         │    ├── columns: i:2(int)
+           │         │    ├── columns: i:2
            │         │    └── limit hint: 1.00
-           │         └── const: 1 [type=int]
-           └── const: 5 [type=int]
+           │         └── 1
+           └── 5
 
 norm expect=EliminateMax1Row
 SELECT (SELECT count(*) FROM a) > 100 AS r
 ----
 values
- ├── columns: r:7(bool)
+ ├── columns: r:7
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
- └── tuple [type=tuple{bool}]
-      └── gt [type=bool]
-           ├── subquery [type=int]
+ └── tuple
+      └── gt
+           ├── subquery
            │    └── scalar-group-by
-           │         ├── columns: count_rows:6(int!null)
+           │         ├── columns: count_rows:6!null
            │         ├── cardinality: [1 - 1]
            │         ├── key: ()
            │         ├── fd: ()-->(6)
            │         ├── scan a
            │         └── aggregations
-           │              └── count-rows [type=int]
-           └── const: 100 [type=int]
+           │              └── count-rows [as=count_rows:6]
+           └── 100
 
 norm expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
 ----
 values
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- └── tuple [type=tuple{bool}]
-      └── gt [type=bool]
-           ├── subquery [type=int]
+ └── tuple
+      └── gt
+           ├── subquery
            │    └── values
-           │         ├── columns: i:2(int!null)
+           │         ├── columns: i:2!null
            │         ├── cardinality: [0 - 0]
            │         ├── key: ()
            │         └── fd: ()-->(2)
-           └── const: 5 [type=int]
+           └── 5
 
 # Don't remove the Max1Row operator.
 norm expect-not=EliminateMax1Row
 SELECT (SELECT i FROM a) > 5 AS r
 ----
 values
- ├── columns: r:6(bool)
+ ├── columns: r:6
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- └── tuple [type=tuple{bool}]
-      └── gt [type=bool]
-           ├── subquery [type=int]
+ └── tuple
+      └── gt
+           ├── subquery
            │    └── max1-row
-           │         ├── columns: i:2(int)
+           │         ├── columns: i:2
            │         ├── error: "more than one row returned by a subquery used as an expression"
            │         ├── cardinality: [0 - 1]
            │         ├── key: ()
            │         ├── fd: ()-->(2)
            │         └── scan a
-           │              └── columns: i:2(int)
-           └── const: 5 [type=int]
+           │              └── columns: i:2
+           └── 5
