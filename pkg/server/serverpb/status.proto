@@ -754,6 +754,31 @@ message StatementsResponse {
   string internal_app_name_prefix = 4;
 }
 
+message CreateStatementDiagnosticsRequestRequest {
+  string statement_fingerprint = 1;
+}
+
+message StatementDiagnosticsRequest {
+  string statement_fingerprint = 1;
+  google.protobuf.Timestamp requested_at = 2
+  [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  google.protobuf.Timestamp completed_at = 3
+  [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
+  bool completed = 4;
+}
+
+message CreateStatementDiagnosticsRequestResponse {
+  StatementDiagnosticsRequest request = 1;
+}
+
+message StatementDiagnosticsRequestsRequest {
+  string statement_fingerprint = 1 [ (gogoproto.nullable) = true ];
+}
+
+message StatementDiagnosticsRequestsResponse {
+  repeated StatementDiagnosticsRequest requests = 1 [ (gogoproto.nullable) = false ];
+}
+
 message JobRegistryStatusRequest {
   string node_id = 1;
 }
@@ -915,6 +940,16 @@ service Status {
   rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
       get: "/_status/statements"
+    };
+  }
+  rpc CreateStatementDiagnosticsRequest(CreateStatementDiagnosticsRequestRequest) returns (CreateStatementDiagnosticsRequestResponse) {
+    option (google.api.http) = {
+      post: "/_status/statementdiagnosticsrequests"
+    };
+  }
+  rpc StatementDiagnosticsRequests(StatementDiagnosticsRequestsRequest) returns (StatementDiagnosticsRequestsResponse) {
+    option (google.api.http) = {
+      get: "/_status/statementdiagnosticsrequests"
     };
   }
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {
