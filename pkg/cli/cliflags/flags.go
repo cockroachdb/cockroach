@@ -716,7 +716,11 @@ Also, if you use equal signs in the file path to a store, you must use the
 		Name: "storage-engine",
 		Description: `
 Storage engine to use for all stores on this cockroach node. Options are rocksdb,
-or pebble.`,
+or pebble.
+
+If left unspecified, the storage engine last used to write to the
+first store directory is used (see --store). If unspecified and store directory
+is uninitialized, rocksdb is used as the default storage engine.`,
 	}
 
 	Size = FlagInfo{

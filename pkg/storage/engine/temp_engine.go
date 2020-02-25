@@ -37,6 +37,8 @@ func NewTempEngine(
 		fallthrough
 	case enginepb.EngineTypePebble:
 		return NewPebbleTempEngine(ctx, tempStorage, storeSpec)
+	case enginepb.EngineTypeDefault:
+		fallthrough
 	case enginepb.EngineTypeRocksDB:
 		return NewRocksDBTempEngine(tempStorage, storeSpec)
 	}

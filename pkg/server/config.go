@@ -437,10 +437,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		details = append(details, fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 		pebbleCache = pebble.NewCache(cfg.CacheSize)
 		defer pebbleCache.Unref()
-	} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	}
+	if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		details = append(details, fmt.Sprintf("RocksDB cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 		cache = engine.NewRocksDBCache(cfg.CacheSize)
 		defer cache.Release()
+	} else if cfg.StorageEngine == enginepb.EngineTypeDefault {
+		return nil, errors.New("engine type 'default' left unresolved")
 	}
 
 	var physicalStores int

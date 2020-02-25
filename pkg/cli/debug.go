@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -140,8 +141,19 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (engi
 	}
 
 	var db engine.Engine
+	storageEngine := engine.DefaultStorageEngine
+	if storageEngine == enginepb.EngineTypeDefault {
+		storageEngine = enginepb.EngineTypeRocksDB
+		// Check if this storage directory was last written to by pebble. In that
+		// case, default to opening a Pebble engine.
+		if version, err := pebble.GetVersion(storageConfig.Dir, vfs.Default); err == nil {
+			if version != "" && !strings.HasPrefix(version, "rocksdb") {
+				storageEngine = enginepb.EngineTypePebble
+			}
+		}
+	}
 
-	switch engine.DefaultStorageEngine {
+	switch storageEngine {
 	case enginepb.EngineTypePebble:
 		cfg := engine.PebbleConfig{
 			StorageConfig: storageConfig,

@@ -30,6 +30,8 @@ func NewInMem(
 		return newTeeInMem(ctx, attrs, cacheSize)
 	case enginepb.EngineTypePebble:
 		return newPebbleInMem(ctx, attrs, cacheSize)
+	case enginepb.EngineTypeDefault:
+		fallthrough
 	case enginepb.EngineTypeRocksDB:
 		return newRocksDBInMem(attrs, cacheSize)
 	}
