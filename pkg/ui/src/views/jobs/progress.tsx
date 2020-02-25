@@ -25,7 +25,6 @@ import {cockroach} from "src/js/protos";
 
 export class Progress extends React.PureComponent<{ job: Job; lineWidth: number; showPercentage: boolean}> {
   render() {
-    console.log(this.props.job)
     if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED, JOB_STATUS_PAUSED, JOB_STATUS_PENDING, JOB_STATUS_RUNNING)) {
       const className = classNames("jobs-table__status", `jobs-table__status--${this.props.job.status}`);
       return (

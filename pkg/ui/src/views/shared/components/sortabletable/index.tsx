@@ -70,6 +70,7 @@ interface TableProps {
   expandableConfig?: ExpandableConfig;
   drawer?: boolean;
   firstCellBordered?: boolean;
+  renderNoResult?: React.ReactNode;
 }
 
 export interface ExpandableConfig {
@@ -233,7 +234,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
@@ -284,8 +285,7 @@ export class SortableTable extends React.Component<TableProps> {
         )}
         {count === 0 && (
           <div className="table__no-results">
-            <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
-            <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
+            {renderNoResult}
           </div>
         )}
       </React.Fragment>

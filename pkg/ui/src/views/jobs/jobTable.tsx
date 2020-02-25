@@ -61,6 +61,7 @@ export interface JobTableProps {
   jobs: CachedDataReducerState<JobsResponse>;
   pageSize?: number;
   current?: number;
+  isUsedFilter: boolean;
 }
 
 export interface JobTableState {
@@ -139,14 +140,21 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     return data;
   }
 
+  noJobsResult = () => (
+    <>
+      <p>There are no jobs that match your search in filter.</p>
+      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html" target="_blank">Learn more about jobs</a>
+    </>
+  )
+
   render() {
     const jobs = this.props.jobs.data.jobs;
     const { pagination } = this.state;
-    if (_.isEmpty(jobs)) {
+    if (_.isEmpty(jobs) && !this.props.isUsedFilter) {
       return (
         <Empty
-          title="Jobs will show up here"
-          description="Jobs can include backup, import, restore or cdc running."
+          title="There are no jobs to display."
+          description="The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds."
           buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html"
         />
       );
@@ -166,6 +174,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
             className="jobs-table"
             rowClass={job => "jobs-table__row--" + job.status}
             columns={jobsTableColumns}
+            renderNoResult={this.noJobsResult()}
           />
         </section>
         <Pagination
