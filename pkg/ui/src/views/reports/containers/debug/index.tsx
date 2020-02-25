@@ -16,12 +16,12 @@ import { DecommissionedNodeStatusRow, liveNodesTableDataSelector } from "oss/src
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import { withRouter } from "react-router";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import InfoBox from "src/views/shared/components/infoBox";
 import LicenseType from "src/views/shared/components/licenseType";
 import { Panel, PanelPair, PanelSection, PanelTitle } from "src/views/shared/components/panelSection";
 import "./debug.styl";
-import { RouterProps } from "react-router";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
@@ -80,7 +80,7 @@ function DebugPanelLink(props: { name: string, url: string,  note: string }) {
   );
 }
 
-interface IDebugProps extends RouterProps {
+interface IDebugProps {
   nodesSummary: NodesSummary;
   dataSource: DecommissionedNodeStatusRow[];
 }
@@ -470,12 +470,9 @@ class Debug extends React.Component<IDebugProps, IDebugState> {
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
  */
 // tslint:disable-next-line:variable-name
-export default connect(
-  (state: AdminUIState) => {
-    const data = liveNodesTableDataSelector(state);
-    return {
-      nodesSummary: nodesSummarySelector(state),
-      dataSource: data,
-    };
-  },
-)(Debug as any);
+export default withRouter(connect(
+  (state: AdminUIState) => ({
+    nodesSummary: nodesSummarySelector(state),
+    dataSource: liveNodesTableDataSelector(state),
+  }),
+)(Debug as any));
