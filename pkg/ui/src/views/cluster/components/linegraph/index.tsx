@@ -223,6 +223,7 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
 
   render() {
     const { title, subtitle, tooltip, data } = this.props;
+
     let hoverProps: Partial<React.SVGProps<SVGSVGElement>> = {};
     if (this.props.hoverOn) {
       hoverProps = {
@@ -230,6 +231,7 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
         onMouseLeave: this.mouseLeave,
       };
     }
+
     return (
       <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
         <div className="linegraph">
