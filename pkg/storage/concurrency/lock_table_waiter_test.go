@@ -270,12 +270,9 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 				txn:         &pusheeTxn.TxnMeta,
 				ts:          pusheeTxn.WriteTimestamp,
 				key:         keyA,
-				held:        false,
+				held:        lockHeld,
 				access:      spanset.SpanReadWrite,
 				guardAccess: spanset.SpanReadOnly,
-			}
-			if lockHeld {
-				g.state.held = true
 			}
 			if waitAsWrite {
 				g.state.guardAccess = spanset.SpanReadWrite
@@ -283,40 +280,62 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 			g.notify()
 
 			req := makeReq()
-			ir.pushTxn = func(
-				_ context.Context,
-				pusheeArg *enginepb.TxnMeta,
-				h roachpb.Header,
-				pushType roachpb.PushTxnType,
-			) (roachpb.Transaction, *Error) {
-				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
-				require.Equal(t, req.Txn, h.Txn)
-				require.Equal(t, expPushTS, h.Timestamp)
-				if waitAsWrite {
-					require.Equal(t, roachpb.PUSH_ABORT, pushType)
-				} else {
-					require.Equal(t, roachpb.PUSH_TIMESTAMP, pushType)
-				}
+			if lockHeld {
+				// We expect the holder to be pushed.
+				ir.pushTxn = func(
+					_ context.Context,
+					pusheeArg *enginepb.TxnMeta,
+					h roachpb.Header,
+					pushType roachpb.PushTxnType,
+				) (roachpb.Transaction, *Error) {
+					require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
+					require.Equal(t, req.Txn, h.Txn)
+					require.Equal(t, expPushTS, h.Timestamp)
+					if waitAsWrite {
+						require.Equal(t, roachpb.PUSH_ABORT, pushType)
+					} else {
+						require.Equal(t, roachpb.PUSH_TIMESTAMP, pushType)
+					}
 
-				resp := roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.ABORTED}
+					resp := roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.ABORTED}
 
-				// If the lock is held, we'll try to resolve it now that
-				// we know the holder is ABORTED. Otherwide, immediately
-				// tell the request to stop waiting.
-				if lockHeld {
-					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
-						require.Equal(t, keyA, intent.Key)
-						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
-						require.Equal(t, roachpb.ABORTED, intent.Status)
+					// If the lock is held, we'll try to resolve it now that
+					// we know the holder is ABORTED. Otherwide, immediately
+					// tell the request to stop waiting.
+					if lockHeld {
+						ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+							require.Equal(t, keyA, intent.Key)
+							require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
+							require.Equal(t, roachpb.ABORTED, intent.Status)
+							g.state = waitingState{stateKind: doneWaiting}
+							g.notify()
+							return nil
+						}
+					} else {
 						g.state = waitingState{stateKind: doneWaiting}
 						g.notify()
-						return nil
 					}
-				} else {
-					g.state = waitingState{stateKind: doneWaiting}
-					g.notify()
+					return resp, nil
 				}
-				return resp, nil
+			} else {
+				switch k {
+				case waitFor, waitForDistinguished:
+					// We don't expect the holder to be pushed. Set up an observer
+					// channel to detect when the current waiting state is observed.
+					g.stateObserved = make(chan struct{})
+					go func() {
+						<-g.stateObserved
+						g.notify()
+						<-g.stateObserved
+						g.state = waitingState{stateKind: doneWaiting}
+						g.notify()
+						<-g.stateObserved
+					}()
+				case waitElsewhere:
+					// Expect an immediate return.
+				default:
+					t.Fatalf("unexpected state: %v", k)
+				}
 			}
 
 			err := w.WaitOn(ctx, req, g)
