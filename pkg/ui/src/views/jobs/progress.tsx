@@ -14,6 +14,9 @@ import {
   JOB_STATUS_FAILED, JOB_STATUS_SUCCEEDED,
   jobHasOneOfStatuses,
   renamedStatuses,
+  JOB_STATUS_PAUSED,
+  JOB_STATUS_PENDING,
+  JOB_STATUS_RUNNING,
 } from "src/views/jobs/jobStatusOptions";
 import classNames from "classnames";
 import {Line} from "rc-progress";
@@ -22,11 +25,9 @@ import {cockroach} from "src/js/protos";
 
 export class Progress extends React.PureComponent<{ job: Job; lineWidth: number; showPercentage: boolean}> {
   render() {
-    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
-      const className = classNames("jobs-table__status", {
-        "jobs-table__status--succeed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED),
-        "jobs-table__status--failed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_FAILED, JOB_STATUS_CANCELED),
-      });
+    console.log(this.props.job)
+    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED, JOB_STATUS_PAUSED, JOB_STATUS_PENDING, JOB_STATUS_RUNNING)) {
+      const className = classNames("jobs-table__status", `jobs-table__status--${this.props.job.status}`);
       return (
         <div className={className}>
           {renamedStatuses(this.props.job.status)}

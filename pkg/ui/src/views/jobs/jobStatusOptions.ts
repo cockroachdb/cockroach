@@ -28,12 +28,8 @@ export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
 
 export const renamedStatuses = (status: string) => {
   switch (status) {
-    case JOB_STATUS_SUCCEEDED:
-      return "Completed";
-    case JOB_STATUS_FAILED:
-      return "Import failed";
-    case JOB_STATUS_CANCELED:
-      return "Import failed";
+    case JOB_STATUS_RUNNING:
+      return "CDC Running";
     default:
       return _.capitalize(status);
   }
