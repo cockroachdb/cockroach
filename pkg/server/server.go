@@ -1744,6 +1744,8 @@ func (s *Server) Start(ctx context.Context) error {
 	switch s.cfg.StorageEngine {
 	case enginepb.EngineTypePebble:
 		nodeStartCounter += "pebble."
+	case enginepb.EngineTypeDefault:
+		nodeStartCounter += "default."
 	case enginepb.EngineTypeRocksDB:
 		nodeStartCounter += "rocksdb."
 	case enginepb.EngineTypeTeePebbleRocksDB:

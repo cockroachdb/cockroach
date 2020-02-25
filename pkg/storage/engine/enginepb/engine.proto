@@ -19,11 +19,15 @@ enum EngineType {
   option (gogoproto.goproto_enum_prefix) = false;
   option (gogoproto.goproto_enum_stringer) = false;
 
+  // Denotes the default engine as the underlying storage engine type. Resolves
+  // during start to the engine type last used. If left unresolved, it's treated
+  // the same as EngineTypeRocksDB.
+  EngineTypeDefault = 0;
   // Denotes RocksDB as the underlying storage engine type.
-  EngineTypeRocksDB = 0;
+  EngineTypeRocksDB = 1;
   // Denotes Pebble as the underlying storage engine type.
-  EngineTypePebble = 1;
+  EngineTypePebble = 2;
   // Denotes TeePebbleRocksDB as the underlying storage engine type. Only use
   // for testing purposes.
-  EngineTypeTeePebbleRocksDB = 2;
+  EngineTypeTeePebbleRocksDB = 3;
 }

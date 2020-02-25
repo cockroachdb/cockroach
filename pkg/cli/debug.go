@@ -155,6 +155,8 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (engi
 
 		db, err = engine.NewPebble(context.Background(), cfg)
 
+	case enginepb.EngineTypeDefault:
+		fallthrough
 	case enginepb.EngineTypeRocksDB:
 		cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 		defer cache.Release()

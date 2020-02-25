@@ -34,7 +34,7 @@ import (
 var DefaultStorageEngine enginepb.EngineType
 
 func init() {
-	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "rocksdb"))
+	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "default"))
 }
 
 // SimpleIterator is an interface for iterating over key/value pairs in an
