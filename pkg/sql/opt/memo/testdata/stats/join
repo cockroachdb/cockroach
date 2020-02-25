@@ -1145,6 +1145,7 @@ project
  │    │    └── stats: [rows=1000]
  │    ├── max1-row
  │    │    ├── columns: "?column?":15(int!null)
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── outer: (2)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── stats: [rows=1]

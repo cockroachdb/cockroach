@@ -188,7 +188,7 @@ func (f *stubFactory) ConstructLimit(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructMax1Row(input exec.Node) (exec.Node, error) {
+func (f *stubFactory) ConstructMax1Row(input exec.Node, errorText string) (exec.Node, error) {
 	return struct{}{}, nil
 }
 

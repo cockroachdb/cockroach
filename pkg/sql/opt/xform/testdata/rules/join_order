@@ -464,6 +464,7 @@ project
  │    │    │    │    └── key: (1)
  │    │    │    ├── max1-row
  │    │    │    │    ├── columns: bool:6(bool!null)
+ │    │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()

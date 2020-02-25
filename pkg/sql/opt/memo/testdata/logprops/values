@@ -73,6 +73,7 @@ project
       └── subquery [type=int, outer=(1,2), correlated-subquery]
            └── max1-row
                 ├── columns: column1:3(int)
+                ├── error: "more than one row returned by a subquery used as an expression"
                 ├── outer: (1,2)
                 ├── cardinality: [1 - 1]
                 ├── key: ()

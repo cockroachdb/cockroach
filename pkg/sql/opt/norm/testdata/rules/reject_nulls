@@ -173,6 +173,7 @@ project
       │    │    └── fd: (1)-->(2-4)
       │    ├── max1-row
       │    │    ├── columns: u:7(int!null)
+      │    │    ├── error: "more than one row returned by a subquery used as an expression"
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
