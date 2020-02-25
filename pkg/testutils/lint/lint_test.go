@@ -1160,7 +1160,6 @@ func TestLint(t *testing.T) {
 		forbiddenImports := map[string]string{
 			"golang.org/x/net/context":                    "context",
 			"log":                                         "util/log",
-			"path":                                        "path/filepath",
 			"github.com/golang/protobuf/proto":            "github.com/gogo/protobuf/proto",
 			"github.com/satori/go.uuid":                   "util/uuid",
 			"golang.org/x/sync/singleflight":              "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
@@ -1231,10 +1230,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
-			stream.GrepNot(`cockroach/pkg/server/debug/pprofui: path$`),
-			stream.GrepNot(`cockroach/pkg/util/caller: path$`),
-			stream.GrepNot(`cockroach/pkg/storage/cloud: path$`),
-			stream.GrepNot(`cockroach/pkg/ccl/workloadccl: path$`),
+
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")

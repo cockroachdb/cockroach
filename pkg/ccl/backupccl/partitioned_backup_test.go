@@ -93,7 +93,7 @@ func TestGetURIsByLocalityKV(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			defaultURI, urisByLocality, err := getURIsByLocalityKV(tc.input)
+			defaultURI, urisByLocality, err := getURIsByLocalityKV(tc.input, "" /* appendPath */)
 			if tc.error != "" {
 				if !testutils.IsError(err, tc.error) {
 					t.Fatalf("expected error matching %q, got %q", tc.error, err)

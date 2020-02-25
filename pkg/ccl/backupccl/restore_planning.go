@@ -673,17 +673,22 @@ func doRestorePlan(
 	opts map[string]string,
 	resultsCh chan<- tree.Datums,
 ) error {
-	var encryption *roachpb.FileEncryptionOptions
-	if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-		if len(from) < 1 || len(from[0]) < 1 {
-			return errors.New("invalid base backup specified")
-		}
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][0])
+	if len(from) < 1 || len(from[0]) < 1 {
+		return errors.New("invalid base backup specified")
+	}
+	baseStores := make([]cloud.ExternalStorage, len(from[0]))
+	for i := range from[0] {
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][i])
 		if err != nil {
-			return errors.Wrapf(err, "make storage")
+			return errors.Wrapf(err, "failed to open backup storage location")
 		}
 		defer store.Close()
-		opts, err := readEncryptionOptions(ctx, store)
+		baseStores[i] = store
+	}
+
+	var encryption *roachpb.FileEncryptionOptions
+	if passphrase, ok := opts[backupOptEncPassphrase]; ok {
+		opts, err := readEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err
 		}
@@ -691,20 +696,8 @@ func doRestorePlan(
 		encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
 	}
 
-	defaultURIs := make([]string, len(from))
-	localityInfo := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
-	for i, uris := range from {
-		// The first URI in the list must contain the main BACKUP manifest.
-		defaultURIs[i] = uris[0]
-		info, err := getBackupLocalityInfo(ctx, uris, p, encryption)
-		if err != nil {
-			return err
-		}
-		localityInfo[i] = info
-	}
-
-	mainBackupManifests, err := loadBackupManifests(
-		ctx, defaultURIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
+	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
+		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from, encryption,
 	)
 	if err != nil {
 		return err

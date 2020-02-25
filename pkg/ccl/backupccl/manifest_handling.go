@@ -12,13 +12,14 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
+	"net/url"
+	"path"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -73,6 +74,13 @@ func ReadBackupManifestFromURI(
 		return BackupManifest{}, err
 	}
 	defer exportStore.Close()
+	return readBackupManifestFromStore(ctx, exportStore, encryption)
+}
+
+func readBackupManifestFromStore(
+	ctx context.Context, exportStore cloud.ExternalStorage, encryption *roachpb.FileEncryptionOptions,
+) (BackupManifest, error) {
+
 	backupManifest, err := readBackupManifest(ctx, exportStore, BackupManifestName, encryption)
 	if err != nil {
 		newManifest, newErr := readBackupManifest(ctx, exportStore, BackupNewManifestName, encryption)
@@ -85,6 +93,16 @@ func ReadBackupManifestFromURI(
 	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime,
 	// non-empty Paths, and non-overlapping Spans and keyranges in Files.
 	return backupManifest, nil
+}
+
+func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
+	r, err := exportStore.ReadFile(ctx, BackupManifestName)
+	if err != nil {
+		//nolint:returnerrcheck
+		return false, nil /* TODO(dt): only silence non-exists errors */
+	}
+	r.Close()
+	return true, nil
 }
 
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
@@ -234,51 +252,25 @@ func loadBackupManifests(
 	return backupManifests, nil
 }
 
-// getBackupLocalityInfo takes a list of store URIs that together contain a
-// partitioned backup, the first of which must contain the main BACKUP manifest,
-// and searches for BACKUP_PART files in each store to build a map of (non-
-// default) original backup locality values to URIs that currently contain
-// the backup files.
-func getBackupLocalityInfo(
+// getLocalityInfo takes a list of stores and their URIs, along with the main
+// backup manifest searches each for the locality pieces listed in the the
+// main manifest, returning the mapping.
+func getLocalityInfo(
 	ctx context.Context,
+	stores []cloud.ExternalStorage,
 	uris []string,
-	p sql.PlanHookState,
+	mainBackupManifest BackupManifest,
 	encryption *roachpb.FileEncryptionOptions,
+	prefix string,
 ) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	var info jobspb.RestoreDetails_BackupLocalityInfo
-	if len(uris) == 1 {
-		return info, nil
-	}
-	stores := make([]cloud.ExternalStorage, len(uris))
-	for i, uri := range uris {
-		conf, err := cloud.ExternalStorageConfFromURI(uri)
-		if err != nil {
-			return info, errors.Wrapf(err, "export configuration")
-		}
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, conf)
-		if err != nil {
-			return info, errors.Wrapf(err, "make storage")
-		}
-		defer store.Close()
-		stores[i] = store
-	}
-
-	// First read the main backup descriptor, which is required to be at the first
-	// URI in the list. We don't read the table descriptors, so there's no need to
-	// upgrade them.
-	mainBackupManifest, err := readBackupManifest(ctx, stores[0], BackupManifestName, encryption)
-	if err != nil {
-		manifest, manifestErr := readBackupManifest(ctx, stores[0], BackupManifestName, encryption)
-		if manifestErr != nil {
-			return info, err
-		}
-		mainBackupManifest = manifest
-	}
-
 	// Now get the list of expected partial per-store backup manifest filenames
 	// and attempt to find them.
 	urisByOrigLocality := make(map[string]string)
 	for _, filename := range mainBackupManifest.PartitionDescriptorFilenames {
+		if prefix != "" {
+			filename = path.Join(prefix, filename)
+		}
 		found := false
 		for i, store := range stores {
 			if desc, err := readBackupPartitionDescriptor(ctx, store, filename, encryption); err == nil {
@@ -307,6 +299,145 @@ func getBackupLocalityInfo(
 	}
 	info.URIsByOriginalLocalityKV = urisByOrigLocality
 	return info, nil
+}
+
+// findPriorBackups finds "appended" incremental backups by searching for the
+// subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss). Using
+// file-system searching rather than keeping an explicit list allows layers to
+// be manually moved/removed/etc without needing to update/maintain said list.
+func findPriorBackups(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/"+BackupManifestName)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading previous backup layers")
+	}
+	sort.Strings(prev)
+	return prev, nil
+}
+
+// resolveBackupManifests resolves a list of list of URIs that point to the
+// incremental layers (each of which can be partitioned) of backups into the
+// actual backup manifests and metadata required to RESTORE. If only one layer
+// is explicitly provided, it is inspected to see if it contains "appended"
+// layers internally that are then expanded into the result layers returned,
+// similar to if those layers had been specified in `from` explicitly.
+func resolveBackupManifests(
+	ctx context.Context,
+	baseStores []cloud.ExternalStorage,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	from [][]string,
+	encryption *roachpb.FileEncryptionOptions,
+) (
+	defaultURIs []string,
+	mainBackupManifests []BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	_ error,
+) {
+	baseManifest, err := readBackupManifestFromStore(ctx, baseStores[0], encryption)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// If explicit incremental backups were are passed, we simply load them one
+	// by one as specified and return the results.
+	if len(from) > 1 {
+		defaultURIs = make([]string, len(from))
+		localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
+		mainBackupManifests = make([]BackupManifest, len(from))
+
+		for i, uris := range from {
+			// The first URI in the list must contain the main BACKUP manifest.
+			defaultURIs[i] = uris[0]
+
+			stores := make([]cloud.ExternalStorage, len(uris))
+			for j := range uris {
+				stores[j], err = mkStore(ctx, uris[j])
+				if err != nil {
+					return nil, nil, nil, errors.Wrapf(err, "export configuration")
+				}
+				defer stores[j].Close()
+			}
+
+			mainBackupManifests[i], err = readBackupManifestFromStore(ctx, stores[0], encryption)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if len(uris) > 1 {
+				localityInfo[i], err = getLocalityInfo(
+					ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
+				)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+			}
+		}
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	} else {
+		// Since incremental layers were *not* explicitly specified, search for any
+		// automatically created incremental layers inside the base layer.
+		prev, err := findPriorBackups(ctx, baseStores[0])
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		numLayers := len(prev) + 1
+
+		defaultURIs = make([]string, numLayers)
+		mainBackupManifests = make([]BackupManifest, numLayers)
+		localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
+
+		// Setup the base layer explicitly.
+		defaultURIs[0] = from[0][0]
+		mainBackupManifests[0] = baseManifest
+		localityInfo[0], err = getLocalityInfo(
+			ctx, baseStores, from[0], baseManifest, encryption, "", /* prefix */
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		// If we discovered additional layers, handle them too.
+		if numLayers > 1 {
+			numPartitions := len(from[0])
+			// We need the parsed baseURI for each partition to calculate the URI to
+			// each layer in that partition below.
+			baseURIs := make([]*url.URL, numPartitions)
+			for i := range from[0] {
+				baseURIs[i], err = url.Parse(from[0][i])
+				if err != nil {
+					return nil, nil, nil, err
+				}
+			}
+
+			// For each layer, we need to load the base manifest then calculate the URI and the
+			// locality info for each partition.
+			for i := range prev {
+				defaultManifestForLayer, err := readBackupManifest(ctx, baseStores[0], prev[i], encryption)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				mainBackupManifests[i+1] = defaultManifestForLayer
+
+				// prev[i] is the path to the manifest file itself for layer i -- the
+				// dirname piece of that path is the subdirectory in each of the
+				// partitions in which we'll also expect to find a partition manifest.
+				subDir := path.Dir(prev[i])
+				partitionURIs := make([]string, numPartitions)
+				for j := range baseURIs {
+					u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
+					u.Path = path.Join(u.Path, subDir)
+					partitionURIs[j] = u.String()
+				}
+				defaultURIs[i+1] = partitionURIs[0]
+				localityInfo[i+1], err = getLocalityInfo(ctx, baseStores, partitionURIs, defaultManifestForLayer, encryption, subDir)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+			}
+		}
+	}
+	return defaultURIs, mainBackupManifests, localityInfo, nil
 }
 
 func loadSQLDescsFromBackupsAtTime(
