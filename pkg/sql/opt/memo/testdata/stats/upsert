@@ -40,6 +40,41 @@ CREATE TABLE uv (
 )
 ----
 
+# Table with multi-column key.
+exec-ddl
+CREATE TABLE mno (
+    m INT PRIMARY KEY,
+    n INT,
+    o INT,
+    UNIQUE (n, o)
+)
+----
+
+exec-ddl
+ALTER TABLE mno INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["n"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100,
+    "null_count": 10
+  },
+  {
+    "columns": ["o"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 1900,
+    "null_count": 100
+  }
+]'
+----
+
 # Statistics should be derived from input columns and transferred to RETURNING
 # columns.
 build
@@ -86,13 +121,14 @@ with &1
  │         │    ├── fd: ()-->(8,12), (5)~~>(4), (9)-->(10,11)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
- │         │    │    ├── stats: [rows=9.94974874, distinct(9)=6.31184239, null(9)=0]
+ │         │    │    ├── stats: [rows=9.94974874, distinct(9)=9.94974874, null(9)=0]
  │         │    │    ├── lax-key: (5,9)
  │         │    │    ├── fd: ()-->(8), (5)~~>(4), (9)-->(10,11)
  │         │    │    ├── upsert-distinct-on
  │         │    │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float)
  │         │    │    │    ├── grouping columns: b:5(string)
- │         │    │    │    ├── stats: [rows=9.94974874, distinct(4)=6.31184239, null(4)=0, distinct(5)=6.31184239, null(5)=0]
+ │         │    │    │    ├── error-on-dup
+ │         │    │    │    ├── stats: [rows=9.94974874, distinct(4)=6.31184239, null(4)=0, distinct(5)=9.94974874, null(5)=0]
  │         │    │    │    ├── lax-key: (5)
  │         │    │    │    ├── fd: ()-->(8), (5)~~>(4,8)
  │         │    │    │    ├── project
@@ -215,26 +251,27 @@ upsert uv
  └── project
       ├── columns: upsert_u:11(int) upsert_v:12(int) z:6(int) column7:7(int) u:8(int) v:9(int) column10:10(int!null)
       ├── side-effects
-      ├── stats: [rows=1009.08174]
+      ├── stats: [rows=1000]
       ├── lax-key: (6,8)
       ├── fd: ()-->(10), (6)~~>(7), (8)-->(9), (9)~~>(8), (7,8)-->(11), (6,8)-->(12), (6,8)~~>(7,11)
       ├── project
       │    ├── columns: column10:10(int!null) z:6(int) column7:7(int) u:8(int) v:9(int)
       │    ├── side-effects
-      │    ├── stats: [rows=1009.08174]
+      │    ├── stats: [rows=1000]
       │    ├── lax-key: (6,8)
       │    ├── fd: ()-->(10), (6)~~>(7), (8)-->(9), (9)~~>(8)
       │    ├── left-join (hash)
       │    │    ├── columns: z:6(int) column7:7(int) u:8(int) v:9(int)
       │    │    ├── side-effects
-      │    │    ├── stats: [rows=1009.08174, distinct(9)=100, null(9)=10.0908174]
+      │    │    ├── stats: [rows=1000, distinct(9)=991, null(9)=10]
       │    │    ├── lax-key: (6,8)
       │    │    ├── fd: (6)~~>(7), (8)-->(9), (9)~~>(8)
       │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: z:6(int) column7:7(int)
       │    │    │    ├── grouping columns: z:6(int)
+      │    │    │    ├── error-on-dup
       │    │    │    ├── side-effects
-      │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
+      │    │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=10]
       │    │    │    ├── lax-key: (6)
       │    │    │    ├── fd: (6)~~>(7)
       │    │    │    ├── project
@@ -268,3 +305,72 @@ upsert uv
       └── projections
            ├── CASE WHEN u:8 IS NULL THEN column7:7 ELSE u:8 END [as=upsert_u:11, type=int, outer=(7,8)]
            └── CASE WHEN u:8 IS NULL THEN z:6 ELSE column10:10 END [as=upsert_v:12, type=int, outer=(6,8,10)]
+
+# Multiple conflict columns.
+# TODO(andyk): The null counts for the left join are surprisingly high. It's due
+# to the stats code deciding that the left join will only return a tiny number
+# of matches, which then implies all non-matches are NULL (due to null extending
+# behavior of left join). This will get better once we improve multi-column
+# stats.
+build
+INSERT INTO mno
+SELECT * FROM mno
+ON CONFLICT (n, o) DO UPDATE SET o = 5
+----
+upsert mno
+ ├── columns: <none>
+ ├── canary column: 7
+ ├── fetch columns: m:7(int) n:8(int) o:9(int)
+ ├── insert-mapping:
+ │    ├── m:4 => m:1
+ │    ├── n:5 => n:2
+ │    └── o:6 => o:3
+ ├── update-mapping:
+ │    └── upsert_o:13 => o:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ └── project
+      ├── columns: upsert_m:11(int) upsert_n:12(int) upsert_o:13(int) m:4(int!null) n:5(int) o:6(int) m:7(int) n:8(int) o:9(int) column10:10(int!null)
+      ├── stats: [rows=2000]
+      ├── key: (4,7)
+      ├── fd: ()-->(10), (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7), (4,7)-->(11), (5,7,8)-->(12), (6,7)-->(13)
+      ├── project
+      │    ├── columns: column10:10(int!null) m:4(int!null) n:5(int) o:6(int) m:7(int) n:8(int) o:9(int)
+      │    ├── stats: [rows=2000]
+      │    ├── key: (4,7)
+      │    ├── fd: ()-->(10), (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7)
+      │    ├── left-join (hash)
+      │    │    ├── columns: m:4(int!null) n:5(int) o:6(int) m:7(int) n:8(int) o:9(int)
+      │    │    ├── stats: [rows=2000, distinct(8)=21.0526316, null(8)=1988.94737, distinct(9)=21.0526316, null(9)=2000]
+      │    │    ├── key: (4,7)
+      │    │    ├── fd: (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7)
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: m:4(int!null) n:5(int) o:6(int)
+      │    │    │    ├── grouping columns: n:5(int) o:6(int)
+      │    │    │    ├── error-on-dup
+      │    │    │    ├── stats: [rows=2000, distinct(4)=1981, null(4)=0, distinct(5)=100, null(5)=10, distinct(6)=1900, null(6)=100]
+      │    │    │    ├── key: (4)
+      │    │    │    ├── fd: (4)-->(5,6), (5,6)~~>(4)
+      │    │    │    ├── scan mno
+      │    │    │    │    ├── columns: m:4(int!null) n:5(int) o:6(int)
+      │    │    │    │    ├── stats: [rows=2000, distinct(5)=100, null(5)=10, distinct(6)=1900, null(6)=100, distinct(5,6)=1981, null(5,6)=20]
+      │    │    │    │    ├── key: (4)
+      │    │    │    │    └── fd: (4)-->(5,6), (5,6)~~>(4)
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=m:4, type=int, outer=(4)]
+      │    │    │              └── m:4 [type=int]
+      │    │    ├── scan mno
+      │    │    │    ├── columns: m:7(int!null) n:8(int) o:9(int)
+      │    │    │    ├── stats: [rows=2000, distinct(8)=100, null(8)=10, distinct(9)=1900, null(9)=100]
+      │    │    │    ├── key: (7)
+      │    │    │    └── fd: (7)-->(8,9), (8,9)~~>(7)
+      │    │    └── filters
+      │    │         ├── n:5 = n:8 [type=bool, outer=(5,8), constraints=(/5: (/NULL - ]; /8: (/NULL - ]), fd=(5)==(8), (8)==(5)]
+      │    │         └── o:6 = o:9 [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
+      │    └── projections
+      │         └── 5 [as=column10:10, type=int]
+      └── projections
+           ├── CASE WHEN m:7 IS NULL THEN m:4 ELSE m:7 END [as=upsert_m:11, type=int, outer=(4,7)]
+           ├── CASE WHEN m:7 IS NULL THEN n:5 ELSE n:8 END [as=upsert_n:12, type=int, outer=(5,7,8)]
+           └── CASE WHEN m:7 IS NULL THEN o:6 ELSE column10:10 END [as=upsert_o:13, type=int, outer=(6,7,10)]

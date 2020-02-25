@@ -627,7 +627,7 @@ func (c *CustomFuncs) EnsureAggsCanIgnoreNulls(
 }
 
 // MakeGrouping constructs a new unordered GroupingPrivate using the given
-// grouping columns.
+// grouping columns. ErrorOnDup is false.
 func (c *CustomFuncs) MakeGrouping(groupingCols opt.ColSet) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{GroupingCols: groupingCols}
 }
@@ -646,10 +646,9 @@ func (c *CustomFuncs) ExtractGroupingOrdering(
 func (c *CustomFuncs) AddColsToGrouping(
 	private *memo.GroupingPrivate, groupingCols opt.ColSet,
 ) *memo.GroupingPrivate {
-	return &memo.GroupingPrivate{
-		GroupingCols: private.GroupingCols.Union(groupingCols),
-		Ordering:     private.Ordering,
-	}
+	p := *private
+	p.GroupingCols = private.GroupingCols.Union(groupingCols)
+	return &p
 }
 
 // AddColsToPartition unions the given set of columns with a window private's
