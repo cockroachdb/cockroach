@@ -142,7 +142,8 @@ func makeInputConverter(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
 			singleTable, singleTableTargetCols, evalCtx), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
-		return newMysqloutfileReader(ctx, kvCh, spec.Format.MysqlOut, singleTable, evalCtx)
+		return newMysqloutfileReader(
+			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos, int(spec.ReaderParallelism), singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, kvCh, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:

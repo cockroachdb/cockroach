@@ -316,7 +316,7 @@ d
 			create:   `i int8, j int8`,
 			typ:      "DELIMITED",
 			data:     "bad_int\t2\n3\t4",
-			err:      "row 1: parse",
+			err:      "error parsing row 1",
 			rejected: "bad_int\t2\n",
 			query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
 		},
@@ -374,8 +374,8 @@ d
 			with:     `WITH fields_enclosed_by = '$'`,
 			typ:      "DELIMITED",
 			data:     "$foo\tnormal\nbaz\tbar",
-			err:      "row 1: unmatched field enclosure at start of field",
-			rejected: "$foo\tnormal\nbaz\tbar",
+			err:      "error parsing row 1: unmatched field enclosure at start of field",
+			rejected: "$foo\tnormal\nbaz\tbar\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -395,7 +395,7 @@ d
 			typ:      "DELIMITED",
 			data:     "normal\t$foo",
 			err:      "row 1: unmatched field enclosure at start of field",
-			rejected: "normal\t$foo",
+			rejected: "normal\t$foo\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -405,7 +405,7 @@ d
 			typ:      "DELIMITED",
 			data:     "normal\tfoo$",
 			err:      "row 1: unmatched field enclosure at end of field",
-			rejected: "normal\tfoo$",
+			rejected: "normal\tfoo$\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -415,7 +415,7 @@ d
 			typ:      "DELIMITED",
 			data:     `\`,
 			err:      "row 1: unmatched literal",
-			rejected: `\`,
+			rejected: "\\\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -434,9 +434,9 @@ d
 			create: `s STRING`,
 			with:   `WITH fields_escaped_by = '@'`,
 			typ:    "DELIMITED",
-			data:   "@N\nN@@\nNULL",
+			data:   "@N\nN@@@\n\nNULL",
 			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@"}, {"NULL"}},
+				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@\n"}, {"NULL"}},
 			},
 		},
 		{
@@ -466,7 +466,7 @@ d
 			typ:      "DELIMITED",
 			data:     `\N\N`,
 			err:      "row 1: unexpected null encoding",
-			rejected: `\N\N`,
+			rejected: `\N\N` + "\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -990,7 +990,7 @@ COPY t (a, b, c) FROM stdin;
 						sqlDB.CheckQueryResults(t, query, res)
 					}
 					if tc.rejected != mockRecorder.rejectedString {
-						t.Errorf("expected:\n%v\ngot:\n%v\n", tc.rejected,
+						t.Errorf("expected:\n%q\ngot:\n%q\n", tc.rejected,
 							mockRecorder.rejectedString)
 					}
 				}
@@ -2399,6 +2399,19 @@ func (s *csvBenchmarkStream) Row() (interface{}, error) {
 	return s.data[s.pos%len(s.data)], nil
 }
 
+// Read implements Reader interface.  It's used by delimited
+// benchmark to read its tab separated input.
+func (s *csvBenchmarkStream) Read(buf []byte) (int, error) {
+	if s.Scan() {
+		r, err := s.Row()
+		if err != nil {
+			return 0, err
+		}
+		return copy(buf, strings.Join(r.([]string), "\t")+"\n"), nil
+	}
+	return 0, io.EOF
+}
+
 var _ importRowProducer = &csvBenchmarkStream{}
 
 // BenchmarkConvertRecord-16    	 1000000	      2107 ns/op	  56.94 MB/s	    3600 B/op	     101 allocs/op
@@ -2496,16 +2509,16 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 // goos: darwin
 // goarch: amd64
 // pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14411 ns/op	   8.33 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     15090 ns/op	   7.95 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14575 ns/op	   8.23 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14677 ns/op	   8.18 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14554 ns/op	   8.24 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14598 ns/op	   8.22 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14493 ns/op	   8.28 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14501 ns/op	   8.27 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14712 ns/op	   8.16 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14491 ns/op	   8.28 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2473 ns/op	  48.51 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2580 ns/op	  46.51 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2678 ns/op	  44.80 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2897 ns/op	  41.41 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3250 ns/op	  36.92 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3261 ns/op	  36.80 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3016 ns/op	  39.79 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2943 ns/op	  40.77 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3004 ns/op	  39.94 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
 func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	ctx := context.TODO()
 
@@ -2574,10 +2587,10 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	for i, col := range descr.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
-	r, err := newMysqloutfileReader(ctx, kvCh, roachpb.MySQLOutfileOptions{
+	r, err := newMysqloutfileReader(roachpb.MySQLOutfileOptions{
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
-	}, descr, &evalCtx)
+	}, kvCh, 0, 0, descr, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -2590,6 +2603,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	b.ResetTimer()
 	require.NoError(b, r.readFile(ctx, delimited, 0, "benchmark", 0, nil))
 	close(kvCh)
+	b.ReportAllocs()
 }
 
 // TestImportControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
