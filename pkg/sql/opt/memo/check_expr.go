@@ -131,6 +131,8 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 
 	case *DistinctOnExpr, *UpsertDistinctOnExpr:
+		checkErrorOnDup(e.(RelExpr))
+
 		// Check that aggregates can be only FirstAgg or ConstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
 			switch item.Agg.Op() {
@@ -142,6 +144,8 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 
 	case *GroupByExpr, *ScalarGroupByExpr:
+		checkErrorOnDup(e.(RelExpr))
+
 		// Check that aggregates cannot be FirstAgg.
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
 			switch item.Agg.Op() {
@@ -266,5 +270,12 @@ func checkFilters(filters FiltersExpr) {
 				panic(errors.AssertionFailedf("Range operator should have exactly one outer col"))
 			}
 		}
+	}
+}
+
+func checkErrorOnDup(e RelExpr) {
+	// Only UpsertDistinctOn should set the ErrorOnDup field to true.
+	if e.Op() != opt.UpsertDistinctOnOp && e.Private().(*GroupingPrivate).ErrorOnDup {
+		panic(errors.AssertionFailedf("%s should never set ErrorOnDup to true", log.Safe(e.Op())))
 	}
 }

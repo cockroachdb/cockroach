@@ -1480,7 +1480,8 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 	}
 	s.Available = sb.availabilityFromInput(groupNode)
 
-	groupingColSet := groupNode.Private().(*GroupingPrivate).GroupingCols
+	groupingPrivate := groupNode.Private().(*GroupingPrivate)
+	groupingColSet := groupingPrivate.GroupingCols
 
 	if groupingColSet.Empty() {
 		if groupNode.Op() == opt.ScalarGroupByOp {
@@ -1494,12 +1495,12 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 			s.RowCount = min(1, inputStats.RowCount)
 		}
 	} else {
-		colStat := sb.copyColStatFromChild(groupingColSet, groupNode, s)
 		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
 
-		if groupNode.Op() == opt.UpsertDistinctOnOp {
-			// UpsertDistinctOp will fail if any input group has more than one row,
-			// so in non error cases it has the same number of rows as its input.
+		if groupingPrivate.ErrorOnDup {
+			// If any input group has more than one row, then the distinct operator
+			// will raise an error, so in non-error cases it has the same number of
+			// rows as its input.
 			s.RowCount = inputStats.RowCount
 		} else {
 			// Estimate the row count based on the distinct count of the grouping
@@ -1507,6 +1508,7 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 			//
 			// TODO(itsbilal): Update null count here, using a formula similar to the
 			// ones in colStatGroupBy.
+			colStat := sb.copyColStatFromChild(groupingColSet, groupNode, s)
 			s.RowCount = min(colStat.DistinctCount, inputStats.RowCount)
 		}
 	}
@@ -1520,7 +1522,8 @@ func (sb *statisticsBuilder) colStatGroupBy(
 	relProps := groupNode.Relational()
 	s := &relProps.Stats
 
-	groupingColSet := groupNode.Private().(*GroupingPrivate).GroupingCols
+	groupingPrivate := groupNode.Private().(*GroupingPrivate)
+	groupingColSet := groupingPrivate.GroupingCols
 	if groupingColSet.Empty() {
 		// ScalarGroupBy or GroupBy with empty grouping columns.
 		colStat, _ := s.ColStats.Add(colSet)
@@ -1542,11 +1545,18 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		// Make a copy so we don't modify the original
 		colStat = sb.copyColStatFromChild(colSet, groupNode, s)
 		inputColStat = sb.colStatFromChild(colSet, groupNode, 0 /* childIdx */)
+
+		if groupingPrivate.ErrorOnDup && colSet.Equals(groupingColSet) {
+			// If any input group has more than one row, then the distinct operator
+			// will raise an error, so in non-error cases its distinct count is the
+			// same as its row count.
+			colStat.DistinctCount = s.RowCount
+		}
 	}
 
 	if groupNode.Op() == opt.UpsertDistinctOnOp {
-		// UpsertDistinctOp inherits NullCount from child, since it does not
-		// group NULL values.
+		// UpsertDistinctOp inherits NullCount from child, since it does not group
+		// NULL values.
 		colStat.NullCount = inputColStat.NullCount
 	} else {
 		// For null counts - we either only have 1 possible null value (if we're

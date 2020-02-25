@@ -88,7 +88,7 @@ type Table interface {
 	WritableIndexCount() int
 
 	// DeletableIndexCount returns the number of public, write-only, and
-	// delete-onlyindexes defined on this table. DeletableIndexCount is always
+	// delete-only indexes defined on this table. DeletableIndexCount is always
 	// >= WritableIndexCount.
 	DeletableIndexCount() int
 

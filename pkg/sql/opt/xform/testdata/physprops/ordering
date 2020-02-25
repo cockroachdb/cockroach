@@ -1794,6 +1794,7 @@ sort
       │         │    │    ├── columns: x:4!null y:5!null z:6!null
       │         │    │    ├── grouping columns: x:4!null y:5!null z:6!null
       │         │    │    ├── internal-ordering: +5,+6
+      │         │    │    ├── error-on-dup
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (4-6)
       │         │    │    └── limit

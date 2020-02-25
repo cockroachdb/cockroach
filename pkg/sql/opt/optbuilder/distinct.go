@@ -50,11 +50,13 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 }
 
 // buildDistinctOn builds a set of memo groups that represent a DISTINCT ON
-// expression. If forUpsert is true, then construct the UpsertDistinctOn
+// expression. If nullsAreDistinct is true, then construct the UpsertDistinctOn
 // operator rather than the DistinctOn operator (see the UpsertDistinctOn
-// operator comment for details on the differences).
+// operator comment for details on the differences). The errorOnDup parameter
+// controls whether multiple rows in the same distinct group trigger an error.
+// This can only be set to true in the UpsertDistinctOn case.
 func (b *Builder) buildDistinctOn(
-	distinctOnCols opt.ColSet, inScope *scope, forUpsert bool,
+	distinctOnCols opt.ColSet, inScope *scope, nullsAreDistinct, errorOnDup bool,
 ) (outScope *scope) {
 	// When there is a DISTINCT ON clause, the ORDER BY clause is restricted to either:
 	//  1. Contain a subset of columns from the ON list, or
@@ -93,7 +95,7 @@ func (b *Builder) buildDistinctOn(
 		}
 	}
 
-	private := memo.GroupingPrivate{GroupingCols: distinctOnCols.Copy()}
+	private := memo.GroupingPrivate{GroupingCols: distinctOnCols.Copy(), ErrorOnDup: errorOnDup}
 
 	// The ordering is used for intra-group ordering. Ordering with respect to the
 	// DISTINCT ON columns doesn't affect intra-group ordering, so we add these
@@ -152,7 +154,7 @@ func (b *Builder) buildDistinctOn(
 	}
 
 	input := inScope.expr.(memo.RelExpr)
-	if forUpsert {
+	if nullsAreDistinct {
 		outScope.expr = b.factory.ConstructUpsertDistinctOn(input, aggs, &private)
 	} else {
 		outScope.expr = b.factory.ConstructDistinctOn(input, aggs, &private)

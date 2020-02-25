@@ -386,7 +386,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				v.observer.attr(name, "nulls are distinct", "")
 			}
 			if n.errorOnDup != "" {
-				v.observer.attr(name, "error on dups", "")
+				v.observer.attr(name, "error on duplicate", "")
 			}
 		}
 

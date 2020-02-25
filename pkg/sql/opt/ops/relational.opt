@@ -527,6 +527,10 @@ define GroupingPrivate {
     # columns. Exploration rules can create versions of the operator with
     # orderings that contain grouping columns.
     Ordering OrderingChoice
+
+    # ErrorOnDup, if true, triggers an error if any aggregation group contains
+    # more than one row. This can only be true for the UpsertDistinctOn operator.
+    ErrorOnDup bool
 }
 
 # ScalarGroupBy computes aggregate functions over the complete set of input

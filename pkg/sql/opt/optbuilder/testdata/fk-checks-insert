@@ -41,22 +41,28 @@ insert child
  │    ├── column1:3 => c:1
  │    └── column2:4 => child.p:2
  ├── input binding: &1
- ├── project
+ ├── upsert-distinct-on
  │    ├── columns: column1:3!null column2:4!null
- │    └── select
- │         ├── columns: column1:3!null column2:4!null c:5 child.p:6
- │         ├── left-join (hash)
- │         │    ├── columns: column1:3!null column2:4!null c:5 child.p:6
- │         │    ├── values
- │         │    │    ├── columns: column1:3!null column2:4!null
- │         │    │    ├── (100, 1)
- │         │    │    └── (200, 1)
- │         │    ├── scan child
- │         │    │    └── columns: c:5!null child.p:6!null
- │         │    └── filters
- │         │         └── column1:3 = c:5
- │         └── filters
- │              └── c:5 IS NULL
+ │    ├── grouping columns: column1:3!null
+ │    ├── project
+ │    │    ├── columns: column1:3!null column2:4!null
+ │    │    └── select
+ │    │         ├── columns: column1:3!null column2:4!null c:5 child.p:6
+ │    │         ├── left-join (hash)
+ │    │         │    ├── columns: column1:3!null column2:4!null c:5 child.p:6
+ │    │         │    ├── values
+ │    │         │    │    ├── columns: column1:3!null column2:4!null
+ │    │         │    │    ├── (100, 1)
+ │    │         │    │    └── (200, 1)
+ │    │         │    ├── scan child
+ │    │         │    │    └── columns: c:5!null child.p:6!null
+ │    │         │    └── filters
+ │    │         │         └── column1:3 = c:5
+ │    │         └── filters
+ │    │              └── c:5 IS NULL
+ │    └── aggregations
+ │         └── first-agg [as=column2:4]
+ │              └── column2:4
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
