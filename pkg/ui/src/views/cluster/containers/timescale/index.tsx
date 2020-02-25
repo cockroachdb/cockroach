@@ -78,7 +78,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     newSettings.windowEnd = null;
     if (newSettings) {
       this.setQueryParamsByDates(newSettings.windowSize, moment());
-      this.props.setTimeScale(newSettings);
+      this.props.setTimeScale({ ...newSettings, key: newTimescaleKey.value });
     }
   }
 
@@ -108,8 +108,13 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
     if (!windowEnd || windowEnd > moment().subtract(currentScale.windowValid)) {
-      if (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } } as any)) {
-        selected = (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } } as any));
+      const size = { windowSize: { _data: windowSize._data } } ;
+      if (_.find(timewindow.availableTimeScales, size as any)) {
+        const data = {
+          ..._.find(timewindow.availableTimeScales, size as any),
+          key: _.findKey(timewindow.availableTimeScales, size as any),
+        };
+        selected = data;
       } else {
         key = "Custom";
       }
@@ -217,6 +222,10 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const start = dates.start || currentWindow.start;
     const seconds = moment.duration(moment(end).diff(start)).asSeconds();
     const timeScale = timewindow.findClosestTimeScale(seconds);
+    const now = moment();
+    if (moment.duration(now.diff(end)).asMinutes() > timeScale.sampleSize.asMinutes()) {
+      timeScale.key = "Custom";
+    }
     timeScale.windowEnd = null;
     this.props.setTimeRange({ end, start });
     this.props.setTimeScale(timeScale);
