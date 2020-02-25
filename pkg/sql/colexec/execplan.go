@@ -767,17 +767,17 @@ func NewColOperator(
 							ctx, result.createBufferingUnlimitedMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
-						standaloneAllocator := NewAllocator(
-							ctx, result.createStandaloneMemAccount(
-								ctx, flowCtx, monitorNamePrefix,
-							))
+						standaloneMemAccount := result.createStandaloneMemAccount(
+							ctx, flowCtx, monitorNamePrefix,
+						)
 						diskQueuesUnlimitedAllocator := NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(
 								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
 							))
 						return newExternalSorter(
+							ctx,
 							unlimitedAllocator,
-							standaloneAllocator,
+							standaloneMemAccount,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							args.TestingKnobs.MaxNumberPartitions,
