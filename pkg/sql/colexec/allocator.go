@@ -33,7 +33,11 @@ type Allocator struct {
 	acc *mon.BoundAccount
 }
 
-func getVecsSize(vecs []coldata.Vec) int64 {
+func selVectorSize(capacity int) int64 {
+	return int64(capacity * sizeOfUint16)
+}
+
+func getVecsCapacity(vecs []coldata.Vec) int64 {
 	var size int64
 	for _, dest := range vecs {
 		if dest.Type() == coltypes.Bytes {
@@ -55,15 +59,11 @@ func (a *Allocator) NewMemBatch(types []coltypes.T) coldata.Batch {
 	return a.NewMemBatchWithSize(types, int(coldata.BatchSize()))
 }
 
-func (a *Allocator) selVectorSize(capacity int) int64 {
-	return int64(capacity * sizeOfUint16)
-}
-
 // NewMemBatchWithSize allocates a new in-memory coldata.Batch with the given
 // column size.
 func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Batch {
-	estimatedStaticMemoryUsage := a.selVectorSize(size) + int64(estimateBatchSizeBytes(types, size))
-	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
+	estimatedMemoryUsage := selVectorSize(size) + int64(estimateBatchSizeBytes(types, size))
+	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	return coldata.NewMemBatchWithSize(types, size)
@@ -73,24 +73,46 @@ func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Ba
 // need to be used regularly, since most memory accounting necessary is done
 // through PerformOperation. Use this if you want to explicitly manage the
 // memory accounted for.
+// NOTE: this method looks at the capacities of the vectors and does *not* pay
+// attention to the length of the batch.
 func (a *Allocator) RetainBatch(b coldata.Batch) {
-	if err := a.acc.Grow(a.ctx, a.selVectorSize(cap(b.Selection()))+getVecsSize(b.ColVecs())); err != nil {
+	if b.Length() == 0 {
+		return
+	}
+	// We need to get the capacity of the internal selection vector, even if b
+	// currently doesn't use it, so we set selection to true and will reset
+	// below.
+	usesSel := b.Selection() != nil
+	b.SetSelection(true)
+	if err := a.acc.Grow(a.ctx, selVectorSize(cap(b.Selection()))+getVecsCapacity(b.ColVecs())); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
+	b.SetSelection(usesSel)
 }
 
 // ReleaseBatch releases the size of the batch from the memory account. This
 // shouldn't need to be used regularly, since all accounts are closed by
 // Flow.Cleanup. Use this if you want to explicitly manage the memory used. An
 // example of a use case is releasing a batch before writing it to disk.
+// NOTE: this method looks at the capacities of the vectors and does *not* pay
+// attention to the length of the batch.
 func (a *Allocator) ReleaseBatch(b coldata.Batch) {
-	a.acc.Shrink(a.ctx, a.selVectorSize(cap(b.Selection()))+getVecsSize(b.ColVecs()))
+	if b.Length() == 0 {
+		return
+	}
+	// We need to get the capacity of the internal selection vector, even if b
+	// currently doesn't use it, so we set selection to true and will reset
+	// below.
+	usesSel := b.Selection() != nil
+	b.SetSelection(true)
+	a.acc.Shrink(a.ctx, selVectorSize(cap(b.Selection()))+getVecsCapacity(b.ColVecs()))
+	b.SetSelection(usesSel)
 }
 
 // NewMemColumn returns a new coldata.Vec, initialized with a length.
 func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
-	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, n))
-	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
+	estimatedMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, n))
+	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	return coldata.NewMemColumn(t, n)
@@ -117,8 +139,8 @@ func (a *Allocator) MaybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
 	for b.Width() < colIdx {
 		b.AppendCol(a.NewMemColumn(coltypes.Unhandled, 0))
 	}
-	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, int(coldata.BatchSize())))
-	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
+	estimatedMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, int(coldata.BatchSize())))
+	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	col := a.NewMemColumn(t, int(coldata.BatchSize()))
@@ -134,12 +156,12 @@ func (a *Allocator) MaybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
 // NOTE: if some columnar vectors are not modified, they should not be included
 // in 'destVecs' to reduce the performance hit of memory accounting.
 func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
-	before := getVecsSize(destVecs)
+	before := getVecsCapacity(destVecs)
 	// To simplify the accounting, we perform the operation first and then will
 	// update the memory account. The minor "drift" in accounting that is
 	// caused by this approach is ok.
 	operation()
-	after := getVecsSize(destVecs)
+	after := getVecsCapacity(destVecs)
 
 	delta := after - before
 	if delta >= 0 {
