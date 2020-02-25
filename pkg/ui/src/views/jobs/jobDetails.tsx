@@ -103,7 +103,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
             <Row>
               <Col span={24}>
                 <div className="summary--card__counting">
-                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format("MM/DD/YYYY [at] hh:mma")}</h3>
+                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format("MMM DD, YYYY [at] hh:mma")}</h3>
                   <p className="summary--card__counting--label">Creation time</p>
                 </div>
               </Col>
