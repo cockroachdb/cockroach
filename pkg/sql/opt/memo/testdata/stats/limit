@@ -80,6 +80,7 @@ limit
  └── subquery [type=int]
       └── max1-row
            ├── columns: c:5(int!null)
+           ├── error: "more than one row returned by a subquery used as an expression"
            ├── cardinality: [1 - 1]
            ├── stats: [rows=1]
            ├── key: ()

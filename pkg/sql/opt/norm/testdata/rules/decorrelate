@@ -230,6 +230,7 @@ inner-join (cross)
  │              └── subquery [type=int]
  │                   └── max1-row
  │                        ├── columns: generate_series:5(int)
+ │                        ├── error: "more than one row returned by a subquery used as an expression"
  │                        ├── cardinality: [0 - 1]
  │                        ├── side-effects
  │                        ├── key: ()
@@ -3960,6 +3961,7 @@ scalar-group-by
  │    │    │    └── columns: i:2(int)
  │    │    ├── max1-row
  │    │    │    ├── columns: y:7(int!null)
+ │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    │    ├── outer: (2)
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
@@ -4277,6 +4279,7 @@ project
  │    │    └── fd: (1)-->(2)
  │    ├── max1-row
  │    │    ├── columns: column1:8(int)
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── outer: (1,2)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()

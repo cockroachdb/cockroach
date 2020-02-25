@@ -116,6 +116,7 @@ select
            ├── subquery [type=tuple{int, int}]
            │    └── max1-row
            │         ├── columns: column13:13(tuple{int, int})
+           │         ├── error: "more than one row returned by a subquery used as an expression"
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
            │         ├── key: ()

@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const multiRowSubqueryErrText = "more than one row returned by a subquery used as an expression"
+
 // subquery represents a subquery expression in an expression tree
 // after it has been type-checked and added to the memo.
 type subquery struct {
@@ -315,7 +317,7 @@ func (b *Builder) buildSingleRowSubquery(
 	// Wrap the subquery in a Max1Row operator to enforce that it should return
 	// at most one row. Max1Row may be removed by the optimizer later if it can
 	// prove statically that the subquery always returns at most one row.
-	input = b.factory.ConstructMax1Row(input)
+	input = b.factory.ConstructMax1Row(input, multiRowSubqueryErrText)
 
 	out = b.factory.ConstructSubquery(input, &subqueryPrivate)
 	return out, outScope
