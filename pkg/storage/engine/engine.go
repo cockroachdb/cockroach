@@ -34,7 +34,7 @@ import (
 var DefaultStorageEngine enginepb.EngineType
 
 func init() {
-	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "rocksdb"))
+	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "default"))
 }
 
 // SimpleIterator is an interface for iterating over key/value pairs in an
@@ -555,7 +555,7 @@ func NewEngine(
 		defer pebbleConfig.Opts.Cache.Unref()
 
 		return NewPebble(context.Background(), pebbleConfig)
-	case enginepb.EngineTypeRocksDB:
+	case enginepb.EngineTypeDefault, enginepb.EngineTypeRocksDB:
 		cache := NewRocksDBCache(cacheSize)
 		defer cache.Release()
 

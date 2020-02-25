@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,6 +52,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -407,6 +410,23 @@ func initTempStorageConfig(
 	return tempStorageConfig, nil
 }
 
+// Checks if the passed-in engine type is default, and if so, resolves it to
+// the storage engine last used to write to the store at dir (or rocksdb if
+// a store wasn't found).
+func resolveStorageEngineType(engineType enginepb.EngineType, dir string) enginepb.EngineType {
+	if engineType == enginepb.EngineTypeDefault {
+		engineType = enginepb.EngineTypeRocksDB
+		// Check if this storage directory was last written to by pebble. In that
+		// case, default to opening a Pebble engine.
+		if version, err := pebble.GetVersion(dir, vfs.Default); err == nil {
+			if version != "" && !strings.HasPrefix(version, "rocksdb") {
+				engineType = enginepb.EngineTypePebble
+			}
+		}
+	}
+	return engineType
+}
+
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
 func runStartSingleNode(cmd *cobra.Command, args []string) error {
@@ -530,6 +550,10 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
+	// If the storage engine is set to "default", check the engine type used in
+	// this store directory in a past run. If this check fails for any reason,
+	// use RocksDB as the default engine type.
+	serverCfg.StorageEngine = resolveStorageEngineType(serverCfg.StorageEngine, serverCfg.Stores.Specs[0].Path)
 	// Find a StoreSpec that has encryption at rest turned on. If can't find
 	// one, use the first StoreSpec in the list.
 	var specIdx = 0
