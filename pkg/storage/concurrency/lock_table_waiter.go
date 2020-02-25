@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -22,23 +24,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// Default delay before pushing in order to detect dependency cycles.
-const defaultDependencyCyclePushDelay = 100 * time.Millisecond
+// LockTableLivenessPushDelay sets the delay before pushing in order to detect
+// coordinator failures of conflicting transactions.
+var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
+	"kv.lock_table.coordinator_liveness_push_delay",
+	"the delay before pushing in order to detect coordinator failures of conflicting transactions",
+	10*time.Millisecond,
+)
 
-// Silence unused warning.
-var _ = defaultDependencyCyclePushDelay
+// LockTableDeadlockDetectionPushDelay sets the delay before pushing in order to
+// detect dependency cycles between transactions.
+var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
+	"kv.lock_table.deadlock_detection_push_delay",
+	"the delay before pushing in order to detect dependency cycles between transactions",
+	100*time.Millisecond,
+)
 
 // lockTableWaiterImpl is an implementation of lockTableWaiter.
 type lockTableWaiterImpl struct {
 	nodeID  roachpb.NodeID
+	st      *cluster.Settings
 	stopper *stop.Stopper
-
-	// Used to push conflicting transactions and resolve conflicting intents.
-	ir IntentResolver
-
-	// How long to wait until pushing conflicting transactions to detect
-	// dependency cycles.
-	dependencyCyclePushDelay time.Duration
+	ir      IntentResolver
 }
 
 // IntentResolver is an interface used by lockTableWaiterImpl to push
@@ -123,8 +130,8 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// delay. This delay avoids unnecessary push traffic when the
 				// conflicting transaction is continuing to make forward
 				// progress.
-				delay := w.dependencyCyclePushDelay
-				if hasMinPriority(state.txn) || hasMaxPriority(&req.Txn.TxnMeta) {
+				delay := LockTableDeadlockDetectionPushDelay.Get(&w.st.SV)
+				if hasMinPriority(state.txn) || hasMaxPriority(req.Txn) {
 					// However, if the pushee has the minimum priority or if the
 					// pusher has the maximum priority, push immediately.
 					delay = 0
@@ -139,21 +146,31 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 			case waitForDistinguished:
 				// waitForDistinguished is like waitFor, except it instructs the
-				// waiter to immediately push the conflicting transaction instead of
-				// first waiting out the dependencyCyclePushDelay. The lockTable
+				// waiter to quickly push the conflicting transaction instead of
+				// waiting out the full deadlock detection push delay. The lockTable
 				// guarantees that there is always at least one request in the
 				// waitForDistinguished state for each lock that has any waiters.
 				//
-				// The purpose of the waitForDistinguished state is to avoid adding
-				// a delay of dependencyCyclePushDelay to the process of recovering
-				// from the failure of a transaction coordinator for *each* of that
-				// transaction's previously written intents. If we had a cache of
-				// aborted transaction IDs that allowed us to notice and immediately
-				// resolve abandoned intents then we might be able to get rid of
-				// this state.
-				if err := w.pushTxn(ctx, req, state); err != nil {
-					return err
+				// The purpose of the waitForDistinguished state is to avoid waiting
+				// out the longer deadlock detection delay before recognizing and
+				// recovering from the failure of a transaction coordinator for
+				// *each* of that transaction's previously written intents. If we
+				// had a cache of aborted transaction IDs that allowed us to notice
+				// and quickly resolve abandoned intents then we might be able to
+				// get rid of this state.
+				delay := LockTableLivenessPushDelay.Get(&w.st.SV)
+				if hasMinPriority(state.txn) || hasMaxPriority(req.Txn) {
+					// However, if the pushee has the minimum priority or if the
+					// pusher has the maximum priority, push immediately.
+					delay = 0
 				}
+				if timer == nil {
+					timer = timeutil.NewTimer()
+					defer timer.Stop()
+				}
+				timer.Reset(delay)
+				timerC = timer.C
+				timerWaitingState = state
 
 			case waitElsewhere:
 				// The lockTable has hit a memory limit and is no longer maintaining
@@ -185,10 +202,11 @@ func (w *lockTableWaiterImpl) WaitOn(
 			}
 
 		case <-timerC:
-			// If the transactional request was in the waitFor state and did not
-			// observe any update to its state for a dependencyCyclePushDelay,
+			// If the request was in the waitFor or waitForDistinguished states
+			// and did not observe any update to its state for the entire delay,
 			// it should push. It may be the case that the transaction is part
-			// of a dependency cycle.
+			// of a dependency cycle or that the lock holder's coordinator node
+			// has crashed.
 			timerC = nil
 			timer.Read = true
 			if err := w.pushTxn(ctx, req, timerWaitingState); err != nil {
@@ -263,9 +281,9 @@ func (w *lockTableWaiterImpl) pushTxn(ctx context.Context, req Request, ws waiti
 }
 
 func hasMinPriority(txn *enginepb.TxnMeta) bool {
-	return txn.Priority == enginepb.MinTxnPriority
+	return txn != nil && txn.Priority == enginepb.MinTxnPriority
 }
 
-func hasMaxPriority(txn *enginepb.TxnMeta) bool {
-	return txn.Priority == enginepb.MaxTxnPriority
+func hasMaxPriority(txn *roachpb.Transaction) bool {
+	return txn != nil && txn.Priority == enginepb.MaxTxnPriority
 }

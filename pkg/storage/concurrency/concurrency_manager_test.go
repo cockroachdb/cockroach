@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
@@ -38,8 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -81,7 +79,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
 		c := newCluster()
-		m := concurrency.NewManager(c, c.rangeDesc)
+		m := concurrency.NewManager(c.makeConfig())
 		c.m = m
 		mon := newMonitor()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -110,7 +108,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					},
 					ReadTimestamp: ts,
 				}
-				txn.UpdateObservedTimestamp(c.NodeDescriptor().NodeID, ts)
+				txn.UpdateObservedTimestamp(c.nodeDesc.NodeID, ts)
 				c.registerTxn(txnName, txn)
 				return ""
 
@@ -364,17 +362,18 @@ func newCluster() *cluster {
 	}
 }
 
-// cluster implements the Store interface. Many of these methods are only used
-// by the txnWaitQueue, whose functionality is fully mocked out in this test by
-// cluster's implementation of concurrency.IntentResolver.
-func (c *cluster) NodeDescriptor() *roachpb.NodeDescriptor    { return c.nodeDesc }
-func (c *cluster) DB() *client.DB                             { return nil }
-func (c *cluster) Clock() *hlc.Clock                          { return nil }
-func (c *cluster) Stopper() *stop.Stopper                     { return nil }
-func (c *cluster) IntentResolver() concurrency.IntentResolver { return c }
-func (c *cluster) GetTxnWaitKnobs() txnwait.TestingKnobs      { return txnwait.TestingKnobs{} }
-func (c *cluster) GetTxnWaitMetrics() *txnwait.Metrics        { return txnwait.NewMetrics(time.Minute) }
-func (c *cluster) GetSlowLatchGauge() *metric.Gauge           { return nil }
+func (c *cluster) makeConfig() concurrency.Config {
+	st := clustersettings.MakeTestingClusterSettings()
+	concurrency.LockTableLivenessPushDelay.Override(&st.SV, 1*time.Millisecond)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(&st.SV, 1*time.Millisecond)
+	return concurrency.Config{
+		NodeDesc:       c.nodeDesc,
+		RangeDesc:      c.rangeDesc,
+		Settings:       st,
+		IntentResolver: c,
+		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+	}
+}
 
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
@@ -491,7 +490,7 @@ func (c *cluster) reset() error {
 		return errors.Errorf("outstanding latches")
 	}
 	// Clear the lock table by marking the range as merged.
-	c.m.OnMerge()
+	c.m.OnRangeMerge()
 	return nil
 }
 

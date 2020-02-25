@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -62,11 +63,14 @@ func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
 
 func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *mockLockTableGuard) {
 	ir := &mockIntentResolver{}
+	st := cluster.MakeTestingClusterSettings()
+	LockTableLivenessPushDelay.Override(&st.SV, 1*time.Millisecond)
+	LockTableDeadlockDetectionPushDelay.Override(&st.SV, 1*time.Millisecond)
 	w := &lockTableWaiterImpl{
-		nodeID:                   2,
-		stopper:                  stop.NewStopper(),
-		ir:                       ir,
-		dependencyCyclePushDelay: 5 * time.Millisecond,
+		nodeID:  2,
+		st:      st,
+		stopper: stop.NewStopper(),
+		ir:      ir,
 	}
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),

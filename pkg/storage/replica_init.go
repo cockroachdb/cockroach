@@ -71,7 +71,14 @@ func newUnloadedReplica(
 		store:          store,
 		abortSpan:      abortspan.New(desc.RangeID),
 	}
-	r.txnWaitQueue = txnwait.NewQueue(store, r)
+	r.txnWaitQueue = txnwait.NewQueue(txnwait.Config{
+		RangeDesc: desc,
+		DB:        store.DB(),
+		Clock:     store.Clock(),
+		Stopper:   store.Stopper(),
+		Metrics:   store.txnWaitMetrics,
+		Knobs:     store.TestingKnobs().TxnWaitKnobs,
+	})
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
@@ -300,5 +307,6 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	r.rangeStr.store(r.mu.replicaID, desc)
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
+	r.txnWaitQueue.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 }
