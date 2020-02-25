@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,6 +52,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -529,6 +532,19 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// As well as derived temporary/auxiliary directory specifications.
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
+	}
+	// If the storage engine is set to "default", check the engine type used in
+	// this store directory in a past run. If this check fails for any reason,
+	// use RocksDB as the default engine type.
+	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
+		serverCfg.StorageEngine = enginepb.EngineTypeRocksDB
+		// Only check if the first store is written by pebble. If that's the case,
+		// set engine type to pebble.
+		if version, err := pebble.GetVersion(serverCfg.Stores.Specs[0].Path, vfs.Default); err == nil {
+			if version != "" && !strings.HasPrefix(version, "rocksdb") {
+				serverCfg.StorageEngine = enginepb.EngineTypePebble
+			}
+		}
 	}
 	// Find a StoreSpec that has encryption at rest turned on. If can't find
 	// one, use the first StoreSpec in the list.
