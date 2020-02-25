@@ -72,6 +72,36 @@ func (w *lockTableWaiterImpl) WaitOn(
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
+			if !state.held {
+				// If the lock is not held and instead has a reservation, we don't
+				// want to push the reservation transaction. A transaction push will
+				// block until the pushee transaction has either committed or
+				// aborted. It is therefore not appropriate for cases where there is
+				// still a chance for the pusher to make progress without the pushee
+				// completing first. This is not true when the waiter is waiting on
+				// a held lock - the lock must be released before the waiter may
+				// proceed. However, it is true when the waiter is waiting on a
+				// reservation - the reservation holder may release the reservation
+				// without acquiring a lock, allowing the waiter to proceed without
+				// conflict.
+				// NOTE: we could pull this logic into pushTxn, but then we'd be
+				// creating useless timers.
+				//
+				// TODO(sbhola): remove the need for this by only notifying waiters
+				// for held locks and never for reservations.
+				// TODO(sbhola): now that we never push reservation holders, can we
+				// stop special-casing non-transactional writes and let them acquire
+				// reservations?
+				// TODO(sbhola): does this allow us to get rid of the concept of a
+				// reservaton entirely? Is there a reason to keep it?
+				switch state.stateKind {
+				case waitFor, waitForDistinguished:
+					continue
+				case waitElsewhere:
+					return nil
+				}
+			}
+
 			switch state.stateKind {
 			case waitFor:
 				// waitFor indicates that the request is waiting on another
