@@ -324,3 +324,27 @@ SELECT
 FROM
 	t40589 AS t, t40589;
 ----
+
+# Test that a reasonable error is generated for the unsupported case of an
+# apply join that references a top-level WITH clause.
+
+statement ok
+CREATE TABLE IF NOT EXISTS "cpk" (
+  "key" VARCHAR(255) NOT NULL, 
+  "value" INTEGER NOT NULL, 
+  "extra" INTEGER NOT NULL, 
+  PRIMARY KEY ("key", "value"))
+
+statement ok
+INSERT INTO "cpk" ("key", "value", "extra")
+  VALUES ('k1', 1, 1), ('k2', 2, 2), ('k3', 3, 3)
+  RETURNING "cpk"."key", "cpk"."value";
+
+query error couldn't find WITH expression \"new_values\" with ID 1
+WITH "new_values" ("k", "v", "x") AS (
+  VALUES ('k1', 1, 10), ('k3', 3, 30))
+UPDATE "cpk" SET "extra" = (
+    SELECT "new_values"."x" FROM "new_values" 
+    WHERE (("cpk"."key" = "new_values"."k") AND ("cpk"."value" = "new_values"."v"))
+) 
+WHERE (("cpk"."key", "cpk"."value") IN (SELECT "new_values"."k", "new_values"."v" FROM "new_values"));
