@@ -215,6 +215,11 @@ func (c *CustomFuncs) AreValuesDistinct(
 		if groupingCols.SubsetOf(t.Left.Relational().OutputCols) {
 			return c.AreValuesDistinct(t.Left, groupingCols, nullsAreDistinct)
 		}
+
+	case *memo.UpsertDistinctOnExpr:
+		if groupingCols.SubsetOf(t.Input.Relational().OutputCols) {
+			return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)
+		}
 	}
 	return false
 }
