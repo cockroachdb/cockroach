@@ -1,0 +1,356 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t1 (
+  x INT PRIMARY KEY, y INT, z INT, a INT, b INT,
+  FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (a, b),
+  INDEX nonuniqueidx (y), UNIQUE INDEX uniqueidx (y),
+  INDEX nonuniqueidxstoring (y) STORING (z, a, b),
+  UNIQUE INDEX uniqueidxstoring (y) STORING (z, a, b)
+)
+
+# Ensure that inserts into each index look like we expect them to.
+statement ok
+SET TRACING=on,kv,results; INSERT INTO t1 VALUES (1, 1, 1, 1, 1); SET TRACING=off;
+
+# Inserts into nonuniqueidx or uniqueidx (which don't store anything) should be a single kv pair of the old format.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'InitPut /Table/53/2/%' OR
+message LIKE 'InitPut /Table/53/3/%'
+ORDER BY message
+----
+InitPut /Table/53/2/1/1/0 -> /BYTES/
+InitPut /Table/53/3/1/0 -> /BYTES/0x89
+
+# Inserts into nonuniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'InitPut /Table/53/4/%'
+ORDER BY message
+----
+InitPut /Table/53/4/1/1/0 -> /BYTES/
+InitPut /Table/53/4/1/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/53/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+
+# Inserts into uniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'InitPut /Table/53/5/%'
+ORDER BY message
+----
+InitPut /Table/53/5/1/0 -> /BYTES/0x89
+InitPut /Table/53/5/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/53/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+
+# Deletions should delete all k/v pairs for each index.
+statement ok
+SET TRACING=on,kv,results; DELETE FROM t1 WHERE x = 1; SET TRACING=off;
+
+# Deletes on nonuniqueidx or uniqueidx (which don't store anything) should be a single kv pair of the old format.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/2/%' OR
+message LIKE 'Del /Table/53/3/%'
+ORDER BY message
+----
+Del /Table/53/2/1/1/0
+Del /Table/53/3/1/0
+
+# Deletes on nonuniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/4/%'
+ORDER BY message
+----
+Del /Table/53/4/1/1/0
+Del /Table/53/4/1/1/2/1
+Del /Table/53/4/1/1/3/1
+
+# Deletes on uniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/5/%'
+ORDER BY message
+----
+Del /Table/53/5/1/0
+Del /Table/53/5/1/2/1
+Del /Table/53/5/1/3/1
+
+# Put some data back into the table.
+statement ok
+INSERT INTO t1 VALUES (1, 1, 1, 1, 1)
+
+# Selects (as of now) should scan all of the K/V pairs for each index.
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t1@nonuniqueidx;
+SET TRACING=off
+----
+1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/nonuniqueidx/%'
+----
+fetched: /t1/nonuniqueidx/1/1 -> NULL
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t1@uniqueidx;
+SET TRACING=off
+----
+1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidx/%'
+----
+fetched: /t1/uniqueidx/1 -> /1
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@nonuniqueidxstoring;
+SET TRACING=off
+----
+1 1 1 1 1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/nonuniqueidxstoring/%'
+----
+fetched: /t1/nonuniqueidxstoring/1/1 -> NULL
+fetched: /t1/nonuniqueidxstoring/1/1/z -> /1
+fetched: /t1/nonuniqueidxstoring/1/1/a/b -> /1/1
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@uniqueidxstoring;
+SET TRACING=off
+----
+1 1 1 1 1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidxstoring/%'
+----
+fetched: /t1/uniqueidxstoring/1 -> /1
+fetched: /t1/uniqueidxstoring/1/z -> /1
+fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
+
+
+#Test some specific behavior with nulls on unique indexes.
+statement ok
+INSERT INTO t1 VALUES (3, NULL, 3, 3, 3), (4, NULL, 4, 4, 4)
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@uniqueidxstoring ORDER BY x;
+SET TRACING=off
+----
+1 1 1 1 1
+3 NULL 3 3 3
+4 NULL 4 4 4
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidxstoring/%'
+ORDER BY message
+----
+fetched: /t1/uniqueidxstoring/1 -> /1
+fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
+fetched: /t1/uniqueidxstoring/1/z -> /1
+fetched: /t1/uniqueidxstoring/NULL -> /3
+fetched: /t1/uniqueidxstoring/NULL -> /4
+fetched: /t1/uniqueidxstoring/NULL/a/b -> /3/3
+fetched: /t1/uniqueidxstoring/NULL/a/b -> /4/4
+fetched: /t1/uniqueidxstoring/NULL/z -> /3
+fetched: /t1/uniqueidxstoring/NULL/z -> /4
+
+# Ensure that updates delete and insert all K/V pairs for each index.
+statement ok
+SET TRACING=on,kv,results;
+UPDATE t1 SET
+x = 2, y = 2, z = 2, a = 2, b = 2
+WHERE x = 1;
+SET TRACING=off;
+
+# Updates on nonuniqueidx or uniqueidx (which don't store anything) should be a single kv pair of the old format.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/2/%' OR
+message LIKE 'InitPut /Table/53/2/%' OR
+message LIKE 'Del /Table/53/3/%' OR
+message LIKE 'InitPut /Table/53/3/%'
+ORDER BY message
+----
+Del /Table/53/2/1/1/0
+Del /Table/53/3/1/0
+InitPut /Table/53/2/2/2/0 -> /BYTES/
+InitPut /Table/53/3/2/0 -> /BYTES/0x8a
+
+# Updates on nonuniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/4/%' OR
+message LIKE 'InitPut /Table/53/4/%'
+ORDER BY message
+----
+Del /Table/53/4/1/1/0
+Del /Table/53/4/1/1/2/1
+Del /Table/53/4/1/1/3/1
+InitPut /Table/53/4/2/2/0 -> /BYTES/
+InitPut /Table/53/4/2/2/2/1 -> /TUPLE/3:3:Int/2
+InitPut /Table/53/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
+
+# Updates on uniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/5/%' OR
+message LIKE 'InitPut /Table/53/5/%'
+ORDER BY message
+----
+Del /Table/53/5/1/0
+Del /Table/53/5/1/2/1
+Del /Table/53/5/1/3/1
+InitPut /Table/53/5/2/0 -> /BYTES/0x8a
+InitPut /Table/53/5/2/2/1 -> /TUPLE/3:3:Int/2
+InitPut /Table/53/5/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
+
+# Regression for #42992.
+statement ok
+CREATE TABLE t42992 (x TIMESTAMP PRIMARY KEY, y INT, z INT, UNIQUE INDEX i (y) STORING (z), FAMILY (x), FAMILY (y), FAMILY (z))
+
+statement ok
+INSERT INTO t42992 VALUES (now(), NULL, 2)
+
+query II
+SELECT y, z FROM t42992@i
+----
+NULL 2
+
+# Ensure that reads only scan the necessary k/v's.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT, y INT, z INT,
+  FAMILY (x), FAMILY (y), FAMILY (z),
+  UNIQUE INDEX i (x) STORING (y, z),
+  INDEX i2 (x) STORING (y, z)
+);
+INSERT INTO t VALUES (1, 2, 3)
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t@i WHERE x = 1;
+SET TRACING=off
+----
+2
+
+# In this case, we scan only families 0 and 1.
+# We don't really need family 0, but removing that
+# from the needed families code is a further optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+ORDER BY message
+----
+Scan /Table/55/2/1/{0-1/2}
+
+# Make sure that family splitting doesn't affect
+# lookups when there are null values along the
+# secondary index.
+statement ok
+INSERT INTO t VALUES (NULL, 3, 4)
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t@i WHERE x IS NULL;
+SET TRACING=off
+----
+3
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+ORDER BY message
+----
+Scan /Table/55/2/{NULL-!NULL}
+
+# Ensure that updates only touch the changed column families.
+query T
+SET TRACING=on,kv,results;
+UPDATE t SET y = 5 WHERE x = 1;
+SET TRACING=off;
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'CPut /Table/55/2%'
+ORDER BY message
+----
+CPut /Table/55/2/1/1/1 -> /TUPLE/2:2:Int/5 (replacing raw_bytes:"\000\000\000\000\n#\004" timestamp:<> , if exists)
+
+# Test composite datatypes.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y DECIMAL,
+  z DECIMAL,
+  w INT,
+  v INT,
+  FAMILY (x, w), FAMILY (y, z), FAMILY (v),
+  UNIQUE INDEX i (y, z) STORING (w, v)
+);
+INSERT INTO t VALUES (1, 2.01, 3.001, 4, 5)
+
+query TTI
+SET TRACING=on,kv,results;
+SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001;
+SET TRACING=off;
+----
+2.01 3.001 5
+
+# We only need a point scan on family 0, because the composite values
+# are stored in family 0, and a scan on family 2 for v.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+ORDER BY message
+----
+Scan /Table/56/2/2.01/3.001/{0-1}, /Table/56/2/2.01/3.001/2/{1-2}
+
+query TTT
+EXPLAIN SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
+----
+·     distributed  false
+·     vectorized   true
+scan  ·            ·
+·     table        t@i
+·     spans        /2.01/3.001/0-/2.01/3.001/1 /2.01/3.001/2/1-/2.01/3.001/2/2
+
+# Ensure that we always have a k/v in family 0.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  UNIQUE INDEX i (y) STORING (z),
+  FAMILY (y), FAMILY (x), FAMILY (z)
+);
+INSERT INTO t VALUES (1, 2, 3)
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t@i WHERE y = 2;
+SET TRACING=off;
+----
+2
+
+# Prove that we can scan only column family 0 and find the row.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+ORDER BY message
+----
+Scan /Table/57/2/2/{0-1}
