@@ -900,7 +900,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	const numActiveTxns = 8
 	var activeTxns [numActiveTxns]*enginepb.TxnMeta
 	var items []workloadItem
-	const numRequests = 20000
+	const numRequests = 1000
 	for i := 0; i < numRequests; i++ {
 		var txnMeta *enginepb.TxnMeta
 		var ts hlc.Timestamp
@@ -968,7 +968,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	for _, c := range concurrency {
 		t.Run(fmt.Sprintf("concurrency %d", c), func(t *testing.T) {
 			exec := newWorkLoadExecutor(items, c)
-			if err := exec.execute(false, 2000); err != nil {
+			if err := exec.execute(false, 200); err != nil {
 				t.Fatal(err)
 			}
 		})
