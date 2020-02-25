@@ -33,6 +33,7 @@ func NewUnorderedDistinct(
 		distinctCols,
 		outCols,
 		true, /* allowNullEquality */
+		hashTableDistinctMode,
 	)
 
 	return &unorderedDistinct{
@@ -77,7 +78,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	if !op.buildFinished {
 		op.buildFinished = true
 		op.ht.build(ctx, op.input)
-		op.ht.findSameTuples(ctx)
+		op.ht.findTupleGroups(ctx)
 	}
 
 	// The selection vector needs to be populated before any batching can be
