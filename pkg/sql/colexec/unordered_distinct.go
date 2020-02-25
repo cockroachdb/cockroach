@@ -77,7 +77,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	if !op.buildFinished {
 		op.buildFinished = true
 		op.ht.build(ctx, op.input)
-		op.ht.findSameTuples(ctx)
+		op.ht.findDistinctTuples(ctx, false /* populateSame */)
 	}
 
 	// The selection vector needs to be populated before any batching can be

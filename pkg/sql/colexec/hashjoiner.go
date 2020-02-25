@@ -423,7 +423,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 				for nToCheck > 0 {
 					// Continue searching for the build table matching keys while the toCheck
 					// array is non-empty.
-					nToCheck = hj.ht.check(hj.probeState.keyTypes, nToCheck, sel)
+					nToCheck = hj.ht.check(hj.probeState.keyTypes, nToCheck, sel, true /* populateSame */)
 					hj.ht.findNext(nToCheck)
 				}
 
