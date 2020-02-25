@@ -75,6 +75,16 @@ func MakeTimeTZFromTime(t time.Time) TimeTZ {
 	)
 }
 
+// MakeTimeTZFromTimeAllow2400 creates a TimeTZ from a time.Time,
+// but factors in that Time2400 may be possible.
+// This assumes either a lib/pq time or unix time is set.
+func MakeTimeTZFromTimeAllow2400(t time.Time) TimeTZ {
+	if t.Day() != 1 {
+		return MakeTimeTZFromLocation(timeofday.Time2400, t.Location())
+	}
+	return MakeTimeTZFromTime(t)
+}
+
 // Now returns the TimeTZ of the current location.
 func Now() TimeTZ {
 	return MakeTimeTZFromTime(timeutil.Now())

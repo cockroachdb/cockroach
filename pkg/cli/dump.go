@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -683,9 +684,9 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						}
 					case types.TimeFamily:
 						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
-						d = tree.MakeDTime(timeofday.FromTime(t))
+						d = tree.MakeDTime(timeofday.FromTimeAllow2400(t))
 					case types.TimeTZFamily:
-						d = tree.NewDTimeTZFromTime(t)
+						d = tree.NewDTimeTZ(timetz.MakeTimeTZFromTimeAllow2400(t))
 					case types.TimestampFamily:
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
 					case types.TimestampTZFamily:
