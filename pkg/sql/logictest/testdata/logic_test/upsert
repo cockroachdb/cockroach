@@ -1143,3 +1143,46 @@ DROP TABLE source
 
 statement ok
 DROP TABLE target
+
+# ------------------------------------------------------------------------------
+# DO NOTHING with duplicate inputs.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE target (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+statement ok
+CREATE TABLE source (a INT, b INT, c INT)
+
+# Ensure that duplicates are removed from the input at runtime. NULL values are
+# never considered to be duplicates.
+statement ok
+INSERT INTO source
+VALUES
+    (1, 1, 2),
+    (1, 2, 1),
+    (1, 2, 2),
+    (2, 3, 3),
+    (4, 1, NULL),
+    (5, 1, NULL),
+    (6, NULL, NULL),
+    (7, NULL, NULL),
+    (3, 3, 3)
+
+statement ok
+INSERT INTO target SELECT * FROM source ON CONFLICT DO NOTHING
+
+query III rowsort
+SELECT * FROM target
+----
+1  1     2
+2  3     3
+4  1     NULL
+5  1     NULL
+6  NULL  NULL
+7  NULL  NULL
+
+statement ok
+DROP TABLE source
+
+statement ok
+DROP TABLE target

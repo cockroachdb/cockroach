@@ -163,7 +163,7 @@ func ExtractJoinEqualityColumns(
 ) (leftEq opt.ColList, rightEq opt.ColList) {
 	for i := range on {
 		condition := on[i].Condition
-		ok, left, right := isJoinEquality(leftCols, rightCols, condition)
+		ok, left, right := ExtractJoinEquality(leftCols, rightCols, condition)
 		if !ok {
 			continue
 		}
@@ -193,7 +193,7 @@ func ExtractJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) 
 	var newFilters FiltersExpr
 	for i := range on {
 		condition := on[i].Condition
-		ok, _, _ := isJoinEquality(leftCols, rightCols, condition)
+		ok, _, _ := ExtractJoinEquality(leftCols, rightCols, condition)
 		if ok {
 			if newFilters != nil {
 				newFilters = append(newFilters, on[i])
@@ -222,7 +222,11 @@ func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, o
 	return nil, nil, false
 }
 
-func isJoinEquality(
+// ExtractJoinEquality returns true if the given condition is a simple equality
+// condition with two variables (e.g. a=b), where one of the variables (returned
+// as "left") is in the set of leftCols and the other (returned as "right") is
+// in the set of rightCols.
+func ExtractJoinEquality(
 	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr,
 ) (ok bool, left, right opt.ColumnID) {
 	lvar, rvar, ok := isVarEquality(condition)
