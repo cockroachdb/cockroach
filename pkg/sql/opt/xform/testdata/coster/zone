@@ -383,7 +383,7 @@ inner-join (lookup xy@y2)
  │    └── interesting orderings: (+1) (+2,+3,+1)
  └── filters
       └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-           ├── variable: t.public.xy.y [type=int]
+           ├── variable: t.public.xy.y:5 [type=int]
            └── const: 1 [type=int]
 
 # Switch the data center for the target lookup join index.
@@ -421,7 +421,7 @@ inner-join (lookup xy@y1)
  │    └── interesting orderings: (+1) (+2,+3,+1)
  └── filters
       └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-           ├── variable: t.public.xy.y [type=int]
+           ├── variable: t.public.xy.y:5 [type=int]
            └── const: 1 [type=int]
 
 # --------------------------------------------------

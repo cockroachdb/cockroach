@@ -34,8 +34,8 @@ inner-join (hash)
  │    └── prune: (5-7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: t.public.abc.a [type=int]
-           └── variable: t.public.def.d [type=int]
+           ├── variable: t.public.abc.a:1 [type=int]
+           └── variable: t.public.def.d:5 [type=int]
 
 expr
 (MakeLookupJoin
@@ -56,8 +56,8 @@ left-join (lookup abc@ab)
  │    └── prune: (1,2)
  └── filters
       └── gt [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-           ├── variable: t.public.abc.a [type=int]
-           └── variable: t.public.def.e [type=int]
+           ├── variable: t.public.abc.a:5 [type=int]
+           └── variable: t.public.def.e:2 [type=int]
 
 expr
 (MergeJoin
@@ -137,10 +137,10 @@ inner-join-apply
  │    │    └── prune: (5-7)
  │    └── filters
  │         └── eq [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ])]
- │              ├── variable: t.public.abc.a [type=int]
+ │              ├── variable: t.public.abc.a:1 [type=int]
  │              └── plus [type=int]
- │                   ├── variable: t.public.def.d [type=int]
- │                   └── variable: t.public.def.e [type=int]
+ │                   ├── variable: t.public.def.d:5 [type=int]
+ │                   └── variable: t.public.def.e:6 [type=int]
  └── filters (true)
 
 expr

@@ -133,7 +133,7 @@ scalar-group-by
  │         └── (seq_num >= 100) AND (seq_num < 200)
  └── aggregations
       └── sum
-           └── variable: total
+           └── total
 
 # The partition values are not required as the index is constrained as is.
 query T
@@ -144,7 +144,7 @@ scalar-group-by
  │    └── constraint: /1/4/2: [/'us-east1'/100 - /'us-east1'/199]
  └── aggregations
       └── sum
-           └── variable: total
+           └── total
 
 # Create a truly distributed and partitioned table where we use multi-column
 # partitions.

@@ -745,10 +745,12 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
 		}
 		err := resumer.OnFailOrCancel(ctx, phs)
-		if err == nil {
-			nextStatus := StatusCanceled
-			if jobErr != nil {
-				nextStatus = StatusFailed
+		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
+			// If the job has failed with any error different than canceled we
+			// mark it as Failed.
+			nextStatus := StatusFailed
+			if errors.Is(errJobCanceled, jobErr) {
+				nextStatus = StatusCanceled
 			}
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, nextStatus, jobErr)
 		}
@@ -808,7 +810,11 @@ func (r *Registry) resume(
 		// Run the actual job.
 		status, err := job.CurrentStatus(ctx)
 		if err == nil {
-			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, nil)
+			var finalResumeError error
+			if job.Payload().FinalResumeError != nil {
+				finalResumeError = errors.DecodeError(ctx, *job.Payload().FinalResumeError)
+			}
+			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
 			if err != nil {
 				if errors.HasAssertionFailure(err) {
 					log.ReportOrPanic(ctx, nil, err.Error())
@@ -985,25 +991,24 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			continue
 		}
 
-		if err := r.register(*id, cancel); err != nil {
-			if keepRunning := status != StatusCancelRequested; keepRunning {
-				if log.V(3) {
-					log.Infof(ctx, "job %d: skipping: the job is already running/reverting on this node", *id)
-				}
-				continue
-			}
-			if err := job.Reverted(ctx, err, func(context.Context, *client.Txn) error {
+		if cancelRequested := status == StatusCancelRequested; cancelRequested {
+			if err := job.Reverted(ctx, errJobCanceled, func(context.Context, *client.Txn) error {
+				// Unregister the job in case it is running on the node.
+				// Unregister is a no-op for jobs that are not running.
 				r.unregister(*id)
 				return nil
 			}); err != nil {
 				log.Errorf(ctx, "job %d: could not set to reverting: %v", *id, err)
 				continue
 			}
-			if log.V(2) {
-				log.Infof(ctx, "job %d: canceled: the job is now reverting", *id)
+			log.Infof(ctx, "job %d: canceled: the job is now reverting", *id)
+		} else if currentlyRunning := r.register(*id, cancel) != nil; currentlyRunning {
+			if log.V(3) {
+				log.Infof(ctx, "job %d: skipping: the job is already running/reverting on this node", *id)
 			}
-			// Don't continue but adopt job for reverting.
+			continue
 		}
+
 		// Check if job status has changed in the meanwhile.
 		currentStatus, err := job.CurrentStatus(ctx)
 		if err != nil {

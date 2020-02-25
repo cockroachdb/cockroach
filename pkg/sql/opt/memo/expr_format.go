@@ -28,10 +28,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ExprFmtInterceptor is a callback that can be set to a custom formatting
-// function. If the function returns true, the normal formatting code is
-// bypassed.
-var ExprFmtInterceptor func(f *ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool
+// ScalarFmtInterceptor is a callback that can be set to a custom formatting
+// function. If the function returns a non-empty string, the normal formatting
+// code is bypassed.
+var ScalarFmtInterceptor func(f *ExprFmtCtx, expr opt.ScalarExpr) string
 
 // ExprFmtFlags controls which properties of the expression are shown in
 // formatted output.
@@ -75,6 +75,9 @@ const (
 	// ExprFmtHideTypes hides type information from columns and scalar
 	// expressions.
 	ExprFmtHideTypes
+
+	// ExprFmtHideNotNull hides the !null specifier from columns.
+	ExprFmtHideNotNull
 
 	// ExprFmtHideColumns removes column information.
 	ExprFmtHideColumns
@@ -155,11 +158,11 @@ func (f *ExprFmtCtx) FormatExpr(e opt.Expr) {
 	f.Buffer.WriteString(tp.String())
 }
 
-func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
-	if ExprFmtInterceptor != nil && ExprFmtInterceptor(f, tp, e) {
-		return
-	}
+func (f *ExprFmtCtx) space() {
+	f.Buffer.WriteByte(' ')
+}
 
+func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 	scalar, ok := e.(opt.ScalarExpr)
 	if ok {
 		f.formatScalar(scalar, tp)
@@ -337,9 +340,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				})
 				for _, col := range cols {
 					f.Buffer.Reset()
-					formatCol(f, "" /* label */, col, opt.ColSet{} /* notNullCols */, false /* omitType */)
-					colInfo := strings.TrimPrefix(f.Buffer.String(), " ")
-					f.formatExpr(tab.ComputedCols[col], c.Child(colInfo))
+					f.formatExpr(tab.ComputedCols[col], c.Child(f.ColumnString(col)))
 				}
 			}
 		}
@@ -497,9 +498,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			child := tp.Child("mapping:")
 			for i := range t.InCols {
 				f.Buffer.Reset()
-				formatCol(f, "" /* label */, t.InCols[i], opt.ColSet{}, false /* omitType */)
-				f.Buffer.WriteString(" =>")
-				formatCol(f, "" /* label */, t.OutCols[i], opt.ColSet{}, false /* omitType */)
+				f.space()
+				f.formatCol("" /* label */, t.InCols[i], opt.ColSet{} /* notNullCols */)
+				f.Buffer.WriteString(" => ")
+				f.formatCol("" /* label */, t.OutCols[i], opt.ColSet{} /* notNullCols */)
 				child.Child(f.Buffer.String())
 			}
 		}
@@ -513,7 +515,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		f.Buffer.Reset()
 		f.Buffer.WriteString("columns:")
 		for _, col := range t.Columns {
-			formatCol(f, col.Alias, col.ID, opt.ColSet{} /* notNullCols */, false /* omitType */)
+			f.space()
+			f.formatCol(col.Alias, col.ID, opt.ColSet{} /* notNullCols */)
 		}
 		tp.Child(f.Buffer.String())
 
@@ -720,100 +723,153 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		f.formatExpr(scalar.Child(1), tp.Child("filter"))
 
 		return
+
+	case opt.ScalarListOp:
+		// Don't show scalar-list as a separate node, as it's redundant with its
+		// parent.
+		for i, n := 0, scalar.ChildCount(); i < n; i++ {
+			f.formatExpr(scalar.Child(i), tp)
+		}
+		return
 	}
 
-	// Don't show scalar-list, as it's redundant with its parent.
-	if scalar.Op() != opt.ScalarListOp {
-		f.Buffer.Reset()
-		propsExpr := scalar
-		switch scalar.Op() {
-		case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp,
-			opt.ZipItemOp:
-			// Use properties from the item, but otherwise omit it from output.
-			scalar = scalar.Child(0).(opt.ScalarExpr)
-		case opt.WindowsItemOp:
-			// Only show this if the frame differs from the default.
-			frame := scalar.Private().(*WindowsItemPrivate).Frame
-			if frame.Mode == tree.RANGE &&
-				frame.StartBoundType == tree.UnboundedPreceding &&
-				frame.EndBoundType == tree.CurrentRow &&
-				frame.FrameExclusion == tree.NoExclusion {
-				scalar = scalar.Child(0).(opt.ScalarExpr)
+	// Omit various list items from the output, but show some of their properties
+	// along with the properties of their child.
+	var scalarProps []string
+	switch scalar.Op() {
+	case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp,
+		opt.ZipItemOp, opt.WindowsItemOp:
+
+		emitProp := func(format string, args ...interface{}) {
+			scalarProps = append(scalarProps, fmt.Sprintf(format, args...))
+		}
+		switch item := scalar.(type) {
+		case *ProjectionsItem:
+			if !f.HasFlags(ExprFmtHideColumns) {
+				emitProp("as=%s", f.ColumnString(item.Col))
+			}
+
+		case *AggregationsItem:
+			if !f.HasFlags(ExprFmtHideColumns) {
+				emitProp("as=%s", f.ColumnString(item.Col))
+			}
+
+		case *ZipItem:
+			// TODO(radu): show the item.Cols
+
+		case *WindowsItem:
+			if !f.HasFlags(ExprFmtHideColumns) {
+				emitProp("as=%s", f.ColumnString(item.Col))
+			}
+			// Only show the frame if it differs from the default.
+			def := WindowFrame{
+				Mode:           tree.RANGE,
+				StartBoundType: tree.UnboundedPreceding,
+				EndBoundType:   tree.CurrentRow,
+				FrameExclusion: tree.NoExclusion,
+			}
+			if item.Frame != def {
+				emitProp("frame=%q", item.Frame.String())
 			}
 		}
 
-		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
-		f.formatScalarPrivate(scalar)
-		f.FormatScalarProps(propsExpr)
-		tp = tp.Child(f.Buffer.String())
+		scalarProps = append(scalarProps, f.scalarPropsStrings(scalar)...)
+		scalar = scalar.Child(0).(opt.ScalarExpr)
+
+	default:
+		scalarProps = f.scalarPropsStrings(scalar)
 	}
 
-	for i, n := 0, scalar.ChildCount(); i < n; i++ {
-		f.formatExpr(scalar.Child(i), tp)
+	var intercepted bool
+	f.Buffer.Reset()
+	if f.HasFlags(ExprFmtHideScalars) && ScalarFmtInterceptor != nil {
+		if str := ScalarFmtInterceptor(f, scalar); str != "" {
+			f.Buffer.WriteString(str)
+			intercepted = true
+		}
 	}
+	if !intercepted {
+		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
+		f.formatScalarPrivate(scalar)
+	}
+	if len(scalarProps) != 0 {
+		f.Buffer.WriteString(" [")
+		f.Buffer.WriteString(strings.Join(scalarProps, ", "))
+		f.Buffer.WriteByte(']')
+	}
+	tp = tp.Child(f.Buffer.String())
+
+	if !intercepted {
+		for i, n := 0, scalar.ChildCount(); i < n; i++ {
+			f.formatExpr(scalar.Child(i), tp)
+		}
+	}
+}
+
+// scalarPropsStrings returns a slice of strings, each describing a property;
+// for example:
+//   {"type=bool", "outer=(1)", "constraints=(/1: [/1 - /1]; tight)"}
+func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
+	typ := scalar.DataType()
+	if typ == nil {
+		if scalar.Op() == opt.FKChecksItemOp || scalar.Op() == opt.KVOptionsItemOp {
+			// These are not true scalars and have no properties.
+			return nil
+		}
+		// Don't panic if scalar properties don't yet exist when printing
+		// expression.
+		return []string{"type=undefined"}
+	}
+
+	var res []string
+	emitProp := func(format string, args ...interface{}) {
+		res = append(res, fmt.Sprintf(format, args...))
+	}
+	if !f.HasFlags(ExprFmtHideTypes) && typ.Family() != types.AnyFamily {
+		emitProp("type=%s", typ)
+	}
+	if propsExpr, ok := scalar.(ScalarPropsExpr); ok {
+		scalarProps := propsExpr.ScalarProps()
+		if !f.HasFlags(ExprFmtHideMiscProps) {
+			if !scalarProps.OuterCols.Empty() {
+				emitProp("outer=%s", scalarProps.OuterCols)
+			}
+			if scalarProps.CanHaveSideEffects {
+				emitProp("side-effects")
+			}
+			if scalarProps.HasCorrelatedSubquery {
+				emitProp("correlated-subquery")
+			} else if scalarProps.HasSubquery {
+				emitProp("subquery")
+			}
+		}
+
+		if !f.HasFlags(ExprFmtHideConstraints) {
+			if scalarProps.Constraints != nil && !scalarProps.Constraints.IsUnconstrained() {
+				var tight string
+				if scalarProps.TightConstraints {
+					tight = "; tight"
+				}
+				emitProp("constraints=(%s%s)", scalarProps.Constraints, tight)
+			}
+		}
+
+		if !f.HasFlags(ExprFmtHideFuncDeps) && !scalarProps.FuncDeps.Empty() {
+			emitProp("fd=%s", scalarProps.FuncDeps)
+		}
+	}
+	return res
 }
 
 // FormatScalarProps writes out a string representation of the scalar
 // properties (with a preceding space); for example:
 //  " [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]"
 func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
-	// Don't panic if scalar properties don't yet exist when printing
-	// expression.
-	typ := scalar.DataType()
-	if typ == nil {
-		if scalar.Op() != opt.FKChecksItemOp && scalar.Op() != opt.KVOptionsItemOp {
-			f.Buffer.WriteString(" [type=undefined]")
-		}
-	} else {
-		first := true
-		writeProp := func(format string, args ...interface{}) {
-			if first {
-				f.Buffer.WriteString(" [")
-				first = false
-			} else {
-				f.Buffer.WriteString(", ")
-			}
-			fmt.Fprintf(f.Buffer, format, args...)
-		}
-
-		if !f.HasFlags(ExprFmtHideTypes) && typ.Family() != types.AnyFamily {
-			writeProp("type=%s", typ)
-		}
-
-		if propsExpr, ok := scalar.(ScalarPropsExpr); ok {
-			scalarProps := propsExpr.ScalarProps()
-			if !f.HasFlags(ExprFmtHideMiscProps) {
-				if !scalarProps.OuterCols.Empty() {
-					writeProp("outer=%s", scalarProps.OuterCols)
-				}
-				if scalarProps.CanHaveSideEffects {
-					writeProp("side-effects")
-				}
-				if scalarProps.HasCorrelatedSubquery {
-					writeProp("correlated-subquery")
-				} else if scalarProps.HasSubquery {
-					writeProp("subquery")
-				}
-			}
-
-			if !f.HasFlags(ExprFmtHideConstraints) {
-				if scalarProps.Constraints != nil && !scalarProps.Constraints.IsUnconstrained() {
-					writeProp("constraints=(%s", scalarProps.Constraints)
-					if scalarProps.TightConstraints {
-						f.Buffer.WriteString("; tight")
-					}
-					f.Buffer.WriteString(")")
-				}
-			}
-
-			if !f.HasFlags(ExprFmtHideFuncDeps) && !scalarProps.FuncDeps.Empty() {
-				writeProp("fd=%s", scalarProps.FuncDeps)
-			}
-		}
-
-		if !first {
-			f.Buffer.WriteString("]")
-		}
+	props := f.scalarPropsStrings(scalar)
+	if len(props) != 0 {
+		f.Buffer.WriteString(" [")
+		f.Buffer.WriteString(strings.Join(props, ", "))
+		f.Buffer.WriteByte(']')
 	}
 }
 
@@ -822,12 +878,6 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	switch t := scalar.(type) {
 	case *NullExpr, *TupleExpr, *CollateExpr:
 		// Private is redundant with logical type property.
-		private = nil
-
-	case *ProjectionsExpr, *AggregationsExpr:
-		// The private data of these ops was already used to print the output
-		// columns for their containing op (Project or GroupBy), so no need to
-		// print again.
 		private = nil
 
 	case *AnyExpr:
@@ -911,13 +961,15 @@ func (f *ExprFmtCtx) formatColumns(
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
 		hidden.Remove(col.ID)
-		formatCol(f, col.Alias, col.ID, notNullCols, false /* omitType */)
+		f.space()
+		f.formatCol(col.Alias, col.ID, notNullCols)
 	}
 	if !hidden.Empty() {
 		f.Buffer.WriteString("  [hidden:")
 		for _, col := range cols {
 			if hidden.Contains(col) {
-				formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
+				f.space()
+				f.formatCol("" /* label */, col, notNullCols)
 			}
 		}
 		f.Buffer.WriteString("]")
@@ -936,7 +988,8 @@ func (f *ExprFmtCtx) formatColList(
 		f.Buffer.WriteString(heading)
 		for _, col := range colList {
 			if col != 0 {
-				formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
+				f.space()
+				f.formatCol("" /* label */, col, notNullCols)
 			}
 		}
 		tp.Child(f.Buffer.String())
@@ -959,11 +1012,7 @@ func (f *ExprFmtCtx) formatMutationCols(
 	tpChild := tp.Child(heading)
 	for i, col := range colList {
 		if col != 0 {
-			f.Buffer.Reset()
-			formatCol(f, "" /* label */, col, opt.ColSet{}, true /* omitType */)
-			f.Buffer.WriteString(" =>")
-			formatCol(f, "" /* label */, tabID.ColumnID(i), opt.ColSet{}, true /* omitType */)
-			tpChild.Child(f.Buffer.String())
+			tpChild.Child(fmt.Sprintf("%s => %s", f.ColumnString(col), f.ColumnString(tabID.ColumnID(i))))
 		}
 	}
 }
@@ -979,26 +1028,34 @@ func (f *ExprFmtCtx) formatMutationCommon(tp treeprinter.Node, p *MutationPrivat
 	}
 }
 
-// formatCol outputs the specified column into the context's buffer using the
+// ColumnString returns the column in the same format as formatColSimple.
+func (f *ExprFmtCtx) ColumnString(id opt.ColumnID) string {
+	var buf bytes.Buffer
+	f.formatColSimpleToBuffer(&buf, "" /* label */, id)
+	return buf.String()
+}
+
+// formatColSimple outputs the specified column into the context's buffer using the
 // following format:
-//   label:index(type)
+//   label:id
 //
-// If the column is not nullable, then this is the format:
-//   label:index(type!null)
+// The :id part is omitted if the formatting flags include ExprFmtHideColumns.
 //
 // If a label is given, then it is used. Otherwise, a "best effort" label is
 // used from query metadata.
-//
-// If omitType is true, then the type specifier (including not nullable) is
-// omitted from the output.
-func formatCol(
-	f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.ColSet, omitType bool,
-) {
-	md := f.Memo.metadata
-	colMeta := md.ColumnMeta(id)
+func (f *ExprFmtCtx) formatColSimple(label string, id opt.ColumnID) {
+	f.formatColSimpleToBuffer(f.Buffer, label, id)
+}
+
+func (f *ExprFmtCtx) formatColSimpleToBuffer(buf *bytes.Buffer, label string, id opt.ColumnID) {
 	if label == "" {
-		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label = md.QualifiedAlias(id, fullyQualify, f.Catalog)
+		if f.Memo != nil {
+			md := f.Memo.metadata
+			fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
+			label = md.QualifiedAlias(id, fullyQualify, f.Catalog)
+		} else {
+			label = fmt.Sprintf("unknown%d", id)
+		}
 	}
 
 	if !isSimpleColumnName(label) {
@@ -1007,43 +1064,38 @@ func formatCol(
 		label = "\"" + label + "\""
 	}
 
-	f.Buffer.WriteByte(' ')
-	f.Buffer.WriteString(label)
-	f.Buffer.WriteByte(':')
-	fmt.Fprintf(f.Buffer, "%d", id)
-	if !f.HasFlags(ExprFmtHideTypes) && !omitType {
-		f.Buffer.WriteByte('(')
-		f.Buffer.WriteString(colMeta.Type.String())
+	buf.WriteString(label)
+	if !f.HasFlags(ExprFmtHideColumns) {
+		buf.WriteByte(':')
+		fmt.Fprintf(buf, "%d", id)
+	}
+}
 
-		if notNullCols.Contains(id) {
-			f.Buffer.WriteString("!null")
-		}
+// formatCol outputs the specified column into the context's buffer using the
+// following format:
+//   label:id(type)
+//
+// If the column is not nullable, then this is the format:
+//   label:id(type!null)
+//
+// Some of the components can be omitted depending on formatting flags.
+//
+// If a label is given, then it is used. Otherwise, a "best effort" label is
+// used from query metadata.
+func (f *ExprFmtCtx) formatCol(label string, id opt.ColumnID, notNullCols opt.ColSet) {
+	f.formatColSimple(label, id)
+	parenOpen := false
+	if !f.HasFlags(ExprFmtHideTypes) && f.Memo != nil {
+		f.Buffer.WriteByte('(')
+		parenOpen = true
+		f.Buffer.WriteString(f.Memo.metadata.ColumnMeta(id).Type.String())
+	}
+	if !f.HasFlags(ExprFmtHideNotNull) && notNullCols.Contains(id) {
+		f.Buffer.WriteString("!null")
+	}
+	if parenOpen {
 		f.Buffer.WriteByte(')')
 	}
-}
-
-func frameBoundName(b tree.WindowFrameBoundType) string {
-	switch b {
-	case tree.UnboundedFollowing, tree.UnboundedPreceding:
-		return "unbounded"
-	case tree.CurrentRow:
-		return "current-row"
-	case tree.OffsetFollowing, tree.OffsetPreceding:
-		return "offset"
-	}
-	panic(errors.AssertionFailedf("unexpected bound"))
-}
-
-func frameExclusionMode(e tree.WindowFrameExclusion) string {
-	switch e {
-	case tree.ExcludeCurrentRow:
-		return "exclude current row"
-	case tree.ExcludeGroup:
-		return "exclude group"
-	case tree.ExcludeTies:
-		return "exclude ties"
-	}
-	panic(errors.AssertionFailedf("unexpected frame exclusion"))
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
@@ -1058,12 +1110,13 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	}
 	switch t := private.(type) {
 	case *opt.ColumnID:
-		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		if f.Memo != nil {
-			label := f.Memo.metadata.QualifiedAlias(*t, fullyQualify, f.Catalog)
-			fmt.Fprintf(f.Buffer, " %s", label)
-		} else {
-			fmt.Fprintf(f.Buffer, " unknown%d", *t)
+		f.space()
+		f.formatColSimple("" /* label */, *t)
+
+	case *opt.ColList:
+		for _, col := range *t {
+			f.space()
+			f.formatColSimple("" /* label */, col)
 		}
 
 	case *TupleOrdinal:
@@ -1136,21 +1189,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
 
 	case *WindowsItemPrivate:
-		switch t.Frame.Mode {
-		case tree.GROUPS:
-			fmt.Fprintf(f.Buffer, " groups")
-		case tree.ROWS:
-			fmt.Fprintf(f.Buffer, " rows")
-		case tree.RANGE:
-			fmt.Fprintf(f.Buffer, " range")
-		}
-		fmt.Fprintf(f.Buffer, " from %s to %s",
-			frameBoundName(t.Frame.StartBoundType),
-			frameBoundName(t.Frame.EndBoundType),
-		)
-		if t.Frame.FrameExclusion != tree.NoExclusion {
-			fmt.Fprintf(f.Buffer, " %s", frameExclusionMode(t.Frame.FrameExclusion))
-		}
+		fmt.Fprintf(f.Buffer, " frame=%q", &t.Frame)
 
 	case *WindowPrivate:
 		fmt.Fprintf(f.Buffer, " partition=%s", t.Partition)
@@ -1164,7 +1203,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		}
 
 	case *OpaqueRelPrivate:
-		f.Buffer.WriteByte(' ')
+		f.space()
 		f.Buffer.WriteString(t.Metadata.String())
 
 	case *AlterTableSplitPrivate:
@@ -1196,7 +1235,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 
-	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, *types.T, *ExportPrivate:
+	case *ExplainPrivate, *opt.ColSet, *SetPrivate, *types.T, *ExportPrivate:
 		// Don't show anything, because it's mostly redundant.
 
 	default:

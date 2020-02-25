@@ -104,18 +104,18 @@ sort
       │    │    │    │    │    │    │    ├── key: (13)
       │    │    │    │    │    │    │    └── fd: (13)-->(14)
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── n_name = 'GERMANY' [type=bool, outer=(14), constraints=(/14: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(14)]
+      │    │    │    │    │    │         └── n_name:14 = 'GERMANY' [type=bool, outer=(14), constraints=(/14: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(14)]
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters (true)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── ps_supplycost * ps_availqty::FLOAT8 [type=float, outer=(3,4)]
+      │    │         └── ps_supplycost:4 * ps_availqty:3::FLOAT8 [as=column17:17, type=float, outer=(3,4)]
       │    └── aggregations
-      │         └── sum [type=float, outer=(17)]
-      │              └── variable: column17 [type=float]
+      │         └── sum [as=sum:18, type=float, outer=(17)]
+      │              └── column17:17 [type=float]
       └── filters
            └── gt [type=bool, outer=(18), subquery, constraints=(/18: (/NULL - ])]
-                ├── variable: sum [type=float]
+                ├── sum:18 [type=float]
                 └── subquery [type=float]
                      └── project
                           ├── save-table-name: q11_project_10
@@ -171,17 +171,17 @@ sort
                           │    │    │    │    │    │    │    ├── key: (31)
                           │    │    │    │    │    │    │    └── fd: (31)-->(32)
                           │    │    │    │    │    │    └── filters
-                          │    │    │    │    │    │         └── n_name = 'GERMANY' [type=bool, outer=(32), constraints=(/32: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(32)]
+                          │    │    │    │    │    │         └── n_name:32 = 'GERMANY' [type=bool, outer=(32), constraints=(/32: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(32)]
                           │    │    │    │    │    └── filters (true)
                           │    │    │    │    └── filters (true)
                           │    │    │    └── filters (true)
                           │    │    └── projections
-                          │    │         └── ps_supplycost * ps_availqty::FLOAT8 [type=float, outer=(21,22)]
+                          │    │         └── ps_supplycost:22 * ps_availqty:21::FLOAT8 [as=column35:35, type=float, outer=(21,22)]
                           │    └── aggregations
-                          │         └── sum [type=float, outer=(35)]
-                          │              └── variable: column35 [type=float]
+                          │         └── sum [as=sum:36, type=float, outer=(35)]
+                          │              └── column35:35 [type=float]
                           └── projections
-                               └── sum * 0.0001 [type=float, outer=(36)]
+                               └── sum:36 * 0.0001 [as="?column?":37, type=float, outer=(36)]
 
 stats table=q11_sort_1
 ----

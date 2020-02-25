@@ -2357,4 +2357,4 @@ func (s *adminServer) hasAdminRole(ctx context.Context, sessionUser string) (boo
 	return bool(dbDatum), nil
 }
 
-var errInsufficientPrivilege = errors.New("this operation requires admin privilege")
+var errInsufficientPrivilege = status.Error(codes.PermissionDenied, "this operation requires admin privilege")

@@ -438,6 +438,43 @@ type WindowFrame struct {
 	FrameExclusion tree.WindowFrameExclusion
 }
 
+func (f *WindowFrame) String() string {
+	var bld strings.Builder
+	switch f.Mode {
+	case tree.GROUPS:
+		fmt.Fprintf(&bld, "groups")
+	case tree.ROWS:
+		fmt.Fprintf(&bld, "rows")
+	case tree.RANGE:
+		fmt.Fprintf(&bld, "range")
+	}
+
+	frameBoundName := func(b tree.WindowFrameBoundType) string {
+		switch b {
+		case tree.UnboundedFollowing, tree.UnboundedPreceding:
+			return "unbounded"
+		case tree.CurrentRow:
+			return "current-row"
+		case tree.OffsetFollowing, tree.OffsetPreceding:
+			return "offset"
+		}
+		panic(errors.AssertionFailedf("unexpected bound"))
+	}
+	fmt.Fprintf(&bld, " from %s to %s",
+		frameBoundName(f.StartBoundType),
+		frameBoundName(f.EndBoundType),
+	)
+	switch f.FrameExclusion {
+	case tree.ExcludeCurrentRow:
+		bld.WriteString(" exclude current row")
+	case tree.ExcludeGroup:
+		bld.WriteString(" exclude group")
+	case tree.ExcludeTies:
+		bld.WriteString(" exclude ties")
+	}
+	return bld.String()
+}
+
 // IsCanonical returns true if the ScanPrivate indicates an original unaltered
 // primary index Scan operator (i.e. unconstrained and not limited).
 func (s *ScanPrivate) IsCanonical() bool {

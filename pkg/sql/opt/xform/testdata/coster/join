@@ -10,42 +10,42 @@ opt
 SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 ----
 project
- ├── columns: k:1(int!null) x:5(int!null)
+ ├── columns: k:1!null x:5!null
  ├── stats: [rows=99]
  ├── cost: 2124.725
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join (hash)
-      ├── columns: k:1(int!null) d:4(decimal!null) x:5(int!null)
+      ├── columns: k:1!null d:4!null x:5!null
       ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
       ├── cost: 2123.725
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
       ├── scan b
-      │    ├── columns: x:5(int)
+      │    ├── columns: x:5
       │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
       │    └── cost: 1040.02
       ├── select
-      │    ├── columns: k:1(int!null) d:4(decimal!null)
+      │    ├── columns: k:1!null d:4!null
       │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0]
       │    ├── cost: 1070.03
       │    ├── key: (1)
       │    ├── fd: ()-->(4)
       │    ├── scan a
-      │    │    ├── columns: k:1(int!null) d:4(decimal!null)
+      │    │    ├── columns: k:1!null d:4!null
       │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=0]
       │    │    ├── cost: 1060.02
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
       │    └── filters
-      │         └── d = 1.0 [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight), fd=()-->(4)]
+      │         └── d:4 = 1.0 [outer=(4), constraints=(/4: [/1.0 - /1.0]; tight), fd=()-->(4)]
       └── filters
-           └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           └── k:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Verify that we pick merge join if we force it.
 opt
 SELECT k, x FROM a INNER MERGE JOIN b ON k=x
 ----
 inner-join (merge)
- ├── columns: k:1(int!null) x:5(int!null)
+ ├── columns: k:1!null x:5!null
  ├── flags: force merge join
  ├── left ordering: +1
  ├── right ordering: +5
@@ -53,18 +53,18 @@ inner-join (merge)
  ├── cost: 2339.27569
  ├── fd: (1)==(5), (5)==(1)
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1050.02
  │    ├── key: (1)
  │    └── ordering: +1
  ├── sort
- │    ├── columns: x:5(int)
+ │    ├── columns: x:5
  │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │    ├── cost: 1259.34569
  │    ├── ordering: +5
  │    └── scan b
- │         ├── columns: x:5(int)
+ │         ├── columns: x:5
  │         ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │         └── cost: 1040.02
  └── filters (true)
@@ -75,7 +75,7 @@ opt
 SELECT k, x FROM b INNER LOOKUP JOIN a ON k=x
 ----
 inner-join (lookup a)
- ├── columns: k:4(int!null) x:1(int!null)
+ ├── columns: k:4!null x:1!null
  ├── flags: force lookup join (into right side)
  ├── key columns: [1] = [4]
  ├── lookup columns are key
@@ -83,7 +83,7 @@ inner-join (lookup a)
  ├── cost: 7069.53
  ├── fd: (1)==(4), (4)==(1)
  ├── scan b
- │    ├── columns: x:1(int)
+ │    ├── columns: x:1
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    └── cost: 1040.02
  └── filters (true)
@@ -95,22 +95,22 @@ opt
 SELECT k, x FROM a INNER LOOKUP JOIN b ON k=x
 ----
 inner-join (hash)
- ├── columns: k:1(int!null) x:5(int!null)
+ ├── columns: k:1!null x:5!null
  ├── flags: force lookup join (into right side)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(5)=99, null(5)=0]
  ├── cost: 1e+100
  ├── fd: (1)==(5), (5)==(1)
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1!null
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1050.02
  │    └── key: (1)
  ├── scan b
- │    ├── columns: x:5(int)
+ │    ├── columns: x:5
  │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │    └── cost: 1040.02
  └── filters
-      └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── k:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 
 exec-ddl
@@ -133,13 +133,13 @@ opt
 SELECT * FROM abc WHERE c = 1
 ----
 index-join abc
- ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ ├── columns: a:1!null b:2 c:3!null
  ├── stats: [rows=9.9000002, distinct(3)=1, null(3)=0]
  ├── cost: 50.609001
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
-      ├── columns: a:1(int!null) c:3(int!null)
+      ├── columns: a:1!null c:3!null
       ├── constraint: /3/1: [/1 - /1]
       ├── stats: [rows=9.9000002, distinct(3)=1, null(3)=0]
       ├── cost: 10.3060002
@@ -224,31 +224,31 @@ ON w = a AND x = b AND y = c
 WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2'
 ----
 project
- ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)
+ ├── columns: w:1!null x:2!null y:3!null z:4!null
  ├── stats: [rows=500.488759]
  ├── cost: 3155.07489
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
-      ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:6(string!null) b:7(uuid!null) c:8(uuid!null)
+      ├── columns: w:1!null x:2!null y:3!null z:4!null a:6!null b:7!null c:8!null
       ├── key columns: [1 2 3] = [6 7 8]
       ├── stats: [rows=500.488759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=25, null(8)=0]
       ├── cost: 3150.06
       ├── fd: ()-->(1,2,6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
       ├── select
-      │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)
+      │    ├── columns: w:1!null x:2!null y:3!null z:4!null
       │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=10, null(4)=0]
       │    ├── cost: 110.03
       │    ├── fd: ()-->(1,2)
       │    ├── scan wxyz
-      │    │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)
+      │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null
       │    │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=10, null(4)=0]
       │    │    └── cost: 109.02
       │    └── filters
-      │         ├── w = 'foo' [type=bool, outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
-      │         └── x = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [type=bool, outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
+      │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
+      │         └── x:2 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
       └── filters
-           ├── a = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
-           └── b = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [type=bool, outer=(7), constraints=(/7: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(7)]
+           ├── a:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
+           └── b:7 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(7), constraints=(/7: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(7)]
 
 # Also for 34810: make sure the cost adjustment works when the estimated row
 # count is tiny.
@@ -334,34 +334,34 @@ ON w = a AND x = b AND y = c
 WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2' AND (i,j,k,l,m,n)=(1,2,3,4,5,6)
 ----
 project
- ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)
+ ├── columns: w:1!null x:2!null y:3!null z:4!null
  ├── stats: [rows=1.25e-15]
  ├── cost: 12200.07
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
-      ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) i:5(int!null) j:6(int!null) k:7(int!null) l:8(int!null) m:9(int!null) n:10(int!null) a:12(string!null) b:13(uuid!null) c:14(uuid!null)
+      ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:12!null b:13!null c:14!null
       ├── key columns: [1 2 3] = [12 13 14]
       ├── stats: [rows=1.25e-15, distinct(1)=1e-20, null(1)=0, distinct(2)=1e-20, null(2)=0, distinct(3)=1e-20, null(3)=0, distinct(12)=1e-20, null(12)=0, distinct(13)=1e-20, null(13)=0, distinct(14)=1e-20, null(14)=0]
       ├── cost: 12200.06
       ├── fd: ()-->(1,2,5-10,12,13), (1)==(12), (12)==(1), (2)==(13), (13)==(2), (3)==(14), (14)==(3)
       ├── select
-      │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) i:5(int!null) j:6(int!null) k:7(int!null) l:8(int!null) m:9(int!null) n:10(int!null)
+      │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
       │    ├── stats: [rows=1e-20, distinct(1)=1e-20, null(1)=0, distinct(2)=1e-20, null(2)=0, distinct(3)=1e-20, null(3)=0, distinct(4)=1e-20, null(4)=0, distinct(5)=1e-20, null(5)=0, distinct(6)=1e-20, null(6)=0, distinct(7)=1e-20, null(7)=0, distinct(8)=1e-20, null(8)=0, distinct(9)=1e-20, null(9)=0, distinct(10)=1e-20, null(10)=0]
       │    ├── cost: 12200.03
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn
-      │    │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) i:5(int) j:6(int) k:7(int) l:8(int) m:9(int) n:10(int)
+      │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5 j:6 k:7 l:8 m:9 n:10
       │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=10000, null(5)=0, distinct(6)=10000, null(6)=0, distinct(7)=10000, null(7)=0, distinct(8)=10000, null(8)=0, distinct(9)=10000, null(9)=0, distinct(10)=10000, null(10)=0]
       │    │    └── cost: 12100.02
       │    └── filters
-      │         ├── w = 'foo' [type=bool, outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
-      │         ├── x = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [type=bool, outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
-      │         ├── i = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-      │         ├── j = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
-      │         ├── k = 3 [type=bool, outer=(7), constraints=(/7: [/3 - /3]; tight), fd=()-->(7)]
-      │         ├── l = 4 [type=bool, outer=(8), constraints=(/8: [/4 - /4]; tight), fd=()-->(8)]
-      │         ├── m = 5 [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
-      │         └── n = 6 [type=bool, outer=(10), constraints=(/10: [/6 - /6]; tight), fd=()-->(10)]
+      │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
+      │         ├── x:2 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
+      │         ├── i:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      │         ├── j:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
+      │         ├── k:7 = 3 [outer=(7), constraints=(/7: [/3 - /3]; tight), fd=()-->(7)]
+      │         ├── l:8 = 4 [outer=(8), constraints=(/8: [/4 - /4]; tight), fd=()-->(8)]
+      │         ├── m:9 = 5 [outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
+      │         └── n:10 = 6 [outer=(10), constraints=(/10: [/6 - /6]; tight), fd=()-->(10)]
       └── filters
-           ├── a = 'foo' [type=bool, outer=(12), constraints=(/12: [/'foo' - /'foo']; tight), fd=()-->(12)]
-           └── b = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [type=bool, outer=(13), constraints=(/13: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(13)]
+           ├── a:12 = 'foo' [outer=(12), constraints=(/12: [/'foo' - /'foo']; tight), fd=()-->(12)]
+           └── b:13 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(13), constraints=(/13: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(13)]

@@ -6,35 +6,35 @@ opt
 SELECT k, i, s || 'foo' FROM a
 ----
 project
- ├── columns: k:1(int!null) i:2(int) "?column?":5(string)
+ ├── columns: k:1!null i:2 "?column?":5
  ├── stats: [rows=1000]
  ├── cost: 1090.03
  ├── key: (1)
  ├── fd: (1)-->(2,5)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── columns: k:1!null i:2 s:3
  │    ├── stats: [rows=1000]
  │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── projections
-      └── s || 'foo' [type=string, outer=(3)]
+      └── s:3 || 'foo' [as="?column?":5, outer=(3)]
 
 opt
 SELECT k, k+2, i*d FROM a
 ----
 project
- ├── columns: k:1(int!null) "?column?":5(int!null) "?column?":6(decimal)
+ ├── columns: k:1!null "?column?":5!null "?column?":6
  ├── stats: [rows=1000]
  ├── cost: 1100.03
  ├── key: (1)
  ├── fd: (1)-->(5,6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) d:4(decimal!null)
+ │    ├── columns: k:1!null i:2 d:4!null
  │    ├── stats: [rows=1000]
  │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections
-      ├── k + 2 [type=int, outer=(1)]
-      └── i * d [type=decimal, outer=(2,4)]
+      ├── k:1 + 2 [as="?column?":5, outer=(1)]
+      └── i:2 * d:4 [as="?column?":6, outer=(2,4)]

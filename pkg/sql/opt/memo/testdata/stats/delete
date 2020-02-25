@@ -62,7 +62,7 @@ with &1
  │         │    ├── key: (4)
  │         │    └── fd: (4)-->(5,6)
  │         └── filters
- │              └── xyz.z = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
+ │              └── xyz.z:6 = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
  └── select
       ├── columns: x:7(string!null) y:8(int!null) z:9(float!null)
       ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
@@ -78,7 +78,7 @@ with &1
       │    ├── key: (7)
       │    └── fd: ()-->(9), (7)-->(8)
       └── filters
-           └── x > 'foo' [type=bool, outer=(7), constraints=(/7: [/e'foo\x00' - ]; tight)]
+           └── x:7 > 'foo' [type=bool, outer=(7), constraints=(/7: [/e'foo\x00' - ]; tight)]
 
 # Cardinality is zero.
 build

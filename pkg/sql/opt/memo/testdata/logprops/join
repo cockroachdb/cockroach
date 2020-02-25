@@ -34,8 +34,8 @@ inner-join (hash)
  │    └── interesting orderings: (+7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: x [type=int]
-           └── variable: u [type=int]
+           ├── variable: x:1 [type=int]
+           └── variable: u:5 [type=int]
 
 # Inner-join-apply.
 opt
@@ -76,9 +76,9 @@ project
  │    │    │         ├── cardinality: [2 - 2]
  │    │    │         ├── prune: (5)
  │    │    │         ├── tuple [type=tuple{int}]
- │    │    │         │    └── variable: x [type=int]
+ │    │    │         │    └── variable: x:1 [type=int]
  │    │    │         └── tuple [type=tuple{int}]
- │    │    │              └── variable: y [type=int]
+ │    │    │              └── variable: y:2 [type=int]
  │    │    ├── values
  │    │    │    ├── columns: column1:6(int)
  │    │    │    ├── outer: (5)
@@ -87,11 +87,11 @@ project
  │    │    │    ├── fd: ()-->(6)
  │    │    │    ├── prune: (6)
  │    │    │    └── tuple [type=tuple{int}]
- │    │    │         └── variable: column1 [type=int]
+ │    │    │         └── variable: column1:5 [type=int]
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      └── variable: column1 [type=int, outer=(6)]
+      └── variable: column1:6 [as=column1:7, type=int, outer=(6)]
 
 # Inner-join-apply nested in inner-join-apply with outer column references to
 # each parent.
@@ -143,15 +143,15 @@ project
       │              │    └── interesting orderings: (+9)
       │              └── filters
       │                   ├── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
-      │                   │    ├── variable: n [type=int]
-      │                   │    └── variable: v [type=int]
+      │                   │    ├── variable: n:9 [type=int]
+      │                   │    └── variable: v:6 [type=int]
       │                   └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
-      │                        ├── variable: x [type=int]
-      │                        └── variable: n [type=int]
+      │                        ├── variable: x:1 [type=int]
+      │                        └── variable: n:9 [type=int]
       └── filters
            └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-                ├── variable: x [type=int]
-                └── variable: v [type=int]
+                ├── variable: x:1 [type=int]
+                └── variable: v:6 [type=int]
 
 # Inner-join nested in inner-join-apply with outer column reference to top-level
 # inner-join-apply.
@@ -203,15 +203,15 @@ project
       │              │    └── interesting orderings: (+8)
       │              └── filters
       │                   ├── eq [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
-      │                   │    ├── variable: m [type=int]
-      │                   │    └── variable: y [type=int]
+      │                   │    ├── variable: m:8 [type=int]
+      │                   │    └── variable: y:2 [type=int]
       │                   └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │                        ├── variable: x [type=int]
-      │                        └── variable: m [type=int]
+      │                        ├── variable: x:1 [type=int]
+      │                        └── variable: m:8 [type=int]
       └── filters
            └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-                ├── variable: x [type=int]
-                └── variable: v [type=int]
+                ├── variable: x:1 [type=int]
+                └── variable: v:6 [type=int]
 
 # Left-join.
 build
@@ -238,8 +238,8 @@ left-join (hash)
  │    └── interesting orderings: (+7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: x [type=int]
-           └── variable: u [type=int]
+           ├── variable: x:1 [type=int]
+           └── variable: u:5 [type=int]
 
 # Left-join-apply.
 opt
@@ -286,12 +286,12 @@ project
       │    │         │    └── prune: (5)
       │    │         └── filters
       │    │              └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │                   ├── variable: u [type=int]
-      │    │                   └── variable: x [type=int]
+      │    │                   ├── variable: u:5 [type=int]
+      │    │                   └── variable: x:1 [type=int]
       │    └── filters (true)
       └── filters
            └── is [type=bool, outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
-                ├── variable: u [type=int]
+                ├── variable: u:5 [type=int]
                 └── null [type=unknown]
 
 # Right-join.
@@ -319,8 +319,8 @@ right-join (hash)
  │    └── interesting orderings: (+7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: x [type=int]
-           └── variable: u [type=int]
+           ├── variable: x:1 [type=int]
+           └── variable: u:5 [type=int]
 
 # Full-join.
 build
@@ -347,8 +347,8 @@ full-join (hash)
  │    └── interesting orderings: (+7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: x [type=int]
-           └── variable: u [type=int]
+           ├── variable: x:1 [type=int]
+           └── variable: u:5 [type=int]
 
 # Semi-join.
 opt
@@ -403,8 +403,8 @@ semi-join-apply
  │    │    │    └── prune: (6)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              ├── variable: v [type=int]
- │    │              └── variable: x [type=int]
+ │    │              ├── variable: v:6 [type=int]
+ │    │              └── variable: x:1 [type=int]
  │    └── const: 1 [type=int]
  └── filters (true)
 
@@ -438,11 +438,11 @@ semi-join-apply
  │    │    └── interesting orderings: (+8)
  │    └── filters
  │         ├── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │         │    ├── variable: x [type=int]
- │         │    └── variable: m [type=int]
+ │         │    ├── variable: x:1 [type=int]
+ │         │    └── variable: m:8 [type=int]
  │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              ├── variable: x [type=int]
- │              └── variable: v [type=int]
+ │              ├── variable: x:1 [type=int]
+ │              └── variable: v:6 [type=int]
  └── filters (true)
 
 # Anti-join.
@@ -466,8 +466,8 @@ anti-join (hash)
  │    └── prune: (5)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: x [type=int]
-           └── variable: u [type=int]
+           ├── variable: x:1 [type=int]
+           └── variable: u:5 [type=int]
 
 # Anti-join-apply.
 opt
@@ -498,8 +498,8 @@ anti-join-apply
  │    │    │    └── prune: (6)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              ├── variable: v [type=int]
- │    │              └── variable: x [type=int]
+ │    │              ├── variable: v:6 [type=int]
+ │    │              └── variable: x:1 [type=int]
  │    └── const: 1 [type=int]
  └── filters (true)
 
@@ -593,7 +593,7 @@ select
                 │    │    ├── key: ()
                 │    │    └── tuple [type=tuple]
                 │    └── projections
-                │         └── variable: xysd.x [type=int, outer=(1)]
+                │         └── variable: xysd.x:1 [as=x:5, type=int, outer=(1)]
                 ├── project
                 │    ├── columns: y:6(int)
                 │    ├── outer: (2)
@@ -606,12 +606,12 @@ select
                 │    │    ├── key: ()
                 │    │    └── tuple [type=tuple]
                 │    └── projections
-                │         └── variable: xysd.y [type=int, outer=(2)]
+                │         └── variable: xysd.y:2 [as=y:6, type=int, outer=(2)]
                 └── filters
                      └── eq [type=bool, outer=(3,5)]
                           ├── cast: STRING [type=string]
-                          │    └── variable: x [type=int]
-                          └── variable: s [type=string]
+                          │    └── variable: x:5 [type=int]
+                          └── variable: s:3 [type=string]
 
 # Calculate semi-join cardinality when left side has non-zero cardinality.
 opt
@@ -640,10 +640,10 @@ project
       │    │    ├── prune: (5)
       │    │    ├── scan xysd@secondary
       │    │    └── aggregations
-      │    │         └── count-rows [type=int]
+      │    │         └── count-rows [as=count_rows:5, type=int]
       │    └── filters
       │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-      │              ├── variable: count_rows [type=int]
+      │              ├── variable: count_rows:5 [type=int]
       │              └── const: 1 [type=int]
       ├── scan uv
       │    ├── limit: 1
@@ -684,8 +684,8 @@ semi-join-apply
  │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │    │              ├── variable: x [type=int]
- │    │              └── variable: u [type=int]
+ │    │              ├── variable: x:1 [type=int]
+ │    │              └── variable: u:5 [type=int]
  │    └── const: 5 [type=int]
  └── filters (true)
 
@@ -709,8 +709,8 @@ anti-join (hash)
  │    └── prune: (2)
  └── filters
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
-           ├── variable: u [type=int]
-           └── variable: column1 [type=int]
+           ├── variable: u:2 [type=int]
+           └── variable: column1:1 [type=int]
 
 # Calculate anti-join-apply cardinality.
 opt
@@ -746,8 +746,8 @@ anti-join-apply
  │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │    │              ├── variable: x [type=int]
- │    │              └── variable: u [type=int]
+ │    │              ├── variable: x:1 [type=int]
+ │    │              └── variable: u:5 [type=int]
  │    └── const: 5 [type=int]
  └── filters (true)
 
@@ -919,8 +919,8 @@ full-join (hash)
  │         └── const: 4 [type=int]
  └── filters
       └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-           ├── variable: column1 [type=int]
-           └── variable: column1 [type=int]
+           ├── variable: column1:1 [type=int]
+           └── variable: column1:3 [type=int]
 
 # Calculate full-join cardinality with false filter.
 build
@@ -1055,11 +1055,11 @@ left-join (cross)
  │    │         ├── prune: (5-7)
  │    │         └── interesting orderings: (+7)
  │    └── aggregations
- │         └── sum [type=decimal, outer=(6)]
- │              └── variable: v [type=int]
+ │         └── sum [as=sum:8, type=decimal, outer=(6)]
+ │              └── variable: v:6 [type=int]
  └── filters
       └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
-           ├── variable: u [type=int]
+           ├── variable: u:5 [type=int]
            └── null [type=unknown]
 
 # Not-null FD determinant on right side of left-join stays strict.
@@ -1102,11 +1102,11 @@ left-join (cross)
  │    │         │    └── interesting orderings: (+7)
  │    │         └── filters
  │    │              └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
- │    │                   ├── variable: u [type=int]
+ │    │                   ├── variable: u:5 [type=int]
  │    │                   └── null [type=unknown]
  │    └── aggregations
- │         └── sum [type=decimal, outer=(6)]
- │              └── variable: v [type=int]
+ │         └── sum [as=sum:8, type=decimal, outer=(6)]
+ │              └── variable: v:6 [type=int]
  └── filters
       └── true [type=bool]
 
@@ -1137,8 +1137,8 @@ right-join (cross)
  │    │         ├── prune: (1-3)
  │    │         └── interesting orderings: (+3)
  │    └── aggregations
- │         └── sum [type=decimal, outer=(2)]
- │              └── variable: v [type=int]
+ │         └── sum [as=sum:4, type=decimal, outer=(2)]
+ │              └── variable: v:2 [type=int]
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
@@ -1147,7 +1147,7 @@ right-join (cross)
  │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-           ├── variable: u [type=int]
+           ├── variable: u:1 [type=int]
            └── null [type=unknown]
 
 # Not-null FD determinant on left side of right-join stays strict.
@@ -1184,11 +1184,11 @@ right-join (cross)
  │    │         │    └── interesting orderings: (+3)
  │    │         └── filters
  │    │              └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
- │    │                   ├── variable: u [type=int]
+ │    │                   ├── variable: u:1 [type=int]
  │    │                   └── null [type=unknown]
  │    └── aggregations
- │         └── sum [type=decimal, outer=(2)]
- │              └── variable: v [type=int]
+ │         └── sum [as=sum:4, type=decimal, outer=(2)]
+ │              └── variable: v:2 [type=int]
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
@@ -1231,11 +1231,11 @@ full-join (cross)
  │    │         ├── prune: (5-7)
  │    │         └── interesting orderings: (+7)
  │    └── aggregations
- │         └── sum [type=decimal, outer=(6)]
- │              └── variable: v [type=int]
+ │         └── sum [as=sum:8, type=decimal, outer=(6)]
+ │              └── variable: v:6 [type=int]
  └── filters
       └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
-           ├── variable: u [type=int]
+           ├── variable: u:5 [type=int]
            └── null [type=unknown]
 
 # Nullable FD determinant on left side of full-join becomes lax.
@@ -1265,8 +1265,8 @@ full-join (cross)
  │    │         ├── prune: (1-3)
  │    │         └── interesting orderings: (+3)
  │    └── aggregations
- │         └── sum [type=decimal, outer=(2)]
- │              └── variable: v [type=int]
+ │         └── sum [as=sum:4, type=decimal, outer=(2)]
+ │              └── variable: v:2 [type=int]
  ├── scan xysd
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── key: (5)
@@ -1275,7 +1275,7 @@ full-join (cross)
  │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-           ├── variable: u [type=int]
+           ├── variable: u:1 [type=int]
            └── null [type=unknown]
 
 # Merge join (inner).
@@ -1395,8 +1395,8 @@ right-join (merge)
  │         └── fd: (7)-->(5,6)
  └── filters
       └── gt [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-           ├── variable: y [type=int]
-           └── variable: v [type=int]
+           ├── variable: y:2 [type=int]
+           └── variable: v:6 [type=int]
 
 # Regression test #36183.
 opt
@@ -1420,9 +1420,9 @@ with &1
  │    └── insert uv
  │         ├── columns: uv.u:4(int!null) uv.v:5(int!null) rowid:6(int!null)
  │         ├── insert-mapping:
- │         │    ├──  column1:7 => uv.u:4
- │         │    ├──  column2:8 => uv.v:5
- │         │    └──  column9:9 => rowid:6
+ │         │    ├── column1:7 => uv.u:4
+ │         │    ├── column2:8 => uv.v:5
+ │         │    └── column9:9 => rowid:6
  │         ├── cardinality: [1 - 1]
  │         ├── side-effects, mutations
  │         ├── key: ()
@@ -1444,7 +1444,7 @@ with &1
       ├── prune: (19)
       ├── scan uv
       └── projections
-           └── subquery [type=int, subquery]
+           └── subquery [as=m:19, type=int, subquery]
                 └── values
                      ├── columns: mn.m:15(int!null)
                      ├── cardinality: [0 - 0]
@@ -1536,11 +1536,11 @@ full-join (hash)
  │    │    │    ├── columns: t1.x:1(int) t1.y:2(int)
  │    │    │    └── prune: (1,2)
  │    │    └── aggregations
- │    │         └── first-agg [type=int, outer=(2)]
- │    │              └── variable: t1.y [type=int]
+ │    │         └── first-agg [as=t1.y:2, type=int, outer=(2)]
+ │    │              └── variable: t1.y:2 [type=int]
  │    └── filters
  │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
- │              ├── variable: t1.y [type=int]
+ │              ├── variable: t1.y:2 [type=int]
  │              └── null [type=unknown]
  ├── select
  │    ├── columns: t2.x:4(int) t2.y:5(int!null)
@@ -1556,13 +1556,13 @@ full-join (hash)
  │    │    │    ├── columns: t2.x:4(int) t2.y:5(int)
  │    │    │    └── prune: (4,5)
  │    │    └── aggregations
- │    │         └── first-agg [type=int, outer=(5)]
- │    │              └── variable: t2.y [type=int]
+ │    │         └── first-agg [as=t2.y:5, type=int, outer=(5)]
+ │    │              └── variable: t2.y:5 [type=int]
  │    └── filters
  │         └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
- │              ├── variable: t2.y [type=int]
+ │              ├── variable: t2.y:5 [type=int]
  │              └── null [type=unknown]
  └── filters
       └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-           ├── variable: t1.x [type=int]
-           └── variable: t2.x [type=int]
+           ├── variable: t1.x:1 [type=int]
+           └── variable: t2.x:4 [type=int]

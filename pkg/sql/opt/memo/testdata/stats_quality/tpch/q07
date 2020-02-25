@@ -125,11 +125,11 @@ sort
       │    │    │    │    │    │    │    ├── key: (45)
       │    │    │    │    │    │    │    └── fd: (45)-->(46)
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── ((n1.n_name = 'FRANCE') AND (n2.n_name = 'GERMANY')) OR ((n1.n_name = 'GERMANY') AND (n2.n_name = 'FRANCE')) [type=bool, outer=(42,46), constraints=(/42: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /46: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+      │    │    │    │    │    │         └── ((n1.n_name:42 = 'FRANCE') AND (n2.n_name:46 = 'GERMANY')) OR ((n1.n_name:42 = 'GERMANY') AND (n2.n_name:46 = 'FRANCE')) [type=bool, outer=(42,46), constraints=(/42: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /46: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters (true)
       │    │    │    └── filters
-      │    │    │         └── (l_shipdate >= '1995-01-01') AND (l_shipdate <= '1996-12-31') [type=bool, outer=(18), constraints=(/18: [/'1995-01-01' - /'1996-12-31']; tight)]
+      │    │    │         └── (l_shipdate:18 >= '1995-01-01') AND (l_shipdate:18 <= '1996-12-31') [type=bool, outer=(18), constraints=(/18: [/'1995-01-01' - /'1996-12-31']; tight)]
       │    │    ├── scan supplier@s_nk
       │    │    │    ├── save-table-name: q7_scan_11
       │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null)
@@ -141,14 +141,14 @@ sort
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(4)
       │    │    └── filters
-      │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
-      │    │         └── s_nationkey = n1.n_nationkey [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ]), fd=(4)==(41), (41)==(4)]
+      │    │         ├── s_suppkey:1 = l_suppkey:10 [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      │    │         └── s_nationkey:4 = n1.n_nationkey:41 [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ]), fd=(4)==(41), (41)==(4)]
       │    └── projections
-      │         ├── extract('year', l_shipdate) [type=float, outer=(18)]
-      │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(13,14)]
+      │         ├── extract('year', l_shipdate:18) [as=l_year:49, type=float, outer=(18)]
+      │         └── l_extendedprice:13 * (1.0 - l_discount:14) [as=volume:50, type=float, outer=(13,14)]
       └── aggregations
-           └── sum [type=float, outer=(50)]
-                └── variable: volume [type=float]
+           └── sum [as=sum:51, type=float, outer=(50)]
+                └── volume:50 [type=float]
 
 stats table=q7_sort_1
 ----

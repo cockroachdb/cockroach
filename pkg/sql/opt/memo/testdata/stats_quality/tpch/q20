@@ -151,15 +151,15 @@ sort
            │    │              │    │    │    │    ├── key: (12,13)
            │    │              │    │    │    │    └── fd: (12,13)-->(14)
            │    │              │    │    │    └── filters
-           │    │              │    │    │         ├── l_partkey = ps_partkey [type=bool, outer=(12,27), constraints=(/12: (/NULL - ]; /27: (/NULL - ]), fd=(12)==(27), (27)==(12)]
-           │    │              │    │    │         └── l_suppkey = ps_suppkey [type=bool, outer=(13,28), constraints=(/13: (/NULL - ]; /28: (/NULL - ]), fd=(13)==(28), (28)==(13)]
+           │    │              │    │    │         ├── l_partkey:27 = ps_partkey:12 [type=bool, outer=(12,27), constraints=(/12: (/NULL - ]; /27: (/NULL - ]), fd=(12)==(27), (27)==(12)]
+           │    │              │    │    │         └── l_suppkey:28 = ps_suppkey:13 [type=bool, outer=(13,28), constraints=(/13: (/NULL - ]; /28: (/NULL - ]), fd=(13)==(28), (28)==(13)]
            │    │              │    │    └── aggregations
-           │    │              │    │         ├── sum [type=float, outer=(30)]
-           │    │              │    │         │    └── variable: l_quantity [type=float]
-           │    │              │    │         └── const-agg [type=int, outer=(14)]
-           │    │              │    │              └── variable: ps_availqty [type=int]
+           │    │              │    │         ├── sum [as=sum:42, type=float, outer=(30)]
+           │    │              │    │         │    └── l_quantity:30 [type=float]
+           │    │              │    │         └── const-agg [as=ps_availqty:14, type=int, outer=(14)]
+           │    │              │    │              └── ps_availqty:14 [type=int]
            │    │              │    └── filters
-           │    │              │         └── ps_availqty > (sum * 0.5) [type=bool, outer=(14,42), constraints=(/14: (/NULL - ])]
+           │    │              │         └── ps_availqty:14 > (sum:42 * 0.5) [type=bool, outer=(14,42), constraints=(/14: (/NULL - ])]
            │    │              ├── select
            │    │              │    ├── save-table-name: q20_select_15
            │    │              │    ├── columns: p_partkey:17(int!null) p_name:18(varchar!null)
@@ -175,11 +175,11 @@ sort
            │    │              │    │    ├── key: (17)
            │    │              │    │    └── fd: (17)-->(18)
            │    │              │    └── filters
-           │    │              │         └── p_name LIKE 'forest%' [type=bool, outer=(18), constraints=(/18: [/'forest' - /'foresu'); tight)]
+           │    │              │         └── p_name:18 LIKE 'forest%' [type=bool, outer=(18), constraints=(/18: [/'forest' - /'foresu'); tight)]
            │    │              └── filters
-           │    │                   └── ps_partkey = p_partkey [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+           │    │                   └── ps_partkey:12 = p_partkey:17 [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
            │    └── filters
-           │         └── s_suppkey = ps_suppkey [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
+           │         └── s_suppkey:1 = ps_suppkey:13 [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
            ├── select
            │    ├── save-table-name: q20_select_17
            │    ├── columns: n_nationkey:8(int!null) n_name:9(char!null)
@@ -195,9 +195,9 @@ sort
            │    │    ├── key: (8)
            │    │    └── fd: (8)-->(9)
            │    └── filters
-           │         └── n_name = 'CANADA' [type=bool, outer=(9), constraints=(/9: [/'CANADA' - /'CANADA']; tight), fd=()-->(9)]
+           │         └── n_name:9 = 'CANADA' [type=bool, outer=(9), constraints=(/9: [/'CANADA' - /'CANADA']; tight), fd=()-->(9)]
            └── filters
-                └── s_nationkey = n_nationkey [type=bool, outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
+                └── s_nationkey:4 = n_nationkey:8 [type=bool, outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
 
 stats table=q20_sort_1
 ----

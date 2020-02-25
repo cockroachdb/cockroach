@@ -11,45 +11,39 @@ DELETE FROM child WHERE c = 4
 ----
 delete child
  ├── columns: <none>
- ├── fetch columns: c:3(int) p:4(int)
+ ├── fetch columns: c:3 p:4
  └── select
-      ├── columns: c:3(int!null) p:4(int!null)
+      ├── columns: c:3!null p:4!null
       ├── scan child
-      │    └── columns: c:3(int!null) p:4(int!null)
+      │    └── columns: c:3!null p:4!null
       └── filters
-           └── eq [type=bool]
-                ├── variable: c [type=int]
-                └── const: 4 [type=int]
+           └── c:3 = 4
 
 build
 DELETE FROM parent WHERE p = 3
 ----
 delete parent
  ├── columns: <none>
- ├── fetch columns: x:4(int) parent.p:5(int) other:6(int)
+ ├── fetch columns: x:4 parent.p:5 other:6
  ├── input binding: &1
  ├── select
- │    ├── columns: x:4(int) parent.p:5(int!null) other:6(int)
+ │    ├── columns: x:4 parent.p:5!null other:6
  │    ├── scan parent
- │    │    └── columns: x:4(int) parent.p:5(int!null) other:6(int)
+ │    │    └── columns: x:4 parent.p:5!null other:6
  │    └── filters
- │         └── eq [type=bool]
- │              ├── variable: parent.p [type=int]
- │              └── const: 3 [type=int]
+ │         └── parent.p:5 = 3
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── semi-join (hash)
-                ├── columns: p:7(int!null)
+                ├── columns: p:7!null
                 ├── with-scan &1
-                │    ├── columns: p:7(int!null)
+                │    ├── columns: p:7!null
                 │    └── mapping:
-                │         └──  parent.p:5(int) => p:7(int)
+                │         └──  parent.p:5 => p:7
                 ├── scan child
-                │    └── columns: child.p:9(int!null)
+                │    └── columns: child.p:9!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: p [type=int]
-                          └── variable: child.p [type=int]
+                     └── p:7 = child.p:9
 
 exec-ddl
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
@@ -60,43 +54,37 @@ DELETE FROM parent WHERE p = 3
 ----
 delete parent
  ├── columns: <none>
- ├── fetch columns: x:4(int) parent.p:5(int) parent.other:6(int)
+ ├── fetch columns: x:4 parent.p:5 parent.other:6
  ├── input binding: &1
  ├── select
- │    ├── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+ │    ├── columns: x:4 parent.p:5!null parent.other:6
  │    ├── scan parent
- │    │    └── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+ │    │    └── columns: x:4 parent.p:5!null parent.other:6
  │    └── filters
- │         └── eq [type=bool]
- │              ├── variable: parent.p [type=int]
- │              └── const: 3 [type=int]
+ │         └── parent.p:5 = 3
  └── f-k-checks
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── semi-join (hash)
-      │         ├── columns: p:7(int!null)
+      │         ├── columns: p:7!null
       │         ├── with-scan &1
-      │         │    ├── columns: p:7(int!null)
+      │         │    ├── columns: p:7!null
       │         │    └── mapping:
-      │         │         └──  parent.p:5(int) => p:7(int)
+      │         │         └──  parent.p:5 => p:7
       │         ├── scan child
-      │         │    └── columns: child.p:9(int!null)
+      │         │    └── columns: child.p:9!null
       │         └── filters
-      │              └── eq [type=bool]
-      │                   ├── variable: p [type=int]
-      │                   └── variable: child.p [type=int]
+      │              └── p:7 = child.p:9
       └── f-k-checks-item: child2(p) -> parent(other)
            └── semi-join (hash)
-                ├── columns: other:10(int)
+                ├── columns: other:10
                 ├── with-scan &1
-                │    ├── columns: other:10(int)
+                │    ├── columns: other:10
                 │    └── mapping:
-                │         └──  parent.other:6(int) => other:10(int)
+                │         └──  parent.other:6 => other:10
                 ├── scan child2
-                │    └── columns: child2.p:12(int!null)
+                │    └── columns: child2.p:12!null
                 └── filters
-                     └── eq [type=bool]
-                          ├── variable: other [type=int]
-                          └── variable: child2.p [type=int]
+                     └── other:10 = child2.p:12
 
 exec-ddl
 CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
@@ -111,49 +99,41 @@ DELETE FROM doubleparent WHERE p1 = 10
 ----
 delete doubleparent
  ├── columns: <none>
- ├── fetch columns: doubleparent.p1:4(int) doubleparent.p2:5(int) other:6(int)
+ ├── fetch columns: doubleparent.p1:4 doubleparent.p2:5 other:6
  ├── input binding: &1
  ├── select
- │    ├── columns: doubleparent.p1:4(int!null) doubleparent.p2:5(int!null) other:6(int)
+ │    ├── columns: doubleparent.p1:4!null doubleparent.p2:5!null other:6
  │    ├── scan doubleparent
- │    │    └── columns: doubleparent.p1:4(int!null) doubleparent.p2:5(int!null) other:6(int)
+ │    │    └── columns: doubleparent.p1:4!null doubleparent.p2:5!null other:6
  │    └── filters
- │         └── eq [type=bool]
- │              ├── variable: doubleparent.p1 [type=int]
- │              └── const: 10 [type=int]
+ │         └── doubleparent.p1:4 = 10
  └── f-k-checks
       └── f-k-checks-item: doublechild(p1,p2) -> doubleparent(p1,p2)
            └── semi-join (hash)
-                ├── columns: p1:7(int!null) p2:8(int!null)
+                ├── columns: p1:7!null p2:8!null
                 ├── with-scan &1
-                │    ├── columns: p1:7(int!null) p2:8(int!null)
+                │    ├── columns: p1:7!null p2:8!null
                 │    └── mapping:
-                │         ├──  doubleparent.p1:4(int) => p1:7(int)
-                │         └──  doubleparent.p2:5(int) => p2:8(int)
+                │         ├──  doubleparent.p1:4 => p1:7
+                │         └──  doubleparent.p2:5 => p2:8
                 ├── scan doublechild
-                │    └── columns: doublechild.p1:10(int) doublechild.p2:11(int)
+                │    └── columns: doublechild.p1:10 doublechild.p2:11
                 └── filters
-                     ├── eq [type=bool]
-                     │    ├── variable: p1 [type=int]
-                     │    └── variable: doublechild.p1 [type=int]
-                     └── eq [type=bool]
-                          ├── variable: p2 [type=int]
-                          └── variable: doublechild.p2 [type=int]
+                     ├── p1:7 = doublechild.p1:10
+                     └── p2:8 = doublechild.p2:11
 
 build
 DELETE FROM doublechild WHERE p1 = 10
 ----
 delete doublechild
  ├── columns: <none>
- ├── fetch columns: c:4(int) p1:5(int) p2:6(int)
+ ├── fetch columns: c:4 p1:5 p2:6
  └── select
-      ├── columns: c:4(int!null) p1:5(int!null) p2:6(int)
+      ├── columns: c:4!null p1:5!null p2:6
       ├── scan doublechild
-      │    └── columns: c:4(int!null) p1:5(int) p2:6(int)
+      │    └── columns: c:4!null p1:5 p2:6
       └── filters
-           └── eq [type=bool]
-                ├── variable: p1 [type=int]
-                └── const: 10 [type=int]
+           └── p1:5 = 10
 
 exec-ddl
 CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
@@ -165,13 +145,11 @@ DELETE FROM parent WHERE p = 1
 ----
 delete parent
  ├── columns: <none>
- ├── fetch columns: x:4(int) parent.p:5(int) parent.other:6(int)
+ ├── fetch columns: x:4 parent.p:5 parent.other:6
  ├── fk-fallback
  └── select
-      ├── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+      ├── columns: x:4 parent.p:5!null parent.other:6
       ├── scan parent
-      │    └── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+      │    └── columns: x:4 parent.p:5!null parent.other:6
       └── filters
-           └── eq [type=bool]
-                ├── variable: parent.p [type=int]
-                └── const: 1 [type=int]
+           └── parent.p:5 = 1

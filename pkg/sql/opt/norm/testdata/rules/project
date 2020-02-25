@@ -15,7 +15,7 @@ norm expect=EliminateProject
 SELECT x, y FROM a
 ----
 scan a
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1!null y:2
  ├── key: (1)
  └── fd: (1)-->(2)
 
@@ -24,7 +24,7 @@ norm expect=EliminateProject
 SELECT a.y AS aliasy, a.x FROM a
 ----
 scan a
- ├── columns: aliasy:2(int) x:1(int!null)
+ ├── columns: aliasy:2 x:1!null
  ├── key: (1)
  └── fd: (1)-->(2)
 
@@ -33,7 +33,7 @@ norm expect=EliminateProject
 SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM a
 ----
 scan a
- ├── columns: alias1:2(int) x:1(int!null) alias1:2(int) x:1(int!null)
+ ├── columns: alias1:2 x:1!null alias1:2 x:1!null
  ├── key: (1)
  └── fd: (1)-->(2)
 
@@ -42,15 +42,15 @@ norm expect-not=EliminateProject
 SELECT *, 1 r FROM a
 ----
 project
- ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string) r:5(int!null)
+ ├── columns: x:1!null y:2 f:3 s:4 r:5!null
  ├── key: (1)
  ├── fd: ()-->(5), (1)-->(2-4)
  ├── scan a
- │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
+ │    ├── columns: x:1!null y:2 f:3 s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as=r:5]
 
 # --------------------------------------------------
 # MergeProjects
@@ -61,89 +61,89 @@ norm expect=MergeProjects
 SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
- ├── columns: r:7(int)
+ ├── columns: r:7
  ├── inner-join (hash)
- │    ├── columns: a.x:1(int!null) y:2(int) b.x:5(int!null)
+ │    ├── columns: a.x:1!null y:2 b.x:5!null
  │    ├── key: (5)
  │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
  │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) y:2(int)
+ │    │    ├── columns: a.x:1!null y:2
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── scan b
- │    │    ├── columns: b.x:5(int!null)
+ │    │    ├── columns: b.x:5!null
  │    │    └── key: (5)
  │    └── filters
- │         └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         └── a.x:1 = b.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
-      └── y + 1 [type=int, outer=(2)]
+      └── y:2 + 1 [as=r:7, outer=(2)]
 
 # Outer and inner projections have synthesized columns.
 norm expect=MergeProjects
 SELECT y1, f+1 FROM (SELECT y+1 AS y1, f FROM a)
 ----
 project
- ├── columns: y1:5(int) "?column?":6(float)
+ ├── columns: y1:5 "?column?":6
  ├── scan a
- │    └── columns: y:2(int) f:3(float)
+ │    └── columns: y:2 f:3
  └── projections
-      ├── f + 1.0 [type=float, outer=(3)]
-      └── y + 1 [type=int, outer=(2)]
+      ├── f:3 + 1.0 [as="?column?":6, outer=(3)]
+      └── y:2 + 1 [as=y1:5, outer=(2)]
 
 # Multiple synthesized columns in both outer and inner projections.
 norm expect=MergeProjects
 SELECT y1, f+1, x2, s||'foo' FROM (SELECT y+1 AS y1, f, s, x*2 AS x2 FROM a)
 ----
 project
- ├── columns: y1:5(int) "?column?":7(float) x2:6(int!null) "?column?":8(string)
+ ├── columns: y1:5 "?column?":7 x2:6!null "?column?":8
  ├── scan a
- │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
+ │    ├── columns: x:1!null y:2 f:3 s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── projections
-      ├── f + 1.0 [type=float, outer=(3)]
-      ├── s || 'foo' [type=string, outer=(4)]
-      ├── y + 1 [type=int, outer=(2)]
-      └── x * 2 [type=int, outer=(1)]
+      ├── f:3 + 1.0 [as="?column?":7, outer=(3)]
+      ├── s:4 || 'foo' [as="?column?":8, outer=(4)]
+      ├── y:2 + 1 [as=y1:5, outer=(2)]
+      └── x:1 * 2 [as=x2:6, outer=(1)]
 
 # Outer project selects subset of inner columns.
 norm expect=MergeProjects
 SELECT y1 FROM (SELECT y+1 AS y1, f*2 AS f2 FROM a)
 ----
 project
- ├── columns: y1:5(int)
+ ├── columns: y1:5
  ├── scan a
- │    └── columns: y:2(int)
+ │    └── columns: y:2
  └── projections
-      └── y + 1 [type=int, outer=(2)]
+      └── y:2 + 1 [as=y1:5, outer=(2)]
 
 # Don't merge, since outer depends on inner.
 norm expect-not=MergeProjects
 SELECT y1*2, y1/2 FROM (SELECT y+1 AS y1 FROM a)
 ----
 project
- ├── columns: "?column?":6(int) "?column?":7(decimal)
+ ├── columns: "?column?":6 "?column?":7
  ├── side-effects
  ├── project
- │    ├── columns: y1:5(int)
+ │    ├── columns: y1:5
  │    ├── scan a
- │    │    └── columns: y:2(int)
+ │    │    └── columns: y:2
  │    └── projections
- │         └── y + 1 [type=int, outer=(2)]
+ │         └── y:2 + 1 [as=y1:5, outer=(2)]
  └── projections
-      ├── y1 * 2 [type=int, outer=(5)]
-      └── y1 / 2 [type=decimal, outer=(5), side-effects]
+      ├── y1:5 * 2 [as="?column?":6, outer=(5)]
+      └── y1:5 / 2 [as="?column?":7, outer=(5), side-effects]
 
 # Discard all inner columns.
 norm expect=MergeProjects
 SELECT 1 r FROM (SELECT y+1, x FROM a) a
 ----
 project
- ├── columns: r:6(int!null)
+ ├── columns: r:6!null
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── const: 1 [type=int]
+      └── 1 [as=r:6]
 
 # --------------------------------------------------
 # MergeProjectWithValues
@@ -153,67 +153,67 @@ norm expect=MergeProjectWithValues
 SELECT column1, 3 FROM (VALUES (1, 2))
 ----
 values
- ├── columns: column1:1(int!null) "?column?":3(int!null)
+ ├── columns: column1:1!null "?column?":3!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,3)
- └── (1, 3) [type=tuple{int, int}]
+ └── (1, 3)
 
 # Only passthrough columns.
 norm expect=MergeProjectWithValues
 SELECT column1, column3 FROM (VALUES (1, 2, 3))
 ----
 values
- ├── columns: column1:1(int!null) column3:3(int!null)
+ ├── columns: column1:1!null column3:3!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,3)
- └── (1, 3) [type=tuple{int, int}]
+ └── (1, 3)
 
 # Only synthesized columns.
 norm expect=MergeProjectWithValues
 SELECT 4, 5 FROM (VALUES (1, 2, 3))
 ----
 values
- ├── columns: "?column?":4(int!null) "?column?":5(int!null)
+ ├── columns: "?column?":4!null "?column?":5!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4,5)
- └── (4, 5) [type=tuple{int, int}]
+ └── (4, 5)
 
 # Don't trigger rule when there is more than one Values row.
 norm expect-not=MergeProjectWithValues
 SELECT column1, 3 FROM (VALUES (1, 2), (1, 4))
 ----
 project
- ├── columns: column1:1(int!null) "?column?":3(int!null)
+ ├── columns: column1:1!null "?column?":3!null
  ├── cardinality: [2 - 2]
  ├── fd: ()-->(3)
  ├── values
- │    ├── columns: column1:1(int!null)
+ │    ├── columns: column1:1!null
  │    ├── cardinality: [2 - 2]
- │    ├── (1,) [type=tuple{int}]
- │    └── (1,) [type=tuple{int}]
+ │    ├── (1,)
+ │    └── (1,)
  └── projections
-      └── const: 3 [type=int]
+      └── 3 [as="?column?":3]
 
 # Don't trigger rule when Project column depends on Values column.
 norm expect-not=MergeProjectWithValues
 SELECT column1+1, 3 FROM (VALUES ($1::int, $2::int))
 ----
 project
- ├── columns: "?column?":3(int) "?column?":4(int!null)
+ ├── columns: "?column?":3 "?column?":4!null
  ├── cardinality: [1 - 1]
  ├── has-placeholder
  ├── key: ()
  ├── fd: ()-->(3,4)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1
  │    ├── cardinality: [1 - 1]
  │    ├── has-placeholder
  │    ├── key: ()
  │    ├── fd: ()-->(1)
- │    └── ($1::INT8,) [type=tuple{int}]
+ │    └── ($1::INT8,)
  └── projections
-      ├── column1 + 1 [type=int, outer=(1)]
-      └── const: 3 [type=int]
+      ├── column1:1 + 1 [as="?column?":3, outer=(1)]
+      └── 3 [as="?column?":4]
