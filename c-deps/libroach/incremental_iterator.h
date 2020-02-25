@@ -19,8 +19,7 @@
 
 // DBIncrementalIterator is the C++ implementation of MVCCIncrementalIterator.
 // This implementation should be kept in sync with MVCCIncrementalIterator,
-// which is used as an oracle to test DBIncrementalIterator. It may be useful to
-// revive in the future when Pebble becomes the main storage engine.
+// which is used as an oracle to test DBIncrementalIterator.
 // For general documentation around this iterator please refer to the comments
 // in mvcc_incremental_iterator.go.
 struct DBIncrementalIterator {
@@ -73,7 +72,7 @@ struct DBIncrementalIterator {
   DBIterState getState();
   void advanceKey();
   void maybeSkipKeys();
-  bool extractKey(rocksdb::Slice mvcc_key, rocksdb::Slice* key);
+  bool extractKey(rocksdb::Slice mvcc_key, rocksdb::Slice *key);
 
   cockroach::util::hlc::LegacyTimestamp start_time;
   cockroach::util::hlc::LegacyTimestamp end_time;

@@ -53,8 +53,7 @@ bool DBIncrementalIterator::legacyTimestampIsLess(const cockroach::util::hlc::Le
 
 // extractKey extracts the key portion of the mvcc_key and put it in key. It
 // returns a validity indicator.
-WARN_UNUSED_RESULT bool DBIncrementalIterator::extractKey(rocksdb::Slice mvcc_key,
-                                                          rocksdb::Slice* key) {
+WARN_UNUSED_RESULT bool DBIncrementalIterator::extractKey(rocksdb::Slice mvcc_key, rocksdb::Slice *key) {
   rocksdb::Slice ts;
   if (!SplitKey(mvcc_key, key, &ts)) {
     valid = false;
@@ -76,11 +75,11 @@ void DBIncrementalIterator::maybeSkipKeys() {
   }
 
   rocksdb::Slice tbi_key;
-  if (!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
+  if(!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
     return;
   }
   rocksdb::Slice iter_key;
-  if (!extractKey(iter->rep->key(), &iter_key)) {
+  if(!extractKey(iter->rep->key(), &iter_key)) {
     return;
   }
 
@@ -99,11 +98,11 @@ void DBIncrementalIterator::maybeSkipKeys() {
     // iterators remain in lockstep as described above.
     auto state = DBIterNext(time_bound_iter.get(), true /* skip_current_key_versions */);
     if (!state.valid) {
-      status = state.status;
-      valid = false;
-      return;
+        status = state.status;
+        valid = false;
+        return;
     }
-    if (!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
+    if(!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
       return;
     }
 
@@ -119,7 +118,7 @@ void DBIncrementalIterator::maybeSkipKeys() {
         valid = false;
         return;
       }
-      if (!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
+      if(!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
         return;
       }
       cmp = iter_key.compare(tbi_key);
@@ -211,9 +210,9 @@ void DBIncrementalIterator::advanceKey() {
     }
 
     if (!state.valid) {
-      status = state.status;
-      valid = false;
-      return;
+        status = state.status;
+        valid = false;
+        return;
     }
   }
 }
@@ -248,10 +247,7 @@ DBIterState DBIncrementalIterator::seek(DBKey key) {
       return getState();
     }
     const rocksdb::Slice tbi_key(time_bound_iter->rep->key());
-    // NB: iter_key needs to be constructed with ToSlice to ensure that an empty
-    // rocksdb::Slice is properly created in the common case that key is an
-    // empty key (the first key).
-    const rocksdb::Slice iter_key(ToSlice(key.key));
+    const rocksdb::Slice iter_key(key.key.data, key.key.len);
     if (tbi_key.compare(iter_key) > 0) {
       // If the first key that the TBI sees is ahead of the given startKey, we
       // can seek directly to the first version of the key.
@@ -260,9 +256,9 @@ DBIterState DBIncrementalIterator::seek(DBKey key) {
   }
   auto state = DBIterSeek(iter.get(), key);
   if (!state.valid) {
-    status = state.status;
-    valid = false;
-    return getState();
+      status = state.status;
+      valid = false;
+      return getState();
   }
   advanceKey();
   return getState();

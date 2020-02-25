@@ -209,17 +209,6 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 	iterKey := i.iter.Key().Key
 	if iterKey.Compare(tbiKey) > 0 {
 		// If the iterKey got ahead of the TBI key, advance the TBI Key.
-		//
-		// The case where iterKey == tbiKey, after this call, is the fast-path is
-		// when the TBI and the main iterator are in lockstep. In this case, the
-		// main iterator was referencing the next key that would be visited by the
-		// TBI. This means that for the incremental iterator to perform a Next or
-		// NextKey will require only 1 extra NextKey invocation while they remain in
-		// lockstep. This could be common if most keys are modified or the
-		// modifications are clustered in keyspace.
-		//
-		// NB: The Seek() below is expensive, so we aim to avoid it if both
-		// iterators remain in lockstep as described above.
 		i.timeBoundIter.NextKey()
 		if ok, err := i.timeBoundIter.Valid(); !ok {
 			i.err = err
@@ -228,6 +217,12 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 		}
 		tbiKey = i.timeBoundIter.Key().Key
 
+		// The case where cmp == 0 is the fast-path is when the
+		// TBI and the main iterator are in lockstep. In this case, the main
+		// iterator was referencing the next key that would be visited by the TBI.
+		// This means that for the incremental iterator to perform a Next or NextKey
+		// will require only 1 extra NextKey invocation while they remain in
+		// lockstep.
 		cmp := iterKey.Compare(tbiKey)
 
 		if cmp > 0 {
@@ -235,6 +230,9 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// phantom MVCCKey.Keys. These keys may not be seen by the main iterator
 			// due to aborted transactions and keys which have been subsumed due to
 			// range tombstones. In this case we can SeekGE() the TBI to the main iterator.
+
+			// NB: Seek() is expensive, and this is only acceptable since we expect
+			// this case to rarely occur.
 			seekKey := MakeMVCCMetadataKey(iterKey)
 			i.timeBoundIter.SeekGE(seekKey)
 			if ok, err := i.timeBoundIter.Valid(); !ok {
