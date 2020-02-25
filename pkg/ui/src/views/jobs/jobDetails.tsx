@@ -65,7 +65,9 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
       case JOB_STATUS_SUCCEEDED:
         return (
           <div className="job-status__line">
-            <Progress job={this.props.job} lineWidth={2} showPercentage={false} /> - <Duration job={this.props.job} />
+            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
+            <Divider type="vertical" />
+            <span><Duration job={this.props.job} /></span>
           </div>
         );
       case JOB_STATUS_FAILED || JOB_STATUS_CANCELED:
