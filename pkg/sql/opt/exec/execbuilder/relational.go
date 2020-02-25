@@ -1010,12 +1010,16 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 	}
 	ep := execPlan{outputCols: input.outputCols}
 
-	// If this is UpsertDistinctOn, then treat NULL values as distinct and raise
-	// an error if any distinct grouping has more than one row.
+	// If this is UpsertDistinctOn, then treat NULL values as distinct.
 	var nullsAreDistinct bool
-	var errorOnDup string
 	if distinct.Op() == opt.UpsertDistinctOnOp {
 		nullsAreDistinct = true
+	}
+
+	// If duplicate input rows are not allowed, raise an error at runtime if
+	// duplicates are detected.
+	var errorOnDup string
+	if private.ErrorOnDup {
 		errorOnDup = sqlbase.DuplicateUpsertErrText
 	}
 
