@@ -422,51 +422,116 @@ func BenchmarkIntQuotaPool(b *testing.B) {
 	qp.Close("")
 }
 
-// BenchmarkConcurrentIntQuotaPool benchmarks concurrent workers in a variety
-// of ratios between adequate and inadequate quota to concurrently serve all
-// workers.
-func BenchmarkConcurrentIntQuotaPool(b *testing.B) {
-	// test returns the arguments to b.Run for a given number of workers and
-	// quantity of quota.
-	test := func(workers int, quota uint64) (string, func(b *testing.B)) {
-		return fmt.Sprintf("workers=%d,quota=%d", workers, quota), func(b *testing.B) {
-			qp := quotapool.NewIntPool("test", quota, quotapool.LogSlowAcquisition)
-			g, ctx := errgroup.WithContext(context.Background())
-			runWorker := func(workerNum int) {
-				g.Go(func() error {
-					for i := workerNum; i < b.N; i += workers {
-						alloc, err := qp.Acquire(ctx, 1)
-						if err != nil {
-							b.Fatal(err)
-						}
-						runtime.Gosched()
-						alloc.Release()
-					}
-					return nil
-				})
-			}
-			for i := 0; i < workers; i++ {
-				runWorker(i)
-			}
-			if err := g.Wait(); err != nil {
-				b.Fatal(err)
-			}
-			qp.Close("")
+func BenchmarkChannelSemaphore(b *testing.B) {
+	sem := make(chan struct{}, 1)
+	ctx := context.Background()
+	for n := 0; n < b.N; n++ {
+		select {
+		case <-ctx.Done():
+		case sem <- struct{}{}:
+		}
+		select {
+		case <-ctx.Done():
+		case <-sem:
 		}
 	}
-	for _, c := range []struct {
-		workers int
-		quota   uint64
-	}{
-		{1, 1},
-		{2, 2},
-		{8, 4},
-		{128, 4},
-		{512, 128},
-		{512, 513},
-		{512, 511},
-	} {
-		b.Run(test(c.workers, c.quota))
+	close(sem)
+}
+
+type concurrentBenchSpec struct {
+	workers int
+	quota   uint64
+}
+
+func (s concurrentBenchSpec) benchmarkChannelSem(b *testing.B) {
+	sem := make(chan struct{}, s.quota)
+	g, ctx := errgroup.WithContext(context.Background())
+	runWorker := func(workerNum int) {
+		g.Go(func() error {
+			for i := workerNum; i < b.N; i += s.workers {
+				select {
+				case <-ctx.Done():
+				case sem <- struct{}{}:
+				}
+				runtime.Gosched()
+				select {
+				case <-ctx.Done():
+				case <-sem:
+				}
+			}
+			return nil
+		})
+	}
+	for i := 0; i < s.workers; i++ {
+		runWorker(i)
+	}
+	if err := g.Wait(); err != nil {
+		b.Fatal(err)
+	}
+	close(sem)
+}
+
+func (s concurrentBenchSpec) benchmarkIntPool(b *testing.B) {
+	qp := quotapool.NewIntPool("test", s.quota, quotapool.LogSlowAcquisition)
+	g, ctx := errgroup.WithContext(context.Background())
+	runWorker := func(workerNum int) {
+		g.Go(func() error {
+			for i := workerNum; i < b.N; i += s.workers {
+				alloc, err := qp.Acquire(ctx, 1)
+				if err != nil {
+					b.Fatal(err)
+				}
+				runtime.Gosched()
+				alloc.Release()
+			}
+			return nil
+		})
+	}
+	for i := 0; i < s.workers; i++ {
+		runWorker(i)
+	}
+	if err := g.Wait(); err != nil {
+		b.Fatal(err)
+	}
+	qp.Close("")
+}
+
+func (s concurrentBenchSpec) String() string {
+	return fmt.Sprintf("workers=%d,quota=%d", s.workers, s.quota)
+}
+
+var concurrentBenchSpecs = []concurrentBenchSpec{
+	{1, 1},
+	{2, 2},
+	{8, 4},
+	{128, 4},
+	{512, 128},
+	{512, 513},
+	{512, 511},
+	{1024, 4},
+	{1024, 4096},
+}
+
+// BenchmarkConcurrentIntPool benchmarks concurrent workers in a variety
+// of ratios between adequate and inadequate quota to concurrently serve all
+// workers with the IntPool.
+func BenchmarkConcurrentIntPool(b *testing.B) {
+	// test returns the arguments to b.Run for a given number of workers and
+	// quantity of quota.
+	for _, s := range concurrentBenchSpecs {
+		b.Run(s.String(), s.benchmarkIntPool)
+	}
+}
+
+// BenchmarkConcurrentChannelSem benchmarks concurrent workers in a variety
+// of ratios between adequate and inadequate quota to concurrently serve all
+// workers with a channel-based semaphore to compare the performance against
+// the IntPool.
+func BenchmarkConcurrentChannelSemaphore(b *testing.B) {
+	// test returns the arguments to b.Run for a given number of workers and
+	// quantity of quota.
+	for _, s := range concurrentBenchSpecs {
+		b.Run(s.String(), s.benchmarkChannelSem)
 	}
 }
 
