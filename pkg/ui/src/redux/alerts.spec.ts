@@ -362,17 +362,17 @@ describe("alerts", function() {
         assert.isFalse(settingState);
       });
 
-      it("dismissed by by alert#dismiss", async () => {
+      it("dismissed by alert#dismiss", async () => {
         // set alert to open state
         dispatch(emailSubscriptionAlertLocalSetting.set(true));
-        const openState = emailSubscriptionAlertLocalSetting.selector(state());
+        let openState = emailSubscriptionAlertLocalSetting.selector(state());
         assert.isTrue(openState);
 
         // dismiss alert
         const alert = emailSubscriptionAlertSelector(state());
         await alert.dismiss(dispatch, state);
-        const dismissedState = emailSubscriptionAlertLocalSetting.selector(state());
-        assert.isFalse(dismissedState);
+        openState = emailSubscriptionAlertLocalSetting.selector(state());
+        assert.isFalse(openState);
       });
     });
   });
