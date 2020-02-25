@@ -2401,6 +2401,19 @@ func (s *csvBenchmarkStream) Row() (interface{}, error) {
 	return s.data[s.pos%len(s.data)], nil
 }
 
+// Read implements Reader interface.  It's used by delimited
+// benchmark to read its tab separated input.
+func (s *csvBenchmarkStream) Read(buf []byte) (int, error) {
+	if s.Scan() {
+		r, err := s.Row()
+		if err != nil {
+			return 0, err
+		}
+		return copy(buf, strings.Join(r.([]string), "\t")+"\n"), nil
+	}
+	return 0, io.EOF
+}
+
 var _ importRowProducer = &csvBenchmarkStream{}
 
 func BenchmarkCSVConvertRecord(b *testing.B) {
@@ -2487,16 +2500,16 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 // goos: darwin
 // goarch: amd64
 // pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14411 ns/op	   8.33 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     15090 ns/op	   7.95 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14575 ns/op	   8.23 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14677 ns/op	   8.18 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14554 ns/op	   8.24 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14598 ns/op	   8.22 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14493 ns/op	   8.28 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14501 ns/op	   8.27 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14712 ns/op	   8.16 MB/s
-// BenchmarkDelimitedConvertRecord-16    	  100000	     14491 ns/op	   8.28 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2473 ns/op	  48.51 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2580 ns/op	  46.51 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2678 ns/op	  44.80 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2897 ns/op	  41.41 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3250 ns/op	  36.92 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3261 ns/op	  36.80 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3016 ns/op	  39.79 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2943 ns/op	  40.77 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3004 ns/op	  39.94 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
 func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	ctx := context.TODO()
 
@@ -2565,10 +2578,10 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	for i, col := range descr.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
-	r, err := newMysqloutfileReader(ctx, kvCh, roachpb.MySQLOutfileOptions{
+	r, err := newMysqloutfileReader(roachpb.MySQLOutfileOptions{
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
-	}, descr, &evalCtx)
+	}, kvCh, 0, 0, descr, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
