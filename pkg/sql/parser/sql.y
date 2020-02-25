@@ -5263,7 +5263,7 @@ create_type_stmt:
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
-// 
+//
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
@@ -5912,7 +5912,7 @@ opt_conf_expr:
   {
     $$.val = $2.nameList()
   }
-| '(' name_list ')' where_clause { return unimplementedWithIssue(sqllex, 32557) }
+| '(' name_list ')' where_clause { return unimplementedWithIssue(sqllex, 32557) } /* SKIP DOC */
 | ON CONSTRAINT constraint_name { return unimplementedWithIssue(sqllex, 28161) }
 | /* EMPTY */
   {
