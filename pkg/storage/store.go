@@ -2173,14 +2173,6 @@ func (s *Store) Metrics() *StoreMetrics {
 	return s.metrics
 }
 
-// NodeDescriptor returns the NodeDescriptor of the node that holds the Store.
-func (s *Store) NodeDescriptor() *roachpb.NodeDescriptor {
-	return s.nodeDesc
-}
-
-// Silence unused warning.
-var _ = (*Store).NodeDescriptor
-
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
 func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {
@@ -2543,17 +2535,6 @@ func ReadClusterVersion(ctx context.Context, reader engine.Reader) (cluster.Clus
 	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{},
 		&cv, engine.MVCCGetOptions{})
 	return cv, err
-}
-
-// GetTxnWaitKnobs is part of txnwait.StoreInterface.
-func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
-	return s.TestingKnobs().TxnWaitKnobs
-}
-
-// GetTxnWaitMetrics is called by txnwait.Queue instances to get a reference to
-// the shared metrics instance.
-func (s *Store) GetTxnWaitMetrics() *txnwait.Metrics {
-	return s.txnWaitMetrics
 }
 
 func init() {
