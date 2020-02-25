@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/marusama/semaphore"
 )
 
@@ -124,13 +125,14 @@ type externalSorter struct {
 var _ Operator = &externalSorter{}
 
 // newExternalSorter returns a disk-backed general sort operator.
+// - ctx is the same context that standaloneMemAccount was created with.
 // - unlimitedAllocator must have been created with a memory account derived
 // from an unlimited memory monitor. It will be used by several internal
 // components of the external sort which is responsible for making sure that
 // the components stay within the memory limit.
-// - standaloneAllocator must have been created with a memory account derived
-// from an unlimited memory monitor with a standalone budget. It will be used
-// by inputPartitioningOperator to "partition" the input according to memory
+// - standaloneMemAccount must be a memory account derived from an unlimited
+// memory monitor with a standalone budget. It will be used by
+// inputPartitioningOperator to "partition" the input according to memory
 // limit. The budget *must* be standalone because we don't want to double
 // count the memory (the memory under the batches will be accounted for with
 // the unlimitedAllocator).
@@ -141,8 +143,9 @@ var _ Operator = &externalSorter{}
 // computed maximum number of partitions to have at once. It should be
 // non-zero only in tests.
 func newExternalSorter(
+	ctx context.Context,
 	unlimitedAllocator *Allocator,
-	standaloneAllocator *Allocator,
+	standaloneMemAccount *mon.BoundAccount,
 	input Operator,
 	inputTypes []coltypes.T,
 	ordering execinfrapb.Ordering,
@@ -151,7 +154,7 @@ func newExternalSorter(
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 ) Operator {
-	inputPartitioner := newInputPartitioningOperator(standaloneAllocator, input, memoryLimit)
+	inputPartitioner := newInputPartitioningOperator(ctx, input, standaloneMemAccount, memoryLimit)
 	inMemSorter, err := newSorter(
 		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
 		inputTypes, ordering.Columns,
@@ -313,12 +316,13 @@ func (s *externalSorter) createMergerForPartitions(firstIdx, numPartitions int) 
 }
 
 func newInputPartitioningOperator(
-	standaloneAllocator *Allocator, input Operator, memoryLimit int64,
+	ctx context.Context, input Operator, standaloneMemAccount *mon.BoundAccount, memoryLimit int64,
 ) resettableOperator {
 	return &inputPartitioningOperator{
-		OneInputNode:        NewOneInputNode(input),
-		standaloneAllocator: standaloneAllocator,
-		memoryLimit:         memoryLimit,
+		OneInputNode:         NewOneInputNode(input),
+		ctx:                  ctx,
+		standaloneMemAccount: standaloneMemAccount,
+		memoryLimit:          memoryLimit,
 	}
 }
 
@@ -329,8 +333,9 @@ type inputPartitioningOperator struct {
 	OneInputNode
 	NonExplainable
 
-	standaloneAllocator *Allocator
-	memoryLimit         int64
+	ctx                  context.Context
+	standaloneMemAccount *mon.BoundAccount
+	memoryLimit          int64
 }
 
 var _ resettableOperator = &inputPartitioningOperator{}
@@ -340,16 +345,45 @@ func (o *inputPartitioningOperator) Init() {
 }
 
 func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
-	if o.standaloneAllocator.Used() >= o.memoryLimit {
+	if o.standaloneMemAccount.Used() >= o.memoryLimit {
 		return coldata.ZeroBatch
 	}
 	b := o.input.Next(ctx)
-	o.standaloneAllocator.RetainBatch(b)
+	if b.Length() == 0 {
+		return b
+	}
+	// We cannot use Allocator.RetainBatch here because that method looks at the
+	// capacities of the vectors. However, this operator is an input to sortOp
+	// which will spool all the tuples and buffer them (by appending into the
+	// buffered batch), so we need to account for memory proportionally to the
+	// length of the batch. (Note: this is not exactly true for Bytes type, but
+	// it's ok if we have some deviation. This numbers matter only to understand
+	// when to start a new partition, and the memory will be actually accounted
+	// for correctly.)
+	length := int64(b.Length())
+	usesSel := b.Selection() != nil
+	b.SetSelection(true)
+	selCapacity := cap(b.Selection())
+	b.SetSelection(usesSel)
+	batchMemSize := int64(0)
+	if selCapacity > 0 {
+		batchMemSize = selVectorSize(selCapacity) * length / int64(selCapacity)
+	}
+	for _, vec := range b.ColVecs() {
+		if vec.Type() == coltypes.Bytes {
+			batchMemSize += int64(vec.Bytes().ProportionalSize(length))
+		} else {
+			batchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
+		}
+	}
+	if err := o.standaloneMemAccount.Grow(o.ctx, batchMemSize); err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	return b
 }
 
 func (o *inputPartitioningOperator) reset() {
-	o.standaloneAllocator.Clear()
+	o.standaloneMemAccount.Shrink(o.ctx, o.standaloneMemAccount.Used())
 }
 
 func newPartitionerToOperator(

@@ -123,7 +123,6 @@ func TestExternalSort(t *testing.T) {
 
 func TestExternalSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/45322")
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
