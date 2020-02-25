@@ -28,6 +28,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Default upper bound on the number of locks in a lockTable.
+const defaultLockTableSize = 10000
+
 // The kind of waiting that the request is subject to. See the detailed comment
 // above for the meaning of each kind.
 type stateKind int

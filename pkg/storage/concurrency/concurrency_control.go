@@ -252,22 +252,23 @@ type TransactionManager interface {
 // RangeStateListener is concerned with observing updates to the concurrency
 // manager's range. It is one of the roles of Manager.
 type RangeStateListener interface {
-	// OnDescriptorUpdated informs the manager that its range's descriptor has
-	// been updated.
-	OnDescriptorUpdated(*roachpb.RangeDescriptor)
+	// OnRangeDescUpdated informs the manager that its range's descriptor has been
+	// updated.
+	OnRangeDescUpdated(*roachpb.RangeDescriptor)
 
-	// OnLeaseUpdated informs the concurrency manager that its range's lease has
-	// been updated. The argument indicates whether this manager's replica is
-	// the leaseholder going forward.
-	OnLeaseUpdated(isleaseholder bool)
+	// OnRangeLeaseUpdated informs the concurrency manager that its range's
+	// lease has been updated. The argument indicates whether this manager's
+	// replica is the leaseholder going forward.
+	OnRangeLeaseUpdated(isleaseholder bool)
 
-	// OnSplit informs the concurrency manager that its range has split off a
-	// new range to its RHS.
-	OnSplit()
+	// OnRangeSplit informs the concurrency manager that its range has split off
+	// a new range to its RHS.
+	OnRangeSplit()
 
-	// OnMerge informs the concurrency manager that its range has merged into
-	// its LHS neighbor. This is not called on the LHS range being merged into.
-	OnMerge()
+	// OnRangeMerge informs the concurrency manager that its range has merged
+	// into its LHS neighbor. This is not called on the LHS range being merged
+	// into.
+	OnRangeMerge()
 }
 
 // MetricExporter is concerned with providing observability into the state of
@@ -739,4 +740,8 @@ type txnWaitQueue interface {
 	// Clear empties all queues and causes all waiters to return. If disable is
 	// true, future transactions may not be enqueued or waiting pushers added.
 	Clear(disable bool)
+
+	// OnRangeDescUpdated informs the Queue that its range's descriptor has been
+	// updated.
+	OnRangeDescUpdated(*roachpb.RangeDescriptor)
 }
