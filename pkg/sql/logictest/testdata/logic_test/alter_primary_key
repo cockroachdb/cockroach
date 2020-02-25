@@ -592,6 +592,40 @@ INSERT INTO t VALUES (1, 2, 3);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (z);
 UPDATE t SET y = 3 WHERE z = 3
 
+# Test for #45363.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+statement error pq: unimplemented: cannot perform other schema changes in the same transaction as a primary key change
+CREATE INDEX ON t (y)
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+statement error pq: unimplemented: cannot perform other schema changes in the same transaction as a primary key change
+ALTER TABLE t ADD COLUMN z INT
+
+statement ok
+ROLLBACK
+
 subtest add_pk_rowid
 # Tests for #45509.
 statement ok
