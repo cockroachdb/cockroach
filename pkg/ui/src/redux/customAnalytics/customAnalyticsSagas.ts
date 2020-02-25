@@ -44,6 +44,8 @@ export function* signUpEmailSubscription(action: PayloadAction<EmailSubscription
     userId: clusterId,
     traits: {
       email,
+      release_notes_sign_up_from_admin_ui: "true",
+      product_updates: "true",
     },
   });
   yield put(completeEmailSubscriptionSignUp());
