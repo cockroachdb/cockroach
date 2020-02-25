@@ -173,13 +173,6 @@ spec:
           name: grpc
         - containerPort: 8080
           name: http
-        livenessProbe:
-          httpGet:
-            path: "/health"
-            port: http
-            scheme: HTTPS
-          initialDelaySeconds: 30
-          periodSeconds: 5
         readinessProbe:
           httpGet:
             path: "/health?ready=1"
