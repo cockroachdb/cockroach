@@ -44,6 +44,10 @@ func genHashTable(wr io.Writer) error {
 		s,
 		`{{template "checkColBody" buildDict "Global" .Global "UseSel" .UseSel "ProbeHasNulls" $7 "BuildHasNulls" $8 "AllowNullEquality" $9}}`)
 
+	checkBody := makeFunctionRegex("_CHECK_BODY", 1)
+	s = checkBody.ReplaceAllString(s,
+		`{{template "checkBody" buildDict "Global" . "IsHashTableInFullMode" $1}}`)
+
 	s = replaceManipulationFuncs(".Global.LTyp", s)
 
 	tmpl, err := template.New("hashtable").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
