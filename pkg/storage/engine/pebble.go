@@ -505,7 +505,6 @@ func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64)
 	pebbleInMem := newPebbleInMem(ctx, attrs, cacheSize)
 	rocksDBInMem := newRocksDBInMem(attrs, cacheSize)
 	tee := NewTee(ctx, rocksDBInMem, pebbleInMem)
-	tee.inMem = true
 	return tee
 }
 
