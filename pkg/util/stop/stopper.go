@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -330,44 +331,43 @@ func (s *Stopper) RunAsyncTask(
 // until the semaphore is available in order to push back on callers
 // that may be trying to create many tasks. If wait is false, returns
 // immediately with an error if the semaphore is not
-// available. Returns an error if the Stopper is quiescing, in which
-// case the function is not executed.
+// available. It is the caller's responsibility to ensure that sem is
+// closed when the stopper is quiesced. For quotapools which live for the
+// lifetime of the stopper, it is generally best to register the sem with the
+// stopper using AddCloser.
 func (s *Stopper) RunLimitedAsyncTask(
-	ctx context.Context, taskName string, sem chan struct{}, wait bool, f func(context.Context),
-) error {
+	ctx context.Context, taskName string, sem *quotapool.IntPool, wait bool, f func(context.Context),
+) (err error) {
 	// Wait for permission to run from the semaphore.
-	select {
-	case sem <- struct{}{}:
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.ShouldQuiesce():
-		return ErrUnavailable
-	default:
-		if !wait {
-			return ErrThrottled
-		}
-		log.Eventf(ctx, "stopper throttling task from %s due to semaphore", taskName)
-		// Retry the select without the default.
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.ShouldQuiesce():
-			return ErrUnavailable
-		}
+	var alloc *quotapool.IntAlloc
+	if wait {
+		alloc, err = sem.Acquire(ctx, 1)
+	} else {
+		alloc, err = sem.TryAcquire(ctx, 1)
 	}
+	if err == quotapool.ErrNotEnoughQuota {
+		err = ErrThrottled
+	} else if quotapool.HasErrClosed(err) {
+		err = ErrUnavailable
+	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// If the err is non-nil then we know that we did not start the async task
+		// and thus we need to release the acquired quota. If it is nil then we
+		// did start the task and it will release the quota.
+		if err != nil {
+			alloc.Release()
+		}
+	}()
 
 	// Check for canceled context: it's possible to get the semaphore even
 	// if the context is canceled.
-	select {
-	case <-ctx.Done():
-		<-sem
+	if ctx.Err() != nil {
 		return ctx.Err()
-	default:
 	}
-
 	if !s.runPrelude(taskName) {
-		<-sem
 		return ErrUnavailable
 	}
 
@@ -376,7 +376,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
-		defer func() { <-sem }()
+		defer alloc.Release()
 		defer tracing.FinishSpan(span)
 
 		f(ctx)

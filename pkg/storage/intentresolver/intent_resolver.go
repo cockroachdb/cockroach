@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -124,8 +125,8 @@ type IntentResolver struct {
 	stopper      *stop.Stopper
 	testingKnobs storagebase.IntentResolverTestingKnobs
 	ambientCtx   log.AmbientContext
-	sem          chan struct{}    // Semaphore to limit async goroutines.
-	contentionQ  *contentionQueue // manages contention on individual keys
+	sem          *quotapool.IntPool // Semaphore to limit async goroutines.
+	contentionQ  *contentionQueue   // manages contention on individual keys
 
 	rdc kvbase.RangeDescriptorCache
 
@@ -186,13 +187,14 @@ func New(c Config) *IntentResolver {
 		clock:        c.Clock,
 		db:           c.DB,
 		stopper:      c.Stopper,
-		sem:          make(chan struct{}, c.TaskLimit),
+		sem:          quotapool.NewIntPool("intent resolver", uint64(c.TaskLimit)),
 		contentionQ:  newContentionQueue(c.Clock, c.DB),
 		every:        log.Every(time.Minute),
 		Metrics:      makeMetrics(),
 		rdc:          c.RangeDescriptorCache,
 		testingKnobs: c.TestingKnobs,
 	}
+	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
 	gcBatchSize := gcBatchSize
