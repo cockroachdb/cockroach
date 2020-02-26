@@ -130,9 +130,9 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			}
 		}
 
-	case *DistinctOnExpr:
+	case *DistinctOnExpr, *UpsertDistinctOnExpr:
 		// Check that aggregates can be only FirstAgg or ConstAgg.
-		for _, item := range t.Aggregations {
+		for _, item := range *t.Child(1).(*AggregationsExpr) {
 			switch item.Agg.Op() {
 			case opt.FirstAggOp, opt.ConstAggOp:
 

@@ -265,6 +265,8 @@
 )
 
 # PruneAggCols discards aggregation columns in a GroupBy that are never used.
+# Note that UpsertDistinctOn is not included here because its columns are always
+# used.
 [PruneAggCols, Normalize]
 (Project
     $input:(GroupBy | ScalarGroupBy | DistinctOn
@@ -290,7 +292,8 @@
     $passthrough
 )
 
-# PruneGroupByCols discards GroupBy input columns that are never used.
+# PruneGroupByCols discards GroupBy input columns that are never used. Note that
+# UpsertDistinctOn is not included here because its columns are always used.
 [PruneGroupByCols, Normalize]
 (GroupBy | DistinctOn
     $input:*

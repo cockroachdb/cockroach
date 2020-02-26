@@ -17,18 +17,20 @@
 $input
 
 # ReduceWindowPartitionCols reduces a set of partition columns to a simpler form
-# using FDs.
+# using FDs. Window partition columns are redundant if they are functionally
+# determined by other window partition columns.
 [ReduceWindowPartitionCols, Normalize]
 (Window
     $input:*
     $fn:*
-    $private:* & (CanReduceWindowPartitionCols $input $private)
+    $private:* &
+        ^(ColsAreEmpty $redundantCols:(RedundantCols $input (WindowPartition $private)))
 )
 =>
 (Window
     $input
     $fn
-    (ReduceWindowPartitionCols $input $private)
+    (RemoveWindowPartitionCols $private $redundantCols)
 )
 
 # SimplifyWindowOrdering reduces an ordering to a simpler form using FDs.

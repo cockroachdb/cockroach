@@ -984,3 +984,162 @@ query III
 SELECT * from table38627
 ----
 1  1  5
+
+# ------------------------------------------------------------------------------
+# Regression for #44466.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t44466 (c0 INT PRIMARY KEY, c1 BOOL, c2 INT UNIQUE)
+
+statement ok
+INSERT INTO t44466 (c0) VALUES (0)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+UPSERT INTO t44466 (c2, c0) VALUES (0, 0), (1, 0)
+
+statement ok
+DROP TABLE t44466
+
+# ------------------------------------------------------------------------------
+# Duplicate primary key inputs.
+# ------------------------------------------------------------------------------
+# Start with no secondary index present.
+statement ok
+CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT)
+
+statement ok
+INSERT INTO tdup VALUES (1, 1, 1)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup VALUES (1, 2, 1), (1, 3, 1) ON CONFLICT (x) DO UPDATE SET z=1
+
+# Add secondary index and verify that same error occurs.
+statement ok
+CREATE UNIQUE INDEX ON tdup (y)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup VALUES (1, 2, 1), (1, 3, 1) ON CONFLICT (x) DO UPDATE SET z=1
+
+# Verify that duplicate insert into secondary fails with regular conflict error.
+statement error pq: duplicate key value \(y\)=\(2\) violates unique constraint "tdup_y_key"
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (x) DO UPDATE SET z=1
+
+statement ok
+DROP TABLE tdup
+
+# ------------------------------------------------------------------------------
+# Duplicate secondary key inputs.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+statement ok
+INSERT INTO tdup VALUES (1, 1, 1)
+
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
+
+# Verify that NULL values are not treated as duplicates.
+statement ok
+INSERT INTO tdup
+VALUES (2, 2, NULL), (3, 2, NULL), (4, NULL, NULL), (5, NULL, NULL)
+ON CONFLICT (z, y) DO UPDATE SET z=1
+
+query III rowsort
+SELECT * FROM tdup
+----
+1  1     1
+2  2     NULL
+3  2     NULL
+4  NULL  NULL
+5  NULL  NULL
+
+query III rowsort
+SELECT * FROM tdup@tdup_y_z_key
+----
+4  NULL  NULL
+5  NULL  NULL
+1  1     1
+2  2     NULL
+3  2     NULL
+
+# Verify that duplicate secondary key fails with regular conflict error.
+statement error pq: duplicate key value \(y,z\)=\(1,2\) violates unique constraint "tdup_y_z_key"
+INSERT INTO tdup VALUES (6, 1, 1), (7, 1, 2) ON CONFLICT (y, z) DO UPDATE SET z=2
+
+# With constant grouping columns (no error).
+statement ok
+INSERT INTO tdup SELECT 6, 2, z FROM tdup WHERE z=1
+ON CONFLICT (y, z) DO UPDATE SET z=2
+
+query III rowsort
+SELECT * FROM tdup
+----
+1  1     1
+2  2     NULL
+3  2     NULL
+4  NULL  NULL
+5  NULL  NULL
+6  2     1
+
+# With constant grouping columns (error).
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup SELECT 6, 2, z FROM tdup WHERE z=1
+ON CONFLICT (y, z) DO UPDATE SET z=2
+
+# With constant nullable grouping columns.
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO tdup SELECT x+100, y, y+1 FROM tdup WHERE z IS NULL
+ON CONFLICT (y, z) DO UPDATE SET z=3
+
+statement ok
+DROP TABLE tdup
+
+# ------------------------------------------------------------------------------
+# Duplicate ordered inputs (use streaming distinct).
+# Ensure this test stays synchronized to the EXPLAIN in exec/execbuilder/upsert,
+# so that use of streaming group-by is confirmed.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE target (a INT PRIMARY KEY, b INT, c INT, UNIQUE (b, c))
+
+statement ok
+CREATE TABLE source (x INT PRIMARY KEY, y INT, z INT, INDEX (y, z))
+
+statement ok
+INSERT INTO source
+VALUES (1, 1, 1), (2, 1, 1), (3, 1, NULL), (4, 1, NULL), (5, NULL, NULL), (6, NULL, NULL)
+
+# This upsert statement triggers streaming distinct by using conflict columns
+# (b,c) that are provided by the (y,z) index.
+statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO target SELECT x, y, z FROM source ON CONFLICT (b, c) DO UPDATE SET b=5
+
+# Ensure that NULL values are treated as distinct.
+statement ok
+INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
+ON CONFLICT (b, c) DO UPDATE SET b=5
+
+query III rowsort
+SELECT * FROM target
+----
+2  1     1
+3  1     NULL
+4  1     NULL
+5  NULL  NULL
+6  NULL  NULL
+
+query III rowsort
+SELECT * FROM target@target_b_c_key
+----
+5  NULL  NULL
+6  NULL  NULL
+3  1     NULL
+4  1     NULL
+2  1     1
+
+statement ok
+DROP TABLE source
+
+statement ok
+DROP TABLE target

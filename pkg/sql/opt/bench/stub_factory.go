@@ -121,7 +121,11 @@ func (f *stubFactory) ConstructScalarGroupBy(
 }
 
 func (f *stubFactory) ConstructDistinct(
-	input exec.Node, distinctCols, orderedCols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
+	input exec.Node,
+	distinctCols, orderedCols exec.ColumnOrdinalSet,
+	reqOrdering exec.OutputOrdering,
+	nullsAreDistinct bool,
+	errorOnDup string,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

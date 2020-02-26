@@ -32,31 +32,33 @@ func TestDistinct(t *testing.T) {
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
+	vNull := sqlbase.DatumToEncDatum(types.Unknown, tree.DNull)
 
 	testCases := []struct {
 		spec     execinfrapb.DistinctSpec
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
+		error    string
 	}{
 		{
 			spec: execinfrapb.DistinctSpec{
 				DistinctColumns: []uint32{0, 1},
 			},
 			input: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[5], v[6]},
-				{v[2], v[3]},
-				{v[5], v[6]},
-				{v[2], v[6]},
-				{v[3], v[5]},
-				{v[2], v[9]},
+				{v[2], v[3], v[1]},
+				{v[5], v[6], v[2]},
+				{v[2], v[3], v[3]},
+				{v[5], v[6], v[4]},
+				{v[2], v[6], v[5]},
+				{v[3], v[5], v[6]},
+				{v[2], v[9], v[7]},
 			},
 			expected: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[5], v[6]},
-				{v[2], v[6]},
-				{v[3], v[5]},
-				{v[2], v[9]},
+				{v[2], v[3], v[1]},
+				{v[5], v[6], v[2]},
+				{v[2], v[6], v[5]},
+				{v[3], v[5], v[6]},
+				{v[2], v[9], v[7]},
 			},
 		},
 		{
@@ -65,20 +67,20 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns: []uint32{0, 1},
 			},
 			input: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
-				{v[5], v[6]},
+				{v[2], v[3], v[1]},
+				{v[2], v[3], v[2]},
+				{v[2], v[6], v[3]},
+				{v[2], v[9], v[4]},
+				{v[3], v[5], v[5]},
+				{v[5], v[6], v[6]},
+				{v[5], v[6], v[7]},
 			},
 			expected: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
+				{v[2], v[3], v[1]},
+				{v[2], v[6], v[3]},
+				{v[2], v[9], v[4]},
+				{v[3], v[5], v[5]},
+				{v[5], v[6], v[6]},
 			},
 		},
 		{
@@ -87,22 +89,176 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns: []uint32{1},
 			},
 			input: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
-				{v[6], v[6]},
-				{v[7], v[6]},
+				{v[2], v[3], v[1]},
+				{v[2], v[3], v[2]},
+				{v[2], v[6], v[3]},
+				{v[2], v[9], v[4]},
+				{v[3], v[5], v[5]},
+				{v[5], v[6], v[6]},
+				{v[6], v[6], v[7]},
+				{v[7], v[6], v[8]},
 			},
 			expected: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
+				{v[2], v[3], v[1]},
+				{v[2], v[6], v[3]},
+				{v[2], v[9], v[4]},
+				{v[3], v[5], v[5]},
+				{v[5], v[6], v[6]},
 			},
+		},
+		{
+			spec: execinfrapb.DistinctSpec{
+				OrderedColumns:  []uint32{1},
+				DistinctColumns: []uint32{1},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[2], v[3], v[1]},
+				{v[2], v[3], v[2]},
+				{v[2], v[6], v[3]},
+				{v[2], v[9], v[4]},
+				{v[3], v[5], v[5]},
+				{v[5], v[6], v[6]},
+				{v[6], v[6], v[7]},
+				{v[7], v[6], v[8]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3], v[1]},
+				{v[2], v[6], v[3]},
+				{v[2], v[9], v[4]},
+				{v[3], v[5], v[5]},
+				{v[5], v[6], v[6]},
+			},
+		},
+
+		// Test NullsAreDistinct flag (not ordered).
+		{
+			spec: execinfrapb.DistinctSpec{
+				DistinctColumns:  []uint32{0, 1},
+				NullsAreDistinct: false,
+			},
+			input: sqlbase.EncDatumRows{
+				{v[1], v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{v[1], v[2], v[3]},
+				{vNull, vNull, v[4]},
+				{v[1], vNull, v[5]},
+				{vNull, v[2], v[6]},
+				{vNull, v[2], v[7]},
+				{v[1], vNull, v[8]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[1], v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{v[1], vNull, v[5]},
+				{vNull, v[2], v[6]},
+			},
+		},
+		{
+			spec: execinfrapb.DistinctSpec{
+				DistinctColumns:  []uint32{0, 1},
+				NullsAreDistinct: true,
+			},
+			input: sqlbase.EncDatumRows{
+				{v[1], v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{v[1], v[2], v[3]},
+				{vNull, vNull, v[4]},
+				{v[1], vNull, v[5]},
+				{vNull, v[2], v[6]},
+				{vNull, v[2], v[7]},
+				{v[1], vNull, v[8]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[1], v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{vNull, vNull, v[4]},
+				{v[1], vNull, v[5]},
+				{vNull, v[2], v[6]},
+				{vNull, v[2], v[7]},
+				{v[1], vNull, v[8]},
+			},
+		},
+
+		// Test NullsAreDistinct flag (ordered).
+		{
+			spec: execinfrapb.DistinctSpec{
+				OrderedColumns:   []uint32{0},
+				DistinctColumns:  []uint32{0, 1},
+				NullsAreDistinct: false,
+			},
+			input: sqlbase.EncDatumRows{
+				{vNull, v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{vNull, v[2], v[3]},
+				{vNull, vNull, v[4]},
+				{v[1], vNull, v[5]},
+				{v[1], v[2], v[6]},
+				{v[1], vNull, v[7]},
+				{v[1], v[2], v[8]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{vNull, v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{v[1], vNull, v[5]},
+				{v[1], v[2], v[6]},
+			},
+		},
+		{
+			spec: execinfrapb.DistinctSpec{
+				OrderedColumns:   []uint32{0},
+				DistinctColumns:  []uint32{0, 1},
+				NullsAreDistinct: true,
+			},
+			input: sqlbase.EncDatumRows{
+				{vNull, v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{vNull, v[2], v[3]},
+				{vNull, vNull, v[4]},
+				{v[1], vNull, v[5]},
+				{v[1], v[2], v[6]},
+				{v[1], vNull, v[7]},
+				{v[1], v[2], v[8]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{vNull, v[2], v[1]},
+				{vNull, vNull, v[2]},
+				{vNull, v[2], v[3]},
+				{vNull, vNull, v[4]},
+				{v[1], vNull, v[5]},
+				{v[1], v[2], v[6]},
+				{v[1], vNull, v[7]},
+			},
+		},
+
+		// Test ErrorOnDup flag (ordered).
+		{
+			spec: execinfrapb.DistinctSpec{
+				OrderedColumns:  []uint32{0},
+				DistinctColumns: []uint32{0, 1},
+				ErrorOnDup:      "duplicate rows",
+			},
+			input: sqlbase.EncDatumRows{
+				{v[1], v[2], v[1]},
+				{v[2], v[3], v[2]},
+				{v[2], v[3], v[3]},
+				{v[3], v[4], v[4]},
+			},
+			error: "duplicate rows",
+		},
+
+		// Test ErrorOnDup flag (unordered).
+		{
+			spec: execinfrapb.DistinctSpec{
+				DistinctColumns: []uint32{0, 1},
+				ErrorOnDup:      "duplicate rows",
+			},
+			input: sqlbase.EncDatumRows{
+				{v[2], v[3], v[1]},
+				{v[1], v[2], v[2]},
+				{v[3], v[4], v[3]},
+				{v[2], v[3], v[4]},
+			},
+			error: "duplicate rows",
 		},
 	}
 
@@ -110,7 +266,7 @@ func TestDistinct(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ds := c.spec
 
-			in := distsqlutils.NewRowBuffer(sqlbase.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(sqlbase.ThreeIntCols, c.input, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -132,15 +288,25 @@ func TestDistinct(t *testing.T) {
 			}
 			var res sqlbase.EncDatumRows
 			for {
-				row := out.NextNoMeta(t).Copy()
+				row, meta := out.Next()
+				if meta != nil {
+					err = meta.Err
+					break
+				}
 				if row == nil {
 					break
 				}
-				res = append(res, row)
+				res = append(res, row.Copy())
 			}
 
-			if result := res.String(sqlbase.TwoIntCols); result != c.expected.String(sqlbase.TwoIntCols) {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(sqlbase.TwoIntCols))
+			if c.error != "" {
+				if err == nil || err.Error() != c.error {
+					t.Errorf("expected error: %v, got %v", c.error, err)
+				}
+			} else {
+				if result := res.String(sqlbase.ThreeIntCols); result != c.expected.String(sqlbase.ThreeIntCols) {
+					t.Errorf("invalid results: %v, expected %v'", result, c.expected.String(sqlbase.ThreeIntCols))
+				}
 			}
 		})
 	}

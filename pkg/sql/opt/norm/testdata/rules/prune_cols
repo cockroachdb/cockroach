@@ -2625,13 +2625,29 @@ project
            │    ├── side-effects
            │    ├── key: (21)
            │    ├── fd: ()-->(9-13), (21)-->(14-17), (14)~~>(15-17,21)
-           │    ├── values
+           │    ├── upsert-distinct-on
            │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
+           │    │    ├── grouping columns: column13:13
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── side-effects
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(9-13)
-           │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
+           │    │    ├── values
+           │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
+           │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    ├── side-effects
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(9-13)
+           │    │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=column1:9, outer=(9)]
+           │    │         │    └── column1:9
+           │    │         ├── first-agg [as=column2:10, outer=(10)]
+           │    │         │    └── column2:10
+           │    │         ├── first-agg [as=column3:11, outer=(11)]
+           │    │         │    └── column3:11
+           │    │         └── first-agg [as=column12:12, outer=(12)]
+           │    │              └── column12:12
            │    ├── scan returning_test
            │    │    ├── columns: a:14 b:15 c:16 d:17 rowid:21!null
            │    │    ├── key: (21)

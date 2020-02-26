@@ -16,9 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
@@ -42,6 +45,9 @@ type distinct struct {
 	memAcc           mon.BoundAccount
 	datumAlloc       sqlbase.DatumAlloc
 	scratch          []byte
+	nullsAreDistinct bool
+	nullCount        uint32
+	errorOnDup       string
 }
 
 // sortedDistinct is a specialized distinct that can be used when all of the
@@ -94,11 +100,13 @@ func newDistinct(
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
 	d := &distinct{
-		input:        input,
-		orderedCols:  spec.OrderedColumns,
-		distinctCols: distinctCols,
-		memAcc:       memMonitor.MakeBoundAccount(),
-		types:        input.OutputTypes(),
+		input:            input,
+		orderedCols:      spec.OrderedColumns,
+		distinctCols:     distinctCols,
+		memAcc:           memMonitor.MakeBoundAccount(),
+		types:            input.OutputTypes(),
+		nullsAreDistinct: spec.NullsAreDistinct,
+		errorOnDup:       spec.ErrorOnDup,
 	}
 
 	var returnProcessor execinfra.RowSourcedProcessor = d
@@ -163,6 +171,13 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 		if res != 0 || err != nil {
 			return false, err
 		}
+
+		// If null values are treated as distinct from one another, then a grouping
+		// column with a NULL value means that the row should never match any other
+		// row.
+		if d.nullsAreDistinct && d.lastGroupKey[colIdx].IsNull() {
+			return false, nil
+		}
 	}
 	return true, nil
 }
@@ -171,6 +186,7 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 // our 'seen' set.
 func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, error) {
 	var err error
+	foundNull := false
 	for i, datum := range row {
 		// Ignore columns that are not in the distinctCols, as if we are
 		// post-processing to strip out column Y, we cannot include it as
@@ -190,7 +206,20 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 		if err != nil {
 			return nil, err
 		}
+
+		// If null values are treated as distinct from one another, then append
+		// a unique identifier to the end of the encoding, so that the row will
+		// always be in its own distinct group.
+		if d.nullsAreDistinct && datum.IsNull() {
+			foundNull = true
+		}
 	}
+
+	if foundNull {
+		appendTo = encoding.EncodeUint32Ascending(appendTo, d.nullCount)
+		d.nullCount++
+	}
+
 	return appendTo, nil
 }
 
@@ -249,7 +278,14 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 			d.seen = make(map[string]struct{})
 		}
 
+		// Check whether row is distinct.
 		if _, ok := d.seen[string(encoding)]; ok {
+			if d.errorOnDup != "" {
+				// Row is a duplicate input to an Upsert operation, so raise an error.
+				err = pgerror.Newf(pgcode.CardinalityViolation, d.errorOnDup)
+				d.MoveToDraining(err)
+				break
+			}
 			continue
 		}
 		s, err := d.arena.AllocBytes(d.Ctx, encoding)
@@ -289,6 +325,12 @@ func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetad
 			break
 		}
 		if matched {
+			if d.errorOnDup != "" {
+				// Row is a duplicate input to an Upsert operation, so raise an error.
+				err = pgerror.Newf(pgcode.CardinalityViolation, d.errorOnDup)
+				d.MoveToDraining(err)
+				break
+			}
 			continue
 		}
 
