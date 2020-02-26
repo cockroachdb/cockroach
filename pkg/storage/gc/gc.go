@@ -61,10 +61,20 @@ func TimestampForThreshold(threshold hlc.Timestamp, policy zonepb.GCPolicy) (ts 
 	return threshold.Add(ttlNanos, 0)
 }
 
+// Thresholder is part of the GCer interface.
+type Thresholder interface {
+	SetGCThreshold(context.Context, Threshold) error
+}
+
+// PureGCer is part of the GCer interface.
+type PureGCer interface {
+	GC(context.Context, []roachpb.GCRequest_GCKey) error
+}
+
 // A GCer is an abstraction used by the GC queue to carry out chunked deletions.
 type GCer interface {
-	SetGCThreshold(context.Context, Threshold) error
-	GC(context.Context, []roachpb.GCRequest_GCKey) error
+	Thresholder
+	PureGCer
 }
 
 // NoopGCer implements GCer by doing nothing.
