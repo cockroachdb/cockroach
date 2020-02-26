@@ -28,6 +28,114 @@ type Lease interface {
 	GetExpiration() hlc.Timestamp
 }
 
+// Sketch of safety proof for algorithm coded here:
+//
+// The proof uses the construct of a totally ordered history of operations,
+// known to an oracle. When the proof refers to "before", "after" it is in
+// the context of this history. Locks are held for some interval [t1, t2],
+// where the timestamps are HLC time. The correctness is defined in terms
+// of these intervals: intervals for exclusive locks cannot overlap with
+// each other or with intervals of shared locks.
+//
+// Consider 3 events for both exclusive and shared locks: acquisition,
+// hold and release. The reasoning will consider the violations that can
+// happen at the event in the history when the lock is acquired, at any
+// event in history while the lock is held, and any event in history after
+// the lock is released. And will sketch how these violations are impossible.
+//
+// Exclusive lock:
+//   Lock Acquisition:
+//   This happens using the following sequence of operations:
+//   - put exKey at t1
+//   - del range at t2
+//   - del range commits at t3
+//   - put exKey pushed to t3
+//   The lock is considered acquired at t3 (hlc time). t1 <= t2 <= t3.
+//
+//   The violations that can happen correspond to the following states of
+//   the history before the acquire event
+//   1 Ongoing hold of a conflicting lock starting at < t3
+//   2 Finished hold of a conflicting lock starting at < t3 that extends >= t3
+//   3 Finished hold of a conflicting lock starting at >= t3
+//   4 Ongoing hold of a conflicting lock starting at >= t3
+//
+//   The "put exKey"@t3 eliminates 1, 2, 3, 4 for a conflict with an exclusive
+//   lock since puts are monotonic.
+//   The "del range"@t2 eliminates 1, 2, 3, 4 for a conflict with a shared lock since
+//   it implies there was no intent or committed value >= t2 in that range.
+
+//   Lock Hold:
+//   While the lock is held, we don't want new violations appearing in the
+//   history after the acquisition. The violation cases are the same as listed earlier.
+//   The intent created by "put exKey"@t3 eliminates 1, 2, 3, 4 for a
+//   conflict with an exclusive lock since it prevents new intents from
+//   being created.
+//   That intent also prevents shared locks since they also need to "put exKey".
+//
+//   Lock Release:
+//   Two cases:
+//   - Transaction commits at t4: Lock should be held [t3, t4]. The "put exKey"
+//     commits at t4. Since no one can write to this key at <= t4, it eliminates
+//     new violations being created after the lock release that overlap with
+//     [t3, t4].
+//   - Transaction aborts with heartbeat expiry time t4. The lock should be
+//     held [t3, t4]. Since the ts cache is updated to t4, any write after the
+//     release cannot write to the key at <= t4, so it cannot be a violation.
+//
+// Shared lock:
+//   Lock Acquisition:
+//   This happens using the following sequence of operations:
+//   - put exKey at t1
+//   - put shKey at t2
+//   - put exKey commits at t3
+//   The lock is considered acquired at t3. t1 <= t2 <= t3.
+//
+//   The same violation list applies here. The "put exKey" committing at t3
+//   eliminates cases 1, 2, 3, 4.
+//
+//   Lock Hold:
+//   While the lock is held, we don't want new violations appearing in the
+//   history due to exclusive lock acquisitions. The "put exKey" committing
+//   at t3 eliminates 1, 2 since they can't write to a timestamp <= t3.
+//   The intent at shKey@t2 prevents the del range, so eliminates 3, 4.
+//
+//   Lock Release:
+//   Two cases:
+//    - Transaction commits at t4: The "put shKey" commits at t4. Any del range
+//      has to be > t4. So it prevents all the violations.
+//    - Transaction aborts with hearbeat expiry time t4. Since the ts cache for
+//      shKey is updated to t4, no del range can happen <= t4.
+//
+// Alternatives:
+// The algorithm implemented here introduces contention between shared lock/lease
+// acquisitions since they all need to write to the exKey and commit that write
+// in a side transaction. The following alternative avoids this contention.
+// It uses the following ideas:
+// - Use lossy unreplicated locks to avoid aborts due to violating serializability,
+//   by preventing txn races from causing interleaving of operations. This needs
+//   unreplicated shared locks.
+// - Use a read with failOnMoreRecent, introduced in #44473 for Select For Update.
+// - For session scoped locks/leases, which need to be maintained up to the heartbeat
+//   expiry time, use a special non-transactional intent that transitions to
+//   committed at the abort time.
+//
+// AcquireExclusive(Txn, Key)
+//    exKey, shRange := makeExKeys(key)
+//    Txn.AcquireUnreplicatedExLock(exKey)
+//    Txn.DelRange(shRange)
+//    Txn.Put(exKey)
+//
+// AcquireShared(Txn, Key)
+//    exKey, shKey := makeShKeys(Key)
+//    Txn.AcquireUnreplicatedShLock(exKey)  // Blocks on exclusive lock on exKey regardless of timestamp.
+//    Txn.Read(exKey, failOnMoreRecent=true)  // #44473
+//    Txn.Put(shKey)
+//    // Loss of unreplicated shared lock at this point does not result in abort.
+//
+// I have a sketch of a safety proof of the above, if it ever becomes a serious
+// alternative.
+
+
 // One thing to note about these leases is that there's no way to release them.
 // In practive there will be a way - rollback to savepoint but the better way is
 // to just hold the transaction open.
