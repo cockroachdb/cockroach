@@ -110,6 +110,28 @@ func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+// DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
+type DummyPrivilegedAccessor struct{}
+
+var _ tree.PrivilegedAccessor = &DummyPrivilegedAccessor{}
+
+var errEvalPrivileged = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
+	"cannot evaluate privileged expressions in this context")
+
+// LookupNamespaceID is part of the tree.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) LookupNamespaceID(
+	ctx context.Context, parentID int64, name string,
+) (tree.DInt, bool, error) {
+	return 0, false, errors.WithStack(errEvalPrivileged)
+}
+
+// LookupZoneConfigByNamespaceID is part of the tree.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) LookupZoneConfigByNamespaceID(
+	ctx context.Context, id int64,
+) (tree.DBytes, bool, error) {
+	return "", false, errors.WithStack(errEvalPrivileged)
+}
+
 // DummySessionAccessor implements the tree.EvalSessionAccessor interface by returning errors.
 type DummySessionAccessor struct{}
 

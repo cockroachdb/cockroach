@@ -3534,10 +3534,6 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"parent_id", types.Int}, {"name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if ctx.PrivilegedAccessor == nil {
-					return nil, errors.AssertionFailedf("PrivilegedAccessor not set")
-				}
-
 				parentID := tree.MustBeDInt(args[0])
 				name := tree.MustBeDString(args[1])
 				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
@@ -3565,10 +3561,6 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"namespace_id", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if ctx.PrivilegedAccessor == nil {
-					return nil, errors.AssertionFailedf("PrivilegedAccessor not set")
-				}
-
 				id := tree.MustBeDInt(args[0])
 				bytes, found, err := ctx.PrivilegedAccessor.LookupZoneConfigByNamespaceID(
 					ctx.Context,

@@ -1038,8 +1038,6 @@ func (i *iterator) Cur() *latch {
 //    It does so because the item at this position is the first item with a
 //    start key larger than the search range's end key.
 type overlapScan struct {
-	item *latch // search item
-
 	// The "soft" lower-bound constraint.
 	constrMinN       *node
 	constrMinPos     int16
@@ -1058,29 +1056,24 @@ func (i *iterator) FirstOverlap(item *latch) {
 		return
 	}
 	i.pos = 0
-	i.o = overlapScan{item: item}
-	i.constrainMinSearchBounds()
-	i.constrainMaxSearchBounds()
-	i.findNextOverlap()
+	i.o = overlapScan{}
+	i.constrainMinSearchBounds(item)
+	i.constrainMaxSearchBounds(item)
+	i.findNextOverlap(item)
 }
 
 // NextOverlap positions the iterator to the item immediately following
 // its current position that overlaps with the search item.
-func (i *iterator) NextOverlap() {
+func (i *iterator) NextOverlap(item *latch) {
 	if i.n == nil {
 		return
 	}
-	if i.o.item == nilT {
-		// Invalid. Mixed overlap scan with non-overlap scan.
-		i.pos = i.n.count
-		return
-	}
 	i.pos++
-	i.findNextOverlap()
+	i.findNextOverlap(item)
 }
 
-func (i *iterator) constrainMinSearchBounds() {
-	k := i.o.item.Key()
+func (i *iterator) constrainMinSearchBounds(item *latch) {
+	k := item.Key()
 	j := sort.Search(int(i.n.count), func(j int) bool {
 		return bytes.Compare(k, i.n.items[j].Key()) <= 0
 	})
@@ -1088,8 +1081,8 @@ func (i *iterator) constrainMinSearchBounds() {
 	i.o.constrMinPos = int16(j)
 }
 
-func (i *iterator) constrainMaxSearchBounds() {
-	up := upperBound(i.o.item)
+func (i *iterator) constrainMaxSearchBounds(item *latch) {
+	up := upperBound(item)
 	j := sort.Search(int(i.n.count), func(j int) bool {
 		return !up.contains(i.n.items[j])
 	})
@@ -1097,24 +1090,24 @@ func (i *iterator) constrainMaxSearchBounds() {
 	i.o.constrMaxPos = int16(j)
 }
 
-func (i *iterator) findNextOverlap() {
+func (i *iterator) findNextOverlap(item *latch) {
 	for {
 		if i.pos > i.n.count {
 			// Iterate up tree.
 			i.ascend()
 		} else if !i.n.leaf {
 			// Iterate down tree.
-			if i.o.constrMinReached || i.n.children[i.pos].max.contains(i.o.item) {
+			if i.o.constrMinReached || i.n.children[i.pos].max.contains(item) {
 				par := i.n
 				pos := i.pos
 				i.descend(par, pos)
 
 				// Refine the constraint bounds, if necessary.
 				if par == i.o.constrMinN && pos == i.o.constrMinPos {
-					i.constrainMinSearchBounds()
+					i.constrainMinSearchBounds(item)
 				}
 				if par == i.o.constrMaxN && pos == i.o.constrMaxPos {
-					i.constrainMaxSearchBounds()
+					i.constrainMaxSearchBounds(item)
 				}
 				continue
 			}
@@ -1140,7 +1133,7 @@ func (i *iterator) findNextOverlap() {
 				// span's start key.
 				return
 			}
-			if upperBound(i.n.items[i.pos]).contains(i.o.item) {
+			if upperBound(i.n.items[i.pos]).contains(item) {
 				return
 			}
 		}
