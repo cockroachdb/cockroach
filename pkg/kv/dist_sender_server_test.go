@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -92,6 +93,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 			Clock:      s.Clock(),
 			RPCContext: s.RPCContext(),
 			NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		s.(*server.TestServer).Gossip(),
 	)
@@ -961,6 +963,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 						Clock:      clock,
 						RPCContext: s.RPCContext(),
 						NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+						Settings:   cluster.MakeTestingClusterSettings(),
 					},
 					s.(*server.TestServer).Gossip(),
 				)
@@ -1166,6 +1169,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 			Clock:      s.Clock(),
 			RPCContext: s.RPCContext(),
 			NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+			Settings:   cluster.MakeTestingClusterSettings(),
 		}, s.(*server.TestServer).Gossip(),
 	)
 	for _, key := range []string{"c"} {
