@@ -81,6 +81,7 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	gcq.baseQueue = newBaseQueue(
 		"gc", gcq, store, gossip,
 		queueConfig{
+			processTimeout:       10 * time.Minute,
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			needsSystemConfig:    true,
