@@ -72,6 +72,36 @@ func (w *lockTableWaiterImpl) WaitOn(
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
+			if !state.held {
+				// If the lock is not held and instead has a reservation, we don't
+				// want to push the reservation transaction. A transaction push will
+				// block until the pushee transaction has either committed, aborted,
+				// pushed, or rolled back savepoints, i.e., there is some state
+				// change that has happened to the transaction record that unblocks
+				// the pusher. It will not unblock merely because a request issued
+				// by the pushee transaction has completed and released a
+				// reservation. Note that:
+				// - reservations are not a guarantee that the lock will be acquired.
+				// - the following two reasons to push do not apply to requests
+				// holding reservations:
+				//  1. competing requests compete at exactly one lock table, so there
+				//  is no possibility of distributed deadlock due to reservations.
+				//  2. the lock table can prioritize requests based on transaction
+				//  priorities.
+				//
+				// TODO(sbhola): remove the need for this by only notifying waiters
+				// for held locks and never for reservations.
+				// TODO(sbhola): now that we never push reservation holders, we
+				// should stop special-casing non-transactional writes and let them
+				// acquire reservations.
+				switch state.stateKind {
+				case waitFor, waitForDistinguished:
+					continue
+				case waitElsewhere:
+					return nil
+				}
+			}
+
 			switch state.stateKind {
 			case waitFor:
 				// waitFor indicates that the request is waiting on another

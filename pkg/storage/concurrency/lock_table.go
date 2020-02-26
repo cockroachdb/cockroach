@@ -969,29 +969,30 @@ func (l *lockState) acquireLock(
 		// Already held.
 		beforeTxn, beforeTs, _ := l.getLockerInfo()
 		if txn.ID != beforeTxn.ID {
-			return errors.Errorf("caller violated contract")
+			return errors.Errorf("existing lock cannot be acquired by different transaction")
 		}
 		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
 			// Clear the sequences for the older epoch.
 			l.holder.holder[durability].seqs = l.holder.holder[durability].seqs[:0]
 		}
 		seqs := l.holder.holder[durability].seqs
-		add := true
-		if len(seqs) > 0 {
-			lastSeq := seqs[len(seqs)-1]
-			if lastSeq > txn.Sequence {
-				return errors.Errorf("caller violated contract")
+		if len(seqs) > 0 && seqs[len(seqs)-1] >= txn.Sequence {
+			// Idempotent lock acquisition. In this case, we simply ignore
+			// the lock acquisition as long as it corresponds to an existing
+			// sequence number. The validity of such a lock re-acquisition
+			// should have already been determined at the MVCC level.
+			if i := sort.Search(len(seqs), func(i int) bool {
+				return seqs[i] >= txn.Sequence
+			}); i == len(seqs) {
+				panic("lockTable bug - search value <= last element")
+			} else if seqs[i] != txn.Sequence {
+				return errors.Errorf("missing lock at sequence: %v not in %v", txn.Sequence, seqs)
 			}
-			if lastSeq == txn.Sequence {
-				// Idempotent lock acquisition.
-				add = false
-			}
-		}
-		if add {
-			l.holder.holder[durability].seqs = append(seqs, txn.Sequence)
+			return nil
 		}
 		l.holder.holder[durability].txn = txn
 		l.holder.holder[durability].ts = ts
+		l.holder.holder[durability].seqs = append(l.holder.holder[durability].seqs, txn.Sequence)
 		_, afterTs, _ := l.getLockerInfo()
 		if afterTs.Less(beforeTs) {
 			return errors.Errorf("caller violated contract")
@@ -1757,7 +1758,11 @@ func (t *lockTableImpl) String() string {
 	waitingOnStr := func(txn *enginepb.TxnMeta, ts hlc.Timestamp) string {
 		// TODO(sbhola): strip the leading 0 bytes from the UUID string since tests are assigning
 		// UUIDs using a counter and makes this output more readable.
-		return fmt.Sprintf("txn: %v, ts: %v", txn.ID, ts)
+		var seqStr string
+		if txn.Sequence != 0 {
+			seqStr = fmt.Sprintf(", seq: %v", txn.Sequence)
+		}
+		return fmt.Sprintf("txn: %v, ts: %v%s", txn.ID, ts, seqStr)
 	}
 	lockStateStrings := func(l *lockState) {
 		l.mu.Lock()

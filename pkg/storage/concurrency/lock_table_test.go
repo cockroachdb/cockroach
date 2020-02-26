@@ -47,7 +47,7 @@ new-locktable maxlocks=<int>
 
   Creates a lockTable.
 
-new-txn txn=<name> ts=<int>[,<int>] epoch=<int>
+new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 ----
 
  Creates a TxnMeta.
@@ -148,6 +148,10 @@ func TestLockTableBasic(t *testing.T) {
 				ts := scanTimestamp(t, d)
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
+				var seq int
+				if d.HasArg("seq") {
+					d.ScanArgs(t, "seq", &seq)
+				}
 				txnMeta, ok := txnsByName[txnName]
 				var id uuid.UUID
 				if ok {
@@ -158,6 +162,7 @@ func TestLockTableBasic(t *testing.T) {
 				txnsByName[txnName] = &enginepb.TxnMeta{
 					ID:             id,
 					Epoch:          enginepb.TxnEpoch(epoch),
+					Sequence:       enginepb.TxnSeq(seq),
 					WriteTimestamp: ts,
 				}
 				return ""
@@ -900,7 +905,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	const numActiveTxns = 8
 	var activeTxns [numActiveTxns]*enginepb.TxnMeta
 	var items []workloadItem
-	const numRequests = 20000
+	const numRequests = 1000
 	for i := 0; i < numRequests; i++ {
 		var txnMeta *enginepb.TxnMeta
 		var ts hlc.Timestamp
@@ -968,7 +973,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	for _, c := range concurrency {
 		t.Run(fmt.Sprintf("concurrency %d", c), func(t *testing.T) {
 			exec := newWorkLoadExecutor(items, c)
-			if err := exec.execute(false, 2000); err != nil {
+			if err := exec.execute(false, 200); err != nil {
 				t.Fatal(err)
 			}
 		})

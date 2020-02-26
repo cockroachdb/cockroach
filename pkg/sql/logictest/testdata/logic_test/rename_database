@@ -124,7 +124,7 @@ SHOW TABLES FROM u
 ----
 kv
 
-statement error cannot rename database because view "t.public.v" depends on table "kv"
+statement error cannot rename database because relation "t.public.v" depends on relation "u.public.kv"
 ALTER DATABASE u RENAME TO v
 
 statement ok
@@ -136,7 +136,7 @@ ALTER DATABASE u RENAME TO v
 statement ok
 CREATE VIEW v.v AS SELECT k,v FROM v.kv
 
-statement error cannot rename database because view "v" depends on table "kv"
+statement error cannot rename database because relation "v.public.v" depends on relation "v.public.kv"
 ALTER DATABASE v RENAME TO u
 
 # Check that the default databases can be renamed like any other.
@@ -171,3 +171,19 @@ postgres
 system
 t
 v
+
+# Test dependent sequences on different databases upon renames
+# return the appropriate error message.
+subtest regression_45411
+
+statement ok
+CREATE DATABASE db1; CREATE SEQUENCE db1.seq
+
+statement ok
+CREATE DATABASE db2; CREATE TABLE db2.tbl (a int DEFAULT nextval('db1.seq'))
+
+statement error cannot rename database because relation "db2.public.tbl" depends on relation "db1.public.seq"
+ALTER DATABASE db1 RENAME TO db3
+
+statement ok
+DROP DATABASE db2 CASCADE; DROP DATABASE db1 CASCADE
