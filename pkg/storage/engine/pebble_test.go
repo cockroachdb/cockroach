@@ -13,6 +13,8 @@ package engine
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 )
@@ -263,4 +267,27 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		})
 	}
 
+}
+
+func BenchmarkMVCCKeyCompare(b *testing.B) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	keys := make([][]byte, 1000)
+	for i := range keys {
+		k := MVCCKey{
+			Key: randutil.RandBytes(rng, 8),
+			Timestamp: hlc.Timestamp{
+				WallTime: int64(rng.Intn(5)),
+			},
+		}
+		keys[i] = EncodeKey(k)
+	}
+
+	b.ResetTimer()
+	var c int
+	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
+		c = MVCCKeyCompare(keys[i%len(keys)], keys[j%len(keys)])
+	}
+	if testing.Verbose() {
+		fmt.Fprint(ioutil.Discard, c)
+	}
 }

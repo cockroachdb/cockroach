@@ -14,7 +14,6 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
@@ -142,36 +141,4 @@ func (r *sstIterator) UnsafeKey() MVCCKey {
 // UnsafeValue implements the SimpleIterator interface.
 func (r *sstIterator) UnsafeValue() []byte {
 	return r.value
-}
-
-// MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
-// This assumes these are the keys cockroach usually works with i.e. "user" keys
-// from the point of view of rocksdb.
-func MVCCKeyCompare(a, b []byte) int {
-	keyA, tsA, okA := enginepb.SplitMVCCKey(a)
-	keyB, tsB, okB := enginepb.SplitMVCCKey(b)
-	if !okA || !okB {
-		// This should never happen unless there is some sort of corruption of
-		// the keys. This is a little bizarre, but the behavior exactly matches
-		// engine/db.cc:DBComparator.
-		return bytes.Compare(a, b)
-	}
-
-	if c := bytes.Compare(keyA, keyB); c != 0 {
-		return c
-	}
-	if len(tsA) == 0 {
-		if len(tsB) == 0 {
-			return 0
-		}
-		return -1
-	} else if len(tsB) == 0 {
-		return 1
-	}
-	if tsCmp := bytes.Compare(tsB, tsA); tsCmp != 0 {
-		return tsCmp
-	}
-	// If decoded MVCC keys are the same, fallback to comparing raw internal keys
-	// in case the internal suffix differentiates them.
-	return bytes.Compare(a, b)
 }
