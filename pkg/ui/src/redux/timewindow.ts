@@ -96,7 +96,7 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
       windowValid: moment.duration(10, "minutes"),
       sampleSize: moment.duration(30, "minutes"),
     },
-    "Past 2 Week": {
+    "Past 2 Weeks": {
       windowSize: moment.duration(14, "days"),
       windowValid: moment.duration(10, "minutes"),
       sampleSize: moment.duration(30, "minutes"),
@@ -106,7 +106,7 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
       windowValid: moment.duration(20, "minutes"),
       sampleSize: moment.duration(1, "hour"),
     },
-    "Past 2 Month": {
+    "Past 2 Months": {
       windowSize: moment.duration(moment().daysInMonth() * 2, "days"),
       windowValid: moment.duration(20, "minutes"),
       sampleSize: moment.duration(1, "hour"),

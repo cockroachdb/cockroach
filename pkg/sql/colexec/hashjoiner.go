@@ -232,6 +232,7 @@ func (hj *hashJoiner) Init() {
 		hj.spec.right.eqCols,
 		hj.spec.right.outCols,
 		false, /* allowNullEquality */
+		hashTableFullMode,
 	)
 
 	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithSize(hj.spec.right.sourceTypes, 0 /* size */)

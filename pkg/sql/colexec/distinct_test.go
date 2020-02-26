@@ -101,14 +101,18 @@ func TestDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-			func(input []Operator) (Operator, error) {
-				return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
-			})
-		runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
-			func(input []Operator) (Operator, error) {
-				return NewUnorderedDistinct(testAllocator, input[0], tc.distinctCols, tc.colTypes), nil
-			})
+		t.Run("ordered", func(t *testing.T) {
+			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
+				func(input []Operator) (Operator, error) {
+					return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
+				})
+		})
+		t.Run("unordered", func(t *testing.T) {
+			runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
+				func(input []Operator) (Operator, error) {
+					return NewUnorderedDistinct(testAllocator, input[0], tc.distinctCols, tc.colTypes), nil
+				})
+		})
 	}
 }
 

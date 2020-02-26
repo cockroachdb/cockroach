@@ -20,6 +20,19 @@ import (
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
 const hashTableNumBuckets = 1 << 16
 
+// hashTableMode represents different modes in which the hashTable is built.
+type hashTableMode int
+
+const (
+	// hashTableFullMode is the mode where hashTable populates both head and same
+	// array.
+	hashTableFullMode hashTableMode = iota
+
+	// hashTableDistinctMode is the mode where hashTable only populates head
+	// array.
+	hashTableDistinctMode
+)
+
 // hashTable is a structure used by the hash joiner to store the build table
 // batches. Keys are stored according to the encoding of the equality column,
 // which point to the corresponding output keyID. The keyID is calculated
@@ -113,6 +126,9 @@ type hashTable struct {
 
 	decimalScratch decimalOverloadScratch
 	cancelChecker  CancelChecker
+
+	// mode determines how hashTable is built.
+	mode hashTableMode
 }
 
 var _ resetter = &hashTable{}
@@ -124,6 +140,7 @@ func newHashTable(
 	eqCols []uint32,
 	outCols []uint32,
 	allowNullEquality bool,
+	mode hashTableMode,
 ) *hashTable {
 	// Compute the union of eqCols and outCols and compress vals to only keep the
 	// important columns.
@@ -196,6 +213,7 @@ func newHashTable(
 		buckets: make([]uint64, coldata.BatchSize()),
 
 		allowNullEquality: allowNullEquality,
+		mode:              mode,
 	}
 }
 
@@ -223,10 +241,11 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 	ht.buildNextChains(ctx)
 }
 
-// findSameTuples populates the hashTable's same array by probing the
-// hashTable with every single input key.
+// findTupleGroups populates the hashTable's head array by probing the
+// hashTable with every single input key. When hashTable is in hashTableFullMode
+// mode findTupleGroups also populates the ht.same array.
 // NOTE: the hashTable *must* have been already built.
-func (ht *hashTable) findSameTuples(ctx context.Context) {
+func (ht *hashTable) findTupleGroups(ctx context.Context) {
 	ht.head = make([]bool, ht.vals.length+1)
 	ht.maybeAllocateSameAndVisited()
 
@@ -250,7 +269,7 @@ func (ht *hashTable) findSameTuples(ctx context.Context) {
 		for nToCheck > 0 {
 			// Continue searching for the build table matching keys while the toCheck
 			// array is non-empty.
-			nToCheck = ht.check(ht.keyTypes, nToCheck, nil)
+			nToCheck = ht.check(ht.keyTypes, nToCheck, nil /* sel */)
 			ht.findNext(nToCheck)
 		}
 
@@ -372,54 +391,6 @@ func (ht *hashTable) checkCols(probeKeyTypes []coltypes.T, nToCheck uint16, sel 
 	for i := range ht.keyCols {
 		ht.checkCol(probeKeyTypes[i], ht.keyTypes[i], i, nToCheck, sel)
 	}
-}
-
-// check performs an equality check between the current key in the groupID bucket
-// and the probe key at that index. If there is a match, the hashTable's same
-// array is updated to lazily populate the linked list of identical build
-// table keys. The visited flag for corresponding build table key is also set. A
-// key is removed from toCheck if it has already been visited in a previous
-// probe, or the bucket has reached the end (key not found in build table). The
-// new length of toCheck is returned by this function.
-func (ht *hashTable) check(probeKeyTypes []coltypes.T, nToCheck uint16, sel []uint16) uint16 {
-	ht.checkCols(probeKeyTypes, nToCheck, sel)
-	nDiffers := uint16(0)
-	for i := uint16(0); i < nToCheck; i++ {
-		if !ht.differs[ht.toCheck[i]] {
-			// If the current key matches with the probe key, we want to update headID
-			// with the current key if it has not been set yet.
-			keyID := ht.groupID[ht.toCheck[i]]
-			if ht.headID[ht.toCheck[i]] == 0 {
-				ht.headID[ht.toCheck[i]] = keyID
-			}
-			firstID := ht.headID[ht.toCheck[i]]
-
-			if !ht.visited[keyID] {
-				// We can then add this keyID into the same array at the end of the
-				// corresponding linked list and mark this ID as visited. Since there
-				// can be multiple keys that match this probe key, we want to mark
-				// differs at this position to be true. This way, the prober will
-				// continue probing for this key until it reaches the end of the next
-				// chain.
-				ht.differs[ht.toCheck[i]] = true
-				ht.visited[keyID] = true
-
-				if firstID != keyID {
-					ht.same[keyID] = ht.same[firstID]
-					ht.same[firstID] = keyID
-				}
-			}
-		}
-
-		if ht.differs[ht.toCheck[i]] {
-			// Continue probing in this next chain for the probe key.
-			ht.differs[ht.toCheck[i]] = false
-			ht.toCheck[nDiffers] = ht.toCheck[i]
-			nDiffers++
-		}
-	}
-
-	return nDiffers
 }
 
 // distinctCheck determines if the current key in the groupID buckets matches the
