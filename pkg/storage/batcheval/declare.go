@@ -29,12 +29,7 @@ func DefaultDeclareKeys(
 	} else {
 		access = spanset.SpanReadWrite
 	}
-
-	if keys.IsLocal(req.Header().Span().Key) {
-		spans.AddNonMVCC(access, req.Header().Span())
-	} else {
-		spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
-	}
+	spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
 }
 
 // DeclareKeysForBatch adds all keys that the batch with the provided header

@@ -59,8 +59,10 @@ func declareKeysEndTxn(
 ) {
 	et := req.(*roachpb.EndTxnRequest)
 	declareKeysWriteTransaction(desc, header, req, spans)
+	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
+		minTxnTS = header.Txn.MinTimestamp
 		abortSpanAccess := spanset.SpanReadOnly
 		if !et.Commit && et.Poison {
 			abortSpanAccess = spanset.SpanReadWrite
@@ -82,11 +84,7 @@ func declareKeysEndTxn(
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
 		for _, span := range et.IntentSpans {
-			if keys.IsLocal(span.Key) {
-				spans.AddNonMVCC(spanset.SpanReadWrite, span)
-			} else {
-				spans.AddMVCC(spanset.SpanReadWrite, span, header.Timestamp)
-			}
+			spans.AddMVCC(spanset.SpanReadWrite, span, minTxnTS)
 		}
 
 		if et.InternalCommitTrigger != nil {
