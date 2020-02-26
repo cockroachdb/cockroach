@@ -17,7 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // IntPool manages allocating integer units of quota to clients.
@@ -189,6 +189,17 @@ type IntRequestFunc func(ctx context.Context, p PoolInfo) (took uint64, err erro
 // again once there's new resources.
 var ErrNotEnoughQuota = fmt.Errorf("not enough quota available")
 
+// HasErrClosed returns true if this error is or contains an ErrClosed error.
+func HasErrClosed(err error) bool {
+	_, hasErrClosed := errors.If(err, func(err error) (unwrapped interface{}, ok bool) {
+		if _, hasErrClosed := err.(*ErrClosed); hasErrClosed {
+			return err, hasErrClosed
+		}
+		return nil, false
+	})
+	return hasErrClosed
+}
+
 // PoolInfo represents the information that the IntRequestFunc gets about the current quota pool conditions.
 type PoolInfo struct {
 	// Available is the amount of quota available to be consumed. This is the
@@ -262,6 +273,22 @@ func (p *IntPool) ApproximateQuota() (q uint64) {
 // Safe for concurrent use.
 func (p *IntPool) Close(reason string) {
 	p.qp.Close(reason)
+}
+
+// IntPoolCloser implements stop.Closer.
+type IntPoolCloser struct {
+	reason string
+	p      *IntPool
+}
+
+// Close makes the IntPoolCloser a stop.Closer.
+func (ipc IntPoolCloser) Close() {
+	ipc.p.Close(ipc.reason)
+}
+
+// Closer returns a struct which implements stop.Closer.
+func (p *IntPool) Closer(reason string) IntPoolCloser {
+	return IntPoolCloser{p: p, reason: reason}
 }
 
 var intAllocSyncPool = sync.Pool{

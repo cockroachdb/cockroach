@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -988,7 +989,8 @@ func (s *Store) SetDraining(drain bool) {
 	ctx := logtags.AddTag(context.Background(), "drain", nil)
 	transferAllAway := func() int {
 		// Limit the number of concurrent lease transfers.
-		sem := make(chan struct{}, 100)
+		const leaseTransferConcurrency = 100
+		sem := quotapool.NewIntPool("Store.SetDraining", leaseTransferConcurrency)
 		// Incremented for every lease or Raft leadership transfer attempted. We try
 		// to send both the lease and the Raft leaders away, but this may not
 		// reliably work. Instead, we run the surrounding retry loop until there are

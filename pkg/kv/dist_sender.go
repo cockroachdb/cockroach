@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -190,7 +191,7 @@ type DistSender struct {
 	rpcContext       *rpc.Context
 	nodeDialer       *nodedialer.Dialer
 	rpcRetryOptions  retry.Options
-	asyncSenderSem   chan struct{}
+	asyncSenderSem   *quotapool.IntPool
 	// clusterID is used to verify access to enterprise features.
 	// It is copied out of the rpcContext at construction time and used in
 	// testing.
@@ -282,7 +283,8 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	}
 	ds.clusterID = &cfg.RPCContext.ClusterID
 	ds.nodeDialer = cfg.NodeDialer
-	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
+	ds.asyncSenderSem = quotapool.NewIntPool("dist sender concurrency", defaultSenderConcurrency)
+	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
 	ds.rangeIteratorGen = func() *RangeIterator { return NewRangeIterator(ds) }
 
 	if g != nil {
@@ -1273,6 +1275,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 	batchIdx int,
 	responseCh chan response,
 ) bool {
+
 	if err := ds.rpcContext.Stopper.RunLimitedAsyncTask(
 		ctx, "kv.DistSender: sending partial batch",
 		ds.asyncSenderSem, false, /* wait */
