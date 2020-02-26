@@ -272,8 +272,8 @@ func NewNode(
 		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores: storage.NewStores(
 			cfg.AmbientCtx, cfg.Clock,
-			cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
-			cluster.Version.BinaryVersion(cfg.Settings)),
+			cfg.Settings.Version.BinaryVersion(),
+			cfg.Settings.Version.BinaryMinSupportedVersion()),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -347,7 +347,7 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := cluster.Version.Initialize(ctx, cv.Version, n.storeCfg.Settings); err != nil {
+	if err := clusterversion.Initialize(ctx, cv.Version, &n.storeCfg.Settings.SV); err != nil {
 		return err
 	}
 
@@ -392,7 +392,7 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   cluster.Version.BinaryVersion(n.storeCfg.Settings),
+		ServerVersion:   n.storeCfg.Settings.Version.BinaryVersion(),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 	}
@@ -494,10 +494,10 @@ func (n *Node) start(
 	// It's important that we persist new versions to the engines before the node
 	// starts using it, otherwise the node might regress the version after a
 	// crash.
-	cluster.Version.SetBeforeChange(ctx, n.storeCfg.Settings, n.onClusterVersionChange)
+	clusterversion.SetBeforeChange(ctx, &n.storeCfg.Settings.SV, n.onClusterVersionChange)
 	// Invoke the callback manually once so that we persist the updated value that
 	// gossip might have already received.
-	clusterVersion := cluster.Version.ActiveVersion(ctx, n.storeCfg.Settings)
+	clusterVersion := n.storeCfg.Settings.Version.ActiveVersion(ctx)
 	n.onClusterVersionChange(ctx, clusterVersion)
 
 	// Be careful about moving this line above `startStores`; store migrations rely
@@ -581,13 +581,13 @@ func (n *Node) bootstrapStores(
 
 	// There's a bit of an awkward dance around cluster versions here. If this node
 	// is joining an existing cluster for the first time, it doesn't have any engines
-	// set up yet, and cv below will be the MinSupportedVersion. At the same time,
-	// the Gossip update which notifies us about the real cluster version won't
-	// persist it to any engines (because we haven't installed the gossip update
-	// handler yet and also because none of the stores are bootstrapped). So we
-	// just accept that we won't use the correct version here, but
-	// post-bootstrapping will invoke the callback manually, which will
-	// disseminate the correct version to all engines.
+	// set up yet, and cv below will be the binary's minimum supported version.
+	// At the same time, the Gossip update which notifies us about the real
+	// cluster version won't persist it to any engines (because we haven't
+	// installed the gossip update handler yet and also because none of the
+	// stores are bootstrapped). So we just accept that we won't use the correct
+	// version here, but post-bootstrapping will invoke the callback manually,
+	// which will disseminate the correct version to all engines.
 	cv, err := n.stores.SynthesizeClusterVersion(ctx)
 	if err != nil {
 		return errors.Errorf("error retrieving cluster version for bootstrap: %s", err)

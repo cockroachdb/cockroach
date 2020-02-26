@@ -269,7 +269,7 @@ func newTestServer(
 	if useHeartbeat {
 		hb = &heartbeatService{
 			clock:         clock,
-			serverVersion: clusterversion.BinaryServerVersion,
+			serverVersion: clusterversion.TestingBinaryVersion,
 		}
 		rpc.RegisterHeartbeatServer(s, hb)
 	}

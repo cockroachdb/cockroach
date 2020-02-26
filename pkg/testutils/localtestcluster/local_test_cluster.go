@@ -122,7 +122,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		engine.DefaultStorageEngine, roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 
-	ltc.Stores = storage.NewStores(ambient, ltc.Clock, clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
+	ltc.Stores = storage.NewStores(ambient, ltc.Clock, clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion)
 
 	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
 	if ltc.DBContext == nil {
@@ -172,8 +172,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ctx := context.TODO()
 
 	if err := storage.InitEngine(
-		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
-		clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion},
+		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, clusterversion.TestingClusterVersion,
 	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
@@ -184,7 +183,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	if !ltc.DontCreateSystemRanges {
 		schema := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig)
 		var tableSplits []roachpb.RKey
-		bootstrapVersion := clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion}
+		bootstrapVersion := clusterversion.TestingClusterVersion
 		initialValues, tableSplits = schema.GetInitialValues(bootstrapVersion)
 		splits = append(config.StaticSplits(), tableSplits...)
 		sort.Slice(splits, func(i, j int) bool {
@@ -196,7 +195,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		ctx,
 		ltc.Eng,
 		initialValues,
-		clusterversion.BinaryServerVersion,
+		clusterversion.TestingBinaryVersion,
 		1, /* numStores */
 		splits,
 		ltc.Clock.PhysicalNow(),

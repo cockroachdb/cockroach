@@ -32,7 +32,10 @@ import (
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
 func InitEngine(
-	ctx context.Context, eng engine.Engine, ident roachpb.StoreIdent, cv clusterversion.ClusterVersion,
+	ctx context.Context,
+	eng engine.Engine,
+	ident roachpb.StoreIdent,
+	cv clusterversion.ClusterVersion,
 ) error {
 	exIdent, err := ReadStoreIdent(ctx, eng)
 	if err == nil {
