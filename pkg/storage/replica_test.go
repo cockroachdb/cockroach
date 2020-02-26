@@ -4304,7 +4304,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			if pErr := tc.store.intentResolver.ResolveIntents(context.TODO(),
 				[]roachpb.LockUpdate{
 					roachpb.MakeLockUpdate(&txnRecord, roachpb.Span{Key: key}),
-				}, intentresolver.ResolveOptions{Wait: true, Poison: true}); pErr != nil {
+				}, intentresolver.ResolveOptions{Poison: true}); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
@@ -4974,44 +4974,6 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 	if !testutils.IsPError(pErr, "could not commit in one phase as requested") {
 		t.Fatalf("expected requires 1PC error; fgot %v", pErr)
 	}
-}
-
-func TestReplicaResolveIntentNoWait(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var seen int32
-	key := roachpb.Key("zresolveme")
-	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
-				filterArgs.Req.Header().Key.Equal(key) {
-				atomic.StoreInt32(&seen, 1)
-			}
-			return nil
-		}
-
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.StartWithStoreConfig(t, stopper, tsc)
-	splitKey := roachpb.RKey("aa")
-	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
-	txn := newTransaction("name", key, 1, tc.Clock())
-	txn.Status = roachpb.COMMITTED
-	if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
-		[]roachpb.LockUpdate{
-			roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
-		},
-		intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */},
-	); pErr != nil {
-		t.Fatal(pErr)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		if atomic.LoadInt32(&seen) > 0 {
-			return nil
-		}
-		return fmt.Errorf("no intent resolution on %q so far", key)
-	})
 }
 
 // TestAbortSpanPoisonOnResolve verifies that when an intent is
