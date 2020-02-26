@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
+	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -28,7 +30,7 @@ import (
 )
 
 // logSlowAcquisition is an Option to log slow acquisitions.
-var logSlowAcquisition = quotapool.OnSlowAcquisition(base.SlowRequestThreshold, quotapool.LogSlowAcquisition)
+var logSlowAcquisition = quotapool.OnSlowAcquisition(2*time.Second, quotapool.LogSlowAcquisition)
 
 // TestQuotaPoolBasic tests the minimal expected behavior of the quota pool
 // with different sized quota pool and a varying number of goroutines, each
@@ -637,4 +639,150 @@ func TestIntpoolWithExcessCapacity(t *testing.T) {
 			quotapool.NewIntPool("test", c)
 		})
 	}
+}
+
+// TestUpdateCapacityFluctuationsPermitExcessAllocs exercises the case where the
+// capacity of the IntPool fluctuates. We want to ensure that the amount of
+// outstanding quota never exceeds the largest capacity available during the
+// time when any of the outstanding allocations were acquired.
+func TestUpdateCapacityFluctuationsPreventsExcessAllocs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	qp := quotapool.NewIntPool("test", 1)
+	var allocs []*quotapool.IntAlloc
+	allocCh := make(chan *quotapool.IntAlloc)
+	defer close(allocCh)
+	go func() {
+		for a := range allocCh {
+			if a == nil {
+				continue // allow nil channel sends to synchronize
+			}
+			allocs = append(allocs, a)
+		}
+	}()
+	acquireN := func(n int) {
+		var wg sync.WaitGroup
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				alloc, err := qp.Acquire(ctx, 1)
+				assert.NoError(t, err)
+				allocCh <- alloc
+			}()
+		}
+		wg.Wait()
+	}
+
+	acquireN(1)
+	qp.UpdateCapacity(100)
+	acquireN(99)
+	require.Equal(t, uint64(0), qp.ApproximateQuota())
+	qp.UpdateCapacity(1)
+	// Internally the representation of the quota should be -99 but we don't
+	// expose negative quota to users.
+	require.Equal(t, uint64(0), qp.ApproximateQuota())
+
+	// Update the capacity so now there's actually 0.
+	qp.UpdateCapacity(100)
+	require.Equal(t, uint64(0), qp.ApproximateQuota())
+	_, err := qp.TryAcquire(ctx, 1)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+
+	// Now update the capacity so that there's 1.
+	qp.UpdateCapacity(101)
+	require.Equal(t, uint64(1), qp.ApproximateQuota())
+	_, err = qp.TryAcquire(ctx, 2)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	acquireN(1)
+	allocCh <- nil // synchronize
+	// Release all of the quota back to the pool.
+	for _, a := range allocs {
+		a.Release()
+	}
+	allocs = nil
+	require.Equal(t, uint64(101), qp.ApproximateQuota())
+}
+
+func TestQuotaPoolUpdateCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	ch := make(chan *quotapool.IntAlloc, 1)
+	qp := quotapool.NewIntPool("test", 1)
+	alloc, err := qp.Acquire(ctx, 1)
+	require.NoError(t, err)
+	go func() {
+		blocked, err := qp.Acquire(ctx, 2)
+		assert.NoError(t, err)
+		ch <- blocked
+	}()
+	ensureBlocked := func() {
+		t.Helper()
+		select {
+		case <-time.After(10 * time.Millisecond): // ensure the acquisition fails for now
+		case got := <-ch:
+			got.Release()
+			t.Fatal("expected acquisition to fail")
+		}
+	}
+	ensureBlocked()
+	// Update the capacity to 2, the request should still be blocked.
+	qp.UpdateCapacity(2)
+	ensureBlocked()
+	qp.UpdateCapacity(3)
+	got := <-ch
+	require.Equal(t, uint64(2), got.Acquired())
+	require.Equal(t, uint64(3), qp.Capacity())
+	alloc.Release()
+	require.Equal(t, uint64(1), qp.ApproximateQuota())
+}
+
+func TestConcurrentUpdatesAndAcquisitions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	const maxCap = 100
+	qp := quotapool.NewIntPool("test", maxCap, logSlowAcquisition)
+	const N = 100
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			newCap := uint64(rand.Intn(maxCap-1)) + 1
+			qp.UpdateCapacity(newCap)
+		}()
+	}
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			acq, err := qp.Acquire(ctx, uint64(rand.Intn(maxCap)))
+			assert.NoError(t, err)
+			runtime.Gosched()
+			acq.Release()
+		}()
+	}
+	wg.Wait()
+	qp.UpdateCapacity(maxCap)
+	assert.Equal(t, uint64(maxCap), qp.ApproximateQuota())
+}
+
+// This test ensures that if you attempt to freeze an alloc which would make
+// the IntPool have negative capacity a panic occurs.
+func TestFreezeUnavailableCapacityPanics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	qp := quotapool.NewIntPool("test", 10)
+	acq, err := qp.Acquire(ctx, 10)
+	require.NoError(t, err)
+	qp.UpdateCapacity(9)
+	require.Panics(t, func() {
+		acq.Freeze()
+	})
 }
