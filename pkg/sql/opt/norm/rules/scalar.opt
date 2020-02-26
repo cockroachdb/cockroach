@@ -232,8 +232,8 @@
 [InlineAnyValuesMultiCol, Normalize]
 (Any
     (Project
-        $values:(Values)
-        [ (ProjectionsItem $tuple:(Tuple)) ] & (IsTupleOfVars $tuple (ValuesCols $values))
+        $values:(Values * $valuesPrivate:*)
+        [ (ProjectionsItem $tuple:(Tuple)) ] & (IsTupleOfVars $tuple (ValuesCols $valuesPrivate))
         $passthrough:* & (ColsAreEmpty $passthrough)
     )
     $scalar:*

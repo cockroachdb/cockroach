@@ -48,6 +48,16 @@ CREATE TABLE s (
 )
 ----
 
+exec-ddl
+CREATE TABLE nullablecols (
+    c1 INT,
+    c2 INT,
+    c3 INT,
+    UNIQUE (c1),
+    UNIQUE (c2,c3)
+)
+----
+
 # --------------------------------------------------
 # ConvertGroupByToDistinct
 # --------------------------------------------------
@@ -255,6 +265,68 @@ distinct-on
       └── first-agg [as=s:14, outer=(14)]
            └── s:14
 
+# UpsertDistinctOn case.
+norm expect=EliminateGroupByProject
+INSERT INTO nullablecols (rowid, c1, c2, c3)
+SELECT i, i, i, i FROM (SELECT * FROM a WHERE EXISTS(SELECT * FROM a) AND k>0)
+ON CONFLICT (c1) DO UPDATE SET c3=1
+----
+upsert nullablecols
+ ├── columns: <none>
+ ├── canary column: 18
+ ├── fetch columns: c1:15 c2:16 c3:17 rowid:18
+ ├── insert-mapping:
+ │    ├── i:6 => c1:1
+ │    ├── i:6 => c2:2
+ │    ├── i:6 => c3:3
+ │    └── i:6 => rowid:4
+ ├── update-mapping:
+ │    └── upsert_c3:22 => c3:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_c3:22!null i:6!null c1:15 c2:16 c3:17 rowid:18
+      ├── key: (6,18)
+      ├── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18), (6,18)-->(22)
+      ├── left-join (hash)
+      │    ├── columns: i:6!null c1:15 c2:16 c3:17 rowid:18
+      │    ├── key: (6,18)
+      │    ├── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: i:6!null
+      │    │    ├── grouping columns: i:6!null
+      │    │    ├── key: (6)
+      │    │    └── select
+      │    │         ├── columns: k:5!null i:6!null
+      │    │         ├── key: (5)
+      │    │         ├── fd: (5)-->(6)
+      │    │         ├── scan a
+      │    │         │    ├── columns: k:5!null i:6!null
+      │    │         │    ├── key: (5)
+      │    │         │    └── fd: (5)-->(6)
+      │    │         └── filters
+      │    │              ├── exists [subquery]
+      │    │              │    └── limit
+      │    │              │         ├── columns: k:10!null i:11!null f:12 s:13!null j:14
+      │    │              │         ├── cardinality: [0 - 1]
+      │    │              │         ├── key: ()
+      │    │              │         ├── fd: ()-->(10-14)
+      │    │              │         ├── scan a
+      │    │              │         │    ├── columns: k:10!null i:11!null f:12 s:13!null j:14
+      │    │              │         │    ├── key: (10)
+      │    │              │         │    ├── fd: (10)-->(11-14), (11,13)-->(10,12,14), (11,12)~~>(10,13,14)
+      │    │              │         │    └── limit hint: 1.00
+      │    │              │         └── 1
+      │    │              └── k:5 > 0 [outer=(5), constraints=(/5: [/1 - ]; tight)]
+      │    ├── scan nullablecols
+      │    │    ├── columns: c1:15 c2:16 c3:17 rowid:18!null
+      │    │    ├── key: (18)
+      │    │    └── fd: (18)-->(15-17), (15)~~>(16-18), (16,17)~~>(15,18)
+      │    └── filters
+      │         └── i:6 = c1:15 [outer=(6,15), constraints=(/6: (/NULL - ]; /15: (/NULL - ]), fd=(6)==(15), (15)==(6)]
+      └── projections
+           └── CASE WHEN rowid:18 IS NULL THEN i:6 ELSE 1 END [as=upsert_c3:22, outer=(6,18)]
+
 # Don't eliminate project if it computes extra column(s).
 norm expect-not=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
@@ -400,6 +472,220 @@ distinct-on
       │    └── x:6
       └── const-agg [as=f:3, outer=(3)]
            └── f:3
+
+# --------------------------------------------------
+# ReduceNotNullGroupingCols
+# --------------------------------------------------
+
+# UpsertDistinctOn should reduce non-nullable constant grouping column.
+norm expect=ReduceNotNullGroupingCols
+INSERT INTO xy (x)
+SELECT y FROM xy WHERE y=0
+ON CONFLICT (x) DO UPDATE SET y=1
+----
+upsert xy
+ ├── columns: <none>
+ ├── canary column: 6
+ ├── fetch columns: x:6 y:7
+ ├── insert-mapping:
+ │    ├── y:4 => x:1
+ │    └── column5:5 => y:2
+ ├── update-mapping:
+ │    └── upsert_y:10 => y:2
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_y:10 y:4!null column5:5 x:6 y:7
+      ├── key: (6)
+      ├── fd: ()-->(4,5), (6)-->(7), (6)-->(10)
+      ├── left-join (hash)
+      │    ├── columns: y:4!null column5:5 x:6 y:7
+      │    ├── key: (6)
+      │    ├── fd: ()-->(4,5), (6)-->(7)
+      │    ├── max1-row
+      │    │    ├── columns: y:4!null column5:5
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(4,5)
+      │    │    └── project
+      │    │         ├── columns: column5:5 y:4!null
+      │    │         ├── fd: ()-->(4,5)
+      │    │         ├── select
+      │    │         │    ├── columns: y:4!null
+      │    │         │    ├── fd: ()-->(4)
+      │    │         │    ├── scan xy
+      │    │         │    │    └── columns: y:4
+      │    │         │    └── filters
+      │    │         │         └── y:4 = 0 [outer=(4), constraints=(/4: [/0 - /0]; tight), fd=()-->(4)]
+      │    │         └── projections
+      │    │              └── CAST(NULL AS INT8) [as=column5:5]
+      │    ├── scan xy
+      │    │    ├── columns: x:6!null y:7
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    └── filters
+      │         └── y:4 = x:6 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      └── projections
+           └── CASE WHEN x:6 IS NULL THEN column5:5 ELSE 1 END [as=upsert_y:10, outer=(5,6)]
+
+# UpsertDistinctOn should not reduce nullable constant grouping column.
+norm expect-not=ReduceNotNullGroupingCols
+INSERT INTO xy (x)
+SELECT y FROM xy WHERE y IS NULL
+ON CONFLICT (x) DO UPDATE SET y=1
+----
+upsert xy
+ ├── columns: <none>
+ ├── canary column: 6
+ ├── fetch columns: x:6 y:7
+ ├── insert-mapping:
+ │    ├── y:4 => x:1
+ │    └── column5:5 => y:2
+ ├── update-mapping:
+ │    └── upsert_y:10 => y:2
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_y:10 y:4 column5:5 x:6 y:7
+      ├── lax-key: (4,6)
+      ├── fd: ()-->(4,5), (6)-->(7), (6)-->(10)
+      ├── left-join (hash)
+      │    ├── columns: y:4 column5:5 x:6 y:7
+      │    ├── lax-key: (4,6)
+      │    ├── fd: ()-->(4,5), (6)-->(7)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: y:4 column5:5
+      │    │    ├── grouping columns: y:4
+      │    │    ├── lax-key: (4)
+      │    │    ├── fd: ()-->(4,5)
+      │    │    ├── project
+      │    │    │    ├── columns: column5:5 y:4
+      │    │    │    ├── fd: ()-->(4,5)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: y:4
+      │    │    │    │    ├── fd: ()-->(4)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    └── columns: y:4
+      │    │    │    │    └── filters
+      │    │    │    │         └── y:4 IS NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
+      │    │    │    └── projections
+      │    │    │         └── CAST(NULL AS INT8) [as=column5:5]
+      │    │    └── aggregations
+      │    │         └── first-agg [as=column5:5, outer=(5)]
+      │    │              └── column5:5
+      │    ├── scan xy
+      │    │    ├── columns: x:6!null y:7
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    └── filters
+      │         └── y:4 = x:6 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      └── projections
+           └── CASE WHEN x:6 IS NULL THEN column5:5 ELSE 1 END [as=upsert_y:10, outer=(5,6)]
+
+# Test removal of 2/3 grouping columns.
+norm expect=ReduceNotNullGroupingCols
+INSERT INTO abc (a, b, c)
+SELECT 1, b, 2 FROM abc
+ON CONFLICT (a, b, c) DO UPDATE SET a=1
+----
+upsert abc
+ ├── columns: <none>
+ ├── canary column: 9
+ ├── fetch columns: a:9 b:10 c:11
+ ├── insert-mapping:
+ │    ├── "?column?":7 => a:1
+ │    ├── b:5 => b:2
+ │    └── "?column?":8 => c:3
+ ├── update-mapping:
+ │    └── "?column?":7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── left-join (hash)
+      ├── columns: b:5!null "?column?":7!null "?column?":8!null a:9 b:10 c:11
+      ├── key: (5,9-11)
+      ├── fd: ()-->(7,8)
+      ├── upsert-distinct-on
+      │    ├── columns: b:5!null "?column?":7!null "?column?":8!null
+      │    ├── grouping columns: b:5!null
+      │    ├── key: (5)
+      │    ├── fd: ()-->(7,8)
+      │    ├── project
+      │    │    ├── columns: "?column?":7!null "?column?":8!null b:5!null
+      │    │    ├── fd: ()-->(7,8)
+      │    │    ├── scan abc
+      │    │    │    └── columns: b:5!null
+      │    │    └── projections
+      │    │         ├── 1 [as="?column?":7]
+      │    │         └── 2 [as="?column?":8]
+      │    └── aggregations
+      │         ├── const-agg [as="?column?":7, outer=(7)]
+      │         │    └── "?column?":7
+      │         └── const-agg [as="?column?":8, outer=(8)]
+      │              └── "?column?":8
+      ├── scan abc
+      │    ├── columns: a:9!null b:10!null c:11!null
+      │    └── key: (9-11)
+      └── filters
+           ├── "?column?":7 = a:9 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+           ├── b:5 = b:10 [outer=(5,10), constraints=(/5: (/NULL - ]; /10: (/NULL - ]), fd=(5)==(10), (10)==(5)]
+           └── "?column?":8 = c:11 [outer=(8,11), constraints=(/8: (/NULL - ]; /11: (/NULL - ]), fd=(8)==(11), (11)==(8)]
+
+# Test removal of not-null column, but not nullable column.
+norm expect=ReduceNotNullGroupingCols
+INSERT INTO abc
+SELECT NULL, b, c FROM abc WHERE b=1
+ON CONFLICT (a, b, c) DO UPDATE SET c=2
+----
+upsert abc
+ ├── columns: <none>
+ ├── canary column: 8
+ ├── fetch columns: a:8 b:9 c:10
+ ├── insert-mapping:
+ │    ├── "?column?":7 => a:1
+ │    ├── b:5 => b:2
+ │    └── c:6 => c:3
+ ├── update-mapping:
+ │    └── upsert_c:14 => c:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_c:14!null b:5!null c:6!null "?column?":7 a:8 b:9 c:10
+      ├── lax-key: (6-10)
+      ├── fd: ()-->(5,7), (6,8)-->(14)
+      ├── left-join (hash)
+      │    ├── columns: b:5!null c:6!null "?column?":7 a:8 b:9 c:10
+      │    ├── lax-key: (6-10)
+      │    ├── fd: ()-->(5,7)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: b:5!null c:6!null "?column?":7
+      │    │    ├── grouping columns: c:6!null "?column?":7
+      │    │    ├── lax-key: (6,7)
+      │    │    ├── fd: ()-->(5,7)
+      │    │    ├── project
+      │    │    │    ├── columns: "?column?":7 b:5!null c:6!null
+      │    │    │    ├── fd: ()-->(5,7)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: b:5!null c:6!null
+      │    │    │    │    ├── fd: ()-->(5)
+      │    │    │    │    ├── scan abc
+      │    │    │    │    │    └── columns: b:5!null c:6!null
+      │    │    │    │    └── filters
+      │    │    │    │         └── b:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      │    │    │    └── projections
+      │    │    │         └── CAST(NULL AS INT8) [as="?column?":7]
+      │    │    └── aggregations
+      │    │         └── const-agg [as=b:5, outer=(5)]
+      │    │              └── b:5
+      │    ├── scan abc
+      │    │    ├── columns: a:8!null b:9!null c:10!null
+      │    │    └── key: (8-10)
+      │    └── filters
+      │         ├── "?column?":7 = a:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
+      │         ├── b:5 = b:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+      │         └── c:6 = c:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
+      └── projections
+           └── CASE WHEN a:8 IS NULL THEN c:6 ELSE 2 END [as=upsert_c:14, outer=(6,8)]
 
 # --------------------------------------------------
 # EliminateAggDistinctForKeys
@@ -809,3 +1095,381 @@ limit
  │         └── filters
  │              └── b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── 1
+
+# --------------------------------------------------
+# EliminateUpsertDistinctOnNoColumns
+# --------------------------------------------------
+norm expect=EliminateUpsertDistinctOnNoColumns
+INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
+ON CONFLICT (s, i) DO UPDATE SET f=1.1
+----
+upsert a
+ ├── columns: <none>
+ ├── canary column: 15
+ ├── fetch columns: k:15 i:16 f:17 s:18 j:19
+ ├── insert-mapping:
+ │    ├── "?column?":11 => k:1
+ │    ├── i:7 => i:2
+ │    ├── column13:13 => f:3
+ │    ├── "?column?":12 => s:4
+ │    └── column14:14 => j:5
+ ├── update-mapping:
+ │    └── upsert_f:23 => f:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_f:23 i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 k:15 i:16 f:17 s:18 j:19
+      ├── key: (15)
+      ├── fd: ()-->(7,11-14), (15)-->(16-19,23), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      ├── left-join (hash)
+      │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 k:15 i:16 f:17 s:18 j:19
+      │    ├── key: (15)
+      │    ├── fd: ()-->(7,11-14), (15)-->(16-19), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      │    ├── max1-row
+      │    │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,11-14)
+      │    │    └── project
+      │    │         ├── columns: column13:13 column14:14 "?column?":11!null "?column?":12!null i:7!null
+      │    │         ├── fd: ()-->(7,11-14)
+      │    │         ├── select
+      │    │         │    ├── columns: i:7!null
+      │    │         │    ├── fd: ()-->(7)
+      │    │         │    ├── scan a
+      │    │         │    │    └── columns: i:7!null
+      │    │         │    └── filters
+      │    │         │         └── i:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │    │         └── projections
+      │    │              ├── CAST(NULL AS FLOAT8) [as=column13:13]
+      │    │              ├── CAST(NULL AS JSONB) [as=column14:14]
+      │    │              ├── 1 [as="?column?":11]
+      │    │              └── 'foo' [as="?column?":12]
+      │    ├── scan a
+      │    │    ├── columns: k:15!null i:16!null f:17 s:18!null j:19
+      │    │    ├── key: (15)
+      │    │    └── fd: (15)-->(16-19), (16,18)-->(15,17,19), (16,17)~~>(15,18,19)
+      │    └── filters
+      │         ├── i:7 = i:16 [outer=(7,16), constraints=(/7: (/NULL - ]; /16: (/NULL - ]), fd=(7)==(16), (16)==(7)]
+      │         └── "?column?":12 = s:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      └── projections
+           └── CASE WHEN k:15 IS NULL THEN column13:13 ELSE 1.1 END [as=upsert_f:23, outer=(13,15)]
+
+# --------------------------------------------------
+# EliminateDistinctOnValues
+# --------------------------------------------------
+
+# Eliminate DistinctOn when its immediate input is a Values operator.
+norm expect=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (1), (2)) t(x)
+----
+values
+ ├── columns: x:1!null
+ ├── cardinality: [2 - 2]
+ ├── (1,)
+ └── (2,)
+
+# Eliminate DistinctOn when Values operator is below Project, Select, and
+# LeftJoin operators.
+norm expect=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) *, x+1
+FROM (VALUES (1), (2)) t(x)
+LEFT JOIN (SELECT a FROM abc)
+ON a=x
+WHERE x IS NOT NULL
+----
+project
+ ├── columns: x:1!null a:2 "?column?":5!null
+ ├── cardinality: [2 - ]
+ ├── fd: (1)-->(5)
+ ├── left-join (hash)
+ │    ├── columns: column1:1!null a:2
+ │    ├── cardinality: [2 - ]
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1,)
+ │    │    └── (2,)
+ │    ├── scan abc
+ │    │    └── columns: a:2!null
+ │    └── filters
+ │         └── a:2 = column1:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ └── projections
+      └── column1:1 + 1 [as="?column?":5, outer=(1)]
+
+# Grouping columns are not passthrough Project columns.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (y) *
+FROM (SELECT x, x+1 AS y FROM (VALUES (1), (2)) t(x))
+----
+distinct-on
+ ├── columns: x:1!null y:2!null
+ ├── grouping columns: y:2!null
+ ├── cardinality: [1 - 2]
+ ├── key: (2)
+ ├── fd: (1)-->(2), (2)-->(1)
+ ├── project
+ │    ├── columns: y:2!null column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── fd: (1)-->(2)
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1,)
+ │    │    └── (2,)
+ │    └── projections
+ │         └── column1:1 + 1 [as=y:2, outer=(1)]
+ └── aggregations
+      └── first-agg [as=column1:1, outer=(1)]
+           └── column1:1
+
+# Grouping columns are on the right side of a LeftJoin.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) *
+FROM (SELECT k FROM a)
+LEFT JOIN (VALUES (1), (2)) t(x)
+ON k=x
+----
+distinct-on
+ ├── columns: k:1!null x:6
+ ├── grouping columns: column1:6
+ ├── key: (6)
+ ├── fd: (6)-->(1)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null column1:6
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    ├── values
+ │    │    ├── columns: column1:6!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1,)
+ │    │    └── (2,)
+ │    └── filters
+ │         └── k:1 = column1:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── aggregations
+      └── first-agg [as=k:1, outer=(1)]
+           └── k:1
+
+# DistinctOn with multiple grouping columns should be eliminated when there are
+# not duplicate rows.
+norm expect=EliminateDistinctOnValues
+SELECT DISTINCT ON (b, c) * FROM (VALUES (1, 1, 1, 1), (1, 2, 2, 1)) t(a, b, c, d)
+----
+values
+ ├── columns: a:1!null b:2!null c:3!null d:4!null
+ ├── cardinality: [2 - 2]
+ ├── (1, 1, 1, 1)
+ └── (1, 2, 2, 1)
+
+# Composite string type should be considered as not distinct.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES ('ä' COLLATE en), (e'a\u0308' COLLATE en)) t(x)
+----
+distinct-on
+ ├── columns: x:1!null
+ ├── grouping columns: column1:1!null
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1!null
+      ├── cardinality: [2 - 2]
+      ├── (e'\u00E4' COLLATE en,)
+      └── (e'a\u0308' COLLATE en,)
+
+# Composite decimal type should be considered as not distinct.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (1.0::decimal), (1.00::decimal)) t(x)
+----
+distinct-on
+ ├── columns: x:1!null
+ ├── grouping columns: column1:1!null
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1!null
+      ├── cardinality: [2 - 2]
+      ├── (1.0,)
+      └── (1.00,)
+
+# Non-constant value should be considered as not distinct.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (1), (unique_rowid())) t(x)
+----
+distinct-on
+ ├── columns: x:1
+ ├── grouping columns: column1:1
+ ├── cardinality: [1 - 2]
+ ├── side-effects
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1
+      ├── cardinality: [2 - 2]
+      ├── side-effects
+      ├── (1,)
+      └── (unique_rowid(),)
+
+# Tuple values are not handled.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES ((1, 2, 3)), ((1, 2, 3))) t(x)
+----
+distinct-on
+ ├── columns: x:1
+ ├── grouping columns: column1:1
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1
+      ├── cardinality: [2 - 2]
+      ├── ((1, 2, 3),)
+      └── ((1, 2, 3),)
+
+# DistinctOn should not be eliminated when there are duplicate rows.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (y, z) * FROM (VALUES (1, 1, 1), (2, 1, 1)) t(x, y, z)
+----
+distinct-on
+ ├── columns: x:1!null y:2!null z:3!null
+ ├── grouping columns: column2:2!null column3:3!null
+ ├── cardinality: [1 - 2]
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(1)
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null column3:3!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 1, 1)
+ │    └── (2, 1, 1)
+ └── aggregations
+      └── first-agg [as=column1:1, outer=(1)]
+           └── column1:1
+
+# DistinctOn treats NULL values as not distinct, so it can't be eliminated when
+# there are duplicate NULL values.
+norm expect-not=EliminateDistinctOnValues
+SELECT DISTINCT ON (x) * FROM (VALUES (NULL), (NULL)) t(x)
+----
+distinct-on
+ ├── columns: x:1
+ ├── grouping columns: column1:1
+ ├── cardinality: [1 - 2]
+ ├── key: (1)
+ └── values
+      ├── columns: column1:1
+      ├── cardinality: [2 - 2]
+      ├── (NULL,)
+      └── (NULL,)
+
+# UpsertDistinctOn treats NULL values as distinct, so it can be eliminated.
+norm expect=EliminateDistinctOnValues
+INSERT INTO a (k, s, i) VALUES (1, NULL, NULL), (1, NULL, NULL)
+ON CONFLICT (s, i) DO UPDATE SET f=1.0
+----
+upsert a
+ ├── columns: <none>
+ ├── canary column: 11
+ ├── fetch columns: k:11 i:12 f:13 s:14 j:15
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column3:8 => i:2
+ │    ├── column9:9 => f:3
+ │    ├── column2:7 => s:4
+ │    └── column10:10 => j:5
+ ├── update-mapping:
+ │    └── upsert_f:19 => f:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_f:19 column1:6!null column2:7 column3:8 column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
+      ├── cardinality: [2 - ]
+      ├── fd: ()-->(9,10), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      ├── left-join (hash)
+      │    ├── columns: column1:6!null column2:7 column3:8 column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
+      │    ├── cardinality: [2 - ]
+      │    ├── fd: ()-->(9,10), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    ├── project
+      │    │    ├── columns: column9:9 column10:10 column1:6!null column2:7 column3:8
+      │    │    ├── cardinality: [2 - 2]
+      │    │    ├── fd: ()-->(9,10)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7 column3:8
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── (1, NULL, NULL)
+      │    │    │    └── (1, NULL, NULL)
+      │    │    └── projections
+      │    │         ├── CAST(NULL AS FLOAT8) [as=column9:9]
+      │    │         └── CAST(NULL AS JSONB) [as=column10:10]
+      │    ├── scan a
+      │    │    ├── columns: k:11!null i:12!null f:13 s:14!null j:15
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    └── filters
+      │         ├── column3:8 = i:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+      │         └── column2:7 = s:14 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
+      └── projections
+           └── CASE WHEN k:11 IS NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]
+
+# UpsertDistinctOn is not removed when there are duplicates.
+norm expect-not=EliminateDistinctOnValues
+INSERT INTO a (k, s, i) VALUES (1, 'foo', 1), (2, 'bar', 2), (3, 'foo', 1)
+ON CONFLICT (s, i) DO UPDATE SET f=1.0
+----
+upsert a
+ ├── columns: <none>
+ ├── canary column: 11
+ ├── fetch columns: k:11 i:12 f:13 s:14 j:15
+ ├── insert-mapping:
+ │    ├── column1:6 => k:1
+ │    ├── column3:8 => i:2
+ │    ├── column9:9 => f:3
+ │    ├── column2:7 => s:4
+ │    └── column10:10 => j:5
+ ├── update-mapping:
+ │    └── upsert_f:19 => f:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: upsert_f:19 column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
+      ├── cardinality: [1 - ]
+      ├── key: (7,8,11)
+      ├── fd: ()-->(9,10), (7,8)-->(6), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15), (7,8,11)-->(19)
+      ├── left-join (hash)
+      │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:12 f:13 s:14 j:15
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (7,8,11)
+      │    ├── fd: ()-->(9,10), (7,8)-->(6), (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
+      │    │    ├── grouping columns: column2:7!null column3:8!null
+      │    │    ├── cardinality: [1 - 3]
+      │    │    ├── key: (7,8)
+      │    │    ├── fd: ()-->(9,10), (7,8)-->(6,9,10)
+      │    │    ├── project
+      │    │    │    ├── columns: column9:9 column10:10 column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── fd: ()-->(9,10)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    │    ├── (1, 'foo', 1)
+      │    │    │    │    ├── (2, 'bar', 2)
+      │    │    │    │    └── (3, 'foo', 1)
+      │    │    │    └── projections
+      │    │    │         ├── CAST(NULL AS FLOAT8) [as=column9:9]
+      │    │    │         └── CAST(NULL AS JSONB) [as=column10:10]
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column1:6, outer=(6)]
+      │    │         │    └── column1:6
+      │    │         ├── first-agg [as=column9:9, outer=(9)]
+      │    │         │    └── column9:9
+      │    │         └── first-agg [as=column10:10, outer=(10)]
+      │    │              └── column10:10
+      │    ├── scan a
+      │    │    ├── columns: k:11!null i:12!null f:13 s:14!null j:15
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(12-15), (12,14)-->(11,13,15), (12,13)~~>(11,14,15)
+      │    └── filters
+      │         ├── column3:8 = i:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
+      │         └── column2:7 = s:14 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
+      └── projections
+           └── CASE WHEN k:11 IS NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]

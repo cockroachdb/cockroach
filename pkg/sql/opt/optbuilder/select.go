@@ -952,7 +952,7 @@ func (b *Builder) buildSelectClause(
 		if projectionsScope.distinctOnCols.Empty() {
 			outScope.expr = b.constructDistinct(outScope)
 		} else {
-			outScope = b.buildDistinctOn(projectionsScope.distinctOnCols, outScope)
+			outScope = b.buildDistinctOn(projectionsScope.distinctOnCols, outScope, false /* forUpsert */)
 		}
 	}
 	return outScope

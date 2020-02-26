@@ -25,14 +25,22 @@ upsert child
  │    ├── columns: upsert_c:10 column1:4!null column2:5!null column6:6 child.c:7 child.p:8 i:9
  │    ├── left-join (hash)
  │    │    ├── columns: column1:4!null column2:5!null column6:6 child.c:7 child.p:8 i:9
- │    │    ├── project
- │    │    │    ├── columns: column6:6 column1:4!null column2:5!null
- │    │    │    ├── values
- │    │    │    │    ├── columns: column1:4!null column2:5!null
- │    │    │    │    ├── (100, 1)
- │    │    │    │    └── (200, 1)
- │    │    │    └── projections
- │    │    │         └── NULL::INT8 [as=column6:6]
+ │    │    ├── upsert-distinct-on
+ │    │    │    ├── columns: column1:4!null column2:5!null column6:6
+ │    │    │    ├── grouping columns: column1:4!null
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column6:6 column1:4!null column2:5!null
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:4!null column2:5!null
+ │    │    │    │    │    ├── (100, 1)
+ │    │    │    │    │    └── (200, 1)
+ │    │    │    │    └── projections
+ │    │    │    │         └── NULL::INT8 [as=column6:6]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=column2:5]
+ │    │    │         │    └── column2:5
+ │    │    │         └── first-agg [as=column6:6]
+ │    │    │              └── column6:6
  │    │    ├── scan child
  │    │    │    └── columns: child.c:7!null child.p:8!null i:9
  │    │    └── filters
@@ -87,14 +95,22 @@ upsert child
  │    ├── columns: upsert_c:11 xy.x:4 xy.y:5 column7:7 child.c:8 child.p:9 i:10
  │    ├── left-join (hash)
  │    │    ├── columns: xy.x:4 xy.y:5 column7:7 child.c:8 child.p:9 i:10
- │    │    ├── project
- │    │    │    ├── columns: column7:7 xy.x:4 xy.y:5
+ │    │    ├── upsert-distinct-on
+ │    │    │    ├── columns: xy.x:4 xy.y:5 column7:7
+ │    │    │    ├── grouping columns: xy.x:4
  │    │    │    ├── project
- │    │    │    │    ├── columns: xy.x:4 xy.y:5
- │    │    │    │    └── scan xy
- │    │    │    │         └── columns: xy.x:4 xy.y:5 rowid:6!null
- │    │    │    └── projections
- │    │    │         └── NULL::INT8 [as=column7:7]
+ │    │    │    │    ├── columns: column7:7 xy.x:4 xy.y:5
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: xy.x:4 xy.y:5
+ │    │    │    │    │    └── scan xy
+ │    │    │    │    │         └── columns: xy.x:4 xy.y:5 rowid:6!null
+ │    │    │    │    └── projections
+ │    │    │    │         └── NULL::INT8 [as=column7:7]
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=xy.y:5]
+ │    │    │         │    └── xy.y:5
+ │    │    │         └── first-agg [as=column7:7]
+ │    │    │              └── column7:7
  │    │    ├── scan child
  │    │    │    └── columns: child.c:8!null child.p:9!null i:10
  │    │    └── filters
@@ -150,14 +166,22 @@ upsert child
  │    │    ├── columns: column11:11 uv.u:4!null uv.v:5!null column7:7 child.c:8 child.p:9 i:10
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: uv.u:4!null uv.v:5!null column7:7 child.c:8 child.p:9 i:10
- │    │    │    ├── project
- │    │    │    │    ├── columns: column7:7 uv.u:4!null uv.v:5!null
+ │    │    │    ├── upsert-distinct-on
+ │    │    │    │    ├── columns: uv.u:4!null uv.v:5!null column7:7
+ │    │    │    │    ├── grouping columns: uv.u:4!null
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: uv.u:4!null uv.v:5!null
- │    │    │    │    │    └── scan uv
- │    │    │    │    │         └── columns: uv.u:4!null uv.v:5!null rowid:6!null
- │    │    │    │    └── projections
- │    │    │    │         └── NULL::INT8 [as=column7:7]
+ │    │    │    │    │    ├── columns: column7:7 uv.u:4!null uv.v:5!null
+ │    │    │    │    │    ├── project
+ │    │    │    │    │    │    ├── columns: uv.u:4!null uv.v:5!null
+ │    │    │    │    │    │    └── scan uv
+ │    │    │    │    │    │         └── columns: uv.u:4!null uv.v:5!null rowid:6!null
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── NULL::INT8 [as=column7:7]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=uv.v:5]
+ │    │    │    │         │    └── uv.v:5
+ │    │    │    │         └── first-agg [as=column7:7]
+ │    │    │    │              └── column7:7
  │    │    │    ├── scan child
  │    │    │    │    └── columns: child.c:8!null child.p:9!null i:10
  │    │    │    └── filters
@@ -218,10 +242,13 @@ upsert child2
  │    │    ├── columns: column4:4!null column1:2!null child2.c:3
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:2!null child2.c:3
- │    │    │    ├── values
+ │    │    │    ├── upsert-distinct-on
  │    │    │    │    ├── columns: column1:2!null
- │    │    │    │    ├── (1,)
- │    │    │    │    └── (2,)
+ │    │    │    │    ├── grouping columns: column1:2!null
+ │    │    │    │    └── values
+ │    │    │    │         ├── columns: column1:2!null
+ │    │    │    │         ├── (1,)
+ │    │    │    │         └── (2,)
  │    │    │    ├── scan child2
  │    │    │    │    └── columns: child2.c:3!null
  │    │    │    └── filters
@@ -337,9 +364,19 @@ upsert multi_col_child
  │    ├── columns: upsert_c:13 column1:5!null column2:6 column3:7 column4:8 multi_col_child.c:9 multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8 multi_col_child.c:9 multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8
- │    │    │    └── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    │    │    ├── grouping columns: column1:5!null
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8
+ │    │    │    │    └── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=column2:6]
+ │    │    │         │    └── column2:6
+ │    │    │         ├── first-agg [as=column3:7]
+ │    │    │         │    └── column3:7
+ │    │    │         └── first-agg [as=column4:8]
+ │    │    │              └── column4:8
  │    │    ├── scan multi_col_child
  │    │    │    └── columns: multi_col_child.c:9!null multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
  │    │    └── filters
@@ -401,10 +438,20 @@ upsert multi_col_child
  │    ├── columns: upsert_c:13 column1:5!null column2:6 column3:7 column4:8!null multi_col_child.c:9 multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8!null multi_col_child.c:9 multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8!null
- │    │    │    ├── (2, NULL::INT8, 20, 20)
- │    │    │    └── (3, 20, NULL::INT8, 20)
+ │    │    │    ├── grouping columns: column1:5!null
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8!null
+ │    │    │    │    ├── (2, NULL::INT8, 20, 20)
+ │    │    │    │    └── (3, 20, NULL::INT8, 20)
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=column2:6]
+ │    │    │         │    └── column2:6
+ │    │    │         ├── first-agg [as=column3:7]
+ │    │    │         │    └── column3:7
+ │    │    │         └── first-agg [as=column4:8]
+ │    │    │              └── column4:8
  │    │    ├── scan multi_col_child
  │    │    │    └── columns: multi_col_child.c:9!null multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
  │    │    └── filters
@@ -465,9 +512,19 @@ upsert multi_col_child
  │    ├── columns: upsert_c:13 column1:5!null column2:6!null column3:7!null column4:8!null multi_col_child.c:9 multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null multi_col_child.c:9 multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
- │    │    │    └── (1, 10, 10, 10)
+ │    │    │    ├── grouping columns: column1:5!null
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null column4:8!null
+ │    │    │    │    └── (1, 10, 10, 10)
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=column2:6]
+ │    │    │         │    └── column2:6
+ │    │    │         ├── first-agg [as=column3:7]
+ │    │    │         │    └── column3:7
+ │    │    │         └── first-agg [as=column4:8]
+ │    │    │              └── column4:8
  │    │    ├── scan multi_col_child
  │    │    │    └── columns: multi_col_child.c:9!null multi_col_child.p:10 multi_col_child.q:11 multi_col_child.r:12
  │    │    └── filters
@@ -541,9 +598,19 @@ upsert multi_ref_child
  │    ├── columns: upsert_k:13 column1:5!null column2:6 column3:7 column4:8 multi_ref_child.k:9 multi_ref_child.a:10 multi_ref_child.b:11 multi_ref_child.c:12
  │    ├── left-join (hash)
  │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8 multi_ref_child.k:9 multi_ref_child.a:10 multi_ref_child.b:11 multi_ref_child.c:12
- │    │    ├── values
+ │    │    ├── upsert-distinct-on
  │    │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8
- │    │    │    └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    │    │    ├── grouping columns: column1:5!null
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:5!null column2:6 column3:7 column4:8
+ │    │    │    │    └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=column2:6]
+ │    │    │         │    └── column2:6
+ │    │    │         ├── first-agg [as=column3:7]
+ │    │    │         │    └── column3:7
+ │    │    │         └── first-agg [as=column4:8]
+ │    │    │              └── column4:8
  │    │    ├── scan multi_ref_child
  │    │    │    └── columns: multi_ref_child.k:9!null multi_ref_child.a:10 multi_ref_child.b:11 multi_ref_child.c:12
  │    │    └── filters

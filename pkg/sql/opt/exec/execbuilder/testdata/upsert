@@ -87,33 +87,37 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                                        distributed            false
-·                                        vectorized             false
-count                                    ·                      ·
- └── upsert                              ·                      ·
-      │                                  into                   kv(k, v)
-      │                                  strategy               opt upserter
-      │                                  auto commit            ·
-      └── render                         ·                      ·
-           │                             render 0               k
-           │                             render 1               column5
-           │                             render 2               k
-           └── lookup-join               ·                      ·
-                │                        table                  kv@primary
-                │                        type                   inner
-                │                        equality               (k) = (k)
-                │                        equality cols are key  ·
-                │                        parallel               ·
-                └── render               ·                      ·
-                     │                   render 0               CAST(NULL AS INT8)
-                     │                   render 1               k
-                     └── limit           ·                      ·
-                          │              count                  2
-                          └── sort       ·                      ·
-                               │         order                  -v
-                               └── scan  ·                      ·
-·                                        table                  kv@primary
-·                                        spans                  ALL
+·                                             distributed            false
+·                                             vectorized             false
+count                                         ·                      ·
+ └── upsert                                   ·                      ·
+      │                                       into                   kv(k, v)
+      │                                       strategy               opt upserter
+      │                                       auto commit            ·
+      └── render                              ·                      ·
+           │                                  render 0               k
+           │                                  render 1               column5
+           │                                  render 2               k
+           └── lookup-join                    ·                      ·
+                │                             table                  kv@primary
+                │                             type                   inner
+                │                             equality               (k) = (k)
+                │                             equality cols are key  ·
+                │                             parallel               ·
+                └── distinct                  ·                      ·
+                     │                        distinct on            k
+                     │                        nulls are distinct     ·
+                     │                        error on dups          ·
+                     └── render               ·                      ·
+                          │                   render 0               CAST(NULL AS INT8)
+                          │                   render 1               k
+                          └── limit           ·                      ·
+                               │              count                  2
+                               └── sort       ·                      ·
+                                    │         order                  -v
+                                    └── scan  ·                      ·
+·                                             table                  kv@primary
+·                                             spans                  ALL
 
 # Use Upsert with indexed table, default columns, computed columns, and check
 # columns.
@@ -454,3 +458,112 @@ count                       ·                      ·                   ()     
 
 statement ok
 COMMIT
+
+# ------------------------------------------------------------------------------
+# Show UPSERT plans with Distinct execution operator.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE tdup (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+# Show unsorted upsert-distinct-on. Plan should not contain "order key".
+# Ensure this test stays synchronized to the test in logic_test/upsert.
+query TTTTT
+EXPLAIN (VERBOSE)
+INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
+----
+·                                     distributed            false                                        ·                                                  ·
+·                                     vectorized             false                                        ·                                                  ·
+count                                 ·                      ·                                            ()                                                 ·
+ └── upsert                           ·                      ·                                            ()                                                 ·
+      │                               into                   tdup(x, y, z)                                ·                                                  ·
+      │                               strategy               opt upserter                                 ·                                                  ·
+      │                               auto commit            ·                                            ·                                                  ·
+      └── render                      ·                      ·                                            (column1, column2, column3, x, y, z, upsert_z, x)  ·
+           │                          render 0               column1                                      ·                                                  ·
+           │                          render 1               column2                                      ·                                                  ·
+           │                          render 2               column3                                      ·                                                  ·
+           │                          render 3               x                                            ·                                                  ·
+           │                          render 4               y                                            ·                                                  ·
+           │                          render 5               z                                            ·                                                  ·
+           │                          render 6               upsert_z                                     ·                                                  ·
+           │                          render 7               x                                            ·                                                  ·
+           └── render                 ·                      ·                                            (upsert_z, column1, column2, column3, x, y, z)     ·
+                │                     render 0               CASE WHEN x IS NULL THEN column3 ELSE 1 END  ·                                                  ·
+                │                     render 1               column1                                      ·                                                  ·
+                │                     render 2               column2                                      ·                                                  ·
+                │                     render 3               column3                                      ·                                                  ·
+                │                     render 4               x                                            ·                                                  ·
+                │                     render 5               y                                            ·                                                  ·
+                │                     render 6               z                                            ·                                                  ·
+                └── lookup-join       ·                      ·                                            (column1, column2, column3, x, y, z)               ·
+                     │                table                  tdup@tdup_y_z_key                            ·                                                  ·
+                     │                type                   left outer                                   ·                                                  ·
+                     │                equality               (column2, column3) = (y, z)                  ·                                                  ·
+                     │                equality cols are key  ·                                            ·                                                  ·
+                     │                parallel               ·                                            ·                                                  ·
+                     └── distinct     ·                      ·                                            (column1, column2, column3)                        ·
+                          │           distinct on            column2, column3                             ·                                                  ·
+                          │           nulls are distinct     ·                                            ·                                                  ·
+                          │           error on dups          ·                                            ·                                                  ·
+                          └── values  ·                      ·                                            (column1, column2, column3)                        ·
+·                                     size                   3 columns, 2 rows                            ·                                                  ·
+·                                     row 0, expr 0          2                                            ·                                                  ·
+·                                     row 0, expr 1          2                                            ·                                                  ·
+·                                     row 0, expr 2          2                                            ·                                                  ·
+·                                     row 1, expr 0          3                                            ·                                                  ·
+·                                     row 1, expr 1          2                                            ·                                                  ·
+·                                     row 1, expr 2          2                                            ·                                                  ·
+
+statement ok
+CREATE TABLE target (a INT PRIMARY KEY, b INT, c INT, UNIQUE (b, c))
+
+statement ok
+CREATE TABLE source (x INT PRIMARY KEY, y INT, z INT, INDEX (y, z))
+
+# Show sorted upsert-distinct-on. "order key = y, z" should be set below.
+# Ensure this test stays synchronized to the test in logic_test/upsert.
+query TTTTT
+EXPLAIN (VERBOSE)
+INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
+ON CONFLICT (b, c) DO UPDATE SET b=5
+----
+·                                   distributed            false                                  ·                                ·
+·                                   vectorized             false                                  ·                                ·
+count                               ·                      ·                                      ()                               ·
+ └── upsert                         ·                      ·                                      ()                               ·
+      │                             into                   target(a, b, c)                        ·                                ·
+      │                             strategy               opt upserter                           ·                                ·
+      │                             auto commit            ·                                      ·                                ·
+      └── render                    ·                      ·                                      (x, y, z, a, b, c, upsert_b, a)  ·
+           │                        render 0               x                                      ·                                ·
+           │                        render 1               y                                      ·                                ·
+           │                        render 2               z                                      ·                                ·
+           │                        render 3               a                                      ·                                ·
+           │                        render 4               b                                      ·                                ·
+           │                        render 5               c                                      ·                                ·
+           │                        render 6               upsert_b                               ·                                ·
+           │                        render 7               a                                      ·                                ·
+           └── render               ·                      ·                                      (upsert_b, x, y, z, a, b, c)     ·
+                │                   render 0               CASE WHEN a IS NULL THEN y ELSE 5 END  ·                                ·
+                │                   render 1               x                                      ·                                ·
+                │                   render 2               y                                      ·                                ·
+                │                   render 3               z                                      ·                                ·
+                │                   render 4               a                                      ·                                ·
+                │                   render 5               b                                      ·                                ·
+                │                   render 6               c                                      ·                                ·
+                └── lookup-join     ·                      ·                                      (x, y, z, a, b, c)               ·
+                     │              table                  target@target_b_c_key                  ·                                ·
+                     │              type                   left outer                             ·                                ·
+                     │              equality               (y, z) = (b, c)                        ·                                ·
+                     │              equality cols are key  ·                                      ·                                ·
+                     │              parallel               ·                                      ·                                ·
+                     └── distinct   ·                      ·                                      (x, y, z)                        ·
+                          │         distinct on            y, z                                   ·                                ·
+                          │         nulls are distinct     ·                                      ·                                ·
+                          │         error on dups          ·                                      ·                                ·
+                          │         order key              y, z                                   ·                                ·
+                          └── scan  ·                      ·                                      (x, y, z)                        +y,+z
+·                                   table                  source@source_y_z_idx                  ·                                ·
+·                                   spans                  /NULL-/!NULL /1-                       ·                                ·
+·                                   filter                 ((y IS NULL) OR (y > 0)) AND (x != 1)  ·                                ·

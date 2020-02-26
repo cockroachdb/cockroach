@@ -506,8 +506,8 @@ define GroupBy {
 }
 
 # GroupingPrivate is shared between the grouping-related operators: GroupBy
-# ScalarGroupBy, and DistinctOn. This allows the operators to be treated
-# polymorphically.
+# ScalarGroupBy, DistinctOn, and UpsertDistinctOn. This allows the operators to
+# be treated polymorphically.
 [Private]
 define GroupingPrivate {
     # GroupingCols partitions the GroupBy input rows into aggregation groups.
@@ -585,6 +585,29 @@ define ScalarGroupBy {
 # ConstAgg.
 [Relational, Grouping, Telemetry]
 define DistinctOn {
+    Input        RelExpr
+    Aggregations AggregationsExpr
+
+    _ GroupingPrivate
+}
+
+# UpsertDistinctOn is a variation on DistinctOn that is only used with UPSERT
+# and INSERT..ON CONFLICT statements. It differs from DistinctOn in two ways:
+#
+#   1. Null behavior: UpsertDistinctOn treats NULL values as not equal to one
+#      another for purposes of grouping. Two rows having a NULL-valued grouping
+#      column will be placed in different groups. This differs from DistinctOn
+#      behavior, where the two rows would be grouped together. This behavior
+#      difference reflects SQL semantics, in which a unique index key still
+#      allows multiple NULL values.
+#
+#   2. Duplicate behavior: UpsertDistinctOn raises an error if any distinct
+#      grouping contains more than one row. It has "input must be distinct"
+#      semantics rather than "make the input distinct" semantics. This is used
+#      to ensure that no row will be updated more than once.
+#
+[Relational, Grouping, Telemetry]
+define UpsertDistinctOn {
     Input        RelExpr
     Aggregations AggregationsExpr
 

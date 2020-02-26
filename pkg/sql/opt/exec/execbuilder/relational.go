@@ -198,7 +198,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.GroupByExpr, *memo.ScalarGroupByExpr:
 		ep, err = b.buildGroupBy(e)
 
-	case *memo.DistinctOnExpr:
+	case *memo.DistinctOnExpr, *memo.UpsertDistinctOnExpr:
 		ep, err = b.buildDistinct(t)
 
 	case *memo.LimitExpr, *memo.OffsetExpr:
@@ -982,10 +982,12 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	return ep, nil
 }
 
-func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error) {
-	if distinct.GroupingCols.Empty() {
+func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
+	private := distinct.Private().(*memo.GroupingPrivate)
+
+	if private.GroupingCols.Empty() {
 		// A DistinctOn with no grouping columns should have been converted to a
-		// LIMIT 1 by normalization rules.
+		// LIMIT 1 or Max1Row by normalization rules.
 		return execPlan{}, fmt.Errorf("cannot execute distinct on no columns")
 	}
 	input, err := b.buildGroupByInput(distinct)
@@ -993,17 +995,28 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 		return execPlan{}, err
 	}
 
-	distinctCols := input.getColumnOrdinalSet(distinct.GroupingCols)
+	distinctCols := input.getColumnOrdinalSet(private.GroupingCols)
 	var orderedCols exec.ColumnOrdinalSet
 	ordering := ordering.StreamingGroupingColOrdering(
-		&distinct.GroupingPrivate, &distinct.RequiredPhysical().Ordering,
+		private, &distinct.RequiredPhysical().Ordering,
 	)
 	for i := range ordering {
 		orderedCols.Add(int(input.getColumnOrdinal(ordering[i].ID())))
 	}
 	ep := execPlan{outputCols: input.outputCols}
+
+	// If this is UpsertDistinctOn, then treat NULL values as distinct and raise
+	// an error if any distinct grouping has more than one row.
+	var nullsAreDistinct bool
+	var errorOnDup string
+	if distinct.Op() == opt.UpsertDistinctOnOp {
+		nullsAreDistinct = true
+		errorOnDup = sqlbase.DuplicateUpsertErrText
+	}
+
 	reqOrdering := ep.reqOrdering(distinct)
-	ep.root, err = b.factory.ConstructDistinct(input.root, distinctCols, orderedCols, reqOrdering)
+	ep.root, err = b.factory.ConstructDistinct(
+		input.root, distinctCols, orderedCols, reqOrdering, nullsAreDistinct, errorOnDup)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1404,7 +1417,6 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
-
 }
 
 func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {

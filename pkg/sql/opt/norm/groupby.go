@@ -14,45 +14,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// CanReduceGroupingCols is true if the given GroupBy operator has one or more
-// redundant grouping columns. A grouping column is redundant if it is
-// functionally determined by the other grouping columns.
-func (c *CustomFuncs) CanReduceGroupingCols(
-	input memo.RelExpr, private *memo.GroupingPrivate,
-) bool {
-	fdset := input.Relational().FuncDeps
-	return !fdset.ReduceCols(private.GroupingCols).Equals(private.GroupingCols)
+// NullsAreDistinct returns true if the given distinct operator treats NULL
+// values as not equal to one another (i.e. distinct). UpsertDistinctOp treats
+// NULL values as distinct, whereas DistinctOp does not.
+func (c *CustomFuncs) NullsAreDistinct(distinctOp opt.Operator) bool {
+	return distinctOp == opt.UpsertDistinctOnOp
 }
 
-// ReduceGroupingCols constructs a new GroupByDef private, based on an existing
-// definition. The new GroupByDef will not retain any grouping column that is
-// functionally determined by other grouping columns. CanReduceGroupingCols
-// should be called before calling this method, to ensure it has work to do.
-func (c *CustomFuncs) ReduceGroupingCols(
-	input memo.RelExpr, private *memo.GroupingPrivate,
+// RemoveGroupingCols returns a new grouping private struct with the given
+// columns removed from the grouping column set.
+func (c *CustomFuncs) RemoveGroupingCols(
+	private *memo.GroupingPrivate, cols opt.ColSet,
 ) *memo.GroupingPrivate {
-	fdset := input.Relational().FuncDeps
-	return &memo.GroupingPrivate{
-		GroupingCols: fdset.ReduceCols(private.GroupingCols),
-		Ordering:     private.Ordering,
-	}
-}
-
-// AppendReducedGroupingCols will take columns discarded by ReduceGroupingCols
-// and append them to the end of the given aggregate function list, wrapped in
-// ConstAgg aggregate functions. AppendReducedGroupingCols returns a new
-// Aggregations operator containing the combined set of existing aggregate
-// functions and the new ConstAgg aggregate functions.
-func (c *CustomFuncs) AppendReducedGroupingCols(
-	input memo.RelExpr, aggs memo.AggregationsExpr, private *memo.GroupingPrivate,
-) memo.AggregationsExpr {
-	fdset := input.Relational().FuncDeps
-	appendCols := private.GroupingCols.Difference(fdset.ReduceCols(private.GroupingCols))
-	return c.AppendAggCols(aggs, opt.ConstAggOp, appendCols)
+	p := *private
+	p.GroupingCols = private.GroupingCols.Difference(cols)
+	return &p
 }
 
 // AppendAggCols constructs a new Aggregations operator containing the aggregate
@@ -176,12 +159,15 @@ func (c *CustomFuncs) GroupingInputOrdering(private *memo.GroupingPrivate) physi
 }
 
 // ConstructProjectionFromDistinctOn converts a DistinctOn to a projection; this
-// is correct when the input has at most one row. Note that DistinctOn can only
-// have aggregations of type FirstAgg or ConstAgg.
+// is correct when input groupings have at most one row (i.e. the input is
+// already distinct). Note that DistinctOn can only have aggregations of type
+// FirstAgg or ConstAgg.
 func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
-	input memo.RelExpr, aggs memo.AggregationsExpr,
+	input memo.RelExpr, groupingCols opt.ColSet, aggs memo.AggregationsExpr,
 ) memo.RelExpr {
-	var passthrough opt.ColSet
+	// Always pass through grouping columns.
+	passthrough := groupingCols.Copy()
+
 	var projections memo.ProjectionsExpr
 	for i := range aggs {
 		varExpr := memo.ExtractAggFirstVar(aggs[i].Agg)
@@ -194,4 +180,109 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 		}
 	}
 	return c.f.ConstructProject(input, projections, passthrough)
+}
+
+// DuplicateUpsertErrText returns the error text used when duplicate input rows
+// to the Upsert operator are detected.
+func (c *CustomFuncs) DuplicateUpsertErrText() string {
+	return sqlbase.DuplicateUpsertErrText
+}
+
+// AreValuesDistinct returns true if a constant Values operator input contains
+// only rows that are already distinct with respect to the given grouping
+// columns. The Values operator can be wrapped by Select, Project, and/or
+// LeftJoin operators.
+//
+// If nullsAreDistinct is true, then NULL values are treated as not equal to one
+// another, and therefore rows containing a NULL value in any grouping column
+// are always distinct.
+func (c *CustomFuncs) AreValuesDistinct(
+	input memo.RelExpr, groupingCols opt.ColSet, nullsAreDistinct bool,
+) bool {
+	switch t := input.(type) {
+	case *memo.ValuesExpr:
+		return c.areRowsDistinct(t.Rows, t.Cols, groupingCols, nullsAreDistinct)
+
+	case *memo.SelectExpr:
+		return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)
+
+	case *memo.ProjectExpr:
+		if groupingCols.SubsetOf(t.Input.Relational().OutputCols) {
+			return c.AreValuesDistinct(t.Input, groupingCols, nullsAreDistinct)
+		}
+
+	case *memo.LeftJoinExpr:
+		if groupingCols.SubsetOf(t.Left.Relational().OutputCols) {
+			return c.AreValuesDistinct(t.Left, groupingCols, nullsAreDistinct)
+		}
+	}
+	return false
+}
+
+// areRowsDistinct returns true if the given rows are unique on the given
+// grouping columns. If nullsAreDistinct is true, then NULL values are treated
+// as unique, and therefore a row containing a NULL value in any grouping column
+// is always distinct from every other row.
+func (c *CustomFuncs) areRowsDistinct(
+	rows memo.ScalarListExpr, cols opt.ColList, groupingCols opt.ColSet, nullsAreDistinct bool,
+) bool {
+	var seen map[string]bool
+	var encoded []byte
+	for _, scalar := range rows {
+		row := scalar.(*memo.TupleExpr)
+
+		// Reset scratch bytes.
+		encoded = encoded[:0]
+
+		forceDistinct := false
+		for i, colID := range cols {
+			if !groupingCols.Contains(colID) {
+				// This is not a grouping column, so ignore.
+				continue
+			}
+
+			// Try to extract constant value from column. Call IsConstValueOp first,
+			// since this code doesn't handle the tuples and arrays that
+			// ExtractConstDatum can return.
+			col := row.Elems[i]
+			if !opt.IsConstValueOp(col) {
+				// At least one grouping column in at least one row is not constant,
+				// so can't determine whether the rows are distinct.
+				return false
+			}
+			datum := memo.ExtractConstDatum(col)
+
+			// If this is an UpsertDistinctOn operator, then treat NULL values as
+			// always distinct.
+			if nullsAreDistinct && datum == tree.DNull {
+				forceDistinct = true
+				break
+			}
+
+			// Encode the datum using the key encoding format. The encodings for
+			// multiple column datums are simply appended to one another.
+			var err error
+			encoded, err = sqlbase.EncodeTableKey(encoded, datum, encoding.Ascending)
+			if err != nil {
+				// Assume rows are not distinct if an encoding error occurs.
+				return false
+			}
+		}
+
+		if seen == nil {
+			seen = make(map[string]bool, len(rows))
+		}
+
+		// Determine whether key has already been seen.
+		key := string(encoded)
+		if _, ok := seen[key]; ok && !forceDistinct {
+			// Found duplicate.
+			return false
+		}
+
+		// Add the key to the seen map.
+		seen[key] = true
+	}
+
+	return true
 }

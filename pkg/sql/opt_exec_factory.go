@@ -485,13 +485,19 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 
 // ConstructDistinct is part of the exec.Factory interface.
 func (ef *execFactory) ConstructDistinct(
-	input exec.Node, distinctCols, orderedCols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
+	input exec.Node,
+	distinctCols, orderedCols exec.ColumnOrdinalSet,
+	reqOrdering exec.OutputOrdering,
+	nullsAreDistinct bool,
+	errorOnDup string,
 ) (exec.Node, error) {
 	return &distinctNode{
 		plan:              input.(planNode),
 		distinctOnColIdxs: distinctCols,
 		columnsInOrder:    orderedCols,
 		reqOrdering:       ReqOrdering(reqOrdering),
+		nullsAreDistinct:  nullsAreDistinct,
+		errorOnDup:        errorOnDup,
 	}, nil
 }
 
