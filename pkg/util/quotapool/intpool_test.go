@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -616,4 +617,88 @@ func TestLen(t *testing.T) {
 	alloc.Release()
 	<-allocCh
 	assert.Equal(t, 0, qp.Len())
+}
+
+// TestUpdateCapacityFluctuationsPermitExcessAllocs exercises the bad case where
+// fluctuations in the capacity of a quotapool which occur more rapidly than the
+// quota is returned will permit quota in excess of the capacity to be emitted.
+func TestUpdateCapacityFluctuationsPermitExcessAllocs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	qp := quotapool.NewIntPool("test", 1)
+	var allocs []*quotapool.IntAlloc
+	allocCh := make(chan *quotapool.IntAlloc)
+	defer close(allocCh)
+	go func() {
+		for a := range allocCh {
+			if a == nil {
+				continue // allow nil channel sends to synchronize
+			}
+			allocs = append(allocs, a)
+		}
+	}()
+	acquireN := func(n int) {
+		var wg sync.WaitGroup
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				alloc, err := qp.Acquire(ctx, 1)
+				assert.NoError(t, err)
+				allocCh <- alloc
+			}()
+		}
+		wg.Wait()
+	}
+
+	acquireN(1)
+	qp.UpdateCapacity(100)
+	acquireN(99)
+	require.Equal(t, uint64(0), qp.ApproximateQuota())
+	qp.UpdateCapacity(1)
+	qp.UpdateCapacity(100)
+	require.Equal(t, uint64(99), qp.ApproximateQuota())
+	acquireN(99)
+	allocCh <- nil // synchronize
+	// Release all of the quota back to the pool.
+	for _, a := range allocs {
+		a.Release()
+	}
+	allocs = nil
+	require.Equal(t, uint64(100), qp.ApproximateQuota())
+}
+
+func TestQuotaPoolUpdateCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	ch := make(chan *quotapool.IntAlloc, 1)
+	qp := quotapool.NewIntPool("test", 1)
+	alloc, err := qp.Acquire(ctx, 1)
+	require.NoError(t, err)
+	go func() {
+		blocked, err := qp.Acquire(ctx, 2)
+		assert.NoError(t, err)
+		ch <- blocked
+	}()
+	ensureBlocked := func() {
+		t.Helper()
+		select {
+		case <-time.After(10 * time.Millisecond): // ensure the acquisition fails for now
+		case got := <-ch:
+			got.Release()
+			t.Fatal("expected acquisition to fail")
+		}
+	}
+	ensureBlocked()
+	// Update the capacity to 2, the request should still be blocked.
+	qp.UpdateCapacity(2)
+	ensureBlocked()
+	qp.UpdateCapacity(3)
+	got := <-ch
+	require.Equal(t, uint64(2), got.Acquired())
+	require.Equal(t, uint64(3), qp.Capacity())
+	alloc.Release()
+	require.Equal(t, uint64(1), qp.ApproximateQuota())
 }

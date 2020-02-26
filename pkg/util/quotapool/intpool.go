@@ -345,6 +345,29 @@ func (p *IntPool) Capacity() uint64 {
 	return atomic.LoadUint64(&p.capacity)
 }
 
+// UpdateCapacity sets the capacity to newCapacity. If the current capacity
+// is higher than the new capacity, currently running requests will not be
+// affected. When the capacity is increased, new quota will be added. In the
+// case of rapid fluctuations in capacity, much more quota may be outstanding
+// than was ever the limit.
+//
+// Consider the case where the capacity was 100, and then is lowered to 1.
+// At this point there are at most 99 excess allocated. If we then increase
+// the capacity back to 100, we can hand out 99 new alloc to be acquired.
+// This could be mitigated with additional bookkeeping but the complexity is not
+// obviously worth it.
+func (p *IntPool) UpdateCapacity(newCapacity uint64) {
+	// Use the underlying quotapool to synchronize updates. This violates the
+	// abstractions somewhat.
+	oldCapacity := atomic.SwapUint64(&p.capacity, newCapacity)
+	var toRelease uint64
+	if newCapacity > oldCapacity {
+		toRelease = newCapacity - oldCapacity
+	}
+	ia := p.newIntAlloc(toRelease)
+	ia.Release()
+}
+
 // decCapacity decrements the capacity by c.
 func (p *IntPool) decCapacity(c uint64) {
 	// This is how you decrement from a uint64.
@@ -362,11 +385,12 @@ type intRequest struct {
 
 func (r *intRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
 	ia := v.(*intAlloc)
-	r.want = min(r.want, ia.p.Capacity())
-	if ia.alloc < r.want {
+	want := min(r.want, ia.p.Capacity())
+	if ia.alloc < want {
 		return false, nil
 	}
-	ia.alloc -= r.want
+	r.want = want
+	ia.alloc -= want
 	return true, ia
 }
 
