@@ -414,6 +414,9 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}()
 
 	args = append(args, "--machine-type", p.opts.MachineType)
+	if min := minCPUPlatform(p.opts.MachineType); min != "" {
+		args = append(args, "--min-cpu-platform", min)
+	}
 	args = append(args, "--labels", fmt.Sprintf("lifetime=%s", opts.Lifetime))
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
@@ -443,6 +446,18 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	return g.Wait()
+}
+
+func minCPUPlatform(machine string) string {
+	class := strings.Split(machine, "-")[0]
+	switch class {
+	case "n1", "m1", "e2":
+		return "Intel Skylake"
+	case "n2", "c2", "m2":
+		return "Intel Cascade Lake"
+	default:
+		return ""
+	}
 }
 
 // Delete TODO(peter): document
