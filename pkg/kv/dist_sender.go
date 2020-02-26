@@ -13,6 +13,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync/atomic"
 	"unsafe"
 
@@ -34,13 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
-)
-
-const (
-	// The default limit for asynchronous senders.
-	defaultSenderConcurrency = 500
-	// The maximum number of range descriptors to prefetch during range lookups.
-	rangeLookupPrefetchCount = 8
 )
 
 var (
@@ -116,11 +110,31 @@ var CanSendToFollower = func(
 	return false
 }
 
+const (
+	// The default limit for asynchronous senders.
+	defaultSenderConcurrency = 500
+	// The maximum number of range descriptors to prefetch during range lookups.
+	rangeLookupPrefetchCount = 8
+)
+
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 	"kv.range_descriptor_cache.size",
 	"maximum number of entries in the range descriptor and leaseholder caches",
 	1e6,
 )
+
+var senderConcurrencyLimit = settings.RegisterNonNegativeIntSetting(
+	"kv.dist_sender.concurrency_limit",
+	"maximum number of asynchronous send requests",
+	max(defaultSenderConcurrency, int64(32*runtime.NumCPU())),
+)
+
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
@@ -283,7 +297,11 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	}
 	ds.clusterID = &cfg.RPCContext.ClusterID
 	ds.nodeDialer = cfg.NodeDialer
-	ds.asyncSenderSem = quotapool.NewIntPool("dist sender concurrency", defaultSenderConcurrency)
+	ds.asyncSenderSem = quotapool.NewIntPool("DistSender async concurrency",
+		uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
+	senderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func() {
+		ds.asyncSenderSem.UpdateCapacity(uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
+	})
 	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
 	ds.rangeIteratorGen = func() *RangeIterator { return NewRangeIterator(ds) }
 
