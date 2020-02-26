@@ -1518,7 +1518,7 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 		{
 			name:                              "no_client_directed_retries",
 			clientDirectedRetry:               false,
-			expectedTxnStateAfterRetriableErr: "Aborted",
+			expectedTxnStateAfterRetriableErr: "RestartWait",
 		},
 		{
 			name:                              "autocommit",

@@ -814,7 +814,7 @@ ROLLBACK
 statement ok
 BEGIN
 
-statement error pgcode 3B000 savepoint cockroach_restart has not been used
+statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
 
 statement ok
@@ -828,7 +828,7 @@ BEGIN
 statement error pq: relation "bogus_name" does not exist
 SELECT * from bogus_name
 
-statement error pgcode 3B000 savepoint cockroach_restart has not been used
+statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
 
 statement ok
@@ -1028,7 +1028,7 @@ ROLLBACK
 
 # Check that we don't crash when doing a release that wasn't preceded by a
 # savepoint.
-statement error pgcode 3B000 savepoint cockroach_restart has not been used
+statement ok
 BEGIN; RELEASE SAVEPOINT cockroach_restart
 
 statement ok
