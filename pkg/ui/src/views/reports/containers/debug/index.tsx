@@ -235,6 +235,9 @@ export default function Debug() {
         <DebugTableRow title="Runtime Trace">
           <DebugTableLink name="Trace" url="/debug/pprof/trace?debug=1" />
         </DebugTableRow>
+        <DebugTableRow title="Statement Diagnostics Requests">
+          <DebugTableLink name="List All" url="#/debug/statementdiagnosticsrequests" />
+        </DebugTableRow>
       </DebugTable>
       <DebugTable heading="Raw Status Endpoints (JSON)">
         <DebugTableRow title="Logs (single node only)">

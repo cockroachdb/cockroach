@@ -51,6 +51,7 @@ import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
+import StatementDiagnosticsRequests from "src/views/reports/containers/statementDiagnosticsRequests/requests";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -138,6 +139,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route exact path="/debug/redux" component={ReduxDebug}/>
                   <Route exact path="/debug/chart" component={CustomChart}/>
                   <Route exact path="/debug/enqueue_range" component={EnqueueRange}/>
+                  <Route exact path="/debug/statementdiagnosticsrequests" component={StatementDiagnosticsRequests}/>
 
                   <Route path="/raft">
                     <Raft>
