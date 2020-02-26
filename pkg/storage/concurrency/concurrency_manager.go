@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -55,8 +56,9 @@ type Config struct {
 	TxnWaitMetrics *txnwait.Metrics
 	SlowLatchGauge *metric.Gauge
 	// Configs + Knobs.
-	MaxLockTableSize int64
-	TxnWaitKnobs     txnwait.TestingKnobs
+	MaxLockTableSize  int64
+	DisableTxnPushing bool
+	TxnWaitKnobs      txnwait.TestingKnobs
 }
 
 func (c *Config) initDefaults() {
@@ -82,10 +84,11 @@ func NewManager(cfg Config) Manager {
 			maxLocks: cfg.MaxLockTableSize,
 		},
 		ltw: &lockTableWaiterImpl{
-			nodeID:  cfg.NodeDesc.NodeID,
-			st:      cfg.Settings,
-			stopper: cfg.Stopper,
-			ir:      cfg.IntentResolver,
+			nodeID:            cfg.NodeDesc.NodeID,
+			st:                cfg.Settings,
+			stopper:           cfg.Stopper,
+			ir:                cfg.IntentResolver,
+			disableTxnPushing: cfg.DisableTxnPushing,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
@@ -110,7 +113,7 @@ func (m *managerImpl) SequenceReq(
 		log.Event(ctx, "sequencing request")
 	} else {
 		g = prev
-		g.assertNoLatches()
+		g.AssertNoLatches()
 		log.Event(ctx, "re-sequencing request")
 	}
 
@@ -156,14 +159,14 @@ func (m *managerImpl) sequenceReqWithGuard(
 
 		// Scan for conflicting locks.
 		log.Event(ctx, "scanning lock table for conflicting locks")
-		g.ltg = m.lt.ScanAndEnqueue(g.req, g.ltg)
+		g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
 
 		// Wait on conflicting locks, if necessary.
 		if g.ltg.ShouldWait() {
 			m.lm.Release(g.moveLatchGuard())
 
 			log.Event(ctx, "waiting in lock wait-queues")
-			if err := m.ltw.WaitOn(ctx, g.req, g.ltg); err != nil {
+			if err := m.ltw.WaitOn(ctx, g.Req, g.ltg); err != nil {
 				return nil, err
 			}
 			continue
@@ -240,6 +243,11 @@ func (m *managerImpl) FinishReq(g *Guard) {
 func (m *managerImpl) HandleWriterIntentError(
 	ctx context.Context, g *Guard, t *roachpb.WriteIntentError,
 ) *Guard {
+	if g.ltg == nil {
+		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
+			"lockTableGuard; were lock spans declared for this request?", t)
+	}
+
 	// Add a discovered lock to lock-table for each intent and enter each lock's
 	// wait-queue.
 	for i := range t.Intents {
@@ -336,6 +344,11 @@ func (m *managerImpl) LockTableDebug() string {
 	return m.lt.String()
 }
 
+// TxnWaitQueue implements the MetricExporter interface.
+func (m *managerImpl) TxnWaitQueue() *txnwait.Queue {
+	return m.twq.(*txnwait.Queue)
+}
+
 func (r *Request) isSingle(m roachpb.Method) bool {
 	if len(r.Requests) != 1 {
 		return false
@@ -345,11 +358,29 @@ func (r *Request) isSingle(m roachpb.Method) bool {
 
 func newGuard(req Request) *Guard {
 	// TODO(nvanbenschoten): Pool these guard objects.
-	return &Guard{req: req}
+	return &Guard{Req: req}
 }
 
-func (g *Guard) assertNoLatches() {
-	if g.lg != nil {
+// LatchSpans returns the maximal set of spans that the request will access.
+func (g *Guard) LatchSpans() *spanset.SpanSet {
+	return g.Req.LatchSpans
+}
+
+// HoldingLatches returned whether the guard is holding latches or not.
+func (g *Guard) HoldingLatches() bool {
+	return g != nil && g.lg != nil
+}
+
+// AssertLatches asserts that the guard is non-nil and holding latches.
+func (g *Guard) AssertLatches() {
+	if !g.HoldingLatches() {
+		panic("expected latches held, found none")
+	}
+}
+
+// AssertNoLatches asserts that the guard is non-nil and not holding latches.
+func (g *Guard) AssertNoLatches() {
+	if g.HoldingLatches() {
 		panic("unexpected latches held")
 	}
 }

@@ -30,16 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -176,9 +174,8 @@ type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Only set by the constructor
 
-	store        *Store
-	abortSpan    *abortspan.AbortSpan // Avoids anomalous reads after abort
-	txnWaitQueue *txnwait.Queue       // Queues push txn attempts by txn ID
+	store     *Store
+	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
@@ -224,11 +221,10 @@ type Replica struct {
 	// Contains the lease history when enabled.
 	leaseHistory *leaseHistory
 
-	// Enforces at most one command is running per key(s) within each span
-	// scope. The globally-scoped component tracks user writes (i.e. all
-	// keys for which keys.Addr is the identity), the locally-scoped component
-	// the rest (e.g. RangeDescriptor, transaction record, Lease, ...).
-	latchMgr spanlatch.Manager
+	// concMgr sequences incoming requests and provides isolation between
+	// requests that intend to perform conflicting operations. It is the
+	// centerpiece of transaction contention handling.
+	concMgr concurrency.Manager
 
 	mu struct {
 		// Protects all fields in the mu struct.
@@ -664,9 +660,9 @@ func (r *Replica) GetLimiters() *batcheval.Limiters {
 	return &r.store.limiters
 }
 
-// GetTxnWaitQueue returns the Replica's txnwait.Queue.
-func (r *Replica) GetTxnWaitQueue() *txnwait.Queue {
-	return r.txnWaitQueue
+// GetConcurrencyManager returns the Replica's concurrency.Manager.
+func (r *Replica) GetConcurrencyManager() concurrency.Manager {
+	return r.concMgr
 }
 
 // GetTerm returns the term of the given index in the raft log.
@@ -927,14 +923,15 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
 // able to serve traffic or that the request is not compatible with the state of
 // the Range.
 //
-// The method accepts a spanlatch.Guard and a LeaseStatus parameter. These are
+// The method accepts a concurrency Guard and a LeaseStatus parameter. These are
 // used to indicate whether the caller has acquired latches and checked the
 // Range lease. The method will only check for a pending merge if both of these
-// conditions are true. If either lg == nil or st == nil then the method will
-// not check for a pending merge. Callers might be ok with this if they know
-// that they will end up checking for a pending merge at some later time.
+// conditions are true. If either !g.HoldingLatches() or st == nil then the
+// method will not check for a pending merge. Callers might be ok with this if
+// they know that they will end up checking for a pending merge at some later
+// time.
 func (r *Replica) checkExecutionCanProceed(
-	ba *roachpb.BatchRequest, lg *spanlatch.Guard, st *storagepb.LeaseStatus,
+	ba *roachpb.BatchRequest, g *concurrency.Guard, st *storagepb.LeaseStatus,
 ) error {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -949,7 +946,7 @@ func (r *Replica) checkExecutionCanProceed(
 		return err
 	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp); err != nil {
 		return err
-	} else if lg != nil && st != nil {
+	} else if g.HoldingLatches() && st != nil {
 		// Only check for a pending merge if latches are held and the Range
 		// lease is held by this Replica. Without both of these conditions,
 		// checkForPendingMergeRLocked could return false negatives.
@@ -1121,7 +1118,7 @@ func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 // command processing.
 type endCmds struct {
 	repl *Replica
-	lg   *spanlatch.Guard
+	g    *concurrency.Guard
 }
 
 // move moves the endCmds into the return value, clearing and making
@@ -1148,66 +1145,15 @@ func (ec *endCmds) done(
 
 	// Update the timestamp cache if the request is not being re-evaluated. Each
 	// request is considered in turn; only those marked as affecting the cache are
-	// processed. Inconsistent reads are excluded.
-	if ba.ReadConsistency == roachpb.CONSISTENT {
-		ec.repl.updateTimestampCache(ctx, ba, br, pErr)
-	}
+	// processed.
+	ec.repl.updateTimestampCache(ctx, ba, br, pErr)
 
-	// Release the latches acquired by the request back to the spanlatch
-	// manager. Must be done AFTER the timestamp cache is updated.
-	if ec.lg != nil {
-		ec.repl.latchMgr.Release(ec.lg)
+	// Release the latches acquired by the request and exit lock wait-queues.
+	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
+	// the Raft proposal has assumed responsibility for the request.
+	if ec.g != nil {
+		ec.repl.concMgr.FinishReq(ec.g)
 	}
-}
-
-// beginCmds waits for any in-flight, conflicting commands to complete. More
-// specifically, beginCmds acquires latches for the request based on keys
-// affected by the batched commands. This gates subsequent commands with
-// overlapping keys or key ranges. It returns a cleanup function to be called
-// when the commands are done and can release their latches.
-func (r *Replica) beginCmds(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
-) (*spanlatch.Guard, error) {
-	// Only acquire latches for consistent operations.
-	if ba.ReadConsistency != roachpb.CONSISTENT {
-		log.Event(ctx, "operation accepts inconsistent results")
-		return nil, nil
-	}
-
-	// Don't acquire latches for lease requests. These are run on replicas that
-	// do not hold the lease, so acquiring latches wouldn't help synchronize
-	// with other requests.
-	if ba.IsLeaseRequest() {
-		return nil, nil
-	}
-
-	var beforeLatch time.Time
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		beforeLatch = timeutil.Now()
-	}
-
-	// Acquire latches for all the request's declared spans to ensure
-	// protected access and to avoid interacting requests from operating at
-	// the same time. The latches will be held for the duration of request.
-	log.Event(ctx, "acquire latches")
-	lg, err := r.latchMgr.Acquire(ctx, spans)
-	if err != nil {
-		return nil, err
-	}
-
-	if !beforeLatch.IsZero() {
-		dur := timeutil.Since(beforeLatch)
-		log.VEventf(ctx, 2, "waited %s to acquire latches", dur)
-	}
-
-	if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
-		if pErr := filter(ctx, *ba); pErr != nil {
-			r.latchMgr.Release(lg)
-			return nil, pErr.GoError()
-		}
-	}
-
-	return lg, nil
 }
 
 // maybeWatchForMerge checks whether a merge of this replica into its left
