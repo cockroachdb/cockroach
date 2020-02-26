@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1394,7 +1395,10 @@ type LeaseManager struct {
 	testingKnobs LeaseManagerTestingKnobs
 	ambientCtx   log.AmbientContext
 	stopper      *stop.Stopper
+	sem          *quotapool.IntPool
 }
+
+const leaseConcurrencyLimit = 5
 
 // NewLeaseManager creates a new LeaseManager.
 //
@@ -1432,8 +1436,9 @@ func NewLeaseManager(
 		},
 		ambientCtx: ambientCtx,
 		stopper:    stopper,
+		sem:        quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
 	}
-
+	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.tables = make(map[sqlbase.ID]*tableState)
 
 	lm.draining.Store(false)
@@ -1860,13 +1865,12 @@ func (m *LeaseManager) refreshSomeLeases(ctx context.Context) {
 	}
 	m.mu.Unlock()
 	// Limit the number of concurrent lease refreshes.
-	sem := make(chan struct{}, 5)
 	var wg sync.WaitGroup
 	for i := range ids {
 		id := ids[i]
 		wg.Add(1)
 		if err := m.stopper.RunLimitedAsyncTask(
-			ctx, fmt.Sprintf("refresh table:%d lease", id), sem, true /*wait*/, func(ctx context.Context) {
+			ctx, fmt.Sprintf("refresh table:%d lease", id), m.sem, true /*wait*/, func(ctx context.Context) {
 				defer wg.Done()
 				if _, err := acquireNodeLease(ctx, m, id); err != nil {
 					log.Infof(ctx, "refreshing table: %d lease failed: %s", id, err)
@@ -1914,18 +1918,11 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
 			return
 		}
-		// Limit the number of concurrent lease releases.
-		sem := make(chan struct{}, 5)
+
 		var wg sync.WaitGroup
 		defer wg.Wait()
 		for i := range rows {
 			// Early exit?
-			select {
-			case <-m.stopper.ShouldQuiesce():
-				return
-			default:
-			}
-
 			row := rows[i]
 			wg.Add(1)
 			lease := storedTableLease{
@@ -1934,7 +1931,7 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 				expiration: tree.MustBeDTimestamp(row[2]),
 			}
 			if err := m.stopper.RunLimitedAsyncTask(
-				ctx, fmt.Sprintf("release table lease %+v", lease), sem, true /*wait*/, func(ctx context.Context) {
+				ctx, fmt.Sprintf("release table lease %+v", lease), m.sem, true /*wait*/, func(ctx context.Context) {
 					m.LeaseStore.release(ctx, m.stopper, &lease)
 					log.Infof(ctx, "released orphaned table lease: %+v", lease)
 					wg.Done()

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -407,9 +408,9 @@ type baseQueue struct {
 	queueConfig
 	incoming         chan struct{} // Channel signaled when a new replica is added to the queue.
 	processSem       chan struct{}
-	addOrMaybeAddSem chan struct{} // for {Maybe,}AddAsync
-	addLogN          log.EveryN    // avoid log spam when addSem, addOrMaybeAddSemSize are maxed out
-	processDur       int64         // accessed atomically
+	addOrMaybeAddSem *quotapool.IntPool // for {Maybe,}AddAsync
+	addLogN          log.EveryN         // avoid log spam when addSem, addOrMaybeAddSemSize are maxed out
+	processDur       int64              // accessed atomically
 	mu               struct {
 		syncutil.Mutex                                    // Protects all variables in the mu struct
 		replicas       map[roachpb.RangeID]*replicaItem   // Map from RangeID to replicaItem
@@ -460,7 +461,7 @@ func newBaseQueue(
 		queueConfig:      cfg,
 		incoming:         make(chan struct{}, 1),
 		processSem:       make(chan struct{}, cfg.maxConcurrency),
-		addOrMaybeAddSem: make(chan struct{}, cfg.addOrMaybeAddSemSize),
+		addOrMaybeAddSem: quotapool.NewIntPool("queue-add", uint64(cfg.addOrMaybeAddSemSize)),
 		addLogN:          log.Every(5 * time.Second),
 		getReplica: func(id roachpb.RangeID) (replicaInQueue, error) {
 			repl, err := store.GetReplica(id)

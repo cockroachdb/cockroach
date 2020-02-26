@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -24,6 +25,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// logSlowAcquisition is an Option to log slow acquisitions.
+var logSlowAcquisition = quotapool.OnSlowAcquisition(base.SlowRequestThreshold, quotapool.LogSlowAcquisition)
 
 // TestQuotaPoolBasic tests the minimal expected behavior of the quota pool
 // with different sized quota pool and a varying number of goroutines, each
@@ -561,7 +565,7 @@ func TestIntpoolRelease(t *testing.T) {
 func TestLen(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	qp := quotapool.NewIntPool("test", 1, quotapool.LogSlowAcquisition)
+	qp := quotapool.NewIntPool("test", 1, logSlowAcquisition)
 	ctx := context.Background()
 	allocCh := make(chan *quotapool.IntAlloc)
 	doAcquire := func(ctx context.Context) {

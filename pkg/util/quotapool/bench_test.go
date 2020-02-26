@@ -73,7 +73,7 @@ func BenchmarkConcurrentChannelSemaphore(b *testing.B) {
 // BenchmarkIntQuotaPoolFunc benchmarks the common case where we have sufficient
 // quota available in the pool and we repeatedly acquire and release quota.
 func BenchmarkIntPoolFunc(b *testing.B) {
-	qp := quotapool.NewIntPool("test", 1, quotapool.LogSlowAcquisition)
+	qp := quotapool.NewIntPool("test", 1, logSlowAcquisition)
 	ctx := context.Background()
 	toAcquire := intRequest(1)
 	for n := 0; n < b.N; n++ {
@@ -122,7 +122,7 @@ func (s concurrentBenchSpec) benchmarkChannelSem(b *testing.B) {
 }
 
 func (s concurrentBenchSpec) benchmarkIntPool(b *testing.B) {
-	qp := quotapool.NewIntPool("test", s.quota, quotapool.LogSlowAcquisition)
+	qp := quotapool.NewIntPool("test", s.quota, logSlowAcquisition)
 	g, ctx := errgroup.WithContext(context.Background())
 	runWorker := func(workerNum int) {
 		g.Go(func() error {

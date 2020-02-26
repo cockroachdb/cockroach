@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -92,7 +93,7 @@ type Server struct {
 	queryWorkerMax   int
 	workerMemMonitor mon.BytesMonitor
 	resultMemMonitor mon.BytesMonitor
-	workerSem        chan struct{}
+	workerSem        *quotapool.IntPool
 }
 
 // MakeServer instantiates a new Server which services requests with data from
@@ -115,7 +116,8 @@ func MakeServer(
 	if cfg.QueryMemoryMax != 0 {
 		queryMemoryMax = cfg.QueryMemoryMax
 	}
-
+	workerSem := quotapool.NewIntPool("ts.Server worker", uint64(queryWorkerMax))
+	stopper.AddCloser(workerSem.Closer("stopper"))
 	return Server{
 		AmbientContext: ambient,
 		db:             db,
@@ -143,7 +145,7 @@ func MakeServer(
 		),
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,
-		workerSem:      make(chan struct{}, queryWorkerMax),
+		workerSem:      workerSem,
 	}
 }
 

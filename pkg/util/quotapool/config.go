@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -48,10 +47,8 @@ func OnSlowAcquisition(threshold time.Duration, f SlowAcquisitionFunc) Option {
 	})
 }
 
-// LogSlowAcquisition is an Option to log slow acquisitions.
-var LogSlowAcquisition = OnSlowAcquisition(base.SlowRequestThreshold, logSlowAcquire)
-
-func logSlowAcquire(ctx context.Context, poolName string, r Request, start time.Time) func() {
+// LogSlowAcquisition is a SlowAcquisitionFunc.
+func LogSlowAcquisition(ctx context.Context, poolName string, r Request, start time.Time) func() {
 	log.Warningf(ctx, "have been waiting %s attempting to acquire %s quota",
 		timeutil.Since(start), poolName)
 	return func() {
