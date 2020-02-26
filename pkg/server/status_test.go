@@ -270,8 +270,7 @@ func TestStatusEngineStatsJson(t *testing.T) {
 	}
 
 	if engineStats.Stats[0].EngineType == enginepb.EngineTypePebble {
-		// TODO(hueypark): enable when Pebble.GetTickersAndHistograms is
-		// implemented.
+		// Pebble does not have RocksDB style TickersAnd Histogram.
 		return
 	}
 

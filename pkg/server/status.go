@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -274,18 +275,22 @@ func (s *statusServer) EngineStats(
 
 	resp := new(serverpb.EngineStatsResponse)
 	err = s.stores.VisitStores(func(store *storage.Store) error {
-		tickersAndHistograms, err := store.Engine().GetTickersAndHistograms()
-		if err != nil {
-			return grpcstatus.Errorf(codes.Internal, err.Error())
+		engineStatsInfo := serverpb.EngineStatsInfo{
+			StoreID:              store.Ident.StoreID,
+			TickersAndHistograms: nil,
+			EngineType:           store.Engine().Type(),
 		}
-		resp.Stats = append(
-			resp.Stats,
-			serverpb.EngineStatsInfo{
-				StoreID:              store.Ident.StoreID,
-				TickersAndHistograms: tickersAndHistograms,
-				EngineType:           store.Engine().Type(),
-			},
-		)
+
+		switch e := store.Engine().(type) {
+		case *engine.RocksDB:
+			tickersAndHistograms, err := e.GetTickersAndHistograms()
+			if err != nil {
+				return grpcstatus.Errorf(codes.Internal, err.Error())
+			}
+			engineStatsInfo.TickersAndHistograms = tickersAndHistograms
+		}
+
+		resp.Stats = append(resp.Stats, engineStatsInfo)
 		return nil
 	})
 	if err != nil {
