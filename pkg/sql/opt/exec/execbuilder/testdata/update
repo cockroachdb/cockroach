@@ -101,86 +101,90 @@ CREATE TABLE xyz (
 query TTT
 EXPLAIN UPDATE xyz SET y = x
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        xyz
-      │              set          y
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        xyz@primary
-·                    spans        ALL
+·                    distributed       false
+·                    vectorized        false
+count                ·                 ·
+ └── update          ·                 ·
+      │              table             xyz
+      │              set               y
+      │              strategy          updater
+      │              auto commit       ·
+      └── render     ·                 ·
+           └── scan  ·                 ·
+·                    table             xyz@primary
+·                    spans             ALL
+·                    locking strength  for update
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-·                    distributed  false        ·                            ·
-·                    vectorized   false        ·                            ·
-count                ·            ·            ()                           ·
- └── update          ·            ·            ()                           ·
-      │              table        xyz          ·                            ·
-      │              set          x, y         ·                            ·
-      │              strategy     updater      ·                            ·
-      │              auto commit  ·            ·                            ·
-      └── render     ·            ·            (x, y, z, column7, column8)  ·
-           │         render 0     x            ·                            ·
-           │         render 1     y            ·                            ·
-           │         render 2     z            ·                            ·
-           │         render 3     1            ·                            ·
-           │         render 4     2            ·                            ·
-           └── scan  ·            ·            (x, y, z)                    ·
-·                    table        xyz@primary  ·                            ·
-·                    spans        ALL          ·                            ·
+·                    distributed       false        ·                            ·
+·                    vectorized        false        ·                            ·
+count                ·                 ·            ()                           ·
+ └── update          ·                 ·            ()                           ·
+      │              table             xyz          ·                            ·
+      │              set               x, y         ·                            ·
+      │              strategy          updater      ·                            ·
+      │              auto commit       ·            ·                            ·
+      └── render     ·                 ·            (x, y, z, column7, column8)  ·
+           │         render 0          x            ·                            ·
+           │         render 1          y            ·                            ·
+           │         render 2          z            ·                            ·
+           │         render 3          1            ·                            ·
+           │         render 4          2            ·                            ·
+           └── scan  ·                 ·            (x, y, z)                    ·
+·                    table             xyz@primary  ·                            ·
+·                    spans             ALL          ·                            ·
+·                    locking strength  for update   ·                            ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
 ----
-·                    distributed  false        ·                ·
-·                    vectorized   false        ·                ·
-count                ·            ·            ()               ·
- └── update          ·            ·            ()               ·
-      │              table        xyz          ·                ·
-      │              set          x, y         ·                ·
-      │              strategy     updater      ·                ·
-      │              auto commit  ·            ·                ·
-      └── render     ·            ·            (x, y, z, y, x)  ·
-           │         render 0     x            ·                ·
-           │         render 1     y            ·                ·
-           │         render 2     z            ·                ·
-           │         render 3     y            ·                ·
-           │         render 4     x            ·                ·
-           └── scan  ·            ·            (x, y, z)        ·
-·                    table        xyz@primary  ·                ·
-·                    spans        ALL          ·                ·
+·                    distributed       false        ·                ·
+·                    vectorized        false        ·                ·
+count                ·                 ·            ()               ·
+ └── update          ·                 ·            ()               ·
+      │              table             xyz          ·                ·
+      │              set               x, y         ·                ·
+      │              strategy          updater      ·                ·
+      │              auto commit       ·            ·                ·
+      └── render     ·                 ·            (x, y, z, y, x)  ·
+           │         render 0          x            ·                ·
+           │         render 1          y            ·                ·
+           │         render 2          z            ·                ·
+           │         render 3          y            ·                ·
+           │         render 4          x            ·                ·
+           └── scan  ·                 ·            (x, y, z)        ·
+·                    table             xyz@primary  ·                ·
+·                    spans             ALL          ·                ·
+·                    locking strength  for update   ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
 ----
-·                         distributed  false        ·                            ·
-·                         vectorized   false        ·                            ·
-count                     ·            ·            ()                           ·
- └── update               ·            ·            ()                           ·
-      │                   table        xyz          ·                            ·
-      │                   set          x, y         ·                            ·
-      │                   strategy     updater      ·                            ·
-      │                   auto commit  ·            ·                            ·
-      └── render          ·            ·            (x, y, z, column7, column7)  ·
-           │              render 0     x            ·                            ·
-           │              render 1     y            ·                            ·
-           │              render 2     z            ·                            ·
-           │              render 3     column7      ·                            ·
-           │              render 4     column7      ·                            ·
-           └── render     ·            ·            (column7, x, y, z)           ·
-                │         render 0     2            ·                            ·
-                │         render 1     x            ·                            ·
-                │         render 2     y            ·                            ·
-                │         render 3     z            ·                            ·
-                └── scan  ·            ·            (x, y, z)                    ·
-·                         table        xyz@primary  ·                            ·
-·                         spans        ALL          ·                            ·
+·                         distributed       false        ·                            ·
+·                         vectorized        false        ·                            ·
+count                     ·                 ·            ()                           ·
+ └── update               ·                 ·            ()                           ·
+      │                   table             xyz          ·                            ·
+      │                   set               x, y         ·                            ·
+      │                   strategy          updater      ·                            ·
+      │                   auto commit       ·            ·                            ·
+      └── render          ·                 ·            (x, y, z, column7, column7)  ·
+           │              render 0          x            ·                            ·
+           │              render 1          y            ·                            ·
+           │              render 2          z            ·                            ·
+           │              render 3          column7      ·                            ·
+           │              render 4          column7      ·                            ·
+           └── render     ·                 ·            (column7, x, y, z)           ·
+                │         render 0          2            ·                            ·
+                │         render 1          x            ·                            ·
+                │         render 2          y            ·                            ·
+                │         render 3          z            ·                            ·
+                └── scan  ·                 ·            (x, y, z)                    ·
+·                         table             xyz@primary  ·                            ·
+·                         spans             ALL          ·                            ·
+·                         locking strength  for update   ·                            ·
 
 statement ok
 CREATE TABLE pks (
@@ -221,7 +225,8 @@ output row: [2 2 3]
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
-  v INT
+  v INT,
+  FAMILY (k, v)
 )
 
 query TTT
@@ -248,19 +253,20 @@ count                          ·            ·
 query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        kv
-      │              set          v
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        -/2/#
-·                    limit        1
+·                    distributed       false
+·                    vectorized        false
+count                ·                 ·
+ └── update          ·                 ·
+      │              table             kv
+      │              set               v
+      │              strategy          updater
+      │              auto commit       ·
+      └── render     ·                 ·
+           └── scan  ·                 ·
+·                    table             kv@primary
+·                    spans             -/2/#
+·                    limit             1
+·                    locking strength  for update
 
 # Check that updates on tables with multiple column families behave as
 # they should.
@@ -275,22 +281,23 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
 ]
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        tu
-      │              set          c
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           │         render 0     a
-           │         render 1     c
-           │         render 2     d
-           │         render 3     c + 1
-           └── scan  ·            ·
-·                    table        tu@primary
-·                    spans        ALL
+·                    distributed       false
+·                    vectorized        false
+count                ·                 ·
+ └── update          ·                 ·
+      │              table             tu
+      │              set               c
+      │              strategy          updater
+      │              auto commit       ·
+      └── render     ·                 ·
+           │         render 0          a
+           │         render 1          c
+           │         render 2          d
+           │         render 3          c + 1
+           └── scan  ·                 ·
+·                    table             tu@primary
+·                    spans             ALL
+·                    locking strength  for update
 
 statement ok
 SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
@@ -332,36 +339,37 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
-·                                             distributed   false                             ·                         ·
-·                                             vectorized    false                             ·                         ·
-root                                          ·             ·                                 (a)                       +a
- ├── sort                                     ·             ·                                 (a)                       +a
- │    │                                       order         +a                                ·                         ·
- │    └── scan buffer node                    ·             ·                                 (a)                       ·
- │                                            label         buffer 1                          ·                         ·
- └── subquery                                 ·             ·                                 (a)                       +a
-      │                                       id            @S1                               ·                         ·
-      │                                       original sql  UPDATE abc SET a = c RETURNING a  ·                         ·
-      │                                       exec mode     all rows                          ·                         ·
-      └── buffer node                         ·             ·                                 (a)                       ·
-           │                                  label         buffer 1                          ·                         ·
-           └── spool                          ·             ·                                 (a)                       ·
-                └── render                    ·             ·                                 (a)                       ·
-                     │                        render 0      a                                 ·                         ·
-                     └── run                  ·             ·                                 (a, rowid[hidden])        ·
-                          └── update          ·             ·                                 (a, rowid[hidden])        ·
-                               │              table         abc                               ·                         ·
-                               │              set           a                                 ·                         ·
-                               │              strategy      updater                           ·                         ·
-                               └── render     ·             ·                                 (a, b, c, rowid, c)       ·
-                                    │         render 0      a                                 ·                         ·
-                                    │         render 1      b                                 ·                         ·
-                                    │         render 2      c                                 ·                         ·
-                                    │         render 3      rowid                             ·                         ·
-                                    │         render 4      c                                 ·                         ·
-                                    └── scan  ·             ·                                 (a, b, c, rowid[hidden])  ·
-·                                             table         abc@primary                       ·                         ·
-·                                             spans         ALL                               ·                         ·
+·                                             distributed       false                             ·                         ·
+·                                             vectorized        false                             ·                         ·
+root                                          ·                 ·                                 (a)                       +a
+ ├── sort                                     ·                 ·                                 (a)                       +a
+ │    │                                       order             +a                                ·                         ·
+ │    └── scan buffer node                    ·                 ·                                 (a)                       ·
+ │                                            label             buffer 1                          ·                         ·
+ └── subquery                                 ·                 ·                                 (a)                       +a
+      │                                       id                @S1                               ·                         ·
+      │                                       original sql      UPDATE abc SET a = c RETURNING a  ·                         ·
+      │                                       exec mode         all rows                          ·                         ·
+      └── buffer node                         ·                 ·                                 (a)                       ·
+           │                                  label             buffer 1                          ·                         ·
+           └── spool                          ·                 ·                                 (a)                       ·
+                └── render                    ·                 ·                                 (a)                       ·
+                     │                        render 0          a                                 ·                         ·
+                     └── run                  ·                 ·                                 (a, rowid[hidden])        ·
+                          └── update          ·                 ·                                 (a, rowid[hidden])        ·
+                               │              table             abc                               ·                         ·
+                               │              set               a                                 ·                         ·
+                               │              strategy          updater                           ·                         ·
+                               └── render     ·                 ·                                 (a, b, c, rowid, c)       ·
+                                    │         render 0          a                                 ·                         ·
+                                    │         render 1          b                                 ·                         ·
+                                    │         render 2          c                                 ·                         ·
+                                    │         render 3          rowid                             ·                         ·
+                                    │         render 4          c                                 ·                         ·
+                                    └── scan  ·                 ·                                 (a, b, c, rowid[hidden])  ·
+·                                             table             abc@primary                       ·                         ·
+·                                             spans             ALL                               ·                         ·
+·                                             locking strength  for update                        ·                         ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO
@@ -415,3 +423,173 @@ count                           ·            ·               ()               
                      └── scan   ·            ·               (a, b)              ·
 ·                               table        t38799@foo      ·                   ·
 ·                               spans        ALL             ·                   ·
+
+# ------------------------------------------------------------------------------
+# Test without implicit SELECT FOR UPDATE.
+# Some cases were all tested earlier in this file with implicit SFU enabled.
+# ------------------------------------------------------------------------------
+
+query TTT
+EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
+----
+·                    distributed       false
+·                    vectorized        false
+count                ·                 ·
+ └── update          ·                 ·
+      │              table             kv
+      │              set               v
+      │              strategy          updater
+      │              auto commit       ·
+      └── render     ·                 ·
+           └── scan  ·                 ·
+·                    table             kv@primary
+·                    spans             /3-/3/#
+·                    locking strength  for update
+
+query TTT
+EXPLAIN UPDATE kv SET v=k WHERE k > 1 AND k < 10;
+----
+·                    distributed       false
+·                    vectorized        false
+count                ·                 ·
+ └── update          ·                 ·
+      │              table             kv
+      │              set               v
+      │              strategy          updater
+      │              auto commit       ·
+      └── render     ·                 ·
+           └── scan  ·                 ·
+·                    table             kv@primary
+·                    spans             /2-/9/#
+·                    parallel          ·
+·                    locking strength  for update
+
+query TTT
+EXPLAIN UPDATE kv SET v = 10
+----
+·                    distributed       false
+·                    vectorized        false
+count                ·                 ·
+ └── update          ·                 ·
+      │              table             kv
+      │              set               v
+      │              strategy          updater
+      │              auto commit       ·
+      └── render     ·                 ·
+           └── scan  ·                 ·
+·                    table             kv@primary
+·                    spans             ALL
+·                    locking strength  for update
+
+statement ok
+SET enable_implicit_select_for_update = false
+
+query TTT
+EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
+----
+·                    distributed  false
+·                    vectorized   false
+count                ·            ·
+ └── update          ·            ·
+      │              table        kv
+      │              set          v
+      │              strategy     updater
+      │              auto commit  ·
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        /3-/3/#
+
+query TTT
+EXPLAIN UPDATE kv SET v=k WHERE k > 1 AND k < 10;
+----
+·                    distributed  false
+·                    vectorized   false
+count                ·            ·
+ └── update          ·            ·
+      │              table        kv
+      │              set          v
+      │              strategy     updater
+      │              auto commit  ·
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        /2-/9/#
+·                    parallel     ·
+
+query TTT
+EXPLAIN UPDATE kv SET v = 10
+----
+·                    distributed  false
+·                    vectorized   false
+count                ·            ·
+ └── update          ·            ·
+      │              table        kv
+      │              set          v
+      │              strategy     updater
+      │              auto commit  ·
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
+
+query TTTTT
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
+----
+·                    distributed  false        ·                            ·
+·                    vectorized   false        ·                            ·
+count                ·            ·            ()                           ·
+ └── update          ·            ·            ()                           ·
+      │              table        xyz          ·                            ·
+      │              set          x, y         ·                            ·
+      │              strategy     updater      ·                            ·
+      │              auto commit  ·            ·                            ·
+      └── render     ·            ·            (x, y, z, column7, column8)  ·
+           │         render 0     x            ·                            ·
+           │         render 1     y            ·                            ·
+           │         render 2     z            ·                            ·
+           │         render 3     1            ·                            ·
+           │         render 4     2            ·                            ·
+           └── scan  ·            ·            (x, y, z)                    ·
+·                    table        xyz@primary  ·                            ·
+·                    spans        ALL          ·                            ·
+
+query TTT
+EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
+----
+·                    distributed  false
+·                    vectorized   false
+count                ·            ·
+ └── update          ·            ·
+      │              table        kv
+      │              set          v
+      │              strategy     updater
+      │              auto commit  ·
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        -/2/#
+·                    limit        1
+
+# Update single column family.
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN UPDATE tu SET c=c+1
+]
+----
+·                    distributed  false
+·                    vectorized   false
+count                ·            ·
+ └── update          ·            ·
+      │              table        tu
+      │              set          c
+      │              strategy     updater
+      │              auto commit  ·
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        tu@primary
+·                    spans        ALL
+
+# Reset for rest of test.
+statement ok
+SET enable_implicit_select_for_update = true

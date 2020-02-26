@@ -63,6 +63,12 @@ type Builder struct {
 	allowAutoCommit bool
 
 	allowInsertFastPath bool
+
+	// forceForUpdateLocking is conditionally passed through to factory methods
+	// for scan operators that serve as the input for mutation operators. When
+	// set to true, it ensures that a FOR UPDATE row-level locking mode is used
+	// by scans. See forUpdateLocking.
+	forceForUpdateLocking bool
 }
 
 // New constructs an instance of the execution node builder using the

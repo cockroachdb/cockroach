@@ -35,6 +35,50 @@ import (
 	"github.com/pkg/errors"
 )
 
+// MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
+func MVCCKeyCompare(a, b []byte) int {
+	// NB: For performance, this routine manually splits the key into the
+	// user-key and timestamp components rather than using SplitMVCCKey. Don't
+	// try this at home kids: use SplitMVCCKey.
+
+	aEnd := len(a) - 1
+	bEnd := len(b) - 1
+	if aEnd < 0 || bEnd < 0 {
+		// This should never happen unless there is some sort of corruption of
+		// the keys. This is a little bizarre, but the behavior exactly matches
+		// engine/db.cc:DBComparator.
+		return bytes.Compare(a, b)
+	}
+
+	// Compute the index of the separator between the key and the timestamp.
+	aSep := aEnd - int(a[aEnd])
+	bSep := bEnd - int(b[bEnd])
+	if aSep < 0 || bSep < 0 {
+		// This should never happen unless there is some sort of corruption of
+		// the keys. This is a little bizarre, but the behavior exactly matches
+		// engine/db.cc:DBComparator.
+		return bytes.Compare(a, b)
+	}
+
+	// Compare the "user key" part of the key.
+	if c := bytes.Compare(a[:aSep], b[:bSep]); c != 0 {
+		return c
+	}
+
+	// Compare the timestamp part of the key.
+	aTS := a[aSep:aEnd]
+	bTS := b[bSep:bEnd]
+	if len(aTS) == 0 {
+		if len(bTS) == 0 {
+			return 0
+		}
+		return -1
+	} else if len(bTS) == 0 {
+		return 1
+	}
+	return bytes.Compare(bTS, aTS)
+}
+
 // MVCCComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var MVCCComparer = &pebble.Comparer{
