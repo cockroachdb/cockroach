@@ -13,7 +13,6 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -54,8 +53,8 @@ func genMinMaxAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 
-	assignCmpRe := regexp.MustCompile(`_ASSIGN_CMP\((.*),(.*),(.*)\)`)
-	s = assignCmpRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
+	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 3)
+	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
 	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
 	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "LTyp" .LTyp "HasNulls" $4}}`)

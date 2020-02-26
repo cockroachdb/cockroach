@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -67,9 +67,6 @@ func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
 }
 
 // */}}
-
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
 
 // Enum used to represent comparison results
 type comparisonResult int

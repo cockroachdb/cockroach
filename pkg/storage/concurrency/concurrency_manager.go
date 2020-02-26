@@ -72,7 +72,7 @@ func NewManager(store Store, rng *roachpb.RangeDescriptor) Manager {
 		lm: &latchManagerImpl{
 			m: spanlatch.Make(store.Stopper(), store.GetSlowLatchGauge()),
 		},
-		lt: newLockTable(10000 /* arbitrary */),
+		lt: &lockTableImpl{maxLocks: 10000 /* arbitrary */},
 		ltw: &lockTableWaiterImpl{
 			nodeID:                   store.NodeDescriptor().NodeID,
 			stopper:                  store.Stopper(),

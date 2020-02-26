@@ -11,7 +11,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for sum_agg.eg.go. It's formatted in a
+// This file is the execgen template for avg_agg.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
@@ -129,7 +129,7 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		if !a.scratch.foundNonNullForCurrentGroup {
 			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
 		} else {
-			_ASSIGN_DIV_INT64("a.scratch.vec[a.scratch.curIdx]", "a.scratch.curSum", "a.scratch.curCount")
+			_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
 		}
 		a.scratch.curIdx++
 		a.done = true
@@ -187,7 +187,7 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
 			} else {
 				// {{with .Global}}
-				_ASSIGN_DIV_INT64("a.scratch.vec[a.scratch.curIdx]", "a.scratch.curSum", "a.scratch.curCount")
+				_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount)
 				// {{end}}
 			}
 		}
@@ -212,7 +212,7 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 	isNull = false
 	// {{ end }}
 	if !isNull {
-		_ASSIGN_ADD("a.scratch.curSum", "a.scratch.curSum", "col[i]")
+		_ASSIGN_ADD(a.scratch.curSum, a.scratch.curSum, col[i])
 		a.scratch.curCount++
 		a.scratch.foundNonNullForCurrentGroup = true
 	}

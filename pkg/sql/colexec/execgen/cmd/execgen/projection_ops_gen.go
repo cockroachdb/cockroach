@@ -13,7 +13,6 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -58,8 +57,8 @@ func replaceProjTmplVariables(tmpl string) string {
 	tmpl = strings.Replace(tmpl, "_R_TYP", "{{.RTyp}}", -1)
 	tmpl = strings.Replace(tmpl, "_RET_TYP", "{{.RetTyp}}", -1)
 
-	assignRe := regexp.MustCompile(`_ASSIGN\((.*),(.*),(.*)\)`)
-	tmpl = assignRe.ReplaceAllString(tmpl, "{{.Assign $1 $2 $3}}")
+	assignRe := makeFunctionRegex("_ASSIGN", 3)
+	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Assign", 3))
 
 	tmpl = strings.Replace(tmpl, "_HAS_NULLS", "$hasNulls", -1)
 	setProjectionRe := makeFunctionRegex("_SET_PROJECTION", 1)

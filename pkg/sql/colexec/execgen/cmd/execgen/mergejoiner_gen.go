@@ -24,11 +24,10 @@ import (
 type mjOverload struct {
 	// The embedded overload has the shared type information for both of the
 	// overloads, so that you can reference that information inside of . without
-	// needing to pick Eq, Lt, or Gt.
+	// needing to pick Eq or Lt.
 	overload
 	Eq *overload
 	Lt *overload
-	Gt *overload
 }
 
 // selPermutation contains information about which permutation of selection
@@ -124,13 +123,10 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2  "HasNulls" $3 }}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)
+	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Eq.Assign", 3))
 
 	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 3)
-	s = assignLtRe.ReplaceAllString(s, `{{.Lt.Assign $1 $2 $3}}`)
-
-	assignGtRe := makeFunctionRegex("_ASSIGN_GT", 3)
-	s = assignGtRe.ReplaceAllString(s, `{{.Gt.Assign $1 $2 $3}}`)
+	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Lt.Assign", 3))
 
 	s = replaceManipulationFuncs(".LTyp", s)
 
@@ -140,7 +136,7 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 		return err
 	}
 
-	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.EQ], sameTypeComparisonOpToOverloads[tree.LT], sameTypeComparisonOpToOverloads[tree.GT])
+	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.EQ], sameTypeComparisonOpToOverloads[tree.LT])
 
 	// Create an mjOverload for each overload combining three overloads so that
 	// the template code can access all of EQ, LT, and GT in the same range loop.
@@ -150,7 +146,6 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 			overload: *allOverloads[0][i],
 			Eq:       allOverloads[0][i],
 			Lt:       allOverloads[1][i],
-			Gt:       allOverloads[2][i],
 		}
 	}
 

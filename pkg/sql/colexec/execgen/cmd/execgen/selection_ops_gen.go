@@ -13,7 +13,6 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -36,8 +35,8 @@ func getSelectionOpsTmpl() (*template.Template, error) {
 	s = strings.Replace(s, "_R_TYP", "{{.RTyp}}", -1)
 	s = strings.Replace(s, "_NAME", "{{.Name}}", -1)
 
-	assignCmpRe := regexp.MustCompile(`_ASSIGN_CMP\((.*),(.*),(.*)\)`)
-	s = assignCmpRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 3)
+	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
 	s = replaceManipulationFuncs(".LTyp", s)
 	s = strings.Replace(s, "_R_UNSAFEGET", "execgen.UNSAFEGET", -1)

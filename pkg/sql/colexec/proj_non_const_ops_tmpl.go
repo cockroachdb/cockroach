@@ -81,6 +81,29 @@ func _RET_UNSAFEGET(_, _ interface{}) interface{} {
 
 // */}}
 
+// projConstOpBase contains all of the fields for binary projections with a
+// constant, except for the constant itself.
+// NOTE: this struct should be declared in proj_const_ops_tmpl.go, but if we do
+// so, it'll be redeclared because we execute that template twice. To go
+// around the problem we specify it here.
+type projConstOpBase struct {
+	OneInputNode
+	allocator      *Allocator
+	colIdx         int
+	outputIdx      int
+	decimalScratch decimalOverloadScratch
+}
+
+// projOpBase contains all of the fields for non-constant binary projections.
+type projOpBase struct {
+	OneInputNode
+	allocator      *Allocator
+	col1Idx        int
+	col2Idx        int
+	outputIdx      int
+	decimalScratch decimalOverloadScratch
+}
+
 // {{define "projOp"}}
 
 type _OP_NAME struct {
@@ -175,7 +198,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 		// {{end}}
 		arg1 := _L_UNSAFEGET(col1, int(i))
 		arg2 := _R_UNSAFEGET(col2, int(i))
-		_ASSIGN("projCol[i]", "arg1", "arg2")
+		_ASSIGN(projCol[i], arg1, arg2)
 		// {{if _HAS_NULLS }}
 	}
 	// {{end}}

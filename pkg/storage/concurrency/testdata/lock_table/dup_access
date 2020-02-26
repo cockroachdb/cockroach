@@ -361,6 +361,20 @@ guard-state r=req8
 ----
 new: state=waitForDistinguished txn=txn1 ts=10 key="b" held=true guard-access=write
 
+# req9 is just to prevent the lock for "b" from being gc'd and then a new one
+# created when req7 acquires "b", which due to the old snapshot held by req8
+# would not be seen until the next scan.
+new-request r=req9 txn=txn2 ts=10 spans=w@b
+----
+
+scan r=req9
+----
+start-waiting: true
+
+guard-state r=req9
+----
+new: state=waitFor txn=txn1 ts=10 key="b" held=true guard-access=write
+
 print
 ----
 global: num=3
@@ -373,6 +387,7 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:
     active: true req: 8, txn: none
+    active: true req: 9, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 8
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
@@ -382,12 +397,14 @@ local: num=0
 
 release txn=txn1 span=b
 ----
-global: num=2
+global: num=3
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 7
+ lock: "b"
+  res: req: 9, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
 local: num=0
@@ -398,12 +415,14 @@ new: state=waitForDistinguished txn=txn1 ts=10 key="c" held=true guard-access=wr
 
 print
 ----
-global: num=2
+global: num=3
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 7
+ lock: "b"
+  res: req: 9, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:
@@ -415,9 +434,11 @@ local: num=0
 
 release txn=txn1 span=a
 ----
-global: num=2
+global: num=3
  lock: "a"
   res: req: 7, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "b"
+  res: req: 9, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:
@@ -431,9 +452,13 @@ new: state=doneWaiting
 
 print
 ----
-global: num=2
+global: num=3
  lock: "a"
   res: req: 7, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "b"
+  res: req: 7, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: false req: 9, txn: 00000000-0000-0000-0000-000000000002
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
    queued writers:

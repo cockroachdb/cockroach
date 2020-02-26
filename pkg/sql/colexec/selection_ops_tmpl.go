@@ -81,7 +81,7 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		for _, i := range sel {
 			var cmp bool
 			arg := execgen.UNSAFEGET(col, int(i))
-			_ASSIGN_CMP("cmp", "arg", "p.constArg")
+			_ASSIGN_CMP(cmp, arg, p.constArg)
 			// {{if _HAS_NULLS}}
 			isNull := nulls.NullAt(i)
 			// {{else}}
@@ -99,7 +99,7 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		for execgen.RANGE(i, col, 0, int(n)) {
 			var cmp bool
 			arg := execgen.UNSAFEGET(col, i)
-			_ASSIGN_CMP("cmp", "arg", "p.constArg")
+			_ASSIGN_CMP(cmp, arg, p.constArg)
 			// {{if _HAS_NULLS}}
 			isNull := nulls.NullAt(uint16(i))
 			// {{else}}
@@ -127,7 +127,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			var cmp bool
 			arg1 := execgen.UNSAFEGET(col1, int(i))
 			arg2 := _R_UNSAFEGET(col2, int(i))
-			_ASSIGN_CMP("cmp", "arg1", "arg2")
+			_ASSIGN_CMP(cmp, arg1, arg2)
 			// {{if _HAS_NULLS}}
 			isNull := nulls.NullAt(i)
 			// {{else}}
@@ -153,7 +153,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			var cmp bool
 			arg1 := execgen.UNSAFEGET(col1, i)
 			arg2 := _R_UNSAFEGET(col2, i)
-			_ASSIGN_CMP("cmp", "arg1", "arg2")
+			_ASSIGN_CMP(cmp, arg1, arg2)
 			// {{if _HAS_NULLS}}
 			isNull := nulls.NullAt(uint16(i))
 			// {{else}}
@@ -169,6 +169,22 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 	// {{end}}
 	// {{/*
 } // */}}
+
+// selConstOpBase contains all of the fields for binary selections with a
+// constant, except for the constant itself.
+type selConstOpBase struct {
+	OneInputNode
+	colIdx         int
+	decimalScratch decimalOverloadScratch
+}
+
+// selOpBase contains all of the fields for non-constant binary selections.
+type selOpBase struct {
+	OneInputNode
+	col1Idx        int
+	col2Idx        int
+	decimalScratch decimalOverloadScratch
+}
 
 // {{define "selConstOp"}}
 type _OP_CONST_NAME struct {

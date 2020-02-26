@@ -30,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -107,9 +109,6 @@ const _FILTER_INFO = 0
 
 // */}}
 
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
-
 // {{ range $filterInfo := $.FilterInfos }}
 // {{ if or (not $filterInfo.HasFilter) $.JoinType.FilterSupported }}
 type mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp struct {
@@ -171,7 +170,7 @@ func _PROBE_SWITCH(
 				rVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 
 				var match bool
-				_ASSIGN_EQ("match", "lVal", "rVal")
+				_ASSIGN_EQ(match, lVal, rVal)
 				if match {
 					// Find the length of the groups on each side.
 					lGroupLength, rGroupLength := 1, 1
@@ -192,7 +191,7 @@ func _PROBE_SWITCH(
 							// {{ end }}
 							lSelIdx := _L_SEL_IND
 							newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
-							_ASSIGN_EQ("match", "newLVal", "lVal")
+							_ASSIGN_EQ(match, newLVal, lVal)
 							if !match {
 								lComplete = true
 								break
@@ -216,7 +215,7 @@ func _PROBE_SWITCH(
 							// {{ end }}
 							rSelIdx := _R_SEL_IND
 							newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
-							_ASSIGN_EQ("match", "newRVal", "rVal")
+							_ASSIGN_EQ(match, newRVal, rVal)
 							if !match {
 								rComplete = true
 								break
@@ -277,7 +276,7 @@ func _PROBE_SWITCH(
 					}
 				} else { // mismatch
 					var incrementLeft bool
-					_ASSIGN_LT("incrementLeft", "lVal", "rVal")
+					_ASSIGN_LT(incrementLeft, lVal, rVal)
 					// Switch the direction of increment if we're sorted descendingly.
 					incrementLeft = incrementLeft == (o.left.directions[eqColIdx] == execinfrapb.Ordering_Column_ASC)
 					if incrementLeft {
@@ -465,7 +464,7 @@ func _INCREMENT_LEFT_SWITCH(
 		lSelIdx = _L_SEL_IND
 		newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
 		// {{with _MJ_OVERLOAD}}
-		_ASSIGN_EQ("match", "newLVal", "lVal")
+		_ASSIGN_EQ(match, newLVal, lVal)
 		// {{end}}
 		if !match {
 			break
@@ -523,7 +522,7 @@ func _INCREMENT_RIGHT_SWITCH(
 		rSelIdx = _R_SEL_IND
 		newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 		// {{with _MJ_OVERLOAD}}
-		_ASSIGN_EQ("match", "newRVal", "rVal")
+		_ASSIGN_EQ(match, newRVal, rVal)
 		// {{end}}
 		if !match {
 			break

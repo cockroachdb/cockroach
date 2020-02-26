@@ -13,7 +13,6 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -55,8 +54,8 @@ func genSortOps(wr io.Writer) error {
 	s = strings.Replace(s, "_ISNULL", "{{$isNull}}", -1)
 	s = strings.Replace(s, "_HANDLES_NULLS", "{{if .Nulls}}WithNulls{{else}}{{end}}", -1)
 
-	assignLtRe := regexp.MustCompile(`_ASSIGN_LT\((.*),(.*),(.*)\)`)
-	s = assignLtRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 3)
+	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
 	s = replaceManipulationFuncs(".LTyp", s)
 
