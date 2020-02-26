@@ -368,7 +368,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 func (m *Manager) iterAndWait(
 	ctx context.Context, t *timeutil.Timer, it *iterator, wait *latch, ignore ignoreFn,
 ) error {
-	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap() {
+	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {
 		held := it.Cur()
 		if held.done.signaled() {
 			continue

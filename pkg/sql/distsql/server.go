@@ -302,12 +302,13 @@ func (ds *ServerImpl) setupFlow(
 			Mon:         &monitor,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
-			Context:          ctx,
-			Planner:          &sqlbase.DummyEvalPlanner{},
-			SessionAccessor:  &sqlbase.DummySessionAccessor{},
-			Sequence:         &sqlbase.DummySequenceOperators{},
-			InternalExecutor: ie,
-			Txn:              leafTxn,
+			Context:            ctx,
+			Planner:            &sqlbase.DummyEvalPlanner{},
+			SessionAccessor:    &sqlbase.DummySessionAccessor{},
+			PrivilegedAccessor: &sqlbase.DummyPrivilegedAccessor{},
+			Sequence:           &sqlbase.DummySequenceOperators{},
+			InternalExecutor:   ie,
+			Txn:                leafTxn,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
