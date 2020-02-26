@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -78,22 +77,8 @@ func makeTestContext() testContext {
 	}
 }
 
-type retryIntentEnum int
-
-const (
-	retryIntentUnknown retryIntentEnum = iota
-	retryIntentSet
-	retryIntentNotSet
-)
-
 // createOpenState returns a txnState initialized with an open txn.
-func (tc *testContext) createOpenState(
-	typ txnType, retryIntentOpt retryIntentEnum,
-) (fsm.State, *txnState) {
-	if retryIntentOpt == retryIntentUnknown {
-		log.Fatalf(context.TODO(), "retryIntentOpt not specified")
-	}
-
+func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	sp := tc.tracer.StartSpan("createOpenState")
 	ctx := opentracing.ContextWithSpan(tc.ctx, sp)
 	ctx, cancel := context.WithCancel(ctx)
@@ -122,31 +107,25 @@ func (tc *testContext) createOpenState(
 
 	state := stateOpen{
 		ImplicitTxn: fsm.FromBool(typ == implicitTxn),
-		RetryIntent: fsm.FromBool(retryIntentOpt == retryIntentSet),
 	}
 	return state, &ts
 }
 
 // createAbortedState returns a txnState initialized with an aborted txn.
-func (tc *testContext) createAbortedState(retryIntentOpt retryIntentEnum) (fsm.State, *txnState) {
-	_, ts := tc.createOpenState(explicitTxn, retryIntentOpt)
+func (tc *testContext) createAbortedState() (fsm.State, *txnState) {
+	_, ts := tc.createOpenState(explicitTxn)
 	ts.mu.txn.CleanupOnError(ts.Ctx, errors.Errorf("dummy error"))
-	s := stateAborted{RetryIntent: fsm.FromBool(retryIntentOpt == retryIntentSet)}
-	return s, ts
+	return stateAborted{}, ts
 }
 
 func (tc *testContext) createRestartWaitState() (fsm.State, *txnState) {
-	_, ts := tc.createOpenState(
-		explicitTxn,
-		// retryIntent must had been set in order for the state to advance to
-		// RestartWait.
-		retryIntentSet)
+	_, ts := tc.createOpenState(explicitTxn)
 	s := stateRestartWait{}
 	return s, ts
 }
 
 func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
-	_, ts := tc.createOpenState(explicitTxn, retryIntentSet)
+	_, ts := tc.createOpenState(explicitTxn)
 	// Commit the KV txn, simulating what the execution layer is doing.
 	if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
 		return nil, nil, err
@@ -296,7 +275,7 @@ func TestTransitions(t *testing.T) {
 			ev: eventTxnStart{ImplicitTxn: fsm.True},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
 				nil /* historicalTimestamp */, tranCtx),
-			expState: stateOpen{ImplicitTxn: fsm.True, RetryIntent: fsm.False},
+			expState: stateOpen{ImplicitTxn: fsm.True},
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
 				// executed again, this time in state Open.
@@ -321,7 +300,7 @@ func TestTransitions(t *testing.T) {
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
 				nil /* historicalTimestamp */, tranCtx),
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False},
+			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnStart,
@@ -338,24 +317,10 @@ func TestTransitions(t *testing.T) {
 		// Tests starting from the Open state.
 		//
 		{
-			// Set the retry intent.
-			name: "Open->Open + retry intent",
-			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
-				return s, ts, nil
-			},
-			ev:       eventRetryIntentSet{},
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
-			expAdv: expAdvance{
-				expCode: advanceOne,
-			},
-			expTxn: &expKVTxn{},
-		},
-		{
 			// Finish an implicit txn.
 			name: "Open (implicit) -> NoTxn",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(implicitTxn, retryIntentNotSet)
+				s, ts := testCon.createOpenState(implicitTxn)
 				// We commit the KV transaction, as that's done by the layer below
 				// txnState.
 				if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
@@ -376,7 +341,7 @@ func TestTransitions(t *testing.T) {
 			// Finish an explicit txn.
 			name: "Open (explicit) -> NoTxn",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				// We commit the KV transaction, as that's done by the layer below
 				// txnState.
 				if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
@@ -397,7 +362,7 @@ func TestTransitions(t *testing.T) {
 			// Get a retriable error while we can auto-retry.
 			name: "Open + auto-retry",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
@@ -407,7 +372,7 @@ func TestTransitions(t *testing.T) {
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
 			},
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False},
+			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: rewind,
 				expEv:   txnRestart,
@@ -421,7 +386,7 @@ func TestTransitions(t *testing.T) {
 			// difference; we should still auto-retry like the above.
 			name: "Open + auto-retry (COMMIT)",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
@@ -431,7 +396,7 @@ func TestTransitions(t *testing.T) {
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
 			},
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False},
+			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: rewind,
 				expEv:   txnRestart,
@@ -444,7 +409,7 @@ func TestTransitions(t *testing.T) {
 			// is doing client-side retries.
 			name: "Open + client retry",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
@@ -471,7 +436,7 @@ func TestTransitions(t *testing.T) {
 			// we can't go to RestartWait.
 			name: "Open + client retry + error on COMMIT",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
@@ -493,7 +458,7 @@ func TestTransitions(t *testing.T) {
 			// An error on COMMIT leaves us in NoTxn, not in Aborted.
 			name: "Open + non-retriable error on COMMIT",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, nil
 			},
 			ev:        eventNonRetriableErr{IsCommit: fsm.True},
@@ -507,33 +472,11 @@ func TestTransitions(t *testing.T) {
 			expTxn: nil,
 		},
 		{
-			// We get a retriable error, but we can't auto-retry and the client is not
-			// doing client-directed retries.
-			name: "Open + useless retriable error (explicit)",
-			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
-				return s, ts, nil
-			},
-			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
-					rewCap: rewindCapability{},
-				}
-				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
-			},
-			expState: stateAborted{RetryIntent: fsm.False},
-			expAdv: expAdvance{
-				expCode: skipBatch,
-				expEv:   noEvent,
-			},
-			expTxn: &expKVTxn{},
-		},
-		{
 			// Like the above, but this time with an implicit txn: we get a retriable
 			// error, but we can't auto-retry. We expect to go to NoTxn.
 			name: "Open + useless retriable error (implicit)",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(implicitTxn, retryIntentNotSet)
+				s, ts := testCon.createOpenState(implicitTxn)
 				return s, ts, nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
@@ -555,12 +498,12 @@ func TestTransitions(t *testing.T) {
 			// We get a non-retriable error.
 			name: "Open + non-retriable error",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, nil
 			},
 			ev:        eventNonRetriableErr{IsCommit: fsm.False},
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
-			expState:  stateAborted{RetryIntent: fsm.False},
+			expState:  stateAborted{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
 				expEv:   noEvent,
@@ -571,7 +514,7 @@ func TestTransitions(t *testing.T) {
 			// We go to CommitWait (after a RELEASE SAVEPOINT).
 			name: "Open->CommitWait",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				// Simulate what execution does before generating this event.
 				err := ts.mu.txn.Commit(ts.Ctx)
 				return s, ts, err
@@ -588,11 +531,11 @@ func TestTransitions(t *testing.T) {
 			// Restarting from Open via ROLLBACK TO SAVEPOINT.
 			name: "Open + restart",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, nil
 			},
 			ev:       eventTxnRestart{},
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
+			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnRestart,
@@ -608,7 +551,7 @@ func TestTransitions(t *testing.T) {
 			// The txn finished, such as after a ROLLBACK.
 			name: "Aborted->NoTxn",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createAbortedState(retryIntentNotSet)
+				s, ts := testCon.createAbortedState()
 				return s, ts, nil
 			},
 			ev:        eventTxnFinish{},
@@ -624,13 +567,13 @@ func TestTransitions(t *testing.T) {
 			// The txn is starting again (e.g. ROLLBACK TO SAVEPOINT while in Aborted).
 			name: "Aborted->Starting",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createAbortedState(retryIntentSet)
+				s, ts := testCon.createAbortedState()
 				return s, ts, nil
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
 				nil /* historicalTimestamp */, tranCtx),
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
+			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnRestart,
@@ -643,13 +586,13 @@ func TestTransitions(t *testing.T) {
 			// to the expTxn.
 			name: "Aborted->Starting (historical)",
 			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createAbortedState(retryIntentSet)
+				s, ts := testCon.createAbortedState()
 				return s, ts, nil
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadOnly, now.GoTime(),
 				&now, tranCtx),
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
+			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnRestart,
@@ -686,7 +629,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, nil
 			},
 			ev:       eventTxnRestart{},
-			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
+			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnRestart,
@@ -701,7 +644,7 @@ func TestTransitions(t *testing.T) {
 			},
 			ev:        eventNonRetriableErr{IsCommit: fsm.False},
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
-			expState:  stateAborted{RetryIntent: fsm.True},
+			expState:  stateAborted{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
 				expEv:   noEvent,

@@ -711,7 +711,7 @@ func (s *Server) newConnExecutorWithTxn(
 	// initialize the state.
 	ex.machine = fsm.MakeMachine(
 		BoundTxnStateTransitions,
-		stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False},
+		stateOpen{ImplicitTxn: fsm.False},
 		&ex.state,
 	)
 	ex.state.resetForNewSQLTxn(
