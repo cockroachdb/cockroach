@@ -121,11 +121,14 @@ func registerCopy(r *testRegistry) {
 			if err != nil {
 				t.Fatalf("failed to copy rows: %s", err)
 			}
-
+			rangeMinBytes, rangeMaxBytes, err := getDefaultRangeSize(ctx, db)
+			if err != nil {
+				t.Fatalf("failed to get default range size: %v", err)
+			}
 			rc := rangeCount()
 			t.l.Printf("range count after copy = %d\n", rc)
-			highExp := (rows * rowEstimate) / (32 << 20 /* 32MB */)
-			lowExp := (rows * rowEstimate) / (64 << 20 /* 64MB */)
+			highExp := (rows * rowEstimate) / (rangeMinBytes * 2)
+			lowExp := (rows * rowEstimate) / (rangeMaxBytes)
 			if rc > highExp || rc < lowExp {
 				return errors.Errorf("expected range count for table between %d and %d, found %d",
 					lowExp, highExp, rc)
@@ -149,4 +152,17 @@ func registerCopy(r *testRegistry) {
 			},
 		})
 	}
+}
+
+func getDefaultRangeSize(
+	ctx context.Context, db *gosql.DB,
+) (rangeMinBytes, rangeMaxBytes int, err error) {
+	err = db.QueryRow(`SELECT
+    regexp_extract(regexp_extract(raw_config_sql, e'range_min_bytes = \\d+'), e'\\d+')::INT8
+        AS range_min_bytes,
+    regexp_extract(regexp_extract(raw_config_sql, e'range_max_bytes = \\d+'), e'\\d+')::INT8
+        AS range_max_bytes
+FROM
+    [SHOW ZONE CONFIGURATION FOR RANGE default];`).Scan(&rangeMinBytes, &rangeMaxBytes)
+	return rangeMinBytes, rangeMaxBytes, err
 }
