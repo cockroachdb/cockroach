@@ -600,24 +600,25 @@ render               ·            ·          (b)     ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-·                         distributed  false      ·                   ·
-·                         vectorized   false      ·                   ·
-render                    ·            ·          (b)                 ·
- │                        render 0     b          ·                   ·
- └── run                  ·            ·          (a, b)              ·
-      └── update          ·            ·          (a, b)              ·
-           │              table        t          ·                   ·
-           │              set          c          ·                   ·
-           │              strategy     updater    ·                   ·
-           │              auto commit  ·          ·                   ·
-           └── render     ·            ·          (a, b, c, column7)  ·
-                │         render 0     a          ·                   ·
-                │         render 1     b          ·                   ·
-                │         render 2     c          ·                   ·
-                │         render 3     true       ·                   ·
-                └── scan  ·            ·          (a, b, c)           ·
-·                         table        t@primary  ·                   ·
-·                         spans        ALL        ·                   ·
+·                         distributed       false       ·                   ·
+·                         vectorized        false       ·                   ·
+render                    ·                 ·           (b)                 ·
+ │                        render 0          b           ·                   ·
+ └── run                  ·                 ·           (a, b)              ·
+      └── update          ·                 ·           (a, b)              ·
+           │              table             t           ·                   ·
+           │              set               c           ·                   ·
+           │              strategy          updater     ·                   ·
+           │              auto commit       ·           ·                   ·
+           └── render     ·                 ·           (a, b, c, column7)  ·
+                │         render 0          a           ·                   ·
+                │         render 1          b           ·                   ·
+                │         render 2          c           ·                   ·
+                │         render 3          true        ·                   ·
+                └── scan  ·                 ·           (a, b, c)           ·
+·                         table             t@primary   ·                   ·
+·                         spans             ALL         ·                   ·
+·                         locking strength  for update  ·                   ·
 
 statement ok
 CREATE TABLE uvwxyz (

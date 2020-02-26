@@ -1516,18 +1516,19 @@ render     ·            ·
 query TTT
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
-·                    distributed  false
-·                    vectorized   false
-count                ·            ·
- └── update          ·            ·
-      │              table        t4
-      │              set          c
-      │              strategy     updater
-      │              auto commit  ·
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        t4@primary
-·                    spans        /10/20/0-/10/20/1/2
+·                    distributed       false
+·                    vectorized        false
+count                ·                 ·
+ └── update          ·                 ·
+      │              table             t4
+      │              set               c
+      │              strategy          updater
+      │              auto commit       ·
+      └── render     ·                 ·
+           └── scan  ·                 ·
+·                    table             t4@primary
+·                    spans             /10/20/0-/10/20/1/2
+·                    locking strength  for update
 
 # Optimization should not be applied for deletes.
 query TTT

@@ -48,23 +48,24 @@ count                     ·            ·                          ()          
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
 ----
-·                    distributed  false       ·                                          ·
-·                    vectorized   false       ·                                          ·
-count                ·            ·           ()                                         ·
- └── update          ·            ·           ()                                         ·
-      │              table        t9          ·                                          ·
-      │              set          a           ·                                          ·
-      │              strategy     updater     ·                                          ·
-      │              auto commit  ·           ·                                          ·
-      └── render     ·            ·           (a, b, c, d, e, column11, check1, check2)  ·
-           │         render 0     a           ·                                          ·
-           │         render 1     b           ·                                          ·
-           │         render 2     c           ·                                          ·
-           │         render 3     d           ·                                          ·
-           │         render 4     e           ·                                          ·
-           │         render 5     2           ·                                          ·
-           │         render 6     b < 2       ·                                          ·
-           │         render 7     d IS NULL   ·                                          ·
-           └── scan  ·            ·           (a, b, c, d, e)                            ·
-·                    table        t9@primary  ·                                          ·
-·                    spans        /5-/5/#     ·                                          ·
+·                    distributed       false       ·                                          ·
+·                    vectorized        false       ·                                          ·
+count                ·                 ·           ()                                         ·
+ └── update          ·                 ·           ()                                         ·
+      │              table             t9          ·                                          ·
+      │              set               a           ·                                          ·
+      │              strategy          updater     ·                                          ·
+      │              auto commit       ·           ·                                          ·
+      └── render     ·                 ·           (a, b, c, d, e, column11, check1, check2)  ·
+           │         render 0          a           ·                                          ·
+           │         render 1          b           ·                                          ·
+           │         render 2          c           ·                                          ·
+           │         render 3          d           ·                                          ·
+           │         render 4          e           ·                                          ·
+           │         render 5          2           ·                                          ·
+           │         render 6          b < 2       ·                                          ·
+           │         render 7          d IS NULL   ·                                          ·
+           └── scan  ·                 ·           (a, b, c, d, e)                            ·
+·                    table             t9@primary  ·                                          ·
+·                    spans             /5-/5/#     ·                                          ·
+·                    locking strength  for update  ·                                          ·
