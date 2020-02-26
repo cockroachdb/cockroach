@@ -2539,6 +2539,8 @@ void NodeDescriptor::InitAsDefaultInstance() {
       ::cockroach::roachpb::Version::internal_default_instance());
   ::cockroach::roachpb::_NodeDescriptor_default_instance_._instance.get_mutable()->sql_address_ = const_cast< ::cockroach::util::UnresolvedAddr*>(
       ::cockroach::util::UnresolvedAddr::internal_default_instance());
+  ::cockroach::roachpb::_NodeDescriptor_default_instance_._instance.get_mutable()->http_address_ = const_cast< ::cockroach::util::UnresolvedAddr*>(
+      ::cockroach::util::UnresolvedAddr::internal_default_instance());
 }
 void NodeDescriptor::clear_address() {
   if (address_ != NULL) address_->Clear();
@@ -2547,6 +2549,10 @@ void NodeDescriptor::clear_address() {
 void NodeDescriptor::clear_sql_address() {
   if (sql_address_ != NULL) sql_address_->Clear();
   clear_has_sql_address();
+}
+void NodeDescriptor::clear_http_address() {
+  if (http_address_ != NULL) http_address_->Clear();
+  clear_has_http_address();
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int NodeDescriptor::kNodeIdFieldNumber;
@@ -2559,6 +2565,7 @@ const int NodeDescriptor::kStartedAtFieldNumber;
 const int NodeDescriptor::kLocalityAddressFieldNumber;
 const int NodeDescriptor::kClusterNameFieldNumber;
 const int NodeDescriptor::kSqlAddressFieldNumber;
+const int NodeDescriptor::kHttpAddressFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeDescriptor::NodeDescriptor()
@@ -2607,6 +2614,11 @@ NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
   } else {
     sql_address_ = NULL;
   }
+  if (from.has_http_address()) {
+    http_address_ = new ::cockroach::util::UnresolvedAddr(*from.http_address_);
+  } else {
+    http_address_ = NULL;
+  }
   ::memcpy(&started_at_, &from.started_at_,
     static_cast<size_t>(reinterpret_cast<char*>(&node_id_) -
     reinterpret_cast<char*>(&started_at_)) + sizeof(node_id_));
@@ -2634,6 +2646,7 @@ void NodeDescriptor::SharedDtor() {
   if (this != internal_default_instance()) delete locality_;
   if (this != internal_default_instance()) delete serverversion_;
   if (this != internal_default_instance()) delete sql_address_;
+  if (this != internal_default_instance()) delete http_address_;
 }
 
 void NodeDescriptor::SetCachedSize(int size) const {
@@ -2653,7 +2666,7 @@ void NodeDescriptor::Clear() {
 
   locality_address_.Clear();
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 127u) {
+  if (cached_has_bits & 255u) {
     if (cached_has_bits & 0x00000001u) {
       build_tag_.ClearNonDefaultToEmptyNoArena();
     }
@@ -2680,9 +2693,16 @@ void NodeDescriptor::Clear() {
       GOOGLE_DCHECK(sql_address_ != NULL);
       sql_address_->Clear();
     }
+    if (cached_has_bits & 0x00000080u) {
+      GOOGLE_DCHECK(http_address_ != NULL);
+      http_address_->Clear();
+    }
   }
-  started_at_ = GOOGLE_LONGLONG(0);
-  node_id_ = 0;
+  if (cached_has_bits & 768u) {
+    ::memset(&started_at_, 0, static_cast<size_t>(
+        reinterpret_cast<char*>(&node_id_) -
+        reinterpret_cast<char*>(&started_at_)) + sizeof(node_id_));
+  }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
 }
@@ -2817,6 +2837,17 @@ bool NodeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      case 11: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(90u /* 90 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_http_address()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2844,7 +2875,7 @@ void NodeDescriptor::SerializeWithCachedSizes(
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000100u) {
+  if (cached_has_bits & 0x00000200u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
   }
 
@@ -2873,7 +2904,7 @@ void NodeDescriptor::SerializeWithCachedSizes(
       6, this->build_tag(), output);
   }
 
-  if (cached_has_bits & 0x00000080u) {
+  if (cached_has_bits & 0x00000100u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(7, this->started_at(), output);
   }
 
@@ -2893,6 +2924,11 @@ void NodeDescriptor::SerializeWithCachedSizes(
   if (cached_has_bits & 0x00000040u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       10, this->_internal_sql_address(), output);
+  }
+
+  if (cached_has_bits & 0x00000080u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      11, this->_internal_http_address(), output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -2959,19 +2995,27 @@ size_t NodeDescriptor::ByteSizeLong() const {
           *sql_address_);
     }
 
+    if (has_http_address()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *http_address_);
+    }
+
+  }
+  if (_has_bits_[8 / 32] & 768u) {
     if (has_started_at()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->started_at());
     }
 
-  }
-  if (has_node_id()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->node_id());
-  }
+    if (has_node_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->node_id());
+    }
 
+  }
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -3016,12 +3060,17 @@ void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
       mutable_sql_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.sql_address());
     }
     if (cached_has_bits & 0x00000080u) {
+      mutable_http_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.http_address());
+    }
+  }
+  if (cached_has_bits & 768u) {
+    if (cached_has_bits & 0x00000100u) {
       started_at_ = from.started_at_;
     }
+    if (cached_has_bits & 0x00000200u) {
+      node_id_ = from.node_id_;
+    }
     _has_bits_[0] |= cached_has_bits;
-  }
-  if (cached_has_bits & 0x00000100u) {
-    set_node_id(from.node_id());
   }
 }
 
@@ -3052,6 +3101,7 @@ void NodeDescriptor::InternalSwap(NodeDescriptor* other) {
   swap(locality_, other->locality_);
   swap(serverversion_, other->serverversion_);
   swap(sql_address_, other->sql_address_);
+  swap(http_address_, other->http_address_);
   swap(started_at_, other->started_at_);
   swap(node_id_, other->node_id_);
   swap(_has_bits_[0], other->_has_bits_[0]);

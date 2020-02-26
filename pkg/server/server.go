@@ -1394,6 +1394,7 @@ func (s *Server) Start(ctx context.Context) error {
 	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+	advHTTPAddrU := util.NewUnresolvedAddr(s.cfg.HTTPRequestScheme(), s.cfg.HTTPAdvertiseAddr)
 	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1522,7 +1523,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// we're joining an existing cluster for the first time.
 	if err := s.node.start(
 		ctx,
-		advAddrU, advSQLAddrU,
+		advAddrU, advSQLAddrU, advHTTPAddrU,
 		bootstrappedEngines, emptyEngines,
 		s.cfg.ClusterName,
 		s.cfg.NodeAttributes,

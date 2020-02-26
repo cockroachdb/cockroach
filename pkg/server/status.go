@@ -659,6 +659,9 @@ func (s *statusServer) Details(
 	if addr, err := s.gossip.GetNodeIDSQLAddress(remoteNodeID); err == nil {
 		resp.SQLAddress = *addr
 	}
+	if addr, err := s.gossip.GetNodeIDHTTPAddress(remoteNodeID); err == nil {
+		resp.HTTPAddress = *addr
+	}
 
 	// If Ready is not set, the client doesn't want to know whether this node is
 	// ready to receive client traffic.

@@ -337,7 +337,7 @@ func (n *Node) onClusterVersionChange(ctx context.Context, cv cluster.ClusterVer
 // NodeDescriptor is available, to help bootstrapping.
 func (n *Node) start(
 	ctx context.Context,
-	addr, sqlAddr net.Addr,
+	addr, sqlAddr, httpAddr net.Addr,
 	initializedEngines, emptyEngines []engine.Engine,
 	clusterName string,
 	attrs roachpb.Attributes,
@@ -387,6 +387,7 @@ func (n *Node) start(
 		NodeID:          nodeID,
 		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		SQLAddress:      util.MakeUnresolvedAddr(sqlAddr.Network(), sqlAddr.String()),
+		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
 		Attrs:           attrs,
 		Locality:        locality,
 		LocalityAddress: localityAddress,

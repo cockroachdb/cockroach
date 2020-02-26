@@ -107,6 +107,7 @@ message DetailsResponse {
   build.Info build_info = 3 [ (gogoproto.nullable) = false ];
   SystemInfo system_info = 4 [ (gogoproto.nullable) = false ];
   util.UnresolvedAddr sql_address = 5 [ (gogoproto.nullable) = false, (gogoproto.customname) = "SQLAddress" ];
+  util.UnresolvedAddr http_address = 6 [ (gogoproto.nullable) = false, (gogoproto.customname) = "HTTPAddress" ];
 }
 
 message NodesRequest {}
