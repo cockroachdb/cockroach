@@ -33,7 +33,7 @@ func genMergeJoinBase(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)
+	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
 	s = replaceManipulationFuncs(".LTyp", s)
 
@@ -42,25 +42,7 @@ func genMergeJoinBase(wr io.Writer) error {
 		return err
 	}
 
-	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.EQ], sameTypeComparisonOpToOverloads[tree.LT], sameTypeComparisonOpToOverloads[tree.GT])
-
-	// Create an mjOverload for each overload combining three overloads so that
-	// the template code can access all of EQ, LT, and GT in the same range loop.
-	mjOverloads := make([]mjOverload, len(allOverloads[0]))
-	for i := range allOverloads[0] {
-		mjOverloads[i] = mjOverload{
-			overload: *allOverloads[0][i],
-			Eq:       allOverloads[0][i],
-			Lt:       allOverloads[1][i],
-			Gt:       allOverloads[2][i],
-		}
-	}
-
-	return tmpl.Execute(wr, struct {
-		MJOverloads interface{}
-	}{
-		MJOverloads: mjOverloads,
-	})
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
 }
 
 func init() {

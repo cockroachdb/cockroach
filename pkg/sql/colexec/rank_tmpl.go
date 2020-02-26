@@ -74,9 +74,9 @@ func NewRankOperator(
 
 // {{/*
 
-// _UPDATE_RANK_ is the template function for updating the state of rank
+// _UPDATE_RANK is the template function for updating the state of rank
 // operators.
-func _UPDATE_RANK_() {
+func _UPDATE_RANK() {
 	execerror.VectorizedInternalPanic("")
 }
 
@@ -150,7 +150,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 			// {{end}}
 			if r.distinctCol[sel[i]] {
-				_UPDATE_RANK_()
+				_UPDATE_RANK()
 				rankCol[sel[i]] = r.rank
 			} else {
 				rankCol[sel[i]] = r.rank
@@ -168,7 +168,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 			// {{end}}
 			if r.distinctCol[i] {
-				_UPDATE_RANK_()
+				_UPDATE_RANK()
 				rankCol[i] = r.rank
 			} else {
 				rankCol[i] = r.rank

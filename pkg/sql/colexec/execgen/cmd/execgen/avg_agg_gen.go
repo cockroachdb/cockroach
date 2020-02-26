@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -70,10 +69,10 @@ func genAvgAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{.Type}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.Type}}", -1)
 
-	assignDivRe := regexp.MustCompile(`_ASSIGN_DIV_INT64\((.*),(.*),(.*)\)`)
-	s = assignDivRe.ReplaceAllString(s, "{{.AssignDivInt64 $1 $2 $3}}")
-	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
-	s = assignAddRe.ReplaceAllString(s, "{{.Global.AssignAdd $1 $2 $3}}")
+	assignDivRe := makeFunctionRegex("_ASSIGN_DIV_INT64", 3)
+	s = assignDivRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignDivInt64", 3))
+	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 3)
+	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 3))
 
 	accumulateAvg := makeFunctionRegex("_ACCUMULATE_AVG", 4)
 	s = accumulateAvg.ReplaceAllString(s, `{{template "accumulateAvg" buildDict "Global" . "HasNulls" $4}}`)

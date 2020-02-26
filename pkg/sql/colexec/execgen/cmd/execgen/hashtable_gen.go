@@ -34,7 +34,7 @@ func genHashTable(wr io.Writer) error {
 	s = strings.Replace(s, "_BuildType", "{{$rTyp}}", -1)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignNeRe.ReplaceAllString(s, `{{.Global.Assign "$1" "$2" "$3"}}`)
+	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
 	checkCol := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 7)
 	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "UseSel" $7}}`)
