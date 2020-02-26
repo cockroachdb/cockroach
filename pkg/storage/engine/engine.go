@@ -349,10 +349,6 @@ type Engine interface {
 	GetCompactionStats() string
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
-	// GetTickersAndHistograms retrieves maps of all RocksDB tickers and histograms.
-	// It differs from `GetStats` by getting _every_ ticker and histogram, and by not
-	// getting anything else (DB properties, for example).
-	GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error)
 	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
 	// on the store.
 	GetEncryptionRegistries() (*EncryptionRegistries, error)

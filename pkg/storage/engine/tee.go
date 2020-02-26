@@ -261,11 +261,6 @@ func (t *TeeEngine) GetStats() (*Stats, error) {
 	return t.eng2.GetStats()
 }
 
-// GetTickersAndHistograms implements the Engine interface.
-func (t *TeeEngine) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error) {
-	return t.eng1.GetTickersAndHistograms()
-}
-
 // GetEncryptionRegistries implements the Engine interface.
 func (t *TeeEngine) GetEncryptionRegistries() (*EncryptionRegistries, error) {
 	return t.eng1.GetEncryptionRegistries()

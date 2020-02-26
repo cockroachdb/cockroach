@@ -564,12 +564,6 @@ func (p *Pebble) GetCompactionStats() string {
 	return "\n" + p.db.Metrics().String()
 }
 
-// GetTickersAndHistograms implements the Engine interface.
-func (p *Pebble) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error) {
-	// TODO(hueypark): Implement this.
-	return nil, nil
-}
-
 // GetProto implements the Engine interface.
 func (p *Pebble) GetProto(
 	key MVCCKey, msg protoutil.Message,
