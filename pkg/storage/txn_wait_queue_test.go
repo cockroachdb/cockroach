@@ -82,7 +82,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	}
 
 	// Queue starts enabled.
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	if !q.IsEnabled() {
 		t.Errorf("expected push txn queue is enabled")
 	}
@@ -185,7 +185,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 		PusheeTxn: txn.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	if err := checkAllGaugesZero(tc); err != nil {
 		t.Fatal(err.Error())
@@ -251,7 +251,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	req2 := req1
 	req2.PusherTxn = *pusher2
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
 	m := tc.store.txnWaitMetrics
@@ -369,7 +369,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 		PusheeTxn: txn.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
 
@@ -444,7 +444,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 		PusheeTxn: txn.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
 
@@ -519,7 +519,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
 
@@ -607,7 +607,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 			PusheeTxn: txn.TxnMeta,
 		}
 
-		q := tc.repl.txnWaitQueue
+		q := tc.repl.concMgr.TxnWaitQueue()
 		q.Enable()
 		q.EnqueueTxn(txn)
 
@@ -718,7 +718,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 		PusheeTxn: txnA.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -809,7 +809,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 		PusheeTxn: updatedTxnA.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {

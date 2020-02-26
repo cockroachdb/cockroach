@@ -150,16 +150,6 @@ func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
 	return false
 }
 
-// IsSingleQueryTxnRequest returns true iff the batch contains a single
-// request, and that request is for a QueryTxn.
-func (ba *BatchRequest) IsSingleQueryTxnRequest() bool {
-	if ba.IsSingleRequest() {
-		_, ok := ba.Requests[0].GetInner().(*QueryTxnRequest)
-		return ok
-	}
-	return false
-}
-
 // IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
 // request, and that request is a HeartbeatTxn.
 func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {

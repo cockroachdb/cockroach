@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -281,6 +282,12 @@ type MetricExporter interface {
 	// lockTable.
 	LockTableDebug() string
 
+	// TxnWaitQueue returns the concurrency manager's txnWaitQueue.
+	// TODO(nvanbenschoten): this doesn't really fit into this interface. It
+	// would be nice if the txnWaitQueue was hidden behind the concurrency
+	// manager abstraction entirely, but tests want to access it directly.
+	TxnWaitQueue() *txnwait.Queue
+
 	// TODO(nvanbenschoten): fill out this interface to provide observability
 	// into the state of the concurrency manager.
 	// LatchMetrics()
@@ -327,7 +334,7 @@ type Request struct {
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
 // Manager.FinishReq to release the request's resources when it has completed.
 type Guard struct {
-	req Request
+	Req Request
 	lg  latchGuard
 	ltg lockTableGuard
 }

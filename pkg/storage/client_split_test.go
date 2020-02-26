@@ -2283,7 +2283,7 @@ func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 	}
 
 	rhsRepl := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin))
-	if !rhsRepl.IsTxnWaitQueueEnabled() {
+	if !rhsRepl.GetConcurrencyManager().TxnWaitQueue().IsEnabled() {
 		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
 	}
 }

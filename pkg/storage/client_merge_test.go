@@ -1105,7 +1105,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 				t.Fatal(err)
 			}
 			for {
-				if _, ok := repl.GetTxnWaitQueue().TrackedTxns()[txn1.ID()]; ok {
+				if _, ok := repl.GetConcurrencyManager().TxnWaitQueue().TrackedTxns()[txn1.ID()]; ok {
 					break
 				}
 				select {
