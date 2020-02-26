@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -53,7 +53,7 @@ type EvalContext interface {
 	Clock() *hlc.Clock
 	DB() *client.DB
 	AbortSpan() *abortspan.AbortSpan
-	GetTxnWaitQueue() *txnwait.Queue
+	GetConcurrencyManager() concurrency.Manager
 	GetLimiters() *Limiters
 
 	NodeID() roachpb.NodeID
@@ -149,7 +149,7 @@ func (m *mockEvalCtxImpl) GetLimiters() *Limiters {
 func (m *mockEvalCtxImpl) AbortSpan() *abortspan.AbortSpan {
 	return m.MockEvalCtx.AbortSpan
 }
-func (m *mockEvalCtxImpl) GetTxnWaitQueue() *txnwait.Queue {
+func (m *mockEvalCtxImpl) GetConcurrencyManager() concurrency.Manager {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) NodeID() roachpb.NodeID {

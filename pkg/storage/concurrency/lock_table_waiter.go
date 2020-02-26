@@ -46,6 +46,9 @@ type lockTableWaiterImpl struct {
 	st      *cluster.Settings
 	stopper *stop.Stopper
 	ir      IntentResolver
+
+	// When set, WriteIntentError are propagated instead of pushing.
+	disableTxnPushing bool
 }
 
 // IntentResolver is an interface used by lockTableWaiterImpl to push
@@ -159,7 +162,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// had a cache of aborted transaction IDs that allowed us to notice
 				// and quickly resolve abandoned intents then we might be able to
 				// get rid of this state.
-				delay := LockTableLivenessPushDelay.Get(&w.st.SV)
+				delay := minDuration(
+					LockTableLivenessPushDelay.Get(&w.st.SV),
+					LockTableDeadlockDetectionPushDelay.Get(&w.st.SV),
+				)
 				if hasMinPriority(state.txn) || hasMaxPriority(req.Txn) {
 					// However, if the pushee has the minimum priority or if the
 					// pusher has the maximum priority, push immediately.
@@ -224,6 +230,12 @@ func (w *lockTableWaiterImpl) WaitOn(
 }
 
 func (w *lockTableWaiterImpl) pushTxn(ctx context.Context, req Request, ws waitingState) *Error {
+	if w.disableTxnPushing {
+		return roachpb.NewError(&roachpb.WriteIntentError{
+			Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
+		})
+	}
+
 	h := roachpb.Header{
 		Timestamp:    req.Timestamp,
 		UserPriority: req.Priority,
@@ -242,12 +254,9 @@ func (w *lockTableWaiterImpl) pushTxn(ctx context.Context, req Request, ws waiti
 		// after our operation started. This allows us to not have to
 		// restart for uncertainty as we come back and read.
 		obsTS, ok := h.Txn.GetObservedTimestamp(w.nodeID)
-		if !ok {
-			// This was set earlier, so it's completely unexpected to
-			// not be found now.
-			return roachpb.NewErrorf("missing observed timestamp: %+v", h.Txn)
+		if ok {
+			h.Timestamp.Forward(obsTS)
 		}
-		h.Timestamp.Forward(obsTS)
 	}
 
 	var pushType roachpb.PushTxnType
@@ -287,4 +296,11 @@ func hasMinPriority(txn *enginepb.TxnMeta) bool {
 
 func hasMaxPriority(txn *roachpb.Transaction) bool {
 	return txn != nil && txn.Priority == enginepb.MaxTxnPriority
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -29,22 +29,15 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, lg *spanlatch.Guard,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// Guarantee we release the provided latches. This is wrapped to delay pErr
-	// evaluation to its value when returning.
-	ec := endCmds{repl: r, lg: lg}
-	defer func() {
-		ec.done(ctx, ba, br, pErr)
-	}()
-
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	// If the read is not inconsistent, the read requires the range lease or
 	// permission to serve via follower reads.
 	var status storagepb.LeaseStatus
 	if ba.ReadConsistency.RequiresReadLease() {
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
-				return nil, nErr
+				return nil, g, nErr
 			}
 			r.store.metrics.FollowerReadsCount.Inc(1)
 		}
@@ -56,12 +49,12 @@ func (r *Replica) executeReadOnlyBatch(
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	if err := r.checkExecutionCanProceed(ba, ec.lg, &status); err != nil {
-		return nil, roachpb.NewError(err)
+	if err := r.checkExecutionCanProceed(ba, g, &status); err != nil {
+		return nil, g, roachpb.NewError(err)
 	}
 
 	// Evaluate read-only batch command.
-	var result result.Result
+	spans := g.LatchSpans()
 	rec := NewReplicaEvalContext(r, spans)
 
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
@@ -72,17 +65,28 @@ func (r *Replica) executeReadOnlyBatch(
 		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
 	}
 	defer rw.Close()
+
+	// TODO(nvanbenschoten): once all replicated intents are pulled into the
+	// concurrency manager's lock-table, we can be sure that if we reached this
+	// point, we will not conflict with any of them during evaluation. This in
+	// turn means that we can bump the timestamp cache *before* evaluation
+	// without risk of starving writes. Once we start doing that, we're free to
+	// release latches immediately after we acquire an engine iterator as long
+	// as we're performing a non-locking read.
+
+	var result result.Result
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
 	if err := r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local); err != nil {
 		pErr = roachpb.NewError(err)
 	}
+	r.updateTimestampCache(ctx, ba, br, pErr)
 
 	if pErr != nil {
 		log.VErrEvent(ctx, 3, pErr.String())
 	} else {
 		log.Event(ctx, "read completed")
 	}
-	return br, pErr
+	return br, g, pErr
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(
@@ -103,6 +107,14 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 			return err
 		}
 		lResult.MaybeWatchForMerge = false
+	}
+
+	if lResult.WrittenIntents != nil {
+		// These will all be unreplicated locks.
+		for i := range lResult.WrittenIntents {
+			r.concMgr.OnLockAcquired(ctx, &lResult.WrittenIntents[i])
+		}
+		lResult.WrittenIntents = nil
 	}
 
 	if intents := lResult.DetachEncounteredIntents(); len(intents) > 0 {
