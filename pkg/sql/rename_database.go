@@ -73,9 +73,10 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	dbDesc := n.dbDesc
 
-	// Check if any views depend on tables in the database. Because our views
-	// are currently just stored as strings, they explicitly specify the database
-	// name. Rather than trying to rewrite them with the changed DB name, we
+	// Check if any other tables depend on tables in the database.
+	// Because our views and sequence defaults are currently just stored as
+	// strings, they (may) explicitly specify the database name.
+	// Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
 	phyAccessor := p.PhysicalSchemaAccessor()
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
@@ -110,24 +111,48 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				continue
 			}
 			tbDesc := objDesc.TableDesc()
-			if len(tbDesc.DependedOnBy) > 0 {
-				viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, tbDesc.DependedOnBy[0].ID)
+			for _, dependedOn := range tbDesc.DependedOnBy {
+				dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, dependedOn.ID)
 				if err != nil {
 					return err
 				}
-				viewName := viewDesc.Name
-				if dbDesc.ID != viewDesc.ParentID {
+				tbTableName := tree.MakeTableNameWithSchema(
+					tree.Name(dbDesc.Name),
+					tree.Name(schema),
+					tree.Name(tbDesc.Name),
+				)
+				var dependentDescQualifiedString string
+				if dbDesc.ID != dependentDesc.ParentID || tbDesc.GetParentSchemaID() != dependentDesc.GetParentSchemaID() {
 					var err error
-					viewName, err = p.getQualifiedTableName(ctx, viewDesc)
+					dependentDescQualifiedString, err = p.getQualifiedTableName(ctx, dependentDesc)
 					if err != nil {
-						log.Warningf(ctx, "unable to retrieve fully-qualified name of view %d: %v",
-							viewDesc.ID, err)
-						msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
+						log.Warningf(
+							ctx,
+							"unable to retrieve fully-qualified name of %s (id: %d): %v",
+							tbTableName.String(),
+							dependentDesc.ID,
+							err,
+						)
+						msg := fmt.Sprintf(
+							"cannot rename database because a relation depends on relation %q",
+							tbTableName.String(),
+						)
 						return sqlbase.NewDependentObjectError(msg)
 					}
+				} else {
+					dependentDescTableName := tree.MakeTableNameWithSchema(
+						tree.Name(dbDesc.Name),
+						tree.Name(schema),
+						tree.Name(dependentDesc.Name),
+					)
+					dependentDescQualifiedString = dependentDescTableName.String()
 				}
-				msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
-				hint := fmt.Sprintf("you can drop %s instead.", viewName)
+				msg := fmt.Sprintf(
+					"cannot rename database because relation %q depends on relation %q",
+					dependentDescQualifiedString,
+					tbTableName.String(),
+				)
+				hint := fmt.Sprintf("you can drop %s instead", dependentDescQualifiedString)
 				return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
 			}
 		}

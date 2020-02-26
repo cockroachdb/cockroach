@@ -94,7 +94,7 @@ DROP DATABASE bob
 statement ok
 CREATE TEMP VIEW a_view AS SELECT a FROM bob.pg_temp.a
 
-statement error cannot rename database because view "defaultdb.pg_temp_.*.a_view" depends on table "a"
+statement error cannot rename database because relation "defaultdb.pg_temp_.*.a_view" depends on relation "bob.pg_temp_.*.a"
 ALTER DATABASE bob RENAME TO alice
 
 statement ok
