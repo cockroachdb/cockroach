@@ -13,7 +13,6 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -31,7 +30,7 @@ func declareKeysDeleteRange(
 	args := req.(*roachpb.DeleteRangeRequest)
 	access := spanset.SpanReadWrite
 
-	if args.Inline || keys.IsLocal(req.Header().Span().Key) {
+	if args.Inline {
 		spans.AddNonMVCC(access, req.Header().Span())
 	} else {
 		spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
