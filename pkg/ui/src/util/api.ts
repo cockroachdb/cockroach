@@ -356,12 +356,12 @@ export function getStatements(timeout?: moment.Duration): Promise<StatementsResp
 }
 
 export function getStatementDiagnosticsRequests(timeout?: moment.Duration): Promise<StatementDiagnosticsRequestsResponseMessage> {
-  return timeoutFetch(serverpb.StatementDiagnosticsRequestsResponse, `${STATUS_PREFIX}/statementsdiagnosticsrequests`, null, timeout);
+  return timeoutFetch(serverpb.StatementDiagnosticsRequestsResponse, `${STATUS_PREFIX}/statementdiagnosticsrequests`, null, timeout);
 }
 
 // getStatements returns statements the cluster has recently executed, and some stats about them.
 export function createStatementDiagnosticsRequest(req: CreateStatementDiagnosticsRequestRequestMessage, timeout?: moment.Duration): Promise<CreateStatementDiagnosticsRequestResponseMessage> {
-  return timeoutFetch(serverpb.CreateStatementDiagnosticsRequestResponse, `${STATUS_PREFIX}/statementsdiagnosticsrequests`, req as any, timeout);
+  return timeoutFetch(serverpb.CreateStatementDiagnosticsRequestResponse, `${STATUS_PREFIX}/statementdiagnosticsrequests`, req as any, timeout);
 }
 
 // getDataDistribution returns information about how replicas are distributed across nodes.
