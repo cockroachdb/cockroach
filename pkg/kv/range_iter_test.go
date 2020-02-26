@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,6 +64,7 @@ func TestRangeIterForward(t *testing.T) {
 		Clock:             clock,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
 	}, g)
 
 	ctx := context.Background()
@@ -97,6 +99,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 		Clock:             clock,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
 	}, g)
 
 	ctx := context.Background()
@@ -134,6 +137,7 @@ func TestRangeIterReverse(t *testing.T) {
 		Clock:             clock,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
 	}, g)
 
 	ctx := context.Background()
@@ -168,6 +172,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 		Clock:             clock,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
 	}, g)
 
 	ctx := context.Background()
