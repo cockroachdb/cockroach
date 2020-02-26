@@ -19,7 +19,7 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Delete, DefaultDeclareKeys, Delete)
+	RegisterReadWriteCommand(roachpb.Delete, DefaultDeclareIsolatedKeys, Delete)
 }
 
 // Delete deletes the key and value specified by key.

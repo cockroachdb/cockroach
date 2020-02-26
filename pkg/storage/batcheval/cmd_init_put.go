@@ -19,7 +19,7 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.InitPut, DefaultDeclareKeys, InitPut)
+	RegisterReadWriteCommand(roachpb.InitPut, DefaultDeclareIsolatedKeys, InitPut)
 }
 
 // InitPut sets the value for a specified key only if it doesn't exist. It
