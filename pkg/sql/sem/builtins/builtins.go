@@ -1889,6 +1889,7 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// TODO(knz,otan): Remove in 20.2.
 	"extract_duration": makeBuiltin(
 		tree.FunctionProperties{Category: categoryDateAndTime},
 		tree.Overload{

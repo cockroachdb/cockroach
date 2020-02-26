@@ -804,8 +804,8 @@ message TableDescriptor {
              (gogoproto.casttype) = "ColumnID"];
   }
 
-  // All references to this table/view from other views in the system, tracked
-  // down to the column/index so that we can restrict changes to them while
+  // All references to this table/view from other views and sequences in the system,
+  // tracked down to the column/index so that we can restrict changes to them while
   // they're still being referred to.
   repeated Reference dependedOnBy = 26 [(gogoproto.nullable) = false,
            (gogoproto.customname) = "DependedOnBy"];
