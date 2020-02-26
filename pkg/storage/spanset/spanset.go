@@ -77,8 +77,8 @@ type Span struct {
 // and non-MVCC accesses. The set is divided into subsets for access type
 // (read-only or read/write) and key scope (local or global; used to facilitate
 // use by the separate local and global latches).
-// The Span slice for a particular access and scope contains non-ovelapping
-// spans in increasing key order.
+// The Span slice for a particular access and scope contains non-overlapping
+// spans in increasing key order after calls to SortAndDedup.
 type SpanSet struct {
 	spans [NumSpanAccess][NumSpanScope][]Span
 }
@@ -106,6 +106,11 @@ func (s *SpanSet) Len() int {
 		}
 	}
 	return count
+}
+
+// Empty returns whether the set contains any spans across all accesses and scopes.
+func (s *SpanSet) Empty() bool {
+	return s.Len() == 0
 }
 
 // Reserve space for N additional spans.

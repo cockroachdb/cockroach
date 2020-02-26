@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.Scan, DefaultDeclareKeys, Scan)
+	RegisterReadOnlyCommand(roachpb.Scan, DefaultDeclareIsolatedKeys, Scan)
 }
 
 // Scan scans the key range specified by start key through end key

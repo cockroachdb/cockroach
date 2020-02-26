@@ -1469,7 +1469,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		seqNum := atomic.AddUint64(&t.seqNum, 1)
 		g = &lockTableGuardImpl{
 			seqNum: seqNum,
-			spans:  req.Spans,
+			spans:  req.LockSpans,
 			ts:     req.Timestamp,
 			sa:     spanset.NumSpanAccess - 1,
 			index:  -1,
