@@ -2686,7 +2686,9 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 				},
 			},
 		},
-		&spans)
+		&spans,
+		nil,
+	)
 	for _, tc := range []struct {
 		access       spanset.SpanAccess
 		key          roachpb.Key
@@ -8120,7 +8122,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
+			cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
 
 			expSpans := 1
 			if !keyThresh.IsEmpty() {
@@ -12214,7 +12216,7 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 	}
 
 	batcheval.UnregisterCommand(roachpb.Put)
-	batcheval.RegisterReadWriteCommand(roachpb.Put, batcheval.DefaultDeclareKeys, mockPut)
+	batcheval.RegisterReadWriteCommand(roachpb.Put, batcheval.DefaultDeclareIsolatedKeys, mockPut)
 	return func() {
 		batcheval.UnregisterCommand(roachpb.Put)
 		batcheval.RegisterReadWriteCommand(roachpb.Put, prev.DeclareKeys, prev.EvalRW)

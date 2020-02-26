@@ -150,7 +150,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 		}
 
 		// Some requests don't want the wait on locks.
-		if !shouldWaitOnConflicts(req) {
+		if req.LockSpans.Empty() {
 			return nil, nil
 		}
 
@@ -224,30 +224,6 @@ func shouldAcquireLatches(req Request) bool {
 		return false
 	}
 	return true
-}
-
-// shouldWaitOnConflicts determines whether the request should wait on locks and
-// wait-queues owned by other transactions before proceeding to evaluate. Most
-// requests will want to wait on conflicting transactions to ensure that they
-// are sufficiently isolated during their evaluation, but some "isolation aware"
-// requests want to proceed to evaluation even in the presence of conflicts
-// because they know how to handle them.
-func shouldWaitOnConflicts(req Request) bool {
-	for _, ru := range req.Requests {
-		arg := ru.GetInner()
-		if roachpb.IsTransactional(arg) {
-			switch arg.Method() {
-			case roachpb.Refresh, roachpb.RefreshRange:
-				// Refresh and RefreshRange requests scan inconsistently so that
-				// they can collect all intents in their key span. If they run
-				// into intents written by other transactions, they simply fail
-				// the refresh without trying to push the intents and blocking.
-			default:
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // FinishReq implements the RequestSequencer interface.

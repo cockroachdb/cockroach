@@ -507,7 +507,7 @@ func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) e
 }
 
 func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, error) {
-	spans := &spanset.SpanSet{}
+	var latchSpans, lockSpans spanset.SpanSet
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -519,14 +519,14 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	// TODO(bdarnell): revisit as the local portion gets its appropriate
 	// use.
 	if ba.IsReadOnly() {
-		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
+		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	} else {
 		guess := len(ba.Requests)
 		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
 			// EndTxn declares a global write for each of its intent spans.
 			guess += len(et.(*roachpb.EndTxnRequest).IntentSpans) - 1
 		}
-		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
+		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	}
 
 	// For non-local, MVCC spans we annotate them with the request timestamp
@@ -537,11 +537,11 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	// This is still safe as we're only ever writing at timestamps higher than the
 	// timestamp any write latch would be declared at.
 	desc := r.Desc()
-	batcheval.DeclareKeysForBatch(desc, ba.Header, spans)
+	batcheval.DeclareKeysForBatch(desc, ba.Header, &latchSpans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, ba.Header, inner, spans)
+			cmd.DeclareKeys(desc, ba.Header, inner, &latchSpans, &lockSpans)
 		} else {
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
@@ -549,14 +549,19 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 
 	// Commands may create a large number of duplicate spans. De-duplicate
 	// them to reduce the number of spans we pass to the spanlatch manager.
-	spans.SortAndDedup()
+	for _, s := range [...]*spanset.SpanSet{&latchSpans, &lockSpans} {
+		s.SortAndDedup()
 
-	// If any command gave us spans that are invalid, bail out early
-	// (before passing them to the spanlatch manager, which may panic).
-	if err := spans.Validate(); err != nil {
-		return nil, err
+		// If any command gave us spans that are invalid, bail out early
+		// (before passing them to the spanlatch manager, which may panic).
+		if err := s.Validate(); err != nil {
+			return nil, err
+		}
 	}
-	return spans, nil
+
+	// NB: not used yet.
+	_ = lockSpans
+	return &latchSpans, nil
 }
 
 // limitTxnMaxTimestamp limits the batch transaction's max timestamp

@@ -44,21 +44,27 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
 	}
 }
 
 func declareKeysEndTxn(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
 ) {
 	et := req.(*roachpb.EndTxnRequest)
-	declareKeysWriteTransaction(desc, header, req, spans)
+	declareKeysWriteTransaction(desc, header, req, latchSpans)
 	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -67,7 +73,7 @@ func declareKeysEndTxn(
 		if !et.Commit && et.Poison {
 			abortSpanAccess = spanset.SpanReadWrite
 		}
-		spans.AddNonMVCC(abortSpanAccess, roachpb.Span{
+		latchSpans.AddNonMVCC(abortSpanAccess, roachpb.Span{
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
@@ -78,13 +84,13 @@ func declareKeysEndTxn(
 		// All requests that intent on resolving local intents need to depend on
 		// the range descriptor because they need to determine which intents are
 		// within the local range.
-		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
 		// The spans may extend beyond this Range, but it's ok for the
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
 		for _, span := range et.IntentSpans {
-			spans.AddMVCC(spanset.SpanReadWrite, span, minTxnTS)
+			latchSpans.AddMVCC(spanset.SpanReadWrite, span, minTxnTS)
 		}
 
 		if et.InternalCommitTrigger != nil {
@@ -99,44 +105,44 @@ func declareKeysEndTxn(
 				// all concurrent reads and writes to the RHS because they will
 				// fail if applied after the split. (see
 				// https://github.com/cockroachdb/cockroach/issues/14881)
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    st.LeftDesc.StartKey.AsRawKey(),
 					EndKey: st.LeftDesc.EndKey.AsRawKey(),
 				})
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    st.RightDesc.StartKey.AsRawKey(),
 					EndKey: st.RightDesc.EndKey.AsRawKey(),
 				})
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 				})
 
 				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
 				})
 				rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDPrefix,
 					EndKey: rightRangeIDPrefix.PrefixEnd(),
 				})
 
 				rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDUnreplicatedPrefix,
 					EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 				})
 
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
 				})
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
 				})
 
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    abortspan.MinKey(header.RangeID),
 					EndKey: abortspan.MaxKey(header.RangeID),
 				})
@@ -144,11 +150,11 @@ func declareKeysEndTxn(
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 				// Merges copy over the RHS abort span to the LHS, and compute
 				// replicated range ID stats over the RHS in the merge trigger.
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    abortspan.MinKey(mt.LeftDesc.RangeID),
 					EndKey: abortspan.MaxKey(mt.LeftDesc.RangeID).PrefixEnd(),
 				})
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
 					EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
 				})

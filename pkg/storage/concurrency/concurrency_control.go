@@ -313,8 +313,15 @@ type Request struct {
 	// The individual requests in the batch.
 	Requests []roachpb.RequestUnion
 
-	// The maximal set of spans that the request will access.
-	Spans *spanset.SpanSet
+	// The maximal set of spans that the request will access. Latches
+	// will be acquired for these spans.
+	// TODO(nvanbenschoten): don't allocate these SpanSet objects.
+	LatchSpans *spanset.SpanSet
+
+	// The maximal set of spans within which the request expects to have
+	// isolation from conflicting transactions. Conflicting locks within
+	// these spans will be queued on and conditionally pushed.
+	LockSpans *spanset.SpanSet
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to

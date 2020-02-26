@@ -94,9 +94,9 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				as := abortspan.New(desc.RangeID)
 
-				var spans spanset.SpanSet
+				var latchSpans, lockSpans spanset.SpanSet
 				batch := engine.NewBatch()
-				batch = spanset.NewBatch(batch, &spans)
+				batch = spanset.NewBatch(batch, &latchSpans)
 				defer batch.Close()
 
 				var h roachpb.Header
@@ -107,20 +107,23 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				if !ranged {
 					cArgs.Args = &ri
-					declareKeysResolveIntent(&desc, h, &ri, &spans)
+					declareKeysResolveIntent(&desc, h, &ri, &latchSpans, &lockSpans)
 					if _, err := ResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
 						t.Fatal(err)
 					}
 				} else {
 					cArgs.Args = &rir
-					declareKeysResolveIntentRange(&desc, h, &rir, &spans)
+					declareKeysResolveIntentRange(&desc, h, &rir, &latchSpans, &lockSpans)
 					if _, err := ResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
 						t.Fatal(err)
 					}
 				}
 
-				if s := spans.String(); strings.Contains(s, abortSpanKey) != test.expDeclares {
+				if s := latchSpans.String(); strings.Contains(s, abortSpanKey) != test.expDeclares {
 					t.Errorf("expected AbortSpan declared: %t, but got spans\n%s", test.expDeclares, s)
+				}
+				if !lockSpans.Empty() {
+					t.Errorf("expected no lock spans declared, but got spans\n%s", lockSpans.String())
 				}
 			})
 		}
@@ -191,7 +194,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 			}
 			ri.Key = k
 
-			declareKeysResolveIntent(&desc, h, &ri, &spans)
+			declareKeysResolveIntent(&desc, h, &ri, &spans, nil)
 
 			if _, err := ResolveIntent(ctx, rbatch,
 				CommandArgs{
@@ -213,7 +216,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 			rir.Key = k
 			rir.EndKey = endKey
 
-			declareKeysResolveIntentRange(&desc, h, &rir, &spans)
+			declareKeysResolveIntentRange(&desc, h, &rir, &spans, nil)
 
 			h.MaxSpanRequestKeys = 10
 			if _, err := ResolveIntentRange(ctx, rbatch,

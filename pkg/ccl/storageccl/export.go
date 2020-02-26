@@ -53,10 +53,13 @@ func init() {
 }
 
 func declareKeysExport(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
 ) {
-	batcheval.DefaultDeclareKeys(desc, header, req, spans)
-	spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+	batcheval.DefaultDeclareIsolatedKeys(desc, header, req, latchSpans, lockSpans)
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges

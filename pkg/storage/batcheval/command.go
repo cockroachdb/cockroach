@@ -20,14 +20,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// declareKeysFunc adds all key spans that a command touches to the latchSpans
+// set. It then adds all key spans within which that the command expects to have
+// isolation from conflicting transactions to the lockSpans set.
+type declareKeysFunc func(
+	_ *roachpb.RangeDescriptor, _ roachpb.Header, _ roachpb.Request, latchSpans, lockSpans *spanset.SpanSet,
+)
+
 // A Command is the implementation of a single request within a BatchRequest.
 type Command struct {
 	// DeclareKeys adds all keys this command touches, and when (if applicable),
 	// to the given SpanSet.
 	//
 	// TODO(nvanbenschoten): rationalize this RangeDescriptor. Can it change
-	// between key declaration and cmd evaluation?
-	DeclareKeys func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet)
+	// between key declaration and cmd evaluation? Really, do it.
+	DeclareKeys declareKeysFunc
 
 	// Eval{RW,RO} evaluates a read-{write,only} command respectively on the
 	// given engine.{ReadWriter,Reader}. This is typically derived from
@@ -49,7 +56,7 @@ var cmds = make(map[roachpb.Method]Command)
 // It must only be called before any evaluation takes place.
 func RegisterReadWriteCommand(
 	method roachpb.Method,
-	declare func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
+	declare declareKeysFunc,
 	impl func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{
@@ -62,7 +69,7 @@ func RegisterReadWriteCommand(
 // must only be called before any evaluation takes place.
 func RegisterReadOnlyCommand(
 	method roachpb.Method,
-	declare func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
+	declare declareKeysFunc,
 	impl func(context.Context, engine.Reader, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{
