@@ -553,23 +553,36 @@ func backupAndRestore(
 			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exported.rows)
 		}
 
-		sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
-		const stmt = "SELECT payload FROM system.jobs ORDER BY created DESC LIMIT 1"
-		var payloadBytes []byte
-		sqlDB.QueryRow(t, stmt).Scan(&payloadBytes)
+		found := false
+		const stmt = "SELECT payload FROM system.jobs ORDER BY created DESC LIMIT 10"
+		for rows := sqlDB.Query(t, stmt); rows.Next(); {
+			var payloadBytes []byte
+			if err := rows.Scan(&payloadBytes); err != nil {
+				t.Fatal(err)
+			}
 
-		payload := &jobspb.Payload{}
-		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-			t.Fatal("cannot unmarshal job payload from system.jobs")
-		}
+			payload := &jobspb.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+				t.Fatal("cannot unmarshal job payload from system.jobs")
+			}
 
-		backupManifest := &backupccl.BackupManifest{}
-		backupDetails := payload.Details.(*jobspb.Payload_Backup).Backup
-		if err := protoutil.Unmarshal(backupDetails.BackupManifest, backupManifest); err != nil {
-			t.Fatal("cannot unmarshal backup descriptor from job payload from system.jobs")
+			backupManifest := &backupccl.BackupManifest{}
+			backupPayload, ok := payload.Details.(*jobspb.Payload_Backup)
+			if !ok {
+				t.Logf("job %T is not a backup: %v", payload.Details, payload.Details)
+				continue
+			}
+			backupDetails := backupPayload.Backup
+			found = true
+			if err := protoutil.Unmarshal(backupDetails.BackupManifest, backupManifest); err != nil {
+				t.Fatal("cannot unmarshal backup descriptor from job payload from system.jobs")
+			}
+			if backupManifest.Statistics != nil {
+				t.Fatal("expected statistics field of backup descriptor payload to be nil")
+			}
 		}
-		if backupManifest.Statistics != nil {
-			t.Fatal("expected statistics field of backup descriptor payload to be nil")
+		if !found {
+			t.Fatal("scanned job rows did not contain a backup!")
 		}
 	}
 
