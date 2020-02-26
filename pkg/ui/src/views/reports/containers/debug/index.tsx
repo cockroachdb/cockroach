@@ -8,19 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon } from "antd";
 import _ from "lodash";
-import { NodesSummary, nodesSummarySelector } from "oss/src/redux/nodes";
-import { AdminUIState } from "oss/src/redux/state";
-import { DecommissionedNodeStatusRow, liveNodesTableDataSelector } from "oss/src/views/cluster/containers/nodesOverview";
 import React from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { withRouter } from "react-router";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+
 import InfoBox from "src/views/shared/components/infoBox";
 import LicenseType from "src/views/shared/components/licenseType";
-import { Panel, PanelPair, PanelSection, PanelTitle } from "src/views/shared/components/panelSection";
+import NodesDropdown from "src/views/reports/containers/debug/dropdown";
+import { PanelSection, PanelTitle, PanelPair, Panel } from "src/views/shared/components/panelSection";
+
 import "./debug.styl";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
@@ -80,399 +76,285 @@ function DebugPanelLink(props: { name: string, url: string,  note: string }) {
   );
 }
 
-interface IDebugProps {
-  nodesSummary: NodesSummary;
-  dataSource: DecommissionedNodeStatusRow[];
-}
-
-interface IDebugState {
-  selected: string;
-  location: string;
-  opened: boolean;
-  width: number;
-}
-
-const pattern = /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@%_\+.~#?&=]*)?/;
 // tslint:disable-next-line: variable-name
-class Debug extends React.Component<IDebugProps, IDebugState> {
-  state = {
-    selected: "all",
-    location: "",
-    opened: false,
-    width: window.innerWidth,
-  };
-
-  private rangeContainer = React.createRef<HTMLDivElement>();
-
-  componentDidMount() {
-    this.setState({
-      selected: window.location.hostname,
-    });
-    window.addEventListener("resize", this.updateDimensions);
-  }
-
-  componentWillUnmount() {
-    window.removeEventListener("resize", this.updateDimensions);
-  }
-
-  getOptionsForSelect = () => this.props.nodesSummary.nodeIDs.map((value: string) => ({
-    value: this.props.nodesSummary.nodeDisplayNameByID[value],
-    label: `Node ${value}`,
-  }))
-
-  openApp = () => {
-    const { location } = this.state;
-    window.open(`http://${location}/#/debug/`, "_self");
-  }
-
-  selectApp = (app: DropdownOption) => () => this.setState({ selected: app.value, location: app.value.match(pattern)[0] }, this.openApp);
-
-  toggleDropDown = () => this.setState({ opened: !this.state.opened });
-
-  arrowRenderer = (isOpen: boolean) => {
-    if (isOpen) {
-      return <span><Icon type="caret-up" /></span>;
-    }
-    return <span className="active"><Icon type="caret-down" /></span>;
-  }
-
-  renderOptions = () => {
-    const { selected } = this.state;
-    return this.getOptionsForSelect().map((option: DropdownOption) => (
-      <a onClick={this.selectApp(option)} className={`option ${selected === option.value ? "selected" : ""}`}>{option.label}</a>
-    ));
-  }
-
-  updateDimensions = () => {
-    this.setState({
-      width: window.innerWidth,
-    });
-  }
-
-  render() {
-    const { selected, width, opened } = this.state;
-    const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
-    const left = width >= (containerLeft + 150) ? -45 : width - (containerLeft + 150);
-    return (
-      <div className="section">
-        <Helmet title="Debug" />
-        <h1 className="base-heading">Advanced Debugging</h1>
-        <div className="debug-header">
-          <InfoBox>
-            <p>
-              The following pages are meant for advanced monitoring and troubleshooting.
-              Note that these pages are experimental and undocumented. If you find an issue,
-              let us know through{" "}
-              <a href={ COMMUNITY_URL }>these channels.</a>
-            </p>
-          </InfoBox>
-          <div className="debug-header__annotations">
-            <LicenseType />
-            <Dropdown
-              title="Web server"
-              options={[]}
-              selected={selected}
-              palette="blue"
-              focused={opened}
-              content={
-                <div ref={this.rangeContainer} className="dropdown-list">
-                  <div className="click-zone" onClick={this.toggleDropDown}/>
-                  {opened && <div className="trigger-container" onClick={this.toggleDropDown} />}
-                  <div className="trigger-wrapper">
-                    <div
-                      className={`trigger Select ${opened ? "is-open" : ""}`}
-                    >
-                      <span className="Select-value-label">
-                        {selected}
-                      </span>
-                      <div className="Select-control">
-                        <div className="Select-arrow-zone">
-                          {this.arrowRenderer(opened)}
-                        </div>
-                      </div>
-                    </div>
-                    {opened && (
-                      <div className={`dropdown-options`} style={{ left }}>
-                        {this.renderOptions()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              }
-            />
-          </div>
-        </div>
-        <PanelSection>
-          <PanelTitle>Reports</PanelTitle>
-          <DebugPanelLink
-            name="Custom Time Series Chart"
-            url="#/debug/chart"
-            note="Create a custom chart of time series data."
-          />
-          <DebugPanelLink
-            name="Problem Ranges"
-            url="#/reports/problemranges"
-            note="View ranges in your cluster that are unavailable, underreplicated, slow, or have other problems."
-          />
-          <DebugPanelLink
-            name="Network Latency"
-            url="#/reports/network"
-            note="Check latencies between all nodes in your cluster."
-          />
-          <DebugPanelLink
-            name="Data Distribution and Zone Configs"
-            url="#/data-distribution"
-            note="View the distribution of table data across nodes and verify zone configuration."
-          />
-          <PanelTitle>Configuration</PanelTitle>
-          <DebugPanelLink
-            name="Cluster Settings"
-            url="#/reports/settings"
-            note="View all cluster settings."
-          />
-          <DebugPanelLink
-            name="Localities"
-            url="#/reports/localities"
-            note="Check node localities and locations for your cluster."
-          />
-        </PanelSection>
-        <DebugTable heading="Even More Advanced Debugging">
-          <DebugTableRow title="Node Diagnostics">
-            <DebugTableLink name="All Nodes" url="#/reports/nodes" />
-            <DebugTableLink
-              name="Nodes filtered by node IDs"
-              url="#/reports/nodes?node_ids=1,2"
-              note="#/reports/nodes?node_ids=[node_id{,node_id...}]"
-            />
-            <DebugTableLink
-              name="Nodes filtered by locality (regex)"
-              url="#/reports/nodes?locality=region=us-east"
-              note="#/reports/nodes?locality=[regex]"
-            />
-            <DebugTableLink
-              name="Decommissioned node history"
-              url="#/reports/nodes/history"
-              note="#/reports/nodes/history"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Stores">
-            <DebugTableLink name="Stores on this node" url="#/reports/stores/local" />
-            <DebugTableLink
-              name="Stores on a specific node"
-              url="#/reports/stores/1"
-              note="#/reports/stores/[node_id]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Network">
-            <DebugTableLink
-              name="Latency filtered by node IDs"
-              url="#/reports/network?node_ids=1,2"
-              note="#/reports/network?node_ids=[node_id{,node_id...}]"
-            />
-            <DebugTableLink
-              name="Latency filtered by locality (regex)"
-              url="#/reports/network?locality=region=us-east"
-              note="#/reports/network?locality=[regex]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Security">
-            <DebugTableLink name="Certificates on this node" url="#/reports/certificates/local" />
-            <DebugTableLink
-              name="Certificates on a specific node"
-              url="#/reports/certificates/1"
-              note="#/reports/certificates/[node_id]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Problem Ranges">
-            <DebugTableLink
-              name="Problem Ranges on a specific node"
-              url="#/reports/problemranges/local"
-              note="#/reports/problemranges/[node_id]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Ranges">
-            <DebugTableLink
-              name="Range Status"
-              url="#/reports/range/1"
-              note="#/reports/range/[range_id]"
-            />
-            <DebugTableLink name="Raft Messages" url="#/raft/messages/all" />
-            <DebugTableLink name="Raft for all ranges" url="#/raft/ranges" />
-          </DebugTableRow>
-        </DebugTable>
-        <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
-          <DebugTableRow title="Tracing">
-            <DebugTableLink name="Requests" url="/debug/requests" />
-            <DebugTableLink name="Events" url="/debug/events" />
-            <DebugTableLink
-              name="Logs"
-              url="/debug/logspy?count=1&amp;duration=10s&amp;grep=."
-              note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Enqueue Range">
-            <DebugTableLink
-              name="Run a range through an internal queue"
-              url="#/debug/enqueue_range"
-              note="#/debug/enqueue_range"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Stopper">
-            <DebugTableLink name="Active Tasks" url="/debug/stopper" />
-          </DebugTableRow>
-          <DebugTableRow title="Profiling UI/pprof">
-            <DebugTableLink name="Heap" url="/debug/pprof/ui/heap/" />
-            <DebugTableLink name="Profile" url="/debug/pprof/ui/profile/?seconds=5" />
-            <DebugTableLink name="Profile (w/ Labels)" url="/debug/pprof/ui/profile/?seconds=5&amp;labels=true" />
-            <DebugTableLink name="Block" url="/debug/pprof/ui/block/" />
-            <DebugTableLink name="Mutex" url="/debug/pprof/ui/mutex/" />
-            <DebugTableLink name="Thread Create" url="/debug/pprof/ui/threadcreate/" />
-            <DebugTableLink name="Goroutines" url="/debug/pprof/ui/goroutine/" />
-          </DebugTableRow>
-          <DebugTableRow title="Goroutines">
-            <DebugTableLink name="UI" url="/debug/pprof/goroutineui" />
-            <DebugTableLink name="UI (count)" url="/debug/pprof/goroutineui?sort=count" />
-            <DebugTableLink name="UI (wait)" url="/debug/pprof/goroutineui?sort=wait" />
-            <DebugTableLink name="Raw" url="/debug/pprof/goroutine?debug=2" />
-          </DebugTableRow>
-          <DebugTableRow title="Runtime Trace">
-            <DebugTableLink name="Trace" url="/debug/pprof/trace?debug=1" />
-          </DebugTableRow>
-        </DebugTable>
-        <DebugTable heading="Raw Status Endpoints (JSON)">
-          <DebugTableRow title="Logs (single node only)">
-            <DebugTableLink
-              name="On a Specific Node"
-              url="/_status/logs/local"
-              note="/_status/logs/[node_id]"
-            />
-            <DebugTableLink
-              name="Log Files"
-              url="/_status/logfiles/local"
-              note="/_status/logfiles/[node_id]"
-            />
-            <DebugTableLink
-              name="Specific Log File"
-              url="/_status/logfiles/local/cockroach.log"
-              note="/_status/logfiles/[node_id]/[filename]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Metrics">
-            <DebugTableLink name="Variables" url="/debug/metrics" />
-            <DebugTableLink name="Prometheus" url="/_status/vars" />
-          </DebugTableRow>
-          <DebugTableRow title="Node Status">
-            <DebugTableLink
-              name="All Nodes"
-              url="/_status/nodes"
-              note="/_status/nodes"
-            />
-            <DebugTableLink
-              name="Single node status"
-              url="/_status/nodes/local"
-              note="/_status/nodes/[node_id]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Hot Ranges">
-            <DebugTableLink
-              name="All Nodes"
-              url="/_status/hotranges"
-              note="/_status/hotranges"
-            />
-            <DebugTableLink
-              name="Single node's ranges"
-              url="/_status/hotranges?node_id=local"
-              note="/_status/hotranges?node_id=[node_id]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Single Node Specific">
-            <DebugTableLink
-              name="Stores"
-              url="/_status/stores/local"
-              note="/_status/stores/[node_id]"
-            />
-            <DebugTableLink
-              name="Gossip"
-              url="/_status/gossip/local"
-              note="/_status/gossip/[node_id]"
-            />
-            <DebugTableLink
-              name="Ranges"
-              url="/_status/ranges/local"
-              note="/_status/ranges/[node_id]"
-            />
-            <DebugTableLink
-              name="Stacks"
-              url="/_status/stacks/local"
-              note="/_status/stacks/[node_id]"
-            />
-            <DebugTableLink
-              name="Engine Stats"
-              url="/_status/enginestats/local"
-              note="/_status/enginestats/[node_id]"
-            />
-            <DebugTableLink
-              name="Certificates"
-              url="/_status/certificates/local"
-              note="/_status/certificates/[node_id]"
-            />
-            <DebugTableLink
-              name="Diagnostics Reporting Data"
-              url="/_status/diagnostics/local"
-              note="/_status/diagnostics/[node_id]"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Sessions">
-            <DebugTableLink name="Local Sessions" url="/_status/local_sessions" />
-            <DebugTableLink name="All Sessions" url="/_status/sessions" />
-          </DebugTableRow>
-          <DebugTableRow title="Cluster Wide">
-            <DebugTableLink name="Raft" url="/_status/raft" />
-            <DebugTableLink
-              name="Range"
-              url="/_status/range/1"
-              note="/_status/range/[range_id]"
-            />
-            <DebugTableLink name="Range Log" url="/_admin/v1/rangelog?limit=100" />
-            <DebugTableLink
-              name="Range Log for Specific Range"
-              url="/_admin/v1/rangelog/1?limit=100"
-              note="/_admin/v1/rangelog/[range_id]?limit=100"
-            />
-          </DebugTableRow>
-          <DebugTableRow title="Allocator">
-            <DebugTableLink
-              name="Simulated Allocator Runs on a Specific Node"
-              url="/_status/allocator/node/local"
-              note="/_status/allocator/node/[node_id]"
-            />
-            <DebugTableLink
-              name="Simulated Allocator Runs on a Specific Range"
-              url="/_status/allocator/range/1"
-              note="/_status/allocator/range/[range_id]"
-            />
-          </DebugTableRow>
-        </DebugTable>
-        <DebugTable heading="UI Debugging">
-          <DebugTableRow title="Redux State">
-            <DebugTableLink
-              name="Export the Redux State of the UI"
-              url="#/debug/redux"
-            />
-          </DebugTableRow>
-        </DebugTable>
+const Debug = () => (
+  <div className="section">
+    <Helmet title="Debug" />
+    <h1 className="base-heading">Advanced Debugging</h1>
+    <div className="debug-header">
+      <InfoBox>
+        <p>
+          The following pages are meant for advanced monitoring and troubleshooting.
+          Note that these pages are experimental and undocumented. If you find an issue,
+          let us know through{" "}
+          <a href={ COMMUNITY_URL }>these channels.</a>
+        </p>
+      </InfoBox>
+      <div className="debug-header__annotations">
+        <LicenseType />
+        <NodesDropdown />
       </div>
-    );
-  }
-}
+    </div>
+    <PanelSection>
+      <PanelTitle>Reports</PanelTitle>
+      <DebugPanelLink
+        name="Custom Time Series Chart"
+        url="#/debug/chart"
+        note="Create a custom chart of time series data."
+      />
+      <DebugPanelLink
+        name="Problem Ranges"
+        url="#/reports/problemranges"
+        note="View ranges in your cluster that are unavailable, underreplicated, slow, or have other problems."
+      />
+      <DebugPanelLink
+        name="Network Latency"
+        url="#/reports/network"
+        note="Check latencies between all nodes in your cluster."
+      />
+      <DebugPanelLink
+        name="Data Distribution and Zone Configs"
+        url="#/data-distribution"
+        note="View the distribution of table data across nodes and verify zone configuration."
+      />
+      <PanelTitle>Configuration</PanelTitle>
+      <DebugPanelLink
+        name="Cluster Settings"
+        url="#/reports/settings"
+        note="View all cluster settings."
+      />
+      <DebugPanelLink
+        name="Localities"
+        url="#/reports/localities"
+        note="Check node localities and locations for your cluster."
+      />
+    </PanelSection>
+    <DebugTable heading="Even More Advanced Debugging">
+      <DebugTableRow title="Node Diagnostics">
+        <DebugTableLink name="All Nodes" url="#/reports/nodes" />
+        <DebugTableLink
+          name="Nodes filtered by node IDs"
+          url="#/reports/nodes?node_ids=1,2"
+          note="#/reports/nodes?node_ids=[node_id{,node_id...}]"
+        />
+        <DebugTableLink
+          name="Nodes filtered by locality (regex)"
+          url="#/reports/nodes?locality=region=us-east"
+          note="#/reports/nodes?locality=[regex]"
+        />
+        <DebugTableLink
+          name="Decommissioned node history"
+          url="#/reports/nodes/history"
+          note="#/reports/nodes/history"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Stores">
+        <DebugTableLink name="Stores on this node" url="#/reports/stores/local" />
+        <DebugTableLink
+          name="Stores on a specific node"
+          url="#/reports/stores/1"
+          note="#/reports/stores/[node_id]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Network">
+        <DebugTableLink
+          name="Latency filtered by node IDs"
+          url="#/reports/network?node_ids=1,2"
+          note="#/reports/network?node_ids=[node_id{,node_id...}]"
+        />
+        <DebugTableLink
+          name="Latency filtered by locality (regex)"
+          url="#/reports/network?locality=region=us-east"
+          note="#/reports/network?locality=[regex]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Security">
+        <DebugTableLink name="Certificates on this node" url="#/reports/certificates/local" />
+        <DebugTableLink
+          name="Certificates on a specific node"
+          url="#/reports/certificates/1"
+          note="#/reports/certificates/[node_id]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Problem Ranges">
+        <DebugTableLink
+          name="Problem Ranges on a specific node"
+          url="#/reports/problemranges/local"
+          note="#/reports/problemranges/[node_id]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Ranges">
+        <DebugTableLink
+          name="Range Status"
+          url="#/reports/range/1"
+          note="#/reports/range/[range_id]"
+        />
+        <DebugTableLink name="Raft Messages" url="#/raft/messages/all" />
+        <DebugTableLink name="Raft for all ranges" url="#/raft/ranges" />
+      </DebugTableRow>
+    </DebugTable>
+    <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
+      <DebugTableRow title="Tracing">
+        <DebugTableLink name="Requests" url="/debug/requests" />
+        <DebugTableLink name="Events" url="/debug/events" />
+        <DebugTableLink
+          name="Logs"
+          url="/debug/logspy?count=1&amp;duration=10s&amp;grep=."
+          note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Enqueue Range">
+        <DebugTableLink
+          name="Run a range through an internal queue"
+          url="#/debug/enqueue_range"
+          note="#/debug/enqueue_range"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Stopper">
+        <DebugTableLink name="Active Tasks" url="/debug/stopper" />
+      </DebugTableRow>
+      <DebugTableRow title="Profiling UI/pprof">
+        <DebugTableLink name="Heap" url="/debug/pprof/ui/heap/" />
+        <DebugTableLink name="Profile" url="/debug/pprof/ui/profile/?seconds=5" />
+        <DebugTableLink name="Profile (w/ Labels)" url="/debug/pprof/ui/profile/?seconds=5&amp;labels=true" />
+        <DebugTableLink name="Block" url="/debug/pprof/ui/block/" />
+        <DebugTableLink name="Mutex" url="/debug/pprof/ui/mutex/" />
+        <DebugTableLink name="Thread Create" url="/debug/pprof/ui/threadcreate/" />
+        <DebugTableLink name="Goroutines" url="/debug/pprof/ui/goroutine/" />
+      </DebugTableRow>
+      <DebugTableRow title="Goroutines">
+        <DebugTableLink name="UI" url="/debug/pprof/goroutineui" />
+        <DebugTableLink name="UI (count)" url="/debug/pprof/goroutineui?sort=count" />
+        <DebugTableLink name="UI (wait)" url="/debug/pprof/goroutineui?sort=wait" />
+        <DebugTableLink name="Raw" url="/debug/pprof/goroutine?debug=2" />
+      </DebugTableRow>
+      <DebugTableRow title="Runtime Trace">
+        <DebugTableLink name="Trace" url="/debug/pprof/trace?debug=1" />
+      </DebugTableRow>
+    </DebugTable>
+    <DebugTable heading="Raw Status Endpoints (JSON)">
+      <DebugTableRow title="Logs (single node only)">
+        <DebugTableLink
+          name="On a Specific Node"
+          url="/_status/logs/local"
+          note="/_status/logs/[node_id]"
+        />
+        <DebugTableLink
+          name="Log Files"
+          url="/_status/logfiles/local"
+          note="/_status/logfiles/[node_id]"
+        />
+        <DebugTableLink
+          name="Specific Log File"
+          url="/_status/logfiles/local/cockroach.log"
+          note="/_status/logfiles/[node_id]/[filename]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Metrics">
+        <DebugTableLink name="Variables" url="/debug/metrics" />
+        <DebugTableLink name="Prometheus" url="/_status/vars" />
+      </DebugTableRow>
+      <DebugTableRow title="Node Status">
+        <DebugTableLink
+          name="All Nodes"
+          url="/_status/nodes"
+          note="/_status/nodes"
+        />
+        <DebugTableLink
+          name="Single node status"
+          url="/_status/nodes/local"
+          note="/_status/nodes/[node_id]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Hot Ranges">
+        <DebugTableLink
+          name="All Nodes"
+          url="/_status/hotranges"
+          note="/_status/hotranges"
+        />
+        <DebugTableLink
+          name="Single node's ranges"
+          url="/_status/hotranges?node_id=local"
+          note="/_status/hotranges?node_id=[node_id]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Single Node Specific">
+        <DebugTableLink
+          name="Stores"
+          url="/_status/stores/local"
+          note="/_status/stores/[node_id]"
+        />
+        <DebugTableLink
+          name="Gossip"
+          url="/_status/gossip/local"
+          note="/_status/gossip/[node_id]"
+        />
+        <DebugTableLink
+          name="Ranges"
+          url="/_status/ranges/local"
+          note="/_status/ranges/[node_id]"
+        />
+        <DebugTableLink
+          name="Stacks"
+          url="/_status/stacks/local"
+          note="/_status/stacks/[node_id]"
+        />
+        <DebugTableLink
+          name="Engine Stats"
+          url="/_status/enginestats/local"
+          note="/_status/enginestats/[node_id]"
+        />
+        <DebugTableLink
+          name="Certificates"
+          url="/_status/certificates/local"
+          note="/_status/certificates/[node_id]"
+        />
+        <DebugTableLink
+          name="Diagnostics Reporting Data"
+          url="/_status/diagnostics/local"
+          note="/_status/diagnostics/[node_id]"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Sessions">
+        <DebugTableLink name="Local Sessions" url="/_status/local_sessions" />
+        <DebugTableLink name="All Sessions" url="/_status/sessions" />
+      </DebugTableRow>
+      <DebugTableRow title="Cluster Wide">
+        <DebugTableLink name="Raft" url="/_status/raft" />
+        <DebugTableLink
+          name="Range"
+          url="/_status/range/1"
+          note="/_status/range/[range_id]"
+        />
+        <DebugTableLink name="Range Log" url="/_admin/v1/rangelog?limit=100" />
+        <DebugTableLink
+          name="Range Log for Specific Range"
+          url="/_admin/v1/rangelog/1?limit=100"
+          note="/_admin/v1/rangelog/[range_id]?limit=100"
+        />
+      </DebugTableRow>
+      <DebugTableRow title="Allocator">
+        <DebugTableLink
+          name="Simulated Allocator Runs on a Specific Node"
+          url="/_status/allocator/node/local"
+          note="/_status/allocator/node/[node_id]"
+        />
+        <DebugTableLink
+          name="Simulated Allocator Runs on a Specific Range"
+          url="/_status/allocator/range/1"
+          note="/_status/allocator/range/[range_id]"
+        />
+      </DebugTableRow>
+    </DebugTable>
+    <DebugTable heading="UI Debugging">
+      <DebugTableRow title="Redux State">
+        <DebugTableLink
+          name="Export the Redux State of the UI"
+          url="#/debug/redux"
+        />
+      </DebugTableRow>
+    </DebugTable>
+  </div>
+);
 
-/**
- * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
- */
-// tslint:disable-next-line:variable-name
-export default withRouter(connect(
-  (state: AdminUIState) => ({
-    nodesSummary: nodesSummarySelector(state),
-    dataSource: liveNodesTableDataSelector(state),
-  }),
-)(Debug as any));
+export default Debug;

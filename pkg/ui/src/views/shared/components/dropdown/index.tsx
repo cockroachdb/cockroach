@@ -32,7 +32,7 @@ export enum ArrowDirection {
 interface DropdownOwnProps {
   title: string;
   selected: string;
-  options: DropdownOption[];
+  options?: DropdownOption[];
   onChange?: (selected: DropdownOption) => void; // Callback when the value changes.
   // If onArrowClick exists, don't display the arrow next to the dropdown,
   // display left and right arrows to either side instead.
