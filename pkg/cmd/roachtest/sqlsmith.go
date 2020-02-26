@@ -157,11 +157,15 @@ func registerSQLSmith(r *testRegistry) {
 				}(ctx)
 				select {
 				case <-time.After(timeout * 2):
-					t.Fatalf("query timed out, but did not cancel execution:\n%s;", stmt)
+					// SQLSmith generates queries that either perform full table scans of
+					// large tables or backup/restore operations that timeout. These
+					// should not cause an issue to be raised, as they most likely are
+					// just timing out.
+					c.l.Printf("query timed out, but did not cancel execution:\n%s;", stmt)
+					return nil
 				case err := <-done:
 					return err
 				}
-				panic("unreachable")
 			}()
 			if err != nil {
 				es := err.Error()
