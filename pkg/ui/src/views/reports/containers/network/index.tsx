@@ -368,7 +368,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       <Fragment>
         <Helmet title="Network Diagnostics | Debug" />
         <div className="section">
-          <h1 className="base-heading page-title">Network Diagnostics</h1>
+          <h1 className="base-heading">Network Diagnostics</h1>
         </div>
         <Loading
           loading={!contentAvailable(nodesSummary)}

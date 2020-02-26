@@ -261,7 +261,7 @@ export class CustomChart extends React.Component<CustomChartProps & RouteCompone
     return (
       <>
         <Helmet title="Custom Chart | Debug" />
-        <section className="section"><h1 className="base-heading page-title">Custom Chart</h1></section>
+        <section className="section"><h1 className="base-heading">Custom Chart</h1></section>
         <PageConfig>
           <PageConfigItem>
             <TimeScaleDropdown />
