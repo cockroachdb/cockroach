@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -136,7 +138,9 @@ func (t *TeeEngine) GetProto(
 		return false, 0, 0, err
 	}
 
-	err = protoutil.Unmarshal(val, msg)
+	if msg != nil {
+		err = protoutil.Unmarshal(val, msg)
+	}
 	keyBytes = int64(key.Len())
 	valBytes = int64(len(val))
 	return true, keyBytes, valBytes, err
@@ -256,9 +260,7 @@ func (t *TeeEngine) GetCompactionStats() string {
 
 // GetStats implements the Engine interface.
 func (t *TeeEngine) GetStats() (*Stats, error) {
-	// TODO(itsbilal): Test why getting stats from eng1 segfaults when
-	// eng1 = RocksDB.
-	return t.eng2.GetStats()
+	return t.eng1.GetStats()
 }
 
 // GetEncryptionRegistries implements the Engine interface.
@@ -333,23 +335,40 @@ func (t *TeeEngine) Type() enginepb.EngineType {
 // IngestExternalFiles implements the Engine interface.
 func (t *TeeEngine) IngestExternalFiles(ctx context.Context, paths []string) error {
 	var err, err2 error
-	// Special case: If either engine is RocksDB, run that last, since RocksDB
-	// IngestExternalFiles deletes the specified files.
-	if rocksDBEng, ok := t.eng1.(*RocksDB); ok {
-		err2 = t.eng2.IngestExternalFiles(ctx, paths)
-		err = rocksDBEng.IngestExternalFiles(ctx, paths)
+
+	// Copy all SSTs into a subdirectory of the aux directory first.
+	pathsCopy := make([]string, len(paths))
+	if !t.inMem {
+		auxDir := filepath.Join(t.GetAuxiliaryDir(), "ingest-temp")
+		os.MkdirAll(auxDir, 0755)
+
+		for i, path := range paths {
+			fileName := filepath.Base(path)
+			file, err := os.Open(path)
+			if err != nil {
+				panic(err)
+			}
+			fileCopy, err := os.Create(filepath.Join(auxDir, fileName))
+			if err != nil {
+				panic(err)
+			}
+			io.Copy(fileCopy, file)
+			file.Close()
+			fileCopy.Close()
+			pathsCopy[i] = filepath.Join(auxDir, fileName)
+		}
 	} else {
-		err = t.eng1.IngestExternalFiles(ctx, paths)
-		err2 = t.eng2.IngestExternalFiles(ctx, paths)
+		pathsCopy = paths
 	}
+
+	err = t.eng1.IngestExternalFiles(ctx, paths)
+	err2 = t.eng2.IngestExternalFiles(ctx, pathsCopy)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
 // PreIngestDelay implements the Engine interface.
 func (t *TeeEngine) PreIngestDelay(ctx context.Context) {
-	// TODO(itsbilal): Test why PreIngestDelay on eng1 segfaults when
-	// eng1 = RocksDB in tests like TestDBAddSSTable.
-	t.eng2.PreIngestDelay(ctx)
+	t.eng1.PreIngestDelay(ctx)
 }
 
 // ApproximateDiskBytes implements the Engine interface.
@@ -769,7 +788,9 @@ func (t *TeeEngineReader) GetProto(
 		return false, 0, 0, err
 	}
 
-	err = protoutil.Unmarshal(val, msg)
+	if msg != nil {
+		err = protoutil.Unmarshal(val, msg)
+	}
 	keyBytes = int64(key.Len())
 	valBytes = int64(len(val))
 	return true, keyBytes, valBytes, err
@@ -869,7 +890,9 @@ func (t *TeeEngineBatch) GetProto(
 		return false, 0, 0, err
 	}
 
-	err = protoutil.Unmarshal(val, msg)
+	if msg != nil {
+		err = protoutil.Unmarshal(val, msg)
+	}
 	keyBytes = int64(key.Len())
 	valBytes = int64(len(val))
 	return true, keyBytes, valBytes, err
@@ -1127,7 +1150,7 @@ func (t *TeeEngineIter) ComputeStats(
 	if !stats1.Equal(stats2) {
 		log.Fatalf(t.ctx, "mismatching stats between engines: %v != %v", stats1, stats2)
 	}
-	return stats1, nil
+	return stats1, err
 }
 
 // FindSplitKey implements the Iterator interface.
