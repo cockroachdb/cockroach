@@ -282,7 +282,7 @@ func (ir *IntentResolver) ProcessWriteIntentError(
 	//
 	// To do better here, we need per-intent information on whether we need to
 	// poison.
-	opts := ResolveOptions{Wait: false, Poison: true}
+	opts := ResolveOptions{Poison: true}
 	if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
 		return cleanup, pErr
 	}
@@ -597,7 +597,7 @@ func (ir *IntentResolver) CleanupIntents(
 		//   same situation as above.
 		//
 		// Thus, we must poison.
-		opts := ResolveOptions{Wait: true, Poison: true}
+		opts := ResolveOptions{Poison: true}
 		if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
 			return 0, errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 		}
@@ -817,7 +817,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		}
 	}()
 	// Resolve intents.
-	opts := ResolveOptions{Wait: true, Poison: poison, MinTimestamp: txn.MinTimestamp}
+	opts := ResolveOptions{Poison: poison, MinTimestamp: txn.MinTimestamp}
 	if pErr := ir.ResolveIntents(ctx, intents, opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
@@ -842,15 +842,6 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 // caller wants the call to block, and whether the ranges containing the intents
 // are to be poisoned.
 type ResolveOptions struct {
-	// Resolve intents synchronously. When set to `false`, requests a
-	// semi-synchronous operation, returning when all local commands have
-	// been *proposed* but not yet committed or executed. This ensures that
-	// if a waiting client retries immediately after calling this function,
-	// it will not hit the same intents again.
-	//
-	// TODO(bdarnell): Note that this functionality has been removed and
-	// will be ignored, pending resolution of #8360.
-	Wait   bool
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
@@ -896,7 +887,7 @@ func (ir *IntentResolver) ResolveIntents(
 	if err := ctx.Err(); err != nil {
 		return roachpb.NewError(err)
 	}
-	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)
+	log.Eventf(ctx, "resolving intents")
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	type resolveReq struct {

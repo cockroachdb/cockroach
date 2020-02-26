@@ -277,7 +277,7 @@ func (w *lockTableWaiterImpl) pushTxn(ctx context.Context, req Request, ws waiti
 	// To do better here, we need per-intent information on whether we need to
 	// poison.
 	resolve := roachpb.MakeLockUpdateWithDur(&pusheeTxn, roachpb.Span{Key: ws.key}, ws.dur)
-	opts := intentresolver.ResolveOptions{Wait: false, Poison: true}
+	opts := intentresolver.ResolveOptions{Poison: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
 
