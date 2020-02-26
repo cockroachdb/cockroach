@@ -945,6 +945,7 @@ service Status {
   rpc CreateStatementDiagnosticsRequest(CreateStatementDiagnosticsRequestRequest) returns (CreateStatementDiagnosticsRequestResponse) {
     option (google.api.http) = {
       post: "/_status/statementdiagnosticsrequests"
+      body: "*"
     };
   }
   rpc StatementDiagnosticsRequests(StatementDiagnosticsRequestsRequest) returns (StatementDiagnosticsRequestsResponse) {
