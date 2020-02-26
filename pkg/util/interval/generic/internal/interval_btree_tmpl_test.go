@@ -870,15 +870,12 @@ func BenchmarkBTreeIterSeekLT(b *testing.B) {
 func BenchmarkBTreeIterFirstOverlap(b *testing.B) {
 	forBenchmarkSizes(b, func(b *testing.B, count int) {
 		var spans []roachpb.Span
-		var items []T
 		var tr btree
 
 		for i := 0; i < count; i++ {
 			s := spanWithEnd(i, i+1)
 			spans = append(spans, s)
-			item := newItem(s)
-			items = append(items, item)
-			tr.Set(item)
+			tr.Set(newItem(s))
 		}
 
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -888,8 +885,7 @@ func BenchmarkBTreeIterFirstOverlap(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			j := rng.Intn(len(spans))
 			s := spans[j]
-			item := items[j]
-			it.FirstOverlap(item)
+			it.FirstOverlap(newItem(s))
 			if testing.Verbose() {
 				if !it.Valid() {
 					b.Fatal("expected to find key")
@@ -981,12 +977,9 @@ func BenchmarkBTreeIterOverlapScan(b *testing.B) {
 		tr.Set(newItem(spanWithEnd(i, i+size+1)))
 	}
 
-	item := newItem(roachpb.Span{})
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		span := randomSpan(rng, count)
-		item.SetKey(span.Key)
-		item.SetEndKey(span.EndKey)
+		item := newItem(randomSpan(rng, count))
 		it := tr.MakeIter()
 		it.FirstOverlap(item)
 		for it.Valid() {
