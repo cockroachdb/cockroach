@@ -52,7 +52,7 @@ func (ex *connExecutor) execSavepointInOpenState(
 	ex.state.activeRestartSavepointName = s.Name
 	// Note that Savepoint doesn't have a corresponding plan node.
 	// This here is all the execution there is.
-	return eventRetryIntentSet{}, nil /* payload */, nil
+	return nil, nil, nil
 }
 
 // execReleaseSavepointInOpenState runs a RELEASE SAVEPOINT statement
@@ -64,11 +64,6 @@ func (ex *connExecutor) execReleaseSavepointInOpenState(
 		ev, payload := ex.makeErrEvent(err, s)
 		return ev, payload, nil
 	}
-	if !ex.machine.CurState().(stateOpen).RetryIntent.Get() {
-		ev, payload := ex.makeErrEvent(errSavepointNotUsed, s)
-		return ev, payload, nil
-	}
-
 	// ReleaseSavepoint is executed fully here; there's no plan for it.
 	ev, payload := ex.runReleaseRestartSavepointAsTxnCommit(ctx, s)
 	res.ResetStmtType((*tree.CommitTransaction)(nil))
@@ -82,10 +77,6 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	if err := ex.validateSavepointName(s.Savepoint); err != nil {
 		ev, payload := ex.makeErrEvent(err, s)
-		return ev, payload, nil
-	}
-	if !ex.machine.CurState().(stateOpen).RetryIntent.Get() {
-		ev, payload := ex.makeErrEvent(errSavepointNotUsed, s)
 		return ev, payload, nil
 	}
 	ex.state.activeRestartSavepointName = ""
@@ -132,14 +123,6 @@ func (ex *connExecutor) execSavepointInAbortedState(
 		ex.state.activeRestartSavepointName = ""
 	} else {
 		ex.state.activeRestartSavepointName = spName
-	}
-
-	if !(inRestartWait || ex.machine.CurState().(stateAborted).RetryIntent.Get()) {
-		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{
-			err: errSavepointNotUsed,
-		}
-		return ev, payload
 	}
 
 	res.ResetStmtType((*tree.RollbackTransaction)(nil))
@@ -218,7 +201,3 @@ func (ex *connExecutor) clearSavepoints() {
 
 // restartSavepointName is the only savepoint ident that we accept.
 const restartSavepointName string = "cockroach_restart"
-
-var errSavepointNotUsed = pgerror.Newf(
-	pgcode.SavepointException,
-	"savepoint %s has not been used", restartSavepointName)
