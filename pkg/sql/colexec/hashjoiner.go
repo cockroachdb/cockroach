@@ -363,7 +363,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 			}
 
 			for i, colIdx := range hj.spec.left.eqCols {
-				hj.ht.keys[i] = batch.ColVec(int(colIdx))
+				hj.ht.probeScratch.keys[i] = batch.ColVec(int(colIdx))
 			}
 
 			sel := batch.Selection()
@@ -376,18 +376,18 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 				//
 				// First, we compute the hash values for all tuples in the batch.
 				hj.ht.computeBuckets(
-					ctx, hj.ht.buckets, hj.probeState.keyTypes,
-					hj.ht.keys, batchSize, sel,
+					ctx, hj.ht.probeScratch.buckets, hj.probeState.keyTypes,
+					hj.ht.probeScratch.keys, batchSize, sel,
 				)
 				// Then, we iterate over all tuples to see whether there is at least
 				// one tuple in the hash table that has the same hash value.
 				for i := 0; i < batchSize; i++ {
-					if hj.ht.first[hj.ht.buckets[i]] != 0 {
+					if hj.ht.buildScratch.first[hj.ht.probeScratch.buckets[i]] != 0 {
 						// Non-zero "first" key indicates that there is a match of hashes
 						// and we need to include the current tuple to check whether it is
 						// an actual match.
-						hj.ht.groupID[i] = hj.ht.first[hj.ht.buckets[i]]
-						hj.ht.toCheck[nToCheck] = uint64(i)
+						hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[hj.ht.probeScratch.buckets[i]]
+						hj.ht.probeScratch.toCheck[nToCheck] = uint64(i)
 						nToCheck++
 					}
 				}
@@ -397,7 +397,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 				// definitely don't have a match, the zero value will remain until the
 				// "collecting" and "congregation" step in which such tuple will be
 				// included into the output.
-				copy(hj.ht.headID[:batchSize], zeroUint64Column)
+				copy(hj.ht.probeScratch.headID[:batchSize], zeroUint64Column)
 			default:
 				// Initialize groupID with the initial hash buckets and toCheck with all
 				// applicable indices.
@@ -413,7 +413,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 					// buckets. If the key is found or end of next chain is reached, the key is
 					// removed from the toCheck array.
 					nToCheck = hj.ht.distinctCheck(hj.probeState.keyTypes, nToCheck, sel)
-					hj.ht.findNext(nToCheck)
+					hj.ht.findNext(hj.ht.buildScratch.next, nToCheck)
 				}
 
 				nResults = hj.distinctCollect(batch, batchSize, sel)
@@ -421,8 +421,8 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 				for nToCheck > 0 {
 					// Continue searching for the build table matching keys while the toCheck
 					// array is non-empty.
-					nToCheck = hj.ht.check(hj.probeState.keyTypes, nToCheck, sel)
-					hj.ht.findNext(nToCheck)
+					nToCheck = hj.ht.check(hj.ht.probeScratch.keys, hj.probeState.keyTypes, hj.ht.keyCols, nToCheck, sel)
+					hj.ht.findNext(hj.ht.buildScratch.next, nToCheck)
 				}
 
 				// We're processing a new batch, so we'll reset the index to start
