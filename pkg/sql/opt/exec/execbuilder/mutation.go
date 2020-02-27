@@ -371,7 +371,6 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
 	returnColOrds := ordinalSetFromColList(ups.ReturnCols)
 	checkOrds := ordinalSetFromColList(ups.CheckCols)
-	disableExecFKs := !ups.FKFallback
 	node, err := b.factory.ConstructUpsert(
 		input.root,
 		tab,
@@ -382,13 +381,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		b.allowAutoCommit && len(ups.Checks) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
-		return execPlan{}, err
-	}
-
-	if err := b.buildFKChecks(ups.Checks); err != nil {
 		return execPlan{}, err
 	}
 
