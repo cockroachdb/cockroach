@@ -457,7 +457,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateRestartWait{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnRestart,
+				expEv:   noEvent,
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{},
