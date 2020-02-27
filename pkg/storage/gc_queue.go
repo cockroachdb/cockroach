@@ -445,8 +445,12 @@ func processAbortSpan(
 	rangeID roachpb.RangeID,
 	threshold hlc.Timestamp,
 	infoMu *lockableGCInfo,
-) []roachpb.GCRequest_GCKey {
-	var gcKeys []roachpb.GCRequest_GCKey
+	gcer PureGCer,
+) {
+	b := makeBatchingInlineGCer(gcer, func(err error) {
+		log.Warningf(ctx, "unable to GC from abort span: %s", err)
+	})
+	defer b.Flush(ctx)
 	abortSpan := abortspan.New(rangeID)
 	infoMu.Lock()
 	defer infoMu.Unlock()
@@ -454,14 +458,13 @@ func processAbortSpan(
 		infoMu.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
 			infoMu.AbortSpanGCNum++
-			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
+			b.FlushingAdd(ctx, key)
 		}
 		return nil
 	}); err != nil {
 		// Still return whatever we managed to collect.
 		log.Warning(ctx, err)
 	}
-	return gcKeys
 }
 
 // NoopGCer implements GCer by doing nothing.
@@ -862,10 +865,7 @@ func RunGC(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &infoMu)
-	if err := gcer.GC(ctx, abortSpanKeys); err != nil {
-		return GCInfo{}, err
-	}
+	processAbortSpan(ctx, snap, desc.RangeID, txnExp, &infoMu, gcer)
 
 	infoMu.Lock()
 	log.Eventf(ctx, "GC'ed keys; stats %+v", infoMu.GCInfo)
@@ -896,4 +896,42 @@ func (*gcQueue) timer(_ time.Duration) time.Duration {
 // purgatoryChan returns nil.
 func (*gcQueue) purgatoryChan() <-chan time.Time {
 	return nil
+}
+
+type PureGCer interface {
+	GC(context.Context, []roachpb.GCRequest_GCKey) error
+}
+
+// batchingInlineGCer is a helper to paginate the GC of inline (i.e. zero
+// timestamp keys). After creation, keys are added via FlushingAdd(). A
+// final call to Flush() empties out the buffer when all keys were added.
+type batchingInlineGCer struct {
+	gcer  PureGCer
+	onErr func(error)
+
+	size   int
+	max    int
+	gcKeys []roachpb.GCRequest_GCKey
+}
+
+func makeBatchingInlineGCer(gcer PureGCer, onErr func(error)) batchingInlineGCer {
+	return batchingInlineGCer{gcer: gcer, onErr: onErr, max: base.ChunkRaftCommandThresholdBytes}
+}
+
+func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
+	b.gcKeys = append(b.gcKeys, roachpb.GCRequest_GCKey{Key: key})
+	b.size += len(key)
+	if b.size < b.max {
+		return
+	}
+	b.Flush(ctx)
+}
+
+func (b *batchingInlineGCer) Flush(ctx context.Context) {
+	err := b.gcer.GC(ctx, b.gcKeys)
+	b.gcKeys = nil
+	b.size = 0
+	if err != nil {
+		b.onErr(err)
+	}
 }
