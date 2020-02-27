@@ -14,11 +14,13 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,7 +40,27 @@ type StmtDiagnosticsRequester interface {
 	//
 	// It returns the ID of the new row.
 	InsertRequest(ctx context.Context, fprint string) (int, error)
+	GetAllRequests(ctx context.Context) ([]StmtDiagnosticsRequest, error)
 }
+
+type StmtDiagnosticsRequest struct {
+	Id                     int
+	QueryFingerprint       string
+	Completed              bool
+	StatementDiagnosticsId int
+	RequestedAt            time.Time
+	CompletedAt            time.Time
+}
+
+func (request *StmtDiagnosticsRequest) ToProto() serverpb.StatementDiagnosticsRequest {
+	return serverpb.StatementDiagnosticsRequest{
+		StatementFingerprint: request.QueryFingerprint,
+		RequestedAt:          request.RequestedAt,
+		CompletedAt:          &request.CompletedAt,
+		Completed:            request.Completed,
+	}
+}
+
 
 // stmtDiagnosticsRequestRegistry maintains a view on the statement fingerprints
 // on which data is to be collected (i.e. system.statement_diagnostics_requests)
@@ -64,6 +86,55 @@ type stmtDiagnosticsRequestRegistry struct {
 	gossip *gossip.Gossip
 	nodeID roachpb.NodeID
 }
+
+func (r *stmtDiagnosticsRequestRegistry) GetAllRequests(ctx context.Context) ([]StmtDiagnosticsRequest, error) {
+	var err error
+	rows, err := r.ie.QueryEx(ctx, "stmt-diag-get-all", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{
+			User: security.RootUser,
+		},
+		"SELECT id, statement_fingerprint, completed, statement_diagnostics_id, requested_at, completed_at "+
+			"FROM system.statement_diagnostics_requests")
+	if err != nil {
+		return nil, err
+	}
+
+	requests := make([]StmtDiagnosticsRequest, len(rows))
+	for i, row := range rows {
+		id := int(*row[0].(*tree.DInt))
+		queryFingerprint := string(*row[1].(*tree.DString))
+		completed := bool(*row[2].(*tree.DBool))
+		req := StmtDiagnosticsRequest{
+			Id:                     id,
+			QueryFingerprint:       queryFingerprint,
+			Completed:              completed,
+		}
+
+		if row[3] != tree.DNull {
+			sdi := int(*row[3].(*tree.DInt))
+			req.StatementDiagnosticsId = sdi
+		}
+
+		requestedAt, ok := row[4].(*tree.DTimestampTZ)
+		if ok {
+			req.RequestedAt = requestedAt.Time
+		}
+
+		if row[5] != tree.DNull {
+			completedAt, ok := row[5].(*tree.DTimestampTZ)
+			if ok {
+				req.CompletedAt = completedAt.Time
+			}
+		}
+
+		requests[i] = req
+	}
+
+	return requests, nil
+}
+
+
+var _ StmtDiagnosticsRequester = &stmtDiagnosticsRequestRegistry{}
 
 func newStmtDiagnosticsRequestRegistry(
 	ie *InternalExecutor, db *client.DB, g *gossip.Gossip, nodeID roachpb.NodeID,

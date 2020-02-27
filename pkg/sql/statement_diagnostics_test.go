@@ -113,3 +113,39 @@ func TestTraceRequestDifferentNode(t *testing.T) {
 	require.Contains(t, json, "traced statement")
 	require.Contains(t, json, "statement execution committed the txn")
 }
+
+func TestStmtDiagnosticsRequestRegistry_GetAllRequests_singleRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	// Ask to trace a particular query using node 0.
+	testFingerprint := "INSERT INTO test VALUES (_)"
+	_, err := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.InsertRequest(
+		ctx, testFingerprint)
+	require.NoError(t, err)
+
+	requests, err := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(requests))
+	require.Equal(t, testFingerprint, requests[0].QueryFingerprint)
+}
+
+func TestStmtDiagnosticsRequestRegistry_GetAllRequests_manyRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	for i := 0; i < 3; i++ {
+		testFingerprint := fmt.Sprintf("INSERT INTO test%d VALUES (_)", i)
+		_, err := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.InsertRequest(
+			ctx, testFingerprint)
+		require.NoError(t, err)
+	}
+
+	requests, err := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 3, len(requests))
+}
