@@ -376,10 +376,8 @@ const (
 	// This event is produced both when entering the Aborted state and sometimes
 	// when leaving it.
 	txnAborted
-	// txnRestart means that the transaction is expecting a retry. The iteration
+	// txnRestart means that the transaction is restarting. The iteration
 	// of the txn just finished will not commit.
-	// This event is produced both when entering the RetryWait state and sometimes
-	// when exiting it.
 	txnRestart
 )
 
