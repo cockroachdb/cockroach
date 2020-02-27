@@ -203,6 +203,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"auto",
 	map[int64]string{
 		int64(sessiondata.VectorizeOff):            "off",
+		int64(sessiondata.Vectorize192Auto):        "192auto",
 		int64(sessiondata.VectorizeAuto):           "auto",
 		int64(sessiondata.VectorizeExperimentalOn): "experimental_on",
 	},

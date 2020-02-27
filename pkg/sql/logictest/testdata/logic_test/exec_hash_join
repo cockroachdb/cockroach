@@ -1,5 +1,7 @@
 # LogicTest: local-vec
 
+# TODO(asubiotto): Add fakedist-vec-disk configuration to this file.
+
 # Test that the exec HashJoiner follows SQL NULL semantics for ON predicate
 # equivalence.
 

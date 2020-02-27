@@ -15,7 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/marusama/semaphore"
 )
 
 // externalHashJoinerState indicates the current state of the external hash
@@ -44,10 +46,6 @@ const (
 	// tuples already and only zero-length batch will be emitted from now on.
 	externalHJFinished
 )
-
-// TODO(yuzefovich): make this tunable. Ideally, we would calculate this number
-// based on the cardinality of inputs.
-const externalHJNumPartitions = 4 << 10 /* 4096 */
 
 // externalHashJoiner is an operator that performs Grace hash join algorithm
 // and can spill to disk. The high level view is that it partitions the left
@@ -89,8 +87,8 @@ type externalHashJoiner struct {
 	spec      hashJoinerSpec
 
 	// Partitioning phase variables.
-	leftPartitioner  Partitioner
-	rightPartitioner Partitioner
+	leftPartitioner  colcontainer.PartitionedQueue
+	rightPartitioner colcontainer.PartitionedQueue
 	tupleDistributor *tupleHashDistributor
 	// TODO(yuzefovich): use bitmap for this to reduce memory footprint.
 	nonEmptyPartition []bool
@@ -114,24 +112,29 @@ func newExternalHashJoiner(
 	allocator *Allocator,
 	spec hashJoinerSpec,
 	leftInput, rightInput Operator,
-	// TODO(yuzefovich): remove this once actual disk queues are in-place.
-	diskQueuesUnlimitedAllocator *Allocator,
+	diskQueueCfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) Operator {
-	leftPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.left.sourceTypes)
+	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
 	leftInMemHashJoinerInput := newPartitionerToOperator(
 		allocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
 	)
-	rightPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.right.sourceTypes)
+	rightPartitioner := colcontainer.NewPartitionedDiskQueue(spec.right.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
 	rightInMemHashJoinerInput := newPartitionerToOperator(
 		allocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
 	)
 	ehj := &externalHashJoiner{
-		twoInputNode:              newTwoInputNode(leftInput, rightInput),
-		allocator:                 allocator,
-		spec:                      spec,
-		leftPartitioner:           leftPartitioner,
-		rightPartitioner:          rightPartitioner,
-		numPartitions:             externalHJNumPartitions,
+		twoInputNode:     newTwoInputNode(leftInput, rightInput),
+		allocator:        allocator,
+		spec:             spec,
+		leftPartitioner:  leftPartitioner,
+		rightPartitioner: rightPartitioner,
+		// TODO(asubiotto): This is temporary. With the default limit of 256 file
+		//  descriptors, this results in 16 partitions (8 for the left and 8 for the
+		//  right). The total size of these partitions is ignored and might hit a
+		//  memory limit. This is temporary until recursive partitioning is merged
+		//  and is behind the experimental_on flag.
+		numPartitions:             fdSemaphore.GetLimit() / 32,
 		leftInMemHashJoinerInput:  leftInMemHashJoinerInput,
 		rightInMemHashJoinerInput: rightInMemHashJoinerInput,
 		inMemHashJoiner: newHashJoiner(
@@ -173,7 +176,7 @@ func (hj *externalHashJoiner) partitionBatch(
 	batch coldata.Batch,
 	scratchBatch coldata.Batch,
 	sourceSpec hashJoinerSourceSpec,
-	partitioner Partitioner,
+	partitioner colcontainer.PartitionedQueue,
 ) {
 	if batch.Length() == 0 {
 		return
@@ -200,7 +203,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				}
 				scratchBatch.SetLength(uint16(len(sel)))
 			})
-			if err := partitioner.Enqueue(partitionIdx, scratchBatch); err != nil {
+			if err := partitioner.Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			hj.nonEmptyPartition[partitionIdx] = true
@@ -216,7 +219,13 @@ func (hj *externalHashJoiner) Next(ctx context.Context) coldata.Batch {
 			rightBatch := hj.inputTwo.Next(ctx)
 			if leftBatch.Length() == 0 && rightBatch.Length() == 0 {
 				// Both inputs have been partitioned and spilled, so we transition to
-				// "joining" phase.
+				// "joining" phase. Close all the open write file descriptors.
+				if err := hj.leftPartitioner.CloseAllOpenWriteFileDescriptors(); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
+				if err := hj.rightPartitioner.CloseAllOpenWriteFileDescriptors(); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
 				hj.inMemHashJoiner.Init()
 				hj.state = externalHJJoinNewPartition
 				continue
@@ -225,7 +234,14 @@ func (hj *externalHashJoiner) Next(ctx context.Context) coldata.Batch {
 			hj.partitionBatch(ctx, rightBatch, hj.scratch.rightBatch, hj.spec.right, hj.rightPartitioner)
 
 		case externalHJJoinNewPartition:
-			// Find next non empty partition.
+			// Find next non empty partition. Close any open read file descriptors
+			// from previous joins.
+			if err := hj.leftPartitioner.CloseAllOpenReadFileDescriptors(); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
+			if err := hj.rightPartitioner.CloseAllOpenReadFileDescriptors(); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
 			for hj.partitionIdxToJoin < hj.numPartitions &&
 				!hj.nonEmptyPartition[hj.partitionIdxToJoin] {
 				hj.partitionIdxToJoin++

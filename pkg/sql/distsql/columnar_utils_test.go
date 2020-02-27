@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -58,7 +59,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := engine.NewTempEngine(ctx, engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	tempEngine, tempFS, err := engine.NewTempEngine(ctx, engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		return err
 	}
@@ -114,6 +115,8 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		Inputs:               columnarizers,
 		StreamingMemAccount:  &acc,
 		ProcessorConstructor: rowexec.NewProcessor,
+		DiskQueueCfg:         colcontainer.DiskQueueCfg{FS: tempFS},
+		FDSemaphore:          colexec.NewTestingSemaphore(256),
 	}
 	var spilled bool
 	if args.forceDiskSpill {
