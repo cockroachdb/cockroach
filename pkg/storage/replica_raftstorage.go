@@ -940,6 +940,9 @@ func (r *Replica) applySnapshot(
 	// in the snapshot.
 	r.leasePostApply(ctx, *s.Lease, true /* permitJump */)
 
+	// Inform the concurrency manager that this replica just applied a snapshot.
+	r.concMgr.OnReplicaSnapshotApplied()
+
 	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is
 	// not a correctness issue, but means that we may have just transferred
