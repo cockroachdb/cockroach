@@ -36,17 +36,26 @@ func genHashTable(wr io.Writer) error {
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
-	checkCol := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 7)
-	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "UseSel" $7}}`)
-
-	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 9)
+	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 12)
 	s = checkColBody.ReplaceAllString(
 		s,
-		`{{template "checkColBody" buildDict "Global" .Global "UseSel" .UseSel "ProbeHasNulls" $7 "BuildHasNulls" $8 "AllowNullEquality" $9}}`)
+		`{{template "checkColBody" buildDict "Global" .Global "UseProbeSel" .UseProbeSel "UseBuildSel" .UseBuildSel "ProbeHasNulls" $7 "BuildHasNulls" $8 "AllowNullEquality" $9 "SelectDistinct" $10}}`)
 
-	checkBody := makeFunctionRegex("_CHECK_BODY", 1)
+	checkColWithNulls := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 8)
+	s = checkColWithNulls.ReplaceAllString(s,
+		`{{template "checkColWithNulls" buildDict "Global" . "UseProbeSel" $7 "UseBuildSel" $8}}`)
+
+	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 8)
+	s = checkColForDistinctWithNulls.ReplaceAllString(s,
+		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $7 "UseBuildSel" $8}}`)
+
+	checkBody := makeFunctionRegex("_CHECK_BODY", 3)
 	s = checkBody.ReplaceAllString(s,
-		`{{template "checkBody" buildDict "Global" . "IsHashTableInFullMode" $1}}`)
+		`{{template "checkBody" buildDict "Global" . "SelectSameTuples" $3}}`)
+
+	updateSelBody := makeFunctionRegex("_UPDATE_SEL_BODY", 4)
+	s = updateSelBody.ReplaceAllString(s,
+		`{{template "updateSelBody" buildDict "Global" . "UseSel" $4}}`)
 
 	s = replaceManipulationFuncs(".Global.LTyp", s)
 
