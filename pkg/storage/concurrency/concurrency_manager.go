@@ -334,6 +334,16 @@ func (m *managerImpl) OnRangeMerge() {
 	m.twq.Clear(true /* disable */)
 }
 
+// OnRangeSnapshot implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeSnapshot() {
+	// A snapshot can cause discontinuities in raft entry application. The
+	// lockTable expects to observe all lock state transitions on the range
+	// through LockManager listener methods. If there's a chance it missed a
+	// state transition, it is safer to simply clear the lockTable and rebuild
+	// it from persistent intent state.
+	m.lt.Clear()
+}
+
 // LatchMetrics implements the MetricExporter interface.
 func (m *managerImpl) LatchMetrics() (global, local storagepb.LatchManagerInfo) {
 	return m.lm.Info()

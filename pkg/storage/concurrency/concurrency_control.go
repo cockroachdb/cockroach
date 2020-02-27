@@ -270,6 +270,10 @@ type RangeStateListener interface {
 	// into its LHS neighbor. This is not called on the LHS range being merged
 	// into.
 	OnRangeMerge()
+
+	// OnRangeSnapshot informs the concurrency manager that its replica has
+	// received a snapshot from another replica in its range.
+	OnRangeSnapshot()
 }
 
 // MetricExporter is concerned with providing observability into the state of
