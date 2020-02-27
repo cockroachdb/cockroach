@@ -44,3 +44,30 @@ set require_explicit_primary_keys=true
 
 statement error pq: no primary key specified for table t \(require_explicit_primary_keys = true\)
 CREATE TABLE t (x INT, y INT)
+
+# Regression for #45496.
+statement ok
+reset require_explicit_primary_keys;
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (rowid INT, rowid_1 INT, FAMILY (rowid, rowid_1))
+
+query T rowsort
+SELECT column_name FROM [SHOW COLUMNS FROM t]
+----
+rowid
+rowid_1
+rowid_2
+
+query TT
+SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
+----
+primary rowid_2
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   rowid INT8 NULL,
+   rowid_1 INT8 NULL,
+   FAMILY fam_0_rowid_rowid_1_rowid_2 (rowid, rowid_1, rowid_2)
+)
