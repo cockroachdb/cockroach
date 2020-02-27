@@ -344,9 +344,48 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
   return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
 }
 
+// TODO (koorosh): It is stub. Has to be defined with protobufs
+export interface StatementsResponseMessageWithDiagnostics extends StatementsResponseMessage {
+  statements: StatementsResponseMessage["statements"] & any;
+}
+
 // getStatements returns statements the cluster has recently executed, and some stats about them.
-export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessage> {
-  return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
+export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessageWithDiagnostics/*StatementsResponseMessage*/> {
+  return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout)
+    .then((response: any) => {
+      const diagnostics = [
+        {
+          uuid: Date.now().toString(),
+          initiated_at: new Date,
+          collected_at: new Date,
+          status: "READY",
+        },
+        {
+          uuid: Date.now().toString(),
+          initiated_at: new Date,
+          status: "WAITING FOR QUERY",
+        },
+        {
+          uuid: Date.now().toString(),
+          initiated_at: new Date,
+          status: "ERROR",
+        },
+      ];
+      response.statements = response.statements.map((s: any) => ({
+        ...s,
+        diagnostics,
+      }));
+      return response;
+    });
+}
+
+// TODO (koorosh): It is stub. Has to be defined with protobufs
+interface EnqueueStatementDiagnosticsMessage {
+  statementId: string;
+}
+
+export function enqueueStatementDiagnostics(_req: EnqueueStatementDiagnosticsMessage, _timeout?: moment.Duration): Promise<void> {
+  return Promise.resolve();
 }
 
 // getDataDistribution returns information about how replicas are distributed across nodes.
