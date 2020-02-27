@@ -927,7 +927,7 @@ type ListenError struct {
 func inspectEngines(
 	ctx context.Context,
 	engines []engine.Engine,
-	minVersion, serverVersion roachpb.Version,
+	binaryVersion, binaryMinSupportedVersion roachpb.Version,
 	clusterIDContainer *base.ClusterIDContainer,
 ) (
 	bootstrappedEngines []engine.Engine,
@@ -935,10 +935,10 @@ func inspectEngines(
 	_ clusterversion.ClusterVersion,
 	_ error,
 ) {
-	for _, engine := range engines {
-		storeIdent, err := storage.ReadStoreIdent(ctx, engine)
+	for _, eng := range engines {
+		storeIdent, err := storage.ReadStoreIdent(ctx, eng)
 		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
-			emptyEngines = append(emptyEngines, engine)
+			emptyEngines = append(emptyEngines, eng)
 			continue
 		} else if err != nil {
 			return nil, nil, clusterversion.ClusterVersion{}, err
@@ -952,10 +952,10 @@ func inspectEngines(
 					errors.Errorf("conflicting store cluster IDs: %s, %s", storeIdent.ClusterID, clusterID)
 			}
 		}
-		bootstrappedEngines = append(bootstrappedEngines, engine)
+		bootstrappedEngines = append(bootstrappedEngines, eng)
 	}
 
-	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, minVersion, serverVersion)
+	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, binaryVersion, binaryMinSupportedVersion)
 	if err != nil {
 		return nil, nil, clusterversion.ClusterVersion{}, err
 	}
@@ -1226,9 +1226,6 @@ func (s *Server) startPersistingHLCUpperBound(
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
 func (s *Server) Start(ctx context.Context) error {
-	if !s.st.Initialized {
-		return errors.New("must pass initialized ClusterSettings")
-	}
 	ctx = s.AnnotateCtx(ctx)
 
 	// Start the time sanity checker.
@@ -1389,8 +1386,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	bootstrappedEngines, _, _, err := inspectEngines(
 		ctx, s.engines,
-		cluster.Version.BinaryMinSupportedVersion(s.cfg.Settings),
-		cluster.Version.BinaryVersion(s.cfg.Settings),
+		s.cfg.Settings.Version.BinaryVersion(),
+		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
@@ -1461,7 +1458,7 @@ func (s *Server) Start(ctx context.Context) error {
 			//
 			// However we want to be somewhat precisely informative to the user
 			// about whether the node is waiting on init / join, or whether
-			// the join was successful straight away. So we spawn this gogoroutine
+			// the join was successful straight away. So we spawn this goroutine
 			// and either:
 			// - its timer will fire after 2 seconds and we call ReadyFn(true)
 			// - bootstrap completes earlier and the ready chan gets closed,
@@ -1512,8 +1509,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// we'll get the actual list of bootstrapped and empty engines.
 	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(
 		ctx, s.engines,
-		cluster.Version.BinaryMinSupportedVersion(s.cfg.Settings),
-		cluster.Version.BinaryVersion(s.cfg.Settings),
+		s.cfg.Settings.Version.BinaryVersion(),
+		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
@@ -2024,7 +2021,7 @@ func (s *Server) startServeSQL(
 }
 
 func (s *Server) bootstrapVersion() roachpb.Version {
-	v := clusterversion.BinaryServerVersion
+	v := s.cfg.Settings.Version.BinaryVersion()
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
 		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
 			v = ov

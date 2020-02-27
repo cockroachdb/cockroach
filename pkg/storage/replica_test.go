@@ -190,7 +190,7 @@ func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
 // StartWithStoreConfig initializes the test context with a single
 // range covering the entire keyspace.
 func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper, cfg StoreConfig) {
-	tc.StartWithStoreConfigAndVersion(t, stopper, cfg, cluster.Version.BinaryVersion(cfg.Settings))
+	tc.StartWithStoreConfigAndVersion(t, stopper, cfg, cfg.Settings.Version.BinaryVersion())
 }
 
 // StartWithStoreConfigAndVersion is like StartWithStoreConfig but additionally
@@ -235,7 +235,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			cv); err != nil {
 			t.Fatal(err)
 		}
-		if err := cluster.Version.Initialize(ctx, cv.Version, cfg.Settings); err != nil {
+		if err := clusterversion.Initialize(ctx, cv.Version, &cfg.Settings.SV); err != nil {
 			t.Fatal(err)
 		}
 		tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
@@ -12140,7 +12140,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		defer stopper.Stop(ctx)
 		cfg := TestStoreConfig(nil)
 		version := clusterversion.VersionByKey(clusterversion.VersionContainsEstimatesCounter - 1)
-		cfg.Settings = cluster.MakeClusterSettings(version, version)
+		cfg.Settings = cluster.MakeTestingClusterSettingsWithVersions(version, version, false /* initializeVersion */)
 		var tc testContext
 		tc.StartWithStoreConfigAndVersion(t, stopper, cfg, version)
 

@@ -23,7 +23,6 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -105,8 +104,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
 	if params.Settings == nil {
-		st = cluster.MakeClusterSettings(
-			clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
+		st = cluster.MakeClusterSettings()
 	}
 	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)
@@ -662,8 +660,8 @@ func (ts *TestServer) DistSQLServer() interface{} {
 }
 
 // SetDistSQLSpanResolver is part of TestServerInterface.
-func (ts *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
-	ts.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
+func (s *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
+	s.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
 // GetFirstStoreID is part of TestServerInterface.

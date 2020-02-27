@@ -119,7 +119,7 @@ func MakeObjectNameKey(
 	ctx context.Context, settings *cluster.Settings, parentID ID, parentSchemaID ID, name string,
 ) DescriptorKey {
 	// TODO(solon): This if condition can be removed in 20.2
-	if !cluster.Version.IsActive(ctx, settings, clusterversion.VersionNamespaceTableWithSchemas) {
+	if !settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
 		return NewDeprecatedTableKey(parentID, name)
 	}
 	var key DescriptorKey

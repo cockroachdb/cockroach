@@ -29,16 +29,15 @@ type middleField struct {
 
 type lastField struct {
 	a int64
-	_ util.NoCopy  // want `Illegal use of util.NoCopy - must be first field in struct`
+	_ util.NoCopy // want `Illegal use of util.NoCopy - must be first field in struct`
 }
-
 
 type embeddedField struct {
 	util.NoCopy // want `Illegal use of util.NoCopy - should not be embedded`
 }
 
 type multiField struct {
-	_, _ util.NoCopy// want `Illegal use of util.NoCopy - should be included only once`
+	_, _ util.NoCopy // want `Illegal use of util.NoCopy - should be included only once`
 }
 
 type namedField struct {

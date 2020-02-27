@@ -764,7 +764,7 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.Delta = ms.ToStatsDelta()
 
 		_ = clusterversion.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
-		if cluster.Version.IsActive(ctx, r.ClusterSettings(), clusterversion.VersionContainsEstimatesCounter) {
+		if r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
 			// Encode that this command (and any that follow) uses regular arithmetic for ContainsEstimates
 			// by making sure ContainsEstimates is > 1.
 			// This will be interpreted during command application.

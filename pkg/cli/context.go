@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -31,11 +30,12 @@ import (
 )
 
 // serverCfg is used as the client-side copy of default server
-// parameters for CLI utilities (other than `cockroach start`, which
-// constructs a proper server.Config for the newly created server).
+// parameters for CLI utilities.
+//
+// NB: `cockroach start` further annotates serverCfg for the newly created
+// server.
 var serverCfg = func() server.Config {
-	st := cluster.MakeClusterSettings(
-		clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
+	st := cluster.MakeClusterSettings()
 	settings.SetCanonicalValuesContainer(&st.SV)
 
 	s := server.MakeConfig(context.Background(), st)

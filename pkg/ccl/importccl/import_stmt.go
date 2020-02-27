@@ -152,7 +152,7 @@ func importPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, clusterversion.VersionPartitionedBackup) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionPartitionedBackup) {
 		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
 	}
 

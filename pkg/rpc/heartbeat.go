@@ -79,7 +79,7 @@ func checkClusterName(clusterName string, peerName string) error {
 }
 
 func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb.Version) error {
-	activeVersion := cluster.Version.ActiveVersionOrEmpty(ctx, st)
+	activeVersion := st.Version.ActiveVersionOrEmpty(ctx)
 	if activeVersion == (clusterversion.ClusterVersion{}) {
 		// Cluster version has not yet been determined.
 		return nil
@@ -159,7 +159,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	return &PingResponse{
 		Pong:                           args.Ping,
 		ServerTime:                     hs.clock.PhysicalNow(),
-		ServerVersion:                  cluster.Version.BinaryVersion(hs.settings),
+		ServerVersion:                  hs.settings.Version.BinaryVersion(),
 		ClusterName:                    hs.clusterName,
 		DisableClusterNameVerification: hs.disableClusterNameVerification,
 	}, nil

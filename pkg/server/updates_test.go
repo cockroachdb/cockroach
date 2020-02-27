@@ -758,7 +758,7 @@ func TestReportUsage(t *testing.T) {
 		"diagnostics.reporting.enabled":            "true",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
-		"version":                                  clusterversion.BinaryServerVersion.String(),
+		"version":                                  clusterversion.TestingBinaryVersion.String(),
 		"cluster.secret":                           "<redacted>",
 	} {
 		if got, ok := r.last.AlteredSettings[key]; !ok {

@@ -134,18 +134,18 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			"To use the default configuration, assign the empty string ('').")
 	}
 
-	// Retrieve the cluster settings. We'll need to check the current cluster version.
-	var st *cluster.Settings
+	// Retrieve the cluster version handle. We'll need to check the current cluster version.
+	var vh clusterversion.Handle
 	if values != nil {
-		st = values.Opaque().(*cluster.Settings)
+		vh = values.Opaque().(clusterversion.Handle)
 	}
 
 	for _, entry := range conf.Entries {
 		switch entry.ConnType {
 		case hba.ConnHostAny:
 		case hba.ConnLocal:
-			if st != nil &&
-				!cluster.Version.IsActive(context.TODO(), st, clusterversion.VersionAuthLocalAndTrustRejectMethods) {
+			if vh != nil &&
+				!vh.IsActive(context.TODO(), clusterversion.VersionAuthLocalAndTrustRejectMethods) {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					`authentication rule type 'local' requires all nodes to be upgraded to %s`,
 					clusterversion.VersionByKey(clusterversion.VersionAuthLocalAndTrustRejectMethods),
@@ -191,7 +191,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 				"Supported methods: %s", listRegisteredMethods())
 		}
 		// Verify that the cluster setting is at least the required version.
-		if st != nil && !cluster.Version.IsActive(context.TODO(), st, method.minReqVersion) {
+		if vh != nil && !vh.IsActive(context.TODO(), method.minReqVersion) {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				`authentication method '%s' requires all nodes to be upgraded to %s`,
 				entry.Method.Value,
