@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -115,6 +116,9 @@ func newExternalHashJoiner(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 ) Operator {
+	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeClearAndReuseCache {
+		execerror.VectorizedInternalPanic(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
+	}
 	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
 	leftInMemHashJoinerInput := newPartitionerToOperator(
 		allocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */

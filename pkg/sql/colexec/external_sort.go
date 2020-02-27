@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -148,9 +149,12 @@ func newExternalSorter(
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
-	cfg colcontainer.DiskQueueCfg,
+	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 ) Operator {
+	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeReuseCache {
+		execerror.VectorizedInternalPanic(errors.Errorf("external sorter instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
+	}
 	inputPartitioner := newInputPartitioningOperator(standaloneAllocator, input, memoryLimit)
 	inMemSorter, err := newSorter(
 		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
@@ -159,7 +163,7 @@ func newExternalSorter(
 	if err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	if cfg.BufferSizeBytes > 0 && maxNumberPartitions == 0 {
+	if diskQueueCfg.BufferSizeBytes > 0 && maxNumberPartitions == 0 {
 		// Each disk queue will use up to BufferSizeBytes of RAM, so we will give
 		// it almost all of the available memory (except for a single output batch
 		// that mergers will use).
@@ -168,7 +172,7 @@ func newExternalSorter(
 		// partitionerToOperator, but once we use actual disk-backed queues, we
 		// should allocate zero-sized batch in there and all memory will be
 		// allocated by the partitioner (and will be included in BufferSizeBytes).
-		maxNumberPartitions = (int(memoryLimit) - batchMemSize) / (cfg.BufferSizeBytes + batchMemSize)
+		maxNumberPartitions = (int(memoryLimit) - batchMemSize) / (diskQueueCfg.BufferSizeBytes + batchMemSize)
 	}
 	// In order to make progress when merging we have to merge at least two
 	// partitions.
@@ -180,7 +184,7 @@ func newExternalSorter(
 		unlimitedAllocator:  unlimitedAllocator,
 		memoryLimit:         memoryLimit,
 		inMemSorter:         inMemSorter,
-		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, cfg, fdSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition),
+		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition),
 		inputTypes:          inputTypes,
 		ordering:            ordering,
 		maxNumberPartitions: maxNumberPartitions,
