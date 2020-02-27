@@ -199,6 +199,9 @@ reports_meta
 namespace
 protected_ts_meta
 protected_ts_records
+statement_bundle_chunks
+statement_diagnostics_requests
+statement_diagnostics
 role_options
 
 query TT colnames,rowsort
@@ -227,6 +230,9 @@ reports_meta                     ·
 namespace                        ·
 protected_ts_meta                ·
 protected_ts_records             ·
+statement_bundle_chunks          ·
+statement_diagnostics_requests   ·
+statement_diagnostics            ·
 role_options                     ·
 
 query ITTT colnames

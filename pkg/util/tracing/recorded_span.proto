@@ -17,6 +17,19 @@ import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
+// LogRecord is a log message recorded in a traced span.
+message LogRecord {
+  // Time of the log record.
+  google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false,
+                                     (gogoproto.stdtime) = true];
+  message Field {
+    string key = 1;
+    string value = 2;
+  }
+  // Fields with values converted to strings.
+  repeated Field fields = 2 [(gogoproto.nullable) = false];
+}
+
 // RecordedSpan is a span that is part of a recording. It can be transferred
 // over the wire for snowball tracing.
 message RecordedSpan {
@@ -43,20 +56,25 @@ message RecordedSpan {
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
-  message LogRecord {
-    // Time of the log record.
-    google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false,
-                                        (gogoproto.stdtime) = true];
-    message Field {
-      string key = 1;
-      string value = 2;
-    }
-    // Fields with values converted to strings.
-    repeated Field fields = 2 [(gogoproto.nullable) = false];
-  }
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
 
   // Stats collected in this span.
   google.protobuf.Any stats = 10;
+}
+
+// NormalizedSpan is a representation of a RecordedSpan from a trace with all
+// its children embedded, recursively. This JSON serialization of this proto is
+// used in the system.statement_diagnostics.trace column.
+//
+// See RecordedSpan for the description of the fields.
+message NormalizedSpan {
+  string operation = 1;
+  map<string, string> tags = 2;
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.nullable) = false,
+                                           (gogoproto.stdtime) = true];
+  google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+  repeated LogRecord logs = 5 [(gogoproto.nullable) = false];
+  repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
 }
