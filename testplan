@@ -1,0 +1,35 @@
+x while !test_passes {
+x     try and fix test
+x }
+x push changes
+x switch branches to integration
+x integrate gc jobs
+x unskip the test
+fixup the test
+while ! drop test passes {
+    try and fix test
+}
+push integration branch
+
+checkout master
+create new branch called show-job-fcb
+edit the branch so that show-jobs has a column indicating if a cluster is a full backup or not
+write a test
+push the branch and open a PR
+
+checkout protect-all-the-branches
+find out why test passes before protected ts changes
+fix test
+
+checkout master
+create a new branch called show-backup-show-grants
+edit the branch so that show backup also shows the grants on the descriptor
+write a test
+push the branch and open a PR
+
+checkout master
+create a branch called backup-with-users-and-roles
+edit the branch so that the system.users table and system.roles tables are backed up
+write a test
+push the branch and open a PR
+
