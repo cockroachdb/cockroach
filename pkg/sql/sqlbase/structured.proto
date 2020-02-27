@@ -610,6 +610,7 @@ message TableDescriptor {
       (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
   // families holds information about the column families of this table.
   // This list has at least length 1, in which case all columns are stored in the same family.
+  // families is stored in sorted order by family ID.
   repeated ColumnFamilyDescriptor families = 22 [(gogoproto.nullable) = false];
   // next_family_id is used to ensure that deleted family ids are not reused.
   optional uint32 next_family_id = 23 [(gogoproto.nullable) = false,

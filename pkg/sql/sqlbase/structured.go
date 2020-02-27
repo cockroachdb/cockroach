@@ -1871,6 +1871,15 @@ func (desc *TableDescriptor) validateColumnFamilies(columnIDs map[ColumnID]strin
 			return err
 		}
 
+		if i != 0 {
+			prevFam := desc.Families[i-1]
+			if family.ID < prevFam.ID {
+				return errors.Newf(
+					"family %s at index %d has id %d less than family %s at index %d with id %d",
+					family.Name, i, family.ID, prevFam.Name, i-1, prevFam.ID)
+			}
+		}
+
 		if _, ok := familyNames[family.Name]; ok {
 			return fmt.Errorf("duplicate family name: %q", family.Name)
 		}
