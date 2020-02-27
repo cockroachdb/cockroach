@@ -667,15 +667,17 @@ func (m *monitor) hasNewEvents(g *monitoredGoroutine) bool {
 // performs an action that may unblock any of the goroutines.
 func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
 	// Iterate until we see two iterations in a row that both observe all
-	// monitored goroutines to be stalled and also both observe the exact
-	// same goroutine state. Waiting for two iterations to be identical
-	// isn't required for correctness because the goroutine dump itself
-	// should provide a consistent snapshot of all goroutine states and
-	// statuses (runtime.Stack(all=true) stops the world), but it still
-	// seems like a generally good idea.
+	// monitored goroutines to be stalled and also both observe the exact same
+	// goroutine state. The goroutine dump provides a consistent snapshot of all
+	// goroutine states and statuses (runtime.Stack(all=true) stops the world).
 	var status []*stack.Goroutine
 	filter := funcName((*monitor).runAsync)
 	testutils.SucceedsSoon(t, func() error {
+		// Add a small fixed delay after each iteration. This is sufficient to
+		// prevents false detection of stalls in a few cases, like when
+		// receiving on a buffered channel that already has an element in it.
+		defer time.Sleep(1 * time.Millisecond)
+
 		prevStatus := status
 		status = goroutineStatus(t, filter, &m.buf)
 		if len(status) == 0 {
