@@ -10,7 +10,7 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import { Link as RouterLink } from "react-router-dom";
+import { Link } from "react-router-dom";
 import moment from "moment";
 import Long from "long";
 
