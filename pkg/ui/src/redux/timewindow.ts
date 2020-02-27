@@ -164,7 +164,7 @@ export function timeWindowReducer(state = new TimeWindowState(), action: Action)
       state = _.clone(state);
       if (scale.key === "Custom") {
         state.useTimeRage = true;
-      } else if (state.scale.key !== scale.key) {
+      } else {
         state.useTimeRage = false;
       }
       state.scale = scale;
