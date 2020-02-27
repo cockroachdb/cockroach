@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/pkg/errors"
 )
 
 // KeyRange is a helper struct for the ReplicaDataIterator.
@@ -24,10 +25,10 @@ type KeyRange struct {
 
 // ReplicaDataIterator provides a complete iteration over all key / value
 // rows in a range, including all system-local metadata and user data.
-// The ranges keyRange slice specifies the key ranges which comprise
+// The ranges KeyRange slice specifies the key ranges which comprise
 // all of the range's data.
 //
-// A ReplicaDataIterator provides a subset of the engine.Iterator interface.
+// A ReplicaDataIterator provides a subset of the storage.Iterator interface.
 //
 // TODO(tschottdorf): the API is awkward. By default, ReplicaDataIterator uses
 // a byte allocator which needs to be reset manually using `ResetAllocator`.
@@ -48,6 +49,32 @@ func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 		MakeRangeLocalKeyRange(d),
 		MakeUserKeyRange(d),
 	}
+}
+
+// ConstrainToKeys returns a Span constrained to the keys present in the given Range.
+// Returns (span, true) if the Range is contains no keys, otherwise (span, false).
+func ConstrainToKeys(
+	reader storage.Reader, span roachpb.Span,
+) (_ roachpb.Span, empty bool, _ error) {
+	it := reader.NewIterator(storage.IterOptions{LowerBound: span.Key, UpperBound: span.EndKey})
+	defer it.Close()
+	it.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
+	if valid, err := it.Valid(); err != nil {
+		return roachpb.Span{}, true, errors.Wrapf(err, "unexpected error when constraining non-empty span")
+	} else if !valid {
+		return roachpb.Span{}, true, nil
+	}
+	startKey := it.Key().Key
+
+	it.SeekLT(storage.MakeMVCCMetadataKey(span.EndKey))
+	if valid, err := it.Valid(); err != nil {
+		return roachpb.Span{}, true, errors.Wrapf(err, "unexpected error when constraining non-empty span")
+	} else if !valid {
+		return roachpb.Span{}, true, nil
+	}
+	endKey := it.Key().Key.Next()
+
+	return roachpb.Span{Key: startKey, EndKey: endKey}, false, nil
 }
 
 // MakeReplicatedKeyRanges returns all key ranges that are fully Raft

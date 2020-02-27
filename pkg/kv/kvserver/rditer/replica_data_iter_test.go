@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func fakePrevKey(k []byte) roachpb.Key {
@@ -264,4 +265,67 @@ func TestReplicaDataIterator(t *testing.T) {
 			verifyRDIter(t, test.desc, eng, false /* replicatedOnly */, test.keys)
 		})
 	}
+}
+
+func TestConstrainToKeysEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := storage.NewDefaultInMem()
+	defer eng.Close()
+
+	span, empty, err := ConstrainToKeys(eng, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")})
+	require.NoError(t, err)
+	require.True(t, empty)
+	require.Equal(t, roachpb.Span{}, span)
+}
+
+func TestConstrainToKeysNonEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := storage.NewDefaultInMem()
+	defer eng.Close()
+
+	originalSpan := roachpb.Span{
+		Key:    roachpb.Key("b"),
+		EndKey: roachpb.Key("q"),
+	}
+
+	// Insert a single key, d, and expect [d, d.Next()).
+	err := storage.MVCCPut(context.Background(), eng, nil, roachpb.Key("d"), hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+	span, empty, err := ConstrainToKeys(eng, originalSpan)
+	require.NoError(t, err)
+	require.False(t, empty)
+	require.Equal(t, roachpb.Key("d"), span.Key)
+	require.Equal(t, roachpb.Key("d").Next(), span.EndKey)
+
+	// Insert a second key, h, and expect [d, h.Next()).
+	err = storage.MVCCPut(context.Background(), eng, nil, roachpb.Key("h"), hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+	span, empty, err = ConstrainToKeys(eng, originalSpan)
+	require.NoError(t, err)
+	require.False(t, empty)
+	require.Equal(t, roachpb.Key("d"), span.Key)
+	require.Equal(t, roachpb.Key("h").Next(), span.EndKey)
+
+	// Insert a third key, c, and expect [c, h.Next()).
+	err = storage.MVCCPut(context.Background(), eng, nil, roachpb.Key("c"), hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+	span, empty, err = ConstrainToKeys(eng, originalSpan)
+	require.NoError(t, err)
+	require.False(t, empty)
+	require.Equal(t, roachpb.Key("c"), span.Key)
+	require.Equal(t, roachpb.Key("h").Next(), span.EndKey)
+
+	// Insert a key before the start key and beyond the end key of the original
+	// span. Expect the constrained span to remain unchanged.
+	err = storage.MVCCPut(context.Background(), eng, nil, roachpb.Key("a"), hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+	err = storage.MVCCPut(context.Background(), eng, nil, roachpb.Key("z"), hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+	span, empty, err = ConstrainToKeys(eng, originalSpan)
+	require.NoError(t, err)
+	require.False(t, empty)
+	require.Equal(t, roachpb.Key("c"), span.Key)
+	require.Equal(t, roachpb.Key("h").Next(), span.EndKey)
 }
