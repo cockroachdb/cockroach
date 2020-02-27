@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -51,8 +53,8 @@ func TestSSTSnapshotStorage(t *testing.T) {
 		require.NoError(t, f.Close())
 	}()
 
-	// Check that even though the files aren't created, they are still recorded in SSTs().
-	require.Equal(t, len(scratch.SSTs()), 1)
+	// The files are lazily created and also lazily added to the SSTs() slice.
+	require.Equal(t, len(scratch.SSTs()), 0)
 
 	// Check that the storage lazily creates the files on write.
 	for _, fileName := range scratch.SSTs() {
@@ -64,6 +66,8 @@ func TestSSTSnapshotStorage(t *testing.T) {
 
 	_, err = f.Write([]byte("foo"))
 	require.NoError(t, err)
+	// After the SST file has been written to, it should be recorded in SSTs().
+	require.Equal(t, len(scratch.SSTs()), 1)
 
 	// After writing to files, check that they have been flushed to disk.
 	for _, fileName := range scratch.SSTs() {
@@ -101,9 +105,10 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	}
 }
 
-// TestMultiSSTWriterInitSST tests that multiSSTWriter initializes each of the
-// SST files associated with the three replicated key ranges by writing a range
-// deletion tombstone that spans the entire range of each respectively.
+// TestMultiSSTWriterInitSST tests that multiSSTWriter lazily creates each of
+// the SST files associated with the three replicated key ranges and if the
+// ranges are non-empty, writes a range deletion tombstone to each file that
+// spans only the keys in the range.
 func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -116,45 +121,70 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer cleanup()
 	defer eng.Close()
 
-	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
-	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
-	desc := roachpb.RangeDescriptor{
-		StartKey: roachpb.RKey("d"),
-		EndKey:   roachpb.RKeyMax,
-	}
-	keyRanges := rditer.MakeReplicatedKeyRanges(&desc)
+	testutils.RunTrueAndFalse(t, "insertKeys", func(t *testing.T, insertKeys bool) {
+		desc := roachpb.RangeDescriptor{
+			StartKey: roachpb.RKey("d"),
+			EndKey:   roachpb.RKeyMax,
+		}
+		keyRanges := rditer.MakeReplicatedKeyRanges(&desc)
+		ts := hlc.Timestamp{}
+		sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+		var scratch *SSTSnapshotStorageScratch
 
-	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0)
-	require.NoError(t, err)
-	err = msstw.Finish(ctx)
-	require.NoError(t, err)
+		if insertKeys {
+			// Expect a SST file to be created for a range only if that range contains
+			// at least one key. So we insert a key that falls within each of the
+			// three types of replicated key ranges and check to see if the number of
+			// SST files created matches what we expect.
+			insertedKeys := make([]roachpb.Key, len(keyRanges))
+			for i, kr := range keyRanges {
+				insertedKeys[i] = kr.Start.Key
+			}
+			for numberOfPuts := 1; numberOfPuts < len(keyRanges)+1; numberOfPuts++ {
+				err := storage.MVCCPut(ctx, eng, nil, insertedKeys[numberOfPuts-1], ts, roachpb.MakeValueFromString("value"), nil)
+				require.NoError(t, err)
+				scratch = sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+				msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0, eng)
+				require.NoError(t, err)
+				err = msstw.Finish(ctx)
+				require.NoError(t, err)
+				require.Equal(t, numberOfPuts, len(msstw.scratch.SSTs()))
+			}
 
-	var actualSSTs [][]byte
-	fileNames := msstw.scratch.SSTs()
-	for _, file := range fileNames {
-		sst, err := eng.ReadFile(file)
-		require.NoError(t, err)
-		actualSSTs = append(actualSSTs, sst)
-	}
+			var actualSSTs [][]byte
+			fileNames := scratch.SSTs()
+			for _, file := range fileNames {
+				sst, err := eng.ReadFile(file)
+				require.NoError(t, err)
+				actualSSTs = append(actualSSTs, sst)
+			}
+			// Construct an SST file for each of the key ranges and write a rangedel
+			// tombstone that spans [insertedKey, insertedKey.Next()
+			var expectedSSTs [][]byte
+			for i := range keyRanges {
+				func() {
+					sstFile := &storage.MemFile{}
+					sst := storage.MakeIngestionSSTWriter(sstFile)
+					defer sst.Close()
+					err := sst.ClearRange(storage.MakeMVCCMetadataKey(insertedKeys[i]), storage.MakeMVCCMetadataKey(insertedKeys[i].Next()))
+					require.NoError(t, err)
+					err = sst.Finish()
+					require.NoError(t, err)
+					expectedSSTs = append(expectedSSTs, sstFile.Data())
+				}()
+			}
 
-	// Construct an SST file for each of the key ranges and write a rangedel
-	// tombstone that spans from Start to End.
-	var expectedSSTs [][]byte
-	for _, r := range keyRanges {
-		func() {
-			sstFile := &storage.MemFile{}
-			sst := storage.MakeIngestionSSTWriter(sstFile)
-			defer sst.Close()
-			err := sst.ClearRange(r.Start, r.End)
+			for i := range fileNames {
+				require.Equal(t, actualSSTs[i], expectedSSTs[i])
+			}
+		} else {
+			// Without any inserted keys, we expect no SSTs to be created.
+			scratch = sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+			msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0, eng)
 			require.NoError(t, err)
-			err = sst.Finish()
+			err = msstw.Finish(ctx)
 			require.NoError(t, err)
-			expectedSSTs = append(expectedSSTs, sstFile.Data())
-		}()
-	}
-
-	require.Equal(t, len(actualSSTs), len(expectedSSTs))
-	for i := range fileNames {
-		require.Equal(t, actualSSTs[i], expectedSSTs[i])
-	}
+			require.Equal(t, 0, len(msstw.scratch.SSTs()))
+		}
+	})
 }
