@@ -36,6 +36,20 @@ func init() {
 	types.known = make(map[typeKey]reflect.Type)
 }
 
+// RegisterUnclonableType registers a type as not being allowed for cloning.
+// This is an added hack on top of the hack to allow clients of this package to
+// disallow cloning of certain types which are not recursed into due to how
+// oneof is implemented. In particular it may be the case that one of the
+// implementations of an interface is unclonable. In this case, due to the type
+// (rather than value) traversal, we'd not discover this fact.
+//
+// See the comment on Clone.
+func RegisterUnclonableType(typ reflect.Type, verbotenKind reflect.Kind) {
+	types.Lock()
+	defer types.Unlock()
+	types.known[typeKey{typ: typ, verboten: verbotenKind}] = typ
+}
+
 func uncloneable(pb Message) (reflect.Type, bool) {
 	for _, verbotenKind := range verbotenKinds {
 		if t := typeIsOrContainsVerboten(reflect.TypeOf(pb), verbotenKind); t != nil {

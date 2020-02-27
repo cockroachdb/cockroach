@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -66,6 +67,15 @@ type StartableJob struct {
 	cancel     context.CancelFunc
 	resultsCh  chan<- tree.Datums
 	starts     int64 // used to detect multiple calls to Start()
+}
+
+func init() {
+	// NB: This exists to make the jobs payload usable during testrace. See the
+	// comment on protoutil.Clone and the implementation of Marshal when run under
+	// race.
+	var jobPayload jobspb.Payload
+	jobsDetailsInterfaceType := reflect.TypeOf(&jobPayload.Details).Elem()
+	protoutil.RegisterUnclonableType(jobsDetailsInterfaceType, reflect.Array)
 }
 
 // Status represents the status of a job in the system.jobs table.
