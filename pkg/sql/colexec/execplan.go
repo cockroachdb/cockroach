@@ -214,7 +214,8 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		}
 		for _, t := range inputTypes {
 			if t == coltypes.Interval {
-				return false, errors.WithIssueLink(errors.Errorf("sort on interval type not supported"), errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
+				return false, errors.WithIssueLink(errors.Errorf("sort on interval type not supported"),
+					errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
 			}
 		}
 		return true, nil
@@ -233,6 +234,21 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		if wf.Func.AggregateFunc != nil {
 			return false, errors.Newf("aggregate functions used as window functions are not supported")
 		}
+		if len(core.Windower.PartitionBy) > 0 || len(wf.Ordering.Columns) > 0 {
+			// When we have non-empty PARTITION BY and ORDER BY clauses, we will need
+			// to plan a sorter which currently doesn't support operating on interval
+			// type.
+			inputTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			if err != nil {
+				return false, err
+			}
+			for _, t := range inputTypes {
+				if t == coltypes.Interval {
+					return false, errors.WithIssueLink(errors.Errorf("window functions involving interval type not supported"),
+						errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
+				}
+			}
+		}
 
 		switch *wf.Func.WindowFunc {
 		case execinfrapb.WindowerSpec_ROW_NUMBER:
@@ -246,6 +262,138 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 	default:
 		return false, errors.Newf("unsupported processor core %q", core)
 	}
+}
+
+// createDiskBackedSort creates a new disk-backed operator that sorts the input
+// according to ordering.
+// - matchLen specifies the length of the prefix of ordering columns the input
+// is already ordered on.
+// - processorID is the ProcessorID of the processor core that requested
+// creation of this operator. It is used only to distinguish memory monitors.
+// - post describes the post-processing spec of the processor. It will be used
+// to determine whether top K sort can be planned. If you want the general sort
+// operator, then pass in empty struct.
+func (r *NewColOperatorResult) createDiskBackedSort(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	args NewColOperatorArgs,
+	input Operator,
+	inputTypes []coltypes.T,
+	ordering execinfrapb.Ordering,
+	matchLen uint32,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+	memMonitorNamePrefix string,
+) (Operator, error) {
+	streamingMemAccount := args.StreamingMemAccount
+	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
+	var (
+		sorterMemMonitorName string
+		inMemorySorter       Operator
+		err                  error
+	)
+	if len(ordering.Columns) == int(matchLen) {
+		// The input is already fully ordered, so there is nothing to sort.
+		return input, nil
+	}
+	for _, t := range inputTypes {
+		if t == coltypes.Interval {
+			execerror.VectorizedInternalPanic("attempted to create a sort on interval type after isSupported check")
+		}
+	}
+	if matchLen > 0 {
+		// The input is already partially ordered. Use a chunks sorter to avoid
+		// loading all the rows into memory.
+		sorterMemMonitorName = fmt.Sprintf("%ssort-chunks-%d", memMonitorNamePrefix, processorID)
+		var sortChunksMemAccount *mon.BoundAccount
+		if useStreamingMemAccountForBuffering {
+			sortChunksMemAccount = streamingMemAccount
+		} else {
+			sortChunksMemAccount = r.createBufferingMemAccount(
+				ctx, flowCtx, sorterMemMonitorName,
+			)
+		}
+		inMemorySorter, err = NewSortChunks(
+			NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
+			ordering.Columns, int(matchLen),
+		)
+	} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
+		// There is a limit specified with no post-process filter, so we know
+		// exactly how many rows the sorter should output. Choose a top K sorter,
+		// which uses a heap to avoid storing more rows than necessary.
+		sorterMemMonitorName = fmt.Sprintf("%stopk-sort-%d", memMonitorNamePrefix, processorID)
+		var topKSorterMemAccount *mon.BoundAccount
+		if useStreamingMemAccountForBuffering {
+			topKSorterMemAccount = streamingMemAccount
+		} else {
+			topKSorterMemAccount = r.createBufferingMemAccount(
+				ctx, flowCtx, sorterMemMonitorName,
+			)
+		}
+		k := uint16(post.Limit + post.Offset)
+		inMemorySorter = NewTopKSorter(
+			NewAllocator(ctx, topKSorterMemAccount), input, inputTypes,
+			ordering.Columns, k,
+		)
+	} else {
+		// No optimizations possible. Default to the standard sort operator.
+		sorterMemMonitorName = fmt.Sprintf("%ssort-all-%d", memMonitorNamePrefix, processorID)
+		var sorterMemAccount *mon.BoundAccount
+		if useStreamingMemAccountForBuffering {
+			sorterMemAccount = streamingMemAccount
+		} else {
+			sorterMemAccount = r.createBufferingMemAccount(
+				ctx, flowCtx, sorterMemMonitorName,
+			)
+		}
+		inMemorySorter, err = NewSorter(
+			NewAllocator(ctx, sorterMemAccount), input, inputTypes, ordering.Columns,
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if inMemorySorter == nil {
+		return nil, errors.AssertionFailedf("unexpectedly inMemorySorter is nil")
+	}
+	// NOTE: when spilling to disk, we're using the same general external
+	// sorter regardless of which sorter variant we have instantiated (i.e.
+	// we don't take advantage of the limits and of partial ordering). We
+	// could improve this.
+	return newOneInputDiskSpiller(
+		input, inMemorySorter.(bufferingInMemoryOperator),
+		sorterMemMonitorName,
+		func(input Operator) Operator {
+			monitorNamePrefix := fmt.Sprintf("%sexternal-sorter", memMonitorNamePrefix)
+			// We are using an unlimited memory monitor here because external
+			// sort itself is responsible for making sure that we stay within
+			// the memory limit.
+			unlimitedAllocator := NewAllocator(
+				ctx, r.createBufferingUnlimitedMemAccount(
+					ctx, flowCtx, monitorNamePrefix,
+				))
+			standaloneMemAccount := r.createStandaloneMemAccount(
+				ctx, flowCtx, monitorNamePrefix,
+			)
+			// Make a copy of the DiskQueueCfg and set defaults for the sorter.
+			// The cache mode is chosen to reuse the cache to have a smaller
+			// cache per partition without affecting performance.
+			diskQueueCfg := args.DiskQueueCfg
+			diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
+			diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
+			return newExternalSorter(
+				ctx,
+				unlimitedAllocator,
+				standaloneMemAccount,
+				input, inputTypes, ordering,
+				execinfra.GetWorkMemLimit(flowCtx.Cfg),
+				args.TestingKnobs.NumForcedRepartitions,
+				diskQueueCfg,
+				args.FDSemaphore,
+			)
+		},
+		args.TestingKnobs.SpillingCallbackFn,
+	), nil
 }
 
 // NewColOperator creates a new columnar operator according to the given spec.
@@ -723,117 +871,17 @@ func NewColOperator(
 				return result, err
 			}
 			input := inputs[0]
-			var (
-				inputTypes           []coltypes.T
-				sorterMemMonitorName string
-				inMemorySorter       Operator
-			)
+			var inputTypes []coltypes.T
 			inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
-			for _, t := range inputTypes {
-				if t == coltypes.Interval {
-					execerror.VectorizedInternalPanic("attempted to create a sort on interval type after isSupported check")
-				}
-			}
-			orderingCols := core.Sorter.OutputOrdering.Columns
+			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
-			if len(orderingCols) == int(matchLen) {
-				// The input is already fully ordered, so there is nothing to sort.
-				result.Op = input
-			} else if matchLen > 0 {
-				// The input is already partially ordered. Use a chunks sorter to avoid
-				// loading all the rows into memory.
-				sorterMemMonitorName = fmt.Sprintf("sort-chunks-%d", spec.ProcessorID)
-				var sortChunksMemAccount *mon.BoundAccount
-				if useStreamingMemAccountForBuffering {
-					sortChunksMemAccount = streamingMemAccount
-				} else {
-					sortChunksMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, sorterMemMonitorName,
-					)
-				}
-				inMemorySorter, err = NewSortChunks(
-					NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
-					orderingCols, int(matchLen),
-				)
-			} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
-				// There is a limit specified with no post-process filter, so we know
-				// exactly how many rows the sorter should output. Choose a top K sorter,
-				// which uses a heap to avoid storing more rows than necessary.
-				sorterMemMonitorName = fmt.Sprintf("topk-sort-%d", spec.ProcessorID)
-				var topKSorterMemAccount *mon.BoundAccount
-				if useStreamingMemAccountForBuffering {
-					topKSorterMemAccount = streamingMemAccount
-				} else {
-					topKSorterMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, sorterMemMonitorName,
-					)
-				}
-				k := uint16(post.Limit + post.Offset)
-				inMemorySorter = NewTopKSorter(
-					NewAllocator(ctx, topKSorterMemAccount), input, inputTypes,
-					orderingCols, k,
-				)
-			} else {
-				// No optimizations possible. Default to the standard sort operator.
-				sorterMemMonitorName = fmt.Sprintf("sort-all-%d", spec.ProcessorID)
-				var sorterMemAccount *mon.BoundAccount
-				if useStreamingMemAccountForBuffering {
-					sorterMemAccount = streamingMemAccount
-				} else {
-					sorterMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, sorterMemMonitorName,
-					)
-				}
-				inMemorySorter, err = NewSorter(
-					NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
-				)
-			}
-			if err != nil {
-				return result, err
-			}
-			if inMemorySorter != nil {
-				// NOTE: when spilling to disk, we're using the same general external
-				// sorter regardless of which sorter variant we have instantiated (i.e.
-				// we don't take advantage of the limits and of partial ordering). We
-				// could improve this.
-				result.Op = newOneInputDiskSpiller(
-					input, inMemorySorter.(bufferingInMemoryOperator),
-					sorterMemMonitorName,
-					func(input Operator) Operator {
-						monitorNamePrefix := "external-sorter"
-						// We are using an unlimited memory monitor here because external
-						// sort itself is responsible for making sure that we stay within
-						// the memory limit.
-						unlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix,
-							))
-						standaloneMemAccount := result.createStandaloneMemAccount(
-							ctx, flowCtx, monitorNamePrefix,
-						)
-						// Make a copy of the DiskQueueCfg and set defaults for the sorter.
-						// The cache mode is chosen to reuse the cache to have a smaller
-						// cache per partition without affecting performance.
-						diskQueueCfg := args.DiskQueueCfg
-						diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-						diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
-						return newExternalSorter(
-							ctx,
-							unlimitedAllocator,
-							standaloneMemAccount,
-							input, inputTypes, core.Sorter.OutputOrdering,
-							execinfra.GetWorkMemLimit(flowCtx.Cfg),
-							args.TestingKnobs.NumForcedRepartitions,
-							diskQueueCfg,
-							args.FDSemaphore,
-						)
-					},
-					args.TestingKnobs.SpillingCallbackFn,
-				)
-			}
+			result.Op, err = result.createDiskBackedSort(
+				ctx, flowCtx, args, input, inputTypes, ordering, matchLen,
+				spec.ProcessorID, post, "", /* memMonitorNamePrefix */
+			)
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			// A sorter can run in auto mode because it falls back to disk if there
 			// is not enough memory available.
@@ -852,32 +900,36 @@ func NewColOperator(
 				return result, err
 			}
 			tempPartitionColOffset, partitionColIdx := 0, -1
+			memMonitorsPrefix := "window-"
 			if len(core.Windower.PartitionBy) > 0 {
 				// TODO(yuzefovich): add support for hashing partitioner (probably by
 				// leveraging hash routers once we can distribute). The decision about
 				// which kind of partitioner to use should come from the optimizer.
 				windowSortingPartitionerMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner")
+					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(
+						ctx, flowCtx, memMonitorsPrefix+"sorting-partitioner",
+					)
 				}
 				input, err = NewWindowSortingPartitioner(
 					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
 					core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
+					func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
+						return result.createDiskBackedSort(
+							ctx, flowCtx, args, input, inputTypes,
+							execinfrapb.Ordering{Columns: orderingCols},
+							0 /* matchLen */, spec.ProcessorID,
+							&execinfrapb.PostProcessSpec{}, memMonitorsPrefix)
+					},
 				)
 				tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
 			} else {
 				if len(wf.Ordering.Columns) > 0 {
-					windowSorterMemAccount := streamingMemAccount
-					if !useStreamingMemAccountForBuffering {
-						windowSorterMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorter")
-					}
-					input, err = NewSorter(
-						NewAllocator(ctx, windowSorterMemAccount), input, typs,
-						wf.Ordering.Columns,
+					input, err = result.createDiskBackedSort(
+						ctx, flowCtx, args, input, typs, wf.Ordering, 0, /* matchLen */
+						spec.ProcessorID, &execinfrapb.PostProcessSpec{}, memMonitorsPrefix,
 					)
 				}
-				// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
-				// omitted, the window function operator is actually streaming.
 			}
 			if err != nil {
 				return result, err
@@ -908,6 +960,11 @@ func NewColOperator(
 			}
 
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
+			// Window functions can run in auto mode because they are streaming
+			// operators and internally they use a sorter which can fall back to disk
+			// if needed.
+			// TODO(yuzefovich): currently disabled.
+			// result.CanRunInAutoMode = true
 
 		default:
 			return result, errors.Newf("unsupported processor core %q", core)
