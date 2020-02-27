@@ -17,15 +17,44 @@ import (
 )
 
 func (s *statusServer) CreateStatementDiagnosticsRequest(
-	context.Context,
-	*serverpb.CreateStatementDiagnosticsRequestRequest,
+	ctx context.Context,
+	req *serverpb.CreateStatementDiagnosticsRequestRequest,
 ) (*serverpb.CreateStatementDiagnosticsRequestResponse, error) {
-	panic("implement me")
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	response := &serverpb.CreateStatementDiagnosticsRequestResponse{
+		Request: &serverpb.StatementDiagnosticsRequest{},
+	}
+
+	_, err := s.stmtDiagnosticsRequester.InsertRequest(ctx, req.StatementFingerprint)
+	if err != nil {
+		return nil, err
+	}
+
+	response.Request.StatementFingerprint = req.StatementFingerprint
+	return response, nil
 }
 
 func (s *statusServer) StatementDiagnosticsRequests(
-	context.Context,
-	*serverpb.StatementDiagnosticsRequestsRequest,
+	ctx context.Context,
+	req *serverpb.StatementDiagnosticsRequestsRequest,
 ) (*serverpb.StatementDiagnosticsRequestsResponse, error) {
-	panic("implement me")
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	requests, err := s.stmtDiagnosticsRequester.GetAllRequests(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &serverpb.StatementDiagnosticsRequestsResponse{
+		Requests: make([]serverpb.StatementDiagnosticsRequest, len(requests)),
+	}
+
+	for i, request := range requests {
+		response.Requests[i] = request.ToProto()
+	}
+	return response, nil
 }
+
