@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
-// NewWindowSortingPartitioner creates a new exec.Operator that orders input
+// NewWindowSortingPartitioner creates a new colexec.Operator that orders input
 // first based on the partitionIdxs columns and second on ordCols (i.e. it
 // handles both PARTITION BY and ORDER BY clauses of a window function) and
 // puts true in partitionColIdx'th column (which is appended if needed) for
@@ -30,13 +30,14 @@ func NewWindowSortingPartitioner(
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
+	createDiskBackedSorter func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error),
 ) (op Operator, err error) {
 	partitionAndOrderingCols := make([]execinfrapb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {
 		partitionAndOrderingCols[i] = execinfrapb.Ordering_Column{ColIdx: idx}
 	}
 	copy(partitionAndOrderingCols[len(partitionIdxs):], ordCols)
-	input, err = NewSorter(allocator, input, inputTyps, partitionAndOrderingCols)
+	input, err = createDiskBackedSorter(input, inputTyps, partitionAndOrderingCols)
 	if err != nil {
 		return nil, err
 	}
