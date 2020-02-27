@@ -96,9 +96,9 @@ describe("time window reducer", function() {
     describe("findClosestTimeScale", () => {
       it("should found correctly time scale", () => {
         assert.deepEqual(timewindow.findClosestTimeScale(15), { ...timewindow.availableTimeScales["Past 10 Minutes"], key: "Custom" });
-        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(10, "minutes").asSeconds()), timewindow.availableTimeScales["Past 10 Minutes"]);
-        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(14, "days").asSeconds()), timewindow.availableTimeScales["Past 2 Week"]);
-        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(moment().daysInMonth() * 5, "days").asSeconds()), { ...timewindow.availableTimeScales["Past 2 Month"], key: "Custom" });
+        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(10, "minutes").asSeconds()), { ...timewindow.availableTimeScales["Past 10 Minutes"], key: "Past 10 Minutes"});
+        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(14, "days").asSeconds()), { ...timewindow.availableTimeScales["Past 2 Weeks"], key: "Past 2 Weeks" });
+        assert.deepEqual(timewindow.findClosestTimeScale(moment.duration(moment().daysInMonth() * 5, "days").asSeconds()), { ...timewindow.availableTimeScales["Past 2 Months"], key: "Custom" });
       });
     });
   });
