@@ -42,6 +42,24 @@ import (
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
+func (r *RowCount) add(other RowCount) {
+	r.DataSize += other.DataSize
+	r.Rows += other.Rows
+	r.IndexEntries += other.IndexEntries
+}
+
+func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]struct{}) RowCount {
+	res := RowCount{DataSize: raw.DataSize}
+	for id, count := range raw.EntryCounts {
+		if _, ok := pkIDs[id]; ok {
+			res.Rows += count
+		} else {
+			res.IndexEntries += count
+		}
+	}
+	return res
+}
+
 func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
@@ -154,14 +172,14 @@ func backup(
 	resultsCh chan<- tree.Datums,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *roachpb.FileEncryptionOptions,
-) (roachpb.BulkOpSummary, error) {
+) (RowCount, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
 	mu := struct {
 		syncutil.Mutex
 		files          []BackupManifest_File
-		exported       roachpb.BulkOpSummary
+		exported       RowCount
 		lastCheckpoint time.Time
 	}{}
 
@@ -176,7 +194,7 @@ func backup(
 		ranges, err = allRangeDescriptors(ctx, txn)
 		return err
 	}); err != nil {
-		return mu.exported, err
+		return RowCount{}, err
 	}
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
@@ -222,6 +240,13 @@ func backup(
 	})
 
 	progressLogger := jobs.NewChunkProgressLogger(job, len(spans), job.FractionCompleted(), jobs.ProgressUpdateOnly)
+
+	pkIDs := make(map[uint64]struct{})
+	for _, desc := range backupManifest.Descriptors {
+		if t := desc.Table(hlc.Timestamp{}); t != nil {
+			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = struct{}{}
+		}
+	}
 
 	// We're already limiting these on the server-side, but sending all the
 	// Export requests at once would fill up distsender/grpc/something and cause
@@ -296,7 +321,7 @@ func backup(
 						Span:        file.Span,
 						Path:        file.Path,
 						Sha512:      file.Sha512,
-						EntryCounts: file.Exported,
+						EntryCounts: countRows(file.Exported, pkIDs),
 						LocalityKV:  file.LocalityKV,
 					}
 					if span.start != backupManifest.StartTime {
@@ -304,7 +329,7 @@ func backup(
 						f.EndTime = span.end
 					}
 					mu.files = append(mu.files, f)
-					mu.exported.Add(file.Exported)
+					mu.exported.add(f.EntryCounts)
 				}
 				var checkpointFiles BackupFileDescriptors
 				if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
@@ -341,7 +366,7 @@ func backup(
 	})
 
 	if err := g.Wait(); err != nil {
-		return mu.exported, errors.Wrapf(err, "exporting %d ranges", errors.Safe(len(spans)))
+		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(len(spans)))
 	}
 
 	// No more concurrency, so no need to acquire locks below.
@@ -383,13 +408,13 @@ func backup(
 				defer store.Close()
 				return writeBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
 			}(); err != nil {
-				return mu.exported, err
+				return RowCount{}, err
 			}
 		}
 	}
 
 	if err := writeBackupManifest(ctx, settings, defaultStore, BackupManifestName, encryption, backupManifest); err != nil {
-		return mu.exported, err
+		return RowCount{}, err
 	}
 
 	return mu.exported, nil
@@ -398,7 +423,7 @@ func backup(
 type backupResumer struct {
 	job                 *jobs.Job
 	settings            *cluster.Settings
-	res                 roachpb.BulkOpSummary
+	res                 RowCount
 	makeExternalStorage cloud.ExternalStorageFactory
 }
 

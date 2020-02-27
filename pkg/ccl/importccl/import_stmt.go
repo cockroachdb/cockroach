@@ -723,10 +723,10 @@ func parseAvroOptions(
 type importResumer struct {
 	job      *jobs.Job
 	settings *cluster.Settings
-	res      roachpb.BulkOpSummary
+	res      backupccl.RowCount
 
 	testingKnobs struct {
-		afterImport            func(summary roachpb.BulkOpSummary) error
+		afterImport            func(summary backupccl.RowCount) error
 		alwaysFlushJobProgress bool
 	}
 }
@@ -974,12 +974,23 @@ func (r *importResumer) Resume(
 	if err != nil {
 		return err
 	}
+	pkIDs := make(map[uint64]struct{}, len(details.Tables))
+	for _, t := range details.Tables {
+		pkIDs[roachpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
+	}
+	r.res.DataSize = res.DataSize
+	for id, count := range res.EntryCounts {
+		if _, ok := pkIDs[id]; ok {
+			r.res.Rows += count
+		} else {
+			r.res.IndexEntries += count
+		}
+	}
 	if r.testingKnobs.afterImport != nil {
-		if err := r.testingKnobs.afterImport(res); err != nil {
+		if err := r.testingKnobs.afterImport(r.res); err != nil {
 			return err
 		}
 	}
-	r.res = res
 
 	if err := r.publishTables(ctx, p.ExecCfg()); err != nil {
 		return err

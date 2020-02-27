@@ -77,7 +77,6 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	fmt.Printf("DataSize: %d (%s)\n", desc.EntryCounts.DataSize, humanizeutil.IBytes(desc.EntryCounts.DataSize))
 	fmt.Printf("Rows: %d\n", desc.EntryCounts.Rows)
 	fmt.Printf("IndexEntries: %d\n", desc.EntryCounts.IndexEntries)
-	fmt.Printf("SystemRecords: %d\n", desc.EntryCounts.SystemRecords)
 	fmt.Printf("FormatVersion: %d\n", desc.FormatVersion)
 	fmt.Printf("ClusterID: %s\n", desc.ClusterID)
 	fmt.Printf("NodeID: %s\n", desc.NodeID)
@@ -94,7 +93,6 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 		fmt.Printf("		DataSize: %d (%s)\n", f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
 		fmt.Printf("		Rows: %d\n", f.EntryCounts.Rows)
 		fmt.Printf("		IndexEntries: %d\n", f.EntryCounts.IndexEntries)
-		fmt.Printf("		SystemRecords: %d\n", f.EntryCounts.SystemRecords)
 	}
 	// Note that these descriptors could be from any past version of the cluster,
 	// in case more fields need to be added to the output.
