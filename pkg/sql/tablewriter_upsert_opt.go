@@ -171,20 +171,7 @@ func (tu *optTableUpserter) init(
 		)
 	}
 
-	var err error
-	tu.ru, err = row.MakeUpdater(
-		ctx,
-		txn,
-		tu.tableDesc(),
-		tu.fkTables,
-		tu.updateCols,
-		tu.fetchCols,
-		row.UpdaterDefault,
-		row.CheckFKs,
-		evalCtx,
-		tu.alloc,
-	)
-	return err
+	return nil
 }
 
 // flushAndStartNewBatch is part of the tableWriter interface.
