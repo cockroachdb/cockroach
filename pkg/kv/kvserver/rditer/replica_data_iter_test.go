@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func fakePrevKey(k []byte) roachpb.Key {
@@ -264,4 +265,62 @@ func TestReplicaDataIterator(t *testing.T) {
 			verifyRDIter(t, test.desc, eng, false /* replicatedOnly */, test.keys)
 		})
 	}
+}
+
+func TestConstrainToKeysEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := engine.NewDefaultInMem()
+	defer eng.Close()
+
+	span, empty, err := ConstrainToKeys(eng, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")})
+	require.NoError(t, err)
+	require.True(t, empty)
+	require.Equal(t, roachpb.Span{}, span)
+}
+
+func TestConstrainToKeysNonEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := engine.NewDefaultInMem()
+	defer eng.Close()
+
+	startKey := roachpb.Key("b")
+	endKey := roachpb.Key("q")
+	beforeStartOfSpanKey := roachpb.Key("a")
+	beyondEndOfSpanKey := roachpb.Key("z")
+	originalSpan := roachpb.Span{
+		Key:    startKey,
+		EndKey: endKey,
+	}
+
+	expectedStartKey := roachpb.Key("d")
+	err := engine.MVCCPut(context.Background(), eng, nil, expectedStartKey, hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+
+	span, empty, err := ConstrainToKeys(eng, originalSpan)
+	require.NoError(t, err)
+	require.False(t, empty)
+	require.Equal(t, expectedStartKey, span.Key)
+	require.Equal(t, expectedStartKey.Next(), span.EndKey)
+
+	expectedEndKey := roachpb.Key("h")
+	err = engine.MVCCPut(context.Background(), eng, nil, expectedEndKey, hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+
+	span, empty, err = ConstrainToKeys(eng, originalSpan)
+	require.NoError(t, err)
+	require.False(t, empty)
+	require.Equal(t, expectedStartKey, span.Key)
+	require.Equal(t, expectedEndKey.Next(), span.EndKey)
+
+	err = engine.MVCCPut(context.Background(), eng, nil, beyondEndOfSpanKey, hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	err = engine.MVCCPut(context.Background(), eng, nil, beforeStartOfSpanKey, hlc.Timestamp{}, roachpb.MakeValueFromString("value"), nil)
+	require.NoError(t, err)
+
+	span, empty, err = ConstrainToKeys(eng, originalSpan)
+	require.NoError(t, err)
+	require.False(t, empty)
+	require.Equal(t, expectedStartKey, span.Key)
+	require.Equal(t, expectedEndKey.Next(), span.EndKey)
 }
