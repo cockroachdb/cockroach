@@ -629,6 +629,8 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 3903121477 3903121477  0 0 0 0   2 2 2 2    NULL      NULL
 1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                        0 0       2 2        NULL      NULL
 1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+1489445036  35        2         false        false         false           false         false           true        false         false       true       false           2 1      0 0                        0 0       2 2        NULL      NULL
+1489445039  35        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL
 1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                          0         2          NULL      NULL
@@ -640,8 +642,10 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0               0 0       2 2        NULL      NULL
 2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3903121477               0 0       2 2        NULL      NULL
 3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
+3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL
 3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL
@@ -674,6 +678,9 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 1276104432  0                           1
 1276104432  0                           2
 1322500096  0                           1
+1489445036  0                           1
+1489445036  0                           2
+1489445039  0                           1
 1582236367  0                           1
 1628632028  0                           1
 1628632029  0                           1
@@ -689,10 +696,12 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2621181440  0                           2
 2621181443  0                           1
 2667577107  0                           1
+2834522046  0                           1
 2927313374  0                           1
 2927313374  0                           2
 3094258317  0                           1
 3094258317  0                           2
+3353994584  0                           1
 3446785912  0                           1
 3493181576  0                           1
 3493181576  0                           2

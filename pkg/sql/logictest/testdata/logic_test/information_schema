@@ -628,6 +628,9 @@ system         public              namespace                          BASE TABLE
 system         public              protected_ts_meta                  BASE TABLE   YES                 1
 system         public              protected_ts_records               BASE TABLE   YES                 1
 system         public              role_options                       BASE TABLE   YES                 1
+system         public              statement_bundle_chunks            BASE TABLE   YES                 1
+system         public              statement_diagnostics_requests     BASE TABLE   YES                 1
+system         public              statement_diagnostics              BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -772,6 +775,19 @@ system              public             630200280_6_1_not_null   system         p
 system              public             630200280_6_2_not_null   system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_3_not_null   system         public        settings                         CHECK            NO             NO
 system              public             primary                  system         public        settings                         PRIMARY KEY      NO             NO
+system              public             630200280_34_1_not_null  system         public        statement_bundle_chunks          CHECK            NO             NO
+system              public             630200280_34_3_not_null  system         public        statement_bundle_chunks          CHECK            NO             NO
+system              public             primary                  system         public        statement_bundle_chunks          PRIMARY KEY      NO             NO
+system              public             630200280_36_1_not_null  system         public        statement_diagnostics            CHECK            NO             NO
+system              public             630200280_36_2_not_null  system         public        statement_diagnostics            CHECK            NO             NO
+system              public             630200280_36_3_not_null  system         public        statement_diagnostics            CHECK            NO             NO
+system              public             630200280_36_4_not_null  system         public        statement_diagnostics            CHECK            NO             NO
+system              public             primary                  system         public        statement_diagnostics            PRIMARY KEY      NO             NO
+system              public             630200280_35_1_not_null  system         public        statement_diagnostics_requests   CHECK            NO             NO
+system              public             630200280_35_2_not_null  system         public        statement_diagnostics_requests   CHECK            NO             NO
+system              public             630200280_35_3_not_null  system         public        statement_diagnostics_requests   CHECK            NO             NO
+system              public             630200280_35_5_not_null  system         public        statement_diagnostics_requests   CHECK            NO             NO
+system              public             primary                  system         public        statement_diagnostics_requests   PRIMARY KEY      NO             NO
 system              public             630200280_20_1_not_null  system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_2_not_null  system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_4_not_null  system         public        table_statistics                 CHECK            NO             NO
@@ -884,6 +900,16 @@ system              public             630200280_32_6_not_null  spans IS NOT NUL
 system              public             630200280_32_7_not_null  verified IS NOT NULL
 system              public             630200280_33_1_not_null  username IS NOT NULL
 system              public             630200280_33_2_not_null  option IS NOT NULL
+system              public             630200280_34_1_not_null  id IS NOT NULL
+system              public             630200280_34_3_not_null  data IS NOT NULL
+system              public             630200280_35_1_not_null  id IS NOT NULL
+system              public             630200280_35_2_not_null  completed IS NOT NULL
+system              public             630200280_35_3_not_null  statement_fingerprint IS NOT NULL
+system              public             630200280_35_5_not_null  requested_at IS NOT NULL
+system              public             630200280_36_1_not_null  id IS NOT NULL
+system              public             630200280_36_2_not_null  statement_fingerprint IS NOT NULL
+system              public             630200280_36_3_not_null  statement IS NOT NULL
+system              public             630200280_36_4_not_null  collected_at IS NOT NULL
 system              public             630200280_3_1_not_null   id IS NOT NULL
 system              public             630200280_4_1_not_null   username IS NOT NULL
 system              public             630200280_4_3_not_null   isRole IS NOT NULL
@@ -937,6 +963,9 @@ system         public        role_members                     role            sy
 system         public        role_options                     option          system              public             primary
 system         public        role_options                     username        system              public             primary
 system         public        settings                         name            system              public             primary
+system         public        statement_bundle_chunks          id              system              public             primary
+system         public        statement_diagnostics            id              system              public             primary
+system         public        statement_diagnostics_requests   id              system              public             primary
 system         public        table_statistics                 statisticID     system              public             primary
 system         public        table_statistics                 tableID         system              public             primary
 system         public        ui                               key             system              public             primary
@@ -1026,114 +1055,130 @@ FROM system.information_schema.columns
 WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog' AND table_schema != 'crdb_internal'
 ORDER BY 3,4
 ----
-table_catalog  table_schema  table_name                       column_name              ordinal_position
-system         public        comments                         comment                  4
-system         public        comments                         object_id                2
-system         public        comments                         sub_id                   3
-system         public        comments                         type                     1
-system         public        descriptor                       descriptor               2
-system         public        descriptor                       id                       1
-system         public        eventlog                         eventType                2
-system         public        eventlog                         info                     5
-system         public        eventlog                         reportingID              4
-system         public        eventlog                         targetID                 3
-system         public        eventlog                         timestamp                1
-system         public        eventlog                         uniqueID                 6
-system         public        jobs                             created                  3
-system         public        jobs                             id                       1
-system         public        jobs                             payload                  4
-system         public        jobs                             progress                 5
-system         public        jobs                             status                   2
-system         public        lease                            descID                   1
-system         public        lease                            expiration               4
-system         public        lease                            nodeID                   3
-system         public        lease                            version                  2
-system         public        locations                        latitude                 3
-system         public        locations                        localityKey              1
-system         public        locations                        localityValue            2
-system         public        locations                        longitude                4
-system         public        namespace                        id                       4
-system         public        namespace                        name                     3
-system         public        namespace                        parentID                 1
-system         public        namespace                        parentSchemaID           2
-system         public        namespace_deprecated             id                       3
-system         public        namespace_deprecated             name                     2
-system         public        namespace_deprecated             parentID                 1
-system         public        protected_ts_meta                num_records              3
-system         public        protected_ts_meta                num_spans                4
-system         public        protected_ts_meta                singleton                1
-system         public        protected_ts_meta                total_bytes              5
-system         public        protected_ts_meta                version                  2
-system         public        protected_ts_records             id                       1
-system         public        protected_ts_records             meta                     4
-system         public        protected_ts_records             meta_type                3
-system         public        protected_ts_records             num_spans                5
-system         public        protected_ts_records             spans                    6
-system         public        protected_ts_records             ts                       2
-system         public        protected_ts_records             verified                 7
-system         public        rangelog                         eventType                4
-system         public        rangelog                         info                     6
-system         public        rangelog                         otherRangeID             5
-system         public        rangelog                         rangeID                  2
-system         public        rangelog                         storeID                  3
-system         public        rangelog                         timestamp                1
-system         public        rangelog                         uniqueID                 7
-system         public        replication_constraint_stats     config                   4
-system         public        replication_constraint_stats     report_id                5
-system         public        replication_constraint_stats     subzone_id               2
-system         public        replication_constraint_stats     type                     3
-system         public        replication_constraint_stats     violating_ranges         7
-system         public        replication_constraint_stats     violation_start          6
-system         public        replication_constraint_stats     zone_id                  1
-system         public        replication_critical_localities  at_risk_ranges           5
-system         public        replication_critical_localities  locality                 3
-system         public        replication_critical_localities  report_id                4
-system         public        replication_critical_localities  subzone_id               2
-system         public        replication_critical_localities  zone_id                  1
-system         public        replication_stats                over_replicated_ranges   7
-system         public        replication_stats                report_id                3
-system         public        replication_stats                subzone_id               2
-system         public        replication_stats                total_ranges             4
-system         public        replication_stats                unavailable_ranges       5
-system         public        replication_stats                under_replicated_ranges  6
-system         public        replication_stats                zone_id                  1
-system         public        reports_meta                     generated                2
-system         public        reports_meta                     id                       1
-system         public        role_members                     isAdmin                  3
-system         public        role_members                     member                   2
-system         public        role_members                     role                     1
-system         public        role_options                     option                   2
-system         public        role_options                     username                 1
-system         public        role_options                     value                    3
-system         public        settings                         lastUpdated              3
-system         public        settings                         name                     1
-system         public        settings                         value                    2
-system         public        settings                         valueType                4
-system         public        table_statistics                 columnIDs                4
-system         public        table_statistics                 createdAt                5
-system         public        table_statistics                 distinctCount            7
-system         public        table_statistics                 histogram                9
-system         public        table_statistics                 name                     3
-system         public        table_statistics                 nullCount                8
-system         public        table_statistics                 rowCount                 6
-system         public        table_statistics                 statisticID              2
-system         public        table_statistics                 tableID                  1
-system         public        ui                               key                      1
-system         public        ui                               lastUpdated              3
-system         public        ui                               value                    2
-system         public        users                            hashedPassword           2
-system         public        users                            isRole                   3
-system         public        users                            username                 1
-system         public        web_sessions                     auditInfo                8
-system         public        web_sessions                     createdAt                4
-system         public        web_sessions                     expiresAt                5
-system         public        web_sessions                     hashedSecret             2
-system         public        web_sessions                     id                       1
-system         public        web_sessions                     lastUsedAt               7
-system         public        web_sessions                     revokedAt                6
-system         public        web_sessions                     username                 3
-system         public        zones                            config                   2
-system         public        zones                            id                       1
+table_catalog  table_schema  table_name                       column_name               ordinal_position
+system         public        comments                         comment                   4
+system         public        comments                         object_id                 2
+system         public        comments                         sub_id                    3
+system         public        comments                         type                      1
+system         public        descriptor                       descriptor                2
+system         public        descriptor                       id                        1
+system         public        eventlog                         eventType                 2
+system         public        eventlog                         info                      5
+system         public        eventlog                         reportingID               4
+system         public        eventlog                         targetID                  3
+system         public        eventlog                         timestamp                 1
+system         public        eventlog                         uniqueID                  6
+system         public        jobs                             created                   3
+system         public        jobs                             id                        1
+system         public        jobs                             payload                   4
+system         public        jobs                             progress                  5
+system         public        jobs                             status                    2
+system         public        lease                            descID                    1
+system         public        lease                            expiration                4
+system         public        lease                            nodeID                    3
+system         public        lease                            version                   2
+system         public        locations                        latitude                  3
+system         public        locations                        localityKey               1
+system         public        locations                        localityValue             2
+system         public        locations                        longitude                 4
+system         public        namespace                        id                        4
+system         public        namespace                        name                      3
+system         public        namespace                        parentID                  1
+system         public        namespace                        parentSchemaID            2
+system         public        namespace_deprecated             id                        3
+system         public        namespace_deprecated             name                      2
+system         public        namespace_deprecated             parentID                  1
+system         public        protected_ts_meta                num_records               3
+system         public        protected_ts_meta                num_spans                 4
+system         public        protected_ts_meta                singleton                 1
+system         public        protected_ts_meta                total_bytes               5
+system         public        protected_ts_meta                version                   2
+system         public        protected_ts_records             id                        1
+system         public        protected_ts_records             meta                      4
+system         public        protected_ts_records             meta_type                 3
+system         public        protected_ts_records             num_spans                 5
+system         public        protected_ts_records             spans                     6
+system         public        protected_ts_records             ts                        2
+system         public        protected_ts_records             verified                  7
+system         public        rangelog                         eventType                 4
+system         public        rangelog                         info                      6
+system         public        rangelog                         otherRangeID              5
+system         public        rangelog                         rangeID                   2
+system         public        rangelog                         storeID                   3
+system         public        rangelog                         timestamp                 1
+system         public        rangelog                         uniqueID                  7
+system         public        replication_constraint_stats     config                    4
+system         public        replication_constraint_stats     report_id                 5
+system         public        replication_constraint_stats     subzone_id                2
+system         public        replication_constraint_stats     type                      3
+system         public        replication_constraint_stats     violating_ranges          7
+system         public        replication_constraint_stats     violation_start           6
+system         public        replication_constraint_stats     zone_id                   1
+system         public        replication_critical_localities  at_risk_ranges            5
+system         public        replication_critical_localities  locality                  3
+system         public        replication_critical_localities  report_id                 4
+system         public        replication_critical_localities  subzone_id                2
+system         public        replication_critical_localities  zone_id                   1
+system         public        replication_stats                over_replicated_ranges    7
+system         public        replication_stats                report_id                 3
+system         public        replication_stats                subzone_id                2
+system         public        replication_stats                total_ranges              4
+system         public        replication_stats                unavailable_ranges        5
+system         public        replication_stats                under_replicated_ranges   6
+system         public        replication_stats                zone_id                   1
+system         public        reports_meta                     generated                 2
+system         public        reports_meta                     id                        1
+system         public        role_members                     isAdmin                   3
+system         public        role_members                     member                    2
+system         public        role_members                     role                      1
+system         public        role_options                     option                    2
+system         public        role_options                     username                  1
+system         public        role_options                     value                     3
+system         public        settings                         lastUpdated               3
+system         public        settings                         name                      1
+system         public        settings                         value                     2
+system         public        settings                         valueType                 4
+system         public        statement_bundle_chunks          data                      3
+system         public        statement_bundle_chunks          description               2
+system         public        statement_bundle_chunks          id                        1
+system         public        statement_diagnostics            bundle_chunks             6
+system         public        statement_diagnostics            collected_at              4
+system         public        statement_diagnostics            error                     7
+system         public        statement_diagnostics            id                        1
+system         public        statement_diagnostics            statement                 3
+system         public        statement_diagnostics            statement_fingerprint     2
+system         public        statement_diagnostics            trace                     5
+system         public        statement_diagnostics_requests   completed                 2
+system         public        statement_diagnostics_requests   completed_at              6
+system         public        statement_diagnostics_requests   id                        1
+system         public        statement_diagnostics_requests   requested_at              5
+system         public        statement_diagnostics_requests   statement_diagnostics_id  4
+system         public        statement_diagnostics_requests   statement_fingerprint     3
+system         public        table_statistics                 columnIDs                 4
+system         public        table_statistics                 createdAt                 5
+system         public        table_statistics                 distinctCount             7
+system         public        table_statistics                 histogram                 9
+system         public        table_statistics                 name                      3
+system         public        table_statistics                 nullCount                 8
+system         public        table_statistics                 rowCount                  6
+system         public        table_statistics                 statisticID               2
+system         public        table_statistics                 tableID                   1
+system         public        ui                               key                       1
+system         public        ui                               lastUpdated               3
+system         public        ui                               value                     2
+system         public        users                            hashedPassword            2
+system         public        users                            isRole                    3
+system         public        users                            username                  1
+system         public        web_sessions                     auditInfo                 8
+system         public        web_sessions                     createdAt                 4
+system         public        web_sessions                     expiresAt                 5
+system         public        web_sessions                     hashedSecret              2
+system         public        web_sessions                     id                        1
+system         public        web_sessions                     lastUsedAt                7
+system         public        web_sessions                     revokedAt                 6
+system         public        web_sessions                     username                  3
+system         public        zones                            config                    2
+system         public        zones                            id                        1
 
 statement ok
 SET DATABASE = test
@@ -1708,6 +1753,36 @@ NULL     root     system         public              settings                   
 NULL     root     system         public              settings                           INSERT          NULL          NO
 NULL     root     system         public              settings                           SELECT          NULL          YES
 NULL     root     system         public              settings                           UPDATE          NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            DELETE          NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            GRANT           NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            INSERT          NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            SELECT          NULL          YES
+NULL     admin    system         public              statement_bundle_chunks            UPDATE          NULL          NO
+NULL     root     system         public              statement_bundle_chunks            DELETE          NULL          NO
+NULL     root     system         public              statement_bundle_chunks            GRANT           NULL          NO
+NULL     root     system         public              statement_bundle_chunks            INSERT          NULL          NO
+NULL     root     system         public              statement_bundle_chunks            SELECT          NULL          YES
+NULL     root     system         public              statement_bundle_chunks            UPDATE          NULL          NO
+NULL     admin    system         public              statement_diagnostics              DELETE          NULL          NO
+NULL     admin    system         public              statement_diagnostics              GRANT           NULL          NO
+NULL     admin    system         public              statement_diagnostics              INSERT          NULL          NO
+NULL     admin    system         public              statement_diagnostics              SELECT          NULL          YES
+NULL     admin    system         public              statement_diagnostics              UPDATE          NULL          NO
+NULL     root     system         public              statement_diagnostics              DELETE          NULL          NO
+NULL     root     system         public              statement_diagnostics              GRANT           NULL          NO
+NULL     root     system         public              statement_diagnostics              INSERT          NULL          NO
+NULL     root     system         public              statement_diagnostics              SELECT          NULL          YES
+NULL     root     system         public              statement_diagnostics              UPDATE          NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     DELETE          NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     GRANT           NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     INSERT          NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     SELECT          NULL          YES
+NULL     admin    system         public              statement_diagnostics_requests     UPDATE          NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     DELETE          NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     GRANT           NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     INSERT          NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     SELECT          NULL          YES
+NULL     root     system         public              statement_diagnostics_requests     UPDATE          NULL          NO
 NULL     admin    system         public              table_statistics                   DELETE          NULL          NO
 NULL     admin    system         public              table_statistics                   GRANT           NULL          NO
 NULL     admin    system         public              table_statistics                   INSERT          NULL          NO
@@ -2073,6 +2148,36 @@ NULL     root     system         public              role_options               
 NULL     root     system         public              role_options                       INSERT          NULL          NO
 NULL     root     system         public              role_options                       SELECT          NULL          YES
 NULL     root     system         public              role_options                       UPDATE          NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            DELETE          NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            GRANT           NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            INSERT          NULL          NO
+NULL     admin    system         public              statement_bundle_chunks            SELECT          NULL          YES
+NULL     admin    system         public              statement_bundle_chunks            UPDATE          NULL          NO
+NULL     root     system         public              statement_bundle_chunks            DELETE          NULL          NO
+NULL     root     system         public              statement_bundle_chunks            GRANT           NULL          NO
+NULL     root     system         public              statement_bundle_chunks            INSERT          NULL          NO
+NULL     root     system         public              statement_bundle_chunks            SELECT          NULL          YES
+NULL     root     system         public              statement_bundle_chunks            UPDATE          NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     DELETE          NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     GRANT           NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     INSERT          NULL          NO
+NULL     admin    system         public              statement_diagnostics_requests     SELECT          NULL          YES
+NULL     admin    system         public              statement_diagnostics_requests     UPDATE          NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     DELETE          NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     GRANT           NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     INSERT          NULL          NO
+NULL     root     system         public              statement_diagnostics_requests     SELECT          NULL          YES
+NULL     root     system         public              statement_diagnostics_requests     UPDATE          NULL          NO
+NULL     admin    system         public              statement_diagnostics              DELETE          NULL          NO
+NULL     admin    system         public              statement_diagnostics              GRANT           NULL          NO
+NULL     admin    system         public              statement_diagnostics              INSERT          NULL          NO
+NULL     admin    system         public              statement_diagnostics              SELECT          NULL          YES
+NULL     admin    system         public              statement_diagnostics              UPDATE          NULL          NO
+NULL     root     system         public              statement_diagnostics              DELETE          NULL          NO
+NULL     root     system         public              statement_diagnostics              GRANT           NULL          NO
+NULL     root     system         public              statement_diagnostics              INSERT          NULL          NO
+NULL     root     system         public              statement_diagnostics              SELECT          NULL          YES
+NULL     root     system         public              statement_diagnostics              UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

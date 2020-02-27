@@ -43,7 +43,7 @@ namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[5];
+  static const ::google::protobuf::internal::ParseTable schema[7];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -52,18 +52,24 @@ struct TableStruct {
 namespace cockroach {
 namespace util {
 namespace tracing {
+class LogRecord;
+class LogRecordDefaultTypeInternal;
+extern LogRecordDefaultTypeInternal _LogRecord_default_instance_;
+class LogRecord_Field;
+class LogRecord_FieldDefaultTypeInternal;
+extern LogRecord_FieldDefaultTypeInternal _LogRecord_Field_default_instance_;
+class NormalizedSpan;
+class NormalizedSpanDefaultTypeInternal;
+extern NormalizedSpanDefaultTypeInternal _NormalizedSpan_default_instance_;
+class NormalizedSpan_TagsEntry_DoNotUse;
+class NormalizedSpan_TagsEntry_DoNotUseDefaultTypeInternal;
+extern NormalizedSpan_TagsEntry_DoNotUseDefaultTypeInternal _NormalizedSpan_TagsEntry_DoNotUse_default_instance_;
 class RecordedSpan;
 class RecordedSpanDefaultTypeInternal;
 extern RecordedSpanDefaultTypeInternal _RecordedSpan_default_instance_;
 class RecordedSpan_BaggageEntry_DoNotUse;
 class RecordedSpan_BaggageEntry_DoNotUseDefaultTypeInternal;
 extern RecordedSpan_BaggageEntry_DoNotUseDefaultTypeInternal _RecordedSpan_BaggageEntry_DoNotUse_default_instance_;
-class RecordedSpan_LogRecord;
-class RecordedSpan_LogRecordDefaultTypeInternal;
-extern RecordedSpan_LogRecordDefaultTypeInternal _RecordedSpan_LogRecord_default_instance_;
-class RecordedSpan_LogRecord_Field;
-class RecordedSpan_LogRecord_FieldDefaultTypeInternal;
-extern RecordedSpan_LogRecord_FieldDefaultTypeInternal _RecordedSpan_LogRecord_Field_default_instance_;
 class RecordedSpan_TagsEntry_DoNotUse;
 class RecordedSpan_TagsEntry_DoNotUseDefaultTypeInternal;
 extern RecordedSpan_TagsEntry_DoNotUseDefaultTypeInternal _RecordedSpan_TagsEntry_DoNotUse_default_instance_;
@@ -72,10 +78,12 @@ extern RecordedSpan_TagsEntry_DoNotUseDefaultTypeInternal _RecordedSpan_TagsEntr
 }  // namespace cockroach
 namespace google {
 namespace protobuf {
+template<> ::cockroach::util::tracing::LogRecord* Arena::CreateMaybeMessage<::cockroach::util::tracing::LogRecord>(Arena*);
+template<> ::cockroach::util::tracing::LogRecord_Field* Arena::CreateMaybeMessage<::cockroach::util::tracing::LogRecord_Field>(Arena*);
+template<> ::cockroach::util::tracing::NormalizedSpan* Arena::CreateMaybeMessage<::cockroach::util::tracing::NormalizedSpan>(Arena*);
+template<> ::cockroach::util::tracing::NormalizedSpan_TagsEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::util::tracing::NormalizedSpan_TagsEntry_DoNotUse>(Arena*);
 template<> ::cockroach::util::tracing::RecordedSpan* Arena::CreateMaybeMessage<::cockroach::util::tracing::RecordedSpan>(Arena*);
 template<> ::cockroach::util::tracing::RecordedSpan_BaggageEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::util::tracing::RecordedSpan_BaggageEntry_DoNotUse>(Arena*);
-template<> ::cockroach::util::tracing::RecordedSpan_LogRecord* Arena::CreateMaybeMessage<::cockroach::util::tracing::RecordedSpan_LogRecord>(Arena*);
-template<> ::cockroach::util::tracing::RecordedSpan_LogRecord_Field* Arena::CreateMaybeMessage<::cockroach::util::tracing::RecordedSpan_LogRecord_Field>(Arena*);
 template<> ::cockroach::util::tracing::RecordedSpan_TagsEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::util::tracing::RecordedSpan_TagsEntry_DoNotUse>(Arena*);
 }  // namespace protobuf
 }  // namespace google
@@ -85,62 +93,24 @@ namespace tracing {
 
 // ===================================================================
 
-class RecordedSpan_BaggageEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<RecordedSpan_BaggageEntry_DoNotUse, 
-    ::std::string, ::std::string,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    0 > {
-public:
-  typedef ::google::protobuf::internal::MapEntryLite<RecordedSpan_BaggageEntry_DoNotUse, 
-    ::std::string, ::std::string,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    0 > SuperType;
-  RecordedSpan_BaggageEntry_DoNotUse();
-  RecordedSpan_BaggageEntry_DoNotUse(::google::protobuf::Arena* arena);
-  void MergeFrom(const RecordedSpan_BaggageEntry_DoNotUse& other);
-  static const RecordedSpan_BaggageEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const RecordedSpan_BaggageEntry_DoNotUse*>(&_RecordedSpan_BaggageEntry_DoNotUse_default_instance_); }
-};
-
-// -------------------------------------------------------------------
-
-class RecordedSpan_TagsEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<RecordedSpan_TagsEntry_DoNotUse, 
-    ::std::string, ::std::string,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    0 > {
-public:
-  typedef ::google::protobuf::internal::MapEntryLite<RecordedSpan_TagsEntry_DoNotUse, 
-    ::std::string, ::std::string,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    0 > SuperType;
-  RecordedSpan_TagsEntry_DoNotUse();
-  RecordedSpan_TagsEntry_DoNotUse(::google::protobuf::Arena* arena);
-  void MergeFrom(const RecordedSpan_TagsEntry_DoNotUse& other);
-  static const RecordedSpan_TagsEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const RecordedSpan_TagsEntry_DoNotUse*>(&_RecordedSpan_TagsEntry_DoNotUse_default_instance_); }
-};
-
-// -------------------------------------------------------------------
-
-class RecordedSpan_LogRecord_Field : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.RecordedSpan.LogRecord.Field) */ {
+class LogRecord_Field : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.LogRecord.Field) */ {
  public:
-  RecordedSpan_LogRecord_Field();
-  virtual ~RecordedSpan_LogRecord_Field();
+  LogRecord_Field();
+  virtual ~LogRecord_Field();
 
-  RecordedSpan_LogRecord_Field(const RecordedSpan_LogRecord_Field& from);
+  LogRecord_Field(const LogRecord_Field& from);
 
-  inline RecordedSpan_LogRecord_Field& operator=(const RecordedSpan_LogRecord_Field& from) {
+  inline LogRecord_Field& operator=(const LogRecord_Field& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  RecordedSpan_LogRecord_Field(RecordedSpan_LogRecord_Field&& from) noexcept
-    : RecordedSpan_LogRecord_Field() {
+  LogRecord_Field(LogRecord_Field&& from) noexcept
+    : LogRecord_Field() {
     *this = ::std::move(from);
   }
 
-  inline RecordedSpan_LogRecord_Field& operator=(RecordedSpan_LogRecord_Field&& from) noexcept {
+  inline LogRecord_Field& operator=(LogRecord_Field&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -149,34 +119,34 @@ class RecordedSpan_LogRecord_Field : public ::google::protobuf::MessageLite /* @
     return *this;
   }
   #endif
-  static const RecordedSpan_LogRecord_Field& default_instance();
+  static const LogRecord_Field& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const RecordedSpan_LogRecord_Field* internal_default_instance() {
-    return reinterpret_cast<const RecordedSpan_LogRecord_Field*>(
-               &_RecordedSpan_LogRecord_Field_default_instance_);
+  static inline const LogRecord_Field* internal_default_instance() {
+    return reinterpret_cast<const LogRecord_Field*>(
+               &_LogRecord_Field_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    2;
+    0;
 
-  void Swap(RecordedSpan_LogRecord_Field* other);
-  friend void swap(RecordedSpan_LogRecord_Field& a, RecordedSpan_LogRecord_Field& b) {
+  void Swap(LogRecord_Field* other);
+  friend void swap(LogRecord_Field& a, LogRecord_Field& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline RecordedSpan_LogRecord_Field* New() const final {
-    return CreateMaybeMessage<RecordedSpan_LogRecord_Field>(NULL);
+  inline LogRecord_Field* New() const final {
+    return CreateMaybeMessage<LogRecord_Field>(NULL);
   }
 
-  RecordedSpan_LogRecord_Field* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<RecordedSpan_LogRecord_Field>(arena);
+  LogRecord_Field* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<LogRecord_Field>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const RecordedSpan_LogRecord_Field& from);
-  void MergeFrom(const RecordedSpan_LogRecord_Field& from);
+  void CopyFrom(const LogRecord_Field& from);
+  void MergeFrom(const LogRecord_Field& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -192,7 +162,7 @@ class RecordedSpan_LogRecord_Field : public ::google::protobuf::MessageLite /* @
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(RecordedSpan_LogRecord_Field* other);
+  void InternalSwap(LogRecord_Field* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -236,7 +206,7 @@ class RecordedSpan_LogRecord_Field : public ::google::protobuf::MessageLite /* @
   ::std::string* release_value();
   void set_allocated_value(::std::string* value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.util.tracing.RecordedSpan.LogRecord.Field)
+  // @@protoc_insertion_point(class_scope:cockroach.util.tracing.LogRecord.Field)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -247,24 +217,24 @@ class RecordedSpan_LogRecord_Field : public ::google::protobuf::MessageLite /* @
 };
 // -------------------------------------------------------------------
 
-class RecordedSpan_LogRecord : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.RecordedSpan.LogRecord) */ {
+class LogRecord : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.LogRecord) */ {
  public:
-  RecordedSpan_LogRecord();
-  virtual ~RecordedSpan_LogRecord();
+  LogRecord();
+  virtual ~LogRecord();
 
-  RecordedSpan_LogRecord(const RecordedSpan_LogRecord& from);
+  LogRecord(const LogRecord& from);
 
-  inline RecordedSpan_LogRecord& operator=(const RecordedSpan_LogRecord& from) {
+  inline LogRecord& operator=(const LogRecord& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  RecordedSpan_LogRecord(RecordedSpan_LogRecord&& from) noexcept
-    : RecordedSpan_LogRecord() {
+  LogRecord(LogRecord&& from) noexcept
+    : LogRecord() {
     *this = ::std::move(from);
   }
 
-  inline RecordedSpan_LogRecord& operator=(RecordedSpan_LogRecord&& from) noexcept {
+  inline LogRecord& operator=(LogRecord&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -273,34 +243,34 @@ class RecordedSpan_LogRecord : public ::google::protobuf::MessageLite /* @@proto
     return *this;
   }
   #endif
-  static const RecordedSpan_LogRecord& default_instance();
+  static const LogRecord& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const RecordedSpan_LogRecord* internal_default_instance() {
-    return reinterpret_cast<const RecordedSpan_LogRecord*>(
-               &_RecordedSpan_LogRecord_default_instance_);
+  static inline const LogRecord* internal_default_instance() {
+    return reinterpret_cast<const LogRecord*>(
+               &_LogRecord_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    3;
+    1;
 
-  void Swap(RecordedSpan_LogRecord* other);
-  friend void swap(RecordedSpan_LogRecord& a, RecordedSpan_LogRecord& b) {
+  void Swap(LogRecord* other);
+  friend void swap(LogRecord& a, LogRecord& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline RecordedSpan_LogRecord* New() const final {
-    return CreateMaybeMessage<RecordedSpan_LogRecord>(NULL);
+  inline LogRecord* New() const final {
+    return CreateMaybeMessage<LogRecord>(NULL);
   }
 
-  RecordedSpan_LogRecord* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<RecordedSpan_LogRecord>(arena);
+  LogRecord* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<LogRecord>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const RecordedSpan_LogRecord& from);
-  void MergeFrom(const RecordedSpan_LogRecord& from);
+  void CopyFrom(const LogRecord& from);
+  void MergeFrom(const LogRecord& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -316,7 +286,7 @@ class RecordedSpan_LogRecord : public ::google::protobuf::MessageLite /* @@proto
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(RecordedSpan_LogRecord* other);
+  void InternalSwap(LogRecord* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -330,19 +300,19 @@ class RecordedSpan_LogRecord : public ::google::protobuf::MessageLite /* @@proto
 
   // nested types ----------------------------------------------------
 
-  typedef RecordedSpan_LogRecord_Field Field;
+  typedef LogRecord_Field Field;
 
   // accessors -------------------------------------------------------
 
   int fields_size() const;
   void clear_fields();
   static const int kFieldsFieldNumber = 2;
-  ::cockroach::util::tracing::RecordedSpan_LogRecord_Field* mutable_fields(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord_Field >*
+  ::cockroach::util::tracing::LogRecord_Field* mutable_fields(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord_Field >*
       mutable_fields();
-  const ::cockroach::util::tracing::RecordedSpan_LogRecord_Field& fields(int index) const;
-  ::cockroach::util::tracing::RecordedSpan_LogRecord_Field* add_fields();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord_Field >&
+  const ::cockroach::util::tracing::LogRecord_Field& fields(int index) const;
+  ::cockroach::util::tracing::LogRecord_Field* add_fields();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord_Field >&
       fields() const;
 
   bool has_time() const;
@@ -356,15 +326,53 @@ class RecordedSpan_LogRecord : public ::google::protobuf::MessageLite /* @@proto
   ::google::protobuf::Timestamp* mutable_time();
   void set_allocated_time(::google::protobuf::Timestamp* time);
 
-  // @@protoc_insertion_point(class_scope:cockroach.util.tracing.RecordedSpan.LogRecord)
+  // @@protoc_insertion_point(class_scope:cockroach.util.tracing.LogRecord)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord_Field > fields_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord_Field > fields_;
   ::google::protobuf::Timestamp* time_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_util_2ftracing_2frecorded_5fspan_2eproto::TableStruct;
 };
+// -------------------------------------------------------------------
+
+class RecordedSpan_BaggageEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<RecordedSpan_BaggageEntry_DoNotUse, 
+    ::std::string, ::std::string,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    0 > {
+public:
+  typedef ::google::protobuf::internal::MapEntryLite<RecordedSpan_BaggageEntry_DoNotUse, 
+    ::std::string, ::std::string,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    0 > SuperType;
+  RecordedSpan_BaggageEntry_DoNotUse();
+  RecordedSpan_BaggageEntry_DoNotUse(::google::protobuf::Arena* arena);
+  void MergeFrom(const RecordedSpan_BaggageEntry_DoNotUse& other);
+  static const RecordedSpan_BaggageEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const RecordedSpan_BaggageEntry_DoNotUse*>(&_RecordedSpan_BaggageEntry_DoNotUse_default_instance_); }
+};
+
+// -------------------------------------------------------------------
+
+class RecordedSpan_TagsEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<RecordedSpan_TagsEntry_DoNotUse, 
+    ::std::string, ::std::string,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    0 > {
+public:
+  typedef ::google::protobuf::internal::MapEntryLite<RecordedSpan_TagsEntry_DoNotUse, 
+    ::std::string, ::std::string,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    0 > SuperType;
+  RecordedSpan_TagsEntry_DoNotUse();
+  RecordedSpan_TagsEntry_DoNotUse(::google::protobuf::Arena* arena);
+  void MergeFrom(const RecordedSpan_TagsEntry_DoNotUse& other);
+  static const RecordedSpan_TagsEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const RecordedSpan_TagsEntry_DoNotUse*>(&_RecordedSpan_TagsEntry_DoNotUse_default_instance_); }
+};
+
 // -------------------------------------------------------------------
 
 class RecordedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.RecordedSpan) */ {
@@ -450,7 +458,6 @@ class RecordedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertio
 
   // nested types ----------------------------------------------------
 
-  typedef RecordedSpan_LogRecord LogRecord;
 
   // accessors -------------------------------------------------------
 
@@ -475,12 +482,12 @@ class RecordedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertio
   int logs_size() const;
   void clear_logs();
   static const int kLogsFieldNumber = 9;
-  ::cockroach::util::tracing::RecordedSpan_LogRecord* mutable_logs(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord >*
+  ::cockroach::util::tracing::LogRecord* mutable_logs(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >*
       mutable_logs();
-  const ::cockroach::util::tracing::RecordedSpan_LogRecord& logs(int index) const;
-  ::cockroach::util::tracing::RecordedSpan_LogRecord* add_logs();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord >&
+  const ::cockroach::util::tracing::LogRecord& logs(int index) const;
+  ::cockroach::util::tracing::LogRecord* add_logs();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >&
       logs() const;
 
   // string operation = 4;
@@ -562,7 +569,7 @@ class RecordedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertio
       ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
       ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
       0 > tags_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord > logs_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord > logs_;
   ::google::protobuf::internal::ArenaStringPtr operation_;
   ::google::protobuf::Timestamp* start_time_;
   ::google::protobuf::Duration* duration_;
@@ -570,6 +577,198 @@ class RecordedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::uint64 trace_id_;
   ::google::protobuf::uint64 span_id_;
   ::google::protobuf::uint64 parent_span_id_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_util_2ftracing_2frecorded_5fspan_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class NormalizedSpan_TagsEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<NormalizedSpan_TagsEntry_DoNotUse, 
+    ::std::string, ::std::string,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    0 > {
+public:
+  typedef ::google::protobuf::internal::MapEntryLite<NormalizedSpan_TagsEntry_DoNotUse, 
+    ::std::string, ::std::string,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    0 > SuperType;
+  NormalizedSpan_TagsEntry_DoNotUse();
+  NormalizedSpan_TagsEntry_DoNotUse(::google::protobuf::Arena* arena);
+  void MergeFrom(const NormalizedSpan_TagsEntry_DoNotUse& other);
+  static const NormalizedSpan_TagsEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const NormalizedSpan_TagsEntry_DoNotUse*>(&_NormalizedSpan_TagsEntry_DoNotUse_default_instance_); }
+};
+
+// -------------------------------------------------------------------
+
+class NormalizedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.NormalizedSpan) */ {
+ public:
+  NormalizedSpan();
+  virtual ~NormalizedSpan();
+
+  NormalizedSpan(const NormalizedSpan& from);
+
+  inline NormalizedSpan& operator=(const NormalizedSpan& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  NormalizedSpan(NormalizedSpan&& from) noexcept
+    : NormalizedSpan() {
+    *this = ::std::move(from);
+  }
+
+  inline NormalizedSpan& operator=(NormalizedSpan&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const NormalizedSpan& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const NormalizedSpan* internal_default_instance() {
+    return reinterpret_cast<const NormalizedSpan*>(
+               &_NormalizedSpan_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    6;
+
+  void Swap(NormalizedSpan* other);
+  friend void swap(NormalizedSpan& a, NormalizedSpan& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline NormalizedSpan* New() const final {
+    return CreateMaybeMessage<NormalizedSpan>(NULL);
+  }
+
+  NormalizedSpan* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<NormalizedSpan>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const NormalizedSpan& from);
+  void MergeFrom(const NormalizedSpan& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(NormalizedSpan* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+
+  // accessors -------------------------------------------------------
+
+  // map<string, string> tags = 2;
+  int tags_size() const;
+  void clear_tags();
+  static const int kTagsFieldNumber = 2;
+  const ::google::protobuf::Map< ::std::string, ::std::string >&
+      tags() const;
+  ::google::protobuf::Map< ::std::string, ::std::string >*
+      mutable_tags();
+
+  int logs_size() const;
+  void clear_logs();
+  static const int kLogsFieldNumber = 5;
+  ::cockroach::util::tracing::LogRecord* mutable_logs(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >*
+      mutable_logs();
+  const ::cockroach::util::tracing::LogRecord& logs(int index) const;
+  ::cockroach::util::tracing::LogRecord* add_logs();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >&
+      logs() const;
+
+  int children_size() const;
+  void clear_children();
+  static const int kChildrenFieldNumber = 6;
+  ::cockroach::util::tracing::NormalizedSpan* mutable_children(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::NormalizedSpan >*
+      mutable_children();
+  const ::cockroach::util::tracing::NormalizedSpan& children(int index) const;
+  ::cockroach::util::tracing::NormalizedSpan* add_children();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::NormalizedSpan >&
+      children() const;
+
+  // string operation = 1;
+  void clear_operation();
+  static const int kOperationFieldNumber = 1;
+  const ::std::string& operation() const;
+  void set_operation(const ::std::string& value);
+  #if LANG_CXX11
+  void set_operation(::std::string&& value);
+  #endif
+  void set_operation(const char* value);
+  void set_operation(const char* value, size_t size);
+  ::std::string* mutable_operation();
+  ::std::string* release_operation();
+  void set_allocated_operation(::std::string* operation);
+
+  bool has_start_time() const;
+  void clear_start_time();
+  static const int kStartTimeFieldNumber = 3;
+  private:
+  const ::google::protobuf::Timestamp& _internal_start_time() const;
+  public:
+  const ::google::protobuf::Timestamp& start_time() const;
+  ::google::protobuf::Timestamp* release_start_time();
+  ::google::protobuf::Timestamp* mutable_start_time();
+  void set_allocated_start_time(::google::protobuf::Timestamp* start_time);
+
+  bool has_duration() const;
+  void clear_duration();
+  static const int kDurationFieldNumber = 4;
+  private:
+  const ::google::protobuf::Duration& _internal_duration() const;
+  public:
+  const ::google::protobuf::Duration& duration() const;
+  ::google::protobuf::Duration* release_duration();
+  ::google::protobuf::Duration* mutable_duration();
+  void set_allocated_duration(::google::protobuf::Duration* duration);
+
+  // @@protoc_insertion_point(class_scope:cockroach.util.tracing.NormalizedSpan)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::MapFieldLite<
+      NormalizedSpan_TagsEntry_DoNotUse,
+      ::std::string, ::std::string,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      0 > tags_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord > logs_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::NormalizedSpan > children_;
+  ::google::protobuf::internal::ArenaStringPtr operation_;
+  ::google::protobuf::Timestamp* start_time_;
+  ::google::protobuf::Duration* duration_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_util_2ftracing_2frecorded_5fspan_2eproto::TableStruct;
 };
@@ -582,151 +781,147 @@ class RecordedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertio
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif  // __GNUC__
-// -------------------------------------------------------------------
-
-// -------------------------------------------------------------------
-
-// RecordedSpan_LogRecord_Field
+// LogRecord_Field
 
 // string key = 1;
-inline void RecordedSpan_LogRecord_Field::clear_key() {
+inline void LogRecord_Field::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& RecordedSpan_LogRecord_Field::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+inline const ::std::string& LogRecord_Field::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.LogRecord.Field.key)
   return key_.GetNoArena();
 }
-inline void RecordedSpan_LogRecord_Field::set_key(const ::std::string& value) {
+inline void LogRecord_Field::set_key(const ::std::string& value) {
   
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+  // @@protoc_insertion_point(field_set:cockroach.util.tracing.LogRecord.Field.key)
 }
 #if LANG_CXX11
-inline void RecordedSpan_LogRecord_Field::set_key(::std::string&& value) {
+inline void LogRecord_Field::set_key(::std::string&& value) {
   
   key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.util.tracing.LogRecord.Field.key)
 }
 #endif
-inline void RecordedSpan_LogRecord_Field::set_key(const char* value) {
+inline void LogRecord_Field::set_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+  // @@protoc_insertion_point(field_set_char:cockroach.util.tracing.LogRecord.Field.key)
 }
-inline void RecordedSpan_LogRecord_Field::set_key(const char* value, size_t size) {
+inline void LogRecord_Field::set_key(const char* value, size_t size) {
   
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.util.tracing.LogRecord.Field.key)
 }
-inline ::std::string* RecordedSpan_LogRecord_Field::mutable_key() {
+inline ::std::string* LogRecord_Field::mutable_key() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.LogRecord.Field.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* RecordedSpan_LogRecord_Field::release_key() {
-  // @@protoc_insertion_point(field_release:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+inline ::std::string* LogRecord_Field::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.util.tracing.LogRecord.Field.key)
   
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void RecordedSpan_LogRecord_Field::set_allocated_key(::std::string* key) {
+inline void LogRecord_Field::set_allocated_key(::std::string* key) {
   if (key != NULL) {
     
   } else {
     
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.RecordedSpan.LogRecord.Field.key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.LogRecord.Field.key)
 }
 
 // string value = 2;
-inline void RecordedSpan_LogRecord_Field::clear_value() {
+inline void LogRecord_Field::clear_value() {
   value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& RecordedSpan_LogRecord_Field::value() const {
-  // @@protoc_insertion_point(field_get:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+inline const ::std::string& LogRecord_Field::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.LogRecord.Field.value)
   return value_.GetNoArena();
 }
-inline void RecordedSpan_LogRecord_Field::set_value(const ::std::string& value) {
+inline void LogRecord_Field::set_value(const ::std::string& value) {
   
   value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+  // @@protoc_insertion_point(field_set:cockroach.util.tracing.LogRecord.Field.value)
 }
 #if LANG_CXX11
-inline void RecordedSpan_LogRecord_Field::set_value(::std::string&& value) {
+inline void LogRecord_Field::set_value(::std::string&& value) {
   
   value_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.util.tracing.LogRecord.Field.value)
 }
 #endif
-inline void RecordedSpan_LogRecord_Field::set_value(const char* value) {
+inline void LogRecord_Field::set_value(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+  // @@protoc_insertion_point(field_set_char:cockroach.util.tracing.LogRecord.Field.value)
 }
-inline void RecordedSpan_LogRecord_Field::set_value(const char* value, size_t size) {
+inline void LogRecord_Field::set_value(const char* value, size_t size) {
   
   value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.util.tracing.LogRecord.Field.value)
 }
-inline ::std::string* RecordedSpan_LogRecord_Field::mutable_value() {
+inline ::std::string* LogRecord_Field::mutable_value() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.LogRecord.Field.value)
   return value_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* RecordedSpan_LogRecord_Field::release_value() {
-  // @@protoc_insertion_point(field_release:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+inline ::std::string* LogRecord_Field::release_value() {
+  // @@protoc_insertion_point(field_release:cockroach.util.tracing.LogRecord.Field.value)
   
   return value_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void RecordedSpan_LogRecord_Field::set_allocated_value(::std::string* value) {
+inline void LogRecord_Field::set_allocated_value(::std::string* value) {
   if (value != NULL) {
     
   } else {
     
   }
   value_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.RecordedSpan.LogRecord.Field.value)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.LogRecord.Field.value)
 }
 
 // -------------------------------------------------------------------
 
-// RecordedSpan_LogRecord
+// LogRecord
 
-inline bool RecordedSpan_LogRecord::has_time() const {
+inline bool LogRecord::has_time() const {
   return this != internal_default_instance() && time_ != NULL;
 }
-inline const ::google::protobuf::Timestamp& RecordedSpan_LogRecord::_internal_time() const {
+inline const ::google::protobuf::Timestamp& LogRecord::_internal_time() const {
   return *time_;
 }
-inline const ::google::protobuf::Timestamp& RecordedSpan_LogRecord::time() const {
+inline const ::google::protobuf::Timestamp& LogRecord::time() const {
   const ::google::protobuf::Timestamp* p = time_;
-  // @@protoc_insertion_point(field_get:cockroach.util.tracing.RecordedSpan.LogRecord.time)
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.LogRecord.time)
   return p != NULL ? *p : *reinterpret_cast<const ::google::protobuf::Timestamp*>(
       &::google::protobuf::_Timestamp_default_instance_);
 }
-inline ::google::protobuf::Timestamp* RecordedSpan_LogRecord::release_time() {
-  // @@protoc_insertion_point(field_release:cockroach.util.tracing.RecordedSpan.LogRecord.time)
+inline ::google::protobuf::Timestamp* LogRecord::release_time() {
+  // @@protoc_insertion_point(field_release:cockroach.util.tracing.LogRecord.time)
   
   ::google::protobuf::Timestamp* temp = time_;
   time_ = NULL;
   return temp;
 }
-inline ::google::protobuf::Timestamp* RecordedSpan_LogRecord::mutable_time() {
+inline ::google::protobuf::Timestamp* LogRecord::mutable_time() {
   
   if (time_ == NULL) {
     auto* p = CreateMaybeMessage<::google::protobuf::Timestamp>(GetArenaNoVirtual());
     time_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.RecordedSpan.LogRecord.time)
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.LogRecord.time)
   return time_;
 }
-inline void RecordedSpan_LogRecord::set_allocated_time(::google::protobuf::Timestamp* time) {
+inline void LogRecord::set_allocated_time(::google::protobuf::Timestamp* time) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(time_);
@@ -743,37 +938,41 @@ inline void RecordedSpan_LogRecord::set_allocated_time(::google::protobuf::Times
     
   }
   time_ = time;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.RecordedSpan.LogRecord.time)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.LogRecord.time)
 }
 
-inline int RecordedSpan_LogRecord::fields_size() const {
+inline int LogRecord::fields_size() const {
   return fields_.size();
 }
-inline void RecordedSpan_LogRecord::clear_fields() {
+inline void LogRecord::clear_fields() {
   fields_.Clear();
 }
-inline ::cockroach::util::tracing::RecordedSpan_LogRecord_Field* RecordedSpan_LogRecord::mutable_fields(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.RecordedSpan.LogRecord.fields)
+inline ::cockroach::util::tracing::LogRecord_Field* LogRecord::mutable_fields(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.LogRecord.fields)
   return fields_.Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord_Field >*
-RecordedSpan_LogRecord::mutable_fields() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.util.tracing.RecordedSpan.LogRecord.fields)
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord_Field >*
+LogRecord::mutable_fields() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.util.tracing.LogRecord.fields)
   return &fields_;
 }
-inline const ::cockroach::util::tracing::RecordedSpan_LogRecord_Field& RecordedSpan_LogRecord::fields(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.util.tracing.RecordedSpan.LogRecord.fields)
+inline const ::cockroach::util::tracing::LogRecord_Field& LogRecord::fields(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.LogRecord.fields)
   return fields_.Get(index);
 }
-inline ::cockroach::util::tracing::RecordedSpan_LogRecord_Field* RecordedSpan_LogRecord::add_fields() {
-  // @@protoc_insertion_point(field_add:cockroach.util.tracing.RecordedSpan.LogRecord.fields)
+inline ::cockroach::util::tracing::LogRecord_Field* LogRecord::add_fields() {
+  // @@protoc_insertion_point(field_add:cockroach.util.tracing.LogRecord.fields)
   return fields_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord_Field >&
-RecordedSpan_LogRecord::fields() const {
-  // @@protoc_insertion_point(field_list:cockroach.util.tracing.RecordedSpan.LogRecord.fields)
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord_Field >&
+LogRecord::fields() const {
+  // @@protoc_insertion_point(field_list:cockroach.util.tracing.LogRecord.fields)
   return fields_;
 }
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
 
@@ -1009,24 +1208,24 @@ inline int RecordedSpan::logs_size() const {
 inline void RecordedSpan::clear_logs() {
   logs_.Clear();
 }
-inline ::cockroach::util::tracing::RecordedSpan_LogRecord* RecordedSpan::mutable_logs(int index) {
+inline ::cockroach::util::tracing::LogRecord* RecordedSpan::mutable_logs(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.RecordedSpan.logs)
   return logs_.Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >*
 RecordedSpan::mutable_logs() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.util.tracing.RecordedSpan.logs)
   return &logs_;
 }
-inline const ::cockroach::util::tracing::RecordedSpan_LogRecord& RecordedSpan::logs(int index) const {
+inline const ::cockroach::util::tracing::LogRecord& RecordedSpan::logs(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.util.tracing.RecordedSpan.logs)
   return logs_.Get(index);
 }
-inline ::cockroach::util::tracing::RecordedSpan_LogRecord* RecordedSpan::add_logs() {
+inline ::cockroach::util::tracing::LogRecord* RecordedSpan::add_logs() {
   // @@protoc_insertion_point(field_add:cockroach.util.tracing.RecordedSpan.logs)
   return logs_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan_LogRecord >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >&
 RecordedSpan::logs() const {
   // @@protoc_insertion_point(field_list:cockroach.util.tracing.RecordedSpan.logs)
   return logs_;
@@ -1080,9 +1279,244 @@ inline void RecordedSpan::set_allocated_stats(::google::protobuf::Any* stats) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.RecordedSpan.stats)
 }
 
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// NormalizedSpan
+
+// string operation = 1;
+inline void NormalizedSpan::clear_operation() {
+  operation_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& NormalizedSpan::operation() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.NormalizedSpan.operation)
+  return operation_.GetNoArena();
+}
+inline void NormalizedSpan::set_operation(const ::std::string& value) {
+  
+  operation_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.util.tracing.NormalizedSpan.operation)
+}
+#if LANG_CXX11
+inline void NormalizedSpan::set_operation(::std::string&& value) {
+  
+  operation_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.util.tracing.NormalizedSpan.operation)
+}
+#endif
+inline void NormalizedSpan::set_operation(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  operation_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.util.tracing.NormalizedSpan.operation)
+}
+inline void NormalizedSpan::set_operation(const char* value, size_t size) {
+  
+  operation_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.util.tracing.NormalizedSpan.operation)
+}
+inline ::std::string* NormalizedSpan::mutable_operation() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.NormalizedSpan.operation)
+  return operation_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* NormalizedSpan::release_operation() {
+  // @@protoc_insertion_point(field_release:cockroach.util.tracing.NormalizedSpan.operation)
+  
+  return operation_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void NormalizedSpan::set_allocated_operation(::std::string* operation) {
+  if (operation != NULL) {
+    
+  } else {
+    
+  }
+  operation_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), operation);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.NormalizedSpan.operation)
+}
+
+// map<string, string> tags = 2;
+inline int NormalizedSpan::tags_size() const {
+  return tags_.size();
+}
+inline void NormalizedSpan::clear_tags() {
+  tags_.Clear();
+}
+inline const ::google::protobuf::Map< ::std::string, ::std::string >&
+NormalizedSpan::tags() const {
+  // @@protoc_insertion_point(field_map:cockroach.util.tracing.NormalizedSpan.tags)
+  return tags_.GetMap();
+}
+inline ::google::protobuf::Map< ::std::string, ::std::string >*
+NormalizedSpan::mutable_tags() {
+  // @@protoc_insertion_point(field_mutable_map:cockroach.util.tracing.NormalizedSpan.tags)
+  return tags_.MutableMap();
+}
+
+inline bool NormalizedSpan::has_start_time() const {
+  return this != internal_default_instance() && start_time_ != NULL;
+}
+inline const ::google::protobuf::Timestamp& NormalizedSpan::_internal_start_time() const {
+  return *start_time_;
+}
+inline const ::google::protobuf::Timestamp& NormalizedSpan::start_time() const {
+  const ::google::protobuf::Timestamp* p = start_time_;
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.NormalizedSpan.start_time)
+  return p != NULL ? *p : *reinterpret_cast<const ::google::protobuf::Timestamp*>(
+      &::google::protobuf::_Timestamp_default_instance_);
+}
+inline ::google::protobuf::Timestamp* NormalizedSpan::release_start_time() {
+  // @@protoc_insertion_point(field_release:cockroach.util.tracing.NormalizedSpan.start_time)
+  
+  ::google::protobuf::Timestamp* temp = start_time_;
+  start_time_ = NULL;
+  return temp;
+}
+inline ::google::protobuf::Timestamp* NormalizedSpan::mutable_start_time() {
+  
+  if (start_time_ == NULL) {
+    auto* p = CreateMaybeMessage<::google::protobuf::Timestamp>(GetArenaNoVirtual());
+    start_time_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.NormalizedSpan.start_time)
+  return start_time_;
+}
+inline void NormalizedSpan::set_allocated_start_time(::google::protobuf::Timestamp* start_time) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(start_time_);
+  }
+  if (start_time) {
+    ::google::protobuf::Arena* submessage_arena =
+      reinterpret_cast<::google::protobuf::MessageLite*>(start_time)->GetArena();
+    if (message_arena != submessage_arena) {
+      start_time = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, start_time, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  start_time_ = start_time;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.NormalizedSpan.start_time)
+}
+
+inline bool NormalizedSpan::has_duration() const {
+  return this != internal_default_instance() && duration_ != NULL;
+}
+inline const ::google::protobuf::Duration& NormalizedSpan::_internal_duration() const {
+  return *duration_;
+}
+inline const ::google::protobuf::Duration& NormalizedSpan::duration() const {
+  const ::google::protobuf::Duration* p = duration_;
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.NormalizedSpan.duration)
+  return p != NULL ? *p : *reinterpret_cast<const ::google::protobuf::Duration*>(
+      &::google::protobuf::_Duration_default_instance_);
+}
+inline ::google::protobuf::Duration* NormalizedSpan::release_duration() {
+  // @@protoc_insertion_point(field_release:cockroach.util.tracing.NormalizedSpan.duration)
+  
+  ::google::protobuf::Duration* temp = duration_;
+  duration_ = NULL;
+  return temp;
+}
+inline ::google::protobuf::Duration* NormalizedSpan::mutable_duration() {
+  
+  if (duration_ == NULL) {
+    auto* p = CreateMaybeMessage<::google::protobuf::Duration>(GetArenaNoVirtual());
+    duration_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.NormalizedSpan.duration)
+  return duration_;
+}
+inline void NormalizedSpan::set_allocated_duration(::google::protobuf::Duration* duration) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(duration_);
+  }
+  if (duration) {
+    ::google::protobuf::Arena* submessage_arena =
+      reinterpret_cast<::google::protobuf::MessageLite*>(duration)->GetArena();
+    if (message_arena != submessage_arena) {
+      duration = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, duration, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  duration_ = duration;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.NormalizedSpan.duration)
+}
+
+inline int NormalizedSpan::logs_size() const {
+  return logs_.size();
+}
+inline void NormalizedSpan::clear_logs() {
+  logs_.Clear();
+}
+inline ::cockroach::util::tracing::LogRecord* NormalizedSpan::mutable_logs(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.NormalizedSpan.logs)
+  return logs_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >*
+NormalizedSpan::mutable_logs() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.util.tracing.NormalizedSpan.logs)
+  return &logs_;
+}
+inline const ::cockroach::util::tracing::LogRecord& NormalizedSpan::logs(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.NormalizedSpan.logs)
+  return logs_.Get(index);
+}
+inline ::cockroach::util::tracing::LogRecord* NormalizedSpan::add_logs() {
+  // @@protoc_insertion_point(field_add:cockroach.util.tracing.NormalizedSpan.logs)
+  return logs_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::LogRecord >&
+NormalizedSpan::logs() const {
+  // @@protoc_insertion_point(field_list:cockroach.util.tracing.NormalizedSpan.logs)
+  return logs_;
+}
+
+inline int NormalizedSpan::children_size() const {
+  return children_.size();
+}
+inline void NormalizedSpan::clear_children() {
+  children_.Clear();
+}
+inline ::cockroach::util::tracing::NormalizedSpan* NormalizedSpan::mutable_children(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.NormalizedSpan.children)
+  return children_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::NormalizedSpan >*
+NormalizedSpan::mutable_children() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.util.tracing.NormalizedSpan.children)
+  return &children_;
+}
+inline const ::cockroach::util::tracing::NormalizedSpan& NormalizedSpan::children(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.NormalizedSpan.children)
+  return children_.Get(index);
+}
+inline ::cockroach::util::tracing::NormalizedSpan* NormalizedSpan::add_children() {
+  // @@protoc_insertion_point(field_add:cockroach.util.tracing.NormalizedSpan.children)
+  return children_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::NormalizedSpan >&
+NormalizedSpan::children() const {
+  // @@protoc_insertion_point(field_list:cockroach.util.tracing.NormalizedSpan.children)
+  return children_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

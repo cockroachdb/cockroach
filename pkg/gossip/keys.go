@@ -91,6 +91,13 @@ const (
 	// client connections a node has open. This is used by other nodes in the
 	// cluster to build a map of the gossip network.
 	KeyGossipClientsPrefix = "gossip-clients"
+
+	// KeyGossipStatementDiagnosticsRequest is the gossip key for new statement
+	// diagnostics requests. The values is the id of the request that generated
+	// the notification, as a little-endian-encoded uint64.
+	// stmtDiagnosticsRequestRegistry listens for notifications and responds by
+	// polling for new requests.
+	KeyGossipStatementDiagnosticsRequest = "stmt-diag-req"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of
