@@ -585,3 +585,20 @@ CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y,
 INSERT INTO t VALUES (1, 2, 3);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (z);
 UPDATE t SET y = 3 WHERE z = 3
+
+# Regression for #45362.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT NOT NULL)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN y INT
+
+statement error pq: unimplemented: cannot perform a primary key change on t with other schema changes on t in the same transaction
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x)
+
+statement ok
+ROLLBACK
