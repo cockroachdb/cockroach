@@ -1,4 +1,4 @@
-# LogicTest: local-vec
+# LogicTest: local-vec fakedist-vec
 
 statement ok
 CREATE TABLE t (a INT, b INT, c INT PRIMARY KEY)
