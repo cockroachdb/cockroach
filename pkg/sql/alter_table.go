@@ -108,7 +108,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 	var droppedViews []string
 	tn := params.p.ResolvedName(n.n.Table)
 
-	for i, cmd := range n.n.Cmds {
+	// We use an increment based for loop here against len(n.n.Cmds)
+	// because the evaluation of some commands involves translation
+	// into new commands to evaluate. n.n.Cmds might change in each
+	// iteration, so do not take pointers into it.
+	for i := 0; i < len(n.n.Cmds); i++ {
+		cmd := n.n.Cmds[i]
 		telemetry.Inc(cmd.TelemetryCounter())
 
 		switch t := cmd.(type) {
@@ -214,8 +219,24 @@ func (n *alterTableNode) startExec(params runParams) error {
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.PrimaryKey {
-					return pgerror.Newf(pgcode.Syntax,
-						"multiple primary keys for table %q are not allowed", n.tableDesc.Name)
+					// We only support "adding" a primary key when we are using the
+					// default rowid primary index.
+					if !n.tableDesc.IsPrimaryIndexDefaultRowID() {
+						return pgerror.Newf(pgcode.Syntax,
+							"multiple primary keys for table %q are not allowed", n.tableDesc.Name)
+					}
+
+					// Translate this operation into an ALTER PRIMARY KEY command.
+					alterPK := &tree.AlterTableAlterPrimaryKey{
+						Columns:    d.Columns,
+						Sharded:    d.Sharded,
+						Interleave: d.Interleave,
+					}
+					// Insert the alterPK command to be processed after this command.
+					n.n.Cmds = append(n.n.Cmds, nil)
+					copy(n.n.Cmds[i+2:], n.n.Cmds[i+1:])
+					n.n.Cmds[i+1] = alterPK
+					continue
 				}
 				idx := sqlbase.IndexDescriptor{
 					Name:             string(d.Name),
