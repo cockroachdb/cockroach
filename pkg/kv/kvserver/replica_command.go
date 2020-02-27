@@ -1740,8 +1740,11 @@ func execChangeReplicasTxn(
 // three SSTs from them for direct ingestion: one for the replicated range-ID
 // local keys, one for the range local keys, and one for the user keys. The
 // reason it creates three separate SSTs is to prevent overlaps with the
-// memtable and existing SSTs in RocksDB. Each of the SSTs also has a range
-// deletion tombstone to delete the existing data in the range.
+// memtable and existing SSTs in RocksDB. These SST files are created lazily,
+// so in the case where the keyspace is empty, no file will be created. Each
+// of the SSTs has a range deletion tombstone written to it to delete the
+// existing data in the range, however if the keyspace is empty, then the
+// tombstone will be omitted.
 //
 // Applying the snapshot: After the recipient has received the message
 // indicating it has all the data, it hands it all to
