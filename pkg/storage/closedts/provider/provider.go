@@ -123,7 +123,9 @@ func (p *Provider) runCloser(ctx context.Context) {
 		}
 	}
 	closedts.TargetDuration.SetOnChange(&p.cfg.Settings.SV, confChanged)
-
+	// Track whether we've ever been live to avoid logging warnings about not
+	// being live during node startup.
+	var everBeenLive bool
 	var t timeutil.Timer
 	defer t.Stop()
 	for {
@@ -146,13 +148,14 @@ func (p *Provider) runCloser(ctx context.Context) {
 		next, liveAtEpoch, err := p.cfg.Clock(p.cfg.NodeID)
 		next.WallTime -= int64(targetDuration)
 		if err != nil {
-			if p.everyClockLog.ShouldLog() {
+			if everBeenLive && p.everyClockLog.ShouldLog() {
 				log.Warningf(ctx, "unable to move closed timestamp forward: %+v", err)
 			}
 			// Broadcast even if nothing new was queued, so that the subscribers
 			// loop to check their client's context.
 			p.mu.Broadcast()
 		} else {
+			everBeenLive = true
 			// Close may fail if the data being closed does not correspond to the
 			// current liveAtEpoch.
 			closed, m, ok := p.cfg.Close(next, liveAtEpoch)
