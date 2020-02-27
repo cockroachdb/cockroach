@@ -279,7 +279,6 @@ func (f *stubFactory) ConstructUpsert(
 	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
