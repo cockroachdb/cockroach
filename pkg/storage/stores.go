@@ -39,12 +39,13 @@ type Stores struct {
 	log.AmbientContext
 	clock    *hlc.Clock
 	storeMap syncutil.IntMap // map[roachpb.StoreID]*Store
-	// These two versions are usually cluster.BinaryMinimumSupportedVersion and
-	// cluster.BinaryServerVersion, respectively. They are changed in some
-	// tests.
-	minSupportedVersion roachpb.Version
-	serverVersion       roachpb.Version
-	mu                  struct {
+	// These two versions are usually
+	// clusterversion.binary{,MinimumSupported}Version, respectively. They are
+	// changed in some tests.
+	binaryVersion             roachpb.Version
+	binaryMinSupportedVersion roachpb.Version
+
+	mu struct {
 		syncutil.Mutex
 		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
 		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
@@ -57,13 +58,15 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
 func NewStores(
-	ambient log.AmbientContext, clock *hlc.Clock, minVersion, serverVersion roachpb.Version,
+	ambient log.AmbientContext,
+	clock *hlc.Clock,
+	binaryVersion, binaryMinSupportedVersion roachpb.Version,
 ) *Stores {
 	return &Stores{
-		AmbientContext:      ambient,
-		clock:               clock,
-		minSupportedVersion: minVersion,
-		serverVersion:       serverVersion,
+		AmbientContext:            ambient,
+		clock:                     clock,
+		binaryVersion:             binaryVersion,
+		binaryMinSupportedVersion: binaryMinSupportedVersion,
 	}
 }
 
@@ -295,19 +298,20 @@ func WriteClusterVersionToEngines(
 	return nil
 }
 
-// SynthesizeClusterVersionFromEngines implements the core of (*Stores).SynthesizeClusterVersion.
-//
-// Returns the cluster version that was read from the engines or, if there's no
-// bootstrapped engines, returns minSupportedVersion.
+// SynthesizeClusterVersionFromEngines returns the cluster version that was read
+// from the engines or, if there's no bootstrapped engines, returns
+// binaryMinSupportedVersion.
 //
 // Args:
-// 	minSupportedVersion: The minimum version supported by this binary. An error
+// 	binaryMinSupportedVersion: The minimum version supported by this binary. An error
 // 	  is returned if any engine has a version lower that this. This version is
 // 	  written to the engines if no store has a version in it.
-// 	serverVersion: The maximum version supported by this binary. An error is
-// 	  returned if any engine has a higher version.
+// 	binaryVersion: The version of this binary. An error is returned if
+// 	  any engine has a higher version.
 func SynthesizeClusterVersionFromEngines(
-	ctx context.Context, engines []engine.Engine, minSupportedVersion, serverVersion roachpb.Version,
+	ctx context.Context,
+	engines []engine.Engine,
+	binaryVersion, binaryMinSupportedVersion roachpb.Version,
 ) (clusterversion.ClusterVersion, error) {
 	// Find the most recent bootstrap info.
 	type originVersion struct {
@@ -315,17 +319,17 @@ func SynthesizeClusterVersionFromEngines(
 		origin string
 	}
 
-	maxPossibleVersion := roachpb.Version{Major: 999999} // sort above any real version
+	maxPossibleVersion := roachpb.Version{Major: 999999} // Sort above any real version.
 	minStoreVersion := originVersion{
 		Version: maxPossibleVersion,
 		origin:  "(no store)",
 	}
 
-	// We run this twice because only after having seen all the versions, we
-	// can decide whether the node catches a version error. However, we also
-	// want to name at least one engine that violates the version
-	// constraints, which at the latest the second loop will achieve
-	// (because then minStoreVersion don't change any more).
+	// We run this twice because it's only after having seen all the versions
+	// that we can decide whether the node catches a version error. However, we
+	// also want to name at least one engine that violates the version
+	// constraints, which at the latest the second loop will achieve (because
+	// then minStoreVersion don't change any more).
 	for _, eng := range engines {
 		var cv clusterversion.ClusterVersion
 		cv, err := ReadVersionFromEngineOrZero(ctx, eng)
@@ -336,15 +340,15 @@ func SynthesizeClusterVersionFromEngines(
 			// This is needed when a node first joins an existing cluster, in
 			// which case it won't know what version to use until the first
 			// Gossip update comes in.
-			cv.Version = minSupportedVersion
+			cv.Version = binaryMinSupportedVersion
 		}
 
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
-		if serverVersion.Less(cv.Version) {
+		if binaryVersion.Less(cv.Version) {
 			return clusterversion.ClusterVersion{}, errors.Errorf(
 				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
-				serverVersion, eng, cv.Version)
+				binaryVersion, eng, cv.Version)
 		}
 
 		// Track smallest use version encountered.
@@ -354,12 +358,11 @@ func SynthesizeClusterVersionFromEngines(
 		}
 	}
 
-	// If no use version was found, fall back to our
-	// minSupportedVersion. This is the case when a brand new node is
-	// joining an existing cluster (which may be on any older version
-	// this binary supports).
+	// If no use version was found, fall back to our binaryMinSupportedVersion. This
+	// is the case when a brand new node is joining an existing cluster (which
+	// may be on any older version this binary supports).
 	if minStoreVersion.Version == maxPossibleVersion {
-		minStoreVersion.Version = minSupportedVersion
+		minStoreVersion.Version = binaryMinSupportedVersion
 	}
 
 	cv := clusterversion.ClusterVersion{
@@ -378,11 +381,12 @@ func SynthesizeClusterVersionFromEngines(
 	// We only verify this now because as we iterate through the stores, we
 	// may not yet have picked up the final versions we're actually planning
 	// to use.
-	if minStoreVersion.Version.Less(minSupportedVersion) {
+	if minStoreVersion.Version.Less(binaryMinSupportedVersion) {
 		return clusterversion.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
 			"is too old for running version v%s (which requires data from v%s or later)",
-			minStoreVersion.origin, minStoreVersion.Version, serverVersion, minSupportedVersion)
+			minStoreVersion.origin, minStoreVersion.Version, binaryVersion, binaryMinSupportedVersion)
 	}
+
 	// Write the "actual" version back to all stores. This is almost always a
 	// no-op, but will backfill the information for 1.0.x clusters, and also
 	// smoothens out inconsistent state that can crop up during an ill-timed
@@ -406,7 +410,7 @@ func (ls *Stores) SynthesizeClusterVersion(
 		engines = append(engines, (*Store)(v).engine)
 		return true // want more
 	})
-	cv, err := SynthesizeClusterVersionFromEngines(ctx, engines, ls.minSupportedVersion, ls.serverVersion)
+	cv, err := SynthesizeClusterVersionFromEngines(ctx, engines, ls.binaryVersion, ls.binaryMinSupportedVersion)
 	if err != nil {
 		return clusterversion.ClusterVersion{}, err
 	}

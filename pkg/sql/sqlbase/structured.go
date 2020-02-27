@@ -1543,7 +1543,7 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 	//
 	// TODO(ajwerner): remove this check in 20.1.
 	var modTime hlc.Timestamp
-	if !cluster.Version.IsActive(ctx, settings, clusterversion.VersionTableDescModificationTimeFromMVCC) {
+	if !settings.Version.IsActive(ctx, clusterversion.VersionTableDescModificationTimeFromMVCC) {
 		modTime = txn.CommitTimestamp()
 	}
 	desc.ModificationTime = modTime

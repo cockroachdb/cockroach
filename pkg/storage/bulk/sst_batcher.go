@@ -181,7 +181,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
 	// in the cluster can support it. Until then, for backward compatibility,
 	// create SSTs in the leveldb format ("backup" ones).
-	if cluster.Version.IsActive(ctx, b.settings, clusterversion.VersionStart20_1) {
+	if b.settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
 		b.sstWriter = engine.MakeIngestionSSTWriter(b.sstFile)
 	} else {
 		b.sstWriter = engine.MakeBackupSSTWriter(b.sstFile)
@@ -481,7 +481,7 @@ func createSplitSSTable(
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &engine.MemFile{}
 	var w engine.SSTWriter
-	if cluster.Version.IsActive(ctx, settings, clusterversion.VersionStart20_1) {
+	if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
 		w = engine.MakeIngestionSSTWriter(sstFile)
 	} else {
 		w = engine.MakeBackupSSTWriter(sstFile)
@@ -515,7 +515,7 @@ func createSplitSSTable(
 				disallowShadowing: disallowShadowing,
 			}
 			*sstFile = engine.MemFile{}
-			if cluster.Version.IsActive(ctx, settings, clusterversion.VersionStart20_1) {
+			if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
 				w = engine.MakeIngestionSSTWriter(sstFile)
 			} else {
 				w = engine.MakeBackupSSTWriter(sstFile)

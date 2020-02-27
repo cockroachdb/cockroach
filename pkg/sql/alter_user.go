@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
@@ -68,7 +67,7 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 
 	// TODO(knz): Remove in 20.2.
 	if normalizedUsername == security.RootUser && len(hashedPassword) > 0 &&
-		!cluster.Version.IsActive(params.ctx, params.EvalContext().Settings, clusterversion.VersionRootPassword) {
+		!params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionRootPassword) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`setting a root password requires all nodes to be upgraded to %s`,
 			clusterversion.VersionByKey(clusterversion.VersionRootPassword),
