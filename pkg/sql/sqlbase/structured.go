@@ -1243,9 +1243,18 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
+		nameExists := func(name tree.Name) bool {
+			_, _, err := desc.FindColumnByName(name)
+			return err == nil
+		}
 		s := "unique_rowid()"
+		basename := "rowid"
+		name := basename
+		for try := 1; nameExists(tree.Name(name)); try++ {
+			name = fmt.Sprintf("%s#%d", basename, try)
+		}
 		col := &ColumnDescriptor{
-			Name:        "rowid",
+			Name:        name,
 			Type:        *types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -2900,7 +2909,7 @@ func (desc *TableDescriptor) IsPrimaryIndexDefaultRowID() bool {
 		// Should never be in this case.
 		panic(err)
 	}
-	return col.Hidden && col.Name == "rowid"
+	return col.Hidden
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.

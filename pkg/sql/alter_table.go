@@ -527,9 +527,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for _, idx := range indexesToRewrite {
 				// Clone the index that we want to rewrite.
 				newIndex := protoutil.Clone(idx).(*sqlbase.IndexDescriptor)
-				name := newIndex.Name + "_rewrite_for_primary_key_change"
+				basename := newIndex.Name + "_rewrite_for_primary_key_change"
+				name := basename
 				for try := 1; nameExists(name); try++ {
-					name = fmt.Sprintf("%s#%d", name, try)
+					name = fmt.Sprintf("%s#%d", basename, try)
 				}
 				newIndex.Name = name
 				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, newIndex, newPrimaryIndexDesc); err != nil {

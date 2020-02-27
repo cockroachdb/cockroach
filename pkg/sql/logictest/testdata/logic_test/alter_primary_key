@@ -585,3 +585,14 @@ CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y,
 INSERT INTO t VALUES (1, 2, 3);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (z);
 UPDATE t SET y = 3 WHERE z = 3
+
+# Ensure we don't rewrite default primary index even if its name isn't rowid.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (rowid INT NOT NULL);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (rowid)
+
+query TT
+SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
+----
+primary rowid
