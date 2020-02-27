@@ -362,7 +362,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				// Note: Preparing the KV txn for restart has already happened by this
 				// point.
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, txnRestart)
+				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
 				return nil
 			},
 		},
