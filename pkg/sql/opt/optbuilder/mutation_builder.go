@@ -138,6 +138,9 @@ type mutationBuilder struct {
 	// UPDATE ... FROM queries, as the columns from the FROM tables must be
 	// made accessible to the RETURNING clause.
 	extraAccessibleCols []scopeColumn
+
+	// fkCheckHelper is used to prevent allocating the helper separately.
+	fkCheckHelper fkCheckHelper
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
@@ -178,12 +181,6 @@ func (mb *mutationBuilder) scopeOrdToColID(ord scopeOrdinal) opt.ColumnID {
 // ordinal position in the table).
 func (mb *mutationBuilder) insertColID(tabOrd int) opt.ColumnID {
 	return mb.scopeOrdToColID(mb.insertOrds[tabOrd])
-}
-
-// fetchColID is a convenience method that returns the ID of the fetch column
-// for the given table column (specified by ordinal position in the table).
-func (mb *mutationBuilder) fetchColID(tabOrd int) opt.ColumnID {
-	return mb.scopeOrdToColID(mb.fetchOrds[tabOrd])
 }
 
 // buildInputForUpdate constructs a Select expression from the fields in
@@ -894,13 +891,9 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 	// more efficient if we did it in here (or we'd end up building the entire FK
 	// subtrees twice).
 	mb.withID = mb.b.factory.Memo().NextWithID()
-	insertCols := make(opt.ColList, len(mb.insertOrds))
-	for i := range insertCols {
-		insertCols[i] = mb.insertColID(i)
-	}
 
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
-		mb.addInsertionCheck(i, insertCols)
+		mb.addInsertionCheck(i)
 	}
 }
 
@@ -919,31 +912,20 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 	mb.withID = mb.b.factory.Memo().NextWithID()
 
 	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
-		fk := mb.tab.InboundForeignKey(i)
-
-		deleteCols := make(opt.ColList, fk.ColumnCount())
-		for j := range deleteCols {
-			deleteCols[j] = mb.fetchColID(j)
+		h := &mb.fkCheckHelper
+		if !h.initWithInboundFK(mb, i) {
+			continue
 		}
 
-		// deletedFKCols is the list of columns partaking in the FK for the deletion.
-		deletedFKCols := make(opt.ColList, fk.ColumnCount())
-		for j := 0; j < fk.ColumnCount(); j++ {
-			ord := fk.ReferencedColumnOrdinal(mb.tab, j)
-			colID := mb.fetchColID(ord)
-			if colID == 0 {
-				panic(errors.AssertionFailedf("no value for FK column %d", ord))
-			}
-			deletedFKCols[j] = colID
-		}
-
-		input, cols := mb.makeFKInputScan(deletedFKCols)
-		ok := mb.addDeletionCheck(i, input, cols, fk.DeleteReferenceAction())
-		if !ok {
+		if a := h.fk.DeleteReferenceAction(); a != tree.Restrict && a != tree.NoAction {
+			// Bail, so that exec FK checks pick up on FK checks and perform them.
 			mb.checks = nil
 			mb.fkFallback = true
 			return
 		}
+
+		fkInput, withScanCols, _ := h.makeFKInputScan(fkInputScanFetchedVals)
+		mb.addDeletionCheck(h, fkInput, withScanCols)
 	}
 }
 
@@ -967,29 +949,6 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	// new value for each updated column. From this we can construct the effective
 	// insertion and deletion.
 
-	// oldRowCols is an array mapping column ordinals in mb.tab to their
-	// corresponding ordinal in the input to the update.
-	oldRowCols := mb.fetchOrds
-
-	// newRowCols is an array mapping column ordinals in each of the effective new
-	// rows being "inserted" with their corresponding ordinal in the input to the
-	// update.
-	newRowCols := make([]scopeOrdinal, len(mb.fetchOrds))
-	newRowColIDs := make(opt.ColList, len(mb.fetchOrds))
-	// updatedOrdinals tracks which ordinals participate in the update, since we
-	// only need to emit foreign key checks for FKs which intersect the set of
-	// updated columns.
-	var updatedOrdinals util.FastIntSet
-	for i := range newRowCols {
-		if mb.updateOrds[i] != -1 {
-			newRowCols[i] = mb.updateOrds[i]
-			updatedOrdinals.Add(i)
-		} else {
-			newRowCols[i] = mb.fetchOrds[i]
-		}
-		newRowColIDs[i] = mb.outScope.cols[newRowCols[i]].id
-	}
-
 	// Say the table being updated by an update is:
 	//
 	//   x | y | z
@@ -1003,56 +962,43 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	//   --+---+---+------
 	//   1 | 3 | 5 |  10
 	//
-	// Then oldRowCols will be [0, 1, 2] (corresponding to the old row of
-	// [1 3 5]), and newRowCols will be [0, 3, 2] (corresponding to the new row of
-	// [1 10 5]).
+	// The insertion check will happen on the "new" row (x, new_y, z); the deletion
+	// check will happen on the "old" row (x, y, z).
 
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
-		fk := mb.tab.OutboundForeignKey(i)
-
-		var fkOrdinals util.FastIntSet
-		for j := 0; j < fk.ColumnCount(); j++ {
-			ord := fk.OriginColumnOrdinal(mb.tab, j)
-			fkOrdinals.Add(ord)
+		// Verify that at least one FK column is actually updated.
+		if mb.outboundFKColsUpdated(i) {
+			mb.addInsertionCheck(i)
 		}
-		if !fkOrdinals.Intersects(updatedOrdinals) {
-			continue
-		}
-
-		mb.addInsertionCheck(i, newRowColIDs)
 	}
 
 	// The "deletion" incurred by an update is the rows deleted for a given
 	// inbound FK minus the rows inserted.
 	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
-		fk := mb.tab.InboundForeignKey(i)
-
-		// Build a semi join, with the referenced FK columns on the left and the
-		// origin columns on the right.
-
-		numCols := fk.ColumnCount()
-
-		oldRowFKColOrdinals := make([]scopeOrdinal, numCols)
-		newRowFKColOrdinals := make([]scopeOrdinal, numCols)
-		var fkOrdinals util.FastIntSet
-		for j := 0; j < numCols; j++ {
-			ord := fk.ReferencedColumnOrdinal(mb.tab, j)
-			fkOrdinals.Add(ord)
-			oldRowFKColOrdinals[j] = oldRowCols[ord]
-			newRowFKColOrdinals[j] = newRowCols[ord]
+		// Verify that at least one FK column is actually updated.
+		if !mb.inboundFKColsUpdated(i) {
+			continue
 		}
-
-		if !fkOrdinals.Intersects(updatedOrdinals) {
+		h := &mb.fkCheckHelper
+		if !h.initWithInboundFK(mb, i) {
+			// The FK constraint can safely be ignored.
 			continue
 		}
 
-		oldRows, colsForOldRow := mb.projectOrdinals(oldRowFKColOrdinals)
-		newRows, colsForNewRow := mb.projectOrdinals(newRowFKColOrdinals)
+		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
+			// Bail, so that exec FK checks pick up on FK checks and perform them.
+			mb.checks = nil
+			mb.fkFallback = true
+			return
+		}
+
+		oldRows, colsForOldRow, _ := h.makeFKInputScan(fkInputScanFetchedVals)
+		newRows, colsForNewRow, _ := h.makeFKInputScan(fkInputScanNewVals)
 
 		// The rows that no longer exist are the ones that were "deleted" by virtue
 		// of being updated _from_, minus the ones that were "added" by virtue of
 		// being updated _to_. Note that this could equivalently be ExceptAll.
-		deletions := mb.b.factory.ConstructExcept(
+		deletedRows := mb.b.factory.ConstructExcept(
 			oldRows,
 			newRows,
 			&memo.SetPrivate{
@@ -1062,32 +1008,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			},
 		)
 
-		// deletedFKCols is the list of columns partaking in the FK for the deletion.
-		deletedFKCols := make(opt.ColList, fk.ColumnCount())
-		for j := 0; j < fk.ColumnCount(); j++ {
-			colID := colsForOldRow[j]
-			deletedFKCols[j] = colID
-		}
-
-		outCols := make(opt.ColList, len(deletedFKCols))
-		proj := memo.ProjectionsExpr{}
-		for j := 0; j < len(deletedFKCols); j++ {
-			c := mb.b.factory.Metadata().ColumnMeta(deletedFKCols[j])
-			outCols[j] = mb.md.AddColumn(c.Alias, c.Type)
-			proj = append(proj, mb.b.factory.ConstructProjectionsItem(
-				mb.b.factory.ConstructVariable(deletedFKCols[j]),
-				outCols[j],
-			))
-		}
-		// TODO(justin): add rules to allow this to get pushed down.
-		input := mb.b.factory.ConstructProject(deletions, proj, opt.ColSet{})
-
-		ok := mb.addDeletionCheck(i, input, outCols, fk.UpdateReferenceAction())
-		if !ok {
-			mb.checks = nil
-			mb.fkFallback = true
-			return
-		}
+		mb.addDeletionCheck(h, deletedRows, colsForOldRow)
 	}
 }
 
@@ -1104,72 +1025,16 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 }
 
 // addInsertionCheck adds a FK check for rows which are added to a table.
-// The input to the insertion check will be the input to the mutation operator.
-// insertCols is a list of the columns for the rows being inserted, indexed by
-// their ordinal position in the table.
-func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColList) {
-	fk := mb.tab.OutboundForeignKey(fkOrdinal)
-	numCols := fk.ColumnCount()
-	var notNullInputCols opt.ColSet
-	insertedFKCols := make(opt.ColList, numCols)
-	for i := 0; i < numCols; i++ {
-		ord := fk.OriginColumnOrdinal(mb.tab, i)
-		inputColID := insertCols[ord]
-		if inputColID == 0 {
-			// There shouldn't be any FK relations involving delete-only mutation
-			// columns.
-			panic(errors.AssertionFailedf("no value for FK column %d", ord))
-		}
-		insertedFKCols[i] = inputColID
+// The input to the insertion check will be produced from the input to the
+// mutation operator.
+func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int) {
+	h := &mb.fkCheckHelper
+	h.initWithOutboundFK(mb, fkOrdinal)
 
-		// If a table column is not nullable, NULLs cannot be inserted (the
-		// mutation will fail). So for the purposes of FK checks, we can treat
-		// these columns as not null.
-		if mb.outScope.expr.Relational().NotNullCols.Contains(inputColID) || !mb.tab.Column(ord).IsNullable() {
-			notNullInputCols.Add(inputColID)
-		}
-	}
+	fkInput, withScanCols, notNullWithScanCols := h.makeFKInputScan(fkInputScanNewVals)
 
-	private := memo.FKChecksItemPrivate{
-		OriginTable: mb.tabID,
-		FKOutbound:  true,
-		FKOrdinal:   fkOrdinal,
-		OpName:      mb.opName,
-	}
-
-	// Build an anti-join, with the origin FK columns on the left and the
-	// referenced columns on the right.
-	refID := fk.ReferencedTableID()
-	ref, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
-	if err != nil {
-		if isAdding {
-			// The other table is in the process of being added; ignore the FK relation.
-			return
-		}
-		panic(err)
-	}
-	refTab := ref.(cat.Table)
-
-	// We need SELECT privileges on the referenced table.
-	mb.b.checkPrivilege(opt.DepByID(refID), refTab, privilege.SELECT)
-	refOrdinals := make([]int, numCols)
-	for j := range refOrdinals {
-		refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab, j)
-	}
-	refTabMeta := mb.b.addTable(refTab.(cat.Table), tree.NewUnqualifiedTableName(refTab.Name()))
-	private.ReferencedTable = refTabMeta.MetaID
-	scanScope := mb.b.buildScan(
-		refTabMeta,
-		refOrdinals,
-		&tree.IndexFlags{IgnoreForeignKeys: true},
-		noRowLocking,
-		includeMutations,
-		mb.b.allocScope(),
-	)
-
-	left, withScanCols := mb.makeFKInputScan(insertedFKCols)
-	private.KeyCols = withScanCols
-	if notNullInputCols.Len() < numCols {
+	numCols := len(withScanCols)
+	if notNullWithScanCols.Len() < numCols {
 		// The columns we are inserting might have NULLs. These require special
 		// handling, depending on the match method:
 		//  - MATCH SIMPLE: allows any column(s) to be NULL and the row doesn't
@@ -1187,26 +1052,26 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 		// filter out any rows where all the columns are NULL (rows which have
 		// NULLs a subset of columns are let through and will generate FK errors
 		// because they will never have a match in the anti join).
-		switch m := fk.MatchMethod(); m {
+		switch m := h.fk.MatchMethod(); m {
 		case tree.MatchSimple:
 			// Filter out any rows which have a NULL; build filters of the form
 			//   (a IS NOT NULL) AND (b IS NOT NULL) ...
-			filters := make(memo.FiltersExpr, 0, numCols-notNullInputCols.Len())
-			for i := range insertedFKCols {
-				if !notNullInputCols.Contains(insertedFKCols[i]) {
+			filters := make(memo.FiltersExpr, 0, numCols-notNullWithScanCols.Len())
+			for _, col := range withScanCols {
+				if !notNullWithScanCols.Contains(col) {
 					filters = append(filters, mb.b.factory.ConstructFiltersItem(
 						mb.b.factory.ConstructIsNot(
-							mb.b.factory.ConstructVariable(withScanCols[i]),
+							mb.b.factory.ConstructVariable(col),
 							memo.NullSingleton,
 						),
 					))
 				}
 			}
-			left = mb.b.factory.ConstructSelect(left, filters)
+			fkInput = mb.b.factory.ConstructSelect(fkInput, filters)
 
 		case tree.MatchFull:
 			// Filter out any rows which have NULLs on all referencing columns.
-			if !notNullInputCols.Empty() {
+			if !notNullWithScanCols.Empty() {
 				// We statically know that some of the referencing columns can't be
 				// NULL. In this case, we don't need to filter anything (the case
 				// where all the origin columns are NULL is not possible).
@@ -1226,8 +1091,8 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 					condition = mb.b.factory.ConstructOr(condition, is)
 				}
 			}
-			left = mb.b.factory.ConstructSelect(
-				left,
+			fkInput = mb.b.factory.ConstructSelect(
+				fkInput,
 				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(condition)},
 			)
 
@@ -1235,6 +1100,11 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 			panic(errors.AssertionFailedf("match method %s not supported", m))
 		}
 	}
+
+	// Build an anti-join, with the origin FK columns on the left and the
+	// referenced columns on the right.
+
+	scanScope, refTabMeta := h.buildOtherTableScan()
 
 	// Build the join filters:
 	//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
@@ -1247,141 +1117,61 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 			),
 		)
 	}
+	antiJoin := mb.b.factory.ConstructAntiJoin(
+		fkInput, scanScope.expr, antiJoinFilters, &memo.JoinPrivate{},
+	)
 
-	mb.checks = append(mb.checks, mb.b.factory.ConstructFKChecksItem(
-		mb.b.factory.ConstructAntiJoin(
-			left, scanScope.expr, antiJoinFilters, &memo.JoinPrivate{},
-		),
-		&private,
-	))
+	check := mb.b.factory.ConstructFKChecksItem(antiJoin, &memo.FKChecksItemPrivate{
+		OriginTable:     mb.tabID,
+		ReferencedTable: refTabMeta.MetaID,
+		FKOutbound:      true,
+		FKOrdinal:       fkOrdinal,
+		KeyCols:         withScanCols,
+		OpName:          mb.opName,
+	})
+
+	mb.checks = append(mb.checks, check)
 }
 
 // addDeletionCheck adds a FK check for rows which are removed from a table.
 // deletedRows is used as the input to the deletion check, and deleteCols is a
-// list of the columns for the rows being deleted, indexed by their ordinal
-// position in the table.
-//
-// Returns false if the check to be added couldn't be added (say, because it
-// uses CASCADE) and we need to fall back to the legacy FK checks path.
+// list of the columns for the rows being deleted, containing values for the
+// referenced FK columns in the table we are mutating.
 func (mb *mutationBuilder) addDeletionCheck(
-	fkOrdinal int, deletedRows memo.RelExpr, deleteCols opt.ColList, action tree.ReferenceAction,
-) (ok bool) {
-	fk := mb.tab.InboundForeignKey(fkOrdinal)
-	private := memo.FKChecksItemPrivate{
-		ReferencedTable: mb.tabID,
-		FKOutbound:      false,
-		FKOrdinal:       fkOrdinal,
-		OpName:          mb.opName,
-	}
-
+	h *fkCheckHelper, deletedRows memo.RelExpr, deleteCols opt.ColList,
+) {
 	// Build a semi join, with the referenced FK columns on the left and the
 	// origin columns on the right.
-	origID := fk.OriginTableID()
-	orig, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, origID)
-	if err != nil {
-		if isAdding {
-			// The other table is in the process of being added; ignore the FK relation.
-			return true
-		}
-		panic(err)
-	}
-	origTab := orig.(cat.Table)
-
-	// Bail, so that exec FK checks pick up on FK checks and perform them.
-	if action != tree.Restrict && action != tree.NoAction {
-		return false
-	}
-
-	numCols := fk.ColumnCount()
-	// We need SELECT privileges on the origin table.
-	mb.b.checkPrivilege(opt.DepByID(origID), origTab, privilege.SELECT)
-	origOrdinals := make([]int, numCols)
-	for j := range origOrdinals {
-		origOrdinals[j] = fk.OriginColumnOrdinal(origTab.(cat.Table), j)
-	}
-
-	origTabMeta := mb.b.addTable(origTab, tree.NewUnqualifiedTableName(origTab.Name()))
-	private.OriginTable = origTabMeta.MetaID
-	scanScope := mb.b.buildScan(
-		origTabMeta,
-		origOrdinals,
-		&tree.IndexFlags{IgnoreForeignKeys: true},
-		noRowLocking,
-		includeMutations,
-		mb.b.allocScope(),
-	)
-
-	left, withScanCols := deletedRows, deleteCols
-	private.KeyCols = withScanCols
+	scanScope, origTabMeta := h.buildOtherTableScan()
 
 	// Note that it's impossible to orphan a row whose FK key columns contain a
 	// NULL, since by definition a NULL never refers to an actual row (in
 	// either MATCH FULL or MATCH SIMPLE).
 	// Build the join filters:
 	//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
-	semiJoinFilters := make(memo.FiltersExpr, numCols)
-	for j := 0; j < numCols; j++ {
+	semiJoinFilters := make(memo.FiltersExpr, len(deleteCols))
+	for j := range deleteCols {
 		semiJoinFilters[j] = mb.b.factory.ConstructFiltersItem(
 			mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(withScanCols[j]),
+				mb.b.factory.ConstructVariable(deleteCols[j]),
 				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
 			),
 		)
 	}
-	mb.checks = append(mb.checks, mb.b.factory.ConstructFKChecksItem(
-		mb.b.factory.ConstructSemiJoin(
-			left, scanScope.expr, semiJoinFilters, &memo.JoinPrivate{},
-		),
-		&private,
-	))
+	semiJoin := mb.b.factory.ConstructSemiJoin(
+		deletedRows, scanScope.expr, semiJoinFilters, &memo.JoinPrivate{},
+	)
 
-	return true
-}
-
-// projectOrdinals returns a WithScan that returns each row in the input to the
-// mutation operator, projecting only the column ordinals provided, mapping them
-// to new column ids. Returns the new expression along with the column ids
-// they've been mapped to.
-func (mb *mutationBuilder) projectOrdinals(
-	ords []scopeOrdinal,
-) (_ memo.RelExpr, outCols opt.ColList) {
-	outCols = make(opt.ColList, len(ords))
-	inCols := make(opt.ColList, len(ords))
-	for i := 0; i < len(ords); i++ {
-		c := mb.b.factory.Metadata().ColumnMeta(mb.outScope.cols[ords[i]].id)
-		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
-		inCols[i] = mb.outScope.cols[ords[i]].id
-	}
-	out := mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-		With:         mb.withID,
-		InCols:       inCols,
-		OutCols:      outCols,
-		BindingProps: mb.outScope.expr.Relational(),
-		ID:           mb.b.factory.Metadata().NextUniqueID(),
+	check := mb.b.factory.ConstructFKChecksItem(semiJoin, &memo.FKChecksItemPrivate{
+		OriginTable:     origTabMeta.MetaID,
+		ReferencedTable: mb.tabID,
+		FKOutbound:      false,
+		FKOrdinal:       h.fkOrdinal,
+		KeyCols:         deleteCols,
+		OpName:          mb.opName,
 	})
-	return out, outCols
-}
 
-// makeFKInputScan constructs a WithScan that iterates over the input to the
-// mutation operator in order to generate rows that must be checked for FK
-// violations.
-func (mb *mutationBuilder) makeFKInputScan(
-	inputCols opt.ColList,
-) (scan memo.RelExpr, outCols opt.ColList) {
-	// Set up a WithScan; for this we have to synthesize new columns.
-	outCols = make(opt.ColList, len(inputCols))
-	for i := 0; i < len(inputCols); i++ {
-		c := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
-		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
-	}
-	scan = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-		With:         mb.withID,
-		InCols:       inputCols,
-		OutCols:      outCols,
-		BindingProps: mb.outScope.expr.Relational(),
-		ID:           mb.b.factory.Metadata().NextUniqueID(),
-	})
-	return scan, outCols
+	mb.checks = append(mb.checks, check)
 }
 
 // getIndexLaxKeyOrdinals returns the ordinals of all lax key columns in the
@@ -1437,4 +1227,194 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
 	panic(pgerror.Newf(pgcode.DatatypeMismatch,
 		"value type %s doesn't match type %s of column %q",
 		typ, col.DatumType(), tree.ErrNameString(colName)))
+}
+
+// outboundFKColsUpdated returns true if any of the FK columns for an outbound
+// constraint are being updated (according to updateOrds).
+func (mb *mutationBuilder) outboundFKColsUpdated(fkOrdinal int) bool {
+	fk := mb.tab.OutboundForeignKey(fkOrdinal)
+	for i, n := 0, fk.ColumnCount(); i < n; i++ {
+		if ord := fk.OriginColumnOrdinal(mb.tab, i); mb.updateOrds[ord] != -1 {
+			return true
+		}
+	}
+	return false
+}
+
+// inboundFKColsUpdated returns true if any of the FK columns for an inbound
+// constraint are being updated (according to updateOrds).
+func (mb *mutationBuilder) inboundFKColsUpdated(fkOrdinal int) bool {
+	fk := mb.tab.InboundForeignKey(fkOrdinal)
+	for i, n := 0, fk.ColumnCount(); i < n; i++ {
+		if ord := fk.ReferencedColumnOrdinal(mb.tab, i); mb.updateOrds[ord] != -1 {
+			return true
+		}
+	}
+	return false
+}
+
+// fkCheckHelper is a type associated with a single FK constraint and is used to
+// build the "leaves" of a FK check expression, namely the WithScan of the
+// mutation input and the Scan of the other table.
+type fkCheckHelper struct {
+	mb *mutationBuilder
+
+	fk         cat.ForeignKeyConstraint
+	fkOrdinal  int
+	fkOutbound bool
+
+	otherTab cat.Table
+
+	// tabOrdinals are the table ordinals of the FK columns in the table that is
+	// being mutated. They correspond 1-to-1 to the columns in the
+	// ForeignKeyConstraint.
+	tabOrdinals []int
+	// otherTabOrdinals are the table ordinals of the FK columns in the "other"
+	// table. They correspond 1-to-1 to the columns in the ForeignKeyConstraint.
+	otherTabOrdinals []int
+}
+
+// initWithOutboundFK initializes the helper with an outbound FK constraint.
+func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) bool {
+	*h = fkCheckHelper{
+		mb:         mb,
+		fk:         mb.tab.OutboundForeignKey(fkOrdinal),
+		fkOrdinal:  fkOrdinal,
+		fkOutbound: true,
+	}
+
+	refID := h.fk.ReferencedTableID()
+	ref, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
+	if err != nil {
+		if isAdding {
+			// The other table is in the process of being added; ignore the FK relation.
+			return false
+		}
+		panic(err)
+	}
+	// We need SELECT privileges on the referenced table.
+	mb.b.checkPrivilege(opt.DepByID(refID), ref, privilege.SELECT)
+	h.otherTab = ref.(cat.Table)
+
+	numCols := h.fk.ColumnCount()
+	h.allocOrdinals(numCols)
+	for i := 0; i < numCols; i++ {
+		h.tabOrdinals[i] = h.fk.OriginColumnOrdinal(mb.tab, i)
+		h.otherTabOrdinals[i] = h.fk.ReferencedColumnOrdinal(h.otherTab, i)
+	}
+	return true
+}
+
+// initWithInboundFK initializes the helper with an inbound FK constraint.
+//
+// Returns false if the FK relation should be ignored (because the other table
+// is in the process of being created).
+func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (ok bool) {
+	*h = fkCheckHelper{
+		mb:         mb,
+		fk:         mb.tab.InboundForeignKey(fkOrdinal),
+		fkOrdinal:  fkOrdinal,
+		fkOutbound: false,
+	}
+
+	originID := h.fk.OriginTableID()
+	ref, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, originID)
+	if err != nil {
+		if isAdding {
+			// The other table is in the process of being added; ignore the FK relation.
+			return false
+		}
+		panic(err)
+	}
+	// We need SELECT privileges on the referenced table.
+	mb.b.checkPrivilege(opt.DepByID(originID), ref, privilege.SELECT)
+	h.otherTab = ref.(cat.Table)
+
+	numCols := h.fk.ColumnCount()
+	h.allocOrdinals(numCols)
+	for i := 0; i < numCols; i++ {
+		h.tabOrdinals[i] = h.fk.ReferencedColumnOrdinal(mb.tab, i)
+		h.otherTabOrdinals[i] = h.fk.OriginColumnOrdinal(h.otherTab, i)
+	}
+
+	return true
+}
+
+type fkInputScanType uint8
+
+const (
+	fkInputScanNewVals fkInputScanType = iota
+	fkInputScanFetchedVals
+)
+
+// makeFKInputScan constructs a WithScan that iterates over the input to the
+// mutation operator. Used in expressions that generate rows for checking for FK
+// violations.
+//
+// The WithScan expression will scan either the new values or the fetched values
+// for the given table ordinals (which correspond to FK columns).
+//
+// Returns the output columns from the WithScan, which map 1-to-1 to
+// h.tabOrdinals. Also returns the subset of these columns that can be assumed
+// to be not null (either because they are not null in the mutation input or
+// because they are non-nullable table columns).
+//
+func (h *fkCheckHelper) makeFKInputScan(
+	typ fkInputScanType,
+) (scan memo.RelExpr, outCols opt.ColList, notNullOutCols opt.ColSet) {
+	mb := h.mb
+	// inputCols are the column IDs from the mutation input that we are scanning.
+	inputCols := make(opt.ColList, len(h.tabOrdinals))
+	// outCols will store the newly synthesized output columns for WithScan.
+	outCols = make(opt.ColList, len(inputCols))
+	for i, tabOrd := range h.tabOrdinals {
+		if typ == fkInputScanNewVals {
+			inputCols[i] = mb.scopeOrdToColID(mb.mapToReturnScopeOrd(tabOrd))
+		} else {
+			inputCols[i] = mb.scopeOrdToColID(mb.fetchOrds[tabOrd])
+		}
+		if inputCols[i] == 0 {
+			panic(errors.AssertionFailedf("no value for FK column (tabOrd=%d)", tabOrd))
+		}
+
+		// Synthesize new column.
+		c := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
+		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
+
+		// If a table column is not nullable, NULLs cannot be inserted (the
+		// mutation will fail). So for the purposes of FK checks, we can treat
+		// these columns as not null.
+		if mb.outScope.expr.Relational().NotNullCols.Contains(inputCols[i]) ||
+			!mb.tab.Column(tabOrd).IsNullable() {
+			notNullOutCols.Add(outCols[i])
+		}
+	}
+
+	scan = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
+		With:         mb.withID,
+		InCols:       inputCols,
+		OutCols:      outCols,
+		BindingProps: mb.outScope.expr.Relational(),
+		ID:           mb.b.factory.Metadata().NextUniqueID(),
+	})
+	return scan, outCols, notNullOutCols
+}
+
+// buildOtherTableScan builds a Scan of the "other" table.
+func (h *fkCheckHelper) buildOtherTableScan() (outScope *scope, tabMeta *opt.TableMeta) {
+	otherTabMeta := h.mb.b.addTable(h.otherTab, tree.NewUnqualifiedTableName(h.otherTab.Name()))
+	return h.mb.b.buildScan(
+		otherTabMeta,
+		h.otherTabOrdinals,
+		&tree.IndexFlags{IgnoreForeignKeys: true},
+		noRowLocking,
+		includeMutations,
+		h.mb.b.allocScope(),
+	), otherTabMeta
+}
+
+func (h *fkCheckHelper) allocOrdinals(numCols int) {
+	buf := make([]int, numCols*2)
+	h.tabOrdinals = buf[:numCols]
+	h.otherTabOrdinals = buf[numCols:]
 }
