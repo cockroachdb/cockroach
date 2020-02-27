@@ -697,7 +697,7 @@ func doRestorePlan(
 	}
 
 	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
-		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from, encryption,
+		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from, endTime, encryption,
 	)
 	if err != nil {
 		return err
@@ -726,37 +726,6 @@ func doRestorePlan(
 	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
 	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, skipMissingFKs); err != nil {
 		return err
-	}
-
-	if !endTime.IsEmpty() {
-		ok := false
-		for _, b := range mainBackupManifests {
-			// Find the backup that covers the requested time.
-			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
-				ok = true
-				// Ensure that the backup actually has revision history.
-				if b.MVCCFilter != MVCCFilter_All {
-					return errors.Errorf(
-						"incompatible RESTORE timestamp: BACKUP for requested time needs option '%s'", backupOptRevisionHistory,
-					)
-				}
-				// Ensure that the revision history actually covers the requested time -
-				// while the BACKUP's start and end might contain the requested time for
-				// example if start time is 0 (full backup), the revision history was
-				// only captured since the GC window. Note that the RevisionStartTime is
-				// the latest for ranges backed up.
-				if endTime.LessEq(b.RevisionStartTime) {
-					return errors.Errorf(
-						"incompatible RESTORE timestamp: BACKUP for requested time only has revision history from %v", b.RevisionStartTime,
-					)
-				}
-			}
-		}
-		if !ok {
-			return errors.Errorf(
-				"incompatible RESTORE timestamp: supplied backups do not cover requested time",
-			)
-		}
 	}
 
 	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)

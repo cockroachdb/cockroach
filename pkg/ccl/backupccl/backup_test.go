@@ -2391,27 +2391,50 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 		// fullBackup covers up to ts[2], inc to ts[5], inc2 to > ts[8].
 		sqlDB.ExpectErr(
-			t, "incompatible RESTORE timestamp",
+			t, "invalid RESTORE timestamp",
 			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[3]),
 			fullBackup,
 		)
 
 		for _, i := range ts {
-			sqlDB.ExpectErr(
-				t, "incompatible RESTORE timestamp",
-				fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
-				latestBackup,
-			)
 
-			sqlDB.ExpectErr(
-				t, "incompatible RESTORE timestamp",
-				fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
-				latestBackup, incLatestBackup, inc2LatestBackup,
-			)
+			if i == ts[2] {
+				// latestBackup is _at_ ts2 so that is the time, and the only time, at
+				// which restoring it is allowed.
+				sqlDB.Exec(
+					t, fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					latestBackup,
+				)
+				sqlDB.Exec(t, `DROP DATABASE err; CREATE DATABASE err`)
+			} else {
+				sqlDB.ExpectErr(
+					t, "invalid RESTORE timestamp",
+					fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					latestBackup,
+				)
+			}
+
+			if i == ts[2] || i == ts[5] {
+				// latestBackup is _at_ ts2 and incLatestBackup is at ts5, so either of
+				// those are valid for the chain (latest,incLatest,inc2Latest). In fact
+				// there's a third time -- that of inc2Latest, that is valid as well but
+				// it isn't fixed when created above so we know it / test for it.
+				sqlDB.Exec(
+					t, fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					latestBackup, incLatestBackup, inc2LatestBackup,
+				)
+				sqlDB.Exec(t, `DROP DATABASE err; CREATE DATABASE err`)
+			} else {
+				sqlDB.ExpectErr(
+					t, "invalid RESTORE timestamp",
+					fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					latestBackup, incLatestBackup, inc2LatestBackup,
+				)
+			}
 		}
 
 		sqlDB.ExpectErr(
-			t, "incompatible RESTORE timestamp",
+			t, "invalid RESTORE timestamp",
 			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, after),
 			latestBackup,
 		)
