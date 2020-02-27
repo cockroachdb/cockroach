@@ -585,3 +585,72 @@ CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y,
 INSERT INTO t VALUES (1, 2, 3);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (z);
 UPDATE t SET y = 3 WHERE z = 3
+
+subtest add_pk_rowid
+# Tests for #45509.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY)
+
+statement error pq: multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD PRIMARY KEY (x)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT NOT NULL)
+
+statement ok
+ALTER TABLE t ADD PRIMARY KEY (x)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   FAMILY "primary" (x, rowid)
+)
+
+statement ok
+DROP TABLE IF EXISTS t1, t2 CASCADE;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (x INT NOT NULL, y INT NOT NULL, FAMILY (x, y));
+ALTER TABLE t2 ADD PRIMARY KEY (x, y) INTERLEAVE IN PARENT t1 (x)
+
+query TT
+SHOW CREATE t2
+----
+t2 CREATE TABLE t2 (
+     x INT8 NOT NULL,
+     y INT8 NOT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+     FAMILY fam_0_x_y_rowid (x, y, rowid)
+) INTERLEAVE IN PARENT t1 (x)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT NOT NULL);
+ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH BUCKET_COUNT=4
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
+   FAMILY "primary" (x, rowid, crdb_internal_x_shard_4)
+)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT NOT NULL);
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (x)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   FAMILY "primary" (x, rowid)
+)
