@@ -16,6 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -96,5 +98,63 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	_, err = os.Stat(sstSnapshotStorage.dir)
 	if !os.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", sstSnapshotStorage.dir)
+	}
+}
+
+// TestMultiSSTWriterInitSST tests that multiSSTWriter initializes each of the
+// SST files associated with the three replicated key ranges by writing a range
+// deletion tombstone that spans the entire range of each respectively.
+func TestMultiSSTWriterInitSST(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	testRangeID := roachpb.RangeID(1)
+	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
+	testLimiter := rate.NewLimiter(rate.Inf, 0)
+
+	cleanup, eng := newEngine(t)
+	defer cleanup()
+	defer eng.Close()
+
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("d"),
+		EndKey:   roachpb.RKeyMax,
+	}
+	keyRanges := rditer.MakeReplicatedKeyRanges(&desc)
+
+	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0)
+	require.NoError(t, err)
+	err = msstw.Finish(ctx)
+	require.NoError(t, err)
+
+	var actualSSTs [][]byte
+	fileNames := msstw.scratch.SSTs()
+	for _, file := range fileNames {
+		sst, err := eng.ReadFile(file)
+		require.NoError(t, err)
+		actualSSTs = append(actualSSTs, sst)
+	}
+
+	// Construct an SST file for each of the key ranges and write a rangedel
+	// tombstone that spans from Start to End.
+	var expectedSSTs [][]byte
+	for _, r := range keyRanges {
+		func() {
+			sstFile := &engine.MemFile{}
+			sst := engine.MakeIngestionSSTWriter(sstFile)
+			defer sst.Close()
+			err := sst.ClearRange(r.Start, r.End)
+			require.NoError(t, err)
+			err = sst.Finish()
+			require.NoError(t, err)
+			expectedSSTs = append(expectedSSTs, sstFile.Data())
+		}()
+	}
+
+	require.Equal(t, len(actualSSTs), len(expectedSSTs))
+	for i := range fileNames {
+		require.Equal(t, actualSSTs[i], expectedSSTs[i])
 	}
 }
