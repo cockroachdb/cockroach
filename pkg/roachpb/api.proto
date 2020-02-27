@@ -1348,11 +1348,29 @@ message ExportRequest {
   int64 target_file_size = 10;
 }
 
+// BulkOpSummary summarizes the data processed by an operation, counting the
+// total size as well as number of entries processed in each index (from which
+// row counts can be derived).
 message BulkOpSummary {
+  // DataSize is the sum of key and value lengths.
   int64 data_size = 1;
-  int64 rows = 2;
-  int64 index_entries = 3;
-  int64 system_records = 4;
+  // DeprecatedRows contained the row count when "rows" were always defined as
+  // entries in the index with ID 1, however since 20.1 and the introduction of
+  // PK changes, the low-level counters that produce BulkOpSummaries are unable
+  // to assume which index is primary and thus cannot distinguish "rows" vs
+  // "index entries". Callers wishing to get a "row count" from a BulkOpSummary
+  // should use EntryCounts instead, fetching the count for the table/index that
+  // corresponds to the PK.
+  int64 deprecated_rows = 2;
+  // DeprecatedIndexEntries contained the index entry count prior to 20.1. See
+  // the comment on DeprecatedRows for details.
+  int64 deprecated_index_entries = 3;
+
+  reserved 4;
+  // EntryCounts contains the number of keys processed for each tableID/indexID
+  // pair, stored under the key (tableID << 32) | indexID. This EntryCount key
+  // generation logic is also available in the BulkOpSummaryID helper.
+  map<uint64, int64> entry_counts = 5;
 }
 
 // ExportResponse is the response to an Export() operation.
