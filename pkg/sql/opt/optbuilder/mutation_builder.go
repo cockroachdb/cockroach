@@ -1013,15 +1013,22 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 }
 
 func (mb *mutationBuilder) buildFKChecksForUpsert() {
-	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
+	numOutbound := mb.tab.OutboundForeignKeyCount()
+	numInbound := mb.tab.InboundForeignKeyCount()
+
+	if numOutbound == 0 && numInbound == 0 {
 		return
 	}
 	if !mb.b.evalCtx.SessionData.OptimizerFKs {
 		mb.fkFallback = true
 		return
 	}
-	// TODO(justin): not implemented yet.
-	mb.fkFallback = true
+
+	mb.withID = mb.b.factory.Memo().NextWithID()
+
+	for i := 0; i < numOutbound; i++ {
+		mb.addInsertionCheck(i)
+	}
 }
 
 // addInsertionCheck adds a FK check for rows which are added to a table.
