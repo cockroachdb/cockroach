@@ -1672,8 +1672,8 @@ func findAccessInSpans(
 func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*lockState) {
 	tree.mu.Lock()
 	defer tree.mu.Unlock()
-	iter := tree.MakeIter()
 	for _, l := range locks {
+		iter := tree.MakeIter()
 		iter.FirstOverlap(l)
 		// Since the same lockState can go from non-empty to empty multiple times
 		// it is possible that multiple threads are racing to delete it and
