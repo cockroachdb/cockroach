@@ -133,6 +133,122 @@ DROP TABLE child2
 statement ok
 DROP TABLE parent2
 
+# Upsert
+# ------
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY, other INT)
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+
+statement ok
+INSERT INTO parent VALUES (1), (2)
+
+# Insert case.
+statement ok
+INSERT INTO child VALUES (1, 1) ON CONFLICT (c) DO UPDATE SET p = 2
+
+statement error foreign key
+INSERT INTO child VALUES (2, 10) ON CONFLICT (c) DO UPDATE SET p = 2
+
+# Update case.
+statement ok
+INSERT INTO child VALUES (1, 1) ON CONFLICT (c) DO UPDATE SET p = 1
+
+statement ok
+INSERT INTO child VALUES (1, 10) ON CONFLICT (c) DO UPDATE SET p = 1
+
+statement error foreign key
+INSERT INTO child VALUES (1, 10) ON CONFLICT (c) DO UPDATE SET p = 10
+
+statement ok
+TRUNCATE child
+
+statement ok
+INSERT INTO child VALUES (1, 1)
+
+# Both insert and update case.
+
+# Both insert and update are invalid.
+
+statement error foreign key
+INSERT INTO child VALUES (1, 1), (2, 3) ON CONFLICT (c) DO UPDATE SET p = 3
+
+# Insert is invalid, update is valid.
+
+statement error foreign key
+INSERT INTO child VALUES (1, 2), (2, 3) ON CONFLICT (c) DO UPDATE SET p = 1
+
+# Insert is valid, update is invalid.
+
+statement error foreign key
+INSERT INTO child VALUES (1, 2), (2, 1) ON CONFLICT (c) DO UPDATE SET p = 3
+
+# Both insert and update are valid.
+
+statement ok
+INSERT INTO child VALUES (1, 2), (2, 1) ON CONFLICT (c) DO UPDATE SET p = 2
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+# Pseudo-deletions
+
+statement ok
+CREATE TABLE parent (a INT PRIMARY KEY, b INT, UNIQUE (b))
+
+statement ok
+CREATE TABLE child (a INT PRIMARY KEY, b INT REFERENCES parent (b))
+
+statement ok
+INSERT INTO parent VALUES (1, 2)
+
+statement ok
+INSERT INTO child VALUES (10, 2)
+
+statement error pq: upsert on table "parent" violates foreign key constraint "fk_b_ref_parent" on table "child"\nDETAIL: Key \(b\)=\(2\) is still referenced from table "child"\.
+UPSERT INTO parent VALUES (1, 3)
+
+statement ok
+INSERT INTO parent VALUES (1, 3), (2, 2) ON CONFLICT (a) DO UPDATE SET b = 3
+
+query II
+SELECT * FROM child
+----
+10  2
+
+query II rowsort
+SELECT * FROM parent
+----
+1  3
+2  2
+
+# child references the second '2' column in parent. This mutation removes that
+# row via an update, and is disallowed.
+statement error pq: insert on table "parent" violates foreign key constraint "fk_b_ref_parent" on table "child"\nDETAIL: Key \(b\)=\(2\) is still referenced from table "child"\.
+INSERT INTO parent VALUES (2, 2) ON CONFLICT (a) DO UPDATE SET b = parent.b - 1
+
+# This mutation *also* removes that row, but also via an update, introduces a
+# new one, making it acceptable.
+statement ok
+INSERT INTO parent VALUES (2, 2), (1, 3) ON CONFLICT (a) DO UPDATE SET b = parent.b - 1
+
+query II rowsort
+SELECT * FROM parent
+----
+1  2
+2  1
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
 # --- Tests that follow are copied from the fk tests and adjusted as needed.
 
 statement ok

@@ -876,6 +876,15 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 
 // buildFKChecks* methods populate mb.checks with queries that check the
 // integrity of foreign key relations that involve modified rows.
+//
+// The foreign key checks are queries that run after the statement (including
+// the relevant mutation) completes; any row that is returned by these
+// FK check queries indicates a foreign key violation.
+//
+// In the case of insert, each FK check query is an anti-join with the left side
+// being a WithScan of the mutation input and the right side being the
+// referenced table.
+//
 func (mb *mutationBuilder) buildFKChecksForInsert() {
 	if mb.tab.OutboundForeignKeyCount() == 0 {
 		// No relevant FKs.
@@ -899,6 +908,15 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 
 // buildFKChecks* methods populate mb.checks with queries that check the
 // integrity of foreign key relations that involve modified rows.
+//
+// The foreign key checks are queries that run after the statement (including
+// the relevant mutation) completes; any row that is returned by these
+// FK check queries indicates a foreign key violation.
+//
+// In the case of delete, each FK check query is a semi-join with the left side
+// being a WithScan of the mutation input and the right side being the
+// referencing table.
+//
 func (mb *mutationBuilder) buildFKChecksForDelete() {
 	if mb.tab.InboundForeignKeyCount() == 0 {
 		// No relevant FKs.
@@ -931,6 +949,23 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 
 // buildFKChecks* methods populate mb.checks with queries that check the
 // integrity of foreign key relations that involve modified rows.
+//
+// The foreign key checks are queries that run after the statement (including
+// the relevant mutation) completes; any row that is returned by these
+// FK check queries indicates a foreign key violation.
+//
+// In the case of update, there are two types of FK check queries:
+//  - insertion-side checks are very similar to the checks we issue for insert;
+//    they are an anti-join with the left side being a WithScan of the "new"
+//    values for each row.
+//  - deletion-side checks are similar to the checks we issue for delete; they
+//    are a semi-join but the left side input is more complicated: it is an
+//    Except between a WithScan of the "old" values and a WithScan of the "new"
+//    values for each row (this is the set of values that are effectively
+//    removed from the table).
+//
+// Only FK relations that involve updated columns result in FK checks.
+//
 func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
 		return
@@ -992,12 +1027,15 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			return
 		}
 
+		// Construct an Except expression for the set difference between "old"
+		// FK values and "new" FK values.
+
 		oldRows, colsForOldRow, _ := h.makeFKInputScan(fkInputScanFetchedVals)
 		newRows, colsForNewRow, _ := h.makeFKInputScan(fkInputScanNewVals)
 
 		// The rows that no longer exist are the ones that were "deleted" by virtue
 		// of being updated _from_, minus the ones that were "added" by virtue of
-		// being updated _to_. Note that this could equivalently be ExceptAll.
+		// being updated _to_.
 		deletedRows := mb.b.factory.ConstructExcept(
 			oldRows,
 			newRows,
@@ -1012,6 +1050,33 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	}
 }
 
+// buildFKChecks* methods populate mb.checks with queries that check the
+// integrity of foreign key relations that involve modified rows.
+//
+// The foreign key checks are queries that run after the statement (including
+// the relevant mutation) completes; any row that is returned by these
+// FK check queries indicates a foreign key violation.
+//
+// The case of upsert is similar to update; there are two types of FK check
+// queries:
+//  - insertion-side checks are very similar to the checks we issue for insert;
+//    they are an anti-join with the left side being a WithScan of the "new"
+//    values for each row. In some cases, the "new" value can be the result of
+//    an expression of the form:
+//      CASE WHEN canary IS NULL THEN inserted-value ELSE updated-value END
+//    These expressions are already projected as part of the mutation input and
+//    are accessible through WithScan.
+//
+//  - deletion-side checks are similar to the checks we issue for delete; they
+//    are a semi-join but the left side input is more complicated: it is an
+//    Except between a WithScan of the "old" values and a WithScan of the "new"
+//    values for each row (this is the set of values that are effectively
+//    removed from the table).
+//
+// Only FK relations that involve updated columns result in deletion-side FK
+// check. The insertion-side FK checks are always needed (similar to insert)
+// because any of the rows might result in an insert rather than an update.
+//
 func (mb *mutationBuilder) buildFKChecksForUpsert() {
 	numOutbound := mb.tab.OutboundForeignKeyCount()
 	numInbound := mb.tab.InboundForeignKeyCount()
@@ -1019,6 +1084,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 	if numOutbound == 0 && numInbound == 0 {
 		return
 	}
+
 	if !mb.b.evalCtx.SessionData.OptimizerFKs {
 		mb.fkFallback = true
 		return
@@ -1028,6 +1094,50 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 
 	for i := 0; i < numOutbound; i++ {
 		mb.addInsertionCheck(i)
+	}
+
+	for i := 0; i < numInbound; i++ {
+		// Verify that at least one FK column is updated by the Upsert; columns that
+		// are not updated can get new values (through the insert path) but existing
+		// values are never removed.
+		if !mb.inboundFKColsUpdated(i) {
+			continue
+		}
+
+		h := &mb.fkCheckHelper
+		if !h.initWithInboundFK(mb, i) {
+			continue
+		}
+
+		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
+			// Bail, so that exec FK checks pick up on FK checks and perform them.
+			mb.checks = nil
+			mb.fkFallback = true
+			return
+		}
+
+		// Construct an Except expression for the set difference between "old" FK
+		// values and "new" FK values. Note that technically, to get the old rows we
+		// should be selecting only the rows that are being updated (using a
+		// "canaryCol IS NOT NULL" condition); but these rows are harmless because
+		// they have all-null fetched values and thus will never match in the semi
+		// join.
+		oldRows, colsForOldRow, _ := h.makeFKInputScan(fkInputScanFetchedVals)
+		newRows, colsForNewRow, _ := h.makeFKInputScan(fkInputScanNewVals)
+
+		// The rows that no longer exist are the ones that were "deleted" by virtue
+		// of being updated _from_, minus the ones that were "added" by virtue of
+		// being updated _to_.
+		deletedRows := mb.b.factory.ConstructExcept(
+			oldRows,
+			newRows,
+			&memo.SetPrivate{
+				LeftCols:  colsForOldRow,
+				RightCols: colsForNewRow,
+				OutCols:   colsForOldRow,
+			},
+		)
+		mb.addDeletionCheck(h, deletedRows, colsForOldRow)
 	}
 }
 
