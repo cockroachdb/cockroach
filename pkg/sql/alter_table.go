@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -438,7 +439,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// Make a new index that is suitable to be a primary index.
-			name := generateUniqueConstraintName(
+			name := util.GenerateUniqueConstraintName(
 				"new_primary_key",
 				nameExists,
 			)
@@ -592,11 +593,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for _, idx := range indexesToRewrite {
 				// Clone the index that we want to rewrite.
 				newIndex := protoutil.Clone(idx).(*sqlbase.IndexDescriptor)
-				name := newIndex.Name + "_rewrite_for_primary_key_change"
-				for try := 1; nameExists(name); try++ {
-					name = fmt.Sprintf("%s#%d", name, try)
-				}
-				newIndex.Name = name
+				basename := newIndex.Name + "_rewrite_for_primary_key_change"
+				newIndex.Name = util.GenerateUniqueConstraintName(basename, nameExists)
 				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
 					return err
 				}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1244,9 +1245,13 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
+		nameExists := func(name string) bool {
+			_, _, err := desc.FindColumnByName(tree.Name(name))
+			return err == nil
+		}
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
-			Name:        "rowid",
+			Name:        util.GenerateUniqueConstraintName("rowid", nameExists),
 			Type:        *types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -2910,7 +2915,7 @@ func (desc *TableDescriptor) IsPrimaryIndexDefaultRowID() bool {
 		// Should never be in this case.
 		panic(err)
 	}
-	return col.Hidden && col.Name == "rowid"
+	return col.Hidden
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
