@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -420,11 +421,34 @@ func backup(
 	return mu.exported, nil
 }
 
+func (b *backupResumer) releaseProtectedTimestamp(
+	ctx context.Context, txn *kv.Txn, pts protectedts.Storage,
+) error {
+	details := b.job.Details().(jobspb.BackupDetails)
+	ptsID := details.ProtectedTimestampRecord
+	// If the job doesn't have a protected timestamp then there's nothing to do.
+	if ptsID == nil {
+		return nil
+	}
+	err := pts.Release(ctx, txn, *ptsID)
+	if errors.Is(err, protectedts.ErrNotExists) {
+		// No reason to return an error which might cause problems if it doesn't
+		// seem to exist.
+		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		err = nil
+	}
+	return err
+}
+
 type backupResumer struct {
 	job                 *jobs.Job
 	settings            *cluster.Settings
 	res                 RowCount
 	makeExternalStorage cloud.ExternalStorageFactory
+
+	testingKnobs struct {
+		ignoreProtectedTimestamps bool
+	}
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -434,6 +458,19 @@ func (b *backupResumer) Resume(
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
 	b.makeExternalStorage = p.ExecCfg().DistSQLSrv.ExternalStorage
+
+	ptsID := details.ProtectedTimestampRecord
+	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
+		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
+			if errors.Is(err, protectedts.ErrNotExists) {
+				// No reason to return an error which might cause problems if it doesn't
+				// seem to exist.
+				log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+			} else {
+				return err
+			}
+		}
+	}
 
 	if len(details.BackupManifest) == 0 {
 		return errors.Newf("missing backup descriptor; cannot resume a backup from an older version")
@@ -515,6 +552,14 @@ func (b *backupResumer) Resume(
 		tree.NewDInt(tree.DInt(b.res.IndexEntries)),
 		tree.NewDInt(tree.DInt(b.res.DataSize)),
 	}
+
+	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+		}); err != nil {
+			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
+		}
+	}
 	return nil
 }
 
@@ -537,9 +582,12 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+	cfg := phs.(sql.PlanHookState).ExecCfg()
 	b.deleteCheckpoint(ctx)
-	return nil
+	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+	})
 }
 
 func (b *backupResumer) deleteCheckpoint(ctx context.Context) {
