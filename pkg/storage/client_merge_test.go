@@ -2915,8 +2915,14 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		for _, r := range keyRanges {
 			sstFile := &engine.MemFile{}
 			sst := engine.MakeIngestionSSTWriter(sstFile)
-			if err := sst.ClearRange(r.Start, r.End); err != nil {
+			span, empty, err := rditer.ConstrainToKeys(sendingEng, roachpb.Span{Key: r.Start.Key, EndKey: r.End.Key})
+			if err != nil {
 				return err
+			}
+			if !empty {
+				if err := sst.ClearRange(engine.MakeMVCCMetadataKey(span.Key), engine.MakeMVCCMetadataKey(span.EndKey)); err != nil {
+					return err
+				}
 			}
 
 			// Keep adding kv data to the SST until the the key exceeds the
@@ -2972,10 +2978,16 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKeyMax,
 		}
 		r := rditer.MakeUserKeyRange(&desc)
-		if err := engine.ClearRangeWithHeuristic(receivingEng, &sst, r.Start.Key, r.End.Key); err != nil {
+		span, empty, err := rditer.ConstrainToKeys(sendingEng, roachpb.Span{Key: r.Start.Key, EndKey: r.End.Key})
+		if err != nil {
 			return err
 		}
-		err := sst.Finish()
+		if !empty {
+			if err := engine.ClearRangeWithHeuristic(sendingEng, &sst, span.Key, span.EndKey); err != nil {
+				return err
+			}
+		}
+		err = sst.Finish()
 		if err != nil {
 			return err
 		}
@@ -2993,7 +3005,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 		}
 		if len(mismatchedSstsIdx) != 0 {
-			return errors.Errorf("SST indices %v don't match", mismatchedSstsIdx)
+			return errors.Errorf("Actual and expected SST indices %v don't match", mismatchedSstsIdx)
 		}
 		return nil
 	}

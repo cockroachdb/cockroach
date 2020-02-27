@@ -107,6 +107,9 @@ type kvBatchSnapshotStrategy struct {
 	sstChunkSize int64
 	// Only used on the receiver side.
 	scratch *SSTSnapshotStorageScratch
+	// Used to restrict the span of the rangedel done in ClearRange when
+	// receiving a snapshot.
+	reader engine.Reader
 }
 
 // multiSSTWriter is a wrapper around RocksDBSstFileWriter and
@@ -120,6 +123,9 @@ type multiSSTWriter struct {
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
+	// Used to scan for the Upper and LowerBound of ranges to restrict
+	// tombstone width.
+	reader engine.Reader
 }
 
 func newMultiSSTWriter(
@@ -127,11 +133,13 @@ func newMultiSSTWriter(
 	scratch *SSTSnapshotStorageScratch,
 	keyRanges []rditer.KeyRange,
 	sstChunkSize int64,
+	reader engine.Reader,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
 		scratch:      scratch,
 		keyRanges:    keyRanges,
 		sstChunkSize: sstChunkSize,
+		reader:       reader,
 	}
 	if err := msstw.initSST(ctx); err != nil {
 		return msstw, err
@@ -140,13 +148,21 @@ func newMultiSSTWriter(
 }
 
 func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
-	newSSTFile, err := msstw.scratch.NewFile(ctx, msstw.sstChunkSize)
+	span := roachpb.Span{Key: msstw.keyRanges[msstw.currRange].Start.Key, EndKey: msstw.keyRanges[msstw.currRange].End.Key}
+	// Check if the range contains any keys. If the range is empty, skip
+	// creating the file since this may lead to the ingestion of an empty SST
+	// file.
+	span, empty, err := rditer.ConstrainToKeys(msstw.reader, span)
 	if err != nil {
-		return errors.Wrap(err, "failed to create new sst file")
+		return errors.Wrap(err, "failed to constrain span to keys in range")
 	}
-	newSST := engine.MakeIngestionSSTWriter(newSSTFile)
-	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+	if empty {
+		return nil
+	}
+	if err := msstw.maybeCreateNewFile(ctx); err != nil {
+		return err
+	}
+	if err := msstw.currSST.ClearRange(engine.MakeMVCCMetadataKey(span.Key), engine.MakeMVCCMetadataKey(span.EndKey)); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -154,12 +170,28 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 }
 
 func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
-	err := msstw.currSST.Finish()
-	if err != nil {
-		return errors.Wrap(err, "failed to finish sst")
+	if !msstw.currSST.Closed() {
+		err := msstw.currSST.Finish()
+		if err != nil {
+			return errors.Wrap(err, "failed to finish sst")
+		}
+		msstw.currSST.Close()
 	}
 	msstw.currRange++
-	msstw.currSST.Close()
+	return nil
+}
+
+// maybeCreateNewFile creates a new file if currSST is closed. Otherwise it is
+// a no-op. maybeCreateNewFile is idempotent.
+func (msstw *multiSSTWriter) maybeCreateNewFile(ctx context.Context) error {
+	if !msstw.currSST.Closed() {
+		return nil
+	}
+	newSSTFile, err := msstw.scratch.NewFile(ctx, msstw.sstChunkSize)
+	if err != nil {
+		return errors.Wrap(err, "failed to create new sst file")
+	}
+	msstw.currSST = engine.MakeIngestionSSTWriter(newSSTFile)
 	return nil
 }
 
@@ -176,6 +208,9 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key engine.MVCCKey, value 
 	}
 	if msstw.keyRanges[msstw.currRange].Start.Key.Compare(key.Key) > 0 {
 		return crdberrors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
+	}
+	if err := msstw.maybeCreateNewFile(ctx); err != nil {
+		return errors.Wrap(err, "failed to create SST file for Put")
 	}
 	if err := msstw.currSST.Put(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
@@ -200,6 +235,7 @@ func (msstw *multiSSTWriter) Finish(ctx context.Context) error {
 	return nil
 }
 
+// Close is idempotent.
 func (msstw *multiSSTWriter) Close() {
 	msstw.currSST.Close()
 }
@@ -220,7 +256,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most three SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize, kvSS.reader)
 	if err != nil {
 		return noSnap, err
 	}
@@ -262,8 +298,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key ranges, but
-			// we must still construct SSTs with range deletion tombstones to remove
-			// the data.
+			// we must still construct SSTs with range deletion tombstones for
+			// non-empty ranges in order to remove the data.
 			if err := msstw.Finish(ctx); err != nil {
 				return noSnap, err
 			}
@@ -776,6 +812,7 @@ func (s *Store) receiveSnapshot(
 			raftCfg:      &s.cfg.RaftConfig,
 			scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
 			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
+			reader:       s.Engine(),
 		}
 		defer ss.Close(ctx)
 	default:
