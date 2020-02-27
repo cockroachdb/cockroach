@@ -10,46 +10,147 @@
 
 import React from "react";
 import { connect } from "react-redux";
+import { Link as RouterLink } from "react-router-dom";
+import moment from "moment";
 
-import { Button, Text, TextTypes, Link } from "src/components";
+import { Button, Text, TextTypes, Table, ColumnsConfig, Badge, Link } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
+import { selectStatementById } from "src/redux/statements/statementsSelectors";
+import { enqueueDiagnostics } from "src/redux/statements";
+import { trustIcon } from "src/util/trust";
 
+import DownloadIcon from "!!raw-loader!assets/download.svg";
 import "./diagnosticsView.styl";
 
 interface DiagnosticsViewOwnProps {
-  statementId?: string;
+  statementId: string;
 }
 
 type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispatchToProps;
 
-class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
+function mapDiagnosticsStatusToBadge(diagnosticsStatus: string) {
+  switch (diagnosticsStatus) {
+    case "READY":
+      return "success";
+    case "WAITING FOR QUERY":
+      return "info";
+    case "ERROR":
+      return "danger";
+    default:
+      return "info";
+  }
+}
+
+export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
+  columns: ColumnsConfig<any> = [
+    {
+      key: "activatedOn",
+      title: "Activated on",
+      sorter: true,
+      render: (_text, record) => {
+        return moment(record.activatedOn).format("LL[ at ]h:mm a");
+      },
+    },
+    {
+      key: "status",
+      title: "status",
+      sorter: true,
+      width: "60px",
+      render: (_text, record) => (
+        <Badge
+          text={record.status}
+          status={mapDiagnosticsStatusToBadge(record.status)}
+        />
+      ),
+    },
+    {
+      key: "actions",
+      title: "",
+      sorter: false,
+      width: "160px",
+      render: (_text, record) => {
+        if (record.status === "READY") {
+          return (
+            <div className="crl-statements-diagnostics-view__actions-column">
+              <Button
+                size="small"
+                type="flat"
+                iconPosition="left"
+                icon={() => (
+                  <span
+                    className="crl-statements-diagnostics-view__icon"
+                    dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                  />
+                )}
+              >
+                Download
+              </Button>
+              <div className="crl-statements-diagnostics-view__vertical-line" />
+              <Button size="small" type="flat">View trace</Button>
+            </div>
+          );
+        }
+        return null;
+      },
+    },
+  ];
 
   render() {
-    const { hasData, activate } = this.props;
+    const { hasData, statement } = this.props;
+    const diagnostics: any[] = statement.diagnostics || [];
+
+    const canRequestDiagnostics = diagnostics.every(diagnostic => diagnostic.status !== "WAITING FOR QUERY");
+
+    const dataSource = diagnostics.map((diagnostic: any, idx: number) => ({
+      key: idx,
+      activatedOn: diagnostic.initiated_at,
+      status: diagnostic.status,
+    }));
 
     if (!hasData) {
       return (
         <SummaryCard className="summary--card__empty-sate">
-          <EmptyDiagnosticsView activate={activate} />
+          <EmptyDiagnosticsView {...this.props} />
         </SummaryCard>
       );
     }
     return (
-      <SummaryCard className="">
-        <h2 className="base-heading summary--card__title">
-          Execution Latency By Phase
-        </h2>
+      <SummaryCard>
+        <div
+          className="crl-statements-diagnostics-view__title"
+        >
+          <Text
+            textType={TextTypes.Heading3}
+          >
+            Statement diagnostics
+          </Text>
+          <Button
+            disabled={!canRequestDiagnostics}
+            type="secondary"
+          >
+            Activate diagnostics
+          </Button>
+        </div>
+        <Table
+          dataSource={dataSource}
+          columns={this.columns}
+        />
+        <div className="crl-statements-diagnostics-view__footer">
+          <RouterLink to="/reports/statements/diagnostics">All statement diagnostics</RouterLink>
+        </div>
       </SummaryCard>
     );
   }
 }
 
-export type EmptyDiagnosticsViewProps = Pick<DiagnosticsViewProps, "activate">;
+export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> {
+  activateDiagnostics = () => {
+    const { statementId, activate } = this.props;
+    activate(statementId);
+  }
 
-export class EmptyDiagnosticsView extends React.Component<EmptyDiagnosticsViewProps> {
   render() {
-    const { activate } = this.props;
     return (
       <div className="crl-statements-diagnostics-view">
         <Text
@@ -73,7 +174,7 @@ export class EmptyDiagnosticsView extends React.Component<EmptyDiagnosticsViewPr
           <footer className="crl-statements-diagnostics-view__footer">
             <Button
               type="primary"
-              onClick={activate}
+              onClick={this.activateDiagnostics}
             >
               Activate
             </Button>
@@ -86,18 +187,28 @@ export class EmptyDiagnosticsView extends React.Component<EmptyDiagnosticsViewPr
 
 interface MapStateToProps {
   hasData: boolean;
+  statement: any;
 }
 
 interface MapDispatchToProps {
-  activate: () => void;
+  activate: (statementId: string) => void;
 }
 
-const mapStateToProps = (_state: AdminUIState): MapStateToProps => ({
-  hasData: false,
-});
-
-const mapDispatchToProps: MapDispatchToProps = {
-  activate: () => {},
+const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapStateToProps => {
+  const statement = selectStatementById(state, props.statementId);
+  const hasData = statement.diagnostics.length > 0;
+  return {
+    hasData,
+    statement,
+  };
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(DiagnosticsView);
+const mapDispatchToProps: MapDispatchToProps = {
+  activate: enqueueDiagnostics,
+};
+
+export default connect<
+  MapStateToProps,
+  MapDispatchToProps,
+  DiagnosticsViewOwnProps
+  >(mapStateToProps, mapDispatchToProps)(DiagnosticsView);

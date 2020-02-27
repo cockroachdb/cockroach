@@ -15,13 +15,40 @@
   flex-direction column
 
   &__title
-    margin-bottom $spacing-base
+    display flex
+    flex-direction row
+    justify-content space-between
+    margin-bottom $spacing-mid-large
+
+  &__footer
+    margin $spacing-medium 0 0 $spacing-smaller
 
   &__content
     max-width 650px
 
   &__main
     margin-bottom $spacing-medium
+
+  &__actions-column
+    display flex
+    flex-direction row
+    flex-wrap nowrap
+
+  &__vertical-line
+    width 1px
+    min-height 100%
+    border-left 1px solid $colors--neutral-3
+    margin 0 $spacing-x-small
+
+  &__icon
+    display inline-block
+    color inherit
+    font-style normal
+    line-height 0
+    text-align center
+    text-transform none
+    vertical-align -0.125em
+    margin-right $spacing-x-small
 
 .summary--card__empty-sate
   background-color $colors--white
