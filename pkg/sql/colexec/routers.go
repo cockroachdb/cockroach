@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/marusama/semaphore"
 )
 
 // routerOutput is an interface implemented by router outputs. It exists for
@@ -32,7 +33,7 @@ type routerOutput interface {
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
-	addBatch(coldata.Batch, []uint16) bool
+	addBatch(context.Context, coldata.Batch, []uint16) bool
 	// cancel tells the output to stop producing batches.
 	cancel(ctx context.Context)
 }
@@ -141,10 +142,9 @@ func newRouterOutputOp(
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) *routerOutputOp {
-	return newRouterOutputOpWithBlockedThresholdAndBatchSize(
-		unlimitedAllocator, types, unblockedEventsChan, memoryLimit, cfg, getDefaultRouterOutputBlockedThreshold(), int(coldata.BatchSize()),
-	)
+	return newRouterOutputOpWithBlockedThresholdAndBatchSize(unlimitedAllocator, types, unblockedEventsChan, memoryLimit, cfg, fdSemaphore, getDefaultRouterOutputBlockedThreshold(), int(coldata.BatchSize()))
 }
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
@@ -153,6 +153,7 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 	blockedThreshold int,
 	outputBatchSize int,
 ) *routerOutputOp {
@@ -164,7 +165,7 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	}
 	o.mu.unlimitedAllocator = unlimitedAllocator
 	o.mu.cond = sync.NewCond(&o.mu)
-	o.mu.data = newSpillingQueue(unlimitedAllocator, types, memoryLimit, cfg, outputBatchSize)
+	o.mu.data = newSpillingQueue(unlimitedAllocator, types, memoryLimit, cfg, fdSemaphore, outputBatchSize)
 
 	return o
 }
@@ -251,7 +252,9 @@ func (o *routerOutputOp) cancel(ctx context.Context) {
 //  disk as the code is written, meaning that we impact the performance of
 //  writing rows to a fast output if we have to write to disk for a single
 //  slow output.
-func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool {
+func (o *routerOutputOp) addBatch(
+	ctx context.Context, batch coldata.Batch, selection []uint16,
+) bool {
 	if len(selection) > int(batch.Length()) {
 		selection = selection[:batch.Length()]
 	}
@@ -259,7 +262,7 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 	defer o.mu.Unlock()
 	if batch.Length() == 0 {
 		if o.mu.pendingBatch != nil {
-			if err := o.mu.data.enqueue(o.mu.pendingBatch); err != nil {
+			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 		}
@@ -305,7 +308,7 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 		o.mu.pendingBatch.SetLength(newLength)
 		if o.testingKnobs.alwaysFlush || int(newLength) >= o.outputBatchSize {
 			// The capacity in o.mu.pendingBatch has been filled.
-			if err := o.mu.data.enqueue(o.mu.pendingBatch); err != nil {
+			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			o.mu.pendingBatch = nil
@@ -389,6 +392,7 @@ func NewHashRouter(
 	hashCols []uint32,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) (*HashRouter, []Operator) {
 	outputs := make([]routerOutput, len(unlimitedAllocators))
 	outputsAsOps := make([]Operator, len(unlimitedAllocators))
@@ -402,7 +406,7 @@ func NewHashRouter(
 	unblockEventsChan := make(chan struct{}, 2*len(unlimitedAllocators))
 	memoryLimitPerOutput := memoryLimit / int64(len(unlimitedAllocators))
 	for i := range unlimitedAllocators {
-		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, cfg)
+		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, cfg, fdSemaphore)
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
@@ -504,14 +508,14 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		// Done. Push an empty batch to outputs to tell them the data is done as
 		// well.
 		for _, o := range r.outputs {
-			o.addBatch(b, nil)
+			o.addBatch(ctx, b, nil)
 		}
 		return true
 	}
 
 	selections := r.tupleDistributor.distribute(ctx, b, r.types, r.hashCols)
 	for i, o := range r.outputs {
-		if o.addBatch(b, selections[i]) {
+		if o.addBatch(ctx, b, selections[i]) {
 			// This batch blocked the output.
 			r.numBlockedOutputs++
 		}

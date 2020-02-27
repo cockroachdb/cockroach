@@ -121,8 +121,9 @@ func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *exe
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
 		Cfg: &execinfra.ServerConfig{
-			Settings:    params.p.execCfg.Settings,
-			DiskMonitor: &mon.BytesMonitor{},
+			Settings:       params.p.execCfg.Settings,
+			DiskMonitor:    &mon.BytesMonitor{},
+			VecFDSemaphore: params.p.execCfg.DistSQLSrv.VecFDSemaphore,
 		},
 	}
 	return flowCtx

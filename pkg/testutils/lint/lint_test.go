@@ -1413,6 +1413,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"sql/colexec",
 			"sql/colflow",
+			"sql/colcontainer",
 			":!sql/colexec/execerror/error.go",
 			":!sql/colexec/execpb/stats.pb.go",
 			":!sql/colflow/vectorized_panic_propagation_test.go",

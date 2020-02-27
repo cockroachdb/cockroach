@@ -55,7 +55,7 @@ type ArrowBatchConverter struct {
 func NewArrowBatchConverter(typs []coltypes.T) (*ArrowBatchConverter, error) {
 	for _, t := range typs {
 		if _, supported := supportedTypes[t]; !supported {
-			return nil, errors.Errorf("unsupported type %v", t.String())
+			return nil, errors.Errorf("arrowbatchconverter unsupported type %v", t.String())
 		}
 	}
 	c := &ArrowBatchConverter{typs: typs}

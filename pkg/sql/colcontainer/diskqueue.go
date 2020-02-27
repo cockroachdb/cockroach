@@ -143,10 +143,8 @@ func (w *diskQueueWriter) numBytesBuffered() int {
 // writes the same amount of buffer space.
 // NOTE: We could reuse the memory used to buffer uncompressed writes to buffer
 // uncompressed reads, but this would only work with the limitation that all
-// writes happen before all reads.
-// TODO(asubiotto): The improvement mentioned above might be worth it once we
-//  ensure that we only use DiskQueues for the write-everything, read-everything
-//  pattern.
+// writes happen before all reads, which is not the case for the
+// colexec.HashRouter.
 type diskQueue struct {
 	// dirName is the directory in cfg.Path that holds this queue's files.
 	dirName string
@@ -194,6 +192,9 @@ type Queue interface {
 	// to. If an error is returned, the batch and boolean returned are
 	// meaningless.
 	Dequeue(coldata.Batch) (bool, error)
+	// CloseRead closes the read file descriptor. If Dequeued, the file may be
+	// reopened.
+	CloseRead() error
 	// Close closes any resources associated with the Queue.
 	Close() error
 }
@@ -268,6 +269,16 @@ func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
 	return d, d.rotateFile()
 }
 
+func (d *diskQueue) CloseRead() error {
+	if d.readFile != nil {
+		if err := d.readFile.Close(); err != nil {
+			return err
+		}
+		d.readFile = nil
+	}
+	return nil
+}
+
 func (d *diskQueue) Close() error {
 	if d.serializer != nil {
 		if err := d.writeFooterAndFlush(); err != nil {
@@ -287,14 +298,11 @@ func (d *diskQueue) Close() error {
 		}
 		d.writeFile = nil
 	}
-	if d.readFile != nil {
-		if err := d.readFile.Close(); err != nil {
-			return err
-		}
-		d.readFile = nil
-		// The readFile will be removed below in RemoveAll.
+	// The readFile will be removed below in DeleteDirAndFiles.
+	if err := d.CloseRead(); err != nil {
+		return err
 	}
-	if err := d.cfg.FS.DeleteDir(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
+	if err := d.cfg.FS.DeleteDirAndFiles(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
 		return err
 	}
 	return nil
@@ -366,6 +374,10 @@ func (d *diskQueue) writeFooterAndFlush() error {
 
 func (d *diskQueue) Enqueue(b coldata.Batch) error {
 	if b.Length() == 0 {
+		if d.done {
+			// Already done.
+			return nil
+		}
 		if err := d.writeFooterAndFlush(); err != nil {
 			return err
 		}
@@ -421,7 +433,7 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 		// writer has rotated to a new file.
 		if fileToRead.finishedWriting {
 			// Close and remove current file.
-			if err := d.readFile.Close(); err != nil {
+			if err := d.CloseRead(); err != nil {
 				return false, err
 			}
 			if err := d.cfg.FS.DeleteFile(d.files[d.readFileIdx].name); err != nil {

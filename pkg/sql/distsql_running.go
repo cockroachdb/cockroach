@@ -147,7 +147,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 
 	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
-		if !vectorizeThresholdMet && evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto {
+		if !vectorizeThresholdMet && (evalCtx.SessionData.VectorizeMode == sessiondata.Vectorize192Auto || evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto) {
 			// Vectorization is not justified for this flow because the expected
 			// amount of data is too small and the overhead of pre-allocating data
 			// structures needed for the vectorized engine is expected to dominate
@@ -168,9 +168,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 					ctx, &execinfra.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
 						Cfg: &execinfra.ServerConfig{
-							DiskMonitor: &mon.BytesMonitor{},
-							Settings:    dsp.st,
-							ClusterID:   &dsp.rpcCtx.ClusterID,
+							DiskMonitor:    &mon.BytesMonitor{},
+							Settings:       dsp.st,
+							ClusterID:      &dsp.rpcCtx.ClusterID,
+							VecFDSemaphore: dsp.distSQLSrv.VecFDSemaphore,
 						},
 						NodeID: -1,
 					}, spec.Processors, fuseOpt, recv,

@@ -19,20 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/marusama/semaphore"
 )
-
-// Partitioner is the abstraction for on-disk storage.
-type Partitioner interface {
-	// Enqueue adds the batch to the end of the partitionIdx'th partition.
-	Enqueue(partitionIdx int, batch coldata.Batch) error
-	// Dequeue removes and returns the batch from the front of the
-	// partitionIdx'th partition. If the partition is empty (either all batches
-	// from it have already been dequeued or no batches were ever enqueued), a
-	// zero-length batch is returned.
-	Dequeue(partitionIdx int, batch coldata.Batch) error
-	// Close closes the partitioner.
-	Close() error
-}
 
 // externalSorterState indicates the current state of the external sorter.
 type externalSorterState int
@@ -46,13 +34,13 @@ const (
 	// externalSorterSpillPartition indicates that the next batch we read should
 	// be added to the last partition so far. A zero-length batch in this state
 	// indicates that the end of the partition has been reached and we should
-	// transition to starting a new partition.
+	// transition to starting a new partition. If maxNumberPartitions is reached
+	// in this state, the sorter will transition to externalSorterRepeatedMerging
+	// to reduce the number of partitions.
 	externalSorterSpillPartition
-	// externalSorterRepeatedMerging indicates that we need to merge several
-	// partitions into one and spill that new partition to disk. The number of
-	// partitions that we can merge at a time is determined by
-	// maxNumberPartitions. This procedure will be repeated until only one
-	// partition is left, and we transition to externalSorterNewPartition state.
+	// externalSorterRepeatedMerging indicates that we need to merge
+	// maxNumberPartitions into one and spill that new partition to disk. When
+	// finished, the sorter will transition to externalSorterNewPartition.
 	externalSorterRepeatedMerging
 	// externalSorterFinalMerging indicates that we have fully consumed the input
 	// and can merge all of the partitions in one step. We then transition to
@@ -116,20 +104,19 @@ type externalSorter struct {
 	OneInputNode
 	NonExplainable
 
+	closed             bool
 	unlimitedAllocator *Allocator
 	memoryLimit        int64
 	state              externalSorterState
-	inputDone          bool
 	inputTypes         []coltypes.T
 	ordering           execinfrapb.Ordering
 	inMemSorter        resettableOperator
-	partitioner        Partitioner
+	partitioner        colcontainer.PartitionedQueue
 	// numPartitions is the current number of partitions.
 	numPartitions int
 	// firstPartitionIdx is the index of the first partition to merge next.
 	firstPartitionIdx   int
 	maxNumberPartitions int
-	cfg                 colcontainer.DiskQueueCfg
 
 	emitter Operator
 }
@@ -161,9 +148,8 @@ func newExternalSorter(
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
-	// TODO(yuzefovich): remove this once actual disk queues are in-place.
-	diskQueuesUnlimitedAllocator *Allocator,
 	cfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) Operator {
 	inputPartitioner := newInputPartitioningOperator(standaloneAllocator, input, memoryLimit)
 	inMemSorter, err := newSorter(
@@ -194,11 +180,10 @@ func newExternalSorter(
 		unlimitedAllocator:  unlimitedAllocator,
 		memoryLimit:         memoryLimit,
 		inMemSorter:         inMemSorter,
-		partitioner:         newDummyPartitioner(diskQueuesUnlimitedAllocator, inputTypes),
+		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, cfg, fdSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition),
 		inputTypes:          inputTypes,
 		ordering:            ordering,
 		maxNumberPartitions: maxNumberPartitions,
-		cfg:                 cfg,
 	}
 }
 
@@ -213,14 +198,15 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 		case externalSorterNewPartition:
 			b := s.input.Next(ctx)
 			if b.Length() == 0 {
-				// The input has been fully exhausted, so we transition to "merging
-				// partitions" state.
-				s.inputDone = true
-				s.state = externalSorterRepeatedMerging
+				// The input has been fully exhausted, and it is always the case that
+				// the number of partitions is less than the maximum number since
+				// externalSorterSpillPartition will check and re-merge if not.
+				// Proceed to the final merging state.
+				s.state = externalSorterFinalMerging
 				continue
 			}
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
-			if err := s.partitioner.Enqueue(newPartitionIdx, b); err != nil {
+			if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			s.state = externalSorterSpillPartition
@@ -243,43 +229,31 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.state = externalSorterNewPartition
 				continue
 			}
-			if err := s.partitioner.Enqueue(curPartitionIdx, b); err != nil {
+			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			continue
 		case externalSorterRepeatedMerging:
-			if s.numPartitions < 2 {
-				if s.inputDone {
-					s.state = externalSorterFinalMerging
-				} else {
-					s.state = externalSorterNewPartition
-				}
-				continue
-			}
-			numPartitionsToMerge := s.maxNumberPartitions
-			if numPartitionsToMerge > s.numPartitions {
-				numPartitionsToMerge = s.numPartitions
-			}
-			if numPartitionsToMerge == s.numPartitions && s.inputDone {
-				// The input has been fully consumed and we can merge all of the
-				// remaining partitions, so we transition to "final merging" state.
-				s.state = externalSorterFinalMerging
-				continue
-			}
 			// We will merge all partitions in range [s.firstPartitionIdx,
-			// s.firstPartitionIdx+numPartitionsToMerge) and will spill all the
-			// resulting batches into a new partition with the next available
-			// index.
-			merger := s.createMergerForPartitions(s.firstPartitionIdx, numPartitionsToMerge)
+			// s.firstPartitionIdx+s.numPartitions) and will spill all the resulting
+			// batches into a new partition with the next available index.
+			merger := s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
 			merger.Init()
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			for b := merger.Next(ctx); b.Length() > 0; b = merger.Next(ctx) {
-				if err := s.partitioner.Enqueue(newPartitionIdx, b); err != nil {
+				if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
 					execerror.VectorizedInternalPanic(err)
 				}
 			}
-			s.firstPartitionIdx += numPartitionsToMerge
-			s.numPartitions -= numPartitionsToMerge - 1
+			// Reclaim disk space by closing the inactive read partitions. Since the
+			// merger must have exhausted all inputs, this is all the partitions just
+			// read from.
+			if err := s.partitioner.CloseInactiveReadPartitions(); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
+			s.firstPartitionIdx += s.numPartitions
+			s.numPartitions = 1
+			s.state = externalSorterNewPartition
 			continue
 		case externalSorterFinalMerging:
 			if s.numPartitions == 0 {
@@ -303,7 +277,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return b
 		case externalSorterFinished:
-			if err := s.partitioner.Close(); err != nil {
+			if err := s.Close(); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -311,6 +285,14 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected externalSorterState %d", s.state))
 		}
 	}
+}
+
+func (s *externalSorter) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.partitioner.Close()
 }
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
@@ -371,7 +353,10 @@ func (o *inputPartitioningOperator) reset() {
 }
 
 func newPartitionerToOperator(
-	allocator *Allocator, types []coltypes.T, partitioner Partitioner, partitionIdx int,
+	allocator *Allocator,
+	types []coltypes.T,
+	partitioner colcontainer.PartitionedQueue,
+	partitionIdx int,
 ) *partitionerToOperator {
 	return &partitionerToOperator{
 		partitioner:  partitioner,
@@ -384,12 +369,12 @@ func newPartitionerToOperator(
 
 // partitionerToOperator is an Operator that Dequeue's from the corresponding
 // partition on every call to Next. It is a converter from filled in
-// Partitioner to Operator.
+// PartitionedQueue to Operator.
 type partitionerToOperator struct {
 	ZeroInputNode
 	NonExplainable
 
-	partitioner  Partitioner
+	partitioner  colcontainer.PartitionedQueue
 	partitionIdx int
 	batch        coldata.Batch
 }
@@ -398,116 +383,9 @@ var _ Operator = &partitionerToOperator{}
 
 func (p *partitionerToOperator) Init() {}
 
-func (p *partitionerToOperator) Next(context.Context) coldata.Batch {
-	if err := p.partitioner.Dequeue(p.partitionIdx, p.batch); err != nil {
+func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
+	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	return p.batch
-}
-
-func newDummyPartitioner(allocator *Allocator, types []coltypes.T) Partitioner {
-	return &dummyPartitioner{allocator: allocator, types: types}
-}
-
-// dummyPartitioner is a simple implementation of Partitioner interface that
-// uses dummy in-memory queues.
-type dummyPartitioner struct {
-	allocator  *Allocator
-	types      []coltypes.T
-	partitions []*dummyQueue
-}
-
-var _ Partitioner = &dummyPartitioner{}
-
-func (d *dummyPartitioner) Enqueue(partitionIdx int, batch coldata.Batch) error {
-	if len(d.partitions) <= partitionIdx {
-		d.partitions = append(d.partitions, make([]*dummyQueue, partitionIdx-len(d.partitions)+1)...)
-	}
-	if d.partitions[partitionIdx] == nil {
-		d.partitions[partitionIdx] = newDummyQueue(d.allocator, d.types)
-	}
-	return d.partitions[partitionIdx].Enqueue(batch)
-}
-
-func (d *dummyPartitioner) Dequeue(partitionIdx int, batch coldata.Batch) error {
-	var partition *dummyQueue
-	if partitionIdx < len(d.partitions) {
-		partition = d.partitions[partitionIdx]
-	}
-	if partition == nil {
-		batch.SetLength(0)
-		return nil
-	}
-	return partition.Dequeue(batch)
-}
-
-func (d *dummyPartitioner) Close() error {
-	for _, partition := range d.partitions {
-		if err := partition.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func newDummyQueue(allocator *Allocator, types []coltypes.T) *dummyQueue {
-	return &dummyQueue{allocator: allocator, types: types}
-}
-
-// dummyQueue is an in-memory queue that simply copies the passed in batches.
-type dummyQueue struct {
-	allocator *Allocator
-	queue     []coldata.Batch
-	types     []coltypes.T
-}
-
-func (d *dummyQueue) Enqueue(batch coldata.Batch) error {
-	if batch.Length() == 0 {
-		return nil
-	}
-	batchCopy := d.allocator.NewMemBatchWithSize(d.types, int(batch.Length()))
-	d.allocator.PerformOperation(batchCopy.ColVecs(), func() {
-		for i, vec := range batchCopy.ColVecs() {
-			vec.Append(
-				coldata.SliceArgs{
-					ColType:     d.types[i],
-					Src:         batch.ColVec(i),
-					Sel:         batch.Selection(),
-					DestIdx:     0,
-					SrcStartIdx: 0,
-					SrcEndIdx:   uint64(batch.Length()),
-				})
-		}
-	})
-	batchCopy.SetLength(batch.Length())
-	d.queue = append(d.queue, batchCopy)
-	return nil
-}
-
-func (d *dummyQueue) Dequeue(batch coldata.Batch) error {
-	if len(d.queue) == 0 {
-		batch.SetLength(0)
-		return nil
-	}
-	batch.ResetInternalBatch()
-	batchToCopy := d.queue[0]
-	d.queue = d.queue[1:]
-	d.allocator.PerformOperation(batch.ColVecs(), func() {
-		for i, colVecToCopy := range batchToCopy.ColVecs() {
-			batch.ColVec(i).Append(coldata.SliceArgs{
-				ColType:     d.types[i],
-				Src:         colVecToCopy,
-				Sel:         batchToCopy.Selection(),
-				DestIdx:     0,
-				SrcStartIdx: 0,
-				SrcEndIdx:   uint64(batchToCopy.Length()),
-			})
-		}
-	})
-	batch.SetLength(batchToCopy.Length())
-	return nil
-}
-
-func (d *dummyQueue) Close() error {
-	return nil
 }

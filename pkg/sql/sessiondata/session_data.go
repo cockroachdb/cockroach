@@ -257,27 +257,40 @@ func DistSQLExecModeFromString(val string) (_ DistSQLExecMode, ok bool) {
 
 // VectorizeExecMode controls if an when the Executor executes queries using the
 // columnar execution engine.
+// WARNING: When adding a VectorizeExecMode, note that nodes at previous
+// versions might interpret the integer value differently. To avoid this, only
+// append to the list or bump the minimum required distsql version (maybe also
+// take advantage of that to reorder the list as you see fit).
 type VectorizeExecMode int64
 
 const (
 	// VectorizeOff means that columnar execution is disabled.
 	VectorizeOff VectorizeExecMode = iota
-	// VectorizeAuto means that that any supported queries that use only
+	// Vectorize192Auto means that that any supported queries that use only
 	// streaming operators (i.e. those that do not require any buffering) will be
 	// run using the columnar execution.
-	VectorizeAuto
+	// TODO(asubiotto): This was the auto setting for 19.2 and is kept around as
+	//  an escape hatch. Remove in 20.2.
+	Vectorize192Auto
 	// VectorizeExperimentalOn means that any supported queries will be run using
 	// the columnar execution on.
 	VectorizeExperimentalOn
 	// VectorizeExperimentalAlways means that we attempt to vectorize all
 	// queries; unsupported queries will fail. Mostly used for testing.
 	VectorizeExperimentalAlways
+	// VectorizeAuto means that any supported queries that use only streaming
+	// operators or buffering operators that can spill to disk or are marked as
+	// buffering an amount not proportional to the input size will be run using
+	// columnar execution.
+	VectorizeAuto
 )
 
 func (m VectorizeExecMode) String() string {
 	switch m {
 	case VectorizeOff:
 		return "off"
+	case Vectorize192Auto:
+		return "192auto"
 	case VectorizeAuto:
 		return "auto"
 	case VectorizeExperimentalOn:
@@ -296,6 +309,8 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	switch strings.ToUpper(val) {
 	case "OFF":
 		m = VectorizeOff
+	case "192AUTO":
+		m = Vectorize192Auto
 	case "AUTO":
 		m = VectorizeAuto
 	case "EXPERIMENTAL_ON":

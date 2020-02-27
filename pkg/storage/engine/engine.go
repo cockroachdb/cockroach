@@ -417,10 +417,6 @@ type Engine interface {
 	ReadFile(filename string) ([]byte, error)
 	// WriteFile writes data to a file in this RocksDB's env.
 	WriteFile(filename string, data []byte) error
-	// DeleteDirAndFiles deletes the directory and any files it contains but
-	// not subdirectories from this RocksDB's env. If dir does not exist,
-	// DeleteDirAndFiles returns nil (no error).
-	DeleteDirAndFiles(dir string) error
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.

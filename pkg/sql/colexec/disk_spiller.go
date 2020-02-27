@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -224,6 +225,13 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 		execerror.VectorizedInternalPanic(err)
 	}
 	return batch
+}
+
+func (d *diskSpillerBase) Close() error {
+	if c, ok := d.diskBackedOp.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 func (d *diskSpillerBase) ChildCount(verbose bool) int {

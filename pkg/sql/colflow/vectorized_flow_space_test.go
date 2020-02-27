@@ -221,6 +221,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
+					FDSemaphore:         colexec.NewTestingSemaphore(256),
 				}
 				// The disk spilling infrastructure relies on different memory
 				// accounts, so if the spilling is supported, we do *not* want to use

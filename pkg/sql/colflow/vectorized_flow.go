@@ -33,20 +33,62 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/marusama/semaphore"
 	opentracing "github.com/opentracing/opentracing-go"
 )
+
+// countingSemaphore is a semaphore that keeps track of the semaphore count from
+// its perspective.
+type countingSemaphore struct {
+	semaphore.Semaphore
+	globalCount *metric.Gauge
+	count       int64
+}
+
+func (s *countingSemaphore) Acquire(ctx context.Context, n int) error {
+	if err := s.Semaphore.Acquire(ctx, n); err != nil {
+		return err
+	}
+	atomic.AddInt64(&s.count, int64(n))
+	s.globalCount.Inc(int64(n))
+	return nil
+}
+
+func (s *countingSemaphore) TryAcquire(n int) bool {
+	success := s.Semaphore.TryAcquire(n)
+	if !success {
+		return false
+	}
+	atomic.AddInt64(&s.count, int64(n))
+	s.globalCount.Inc(int64(n))
+	return success
+}
+
+func (s *countingSemaphore) Release(n int) int {
+	atomic.AddInt64(&s.count, int64(-n))
+	s.globalCount.Dec(int64(n))
+	return s.Semaphore.Release(n)
+}
 
 type vectorizedFlow struct {
 	*flowinfra.FlowBase
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
+
+	// countingSemaphore is a wrapper over a semaphore.Semaphore that keeps track
+	// of the number of resources held in a semaphore.Semaphore requested from the
+	// context of this flow so that these can be released unconditionally upon
+	// Cleanup.
+	countingSemaphore *countingSemaphore
 
 	// streamingMemAccounts are the memory accounts that are tracking the static
 	// memory usage of the whole vectorized flow as well as all dynamic memory of
@@ -123,6 +165,7 @@ func (f *vectorizedFlow) Setup(
 				// The temporary storage directory has already been created.
 				return
 			}
+			log.VEventf(ctx, 2, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
 			if err := f.Cfg.TempFS.CreateDir(f.tempStorage.path); err != nil {
 				execerror.VectorizedInternalPanic(errors.Errorf("unable to create temporary storage directory: %v", err))
 			}
@@ -131,6 +174,7 @@ func (f *vectorizedFlow) Setup(
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
 	}
+	f.countingSemaphore = &countingSemaphore{Semaphore: f.Cfg.VecFDSemaphore, globalCount: f.Cfg.Metrics.VecOpenFDs}
 	creator := newVectorizedFlowCreator(
 		helper,
 		vectorizedRemoteComponentCreator{},
@@ -140,6 +184,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
 		diskQueueCfg,
+		f.countingSemaphore,
 	)
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(creator)
@@ -185,6 +230,41 @@ func (f *vectorizedFlow) Release() {
 	vectorizedFlowPool.Put(f)
 }
 
+// tryRemoveAll tries to remove all directories and files contained in root as
+// well as root.
+// Used as a temporary solution to forcefully remove the flow's temporary
+// storage directory until #45098 is resolved.
+// TODO(asubiotto): Remove once #45098 is resolved.
+func (f *vectorizedFlow) tryRemoveAll(root string) error {
+	// Unfortunately there is no way to Stat using TempFS, so simply try all
+	// alternatives.
+	if f.Cfg.TempFS.DeleteFile(root) != nil {
+		// If there was an error, it might be a directory.
+		if f.Cfg.TempFS.DeleteDir(root) != nil {
+			// DeleteDir failed, this is probably due to children.
+			children, err := f.Cfg.TempFS.ListDir(root)
+			if err != nil {
+				// This would be a weird error, so return it.
+				return err
+			}
+			for _, child := range children {
+				if child == "." || child == ".." {
+					continue
+				}
+				// ListDir returns relative paths, so join with parent dir.
+				if err := f.tryRemoveAll(filepath.Join(root, child)); err != nil {
+					return err
+				}
+			}
+			// Now that children are cleaned up, delete the directory.
+			if err := f.Cfg.TempFS.DeleteDir(root); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory monitoring of the vectorized flow.
@@ -198,7 +278,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 		memMonitor.Stop(ctx)
 	}
 	if atomic.LoadInt32(&f.tempStorage.created) == 1 {
-		if err := f.Cfg.TempFS.DeleteDir(f.tempStorage.path); err != nil {
+		if err := f.tryRemoveAll(f.tempStorage.path); err != nil {
 			// Log error as a Warning but keep on going to close the memory
 			// infrastructure.
 			log.Warningf(
@@ -209,6 +289,10 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 				err,
 			)
 		}
+	}
+	// Release any leftover temporary storage file descriptors from this flow.
+	if unreleased := atomic.LoadInt64(&f.countingSemaphore.count); unreleased > 0 {
+		f.countingSemaphore.Release(int(unreleased))
 	}
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
@@ -365,6 +449,7 @@ type vectorizedFlowCreator struct {
 	bufferingMemAccounts []*mon.BoundAccount
 
 	diskQueueCfg colcontainer.DiskQueueCfg
+	fdSemaphore  semaphore.Semaphore
 }
 
 func newVectorizedFlowCreator(
@@ -376,6 +461,7 @@ func newVectorizedFlowCreator(
 	nodeDialer *nodedialer.Dialer,
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
+	fdSemaphore semaphore.Semaphore,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -389,6 +475,7 @@ func newVectorizedFlowCreator(
 		nodeDialer:                     nodeDialer,
 		flowID:                         flowID,
 		diskQueueCfg:                   diskQueueCfg,
+		fdSemaphore:                    fdSemaphore,
 	}
 }
 
@@ -495,7 +582,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
-	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg)
+	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		logtags.AddTag(ctx, "hashRouterID", mmName)
 		router.Run(ctx)
@@ -811,6 +898,8 @@ func (s *vectorizedFlowCreator) setupFlow(
 			Inputs:               inputs,
 			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
 			ProcessorConstructor: rowexec.NewProcessor,
+			DiskQueueCfg:         s.diskQueueCfg,
+			FDSemaphore:          s.fdSemaphore,
 		}
 		result, err := colexec.NewColOperator(ctx, flowCtx, args)
 		// Even when err is non-nil, it is possible that the buffering memory
@@ -824,9 +913,13 @@ func (s *vectorizedFlowCreator) setupFlow(
 		if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
 			result.Op = colexec.NewInvariantsChecker(result.Op, len(result.ColumnTypes))
 		}
-		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize192Auto &&
 			!result.IsStreaming {
-			return nil, errors.Errorf("non-streaming operator encountered when vectorize=auto")
+			return nil, errors.Errorf("non-streaming operator encountered when vectorize=192auto")
+		}
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+			(!result.IsStreaming && !result.CanRunInAutoMode) {
+			return nil, errors.Errorf("non-streaming operator encountered that is not marked as green for vectorize=auto")
 		}
 		// We created a streaming memory account when calling NewColOperator above,
 		// so there is definitely at least one memory account, and it doesn't
@@ -847,11 +940,14 @@ func (s *vectorizedFlowCreator) setupFlow(
 			op = vsc
 		}
 
-		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+		if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize192Auto ||
+			flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto) &&
 			pspec.Output[0].Type == execinfrapb.OutputRouterSpec_BY_HASH {
-			// exec.HashRouter can do unlimited buffering, and it is present in the
-			// flow, so we don't want to run such a flow via the vectorized engine
-			// when vectorize=auto.
+			// colexec.HashRouter is not supported when vectorize=192auto since it can
+			// buffer an unlimited number of tuples, even though it falls back to
+			// disk. vectorize=auto does support this.
+			// TODO(asubiotto): Currently unsupported with vectorize=auto as well,
+			//  will be enabled in a future PR.
 			return nil, errors.Errorf("hash router encountered when vectorize=auto")
 		}
 		opOutputTypes, err := typeconv.FromColumnTypes(result.ColumnTypes)
@@ -1047,10 +1143,7 @@ func SupportsVectorized(
 	if output == nil {
 		output = &execinfra.RowChannel{}
 	}
-	creator := newVectorizedFlowCreator(
-		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
-		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-	)
+	creator := newVectorizedFlowCreator(newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 )
 
 func checkNumIn(inputs []Operator, numIn int) error {
@@ -95,6 +96,7 @@ type NewColOperatorArgs struct {
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	DiskQueueCfg         colcontainer.DiskQueueCfg
+	FDSemaphore          semaphore.Semaphore
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
@@ -119,11 +121,17 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op                     Operator
-	ColumnTypes            []types.T
-	InternalMemUsage       int
-	MetadataSources        []execinfrapb.MetadataSource
-	IsStreaming            bool
+	Op               Operator
+	ColumnTypes      []types.T
+	InternalMemUsage int
+	MetadataSources  []execinfrapb.MetadataSource
+	IsStreaming      bool
+	// CanRunInAutoMode returns whether the result can be run in auto mode if
+	// IsStreaming is false. This applies to operators that can spill to disk, but
+	// also operators such as the hash aggregator that buffer, but not
+	// proportionally to the input size (in the hash aggregator's case, it is the
+	// number of distinct groups).
+	CanRunInAutoMode       bool
 	BufferingOpMemMonitors []*mon.BytesMonitor
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
@@ -196,6 +204,15 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.Sorter != nil:
+		inputTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if err != nil {
+			return false, err
+		}
+		for _, t := range inputTypes {
+			if t == coltypes.Interval {
+				return false, errors.WithIssueLink(errors.Errorf("sort on interval type not supported"), errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
+			}
+		}
 		return true, nil
 
 	case core.Windower != nil:
@@ -444,7 +461,13 @@ func NewColOperator(
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					hashAggregatorMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator")
+					// Create an unlimited mem account explicitly even though there is no
+					// disk spilling because the memory usage of an aggregator is
+					// proportional to the number of groups, not the number of inputs.
+					// The row execution engine also gives an unlimited amount (that still
+					// needs to be approved by the upstream monitor, so not really
+					// "unlimited") amount of memory to the aggregator.
+					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
 				}
 				result.Op, err = NewHashAggregator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
@@ -556,7 +579,7 @@ func NewColOperator(
 					inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
 					hashJoinerMemMonitorName,
 					func(inputOne, inputTwo Operator) Operator {
-						monitorNamePrefix := "external-hash-joiner-"
+						monitorNamePrefix := "external-hash-joiner"
 						allocator := NewAllocator(
 							// Pass in the default limit explicitly since we don't want to
 							// use the default memory limit of 1 if ForceDiskSpill is true, to
@@ -565,15 +588,7 @@ func NewColOperator(
 							ctx, result.createBufferingMemAccountWithLimit(
 								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							))
-						diskQueuesUnlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"disk-queues",
-							))
-						return newExternalHashJoiner(
-							allocator, hjSpec,
-							inputOne, inputTwo,
-							diskQueuesUnlimitedAllocator,
-						)
+						return newExternalHashJoiner(allocator, hjSpec, inputOne, inputTwo, args.DiskQueueCfg, args.FDSemaphore)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
@@ -651,8 +666,13 @@ func NewColOperator(
 
 			mergeJoinerMemAccount := streamingMemAccount
 			if !result.IsStreaming && !useStreamingMemAccountForBuffering {
-				// Whether the merge joiner is streaming is already set above.
-				mergeJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner")
+				// If the merge joiner is buffering, create an unlimited buffering
+				// account for now.
+				// TODO(asubiotto): Once we support spilling to disk in the merge
+				//  joiner, make this a limited account. Done this way so that we can
+				//  still run plans that include a merge join with a low memory limit
+				//  to test disk spilling of other components for the time being.
+				mergeJoinerMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "merge-joiner")
 			}
 			result.Op, err = NewMergeJoinOp(
 				NewAllocator(ctx, mergeJoinerMemAccount),
@@ -698,6 +718,11 @@ func NewColOperator(
 			inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
+			}
+			for _, t := range inputTypes {
+				if t == coltypes.Interval {
+					execerror.VectorizedInternalPanic("attempted to create a sort on interval type after isSupported check")
+				}
 			}
 			orderingCols := core.Sorter.OutputOrdering.Columns
 			matchLen := core.Sorter.OrderingMatchLen
@@ -777,24 +802,24 @@ func NewColOperator(
 							ctx, result.createStandaloneMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
-						diskQueuesUnlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix+"-disk-queues",
-							))
 						return newExternalSorter(
 							unlimitedAllocator,
 							standaloneAllocator,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							args.TestingKnobs.MaxNumberPartitions,
-							diskQueuesUnlimitedAllocator,
 							args.DiskQueueCfg,
+							args.FDSemaphore,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 			}
 			result.ColumnTypes = spec.Input[0].ColumnTypes
+			// A sorter can run in auto mode because it falls back to disk if there
+			// is not enough memory available.
+			// TODO(asubiotto): Currently disabled
+			// result.CanRunInAutoMode = true
 
 		case core.Windower != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
