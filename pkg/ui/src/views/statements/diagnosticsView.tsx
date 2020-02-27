@@ -10,14 +10,20 @@
 
 import React from "react";
 import { connect } from "react-redux";
+import { Link as RouterLink } from "react-router-dom";
+import moment from "moment";
 
-import { Button, Text, TextTypes, Anchor } from "src/components";
+import { Button, Text, TextTypes, Table, ColumnsConfig, Badge, Anchor } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
-
-import "./diagnosticsView.styl";
+import {
+  selectStatementByFingerprint,
+  selectDiagnosticsReportsCountByStatementFingerprint,
+} from "src/redux/statements/statementsSelectors";
 import { requestStatementDiagnosticsReport } from "src/redux/statements";
-import { selectDiagnosticsReportsCountByStatementFingerprint } from "src/redux/statements/statementsSelectors";
+import { trustIcon } from "src/util/trust";
+import DownloadIcon from "!!raw-loader!assets/download.svg";
+import "./diagnosticsView.styl";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -25,10 +31,84 @@ interface DiagnosticsViewOwnProps {
 
 type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispatchToProps;
 
-class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
+function mapDiagnosticsStatusToBadge(diagnosticsStatus: string) {
+  switch (diagnosticsStatus) {
+    case "READY":
+      return "success";
+    case "WAITING FOR QUERY":
+      return "info";
+    case "ERROR":
+      return "danger";
+    default:
+      return "info";
+  }
+}
+
+export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
+  columns: ColumnsConfig<any> = [
+    {
+      key: "activatedOn",
+      title: "Activated on",
+      sorter: true,
+      render: (_text, record) => {
+        return moment(record.activatedOn).format("LL[ at ]h:mm a");
+      },
+    },
+    {
+      key: "status",
+      title: "status",
+      sorter: true,
+      width: "60px",
+      render: (_text, record) => (
+        <Badge
+          text={record.status}
+          status={mapDiagnosticsStatusToBadge(record.status)}
+        />
+      ),
+    },
+    {
+      key: "actions",
+      title: "",
+      sorter: false,
+      width: "160px",
+      render: (_text, record) => {
+        if (record.status === "READY") {
+          return (
+            <div className="crl-statements-diagnostics-view__actions-column">
+              <Button
+                size="small"
+                type="flat"
+                iconPosition="left"
+                icon={() => (
+                  <span
+                    className="crl-statements-diagnostics-view__icon"
+                    dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                  />
+                )}
+              >
+                Download
+              </Button>
+              <div className="crl-statements-diagnostics-view__vertical-line" />
+              <Button size="small" type="flat">View trace</Button>
+            </div>
+          );
+        }
+        return null;
+      },
+    },
+  ];
 
   render() {
-    const { hasData } = this.props;
+    const { hasData, statement } = this.props;
+    const diagnostics: any[] = statement.diagnostics || [];
+
+    const canRequestDiagnostics = diagnostics.every(diagnostic => diagnostic.status !== "WAITING FOR QUERY");
+
+    const dataSource = diagnostics.map((diagnostic: any, idx: number) => ({
+      key: idx,
+      activatedOn: diagnostic.initiated_at,
+      status: diagnostic.status,
+    }));
 
     if (!hasData) {
       return (
@@ -38,10 +118,29 @@ class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
       );
     }
     return (
-      <SummaryCard className="">
-        <h2 className="base-heading summary--card__title">
-          Execution Latency By Phase
-        </h2>
+      <SummaryCard>
+        <div
+          className="crl-statements-diagnostics-view__title"
+        >
+          <Text
+            textType={TextTypes.Heading3}
+          >
+            Statement diagnostics
+          </Text>
+          <Button
+            disabled={!canRequestDiagnostics}
+            type="secondary"
+          >
+            Activate diagnostics
+          </Button>
+        </div>
+        <Table
+          dataSource={dataSource}
+          columns={this.columns}
+        />
+        <div className="crl-statements-diagnostics-view__footer">
+          <RouterLink to="/reports/statements/diagnostics">All statement diagnostics</RouterLink>
+        </div>
       </SummaryCard>
     );
   }
@@ -91,15 +190,22 @@ export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> 
 
 interface MapStateToProps {
   hasData: boolean;
+  statement: any;
 }
 
 interface MapDispatchToProps {
   activate: (statementFingerprint: string) => void;
 }
 
-const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapStateToProps => ({
-  hasData: selectDiagnosticsReportsCountByStatementFingerprint(state, props.statementFingerprint) > 0,
-});
+const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapStateToProps => {
+  const { statementFingerprint } = props;
+  const statement = selectStatementByFingerprint(state, statementFingerprint);
+  const hasData = selectDiagnosticsReportsCountByStatementFingerprint(state, statementFingerprint) > 0;
+  return {
+    hasData,
+    statement,
+  };
+};
 
 const mapDispatchToProps: MapDispatchToProps = {
   activate: requestStatementDiagnosticsReport,
