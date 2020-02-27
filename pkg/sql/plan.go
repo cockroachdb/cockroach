@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -70,8 +69,8 @@ func (r *runParams) creationTimeForNewTableDescriptor() hlc.Timestamp {
 	// CreateAsOfTime and ModificationTime when creating a table descriptor and then
 	// upon reading use the MVCC timestamp to populate the values.
 	var ts hlc.Timestamp
-	if !cluster.Version.IsActive(
-		r.ctx, r.ExecCfg().Settings, clusterversion.VersionTableDescModificationTimeFromMVCC,
+	if !r.ExecCfg().Settings.Version.IsActive(
+		r.ctx, clusterversion.VersionTableDescModificationTimeFromMVCC,
 	) {
 		ts = r.p.txn.CommitTimestamp()
 	}

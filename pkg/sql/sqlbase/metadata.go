@@ -15,13 +15,13 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 )
 
 var _ DescriptorProto = &DatabaseDescriptor{}
@@ -256,7 +256,7 @@ func LookupSystemTableDescriptorID(
 	}
 
 	if settings != nil &&
-		!cluster.Version.IsActive(ctx, settings, clusterversion.VersionNamespaceTableWithSchemas) &&
+		!settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) &&
 		tableName == NamespaceTable.Name {
 		return DeprecatedNamespaceTable.ID
 	}

@@ -54,7 +54,7 @@ func TestHeartbeatReply(t *testing.T) {
 
 	request := &PingRequest{
 		Ping:          "testPing",
-		ServerVersion: cluster.Version.BinaryVersion(st),
+		ServerVersion: st.Version.BinaryVersion(),
 	}
 	response, err := heartbeat.Ping(context.Background(), request)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestManualHeartbeat(t *testing.T) {
 
 	request := &PingRequest{
 		Ping:          "testManual",
-		ServerVersion: cluster.Version.BinaryVersion(st),
+		ServerVersion: st.Version.BinaryVersion(),
 	}
 	manualHeartbeat.ready <- nil
 	ctx := context.Background()
@@ -175,7 +175,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 		Ping:           "testManual",
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
-		ServerVersion:  cluster.Version.BinaryVersion(st),
+		ServerVersion:  st.Version.BinaryVersion(),
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
@@ -213,7 +213,7 @@ func TestClusterIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				ClusterID:     &td.clientClusterID,
-				ServerVersion: cluster.Version.BinaryVersion(st),
+				ServerVersion: st.Version.BinaryVersion(),
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
@@ -258,7 +258,7 @@ func TestNodeIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				NodeID:        td.clientNodeID,
-				ServerVersion: cluster.Version.BinaryVersion(st),
+				ServerVersion: st.Version.BinaryVersion(),
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {

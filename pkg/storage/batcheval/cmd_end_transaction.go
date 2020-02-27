@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
@@ -1033,7 +1032,7 @@ func splitTriggerHelper(
 	}
 
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
-	if !cluster.Version.IsActive(ctx, rec.ClusterSettings(), clusterversion.VersionContainsEstimatesCounter) {
+	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
 		deltaPostSplitLeft.ContainsEstimates = 0
 	}
 	return deltaPostSplitLeft, pd, nil
