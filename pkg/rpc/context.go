@@ -1043,7 +1043,7 @@ func (ctx *Context) runHeartbeat(
 
 	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
 
-	var heartbeatTimer timeutil.Timer
+	heartbeatTimer := timeutil.NewTimer()
 	defer heartbeatTimer.Stop()
 
 	// Give the first iteration a wait-free heartbeat attempt.

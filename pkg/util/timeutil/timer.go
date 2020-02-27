@@ -35,7 +35,7 @@ var timeTimerPool sync.Pool
 // channel is read from, the next call to Timer.Reset will deadlock.
 // This pattern looks something like:
 //
-//  var timer timeutil.Timer
+//  timer := timeutil.NewTimer()
 //  defer timer.Stop()
 //  for {
 //      timer.Reset(wait)
@@ -47,8 +47,13 @@ var timeTimerPool sync.Pool
 //  }
 //
 // Note that unlike the standard library's Timer type, this Timer will
-// not begin counting down until Reset is called for the first time, as
-// there is no constructor function.
+// not begin counting down until Reset is called for the first time.
+//
+// Due to the internal use of sync.Pool in, a *Timer should be constructed with
+// NewTimer. Timer values placed on the stack or constructed will be placed into
+// a sync.Pool when Stop() is causing the value to always be moved to the heap.
+// Thus attempts to eliminate an allocation by avoiding the constructor are
+// likely to cause one.
 type Timer struct {
 	timer *time.Timer
 	// C is a local "copy" of timer.C that can be used in a select case before

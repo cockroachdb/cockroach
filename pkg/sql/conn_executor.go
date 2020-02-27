@@ -752,7 +752,7 @@ func (s *Server) PeriodicallyClearSQLStats(
 	ctx context.Context, stopper *stop.Stopper, setting *settings.DurationSetting, stats *sqlStats,
 ) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		var timer timeutil.Timer
+		timer := timeutil.NewTimer()
 		for {
 			s.sqlStats.Lock()
 			last := stats.lastReset

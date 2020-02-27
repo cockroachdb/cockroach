@@ -23,3 +23,7 @@ type Timer struct {
 
 func (t *Timer) Reset(d time.Duration) {
 }
+
+func (t *Timer) Stop() {
+	*t = Timer{}
+}

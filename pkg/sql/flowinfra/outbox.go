@@ -247,7 +247,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 		}
 	}
 
-	var flushTimer timeutil.Timer
+	flushTimer := timeutil.NewTimer()
 	defer flushTimer.Stop()
 
 	draining := false

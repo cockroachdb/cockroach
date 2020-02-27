@@ -19,7 +19,7 @@ import (
 const timeStep = 10 * time.Millisecond
 
 func TestTimerTimeout(t *testing.T) {
-	var timer Timer
+	timer := NewTimer()
 	defer func() {
 		if stopped := timer.Stop(); stopped {
 			t.Errorf("expected Stop to return false, got true")
@@ -41,7 +41,7 @@ func TestTimerStop(t *testing.T) {
 	for sleepMult := time.Duration(0); sleepMult < 3; sleepMult++ {
 		sleepDur := sleepMult * timeStep
 		t.Run(fmt.Sprintf("sleepDur=%d*timeStep", sleepMult), func(t *testing.T) {
-			var timer Timer
+			timer := NewTimer()
 			timer.Reset(timeStep)
 			time.Sleep(sleepDur)
 
@@ -71,14 +71,14 @@ func TestTimerStop(t *testing.T) {
 }
 
 func TestTimerUninitializedStopNoop(t *testing.T) {
-	var timer Timer
+	timer := NewTimer()
 	if stopped := timer.Stop(); stopped {
 		t.Errorf("expected Stop to return false when the timer was never reset, got true")
 	}
 }
 
 func TestTimerResetBeforeTimeout(t *testing.T) {
-	var timer Timer
+	timer := NewTimer()
 	defer timer.Stop()
 	timer.Reset(timeStep)
 
@@ -94,7 +94,7 @@ func TestTimerResetBeforeTimeout(t *testing.T) {
 }
 
 func TestTimerResetAfterTimeoutAndNoRead(t *testing.T) {
-	var timer Timer
+	timer := NewTimer()
 	defer timer.Stop()
 	timer.Reset(timeStep)
 
@@ -112,7 +112,7 @@ func TestTimerResetAfterTimeoutAndNoRead(t *testing.T) {
 }
 
 func TestTimerResetAfterTimeoutAndRead(t *testing.T) {
-	var timer Timer
+	timer := NewTimer()
 	defer timer.Stop()
 	timer.Reset(timeStep)
 
@@ -131,7 +131,7 @@ func TestTimerResetAfterTimeoutAndRead(t *testing.T) {
 }
 
 func TestTimerMakesProgressInLoop(t *testing.T) {
-	var timer Timer
+	timer := NewTimer()
 	defer timer.Stop()
 	for i := 0; i < 5; i++ {
 		timer.Reset(timeStep)
