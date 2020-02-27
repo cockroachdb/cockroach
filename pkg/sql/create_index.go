@@ -12,10 +12,10 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -198,7 +198,7 @@ func setupShardedIndex(
 	indexDesc *sqlbase.IndexDescriptor,
 	isNewTable bool,
 ) (shard *sqlbase.ColumnDescriptor, newColumn bool, err error) {
-	if !cluster.Version.IsActive(ctx, st, clusterversion.VersionHashShardedIndexes) {
+	if !st.Version.IsActive(ctx, clusterversion.VersionHashShardedIndexes) {
 		return nil, false, invalidClusterForShardedIndexError
 	}
 	if !shardedIndexEnabled {
@@ -297,7 +297,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// If all nodes in the cluster know how to handle secondary indexes with column families,
 	// write the new version into the index descriptor.
 	encodingVersion := sqlbase.BaseIndexFormatVersion
-	if cluster.Version.IsActive(params.ctx, params.p.EvalContext().Settings, clusterversion.VersionSecondaryIndexColumnFamilies) {
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionSecondaryIndexColumnFamilies) {
 		encodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
 	}
 	indexDesc.Version = encodingVersion

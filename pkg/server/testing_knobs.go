@@ -50,17 +50,20 @@ type TestingKnobs struct {
 	RPCListener net.Listener
 
 	// BootstrapVersionOverride, if not empty, will be used for bootstrapping
-	// clusters instead of cluster.BinaryServerVersion (if this server
-	// is the one bootstrapping the cluster).
+	// clusters instead of clusterversion.BinaryVersion (if this server is the
+	// one bootstrapping the cluster).
 	//
-	// This can be used by tests to essentially pretend that a new cluster is not
-	// starting from scratch, but instead is "created" by a node starting up with
-	// engines that had already been bootstrapped, at this
+	// This can be used by tests to essentially pretend that a new cluster is
+	// not starting from scratch, but instead is "created" by a node starting up
+	// with engines that had already been bootstrapped, at this
 	// BootstrapVersionOverride. For example, it allows convenient creation of a
 	// cluster from a 2.1 binary, but that's running at version 2.0.
 	//
-	// NOTE: When setting this, you probably also want to set
+	// NB: When setting this, you probably also want to set
 	// DisableAutomaticVersionUpgrade.
+	//
+	// TODO(irfansharif): Update users of this testing knob to use the
+	// appropriate clusterversion.Handle instead.
 	BootstrapVersionOverride roachpb.Version
 }
 

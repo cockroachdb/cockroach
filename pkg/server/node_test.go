@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -163,8 +162,8 @@ func createAndStartTestNode(
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
 		ctx, engines,
-		cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
-		cluster.Version.BinaryVersion(cfg.Settings),
+		cfg.Settings.Version.BinaryVersion(),
+		cfg.Settings.Version.BinaryMinSupportedVersion(),
 		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
@@ -413,8 +412,8 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer stopper.Stop(ctx)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
 		ctx, engines,
-		clusterversion.BinaryMinimumSupportedVersion,
-		clusterversion.BinaryServerVersion,
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
 		node.clusterID)
 	if err != nil {
 		t.Fatal(err)

@@ -78,7 +78,7 @@ func (p *planner) createDatabase(
 	// TODO(solon): This conditional can be removed in 20.2. Every database
 	// is created with a public schema for cluster version >= 20.1, so we can remove
 	// the `shouldCreatePublicSchema` logic as well.
-	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, clusterversion.VersionNamespaceTableWithSchemas) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
 		shouldCreatePublicSchema = false
 	}
 

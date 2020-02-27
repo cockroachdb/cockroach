@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"net/url"
 	"sort"
 
@@ -302,7 +301,7 @@ func backupPlanHook(
 			return err
 		}
 		if len(to) > 1 &&
-			cluster.Version.IsActive(ctx, p.ExecCfg().Settings, clusterversion.VersionPartitionedBackup) {
+			p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionPartitionedBackup) {
 			return errors.Errorf("partitioned backups can only be made on a cluster that has been fully upgraded to version 19.2")
 		}
 

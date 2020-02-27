@@ -2539,7 +2539,9 @@ func WriteClusterVersion(
 }
 
 // ReadClusterVersion reads the the cluster version from the store-local version key.
-func ReadClusterVersion(ctx context.Context, reader engine.Reader) (clusterversion.ClusterVersion, error) {
+func ReadClusterVersion(
+	ctx context.Context, reader engine.Reader,
+) (clusterversion.ClusterVersion, error) {
 	var cv clusterversion.ClusterVersion
 	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{},
 		&cv, engine.MVCCGetOptions{})
