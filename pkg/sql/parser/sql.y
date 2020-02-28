@@ -4737,12 +4737,13 @@ constraint_elem:
       },
     }
   }
-| PRIMARY KEY '(' index_params ')' opt_hash_sharded
+| PRIMARY KEY '(' index_params ')' opt_hash_sharded opt_interleave
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
         Sharded: $6.shardedIndexDef(),
+        Interleave: $7.interleave(),
       },
       PrimaryKey: true,
     }
