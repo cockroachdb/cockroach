@@ -55,7 +55,7 @@
     justify-content flex-start
   &__status
     margin-bottom 8px
-    font-family RobotoMono-Regular
+    font-family $font-family--semi-bold 
     font-size 12px
     font-weight 500
     line-height 1.17
@@ -73,21 +73,6 @@
       letter-spacing 0.3px
       width 40px
       text-align right
-    &--succeeded
-      color $colors--primary-green-4
-      background-color $colors--primary-green-1
-    &--failed
-      color $colors--functional-red-4
-      background-color $colors--functional-red-1
-    &--pending
-      color $colors--functional-orange-4
-      background-color $colors--functional-orange-1
-    &--running
-      color $colors--primary-blue-4
-      background-color $colors--primary-blue-1
-    &--canceled, &--paused
-      color $colors--neutral-6
-      background-color $colors--neutral-2
   .job-detail
     white-space pre-wrap
     padding 5px

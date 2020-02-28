@@ -18,19 +18,21 @@ import {
   JOB_STATUS_PENDING,
   JOB_STATUS_RUNNING,
 } from "src/views/jobs/jobStatusOptions";
-import classNames from "classnames";
-import {Line} from "rc-progress";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import {cockroach} from "src/js/protos";
+import { Badge } from "oss/src/components";
+import { Line } from "rc-progress";
+
+const statuses = [JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED, JOB_STATUS_PAUSED, JOB_STATUS_PENDING, JOB_STATUS_RUNNING];
 
 export class Progress extends React.PureComponent<{ job: Job; lineWidth: number; showPercentage: boolean}> {
   render() {
-    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED, JOB_STATUS_PAUSED, JOB_STATUS_PENDING, JOB_STATUS_RUNNING)) {
-      const className = classNames("jobs-table__status", `jobs-table__status--${this.props.job.status}`);
+    if (jobHasOneOfStatuses(this.props.job, ...statuses)) {
       return (
-        <div className={className}>
-          {renamedStatuses(this.props.job.status)}
-        </div>
+        <Badge
+          status={renamedStatuses(this.props.job.status).value as any}
+          text={renamedStatuses(this.props.job.status).label}
+        />
       );
     }
     const percent = this.props.job.fraction_completed * 100;
