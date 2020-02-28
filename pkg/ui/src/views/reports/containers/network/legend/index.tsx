@@ -84,6 +84,7 @@ export const Legend: React.SFC <ILegendProps> = ({
         <div className="Legend--container__head">
           <Modal
             title={`No Connections (${noConnections.length})`}
+            trigger={noConnections.length === 0 && <span>{`No Connections (${noConnections.length})`}</span>}
             triggerStyle="Legend--container__head--title color--link"
             triggerTitle={`No Connections (${noConnections.length})`}
           >
