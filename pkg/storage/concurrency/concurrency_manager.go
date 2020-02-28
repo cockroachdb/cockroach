@@ -12,6 +12,7 @@ package concurrency
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -237,6 +238,7 @@ func (m *managerImpl) FinishReq(g *Guard) {
 	if lg := g.moveLatchGuard(); lg != nil {
 		m.lm.Release(lg)
 	}
+	releaseGuard(g)
 }
 
 // HandleWriterIntentError implements the ContentionHandler interface.
@@ -373,9 +375,20 @@ func (r *Request) isSingle(m roachpb.Method) bool {
 	return r.Requests[0].GetInner().Method() == m
 }
 
+// Used to avoid allocations.
+var guardPool = sync.Pool{
+	New: func() interface{} { return new(Guard) },
+}
+
 func newGuard(req Request) *Guard {
-	// TODO(nvanbenschoten): Pool these guard objects.
-	return &Guard{Req: req}
+	g := guardPool.Get().(*Guard)
+	g.Req = req
+	return g
+}
+
+func releaseGuard(g *Guard) {
+	*g = Guard{}
+	guardPool.Put(g)
 }
 
 // LatchSpans returns the maximal set of spans that the request will access.
