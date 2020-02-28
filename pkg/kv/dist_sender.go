@@ -558,7 +558,7 @@ func (ds *DistSender) initAndVerifyBatch(
 		return roachpb.NewErrorf("empty batch")
 	}
 
-	if ba.MaxSpanRequestKeys != 0 {
+	if ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0 {
 		// Verify that the batch contains only specific range requests or the
 		// EndTxnRequest. Verify that a batch with a ReverseScan only contains
 		// ReverseScan range requests.
@@ -672,10 +672,11 @@ func (ds *DistSender) Send(
 		splitET = true
 	}
 	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
-	if len(parts) > 1 && ba.MaxSpanRequestKeys != 0 {
+	if len(parts) > 1 && (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) {
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
-		panic("batch with MaxSpanRequestKeys needs splitting")
+		log.Fatalf(ctx, "batch with MaxSpanRequestKeys=%d, TargetBytes=%d needs splitting",
+			log.Safe(ba.MaxSpanRequestKeys), log.Safe(ba.TargetBytes))
 	}
 
 	errIdxOffset := 0
@@ -1152,7 +1153,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	canParallelize := ba.Header.MaxSpanRequestKeys == 0
+	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
 		// entirety of each replica of each range they touch.
@@ -1213,12 +1214,14 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0
+			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
 				var replyResults int64
+				var replyBytes int64
 				for _, r := range resp.reply.Responses {
 					replyResults += r.GetInner().Header().NumKeys
+					replyBytes += r.GetInner().Header().NumBytes
 				}
 				// Update MaxSpanRequestKeys, if applicable. Note that ba might be
 				// passed recursively to further divideAndSendBatchToRanges() calls.
@@ -1230,6 +1233,14 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 					ba.MaxSpanRequestKeys -= replyResults
 					// Exiting; any missing responses will be filled in via defer().
 					if ba.MaxSpanRequestKeys == 0 {
+						couldHaveSkippedResponses = true
+						resumeReason = roachpb.RESUME_KEY_LIMIT
+						return
+					}
+				}
+				if ba.TargetBytes > 0 {
+					ba.TargetBytes -= replyBytes
+					if ba.TargetBytes <= 0 {
 						couldHaveSkippedResponses = true
 						resumeReason = roachpb.RESUME_KEY_LIMIT
 						return

@@ -2317,7 +2317,7 @@ func mvccScanToBytes(
 	if err := opts.validate(); err != nil {
 		return MVCCScanResult{}, err
 	}
-	if opts.MaxKeys < 0 {
+	if opts.MaxKeys < 0 || opts.TargetBytes < 0 {
 		resumeSpan := &roachpb.Span{Key: key, EndKey: endKey}
 		return MVCCScanResult{ResumeSpan: resumeSpan}, nil
 	}
