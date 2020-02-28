@@ -332,6 +332,14 @@ type Request struct {
 	// The maximal set of spans within which the request expects to have
 	// isolation from conflicting transactions. Conflicting locks within
 	// these spans will be queued on and conditionally pushed.
+	//
+	// Note that unlike LatchSpans, the timestamps that these spans are
+	// declared at are NOT consulted. All read spans are considered to take
+	// place at the transaction's read timestamp (Txn.ReadTimestamp) and all
+	// write spans are considered to take place the transaction's write
+	// timestamp (Txn.WriteTimestamp). If the request is non-transactional
+	// (Txn == nil), all reads and writes are considered to take place at
+	// Timestamp.
 	LockSpans *spanset.SpanSet
 }
 
