@@ -381,6 +381,12 @@ func (b *Bytes) Size() uintptr {
 		uintptr(cap(b.offsets))*sizeOfInt32
 }
 
+// ProportionalSize returns the size of the receiver in bytes that is
+// attributed to only first n out of Len() elements.
+func (b *Bytes) ProportionalSize(n int64) uintptr {
+	return FlatBytesOverhead + uintptr(len(b.data[:b.offsets[n]])) + uintptr(n)*sizeOfInt32
+}
+
 var zeroInt32Slice = make([]int32, BatchSize())
 
 // Reset resets the underlying Bytes for reuse. Note that this zeroes out the
