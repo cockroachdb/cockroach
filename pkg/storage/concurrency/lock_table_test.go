@@ -194,7 +194,10 @@ func TestLockTableBasic(t *testing.T) {
 					// Update the transaction's timestamp, if necessary. The transaction
 					// may have needed to move its timestamp for any number of reasons.
 					txnMeta.WriteTimestamp = ts
-					req.Txn = &roachpb.Transaction{TxnMeta: *txnMeta}
+					req.Txn = &roachpb.Transaction{
+						TxnMeta:       *txnMeta,
+						ReadTimestamp: ts,
+					}
 				}
 				requestsByName[reqName] = req
 				return ""
@@ -855,6 +858,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 					ID:             nextUUID(&txnCounter),
 					WriteTimestamp: ts,
 				},
+				ReadTimestamp: ts,
 			}
 		}
 		request := &Request{
@@ -942,7 +946,10 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 			LockSpans:  spans,
 		}
 		if txnMeta != nil {
-			request.Txn = &roachpb.Transaction{TxnMeta: *txnMeta}
+			request.Txn = &roachpb.Transaction{
+				TxnMeta:       *txnMeta,
+				ReadTimestamp: ts,
+			}
 		}
 		wi := workloadItem{request: request}
 		for i := 0; i < numKeys; i++ {
@@ -1091,7 +1098,11 @@ func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int)
 	for i := 0; i < numOutstanding; i++ {
 		wiCopy := wi
 		wiCopy.Request.Txn = &roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{ID: nextUUID(&txnCounter), WriteTimestamp: ts},
+			TxnMeta: enginepb.TxnMeta{
+				ID:             nextUUID(&txnCounter),
+				WriteTimestamp: ts,
+			},
+			ReadTimestamp: ts,
 		}
 		result = append(result, wiCopy)
 	}
