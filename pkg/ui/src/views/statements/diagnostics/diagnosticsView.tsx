@@ -20,7 +20,6 @@ import {
   TextTypes,
   Table,
   ColumnsConfig,
-  Badge,
   Anchor,
   DownloadFile,
   DownloadFileRef,
@@ -34,6 +33,8 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trustIcon } from "src/util/trust";
+
+import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import "./diagnosticsView.styl";
 import { cockroach } from "src/js/protos";
@@ -53,19 +54,6 @@ interface DiagnosticsViewState {
 }
 
 type DiagnosticsStatuses = "READY" | "WAITING FOR QUERY" | "ERROR";
-
-function mapDiagnosticsStatusToBadge(diagnosticsStatus: DiagnosticsStatuses) {
-  switch (diagnosticsStatus) {
-    case "READY":
-      return "success";
-    case "WAITING FOR QUERY":
-      return "info";
-    case "ERROR":
-      return "danger";
-    default:
-      return "info";
-  }
-}
 
 function getDiagnosticsStatus(diagnosticsRequest: IStatementDiagnosticsReport): DiagnosticsStatuses {
   if (diagnosticsRequest.completed) {
@@ -94,9 +82,9 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
       render: (_text, record) => {
         const status = getDiagnosticsStatus(record);
         return (
-          <Badge
-            text={status}
-            status={mapDiagnosticsStatusToBadge(status)}
+          <DiagnosticStatusBadge
+            status={status}
+            enableTooltip={status !== "READY"}
           />
         );
       },
@@ -183,7 +171,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
           columns={this.columns}
         />
         <div className="crl-statements-diagnostics-view__footer">
-          <RouterLink to="/reports/statements/diagnostics">All statement diagnostics</RouterLink>
+          <Link to="/reports/statements/diagnostics">All statement diagnostics</Link>
         </div>
         <DownloadFile ref={this.downloadRef}/>
       </SummaryCard>
