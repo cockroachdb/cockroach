@@ -121,7 +121,7 @@ func TestFileIndexing(t *testing.T) {
 	for batchIdx := numInts - 1; batchIdx >= 0; batchIdx-- {
 		b := coldata.NewMemBatchWithSize(nil, 0)
 		require.NoError(t, d.GetBatch(batchIdx, b))
-		require.Equal(t, uint16(1), b.Length())
+		require.Equal(t, 1, b.Length())
 		require.Equal(t, 1, b.Width())
 		require.Equal(t, coltypes.Int64, b.ColVec(0).Type())
 		require.Equal(t, int64(batchIdx), b.ColVec(0).Int64()[0])

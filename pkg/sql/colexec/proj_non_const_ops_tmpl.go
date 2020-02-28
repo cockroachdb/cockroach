@@ -167,12 +167,12 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		// {{/* Slice is a noop for Bytes type, so colLen below might contain an
 		// incorrect value. In order to keep bounds check elimination for all other
 		// types, we simply omit this code snippet for Bytes. */}}
-		col1 = execgen.SLICE(col1, 0, int(n))
+		col1 = execgen.SLICE(col1, 0, n)
 		colLen := execgen.LEN(col1)
 		_ = _RET_UNSAFEGET(projCol, colLen-1)
 		_ = _R_UNSAFEGET(col2, colLen-1)
 		// {{end}}
-		for execgen.RANGE(i, col1, 0, int(n)) {
+		for execgen.RANGE(i, col1, 0, n) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	}
@@ -192,12 +192,12 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 	// {{$hasNulls := $.HasNulls}}
 	// {{with $.Overload}}
 	// {{if _HAS_NULLS}}
-	if !col1Nulls.NullAt(uint16(i)) && !col2Nulls.NullAt(uint16(i)) {
+	if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 		// We only want to perform the projection operation if both values are not
 		// null.
 		// {{end}}
-		arg1 := _L_UNSAFEGET(col1, int(i))
-		arg2 := _R_UNSAFEGET(col2, int(i))
+		arg1 := _L_UNSAFEGET(col1, i)
+		arg2 := _R_UNSAFEGET(col2, i)
 		_ASSIGN(projCol[i], arg1, arg2)
 		// {{if _HAS_NULLS }}
 	}

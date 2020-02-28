@@ -44,12 +44,12 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 		// tuple whose outputCol value is true.
 		// Note that, if the input already had a selection vector, the output
 		// selection vector will be a subset of the input selection vector.
-		idx := uint16(0)
+		idx := 0
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for s := range sel {
 				i := sel[s]
-				var inc uint16
+				var inc int
 				// This form is transformed into a data dependency by the compiler,
 				// avoiding an expensive conditional branch.
 				if outputCol[i] {
@@ -62,12 +62,12 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 			batch.SetSelection(true)
 			sel := batch.Selection()
 			for i := range outputCol[:n] {
-				var inc uint16
+				var inc int
 				// Ditto above: replace a conditional with a data dependency.
 				if outputCol[i] {
 					inc = 1
 				}
-				sel[idx] = uint16(i)
+				sel[idx] = i
 				idx += inc
 			}
 		}
@@ -85,9 +85,9 @@ func (p *boolVecToSelOp) Init() {
 	p.input.Init()
 }
 
-func boolVecToSel64(vec []bool, sel []uint64) []uint64 {
-	l := uint64(len(vec))
-	for i := uint64(0); i < l; i++ {
+func boolVecToSel64(vec []bool, sel []int) []int {
+	l := len(vec)
+	for i := 0; i < l; i++ {
 		if vec[i] {
 			sel = append(sel, i)
 		}
@@ -150,7 +150,7 @@ func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
 		} else {
 			outputCol = outputCol[0:n]
 			for i := range outputCol {
-				if nulls.NullAt(uint16(i)) {
+				if nulls.NullAt(i) {
 					outputCol[i] = false
 				}
 			}

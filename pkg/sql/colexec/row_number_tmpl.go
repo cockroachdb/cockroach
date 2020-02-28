@@ -86,7 +86,7 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	rowNumberCol := batch.ColVec(r.outputColIdx).Int64()
 	sel := batch.Selection()
 	if sel != nil {
-		for i := uint16(0); i < batch.Length(); i++ {
+		for i := 0; i < batch.Length(); i++ {
 			// {{ if .HasPartition }}
 			if partitionCol[sel[i]] {
 				r.rowNumber = 1
@@ -96,7 +96,7 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			rowNumberCol[sel[i]] = r.rowNumber
 		}
 	} else {
-		for i := uint16(0); i < batch.Length(); i++ {
+		for i := 0; i < batch.Length(); i++ {
 			// {{ if .HasPartition }}
 			if partitionCol[i] {
 				r.rowNumber = 0

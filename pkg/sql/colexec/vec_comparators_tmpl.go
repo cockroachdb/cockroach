@@ -73,13 +73,13 @@ type vecComparator interface {
 	// compare compares values from two vectors. vecIdx is the index of the vector
 	// and valIdx is the index of the value in that vector to compare. Returns -1,
 	// 0, or 1.
-	compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int
+	compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) int
 
 	// set sets the value of the vector at dstVecIdx at index dstValIdx to the value
 	// at the vector at srcVecIdx at index srcValIdx.
 	// NOTE: whenever set is used, the caller is responsible for updating the
 	// memory accounts.
-	set(srcVecIdx, dstVecIdx int, srcValIdx, dstValIdx uint16)
+	set(srcVecIdx, dstVecIdx int, srcValIdx, dstValIdx int)
 
 	// setVec updates the vector at idx.
 	setVec(idx int, vec coldata.Vec)
@@ -91,7 +91,7 @@ type _TYPEVecComparator struct {
 	nulls []*coldata.Nulls
 }
 
-func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int {
+func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) int {
 	n1 := c.nulls[vecIdx1].MaybeHasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
 	n2 := c.nulls[vecIdx2].MaybeHasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
 	if n1 && n2 {
@@ -101,8 +101,8 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint
 	} else if n2 {
 		return 1
 	}
-	left := execgen.UNSAFEGET(c.vecs[vecIdx1], int(valIdx1))
-	right := execgen.UNSAFEGET(c.vecs[vecIdx2], int(valIdx2))
+	left := execgen.UNSAFEGET(c.vecs[vecIdx1], valIdx1)
+	right := execgen.UNSAFEGET(c.vecs[vecIdx2], valIdx2)
 	var cmp int
 	_COMPARE(cmp, left, right)
 	return cmp
@@ -113,7 +113,7 @@ func (c *_TYPEVecComparator) setVec(idx int, vec coldata.Vec) {
 	c.nulls[idx] = vec.Nulls()
 }
 
-func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16) {
+func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	if c.nulls[srcVecIdx].MaybeHasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
@@ -125,10 +125,10 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 		// variable number of bytes in `dstVecIdx`, so we will have to either shift
 		// the bytes after that element left or right, depending on how long the
 		// source bytes slice is. Refer to the CopySlice comment for an example.
-		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], int(dstIdx), int(srcIdx), int(srcIdx+1))
+		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
 		// {{ else }}
-		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], int(srcIdx))
-		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
+		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], srcIdx)
+		execgen.SET(c.vecs[dstVecIdx], dstIdx, v)
 		// {{ end }}
 	}
 }

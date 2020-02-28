@@ -221,7 +221,7 @@ func hashTableInitialData(
 				}
 			case coltypes.Bytes:
 				colBytes := col.Bytes()
-				for i := 0; i < int(b.Length()); i++ {
+				for i := 0; i < b.Length(); i++ {
 					_, _ = h.Write(colBytes.Get(i))
 				}
 			default:

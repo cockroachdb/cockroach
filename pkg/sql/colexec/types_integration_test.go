@@ -64,7 +64,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			// TODO(yuzefovich): remove this once it is supported.
 			continue
 		}
-		for _, numRows := range []uint16{
+		for _, numRows := range []int{
 			// A few interesting sizes.
 			1,
 			coldata.BatchSize() - 1,
@@ -72,7 +72,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			coldata.BatchSize() + 1,
 		} {
 			rows := make(sqlbase.EncDatumRows, numRows)
-			for i := uint16(0); i < numRows; i++ {
+			for i := 0; i < numRows; i++ {
 				rows[i] = make(sqlbase.EncDatumRow, 1)
 				rows[i][0] = sqlbase.DatumToEncDatum(&typ, sqlbase.RandDatum(rng, &typ, true /* nullOk */))
 			}

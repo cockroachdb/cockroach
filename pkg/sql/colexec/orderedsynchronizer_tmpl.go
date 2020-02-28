@@ -73,7 +73,7 @@ type OrderedSynchronizer struct {
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
-	inputIndices []uint16
+	inputIndices []int
 	// heap is a min heap which stores indices into inputBatches. The "current
 	// value" of ith input batch is the tuple at inputIndices[i] position of
 	// inputBatches[i] batch. If an input is fully exhausted, it will be removed
@@ -142,7 +142,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		heap.Init(o)
 	}
 	o.output.ResetInternalBatch()
-	outputIdx := uint16(0)
+	outputIdx := 0
 	o.allocator.PerformOperation(o.output.ColVecs(), func() {
 		for outputIdx < coldata.BatchSize() {
 			if o.Len() == 0 {
@@ -167,8 +167,8 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 					case _TYPES_T:
 						srcCol := vec._TYPE()
 						outCol := o.out_TYPECols[o.outColsMap[i]]
-						v := execgen.UNSAFEGET(srcCol, int(srcRowIdx))
-						execgen.SET(outCol, int(outputIdx), v)
+						v := execgen.UNSAFEGET(srcCol, srcRowIdx)
+						execgen.SET(outCol, outputIdx, v)
 					// {{end}}
 					default:
 						execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
@@ -200,7 +200,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 
 // Init is part of the Operator interface.
 func (o *OrderedSynchronizer) Init() {
-	o.inputIndices = make([]uint16, len(o.inputs))
+	o.inputIndices = make([]int, len(o.inputs))
 	o.output = o.allocator.NewMemBatch(o.columnTypes)
 	o.outNulls = make([]*coldata.Nulls, len(o.columnTypes))
 	o.outColsMap = make([]int, len(o.columnTypes))

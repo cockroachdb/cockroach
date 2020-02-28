@@ -140,7 +140,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col := batch.ColVec(0).Int64()
-	for i := 0; i < int(coldata.BatchSize()); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		if float64(i) < float64(coldata.BatchSize())*selectivity {
 			col[i] = -1
 		} else {
@@ -148,9 +148,9 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 		}
 	}
 	if hasNulls {
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(i)
 			}
 		}
 	}
@@ -158,7 +158,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := uint16(0); i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			sel[i] = i
 		}
 	}
@@ -197,7 +197,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
-	for i := 0; i < int(coldata.BatchSize()); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		if float64(i) < float64(coldata.BatchSize())*selectivity {
 			col1[i], col2[i] = -1, 1
 		} else {
@@ -205,12 +205,12 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 		}
 	}
 	if hasNulls {
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(i)
 			}
 			if rand.Float64() < nullProbability {
-				batch.ColVec(1).Nulls().SetNull(uint16(i))
+				batch.ColVec(1).Nulls().SetNull(i)
 			}
 		}
 	}
@@ -218,7 +218,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := uint16(0); i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			sel[i] = i
 		}
 	}

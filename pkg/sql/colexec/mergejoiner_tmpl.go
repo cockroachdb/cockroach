@@ -70,13 +70,13 @@ type _GOTYPE interface{}
 
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the second input == the third input.
-func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
+func _ASSIGN_EQ(_, _, _ interface{}) int {
 	execerror.VectorizedInternalPanic("")
 }
 
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the the second input < the third input.
-func _ASSIGN_LT(_, _, _ interface{}) uint64 {
+func _ASSIGN_LT(_, _, _ interface{}) int {
 	execerror.VectorizedInternalPanic("")
 }
 
@@ -150,14 +150,14 @@ func _PROBE_SWITCH(
 			// Expand or filter each group based on the current equality column.
 			for curLIdx < curLLength && curRIdx < curRLength && !areGroupsProcessed {
 				// {{ if _L_HAS_NULLS }}
-				if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
+				if lVec.Nulls().NullAt(_L_SEL_IND) {
 					_NULL_FROM_LEFT_SWITCH(_JOIN_TYPE)
 					curLIdx++
 					continue
 				}
 				// {{ end }}
 				// {{ if _R_HAS_NULLS }}
-				if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
+				if rVec.Nulls().NullAt(_R_SEL_IND) {
 					_NULL_FROM_RIGHT_SWITCH(_JOIN_TYPE)
 					curRIdx++
 					continue
@@ -165,9 +165,9 @@ func _PROBE_SWITCH(
 				// {{ end }}
 
 				lSelIdx := _L_SEL_IND
-				lVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
+				lVal := execgen.UNSAFEGET(lKeys, lSelIdx)
 				rSelIdx := _R_SEL_IND
-				rVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
+				rVal := execgen.UNSAFEGET(rKeys, rSelIdx)
 
 				var match bool
 				_ASSIGN_EQ(match, lVal, rVal)
@@ -184,13 +184,13 @@ func _PROBE_SWITCH(
 						curLIdx++
 						for curLIdx < curLLength {
 							// {{ if _L_HAS_NULLS }}
-							if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
+							if lVec.Nulls().NullAt(_L_SEL_IND) {
 								lComplete = true
 								break
 							}
 							// {{ end }}
 							lSelIdx := _L_SEL_IND
-							newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
+							newLVal := execgen.UNSAFEGET(lKeys, lSelIdx)
 							_ASSIGN_EQ(match, newLVal, lVal)
 							if !match {
 								lComplete = true
@@ -208,13 +208,13 @@ func _PROBE_SWITCH(
 						curRIdx++
 						for curRIdx < curRLength {
 							// {{ if _R_HAS_NULLS }}
-							if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
+							if rVec.Nulls().NullAt(_R_SEL_IND) {
 								rComplete = true
 								break
 							}
 							// {{ end }}
 							rSelIdx := _R_SEL_IND
-							newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
+							newRVal := execgen.UNSAFEGET(rKeys, rSelIdx)
 							_ASSIGN_EQ(match, newRVal, rVal)
 							if !match {
 								rComplete = true
@@ -457,12 +457,12 @@ func _INCREMENT_LEFT_SWITCH(
 	o.groups.addLeftUnmatchedGroup(curLIdx-1, curRIdx)
 	for curLIdx < curLLength {
 		// {{ if _L_HAS_NULLS }}
-		if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
+		if lVec.Nulls().NullAt(_L_SEL_IND) {
 			break
 		}
 		// {{ end }}
 		lSelIdx = _L_SEL_IND
-		newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
+		newLVal := execgen.UNSAFEGET(lKeys, lSelIdx)
 		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ(match, newLVal, lVal)
 		// {{end}}
@@ -515,12 +515,12 @@ func _INCREMENT_RIGHT_SWITCH(
 	o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 	for curRIdx < curRLength {
 		// {{ if _R_HAS_NULLS }}
-		if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
+		if rVec.Nulls().NullAt(_R_SEL_IND) {
 			break
 		}
 		// {{ end }}
 		rSelIdx = _R_SEL_IND
-		newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
+		newRVal := execgen.UNSAFEGET(rKeys, rSelIdx)
 		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ(match, newRVal, rVal)
 		// {{end}}
@@ -621,7 +621,7 @@ EqLoop:
 			}
 			tempVec := o.scratch.tempVecByType[toType]
 			if tempVec == nil {
-				tempVec = o.allocator.NewMemColumn(toType, int(coldata.BatchSize()))
+				tempVec = o.allocator.NewMemColumn(toType, coldata.BatchSize())
 				o.scratch.tempVecByType[toType] = tempVec
 			} else {
 				tempVec.Nulls().UnsetNulls()
@@ -696,7 +696,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 				// Repeat each row numRepeats times.
 				srcStartIdx = o.builderState.left.curSrcStartIdx
 				// {{ if _HAS_SELECTION }}
-				srcStartIdx = int(sel[srcStartIdx])
+				srcStartIdx = sel[srcStartIdx]
 				// {{ end }}
 
 				repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
@@ -712,14 +712,14 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 				// we're omitting this check.
 				// */}}
 				if leftGroup.nullGroup {
-					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
+					out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 					outStartIdx += toAppend
 				} else
 				// {{ end }}
 				{
 					// {{ if _HAS_NULLS }}
-					if src.Nulls().NullAt64(uint64(srcStartIdx)) {
-						out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
+					if src.Nulls().NullAt(srcStartIdx) {
+						out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 						outStartIdx += toAppend
 					} else
 					// {{ end }}
@@ -782,22 +782,18 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 // repeated numRepeats times, instead of a simple copy of the group as a whole.
 // SIDE EFFECTS: writes into o.output.
 func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildLeftGroups(
-	leftGroups []group,
-	colOffset int,
-	input *mergeJoinInput,
-	batch coldata.Batch,
-	destStartIdx uint16,
+	leftGroups []group, colOffset int, input *mergeJoinInput, batch coldata.Batch, destStartIdx int,
 ) {
 	sel := batch.Selection()
 	initialBuilderState := o.builderState.left
-	outputBatchSize := int(o.outputBatchSize)
+	outputBatchSize := o.outputBatchSize
 	o.allocator.PerformOperation(
 		o.output.ColVecs()[colOffset:colOffset+len(input.outCols)],
 		func() {
 			// Loop over every column.
 		LeftColLoop:
 			for outColIdx, inColIdx := range input.outCols {
-				outStartIdx := int(destStartIdx)
+				outStartIdx := destStartIdx
 				out := o.output.ColVec(outColIdx)
 				var src coldata.Vec
 				if batch.Length() > 0 {
@@ -863,7 +859,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 				// we're omitting this check.
 				// */}}
 				if rightGroup.nullGroup {
-					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
+					out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 				} else
 				// {{ end }}
 				{
@@ -873,17 +869,17 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						// {{ if _HAS_SELECTION }}
 						// {{ if _HAS_NULLS }}
 						if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
-							out.Nulls().SetNull(uint16(outStartIdx))
+							out.Nulls().SetNull(outStartIdx)
 						} else
 						// {{ end }}
 						{
-							v := execgen.UNSAFEGET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
+							v := execgen.UNSAFEGET(srcCol, sel[o.builderState.right.curSrcStartIdx])
 							execgen.SET(outCol, outStartIdx, v)
 						}
 						// {{ else }}
 						// {{ if _HAS_NULLS }}
-						if src.Nulls().NullAt64(uint64(o.builderState.right.curSrcStartIdx)) {
-							out.Nulls().SetNull(uint16(outStartIdx))
+						if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
+							out.Nulls().SetNull(outStartIdx)
 						} else
 						// {{ end }}
 						{
@@ -898,9 +894,9 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 									ColType:     colType,
 									Src:         src,
 									Sel:         sel,
-									DestIdx:     uint64(outStartIdx),
-									SrcStartIdx: uint64(o.builderState.right.curSrcStartIdx),
-									SrcEndIdx:   uint64(o.builderState.right.curSrcStartIdx + toAppend),
+									DestIdx:     outStartIdx,
+									SrcStartIdx: o.builderState.right.curSrcStartIdx,
+									SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 								},
 							},
 						)
@@ -959,15 +955,11 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 // expanded but directly copied numRepeats times.
 // SIDE EFFECTS: writes into o.output.
 func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildRightGroups(
-	rightGroups []group,
-	colOffset int,
-	input *mergeJoinInput,
-	batch coldata.Batch,
-	destStartIdx uint16,
+	rightGroups []group, colOffset int, input *mergeJoinInput, batch coldata.Batch, destStartIdx int,
 ) {
 	initialBuilderState := o.builderState.right
 	sel := batch.Selection()
-	outputBatchSize := int(o.outputBatchSize)
+	outputBatchSize := o.outputBatchSize
 
 	o.allocator.PerformOperation(
 		o.output.ColVecs()[colOffset:colOffset+len(input.outCols)],
@@ -975,7 +967,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildRightGroups(
 			// Loop over every column.
 		RightColLoop:
 			for outColIdx, inColIdx := range input.outCols {
-				outStartIdx := int(destStartIdx)
+				outStartIdx := destStartIdx
 				out := o.output.ColVec(outColIdx + colOffset)
 				var src coldata.Vec
 				if batch.Length() > 0 {
@@ -1044,8 +1036,8 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	// {{ if _JOIN_TYPE.IsLeftAnti }}
 	// {{ if _FILTER_INFO.HasFilter }}
 	o.builderState.lGroups = o.builderState.lGroups[:0]
-	rEndIdx := int(o.proberState.rBufferedGroup.length)
-	for lIdx := 0; lIdx < int(o.proberState.lBufferedGroup.length); lIdx++ {
+	rEndIdx := o.proberState.rBufferedGroup.Length()
+	for lIdx := 0; lIdx < o.proberState.lBufferedGroup.Length(); lIdx++ {
 		if o.filter.isLeftTupleFilteredOut(
 			ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rEndIdx,
 		) {
@@ -1064,7 +1056,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	o.builderState.lGroups = o.builderState.lGroups[:0]
 	// {{ end }}
 	// {{ else }}
-	lGroupEndIdx := int(o.proberState.lBufferedGroup.length)
+	lGroupEndIdx := o.proberState.lBufferedGroup.Length()
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1072,7 +1064,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	// {{ if _JOIN_TYPE.IsLeftSemi }}
 	// TODO(yuzefovich): think about using selection vectors on mjBufferedGroups.
 	// {{ if _FILTER_INFO.HasFilter }}
-	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
+	rGroupEndIdx := o.proberState.rBufferedGroup.Length()
 	o.builderState.lGroups = o.builderState.lGroups[:0]
 	for lIdx := 0; lIdx < lGroupEndIdx; lIdx++ {
 		if !o.filter.isLeftTupleFilteredOut(
@@ -1095,7 +1087,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	}
 	// {{ end }}
 	// {{ else }}
-	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
+	rGroupEndIdx := o.proberState.rBufferedGroup.Length()
 	o.builderState.lGroups[0] = group{
 		rowStartIdx: 0,
 		rowEndIdx:   lGroupEndIdx,
@@ -1280,10 +1272,8 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // batch size to determine the output count. Note that as soon as a group is
 // materialized partially or fully to output, its toBuild field is updated
 // accordingly.
-func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) calculateOutputCount(
-	groups []group,
-) uint16 {
-	count := int(o.builderState.outCount)
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) calculateOutputCount(groups []group) int {
+	count := o.builderState.outCount
 
 	for i := 0; i < len(groups); i++ {
 		// {{ if _JOIN_TYPE.IsLeftAnti }}
@@ -1295,14 +1285,14 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) calculateOutputCount(
 		// {{ end }}
 		count += groups[i].toBuild
 		groups[i].toBuild = 0
-		if count > int(o.outputBatchSize) {
-			groups[i].toBuild = count - int(o.outputBatchSize)
-			count = int(o.outputBatchSize)
-			return uint16(count)
+		if count > o.outputBatchSize {
+			groups[i].toBuild = count - o.outputBatchSize
+			count = o.outputBatchSize
+			return count
 		}
 	}
 	o.builderState.outFinished = true
-	return uint16(count)
+	return count
 }
 
 func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) Next(ctx context.Context) coldata.Batch {
@@ -1345,7 +1335,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) Next(ctx context.Conte
 			if o.outputReady || o.builderState.outCount == o.outputBatchSize {
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
-				o.builderState.outCount = uint16(0)
+				o.builderState.outCount = 0
 				o.outputReady = false
 				return o.output
 			}
