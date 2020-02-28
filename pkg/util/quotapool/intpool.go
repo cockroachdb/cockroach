@@ -13,6 +13,7 @@ package quotapool
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -37,7 +38,7 @@ type IntPool struct {
 
 // IntAlloc is an allocated quantity which should be released.
 type IntAlloc struct {
-	alloc uint64
+	alloc int64
 	p     *IntPool
 }
 
@@ -49,7 +50,7 @@ func (ia *IntAlloc) Release() {
 
 // Acquired returns the quantity that this alloc has acquired.
 func (ia *IntAlloc) Acquired() uint64 {
-	return ia.alloc
+	return uint64(ia.alloc)
 }
 
 // Merge adds the acquired resources in other to ia. Other may not be used after
@@ -59,7 +60,7 @@ func (ia *IntAlloc) Merge(other *IntAlloc) {
 	if ia.p != other.p {
 		panic("cannot merge IntAllocs from two different pools")
 	}
-	ia.alloc = min(ia.p.Capacity(), ia.alloc+other.alloc)
+	ia.alloc = min(int64(ia.p.Capacity()), int64(ia.alloc+other.alloc))
 	ia.p.putIntAlloc(other)
 }
 
@@ -69,7 +70,7 @@ func (ia *IntAlloc) Merge(other *IntAlloc) {
 // AcquireFunc() requests will be woken up with an updated Capacity, and Alloc()
 // requests will be trimmed accordingly.
 func (ia *IntAlloc) Freeze() {
-	ia.p.decCapacity(ia.alloc)
+	ia.p.decCapacity(uint64(ia.alloc))
 }
 
 // String formats an IntAlloc as a string.
@@ -77,7 +78,7 @@ func (ia *IntAlloc) String() string {
 	if ia == nil {
 		return strconv.Itoa(0)
 	}
-	return strconv.FormatUint(ia.alloc, 10)
+	return strconv.FormatInt(ia.alloc, 10)
 }
 
 // from returns true if this IntAlloc is from p.
@@ -96,12 +97,17 @@ func (ia *intAlloc) Merge(other Resource) {
 
 // NewIntPool creates a new named IntPool.
 //
-// capacity is the amount of quota initially available.
+// capacity is the amount of quota initially available. The maximum capacity
+// is math.MaxInt64. If the capacity argument exceeds that value, this function
+// will panic.
 func NewIntPool(name string, capacity uint64, options ...Option) *IntPool {
+	if capacity > math.MaxInt64 {
+		panic(errors.Errorf("capacity %d exceeds max capacity %d", capacity, math.MaxInt64))
+	}
 	p := IntPool{
 		capacity: capacity,
 	}
-	p.qp = New(name, (*intAlloc)(p.newIntAlloc(capacity)), options...)
+	p.qp = New(name, (*intAlloc)(p.newIntAlloc(int64(capacity))), options...)
 	return &p
 }
 
@@ -131,7 +137,12 @@ func (p *IntPool) TryAcquire(ctx context.Context, v uint64) (*IntAlloc, error) {
 func (p *IntPool) acquireMaybeWait(ctx context.Context, v uint64, wait bool) (*IntAlloc, error) {
 	// Special case acquisitions of size 0.
 	if v == 0 {
-		return p.newIntAlloc(v), nil
+		return p.newIntAlloc(0), nil
+	}
+	// The maximum capacity is math.MaxInt64 so we can always truncate requests
+	// to that value.
+	if v > math.MaxInt64 {
+		v = math.MaxInt64
 	}
 	r := p.newIntRequest(v)
 	defer p.putIntRequest(r)
@@ -144,7 +155,7 @@ func (p *IntPool) acquireMaybeWait(ctx context.Context, v uint64, wait bool) (*I
 	if err := p.qp.Acquire(ctx, req); err != nil {
 		return nil, err
 	}
-	return p.newIntAlloc(r.want), nil
+	return p.newIntAlloc(int64(r.want)), nil
 }
 
 // Release will release allocs back to their pool. Allocs which are from p are
@@ -249,7 +260,9 @@ func (p *IntPool) acquireFuncMaybeWait(
 		}
 		return nil, r.err
 	}
-	return p.newIntAlloc(r.took), nil
+	// NB: We know that r.took must be less than math.MaxInt64 because capacity
+	// cannot exceed that value and took cannot exceed capacity.
+	return p.newIntAlloc(int64(r.took)), nil
 }
 
 // Len returns the current length of the queue for this IntPool.
@@ -262,7 +275,7 @@ func (p *IntPool) Len() int {
 func (p *IntPool) ApproximateQuota() (q uint64) {
 	p.qp.ApproximateQuota(func(r Resource) {
 		if ia, ok := r.(*intAlloc); ok {
-			q = ia.alloc
+			q = uint64(max(0, ia.alloc))
 		}
 	})
 	return q
@@ -296,7 +309,7 @@ var intAllocSyncPool = sync.Pool{
 	New: func() interface{} { return new(IntAlloc) },
 }
 
-func (p *IntPool) newIntAlloc(v uint64) *IntAlloc {
+func (p *IntPool) newIntAlloc(v int64) *IntAlloc {
 	ia := intAllocSyncPool.Get().(*IntAlloc)
 	*ia = IntAlloc{p: p, alloc: v}
 	return ia
@@ -363,11 +376,12 @@ type intRequest struct {
 
 func (r *intRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
 	ia := v.(*intAlloc)
-	r.want = min(r.want, ia.p.Capacity())
-	if ia.alloc < r.want {
+	want := min(int64(r.want), int64(ia.p.Capacity()))
+	if ia.alloc < want {
 		return false, nil
 	}
-	ia.alloc -= r.want
+	r.want = uint64(want)
+	ia.alloc -= want
 	return true, ia
 }
 
@@ -396,7 +410,7 @@ type intFuncRequest struct {
 func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
 	ia := v.(*intAlloc)
 	pi := PoolInfo{
-		Available: ia.alloc,
+		Available: uint64(max(0, ia.alloc)),
 		Capacity:  ia.p.Capacity(),
 	}
 	took, err := r.f(ctx, pi)
@@ -411,16 +425,23 @@ func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled boo
 		// Take the request out of the queue and put all the quota back.
 		return true, ia
 	}
-	if took > ia.alloc {
+	if took > math.MaxInt64 || int64(took) > ia.alloc {
 		panic(errors.Errorf("took %d quota > %d allocated", took, ia.alloc))
 	}
 	r.took = took
-	ia.alloc -= took
+	ia.alloc -= int64(took)
 	return true, ia
 }
 
-func min(a, b uint64) (v uint64) {
+func min(a, b int64) (v int64) {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int64) (v int64) {
+	if a > b {
 		return a
 	}
 	return b
