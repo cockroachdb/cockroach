@@ -42,7 +42,7 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import { approximify, latencyBreakdown, longToInt, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
-import DiagnosticsView from "./diagnosticsView";
+import DiagnosticsView from "./diagnostics";
 import { selectStatementById } from "src/redux/statements/statementsSelectors";
 
 const { TabPane } = Tabs;

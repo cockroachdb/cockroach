@@ -13,13 +13,14 @@ import { connect } from "react-redux";
 import { Link as RouterLink } from "react-router-dom";
 import moment from "moment";
 
-import { Button, Text, TextTypes, Table, ColumnsConfig, Badge, Link } from "src/components";
+import { Button, Text, TextTypes, Table, ColumnsConfig, Link } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import { selectStatementById } from "src/redux/statements/statementsSelectors";
 import { enqueueDiagnostics } from "src/redux/statements";
 import { trustIcon } from "src/util/trust";
 
+import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import "./diagnosticsView.styl";
 
@@ -28,19 +29,6 @@ interface DiagnosticsViewOwnProps {
 }
 
 type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispatchToProps;
-
-function mapDiagnosticsStatusToBadge(diagnosticsStatus: string) {
-  switch (diagnosticsStatus) {
-    case "READY":
-      return "success";
-    case "WAITING FOR QUERY":
-      return "info";
-    case "ERROR":
-      return "danger";
-    default:
-      return "info";
-  }
-}
 
 export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
   columns: ColumnsConfig<any> = [
@@ -58,10 +46,12 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
       sorter: true,
       width: "60px",
       render: (_text, record) => (
-        <Badge
-          text={record.status}
-          status={mapDiagnosticsStatusToBadge(record.status)}
-        />
+        <Text>
+          <DiagnosticStatusBadge
+            status={record.status}
+            enableTooltip={record.status !== "READY"}
+          />
+        </Text>
       ),
     },
     {
