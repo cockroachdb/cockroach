@@ -13,6 +13,7 @@ package quotapool_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -616,4 +617,24 @@ func TestLen(t *testing.T) {
 	alloc.Release()
 	<-allocCh
 	assert.Equal(t, 0, qp.Len())
+}
+
+// TestIntpoolIllegalCapacity ensures that constructing an IntPool with capacity
+// in excess of math.MaxInt64 will panic.
+func TestIntpoolWithExcessCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, c := range []uint64{
+		1, math.MaxInt64 - 1, math.MaxInt64,
+	} {
+		require.NotPanics(t, func() {
+			quotapool.NewIntPool("test", c)
+		})
+	}
+	for _, c := range []uint64{
+		math.MaxUint64, math.MaxUint64 - 1, math.MaxInt64 + 1,
+	} {
+		require.Panics(t, func() {
+			quotapool.NewIntPool("test", c)
+		})
+	}
 }
