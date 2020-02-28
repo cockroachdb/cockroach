@@ -16,7 +16,6 @@ import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
 
 import {
-  completeEmailSubscriptionSignUp,
   EMAIL_SUBSCRIPTION_SIGN_UP,
   EmailSubscriptionSignUpPayload,
 } from "./customAnanlyticsActions";
@@ -50,7 +49,6 @@ export function* signUpEmailSubscription(action: PayloadAction<EmailSubscription
       product_updates: "true",
     },
   });
-  yield put(completeEmailSubscriptionSignUp());
   yield put(emailSubscriptionAlertLocalSetting.set(true));
 }
 
