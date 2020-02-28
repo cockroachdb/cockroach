@@ -33,14 +33,13 @@ import (
 
 // TODO(yuzefovich): add benchmarks.
 
-// NewRankOperator creates a new Operator that computes window functions RANK,
-// DENSE_RANK, or PERCENT_RANK (depending on the passed in windowFn).
+// NewRankOperator creates a new Operator that computes window functions RANK
+// or DENSE_RANK (depending on the passed in windowFn).
 // outputColIdx specifies in which coldata.Vec the operator should put its
 // output (if there is no such column, a new column is appended).
 func NewRankOperator(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
@@ -48,15 +47,11 @@ func NewRankOperator(
 	peersColIdx int,
 ) (Operator, error) {
 	if len(orderingCols) == 0 {
-		if windowFn == execinfrapb.WindowerSpec_PERCENT_RANK {
-			return NewConstOp(allocator, input, coltypes.Float64, float64(0), outputColIdx)
-		}
 		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
 	}
 	initFields := rankInitFields{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
-		inputTypes:      inputTypes,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
 		peersColIdx:     peersColIdx,
@@ -72,11 +67,6 @@ func NewRankOperator(
 			return &denseRankWithPartitionOp{rankInitFields: initFields}, nil
 		}
 		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil
-	case execinfrapb.WindowerSpec_PERCENT_RANK:
-		if partitionColIdx != columnOmitted {
-			return &percentRankWithPartitionOp{rankInitFields: initFields}, nil
-		}
-		return &percentRankNoPartitionOp{rankInitFields: initFields}, nil
 	default:
 		return nil, errors.Errorf("unsupported rank type %s", windowFn)
 	}
@@ -102,7 +92,6 @@ type rankInitFields struct {
 	OneInputNode
 
 	allocator       *Allocator
-	inputTypes      []coltypes.T
 	outputColIdx    int
 	partitionColIdx int
 	peersColIdx     int

@@ -14,19 +14,29 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 
 const columnOmitted = -1
 
-// windowFnNeedsPeersInfo is a map from a window function to a boolean that
-// indicates whether the window function pays attention to the concept of
-// "peers" during its computation ("peers" are tuples within the same partition
-// - from PARTITION BY clause - that are not distinct on the columns in ORDER
-// BY clause). For most window functions, the result of computation should be
-// the same for "peers", so most window functions do need this information.
-var windowFnNeedsPeersInfo map[execinfrapb.WindowerSpec_WindowFunc]bool
+var (
+	// windowFnNeedsPeersInfo is a map from a window function to a boolean that
+	// indicates whether the window function pays attention to the concept of
+	// "peers" during its computation ("peers" are tuples within the same partition
+	// - from PARTITION BY clause - that are not distinct on the columns in ORDER
+	// BY clause). For most window functions, the result of computation should be
+	// the same for "peers", so most window functions do need this information.
+	windowFnNeedsPeersInfo = map[execinfrapb.WindowerSpec_WindowFunc]bool{
+		// row_number doesn't pay attention to the concept of "peers."
+		execinfrapb.WindowerSpec_ROW_NUMBER:   false,
+		execinfrapb.WindowerSpec_RANK:         true,
+		execinfrapb.WindowerSpec_DENSE_RANK:   true,
+		execinfrapb.WindowerSpec_PERCENT_RANK: true,
+		execinfrapb.WindowerSpec_CUME_DIST:    true,
+	}
 
-func init() {
-	windowFnNeedsPeersInfo = make(map[execinfrapb.WindowerSpec_WindowFunc]bool)
-	// row_number doesn't pay attention to the concept of "peers."
-	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_ROW_NUMBER] = false
-	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_RANK] = true
-	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_DENSE_RANK] = true
-	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_PERCENT_RANK] = true
-}
+	// SupportedWindowFns contains all window functions supported by the
+	// vectorized engine.
+	SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{
+		execinfrapb.WindowerSpec_ROW_NUMBER:   {},
+		execinfrapb.WindowerSpec_RANK:         {},
+		execinfrapb.WindowerSpec_DENSE_RANK:   {},
+		execinfrapb.WindowerSpec_PERCENT_RANK: {},
+		execinfrapb.WindowerSpec_CUME_DIST:    {},
+	}
+)
