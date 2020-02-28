@@ -124,6 +124,37 @@ const getStatusDescription = (status: LivenessStatus) => {
   }
 };
 
+// tslint:disable-next-line:variable-name
+const NodeNameColumn: React.FC<{ record: NodeStatusRow | DecommissionedNodeStatusRow }> = ({ record }) => {
+  return (
+    <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+      <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
+      <Text>{record.nodeName}</Text>
+    </Link>
+  );
+};
+
+// tslint:disable-next-line:variable-name
+const NodeLocalityColumn: React.FC<{ record: NodeStatusRow }> = ({ record }) => {
+  return (
+    <Text>
+      <Tooltip
+        placement={"bottom"}
+        title={
+          <div>
+            {
+              record.tiers.map((tier, idx) =>
+                <div key={idx}>{`${tier.key} = ${tier.value}`}</div>)
+            }
+          </div>
+        }
+      >
+        {record.region}
+      </Tooltip>
+    </Text>
+  );
+};
+
 /**
  * LiveNodeList displays a sortable table of all "live" nodes, which includes
  * both healthy and suspect nodes. Included is a side-bar with summary
@@ -137,31 +168,9 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       title: "nodes",
       render: (_text, record) => {
         if (!!record.nodeId) {
-          return (
-            <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-              <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
-              <Text>{record.nodeName}</Text>
-            </Link>
-          );
+          return <NodeNameColumn record={record} />;
         } else {
-          // Top level grouping item does not have nodeId
-          return (
-            <Text>
-              <Tooltip
-                placement={"bottom"}
-                title={
-                  <div>
-                    {
-                      record.tiers.map((tier, idx) =>
-                        <div key={idx}>{`${tier.key} = ${tier.value}`}</div>)
-                    }
-                  </div>
-                }
-              >
-                {record.region}
-              </Tooltip>
-            </Text>
-          );
+          return <NodeLocalityColumn record={record} />;
         }
       },
       sorter: (a, b) => {
@@ -309,11 +318,8 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     {
       key: "nodes",
       title: "decommissioned nodes",
-      render: (_text, record) => (
-        <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-          <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
-          <Text>{record.nodeName}</Text>
-        </Link>),
+      render: (_text, record) =>
+        <NodeNameColumn record={record}/>,
     },
     {
       key: "decommissionedSince",
@@ -405,11 +411,11 @@ export const liveNodesTableDataSelector = createSelector(
         // from location values.
         const firstNodeInGroup = nodesPerRegion[0];
         const tiers = getNodeLocalityTiers(firstNodeInGroup);
-        const location = _.last(tiers);
+        const lastTier = _.last(tiers);
 
         return {
           key: `${regionKey}`,
-          region: location?.value,
+          region: lastTier?.value,
           tiers,
           nodesCount: nodesPerRegion.length,
           replicas: _.sum(nestedRows.map(nr => nr.replicas)),
