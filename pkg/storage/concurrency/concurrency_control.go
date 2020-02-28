@@ -449,7 +449,8 @@ type lockTable interface {
 	ScanAndEnqueue(Request, lockTableGuard) lockTableGuard
 
 	// Dequeue removes the request from its lock wait-queues. It should be
-	// called when the request is finished, whether it evaluated or not.
+	// called when the request is finished, whether it evaluated or not. The
+	// guard should not be used after being dequeued.
 	//
 	// This method does not release any locks. This method must be called on the
 	// last guard returned from ScanAndEnqueue for the request, even if one of
