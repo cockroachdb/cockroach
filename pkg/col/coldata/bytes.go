@@ -87,7 +87,7 @@ func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
 
 // maybeBackfillOffsets is an optimized version of
 // UpdateOffsetsToBeNonDecreasing that assumes that all offsets up to
-// b.maxSetIndex+1 are non-decreasing. Note that this method can be a noop when
+// b.maxSetIndex+1 are non-decreasing. Note that this method is a noop when
 // i <= b.maxSetIndex+1.
 func (b *Bytes) maybeBackfillOffsets(i int) {
 	// Note that we're not checking whether this Bytes is a window because
@@ -95,6 +95,9 @@ func (b *Bytes) maybeBackfillOffsets(i int) {
 	// invariant that we need to have.
 	for j := b.maxSetIndex + 2; j <= i; j++ {
 		b.offsets[j] = b.offsets[b.maxSetIndex+1]
+	}
+	if i > b.maxSetIndex {
+		b.maxSetIndex = i - 1
 	}
 }
 
@@ -123,17 +126,12 @@ func (b *Bytes) Set(i int, v []byte) {
 			),
 		)
 	}
-	if i == b.maxSetIndex {
-		// We are overwriting an element at the end of b.data, truncate so we can
-		// append in every path.
-		b.data = b.data[:b.offsets[i]]
-	} else {
-		// We're maybe setting an element not right after the last already present
-		// element (i.e. there might be gaps in b.offsets). This is probably due to
-		// NULL values that are stored separately. In order to maintain the
-		// assumption of non-decreasing offsets, we need to backfill them.
-		b.maybeBackfillOffsets(i)
-	}
+	// We're maybe setting an element not right after the last already present
+	// element (i.e. there might be gaps in b.offsets). This is probably due to
+	// NULL values that are stored separately. In order to maintain the
+	// assumption of non-decreasing offsets, we need to backfill them.
+	b.maybeBackfillOffsets(i)
+	b.data = b.data[:b.offsets[i]]
 	b.offsets[i] = int32(len(b.data))
 	b.data = append(b.data, v...)
 	b.offsets[i+1] = int32(len(b.data))
