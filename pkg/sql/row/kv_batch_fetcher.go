@@ -231,6 +231,16 @@ func makeKVBatchFetcherWithSendFunc(
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
+	if ba.Header.MaxSpanRequestKeys > 0 {
+		// If this kvfetcher limits the number of rows returned, also use
+		// target bytes to guard against the case in which the average row
+		// is very large.
+		// If no limit is set, the assumption is that SQL *knows* that there
+		// is only a "small" amount of data to be read, and wants to preserve
+		// concurrency for this request inside of DistSender, which setting
+		// TargetBytes would interfere with.
+		ba.Header.TargetBytes = 10 * (1 << 20)
+	}
 	ba.Header.ReturnRangeInfo = f.returnRangeInfo
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	if f.reverse {
