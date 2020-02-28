@@ -370,12 +370,8 @@ const (
 	// This event is produced both when entering the CommitWait state and also
 	// when leaving it.
 	txnCommit
-	// txnAborted means that the transaction will not commit. This doesn't mean
-	// that the SQL txn is necessarily "finished" - the connection might be in the
-	// Aborted state.
-	// This event is produced both when entering the Aborted state and sometimes
-	// when leaving it.
-	txnAborted
+	// txnRollback means that the transaction has rolled back.
+	txnRollback
 	// txnRestart means that the transaction is restarting. The iteration
 	// of the txn just finished will not commit.
 	txnRestart

@@ -11,13 +11,13 @@ func _() {
 	_ = x[noEvent-0]
 	_ = x[txnStart-1]
 	_ = x[txnCommit-2]
-	_ = x[txnAborted-3]
+	_ = x[txnRollback-3]
 	_ = x[txnRestart-4]
 }
 
-const _txnEvent_name = "noEventtxnStarttxnCommittxnAbortedtxnRestart"
+const _txnEvent_name = "noEventtxnStarttxnCommittxnRollbacktxnRestart"
 
-var _txnEvent_index = [...]uint8{0, 7, 15, 24, 34, 44}
+var _txnEvent_index = [...]uint8{0, 7, 15, 24, 35, 45}
 
 func (i txnEvent) String() string {
 	if i < 0 || i >= txnEvent(len(_txnEvent_index)-1) {

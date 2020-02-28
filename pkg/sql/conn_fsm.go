@@ -158,7 +158,7 @@ func (e eventTxnFinishPayload) toEvent() txnEvent {
 	if e.commit {
 		return txnCommit
 	}
-	return txnAborted
+	return txnRollback
 }
 
 type eventTxnRestart struct{}
@@ -323,7 +323,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
 				ts.txnAbortCount.Inc(1)
 				return nil
 			},
@@ -350,7 +350,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
 				ts.txnAbortCount.Inc(1)
 				return nil
 			},
@@ -471,7 +471,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(eventNonRetriableErrPayload).err)
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
 				ts.txnAbortCount.Inc(1)
 				return nil
 			},
@@ -508,7 +508,7 @@ func cleanupAndFinish(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
 	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
 	ts.finishSQLTxn()
-	ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+	ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
 	return nil
 }
 
@@ -553,14 +553,14 @@ func (ts *txnState) finishTxn(payload eventTxnFinishPayload) error {
 var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
 	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False}: {
 		// We accept eventNonRetriableErr with both IsCommit={True, fsm.False}, even
-		// those this state machine does not support COMMIT statements because
+		// though this state machine does not support COMMIT statements because
 		// connExecutor.close() sends an eventNonRetriableErr{IsCommit: fsm.True} event.
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
 			Next: stateInternalError{},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn()
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
 				return nil
 			},
 		},
@@ -569,7 +569,7 @@ var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn()
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
 				return nil
 			},
 		},
