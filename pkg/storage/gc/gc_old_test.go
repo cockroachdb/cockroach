@@ -213,24 +213,16 @@ func runGCOld(
 		}
 	}
 
-	// From now on, all newly added keys are range-local.
+	// From now on, all keys processed are range-local.
 
 	// Process local range key entries (txn records, queue last processed times).
-	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn)
-	if err != nil {
-		return Info{}, err
-	}
-
-	if err := gcer.GC(ctx, localRangeKeys); err != nil {
-		return Info{}, err
+	if err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn, gcer); err != nil {
+		log.Warningf(ctx, "while gc'ing local key range: %s", err)
 	}
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info)
-	if err := gcer.GC(ctx, abortSpanKeys); err != nil {
-		return Info{}, err
-	}
+	processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info, gcer)
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
