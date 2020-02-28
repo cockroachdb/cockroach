@@ -255,6 +255,7 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		case execinfrapb.WindowerSpec_RANK:
 		case execinfrapb.WindowerSpec_DENSE_RANK:
 		case execinfrapb.WindowerSpec_PERCENT_RANK:
+		case execinfrapb.WindowerSpec_CUME_DIST:
 		default:
 			return false, errors.Newf("window function %s is not supported", wf.String())
 		}
@@ -956,23 +957,23 @@ func NewColOperator(
 				typs = append(typs, coltypes.Bool)
 			}
 
-			windowFnOpMemAccount := streamingMemAccount
-			if !useStreamingMemAccountForBuffering && windowFn == execinfrapb.WindowerSpec_PERCENT_RANK {
-				// Only percentRankOps are not streaming.
-				windowFnOpMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "percent-rank")
-			}
-			allocator := NewAllocator(ctx, windowFnOpMemAccount)
 			switch windowFn {
 			case execinfrapb.WindowerSpec_ROW_NUMBER:
 				result.Op = NewRowNumberOperator(
-					allocator, input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+					NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
 				)
-			case
-				execinfrapb.WindowerSpec_RANK,
-				execinfrapb.WindowerSpec_DENSE_RANK,
-				execinfrapb.WindowerSpec_PERCENT_RANK:
+			case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
 				result.Op, err = NewRankOperator(
-					allocator, input, typs, windowFn, wf.Ordering.Columns,
+					NewAllocator(ctx, streamingMemAccount), input, windowFn, wf.Ordering.Columns,
+					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
+				)
+			case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
+				memAccount := streamingMemAccount
+				if !useStreamingMemAccountForBuffering {
+					memAccount = result.createBufferingMemAccount(ctx, flowCtx, "relative-rank")
+				}
+				result.Op, err = NewRelativeRankOperator(
+					NewAllocator(ctx, memAccount), input, typs, windowFn, wf.Ordering.Columns,
 					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
 				)
 			default:
@@ -990,14 +991,16 @@ func NewColOperator(
 				result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
 			}
 
-			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *windowFnOutputType[windowFn])
-			if windowFn != execinfrapb.WindowerSpec_PERCENT_RANK {
+			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *WindowFnOutputType[windowFn])
+			if windowFn != execinfrapb.WindowerSpec_PERCENT_RANK &&
+				windowFn != execinfrapb.WindowerSpec_CUME_DIST {
 				// Window functions can run in auto mode because they are streaming
-				// operators (except for percent_rank) and internally they use a sorter
-				// which can fall back to disk if needed.
+				// operators (except for percent_rank and cume_dist) and internally
+				// they use a sorter which can fall back to disk if needed.
 				// TODO(yuzefovich): currently disabled.
 				// result.CanRunInAutoMode = true
-				// TODO(yuzefovich): add spilling to disk for percent_rank.
+				// TODO(yuzefovich): add spilling to disk for percent_rank and
+				// cume_dist.
 			}
 
 		default:

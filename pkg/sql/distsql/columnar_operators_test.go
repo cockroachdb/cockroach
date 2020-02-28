@@ -856,12 +856,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 		// window functions that take in arguments.
 		typs[i] = *types.Int
 	}
-	for _, windowFn := range []execinfrapb.WindowerSpec_WindowFunc{
-		execinfrapb.WindowerSpec_ROW_NUMBER,
-		execinfrapb.WindowerSpec_RANK,
-		execinfrapb.WindowerSpec_DENSE_RANK,
-		execinfrapb.WindowerSpec_PERCENT_RANK,
-	} {
+	for windowFn, outputType := range colexec.WindowFnOutputType {
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
 			{0},    // Partitioning on the first input column.
@@ -900,10 +895,6 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					pspec := &execinfrapb.ProcessorSpec{
 						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
-					}
-					outputType := types.Int
-					if windowFn == execinfrapb.WindowerSpec_PERCENT_RANK {
-						outputType = types.Float
 					}
 					args := verifyColOperatorArgs{
 						anyOrder:    true,

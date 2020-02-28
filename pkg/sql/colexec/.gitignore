@@ -21,12 +21,12 @@ mergejoiner_rightouter.eg.go
 min_max_agg.eg.go
 orderedsynchronizer.eg.go
 overloads_test_utils.eg.go
-percent_rank.eg.go
 proj_const_left_ops.eg.go
 proj_const_right_ops.eg.go
 proj_non_const_ops.eg.go
 quicksort.eg.go
 rank.eg.go
+relative_rank.eg.go
 row_number.eg.go
 rowstovec.eg.go
 selection_ops.eg.go

@@ -19,7 +19,9 @@ const columnOmitted = -1
 
 var (
 	windowFnNeedsPeersInfo map[execinfrapb.WindowerSpec_WindowFunc]bool
-	windowFnOutputType     map[execinfrapb.WindowerSpec_WindowFunc]*types.T
+	// WindowFnOutputType is a mapping from a window function to its output type.
+	// Only window functions supported by the vectorized engine are present.
+	WindowFnOutputType map[execinfrapb.WindowerSpec_WindowFunc]*types.T
 )
 
 func init() {
@@ -28,10 +30,12 @@ func init() {
 	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_RANK] = true
 	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_DENSE_RANK] = true
 	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_PERCENT_RANK] = true
+	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_CUME_DIST] = true
 
-	windowFnOutputType = make(map[execinfrapb.WindowerSpec_WindowFunc]*types.T)
-	windowFnOutputType[execinfrapb.WindowerSpec_ROW_NUMBER] = types.Int
-	windowFnOutputType[execinfrapb.WindowerSpec_RANK] = types.Int
-	windowFnOutputType[execinfrapb.WindowerSpec_DENSE_RANK] = types.Int
-	windowFnOutputType[execinfrapb.WindowerSpec_PERCENT_RANK] = types.Float
+	WindowFnOutputType = make(map[execinfrapb.WindowerSpec_WindowFunc]*types.T)
+	WindowFnOutputType[execinfrapb.WindowerSpec_ROW_NUMBER] = types.Int
+	WindowFnOutputType[execinfrapb.WindowerSpec_RANK] = types.Int
+	WindowFnOutputType[execinfrapb.WindowerSpec_DENSE_RANK] = types.Int
+	WindowFnOutputType[execinfrapb.WindowerSpec_PERCENT_RANK] = types.Float
+	WindowFnOutputType[execinfrapb.WindowerSpec_CUME_DIST] = types.Float
 }
