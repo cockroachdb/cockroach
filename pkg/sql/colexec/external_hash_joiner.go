@@ -217,6 +217,9 @@ func newExternalHashJoiner(
 	fdSemaphore semaphore.Semaphore,
 	numForcedRepartitions int,
 ) Operator {
+	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeClearAndReuseCache {
+		execerror.VectorizedInternalPanic(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
+	}
 	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
 	leftInMemHashJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
