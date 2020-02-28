@@ -25,23 +25,67 @@ DBIncrementalIterator::DBIncrementalIterator(DBEngine* engine, DBIterOptions opt
       end(end),
       write_intent(write_intent) {
 
+  sanity_iter.reset(NULL);
+
   start_time.set_wall_time(start.wall_time);
   start_time.set_logical(start.logical);
   end_time.set_wall_time(end.wall_time);
   end_time.set_logical(end.logical);
 
-  DBIterOptions iter_opts = opts;
+  // sanity_iter is only relevant if a time-bound iterator is required.
+  //
+  // It is necessary for correctness that sanity_iter be created before
+  // iter. This is because the provided Reader may not be a consistent
+  // snapshot, so the two could end up observing different information. The hack
+  // around sanityCheckMetadataKey only works properly if all possible
+  // discrepancies between the two iterators lead to intents and values falling
+  // outside of the timestamp range **from iter's perspective**. This allows us
+  // to simply ignore discrepancies that we notice in advance(). See #34819.
   if (!EmptyTimestamp(opts.min_timestamp_hint) || !EmptyTimestamp(opts.max_timestamp_hint)) {
     assert(!EmptyTimestamp(opts.max_timestamp_hint));
     DBIterOptions nontimebound_opts = DBIterOptions();
     nontimebound_opts.upper_bound = opts.upper_bound;
-    iter_opts = nontimebound_opts;
-    time_bound_iter.reset(DBNewIter(engine, opts));
+    sanity_iter.reset(DBNewIter(engine, nontimebound_opts));
   }
-  iter.reset(DBNewIter(engine, iter_opts));
+  iter.reset(DBNewIter(engine, opts));
 }
 
 DBIncrementalIterator::~DBIncrementalIterator() {}
+
+// sanityCheckMetadataKey looks up the current `iter` key using a normal,
+// non-time-bound iterator and returns the value if the normal iterator also
+// sees that exact key. Otherwise, it returns false. It's used in the workaround
+// in `advanceKey` for a time-bound iterator bug.
+rocksdb::Slice DBIncrementalIterator::sanityCheckMetadataKey() {
+  // If sanityIter is not set, it's because we're not using time-bound
+  // iterator and we don't need the sanity check.
+  if (sanity_iter == NULL) {
+    valid = true;
+    status = ToDBStatus(rocksdb::Status::OK());
+    return iter.get()->rep->value();
+  }
+
+  auto sanity_iter_rep = sanity_iter->rep.get();
+  sanity_iter_rep->Seek(iter->rep->key());
+
+  if (!sanity_iter_rep->status().ok()) {
+    valid = false;
+    status = ToDBStatus(sanity_iter_rep->status());
+    return NULL;
+  } else if (!sanity_iter_rep->Valid()) {
+    valid = false;
+    status = ToDBStatus(rocksdb::Status::OK());
+    return NULL;
+  } else if (kComparator.Compare(sanity_iter_rep->key(), iter->rep->key()) != 0) {
+    valid = false;
+    status = ToDBStatus(rocksdb::Status::OK());
+    return NULL;
+  }
+
+  valid = true;
+  status = ToDBStatus(rocksdb::Status::OK());
+  return sanity_iter.get()->rep->value();
+}
 
 // legacyTimestampIsLess compares the timestamps t1 and t2, and returns a
 // boolean indicating whether t1 is less than t2.
@@ -51,103 +95,17 @@ bool DBIncrementalIterator::legacyTimestampIsLess(const cockroach::util::hlc::Le
          (t1.wall_time() == t2.wall_time() && t1.logical() < t2.logical());
 }
 
-// extractKey extracts the key portion of the mvcc_key and put it in key. It
-// returns a validity indicator.
-WARN_UNUSED_RESULT bool DBIncrementalIterator::extractKey(rocksdb::Slice mvcc_key, rocksdb::Slice *key) {
-  rocksdb::Slice ts;
-  if (!SplitKey(mvcc_key, key, &ts)) {
-    valid = false;
-    status = FmtStatus("failed to split mvcc key");
-    return false;
-  }
-  return true;
-}
-
-// maybeSkipKeys checks if any keys can be skipped by using a time-bound
-// iterator. If keys can be skipped, it will update the main iterator to point
-// to the earliest version of the next candidate key.
-// It is expected that TBI is at a key <= main iterator key when calling
-// maybeSkipKeys().
-void DBIncrementalIterator::maybeSkipKeys() {
-  if (time_bound_iter == nullptr) {
-    // We don't have a TBI, so we can't skip any keys.
-    return;
-  }
-
-  rocksdb::Slice tbi_key;
-  if(!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
-    return;
-  }
-  rocksdb::Slice iter_key;
-  if(!extractKey(time_bound_iter->rep->key(), &iter_key)) {
-    return;
-  }
-
-  if (iter_key.compare(tbi_key) > 0) {
-    // If the iterKey got ahead of the TBI key, advance the TBI Key.
-    auto state = DBIterNext(time_bound_iter.get(), true /* skip_current_key_versions */);
-    if (!state.valid) {
-        status = state.status;
-        valid = false;
-        return;
-    }
-    if(!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
+// advanceKey finds the key and its appropriate version which lies in
+// (start_time, end_time].
+void DBIncrementalIterator::advanceKey() {
+  for (;;) {
+    if (!valid) {
       return;
     }
 
-    auto cmp = iter_key.compare(tbi_key);
-    // The case where iterKey.Compare(tbiKey) == 0 is the fast-path is when the
-    // TBI and the main iterator are in lockstep. In this case, the main
-    // iterator was referencing the next key that would be visited by the TBI.
-    // This means that for the incremental iterator to perform a Next or NextKey
-    // will require only 1 extra NextKey invocation while they remain in
-    // lockstep.
-
-    if (cmp > 0) {
-      // If the tbiKey is still behind the iterKey, the TBI key may be seeing
-      // phantom MVCCKey.Keys. These keys may not be seen by the main iterator
-      // due to aborted transactions and keys which have been subsumed due to
-      // range tombstones. In this case we can SeekGE() the TBI to the main iterator.
-
-      // NB: Seek() is expensive, and this is only acceptable since we expect
-      // this case to rarely occur.
-      state = DBIterSeek(time_bound_iter.get(), ToDBKey(iter_key));
-      if (!state.valid) {
-        status = state.status;
-        valid = false;
-        return;
-      }
-      if(!extractKey(time_bound_iter->rep->key(), &tbi_key)) {
-        return;
-      }
-      cmp = iter_key.compare(tbi_key);
-    }
-
-    if (cmp < 0) {
-      // In the case that the next MVCC key that the TBI observes is not the
-      // same as the main iterator, we may be able to skip over a large group of
-      // keys. The main iterator is seeked to the TBI in hopes that many keys
-      // were skipped. Note that a Seek() is an order of magnitude more
-      // expensive than a Next().
-      state = DBIterSeek(iter.get(), ToDBKey(tbi_key));
-      if (!state.valid) {
-        status = state.status;
-        valid = false;
-        return;
-      }
-    }
-  }
-}
-
-// advanceKey advances the main iterator until it is referencing a key within
-// (start_time, end_time].
-// It populates i.err with an error if either of the following was encountered:
-// a) an inline value
-// b) an intent with a timestamp within the incremental iterator's bounds
-void DBIncrementalIterator::advanceKey() {
-  for (;;) {
-    maybeSkipKeys();
-    if (!valid) {
+    if (!iter.get()->rep->Valid()) {
+      status = ToDBStatus(iter.get()->rep->status());
+      valid = false;
       return;
     }
 
@@ -165,7 +123,23 @@ void DBIncrementalIterator::advanceKey() {
       meta.mutable_timestamp()->set_wall_time(wall_time);
       meta.mutable_timestamp()->set_logical(logical);
     } else {
-      const auto value = iter->rep->value();
+      // HACK(dan): Work around a known bug in the time-bound iterator.
+      // For reasons described in #28358, a time-bound iterator will
+      // sometimes see an unresolved intent where there is none. A normal
+      // iterator doesn't have this problem, so we work around it by
+      // double checking all non-value keys. If sanityCheckMetadataKey
+      // returns false, then the intent was a phantom and we ignore it.
+      // NB: this could return a older/newer intent than the one the time-bound
+      // iterator saw; this is handled.
+      auto value = sanityCheckMetadataKey();
+      if (status.data != NULL) {
+        return;
+      } else if (!valid) {
+        valid = true;
+        DBIterNext(iter.get(), false);
+        continue;
+      }
+
       if (!meta.ParseFromArray(value.data(), value.size())) {
         status = ToDBString("failed to parse meta");
         valid = false;
@@ -198,21 +172,15 @@ void DBIncrementalIterator::advanceKey() {
       }
     }
 
-    DBIterState state;
     if (legacyTimestampIsLess(end_time, meta.timestamp())) {
-      state = DBIterNext(iter.get(), false);
+      DBIterNext(iter.get(), false);
+      continue;
     } else if (!legacyTimestampIsLess(start_time, meta.timestamp())) {
-      state = DBIterNext(iter.get(), true);
-    } else {
-      // We have found a key within the time bounds, break.
-      break;
+      DBIterNext(iter.get(), true);
+      continue;
     }
 
-    if (!state.valid) {
-        status = state.status;
-        valid = false;
-        return;
-    }
+    break;
   }
 }
 
@@ -233,43 +201,14 @@ DBIterState DBIncrementalIterator::getState() {
   return state;
 }
 
-// seek advances the iterator to the first key in the engine which is >= the
-// provided key. key should be a metadata key to ensure that the iterator has a
-// chance to observe any intents on the key if they are there.
 DBIterState DBIncrementalIterator::seek(DBKey key) {
-  if (time_bound_iter != nullptr) {
-    // Check which is the first key seen by the TBI.
-    auto state = DBIterSeek(time_bound_iter.get(), key);
-    if (!state.valid) {
-      status = state.status;
-      valid = false;
-      return getState();
-    }
-    const rocksdb::Slice tbi_key(time_bound_iter->rep->key());
-    const rocksdb::Slice iter_key(key.key.data, key.key.len);
-    if (tbi_key.compare(iter_key) > 0) {
-      // If the first key that the TBI sees is ahead of the given startKey, we
-      // can seek directly to the first version of the key.
-      key = ToDBKey(tbi_key);
-    }
-  }
-  auto state = DBIterSeek(iter.get(), key);
-  if (!state.valid) {
-      status = state.status;
-      valid = false;
-      return getState();
-  }
+  DBIterSeek(iter.get(), key);
   advanceKey();
   return getState();
 }
 
 DBIterState DBIncrementalIterator::next(bool skip_current_key_versions) {
-  auto state = DBIterNext(iter.get(), skip_current_key_versions);
-  if (!state.valid) {
-    status = state.status;
-    valid = false;
-    return getState();
-  }
+  DBIterNext(iter.get(), skip_current_key_versions);
   advanceKey();
   return getState();
 }
