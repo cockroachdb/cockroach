@@ -588,7 +588,13 @@ func NewColOperator(
 							ctx, result.createBufferingMemAccountWithLimit(
 								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							))
-						return newExternalHashJoiner(allocator, hjSpec, inputOne, inputTwo, args.DiskQueueCfg, args.FDSemaphore)
+						// Make a copy of the DiskQueueCfg and set defaults for the hash
+						// joiner. The cache mode is chosen to automatically close the cache
+						// belonging to partitions at a parent level when repartitioning.
+						diskQueueCfg := args.DiskQueueCfg
+						diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
+						diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
+						return newExternalHashJoiner(allocator, hjSpec, inputOne, inputTwo, diskQueueCfg, args.FDSemaphore)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
@@ -802,13 +808,19 @@ func NewColOperator(
 							ctx, result.createStandaloneMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
+						// Make a copy of the DiskQueueCfg and set defaults for the sorter.
+						// The cache mode is chosen to reuse the cache to have a smaller
+						// cache per partition without affecting performance.
+						diskQueueCfg := args.DiskQueueCfg
+						diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
+						diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 						return newExternalSorter(
 							unlimitedAllocator,
 							standaloneAllocator,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							args.TestingKnobs.MaxNumberPartitions,
-							args.DiskQueueCfg,
+							diskQueueCfg,
 							args.FDSemaphore,
 						)
 					},
