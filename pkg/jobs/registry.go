@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -485,12 +486,12 @@ func (r *Registry) Start(
 		}
 	})
 
-	maybeAdoptJobs := func(ctx context.Context) {
+	maybeAdoptJobs := func(ctx context.Context, randomizeJobOrder bool) {
 		if r.adoptionDisabled(ctx) {
 			r.cancelAll(ctx)
 			return
 		}
-		if err := r.maybeAdoptJob(ctx, nl); err != nil {
+		if err := r.maybeAdoptJob(ctx, nl, randomizeJobOrder); err != nil {
 			log.Errorf(ctx, "error while adopting jobs: %s", err)
 		}
 	}
@@ -501,9 +502,10 @@ func (r *Registry) Start(
 			case <-stopper.ShouldStop():
 				return
 			case <-r.adoptionCh:
-				maybeAdoptJobs(ctx)
+				// Try to adopt the most recently created job.
+				maybeAdoptJobs(ctx, false /* randomizeJobOrder */)
 			case <-time.After(adoptInterval):
-				maybeAdoptJobs(ctx)
+				maybeAdoptJobs(ctx, true /* randomizeJobOrder */)
 			}
 		}
 	})
@@ -942,7 +944,9 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 	return false
 }
 
-func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
+func (r *Registry) maybeAdoptJob(
+	ctx context.Context, nl NodeLiveness, randomizeJobOrder bool,
+) error {
 	const stmt = `
 SELECT id, payload, progress IS NULL, status
 FROM system.jobs
@@ -953,6 +957,11 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed querying for jobs")
+	}
+
+	if randomizeJobOrder {
+		rand.Seed(timeutil.Now().UnixNano())
+		rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
 	}
 
 	type nodeStatus struct {
