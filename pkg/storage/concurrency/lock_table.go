@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -288,6 +289,36 @@ type lockTableGuardImpl struct {
 
 var _ lockTableGuard = &lockTableGuardImpl{}
 
+// Used to avoid allocations.
+var lockTableGuardImplPool = sync.Pool{
+	New: func() interface{} {
+		g := new(lockTableGuardImpl)
+		g.mu.signal = make(chan struct{}, 1)
+		g.mu.locks = make(map[*lockState]struct{})
+		return g
+	},
+}
+
+// newLockTableGuardImpl returns a new lockTableGuardImpl. The struct will
+// contain pre-allocated mu.signal and mu.locks fields, so it shouldn't be
+// overwritten blindly.
+func newLockTableGuardImpl() *lockTableGuardImpl {
+	return lockTableGuardImplPool.Get().(*lockTableGuardImpl)
+}
+
+// releaseLockTableGuardImpl releases the guard back into the object pool.
+func releaseLockTableGuardImpl(g *lockTableGuardImpl) {
+	// Preserve the signal channel and locks map.
+	signal, locks := g.mu.signal, g.mu.locks
+	for l := range locks {
+		delete(locks, l)
+	}
+	*g = lockTableGuardImpl{}
+	g.mu.signal = signal
+	g.mu.locks = locks
+	lockTableGuardImplPool.Put(g)
+}
+
 func (g *lockTableGuardImpl) ShouldWait() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -425,6 +456,10 @@ type lockHolderInfo struct {
 }
 
 // Per lock state in lockTableImpl.
+//
+// NOTE: we can't easily pool lockState objects without some form of reference
+// counting because they are used as elements in a copy-on-write btree and may
+// still be referenced by clones of the tree even when deleted from the primary.
 type lockState struct {
 	id     uint64 // needed for implementing util/interval/generic type contract
 	endKey []byte // used in btree iteration and tests
@@ -1479,27 +1514,28 @@ func (l *lockState) lockIsFree() (gc bool) {
 	return false
 }
 
+func (t *treeMu) nextLockSeqNum() uint64 {
+	t.lockIDSeqNum++
+	return t.lockIDSeqNum
+}
+
 // ScanAndEnqueue implements the lockTable interface.
 func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTableGuard {
 	var g *lockTableGuardImpl
 	if guard == nil {
-		seqNum := atomic.AddUint64(&t.seqNum, 1)
-		g = &lockTableGuardImpl{
-			seqNum:  seqNum,
-			spans:   req.LockSpans,
-			readTS:  req.Timestamp,
-			writeTS: req.Timestamp,
-			sa:      spanset.NumSpanAccess - 1,
-			index:   -1,
-		}
+		g = newLockTableGuardImpl()
+		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
+		g.spans = req.LockSpans
+		g.readTS = req.Timestamp
+		g.writeTS = req.Timestamp
+		g.sa = spanset.NumSpanAccess - 1
+		g.index = -1
 		if req.Txn != nil {
 			g.txn = &req.Txn.TxnMeta
 			g.readTS = req.Txn.ReadTimestamp
 			g.readTS.Forward(req.Txn.MaxTimestamp)
 			g.writeTS = req.Txn.WriteTimestamp
 		}
-		g.mu.signal = make(chan struct{}, 1)
-		g.mu.locks = make(map[*lockState]struct{})
 	} else {
 		g = guard.(*lockTableGuardImpl)
 		g.key = nil
@@ -1533,6 +1569,8 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 // Dequeue implements the lockTable interface.
 func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 	g := guard.(*lockTableGuardImpl)
+	defer releaseLockTableGuardImpl(g)
+
 	var candidateLocks []*lockState
 	g.mu.Lock()
 	for l := range g.mu.locks {
@@ -1574,8 +1612,7 @@ func (t *lockTableImpl) AddDiscoveredLock(intent *roachpb.Intent, guard lockTabl
 	iter := tree.MakeIter()
 	iter.FirstOverlap(&lockState{key: key})
 	if !iter.Valid() {
-		l = &lockState{id: tree.lockIDSeqNum, key: key, ss: ss}
-		tree.lockIDSeqNum++
+		l = &lockState{id: tree.nextLockSeqNum(), key: key, ss: ss}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
 		tree.Set(l)
@@ -1612,7 +1649,7 @@ func (t *lockTableImpl) AcquireLock(
 			// Don't remember uncontended replicated locks.
 			return nil
 		}
-		l = &lockState{id: tree.lockIDSeqNum, key: key, ss: ss}
+		l = &lockState{id: tree.nextLockSeqNum(), key: key, ss: ss}
 		tree.lockIDSeqNum++
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
