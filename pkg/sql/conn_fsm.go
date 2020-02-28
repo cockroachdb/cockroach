@@ -440,7 +440,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 					nil, /* txn */
 					args.Payload.(eventTxnStartPayload).tranCtx,
 				)
-				ts.setAdvanceInfo(advanceOne, noRewind, noEvent)
+				ts.setAdvanceInfo(advanceOne, noRewind, txnRestart)
 				return nil
 			},
 		},
