@@ -42,7 +42,7 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 		typs[i] = availableTyps[rng.Intn(len(availableTyps))]
 	}
 
-	capacity := rng.Intn(int(coldata.BatchSize())) + 1
+	capacity := rng.Intn(coldata.BatchSize()) + 1
 	length := rng.Intn(capacity)
 	b := colexec.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
@@ -151,7 +151,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colexec.RandomBatch(testAllocator, rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
+		batch := colexec.RandomBatch(testAllocator, rng, []coltypes.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
@@ -189,9 +189,9 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {
 			vec := batch.ColVec(0)
 			vec.Nulls().UnsetNulls()
-			numNulls := uint16(int(nullFraction * float64(batch.Length())))
+			numNulls := int(nullFraction * float64(batch.Length()))
 			// Set the first numNulls elements to null.
-			for i := uint16(0); i < batch.Length() && i < numNulls; i++ {
+			for i := 0; i < batch.Length() && i < numNulls; i++ {
 				vec.Nulls().SetNull(i)
 			}
 		}
@@ -206,7 +206,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 					if len(data) != 1 {
 						b.Fatal("expected arrow batch of length 1")
 					}
-					if data[0].Len() != int(coldata.BatchSize()) {
+					if data[0].Len() != coldata.BatchSize() {
 						b.Fatal("unexpected number of elements")
 					}
 				}

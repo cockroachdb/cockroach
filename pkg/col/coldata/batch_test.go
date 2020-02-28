@@ -34,7 +34,7 @@ func TestBatchReset(t *testing.T) {
 		vecsAfter := b.ColVecs()
 		ptrAfter := (*reflect.SliceHeader)(unsafe.Pointer(&vecsAfter))
 		assert.Equal(t, shouldReuse, ptrBefore.Data == ptrAfter.Data)
-		assert.Equal(t, n, int(b.Length()))
+		assert.Equal(t, n, b.Length())
 		assert.Equal(t, len(typs), b.Width())
 
 		assert.Nil(t, b.Selection())

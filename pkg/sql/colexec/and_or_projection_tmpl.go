@@ -47,7 +47,7 @@ type _OP_LOWERProjOp struct {
 	// origSel is a buffer used to keep track of the original selection vector of
 	// the input batch. We need to do this because we're going to modify the
 	// selection vector in order to do the short-circuiting of logical operators.
-	origSel []uint16
+	origSel []int
 }
 
 // New_OP_TITLEProjOp returns a new projection operator that logical-_OP_TITLE's
@@ -69,7 +69,7 @@ func New_OP_TITLEProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]uint16, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -138,7 +138,7 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	// {{ end }}
 	leftCol := batch.ColVec(o.leftIdx)
 	leftColVals := leftCol.Bool()
-	var curIdx uint16
+	var curIdx int
 	if usesSel {
 		sel := batch.Selection()
 		origSel := o.origSel[:origLen]
@@ -157,11 +157,11 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 		sel := batch.Selection()
 		if leftCol.MaybeHasNulls() {
 			leftNulls := leftCol.Nulls()
-			for i := uint16(0); i < origLen; i++ {
+			for i := int(0); i < origLen; i++ {
 				_ADD_TUPLE_FOR_RIGHT(true)
 			}
 		} else {
-			for i := uint16(0); i < origLen; i++ {
+			for i := int(0); i < origLen; i++ {
 				_ADD_TUPLE_FOR_RIGHT(false)
 			}
 		}
@@ -277,7 +277,7 @@ func _SET_SINGLE_VALUE(_IS_OR_OP bool, _USES_SEL bool, _L_HAS_NULLS bool, _R_HAS
 	// {{ if _USES_SEL }}
 	idx := i
 	// {{ else }}
-	idx := uint16(i)
+	idx := int(i)
 	// {{ end }}
 	// {{ if _L_HAS_NULLS }}
 	isLeftNull := leftNulls.NullAt(idx)

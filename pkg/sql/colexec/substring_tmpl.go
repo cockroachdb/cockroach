@@ -99,7 +99,7 @@ func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) colda
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			for i := uint16(0); i < n; i++ {
+			for i := int(0); i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]

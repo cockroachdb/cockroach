@@ -133,7 +133,7 @@ func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
 func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(uint16(idx + 1))
+		a.nulls.UnsetNullsAfter(int(idx + 1))
 	}
 }
 
@@ -147,7 +147,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// any non-nulls for this group so far, the output for this group should
 		// be null.
 		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(uint16(a.curIdx))
+			a.nulls.SetNull(int(a.curIdx))
 		} else {
 			a.allocator.PerformOperation(
 				[]coldata.Vec{a.vec},
@@ -215,7 +215,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		// negative, it means that this is the first group.
 		if a.curIdx >= 0 {
 			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(uint16(a.curIdx))
+				a.nulls.SetNull(int(a.curIdx))
 			} else {
 				execgen.SET(a.col, a.curIdx, a.curAgg)
 			}
@@ -225,7 +225,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
-	isNull = nulls.NullAt(uint16(i))
+	isNull = nulls.NullAt(int(i))
 	// {{ else }}
 	isNull = false
 	// {{ end }}

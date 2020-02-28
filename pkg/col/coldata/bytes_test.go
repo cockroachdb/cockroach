@@ -103,7 +103,7 @@ func applyMethodsAndVerify(
 			b2Window := b2[start:end]
 			// b1Window is not allowed to be modified, so we check explicitly whether
 			// it equals the reference, and we do not update b1 and b2.
-			b1Window.AssertOffsetsAreNonDecreasing(uint64(b1Window.Len()))
+			b1Window.AssertOffsetsAreNonDecreasing(b1Window.Len())
 			debugString += fmt.Sprintf("\n%s\n", b1Window)
 			if err := verifyEqual(b1Window, b2Window); err != nil {
 				return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat:\n%sreference:\n%s", debugString, b1Window.String(), prettyByteSlice(b2Window)))
@@ -153,7 +153,7 @@ func applyMethodsAndVerify(
 		default:
 			return errors.Errorf("unknown method name: %s", m)
 		}
-		b1.AssertOffsetsAreNonDecreasing(uint64(b1.Len()))
+		b1.AssertOffsetsAreNonDecreasing(b1.Len())
 		debugString += fmt.Sprintf("\n%s\n", b1)
 		if err := verifyEqual(b1, b2); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat (maxSetIdx=%d):\n%sreference:\n%s", debugString, b1.maxSetIndex, b1.String(), prettyByteSlice(b2)))

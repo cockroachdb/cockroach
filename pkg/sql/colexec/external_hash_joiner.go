@@ -339,11 +339,11 @@ func (hj *externalHashJoiner) partitionBatch(
 							ColType:   sourceSpec.sourceTypes[i],
 							Src:       batch.ColVec(i),
 							Sel:       sel,
-							SrcEndIdx: uint64(len(sel)),
+							SrcEndIdx: len(sel),
 						},
 					})
 				}
-				scratchBatch.SetLength(uint16(len(sel)))
+				scratchBatch.SetLength(len(sel))
 			})
 			if err := partitioner.Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)

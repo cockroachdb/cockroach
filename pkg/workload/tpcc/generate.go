@@ -530,7 +530,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 	if carrierSet {
 		cb.ColVec(5).Int64()[0] = carrierID
 	} else {
-		cb.ColVec(5).Nulls().SetNull64(0)
+		cb.ColVec(5).Nulls().SetNull(0)
 		cb.ColVec(5).Int64()[0] = 0
 	}
 	cb.ColVec(6).Int64()[0] = numOrderLines
@@ -654,7 +654,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 		if deliveryDSet {
 			olDeliveryDCol.Set(rowIdx, deliveryD)
 		} else {
-			olDeliveryD.Nulls().SetNull64(uint64(rowIdx))
+			olDeliveryD.Nulls().SetNull(rowIdx)
 			olDeliveryDCol.Set(rowIdx, nil)
 		}
 		olQuantityCol[rowIdx] = 5

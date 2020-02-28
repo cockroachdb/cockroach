@@ -156,7 +156,7 @@ func newSingleOrderedDistinct(
 type partitioner interface {
 	// partition partitions the input colVec of size n, writing true to the
 	// outputCol for every value that differs from the previous one.
-	partition(colVec coldata.Vec, outputCol []bool, n uint64)
+	partition(colVec coldata.Vec, outputCol []bool, n int)
 
 	// partitionWithOrder is like partition, except it performs the partitioning
 	// on the input Vec as if it were ordered via the input order vector, which is
@@ -165,7 +165,7 @@ type partitioner interface {
 	// implies a reordered input vector [b,b,a], the resultant outputCol would be
 	// [true, false, true], indicating a distinct value at the 0th and 2nd
 	// elements.
-	partitionWithOrder(colVec coldata.Vec, order []uint64, outputCol []bool, n uint64)
+	partitionWithOrder(colVec coldata.Vec, order []int, outputCol []bool, n int)
 }
 
 // newPartitioner returns a new partitioner on type t.
@@ -238,7 +238,7 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	lastVal := p.lastVal
 	lastValNull := p.lastValNull
 	sel := batch.Selection()
-	firstIdx := uint16(0)
+	firstIdx := int(0)
 	if sel != nil {
 		firstIdx = sel[0]
 	}
@@ -298,7 +298,7 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 type partitioner_TYPE struct{}
 
 func (p partitioner_TYPE) partitionWithOrder(
-	colVec coldata.Vec, order []uint64, outputCol []bool, n uint64,
+	colVec coldata.Vec, order []int, outputCol []bool, n int,
 ) {
 	var lastVal _GOTYPE
 	var lastValNull bool
@@ -322,7 +322,7 @@ func (p partitioner_TYPE) partitionWithOrder(
 	}
 }
 
-func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint64) {
+func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int) {
 	var (
 		lastVal     _GOTYPE
 		lastValNull bool
@@ -386,7 +386,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 ) { // */}}
 
 	// {{define "checkDistinctWithNulls" -}}
-	null := nulls.NullAt(uint16(checkIdx))
+	null := nulls.NullAt(int(checkIdx))
 	if null {
 		if !lastValNull {
 			// The current value is null while the previous was not.

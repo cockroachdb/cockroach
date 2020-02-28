@@ -164,7 +164,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 	// {{$hasNulls := $.HasNulls}}
 	// {{with $.Overload}}
 	// {{if _HAS_NULLS}}
-	if !colNulls.NullAt(uint16(i)) {
+	if !colNulls.NullAt(int(i)) {
 		// We only want to perform the projection operation if the value is not null.
 		// {{end}}
 		arg := execgen.UNSAFEGET(col, int(i))

@@ -79,7 +79,7 @@ func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	partitionVec := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()
 	if sel != nil {
-		for i := uint16(0); i < b.Length(); i++ {
+		for i := int(0); i < b.Length(); i++ {
 			partitionVec[sel[i]] = p.distinctCol[sel[i]]
 		}
 	} else {

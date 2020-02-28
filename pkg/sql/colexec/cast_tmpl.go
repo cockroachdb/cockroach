@@ -69,7 +69,7 @@ func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
 
 // */}}
 
-func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n uint16, sel []uint16) {
+func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n int, sel []int) {
 	switch fromType {
 	// {{ range $typ, $overloads := . }}
 	case coltypes._ALLTYPES:
@@ -97,8 +97,8 @@ func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n uint16
 				} else {
 					inputCol = _FROM_TYPE_SLICE(inputCol, 0, int(n))
 					for execgen.RANGE(i, inputCol, 0, int(n)) {
-						if inputNulls.NullAt(uint16(i)) {
-							outputNulls.SetNull(uint16(i))
+						if inputNulls.NullAt(int(i)) {
+							outputNulls.SetNull(int(i))
 						} else {
 							v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
 							var r _GOTYPE
@@ -215,9 +215,9 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := uint16(0); i < n; i++ {
-			if vecNulls.NullAt(uint16(i)) {
-				projNulls.SetNull(uint16(i))
+		for i := int(0); i < n; i++ {
+			if vecNulls.NullAt(int(i)) {
+				projNulls.SetNull(int(i))
 			} else {
 				execerror.VectorizedInternalPanic(fmt.Errorf("unexpected non-null at index %d", i))
 			}

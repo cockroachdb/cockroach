@@ -65,7 +65,7 @@ var _ = coltypes.Bool
 
 // _ASSIGN_CMP is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
-func _ASSIGN_CMP(_, _, _ interface{}) uint64 {
+func _ASSIGN_CMP(_, _, _ interface{}) int {
 	execerror.VectorizedInternalPanic("")
 }
 
@@ -101,12 +101,12 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 			arg := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, arg, p.constArg)
 			// {{if _HAS_NULLS}}
-			isNull := nulls.NullAt(uint16(i))
+			isNull := nulls.NullAt(int(i))
 			// {{else}}
 			isNull := false
 			// {{end}}
 			if cmp && !isNull {
-				sel[idx] = uint16(i)
+				sel[idx] = int(i)
 				idx++
 			}
 		}
@@ -155,12 +155,12 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			arg2 := _R_UNSAFEGET(col2, i)
 			_ASSIGN_CMP(cmp, arg1, arg2)
 			// {{if _HAS_NULLS}}
-			isNull := nulls.NullAt(uint16(i))
+			isNull := nulls.NullAt(int(i))
 			// {{else}}
 			isNull := false
 			// {{end}}
 			if cmp && !isNull {
-				sel[idx] = uint16(i)
+				sel[idx] = int(i)
 				idx++
 			}
 		}
@@ -207,7 +207,7 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 
 		vec := batch.ColVec(p.colIdx)
 		col := vec._L_TYP()
-		var idx uint16
+		var idx int
 		n := batch.Length()
 		if vec.MaybeHasNulls() {
 			nulls := vec.Nulls()
@@ -252,7 +252,7 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 		col2 := vec2._R_TYP()
 		n := batch.Length()
 
-		var idx uint16
+		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
 			nulls := vec1.Nulls().Or(vec2.Nulls())
 			_SEL_LOOP(true)

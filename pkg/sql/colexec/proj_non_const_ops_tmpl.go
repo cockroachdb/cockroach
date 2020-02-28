@@ -192,7 +192,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 	// {{$hasNulls := $.HasNulls}}
 	// {{with $.Overload}}
 	// {{if _HAS_NULLS}}
-	if !col1Nulls.NullAt(uint16(i)) && !col2Nulls.NullAt(uint16(i)) {
+	if !col1Nulls.NullAt(int(i)) && !col2Nulls.NullAt(int(i)) {
 		// We only want to perform the projection operation if both values are not
 		// null.
 		// {{end}}

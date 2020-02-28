@@ -340,7 +340,7 @@ func init() {
 		ov := &overload{
 			IsHashOp: true,
 			LTyp:     leftType,
-			OpStr:    "uint64",
+			OpStr:    "int",
 		}
 		if sameTypeCustomizer != nil {
 			if b, ok := sameTypeCustomizer.(hashTypeCustomizer); ok {
