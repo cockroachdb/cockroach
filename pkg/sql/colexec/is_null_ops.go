@@ -65,7 +65,7 @@ func (o *isNullProjOp) Next(ctx context.Context) coldata.Batch {
 		} else {
 			projCol = projCol[:n]
 			for i := range projCol {
-				projCol[i] = nulls.NullAt(uint16(i)) != o.negate
+				projCol[i] = nulls.NullAt(i) != o.negate
 			}
 		}
 	} else {
@@ -116,7 +116,7 @@ func (o *isNullSelOp) Next(ctx context.Context) coldata.Batch {
 		if n == 0 {
 			return batch
 		}
-		var idx uint16
+		var idx int
 		vec := batch.ColVec(o.colIdx)
 		nulls := vec.Nulls()
 		if nulls.MaybeHasNulls() {
@@ -134,8 +134,8 @@ func (o *isNullSelOp) Next(ctx context.Context) coldata.Batch {
 				batch.SetSelection(true)
 				sel := batch.Selection()[:n]
 				for i := range sel {
-					if nulls.NullAt(uint16(i)) != o.negate {
-						sel[idx] = uint16(i)
+					if nulls.NullAt(i) != o.negate {
+						sel[idx] = i
 						idx++
 					}
 				}

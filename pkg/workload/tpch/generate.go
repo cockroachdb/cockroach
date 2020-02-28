@@ -537,5 +537,5 @@ func (w *tpch) tpchLineItemInitialRowBatch(
 		}
 		offset += l.orderData.nOrders
 	}
-	cb.SetLength(uint16(offset))
+	cb.SetLength(offset)
 }

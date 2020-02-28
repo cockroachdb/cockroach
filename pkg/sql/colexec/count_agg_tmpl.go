@@ -66,7 +66,7 @@ func (a *countAgg) CurrentOutputIndex() int {
 func (a *countAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(uint16(idx + 1))
+		a.nulls.UnsetNullsAfter(idx + 1)
 	}
 }
 
@@ -128,7 +128,7 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 	var y int64
 	// {{if .ColWithNulls}}
 	y = int64(0)
-	if !nulls.NullAt(uint16(i)) {
+	if !nulls.NullAt(i) {
 		y = 1
 	}
 	// {{else}}

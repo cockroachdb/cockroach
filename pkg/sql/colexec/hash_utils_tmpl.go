@@ -66,8 +66,8 @@ func _REHASH_BODY(
 	buckets []uint64,
 	keys _GOTYPESLICE,
 	nulls *coldata.Nulls,
-	nKeys uint64,
-	sel []uint16,
+	nKeys int,
+	sel []int,
 	_HAS_SEL bool,
 	_HAS_NULLS bool,
 ) { // */}}
@@ -77,9 +77,9 @@ func _REHASH_BODY(
 	// {{ if .HasSel }}
 	_ = sel[nKeys-1]
 	// {{ else }}
-	_ = execgen.UNSAFEGET(keys, int(nKeys-1))
+	_ = execgen.UNSAFEGET(keys, nKeys-1)
 	// {{ end }}
-	for i := uint64(0); i < nKeys; i++ {
+	for i := 0; i < nKeys; i++ {
 		cancelChecker.check(ctx)
 		// {{ if .HasSel }}
 		selIdx := sel[i]
@@ -87,11 +87,11 @@ func _REHASH_BODY(
 		selIdx := i
 		// {{ end }}
 		// {{ if .HasNulls }}
-		if nulls.NullAt(uint16(selIdx)) {
+		if nulls.NullAt(selIdx) {
 			continue
 		}
 		// {{ end }}
-		v := execgen.UNSAFEGET(keys, int(selIdx))
+		v := execgen.UNSAFEGET(keys, selIdx)
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v)
 		buckets[i] = uint64(p)
@@ -111,8 +111,8 @@ func rehash(
 	buckets []uint64,
 	t coltypes.T,
 	col coldata.Vec,
-	nKeys uint64,
-	sel []uint16,
+	nKeys int,
+	sel []int,
 	cancelChecker CancelChecker,
 	decimalScratch decimalOverloadScratch,
 ) {

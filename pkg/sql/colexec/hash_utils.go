@@ -58,16 +58,16 @@ func init() {
 // initHash initializes the hash value of each key to its initial state for
 // rehashing purposes.
 // NOTE: initValue *must* be non-zero.
-func initHash(buckets []uint64, nKeys uint64, initValue uint64) {
+func initHash(buckets []uint64, nKeys int, initValue uint64) {
 	switch initValue {
 	case 1:
-		for n := 0; uint64(n) < nKeys; n += copy(buckets[n:], uint64OneColumn) {
+		for n := 0; n < nKeys; n += copy(buckets[n:], uint64OneColumn) {
 		}
 	case 2:
-		for n := 0; uint64(n) < nKeys; n += copy(buckets[n:], uint64TwoColumn) {
+		for n := 0; n < nKeys; n += copy(buckets[n:], uint64TwoColumn) {
 		}
 	default:
-		for i := uint64(0); i < nKeys; i++ {
+		for i := 0; i < nKeys; i++ {
 			buckets[i] = initValue
 		}
 	}
@@ -75,10 +75,10 @@ func initHash(buckets []uint64, nKeys uint64, initValue uint64) {
 
 // finalizeHash takes each key's hash value and applies a final transformation
 // onto it so that it fits within numBuckets buckets.
-func finalizeHash(buckets []uint64, nKeys uint64, numBuckets uint64) {
+func finalizeHash(buckets []uint64, nKeys int, numBuckets uint64) {
 	isPowerOfTwo := numBuckets&(numBuckets-1) == 0
 	if isPowerOfTwo {
-		for i := uint64(0); i < nKeys; i++ {
+		for i := 0; i < nKeys; i++ {
 			// Since numBuckets is a power of 2, modulo numBuckets could be optimized
 			// into a bitwise operation which improves benchmark performance by 20%.
 			// In effect, the following code is equivalent to (but faster than):
@@ -86,7 +86,7 @@ func finalizeHash(buckets []uint64, nKeys uint64, numBuckets uint64) {
 			buckets[i] = buckets[i] & (numBuckets - 1)
 		}
 	} else {
-		for i := uint64(0); i < nKeys; i++ {
+		for i := 0; i < nKeys; i++ {
 			buckets[i] = buckets[i] % numBuckets
 		}
 	}
@@ -104,7 +104,7 @@ type tupleHashDistributor struct {
 	buckets []uint64
 	// selections stores the selection vectors that actually define how to
 	// distribute the tuples from the batch.
-	selections [][]uint16
+	selections [][]int
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
 	cancelChecker  CancelChecker
@@ -112,9 +112,9 @@ type tupleHashDistributor struct {
 }
 
 func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {
-	selections := make([][]uint16, numOutputs)
+	selections := make([][]int, numOutputs)
 	for i := range selections {
-		selections[i] = make([]uint16, 0, coldata.BatchSize())
+		selections[i] = make([]int, 0, coldata.BatchSize())
 	}
 	return &tupleHashDistributor{
 		initHashValue: initHashValue,
@@ -125,8 +125,8 @@ func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDis
 
 func (d *tupleHashDistributor) distribute(
 	ctx context.Context, b coldata.Batch, types []coltypes.T, hashCols []uint32,
-) [][]uint16 {
-	n := uint64(b.Length())
+) [][]int {
+	n := b.Length()
 	initHash(d.buckets, n, d.initHashValue)
 
 	for _, i := range hashCols {
@@ -150,7 +150,7 @@ func (d *tupleHashDistributor) distribute(
 	} else {
 		for i := range d.buckets[:n] {
 			outputIdx := d.buckets[i]
-			d.selections[outputIdx] = append(d.selections[outputIdx], uint16(i))
+			d.selections[outputIdx] = append(d.selections[outputIdx], i)
 		}
 	}
 	return d.selections
@@ -165,6 +165,6 @@ func (d *tupleHashDistributor) resetNumOutputs(numOutputs int) {
 	}
 	d.selections = d.selections[:cap(d.selections)]
 	for len(d.selections) < numOutputs {
-		d.selections = append(d.selections, make([]uint16, 0, coldata.BatchSize()))
+		d.selections = append(d.selections, make([]int, 0, coldata.BatchSize()))
 	}
 }

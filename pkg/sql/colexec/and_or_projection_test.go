@@ -242,19 +242,19 @@ func benchmarkLogicalProjOp(
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bool, coltypes.Bool})
 	col1 := batch.ColVec(0).Bool()
 	col2 := batch.ColVec(0).Bool()
-	for i := 0; i < int(coldata.BatchSize()); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		col1[i] = rng.Float64() < 0.5
 		col2[i] = rng.Float64() < 0.5
 	}
 	if hasNulls {
 		nulls1 := batch.ColVec(0).Nulls()
 		nulls2 := batch.ColVec(0).Nulls()
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			if rng.Float64() < nullProbability {
-				nulls1.SetNull(uint16(i))
+				nulls1.SetNull(i)
 			}
 			if rng.Float64() < nullProbability {
-				nulls2.SetNull(uint16(i))
+				nulls2.SetNull(i)
 			}
 		}
 	}
@@ -262,8 +262,8 @@ func benchmarkLogicalProjOp(
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < int(coldata.BatchSize()); i++ {
-			sel[i] = uint16(i)
+		for i := 0; i < coldata.BatchSize(); i++ {
+			sel[i] = i
 		}
 	}
 	input := NewRepeatableBatchSource(testAllocator, batch)

@@ -60,7 +60,7 @@ func BenchmarkOrdinality(b *testing.B) {
 	ordinality := NewOrdinalityOp(testAllocator, source, batch.Width())
 	ordinality.Init()
 
-	b.SetBytes(int64(8 * int(coldata.BatchSize())))
+	b.SetBytes(int64(8 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
 		ordinality.Next(ctx)
 	}

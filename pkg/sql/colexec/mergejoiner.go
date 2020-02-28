@@ -55,7 +55,7 @@ type mjBuilderState struct {
 	rGroups []group
 
 	// outCount keeps record of the current number of rows in the output.
-	outCount uint16
+	outCount int
 	// outFinished is used to determine if the builder is finished outputting
 	// the groups from input.
 	outFinished bool
@@ -88,8 +88,8 @@ type mjProberState struct {
 	// Local buffer for the last left and right groups which is used when the
 	// group ends with a batch and the group on each side needs to be saved to
 	// state in order to be able to continue it in the next batch.
-	lBufferedGroup            *bufferedBatch
-	rBufferedGroup            *bufferedBatch
+	lBufferedGroup            coldata.Batch
+	rBufferedGroup            coldata.Batch
 	lBufferedGroupNeedToReset bool
 	rBufferedGroupNeedToReset bool
 }
@@ -353,7 +353,7 @@ type mergeJoinBase struct {
 
 	// Output buffer definition.
 	output          coldata.Batch
-	outputBatchSize uint16
+	outputBatchSize int
 	// outputReady is a flag to indicate that merge joiner is ready to emit an
 	// output batch.
 	outputReady bool
@@ -387,31 +387,31 @@ func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
 
 func (o *mergeJoinBase) InternalMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
-	return 8 * int(coldata.BatchSize()) * sizeOfGroup // o.groups
+	return 8 * coldata.BatchSize() * sizeOfGroup // o.groups
 }
 
 func (o *mergeJoinBase) Init() {
 	o.initWithOutputBatchSize(coldata.BatchSize())
 }
 
-func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
-	o.output = o.allocator.NewMemBatchWithSize(o.getOutColTypes(), int(outBatchSize))
+func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
+	o.output = o.allocator.NewMemBatchWithSize(o.getOutColTypes(), outBatchSize)
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
 	// If there are no output columns, then the operator is for a COUNT query,
-	// in which case we treat the output batch size as the max uint16.
+	// in which case we treat the output batch size as the max int.
 	if o.output.Width() == 0 {
 		o.outputBatchSize = 1<<16 - 1
 	}
 
-	o.proberState.lBufferedGroup = newBufferedBatch(o.allocator, o.left.sourceTypes, int(coldata.BatchSize()))
-	o.proberState.rBufferedGroup = newBufferedBatch(o.allocator, o.right.sourceTypes, int(coldata.BatchSize()))
+	o.proberState.lBufferedGroup = o.allocator.NewMemBatch(o.left.sourceTypes)
+	o.proberState.rBufferedGroup = o.allocator.NewMemBatch(o.right.sourceTypes)
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
 
-	o.groups = makeGroupsBuffer(int(coldata.BatchSize()))
+	o.groups = makeGroupsBuffer(coldata.BatchSize())
 	o.resetBuilderCrossProductState()
 
 	if o.filter != nil {
@@ -429,33 +429,33 @@ func (o *mergeJoinBase) resetBuilderCrossProductState() {
 // source. This needs to happen when a group starts at the end of an input
 // batch and can continue into the following batches.
 func (o *mergeJoinBase) appendToBufferedGroup(
-	input *mergeJoinInput, batch coldata.Batch, sel []uint16, groupStartIdx int, groupLength int,
+	input *mergeJoinInput, batch coldata.Batch, sel []int, groupStartIdx int, groupLength int,
 ) {
 	bufferedGroup := o.proberState.lBufferedGroup
 	if input == &o.right {
 		bufferedGroup = o.proberState.rBufferedGroup
 	}
-	destStartIdx := bufferedGroup.length
+	bufferedGroupLength := bufferedGroup.Length()
 	groupEndIdx := groupStartIdx + groupLength
-	o.allocator.PerformOperation(bufferedGroup.colVecs, func() {
+	o.allocator.PerformOperation(bufferedGroup.ColVecs(), func() {
 		for cIdx, cType := range input.sourceTypes {
-			bufferedGroup.colVecs[cIdx].Append(
+			bufferedGroup.ColVecs()[cIdx].Append(
 				coldata.SliceArgs{
 					ColType:     cType,
 					Src:         batch.ColVec(cIdx),
 					Sel:         sel,
-					DestIdx:     destStartIdx,
-					SrcStartIdx: uint64(groupStartIdx),
-					SrcEndIdx:   uint64(groupEndIdx),
+					DestIdx:     bufferedGroupLength,
+					SrcStartIdx: groupStartIdx,
+					SrcEndIdx:   groupEndIdx,
 				},
 			)
 		}
-		bufferedGroup.length += uint64(groupLength)
+		bufferedGroup.SetLength(bufferedGroupLength + groupLength)
 	})
 
-	for _, v := range bufferedGroup.colVecs {
+	for _, v := range bufferedGroup.ColVecs() {
 		if v.Type() == coltypes.Bytes {
-			v.Bytes().UpdateOffsetsToBeNonDecreasing(bufferedGroup.length)
+			v.Bytes().UpdateOffsetsToBeNonDecreasing(bufferedGroup.Length())
 		}
 	}
 }
@@ -477,18 +477,20 @@ func (o *mergeJoinBase) initProberState(ctx context.Context) {
 	// next batch.
 	if o.proberState.lBatch == nil || (o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength) {
 		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next(ctx)
-		o.proberState.lLength = int(o.proberState.lBatch.Length())
+		o.proberState.lLength = o.proberState.lBatch.Length()
 	}
 	if o.proberState.rBatch == nil || (o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength) {
 		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next(ctx)
-		o.proberState.rLength = int(o.proberState.rBatch.Length())
+		o.proberState.rLength = o.proberState.rBatch.Length()
 	}
 	if o.proberState.lBufferedGroupNeedToReset {
-		o.proberState.lBufferedGroup.reset()
+		o.proberState.lBufferedGroup.SetLength(0)
+		o.proberState.lBufferedGroup.ResetInternalBatch()
 		o.proberState.lBufferedGroupNeedToReset = false
 	}
 	if o.proberState.rBufferedGroupNeedToReset {
-		o.proberState.rBufferedGroup.reset()
+		o.proberState.rBufferedGroup.SetLength(0)
+		o.proberState.rBufferedGroup.ResetInternalBatch()
 		o.proberState.rBufferedGroupNeedToReset = false
 	}
 }
@@ -496,7 +498,7 @@ func (o *mergeJoinBase) initProberState(ctx context.Context) {
 // nonEmptyBufferedGroup returns true if there is a buffered group that needs
 // to be finished.
 func (o *mergeJoinBase) nonEmptyBufferedGroup() bool {
-	return o.proberState.lBufferedGroup.length > 0 || o.proberState.rBufferedGroup.length > 0
+	return o.proberState.lBufferedGroup.Length() > 0 || o.proberState.rBufferedGroup.Length() > 0
 }
 
 // sourceFinished returns true if either of input sources has no more rows.
@@ -517,7 +519,7 @@ func (o *mergeJoinBase) sourceFinished() bool {
 func (o *mergeJoinBase) completeBufferedGroup(
 	ctx context.Context, input *mergeJoinInput, batch coldata.Batch, rowIdx int,
 ) (_ coldata.Batch, idx int, batchLength int) {
-	batchLength = int(batch.Length())
+	batchLength = batch.Length()
 	if o.isBufferedGroupFinished(input, batch, rowIdx) {
 		return batch, rowIdx, batchLength
 	}
@@ -528,7 +530,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 	// know that we are in the same group and, thus, the row is not distinct,
 	// regardless of what the distincter outputs.
 	loopStartIndex := 1
-	var sel []uint16
+	var sel []int
 	for !isBufferedGroupComplete {
 		// Note that we're not resetting the distincter on every loop iteration
 		// because if we're doing the second, third, etc, iteration, then all the
@@ -571,7 +573,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 			// just appended all the tuples from batch to it, so we need to get a
 			// fresh batch from the input.
 			rowIdx, batch = 0, input.source.Next(ctx)
-			batchLength = int(batch.Length())
+			batchLength = batch.Length()
 			if batchLength == 0 {
 				// The input has been exhausted, so the buffered group is now complete.
 				isBufferedGroupComplete = true

@@ -105,7 +105,7 @@ func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
 func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(uint16(idx + 1))
+		a.nulls.UnsetNullsAfter(idx + 1)
 	}
 }
 
@@ -118,7 +118,7 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// If we haven't found any non-nulls for this group so far, the output for
 		// this group should be null.
 		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(uint16(a.curIdx))
+			a.nulls.SetNull(a.curIdx)
 		} else {
 			execgen.SET(a.col, a.curIdx, a.curAgg)
 		}
@@ -139,8 +139,8 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						_FIND_ANY_NOT_NULL(a, nulls, i, true)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
+					col = execgen.SLICE(col, 0, inputLen)
+					for execgen.RANGE(i, col, 0, inputLen) {
 						_FIND_ANY_NOT_NULL(a, nulls, i, true)
 					}
 				}
@@ -151,8 +151,8 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						_FIND_ANY_NOT_NULL(a, nulls, i, false)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
+					col = execgen.SLICE(col, 0, inputLen)
+					for execgen.RANGE(i, col, 0, inputLen) {
 						_FIND_ANY_NOT_NULL(a, nulls, i, false)
 					}
 				}
@@ -182,7 +182,7 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 			// If this is a new group, check if any non-nulls have been found for the
 			// current group.
 			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(uint16(a.curIdx))
+				a.nulls.SetNull(a.curIdx)
 			} else {
 				execgen.SET(a.col, a.curIdx, a.curAgg)
 			}
@@ -192,7 +192,7 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
-	isNull = nulls.NullAt(uint16(i))
+	isNull = nulls.NullAt(i)
 	// {{ else }}
 	isNull = false
 	// {{ end }}
@@ -204,9 +204,9 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// Bytes type is special - we actually need to copy the value that we're
 		// getting in an "unsafe" way because col might be reused (and the
 		// underlying memory overwritten) on the next batches.
-		a.curAgg = append(a.curAgg[:0], execgen.UNSAFEGET(col, int(i))...)
+		a.curAgg = append(a.curAgg[:0], execgen.UNSAFEGET(col, i)...)
 		// {{ else }}
-		a.curAgg = execgen.UNSAFEGET(col, int(i))
+		a.curAgg = execgen.UNSAFEGET(col, i)
 		// {{ end }}
 		a.foundNonNullForCurrentGroup = true
 	}

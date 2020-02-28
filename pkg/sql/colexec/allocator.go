@@ -34,7 +34,7 @@ type Allocator struct {
 }
 
 func selVectorSize(capacity int) int64 {
-	return int64(capacity * sizeOfUint16)
+	return int64(capacity * sizeOfInt)
 }
 
 func getVecMemoryFootprint(vec coldata.Vec) int64 {
@@ -59,7 +59,7 @@ func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
 
 // NewMemBatch allocates a new in-memory coldata.Batch.
 func (a *Allocator) NewMemBatch(types []coltypes.T) coldata.Batch {
-	return a.NewMemBatchWithSize(types, int(coldata.BatchSize()))
+	return a.NewMemBatchWithSize(types, coldata.BatchSize())
 }
 
 // NewMemBatchWithSize allocates a new in-memory coldata.Batch with the given
@@ -167,11 +167,11 @@ func (a *Allocator) MaybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
 	for b.Width() < colIdx {
 		b.AppendCol(a.NewMemColumn(coltypes.Unhandled, 0))
 	}
-	estimatedMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, int(coldata.BatchSize())))
+	estimatedMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, coldata.BatchSize()))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	col := a.NewMemColumn(t, int(coldata.BatchSize()))
+	col := a.NewMemColumn(t, coldata.BatchSize())
 	if b.Width() == colIdx {
 		b.AppendCol(col)
 	} else {
@@ -216,18 +216,18 @@ func (a *Allocator) Clear() {
 
 const (
 	sizeOfBool     = int(unsafe.Sizeof(true))
+	sizeOfInt      = int(unsafe.Sizeof(int(0)))
 	sizeOfInt16    = int(unsafe.Sizeof(int16(0)))
 	sizeOfInt32    = int(unsafe.Sizeof(int32(0)))
 	sizeOfInt64    = int(unsafe.Sizeof(int64(0)))
 	sizeOfFloat64  = int(unsafe.Sizeof(float64(0)))
 	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
 	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
-	sizeOfUint16   = int(unsafe.Sizeof(uint16(0)))
 )
 
 // sizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.
-var sizeOfBatchSizeSelVector = int(coldata.BatchSize()) * sizeOfUint16
+var sizeOfBatchSizeSelVector = coldata.BatchSize() * sizeOfInt
 
 // estimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.

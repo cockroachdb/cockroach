@@ -51,7 +51,7 @@ func RandomBatch(
 	for i, typ := range typs {
 		coldata.RandomVec(rng, typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
 	}
-	batch.SetLength(uint16(length))
+	batch.SetLength(length)
 	return batch
 }
 
@@ -61,12 +61,12 @@ func RandomBatch(
 // is 0, then the selection vector will contain all rows, but if it is > 0, then
 // some rows might be omitted and the length of the selection vector might be
 // less than batchSize.
-func randomSel(rng *rand.Rand, batchSize uint16, probOfOmitting float64) []uint16 {
+func randomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
 		execerror.VectorizedInternalPanic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
-	sel := make([]uint16, 0, batchSize)
-	for i := uint16(0); i < batchSize; i++ {
+	sel := make([]int, 0, batchSize)
+	for i := 0; i < batchSize; i++ {
 		if rng.Float64() < probOfOmitting {
 			continue
 		}
@@ -94,10 +94,10 @@ func randomBatchWithSel(
 ) coldata.Batch {
 	batch := RandomBatch(allocator, rng, typs, n, 0 /* length */, nullProbability)
 	if selProbability != 0 {
-		sel := randomSel(rng, uint16(n), 1-selProbability)
+		sel := randomSel(rng, n, 1-selProbability)
 		batch.SetSelection(true)
 		copy(batch.Selection(), sel)
-		batch.SetLength(uint16(len(sel)))
+		batch.SetLength(len(sel))
 	}
 	return batch
 }
@@ -155,7 +155,7 @@ func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs
 	var (
 		availableTyps   = coltypes.AllTypes
 		maxSchemaLength = defaultMaxSchemaLength
-		batchSize       = int(coldata.BatchSize())
+		batchSize       = coldata.BatchSize()
 		numBatches      = defaultNumBatches
 	)
 	if args.AvailableTyps != nil {

@@ -205,7 +205,7 @@ type cFetcher struct {
 		// rowIdx is always set to the ordinal of the row we're currently writing to
 		// within the current batch. It's incremented as soon as we detect that a row
 		// is finished.
-		rowIdx uint16
+		rowIdx int
 		// curSpan is the current span that the kv fetcher just returned data from.
 		curSpan roachpb.Span
 		// nextKV is the kv to process next.
@@ -880,7 +880,7 @@ func (rf *cFetcher) pushState(state fetcherState) {
 
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
-func (rf *cFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
+func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int, typ types.T) tree.Datum {
 	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, &typ)
 }
 

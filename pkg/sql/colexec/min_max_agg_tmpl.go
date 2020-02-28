@@ -133,7 +133,7 @@ func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
 func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(uint16(idx + 1))
+		a.nulls.UnsetNullsAfter(idx + 1)
 	}
 }
 
@@ -147,7 +147,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// any non-nulls for this group so far, the output for this group should
 		// be null.
 		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(uint16(a.curIdx))
+			a.nulls.SetNull(a.curIdx)
 		} else {
 			a.allocator.PerformOperation(
 				[]coldata.Vec{a.vec},
@@ -172,8 +172,8 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						_ACCUMULATE_MINMAX(a, nulls, i, true)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
+					col = execgen.SLICE(col, 0, inputLen)
+					for execgen.RANGE(i, col, 0, inputLen) {
 						_ACCUMULATE_MINMAX(a, nulls, i, true)
 					}
 				}
@@ -184,8 +184,8 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						_ACCUMULATE_MINMAX(a, nulls, i, false)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
+					col = execgen.SLICE(col, 0, inputLen)
+					for execgen.RANGE(i, col, 0, inputLen) {
 						_ACCUMULATE_MINMAX(a, nulls, i, false)
 					}
 				}
@@ -215,7 +215,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		// negative, it means that this is the first group.
 		if a.curIdx >= 0 {
 			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(uint16(a.curIdx))
+				a.nulls.SetNull(a.curIdx)
 			} else {
 				execgen.SET(a.col, a.curIdx, a.curAgg)
 			}
@@ -225,17 +225,17 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
-	isNull = nulls.NullAt(uint16(i))
+	isNull = nulls.NullAt(i)
 	// {{ else }}
 	isNull = false
 	// {{ end }}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
-			a.curAgg = execgen.UNSAFEGET(col, int(i))
+			a.curAgg = execgen.UNSAFEGET(col, i)
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
-			candidate := execgen.UNSAFEGET(col, int(i))
+			candidate := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg)
 			if cmp {
 				a.curAgg = candidate
