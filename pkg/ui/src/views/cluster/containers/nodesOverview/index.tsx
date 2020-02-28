@@ -31,6 +31,8 @@ import { INodeStatus, MetricConstants } from "src/util/proto";
 import { ColumnsConfig, Table, Text, TextTypes, Tooltip } from "src/components";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
+import { getNodeLocalityTiers } from "src/util/localities";
+import { LocalityTier } from "src/redux/localities";
 
 import TableSection from "./tableSection";
 import "./nodes.styl";
@@ -59,7 +61,8 @@ export interface NodeStatusRow {
   key: string;
   nodeId?: number;
   nodeName?: string;
-  region: string;
+  region?: string;
+  tiers?: LocalityTier[];
   nodesCount?: number;
   uptime?: string;
   replicas: number;
@@ -83,7 +86,6 @@ interface DecommissionedNodeStatusRow {
   key: string;
   nodeId: number;
   nodeName: string;
-  region: string;
   status: LivenessStatus;
   decommissionedDate: Moment;
 }
@@ -122,6 +124,37 @@ const getStatusDescription = (status: LivenessStatus) => {
   }
 };
 
+// tslint:disable-next-line:variable-name
+const NodeNameColumn: React.FC<{ record: NodeStatusRow | DecommissionedNodeStatusRow }> = ({ record }) => {
+  return (
+    <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+      <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
+      <Text>{record.nodeName}</Text>
+    </Link>
+  );
+};
+
+// tslint:disable-next-line:variable-name
+const NodeLocalityColumn: React.FC<{ record: NodeStatusRow }> = ({ record }) => {
+  return (
+    <Text>
+      <Tooltip
+        placement={"bottom"}
+        title={
+          <div>
+            {
+              record.tiers.map((tier, idx) =>
+                <div key={idx}>{`${tier.key} = ${tier.value}`}</div>)
+            }
+          </div>
+        }
+      >
+        {record.region}
+      </Tooltip>
+    </Text>
+  );
+};
+
 /**
  * LiveNodeList displays a sortable table of all "live" nodes, which includes
  * both healthy and suspect nodes. Included is a side-bar with summary
@@ -135,19 +168,9 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       title: "nodes",
       render: (_text, record) => {
         if (!!record.nodeId) {
-          return (
-            <React.Fragment>
-              <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-                <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
-                <Text>{record.nodeName}</Text>
-              </Link>
-            </React.Fragment>);
+          return <NodeNameColumn record={record} />;
         } else {
-          // Top level grouping item does not have nodeId
-          return (
-            <React.Fragment>
-              <Text>{record.region}</Text>
-            </React.Fragment>);
+          return <NodeLocalityColumn record={record} />;
         }
       },
       sorter: (a, b) => {
@@ -295,11 +318,8 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     {
       key: "nodes",
       title: "decommissioned nodes",
-      render: (_text, record) => (
-        <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-          <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
-          <Text>{record.nodeName}</Text>
-        </Link>),
+      render: (_text, record) =>
+        <NodeNameColumn record={record}/>,
     },
     {
       key: "decommissionedSince",
@@ -346,11 +366,6 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
   }
 }
 
-const getNodeRegion = (nodeStatus: INodeStatus) => {
-  const region = nodeStatus.desc.locality?.tiers?.find(tier => tier.key === "region");
-  return region ? region.value : undefined;
-};
-
 export const liveNodesTableDataSelector = createSelector(
   partitionedStatuses,
   nodesSummarySelector,
@@ -368,7 +383,9 @@ export const liveNodesTableDataSelector = createSelector(
     // In case cluster is setup without localities:
     // - it represents a flat structure.
     const data = _.chain(liveStatuses)
-      .groupBy(getNodeRegion)
+      .groupBy((node: INodeStatus) => {
+        return node.desc.locality.tiers.map(tier => tier.value).join(".");
+      })
       .map((nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
         const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
           const { used: usedCapacity, usable: availableCapacity } = nodeCapacityStats(ns);
@@ -376,7 +393,6 @@ export const liveNodesTableDataSelector = createSelector(
             key: `${regionKey}-${idx}`,
             nodeId: ns.desc.node_id,
             nodeName: ns.desc.address.address_field,
-            region: getNodeRegion(ns),
             uptime: moment.duration(LongToMoment(ns.started_at).diff(moment())).humanize(),
             replicas: ns.metrics[MetricConstants.replicas],
             usedCapacity,
@@ -389,9 +405,18 @@ export const liveNodesTableDataSelector = createSelector(
           };
         });
 
+        // Grouped buckets with node statuses contain at least one element.
+        // The list of tires and lower level location are the same for every
+        // element in the group because grouping is made by string composed
+        // from location values.
+        const firstNodeInGroup = nodesPerRegion[0];
+        const tiers = getNodeLocalityTiers(firstNodeInGroup);
+        const lastTier = _.last(tiers);
+
         return {
           key: `${regionKey}`,
-          region: regionKey,
+          region: lastTier?.value,
+          tiers,
           nodesCount: nodesPerRegion.length,
           replicas: _.sum(nestedRows.map(nr => nr.replicas)),
           usedCapacity: _.sum(nestedRows.map(nr => nr.usedCapacity)),
@@ -433,7 +458,6 @@ export const decommissionedNodesTableDataSelector = createSelector(
           key: `${idx}`,
           nodeId: ns.desc.node_id,
           nodeName: ns.desc.address.address_field,
-          region: getNodeRegion(ns),
           status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id],
           decommissionedDate: getDecommissionedTime(ns.desc.node_id),
         };

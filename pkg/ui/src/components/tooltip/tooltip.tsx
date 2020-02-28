@@ -16,17 +16,24 @@ import "./tooltip.styl";
 
 export interface TooltipProps {
   title: React.ReactNode;
+  placement?: "top" | "bottom";
   children: React.ReactNode;
 }
 
 export function Tooltip(props: TooltipProps & AntTooltipProps) {
-  const { title, children } = props;
+  const { title, children, placement } = props;
   return (
     <AntTooltip
       title={title}
       mouseEnterDelay={0.5}
-      overlayClassName="tooltip-overlay">
+      overlayClassName="tooltip-overlay"
+      placement={placement}
+    >
       {children}
     </AntTooltip>
   );
 }
+
+Tooltip.defaultProps = {
+  placement: "top",
+};

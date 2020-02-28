@@ -36,6 +36,10 @@ describe("Nodes Overview page", () => {
       {
         "key": "us-east1",
         "region": "us-east1",
+        "tiers": [
+          { "key": "region", "value": "us-west"},
+          { "key": "az", "value": "us-west-01"},
+        ],
         "nodesCount": 3,
         "replicas": 224,
         "usedCapacity": 0,
@@ -49,7 +53,6 @@ describe("Nodes Overview page", () => {
             "key": "us-east1-0",
             "nodeId": 1,
             "nodeName": "127.0.0.1:50945",
-            "region": "us-east1",
             "uptime": "3 minutes",
             "replicas": 78,
             "usedCapacity": 0,
@@ -64,7 +67,6 @@ describe("Nodes Overview page", () => {
             "key": "us-east1-1",
             "nodeId": 2,
             "nodeName": "127.0.0.2:50945",
-            "region": "us-east1",
             "uptime": "3 minutes",
             "replicas": 74,
             "usedCapacity": 0,
@@ -79,7 +81,6 @@ describe("Nodes Overview page", () => {
             "key": "us-east1-2",
             "nodeId": 3,
             "nodeName": "127.0.0.3:50945",
-            "region": "us-east1",
             "uptime": "3 minutes",
             "replicas": 72,
             "usedCapacity": 0,
@@ -95,6 +96,10 @@ describe("Nodes Overview page", () => {
       {
         "key": "us-west1",
         "region": "us-west1",
+        "tiers": [
+          { "key": "region", "value": "us-west"},
+          { "key": "az", "value": "us-west-01"},
+        ],
         "nodesCount": 3,
         "replicas": 229,
         "usedCapacity": 0,
@@ -108,7 +113,6 @@ describe("Nodes Overview page", () => {
             "key": "us-west1-0",
             "nodeId": 4,
             "nodeName": "127.0.0.4:50945",
-            "region": "us-west1",
             "uptime": "3 minutes",
             "replicas": 73,
             "usedCapacity": 0,
@@ -123,7 +127,6 @@ describe("Nodes Overview page", () => {
             "key": "us-west1-1",
             "nodeId": 5,
             "nodeName": "127.0.0.5:50945",
-            "region": "us-west1",
             "uptime": "3 minutes",
             "replicas": 78,
             "usedCapacity": 0,
@@ -138,7 +141,6 @@ describe("Nodes Overview page", () => {
             "key": "us-west1-2",
             "nodeId": 6,
             "nodeName": "127.0.0.6:50945",
-            "region": "us-west1",
             "uptime": "3 minutes",
             "replicas": 78,
             "usedCapacity": 0,
@@ -154,6 +156,10 @@ describe("Nodes Overview page", () => {
       {
         "key": "europe-west1",
         "region": "europe-west1",
+        "tiers": [
+          { "key": "region", "value": "europe-west1"},
+          { "key": "az", "value": "us-west-01"},
+        ],
         "nodesCount": 3,
         "replicas": 216,
         "usedCapacity": 0,
@@ -167,7 +173,6 @@ describe("Nodes Overview page", () => {
             "key": "europe-west1-0",
             "nodeId": 7,
             "nodeName": "127.0.0.7:50945",
-            "region": "europe-west1",
             "uptime": "3 minutes",
             "replicas": 71,
             "usedCapacity": 0,
@@ -182,7 +187,6 @@ describe("Nodes Overview page", () => {
             "key": "europe-west1-1",
             "nodeId": 8,
             "nodeName": "127.0.0.8:50945",
-            "region": "europe-west1",
             "uptime": "3 minutes",
             "replicas": 74,
             "usedCapacity": 0,
@@ -197,7 +201,6 @@ describe("Nodes Overview page", () => {
             "key": "europe-west1-2",
             "nodeId": 9,
             "nodeName": "127.0.0.9:50945",
-            "region": "europe-west1",
             "uptime": "3 minutes",
             "replicas": 71,
             "usedCapacity": 0,
@@ -252,7 +255,7 @@ describe("Nodes Overview page", () => {
         (columnName, idx) => assert.equal(columnCells.at(idx).text(), columnName));
     });
 
-    it("doesn't display '# of nodes column' when nodes are in single regions", () => {
+    it("doesn't display 'node count' column when nodes are in single regions", () => {
       const expectedColumns = [
         "nodes",
         // should not be displayed "node count",
@@ -302,7 +305,11 @@ describe("Nodes Overview page", () => {
             {
               desc: {
                 node_id: idx + 1,
-                locality: {},
+                locality: {
+                  tiers: [
+                    { key: "region", value: "us-west" },
+                  ],
+                },
                 address: {
                   address_field: `127.0.0.${idx + 1}:50945`,
                 },
