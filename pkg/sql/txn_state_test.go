@@ -633,7 +633,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   noEvent,
+				expEv:   txnRestart,
 			},
 			expTxn: &expKVTxn{},
 		},
@@ -652,7 +652,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   noEvent,
+				expEv:   txnRestart,
 			},
 			expTxn: &expKVTxn{
 				tsNanos: proto.Int64(now.WallTime),
