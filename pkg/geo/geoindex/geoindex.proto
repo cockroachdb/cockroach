@@ -1,0 +1,52 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.geo.geoindex;
+option go_package = "geoindex";
+
+import "gogoproto/gogo.proto";
+
+// Config is the required information to tune one instance of a geospatial
+// index. Each SQL index should have its own copy of this and they can be
+// different from index to index.
+//
+// At the moment, only one major indexing strategy is implemented (s2 cells),
+// but room for future expansion is intentionally left here.
+message Config {
+  option (gogoproto.onlyone) = true;
+  S2Config s2 = 1;
+}
+
+// S2Config is the required information to tune one instance of an s2 cell
+// backed geospatial index.
+message S2Config {
+  // MinLevel is the minimum cell level stored in the index. If left unset, it
+  // defaults to WIP.
+  int32 min_level = 1;
+  // MaxLevel is the maximum cell level stored in the index. If left unset, it
+  // defaults to WIP.
+  int32 max_level = 2;
+  // LevelMod is WIP. `MaxLevel-MinLevel` must be an exact multiple of LevelMod.
+  // If left unset, it defaults to 1.
+  int32 level_mod = 3;
+  // MaxCells is a soft hint for the maximum number of entries used to store a
+  // single geospatial object.
+  //
+  // WIP Add a hard limit which returns a SQL error if hit and rename this to
+  // make it more clear that it's a soft limit.
+  int32 max_cells = 4;
+
+  // TODO(dan): Some tunable ratio between number of cells vs covering
+  // "overhang".
+
+  // TODO(dan): GEOMETRY will need a bounding box.
+}
+
