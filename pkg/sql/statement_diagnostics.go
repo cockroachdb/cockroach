@@ -53,12 +53,15 @@ type StmtDiagnosticsRequest struct {
 }
 
 func (request *StmtDiagnosticsRequest) ToProto() serverpb.StatementDiagnosticsRequest {
-	return serverpb.StatementDiagnosticsRequest{
+	resp := serverpb.StatementDiagnosticsRequest{
 		StatementFingerprint: request.QueryFingerprint,
 		RequestedAt:          request.RequestedAt,
-		CompletedAt:          &request.CompletedAt,
 		Completed:            request.Completed,
 	}
+	if !request.CompletedAt.IsZero() {
+		resp.CompletedAt = &request.CompletedAt
+	}
+	return resp
 }
 
 
@@ -377,8 +380,8 @@ func (r *stmtDiagnosticsRequestRegistry) insertDiagnostics(
 		_, err := r.ie.ExecEx(ctx, "stmt-diag-mark-completed", txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"UPDATE system.statement_diagnostics_requests "+
-				"SET completed = true, statement_diagnostics_id = $1 WHERE id = $2",
-			traceID, req.id)
+				"SET completed = true, completed_at = $1, statement_diagnostics_id = $1 WHERE id = $2",
+			timeutil.Now(), traceID, req.id)
 		return err
 	})
 }

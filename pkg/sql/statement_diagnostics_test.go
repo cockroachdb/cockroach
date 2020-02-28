@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -48,10 +49,12 @@ func TestTraceRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check that the row from statement_diagnostics_request was marked as completed.
+	var completedAt *time.Time
 	traceRow := db.QueryRow(
-		"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
-	require.NoError(t, traceRow.Scan(&completed, &traceID))
+		"SELECT completed, completed_at, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
+	require.NoError(t, traceRow.Scan(&completed, &completedAt, &traceID))
 	require.True(t, completed)
+	require.NotNil(t, completedAt)
 	require.True(t, traceID.Valid)
 
 	// Check the trace.
@@ -120,7 +123,6 @@ func TestStmtDiagnosticsRequestRegistry_GetAllRequests_singleRequest(t *testing.
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	// Ask to trace a particular query using node 0.
 	testFingerprint := "INSERT INTO test VALUES (_)"
 	_, err := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.InsertRequest(
 		ctx, testFingerprint)
@@ -148,4 +150,36 @@ func TestStmtDiagnosticsRequestRegistry_GetAllRequests_manyRequests(t *testing.T
 	requests, err := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.GetAllRequests(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(requests))
+}
+
+func TestStmtDiagnosticsRequestRegistry_GetAllRequests_completed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
+	require.NoError(t, err)
+
+	// Ask to trace a particular query using node 0.
+	testFingerprint := "INSERT INTO test VALUES (_)"
+	_, err = s.ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.InsertRequest(
+		ctx, testFingerprint)
+	require.NoError(t, err)
+
+	requests, err := s.ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(requests))
+	require.Equal(t, testFingerprint, requests[0].QueryFingerprint)
+
+	// complete the request
+	// Run the query.
+	_, err = db.Exec("INSERT INTO test VALUES (1)")
+	require.NoError(t, err)
+
+	// Check that the row from statement_diagnostics_request was marked as completed.
+	requests, err = s.ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(requests))
+	require.True(t, requests[0].Completed)
+	require.NotNil(t, requests[0].CompletedAt)
 }
