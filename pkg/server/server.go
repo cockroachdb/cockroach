@@ -844,6 +844,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return &ie
 		}
 
+	// We use the SessionBoundInternalExecutor from the distSQLServer.
+	s.jobRegistry.SetSessionBoundInternalExecutorFactory(
+		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory)
+
 	for _, m := range s.pgServer.Metrics() {
 		s.registry.AddMetricStruct(m)
 	}

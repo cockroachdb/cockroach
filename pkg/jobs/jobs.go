@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -560,6 +562,12 @@ func (j *Job) FractionCompleted() float32 {
 func (j *Job) WithTxn(txn *client.Txn) *Job {
 	j.txn = txn
 	return j
+}
+
+func (j *Job) MakeSessionBoundInternalExecutor(
+	ctx context.Context, sd *sessiondata.SessionData,
+) sqlutil.InternalExecutor {
+	return j.registry.sessionBoundInternalExecutorFactory(ctx, sd)
 }
 
 func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
