@@ -63,6 +63,7 @@ type waitingState struct {
 // - proper error strings and give better explanation to all panics.
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
+// - test cases where guard.readTS != guard.writeTS.
 
 // The btree for a particular SpanScope.
 type treeMu struct {
@@ -209,9 +210,10 @@ type lockTableGuardImpl struct {
 	seqNum uint64
 
 	// Information about this request.
-	txn   *enginepb.TxnMeta
-	spans *spanset.SpanSet
-	ts    hlc.Timestamp
+	txn     *enginepb.TxnMeta
+	spans   *spanset.SpanSet
+	readTS  hlc.Timestamp
+	writeTS hlc.Timestamp
 
 	// Snapshots of the trees for which this request has some spans. Note that
 	// the lockStates in these snapshots may have been removed from
@@ -663,7 +665,7 @@ func (l *lockState) informActiveWaiters() {
 	if waitForTxn == nil {
 		checkForWaitSelf = true
 		waitForTxn = l.reservation.txn
-		waitForTs = l.reservation.ts
+		waitForTs = l.reservation.writeTS
 		if !findDistinguished && l.distinguishedWaiter.isTxn(waitForTxn) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
@@ -826,7 +828,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 			return false
 		}
 		waitForTxn = l.reservation.txn
-		waitForTs = l.reservation.ts
+		waitForTs = l.reservation.writeTS
 		reservedBySelfTxn = g.isTxn(waitForTxn)
 		// A non-transactional write request never makes or breaks reservations,
 		// and only waits for a reservation if the reservation has a lower seqNum.
@@ -845,7 +847,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 			return false
 		}
 		// Locked by some other txn.
-		if g.ts.Less(waitForTs) {
+		if g.readTS.Less(waitForTs) {
 			return false
 		}
 		g.mu.Lock()
@@ -1117,33 +1119,48 @@ func (l *lockState) discoveredLock(
 		informWaiters = false
 	}
 
-	g.mu.Lock()
-	_, presentHere := g.mu.locks[l]
-	addToQueue := !presentHere && sa == spanset.SpanReadWrite
-	if addToQueue {
-		// Since g will place itself in queue as inactive waiter below.
-		g.mu.locks[l] = struct{}{}
-	}
-	g.mu.Unlock()
+	switch sa {
+	case spanset.SpanReadOnly:
+		// Don't enter the lock's queuedReaders list, because all queued readers
+		// are expected to be active. Instead, wait until the next scan.
 
-	if addToQueue {
-		// Put self in queue as inactive waiter.
-		qg := &queuedGuard{
-			guard:  g,
-			active: false,
+		// Confirm that the guard will wait on the lock the next time it scans
+		// the lock table. If not then it shouldn't have discovered the lock in
+		// the first place. Bugs here would cause infinite loops where the same
+		// lock is repeatedly re-discovered.
+		if g.readTS.Less(ts) {
+			return errors.Errorf("discovered non-conflicting lock")
 		}
-		// g is not necessarily first in the queue in the (rare) case (a) above.
-		var e *list.Element
-		for e = l.queuedWriters.Front(); e != nil; e = e.Next() {
-			qqg := e.Value.(*queuedGuard)
-			if qqg.guard.seqNum > g.seqNum {
-				break
+
+	case spanset.SpanReadWrite:
+		// Immediately enter the lock's queuedWriters list.
+		g.mu.Lock()
+		_, presentHere := g.mu.locks[l]
+		if !presentHere {
+			// Since g will place itself in queue as inactive waiter below.
+			g.mu.locks[l] = struct{}{}
+		}
+		g.mu.Unlock()
+
+		if !presentHere {
+			// Put self in queue as inactive waiter.
+			qg := &queuedGuard{
+				guard:  g,
+				active: false,
 			}
-		}
-		if e == nil {
-			l.queuedWriters.PushBack(qg)
-		} else {
-			l.queuedWriters.InsertBefore(qg, e)
+			// g is not necessarily first in the queue in the (rare) case (a) above.
+			var e *list.Element
+			for e = l.queuedWriters.Front(); e != nil; e = e.Next() {
+				qqg := e.Value.(*queuedGuard)
+				if qqg.guard.seqNum > g.seqNum {
+					break
+				}
+			}
+			if e == nil {
+				l.queuedWriters.PushBack(qg)
+			} else {
+				l.queuedWriters.InsertBefore(qg, e)
+			}
 		}
 	}
 
@@ -1325,7 +1342,7 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
-		if g.ts.Less(newTs) {
+		if g.readTS.Less(newTs) {
 			// Stop waiting.
 			l.waitingReaders.Remove(curr)
 			if g == l.distinguishedWaiter {
@@ -1468,14 +1485,18 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 	if guard == nil {
 		seqNum := atomic.AddUint64(&t.seqNum, 1)
 		g = &lockTableGuardImpl{
-			seqNum: seqNum,
-			spans:  req.LockSpans,
-			ts:     req.Timestamp,
-			sa:     spanset.NumSpanAccess - 1,
-			index:  -1,
+			seqNum:  seqNum,
+			spans:   req.LockSpans,
+			readTS:  req.Timestamp,
+			writeTS: req.Timestamp,
+			sa:      spanset.NumSpanAccess - 1,
+			index:   -1,
 		}
 		if req.Txn != nil {
 			g.txn = &req.Txn.TxnMeta
+			g.readTS = req.Txn.ReadTimestamp
+			g.readTS.Forward(req.Txn.MaxTimestamp)
+			g.writeTS = req.Txn.WriteTimestamp
 		}
 		g.mu.signal = make(chan struct{}, 1)
 		g.mu.locks = make(map[*lockState]struct{})
@@ -1777,7 +1798,7 @@ func (t *lockTableImpl) String() string {
 		txn, ts, _ := l.getLockerInfo()
 		if txn == nil {
 			fmt.Fprintf(&buf, "  res: req: %d, %s\n",
-				l.reservation.seqNum, waitingOnStr(l.reservation.txn, l.reservation.ts))
+				l.reservation.seqNum, waitingOnStr(l.reservation.txn, l.reservation.writeTS))
 		} else {
 			fmt.Fprintf(&buf, "  holder: %s\n", waitingOnStr(txn, ts))
 		}

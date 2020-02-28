@@ -53,7 +53,7 @@ func DefaultDeclareIsolatedKeys(
 		access = spanset.SpanReadWrite
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), header.Timestamp)
-	lockSpans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+	lockSpans.AddNonMVCC(access, req.Header().Span())
 }
 
 // DeclareKeysForBatch adds all keys that the batch with the provided header
