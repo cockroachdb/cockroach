@@ -13,8 +13,9 @@ import Analytics from "analytics-node";
 
 import { PayloadAction } from "src/interfaces/action";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
+import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
+
 import {
-  completeEmailSubscriptionSignUp,
   EMAIL_SUBSCRIPTION_SIGN_UP,
   EmailSubscriptionSignUpPayload,
 } from "./customAnanlyticsActions";
@@ -44,9 +45,11 @@ export function* signUpEmailSubscription(action: PayloadAction<EmailSubscription
     userId: clusterId,
     traits: {
       email,
+      release_notes_sign_up_from_admin_ui: "true",
+      product_updates: "true",
     },
   });
-  yield put(completeEmailSubscriptionSignUp());
+  yield put(emailSubscriptionAlertLocalSetting.set(true));
 }
 
 export function* customAnalyticsSaga() {

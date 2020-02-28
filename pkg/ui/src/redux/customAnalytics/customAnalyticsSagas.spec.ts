@@ -14,7 +14,6 @@ import Analytics from "analytics-node";
 
 import { signUpEmailSubscription } from "./customAnalyticsSagas";
 import {
-  completeEmailSubscriptionSignUp,
   signUpForEmailSubscription,
 } from "./customAnanlyticsActions";
 
@@ -33,7 +32,6 @@ describe("customAnalyticsSagas", () => {
       const action = signUpForEmailSubscription(clusterId, email);
 
       return expectSaga(signUpEmailSubscription, action)
-        .put(completeEmailSubscriptionSignUp())
         .dispatch(action)
         .run()
         .then(() => {

@@ -8,12 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Action } from "redux";
-
 import { PayloadAction } from "src/interfaces/action";
 
 export const EMAIL_SUBSCRIPTION_SIGN_UP = "cockroachui/customanalytics/EMAIL_SUBSCRIPTION_SIGN_UP";
-export const EMAIL_SUBSCRIPTION_SIGN_UP_COMPLETE = "cockroachui/customanalytics/EMAIL_SUBSCRIPTION_SIGN_UP_COMPLETE";
 
 export type EmailSubscriptionSignUpPayload = {
   email: string;
@@ -27,11 +24,5 @@ export function signUpForEmailSubscription(clusterId: string, email: string): Pa
       email,
       clusterId,
     },
-  };
-}
-
-export function completeEmailSubscriptionSignUp(): Action {
-  return {
-    type: EMAIL_SUBSCRIPTION_SIGN_UP_COMPLETE,
   };
 }
