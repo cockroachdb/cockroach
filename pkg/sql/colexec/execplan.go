@@ -250,12 +250,7 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 			}
 		}
 
-		switch *wf.Func.WindowFunc {
-		case execinfrapb.WindowerSpec_ROW_NUMBER:
-		case execinfrapb.WindowerSpec_RANK:
-		case execinfrapb.WindowerSpec_DENSE_RANK:
-		case execinfrapb.WindowerSpec_PERCENT_RANK:
-		default:
+		if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
 			return false, errors.Newf("window function %s is not supported", wf.String())
 		}
 		return true, nil
@@ -906,23 +901,13 @@ func NewColOperator(
 			peersColIdx := columnOmitted
 			memMonitorsPrefix := "window-"
 			windowFn := *wf.Func.WindowFunc
-			needsPeersInfo, supported := windowFnNeedsPeersInfo[*wf.Func.WindowFunc]
-			if !supported {
-				return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
-			}
 			if len(core.Windower.PartitionBy) > 0 {
 				// TODO(yuzefovich): add support for hashing partitioner (probably by
 				// leveraging hash routers once we can distribute). The decision about
 				// which kind of partitioner to use should come from the optimizer.
-				windowSortingPartitionerMemAccount := streamingMemAccount
-				if !useStreamingMemAccountForBuffering {
-					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, memMonitorsPrefix+"sorting-partitioner",
-					)
-				}
 				partitionColIdx = int(wf.OutputColIdx)
 				input, err = NewWindowSortingPartitioner(
-					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
+					NewAllocator(ctx, streamingMemAccount), input, typs,
 					core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
 					func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
 						return result.createDiskBackedSort(
@@ -946,7 +931,7 @@ func NewColOperator(
 			if err != nil {
 				return result, err
 			}
-			if needsPeersInfo {
+			if windowFnNeedsPeersInfo(*wf.Func.WindowFunc) {
 				peersColIdx = int(wf.OutputColIdx + tempColOffset)
 				input, err = NewWindowPeerGrouper(
 					NewAllocator(ctx, streamingMemAccount),
@@ -958,23 +943,23 @@ func NewColOperator(
 				typs = append(typs, coltypes.Bool)
 			}
 
-			windowFnOpMemAccount := streamingMemAccount
-			if !useStreamingMemAccountForBuffering && windowFn == execinfrapb.WindowerSpec_PERCENT_RANK {
-				// Only percentRankOps are not streaming.
-				windowFnOpMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "percent-rank")
-			}
-			allocator := NewAllocator(ctx, windowFnOpMemAccount)
 			switch windowFn {
 			case execinfrapb.WindowerSpec_ROW_NUMBER:
 				result.Op = NewRowNumberOperator(
-					allocator, input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+					NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
 				)
-			case
-				execinfrapb.WindowerSpec_RANK,
-				execinfrapb.WindowerSpec_DENSE_RANK,
-				execinfrapb.WindowerSpec_PERCENT_RANK:
+			case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
 				result.Op, err = NewRankOperator(
-					allocator, input, typs, windowFn, wf.Ordering.Columns,
+					NewAllocator(ctx, streamingMemAccount), input, windowFn, wf.Ordering.Columns,
+					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
+				)
+			case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
+				memAccount := streamingMemAccount
+				if !useStreamingMemAccountForBuffering {
+					memAccount = result.createBufferingMemAccount(ctx, flowCtx, "relative-rank")
+				}
+				result.Op, err = NewRelativeRankOperator(
+					NewAllocator(ctx, memAccount), input, typs, windowFn, wf.Ordering.Columns,
 					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
 				)
 			default:
@@ -997,14 +982,15 @@ func NewColOperator(
 				return result, err
 			}
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *returnType)
-			//if windowFn != execinfrapb.WindowerSpec_PERCENT_RANK {
-			// Window functions can run in auto mode because they are streaming
-			// operators (except for percent_rank) and internally they use a sorter
-			// which can fall back to disk if needed.
-			// TODO(yuzefovich): currently disabled.
-			// result.CanRunInAutoMode = true
-			// TODO(yuzefovich): add spilling to disk for percent_rank.
-			//}
+			if windowFn != execinfrapb.WindowerSpec_PERCENT_RANK &&
+				windowFn != execinfrapb.WindowerSpec_CUME_DIST {
+				// Window functions can run in auto mode because they are streaming
+				// operators (except for percent_rank and cume_dist) and internally
+				// they might use a sorter which can fall back to disk if needed.
+				result.CanRunInAutoMode = true
+				// TODO(yuzefovich): add spilling to disk for percent_rank and
+				// cume_dist.
+			}
 
 		default:
 			return result, errors.Newf("unsupported processor core %q", core)

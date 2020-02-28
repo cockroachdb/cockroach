@@ -279,7 +279,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
 ----
 ·               distributed  false                                                                            ·             ·
-·               vectorized   false                                                                            ·             ·
+·               vectorized   true                                                                             ·             ·
 sort            ·            ·                                                                                (k, v, rank)  +k
  │              order        +k                                                                               ·             ·
  └── window     ·            ·                                                                                (k, v, rank)  ·
