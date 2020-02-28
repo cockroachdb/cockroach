@@ -27,10 +27,41 @@ export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
 
 export const renamedStatuses = (status: string) => {
   switch (status) {
+    case JOB_STATUS_SUCCEEDED:
+      return {
+        label: JOB_STATUS_SUCCEEDED,
+        value: "success",
+      };
+    case JOB_STATUS_FAILED:
+      return {
+        label: JOB_STATUS_FAILED,
+        value: "danger",
+      };
+    case JOB_STATUS_CANCELED:
+      return {
+        label: JOB_STATUS_CANCELED,
+        value: "default",
+      };
+    case JOB_STATUS_PAUSED:
+      return {
+        label: JOB_STATUS_PAUSED,
+        value: "default",
+      };
     case JOB_STATUS_RUNNING:
-      return "CDC Running";
+      return {
+        label: "CDC Running",
+        value: "info",
+      };
+    case JOB_STATUS_PENDING:
+      return {
+        label: JOB_STATUS_PENDING,
+        value: "warning",
+      };
     default:
-      return _.capitalize(status);
+      return {
+        label: _.capitalize(status),
+        value: "info",
+      };
   }
 };
 
