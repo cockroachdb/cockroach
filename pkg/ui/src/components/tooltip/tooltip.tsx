@@ -10,6 +10,7 @@
 
 import * as React from "react";
 import { default as AntTooltip, TooltipProps as AntTooltipProps } from "antd/es/tooltip";
+import cn from "classnames";
 
 import "antd/es/tooltip/style/css";
 import "./tooltip.styl";
@@ -18,15 +19,17 @@ export interface TooltipProps {
   title: React.ReactNode;
   placement?: "top" | "bottom";
   children: React.ReactNode;
+  theme?: "default" | "blue";
 }
 
 export function Tooltip(props: TooltipProps & AntTooltipProps) {
-  const { title, children, placement } = props;
+  const { title, children, theme, placement } = props;
+  const classes = cn("tooltip-overlay", `crl-tooltip--theme-${theme}`);
   return (
     <AntTooltip
       title={title}
       mouseEnterDelay={0.5}
-      overlayClassName="tooltip-overlay"
+      overlayClassName={classes}
       placement={placement}
     >
       {children}
@@ -35,5 +38,6 @@ export function Tooltip(props: TooltipProps & AntTooltipProps) {
 }
 
 Tooltip.defaultProps = {
+  theme: "default",
   placement: "top",
 };
