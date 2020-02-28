@@ -92,13 +92,15 @@ var allSpans = func() spanset.SpanSet {
 	return ss
 }()
 
-// allSpansGuard is a concurrency guard that indicates that it provides
+// allSpansGuard returns a concurrency guard that indicates that it provides
 // isolation across all key spans for use in tests that don't care about
 // properly declaring their spans or sequencing with the concurrency manager.
-var allSpansGuard = concurrency.Guard{
-	Req: concurrency.Request{
-		LatchSpans: &allSpans,
-	},
+func allSpansGuard() *concurrency.Guard {
+	return &concurrency.Guard{
+		Req: concurrency.Request{
+			LatchSpans: &allSpans,
+		},
+	}
 }
 
 func testRangeDescriptor() *roachpb.RangeDescriptor {
@@ -603,7 +605,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, _, pErr := r.evalAndPropose(context.TODO(), &ba, &allSpansGuard, &exLease)
+	ch, _, _, _, pErr := r.evalAndPropose(context.TODO(), &ba, allSpansGuard(), &exLease)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1384,7 +1386,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(context.Background(), &ba, &allSpansGuard, &exLease)
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -7644,7 +7646,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, _, err := repl.evalAndPropose(ctx, &ba, &allSpansGuard, &lease)
+		ch, _, idx, _, err := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &lease)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7713,7 +7715,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, _, err := tc.repl.evalAndPropose(ctx, &ba, &allSpansGuard, &lease)
+		ch, _, idx, _, err := tc.repl.evalAndPropose(ctx, &ba, allSpansGuard(), &lease)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -9031,7 +9033,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 
 	exLease, _ := repl.GetLease()
-	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, &allSpansGuard, &exLease)
+	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9076,7 +9078,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, &allSpansGuard, &exLease)
+	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9139,7 +9141,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	_, _, _, _, pErr := repl.evalAndPropose(ctx, &ba, &allSpansGuard, &exLease)
+	_, _, _, _, pErr := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9157,7 +9159,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, _, pErr = repl.evalAndPropose(ctx, &ba, &allSpansGuard, &exLease)
+		ch, _, _, _, pErr = repl.evalAndPropose(ctx, &ba, allSpansGuard(), &exLease)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -11827,7 +11829,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// the proposal map. Entries are only removed from that map underneath raft.
 	tc.repl.RaftLock()
 	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, &allSpansGuard, &lease)
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -11923,7 +11925,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, &allSpansGuard, &lease)
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
