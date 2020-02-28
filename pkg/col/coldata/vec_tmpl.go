@@ -62,29 +62,29 @@ func (m *memColumn) Append(args SliceArgs) {
 		// attention, the performance suffers dramatically, so we choose to copy
 		// over "actual" as well as "garbage" values.
 		if args.Sel == nil {
-			execgen.APPENDSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
+			execgen.APPENDSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 		} else {
 			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 			// {{if eq .LTyp.String "Bytes"}}
 			// We need to truncate toCol before appending to it, so in case of Bytes,
 			// we append an empty slice.
-			execgen.APPENDSLICE(toCol, toCol, int(args.DestIdx), 0, 0)
+			execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
 			// We will be getting all values below to be appended, regardless of
 			// whether the value is NULL. It is possible that Bytes' invariant of
 			// non-decreasing offsets on the source is currently not maintained, so
 			// we explicitly enforce it.
-			maxIdx := uint16(0)
+			maxIdx := 0
 			for _, selIdx := range sel {
 				if selIdx > maxIdx {
 					maxIdx = selIdx
 				}
 			}
-			fromCol.UpdateOffsetsToBeNonDecreasing(uint64(maxIdx + 1))
+			fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 			// {{else}}
-			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
+			toCol = execgen.SLICE(toCol, 0, args.DestIdx)
 			// {{end}}
 			for _, selIdx := range sel {
-				val := execgen.UNSAFEGET(fromCol, int(selIdx))
+				val := execgen.UNSAFEGET(fromCol, selIdx)
 				execgen.APPENDVAL(toCol, val)
 			}
 		}
@@ -104,21 +104,21 @@ func _COPY_WITH_SEL(
 	if args.Src.MaybeHasNulls() {
 		nulls := args.Src.Nulls()
 		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-			if nulls.NullAt64(uint64(selIdx)) {
+			if nulls.NullAt(selIdx) {
 				// {{if .SelOnDest}}
 				// Remove an unused warning in some cases.
 				_ = i
-				m.nulls.SetNull64(uint64(selIdx))
+				m.nulls.SetNull(selIdx)
 				// {{else}}
-				m.nulls.SetNull64(uint64(i) + args.DestIdx)
+				m.nulls.SetNull(i + args.DestIdx)
 				// {{end}}
 			} else {
-				v := execgen.UNSAFEGET(fromCol, int(selIdx))
+				v := execgen.UNSAFEGET(fromCol, selIdx)
 				// {{if .SelOnDest}}
-				m.nulls.UnsetNull64(uint64(selIdx))
-				execgen.SET(toCol, int(selIdx), v)
+				m.nulls.UnsetNull(selIdx)
+				execgen.SET(toCol, selIdx, v)
 				// {{else}}
-				execgen.SET(toCol, i+int(args.DestIdx), v)
+				execgen.SET(toCol, i+args.DestIdx, v)
 				// {{end}}
 			}
 		}
@@ -126,12 +126,12 @@ func _COPY_WITH_SEL(
 	}
 	// No Nulls.
 	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-		selIdx := sel[int(args.SrcStartIdx)+i]
-		v := execgen.UNSAFEGET(fromCol, int(selIdx))
+		selIdx := sel[args.SrcStartIdx+i]
+		v := execgen.UNSAFEGET(fromCol, selIdx)
 		// {{if .SelOnDest}}
-		execgen.SET(toCol, int(selIdx), v)
+		execgen.SET(toCol, selIdx, v)
 		// {{else}}
-		execgen.SET(toCol, i+int(args.DestIdx), v)
+		execgen.SET(toCol, i+args.DestIdx, v)
 		// {{end}}
 	}
 	// {{end}}
@@ -155,15 +155,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	case _TYPES_T:
 		fromCol := args.Src._TemplateType()
 		toCol := m._TemplateType()
-		if args.Sel64 != nil {
-			sel := args.Sel64
-			if args.SelOnDest {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
-			} else {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
-			}
-			return
-		} else if args.Sel != nil {
+		if args.Sel != nil {
 			sel := args.Sel
 			if args.SelOnDest {
 				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
@@ -172,8 +164,8 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 			}
 			return
 		}
-		// No Sel or Sel64.
-		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
+		// No Sel.
+		execgen.COPYSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 		m.nulls.set(args.SliceArgs)
 	// {{end}}
 	default:
@@ -181,14 +173,14 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	}
 }
 
-func (m *memColumn) Window(colType coltypes.T, start uint64, end uint64) Vec {
+func (m *memColumn) Window(colType coltypes.T, start int, end int) Vec {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
 		col := m._TemplateType()
 		return &memColumn{
 			t:     colType,
-			col:   execgen.WINDOW(col, int(start), int(end)),
+			col:   execgen.WINDOW(col, start, end),
 			nulls: m.nulls.Slice(start, end),
 		}
 	// {{end}}
@@ -197,7 +189,7 @@ func (m *memColumn) Window(colType coltypes.T, start uint64, end uint64) Vec {
 	}
 }
 
-func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
+func (m *memColumn) PrettyValueAt(colIdx int, colType coltypes.T) string {
 	if m.nulls.NullAt(colIdx) {
 		return "NULL"
 	}
@@ -205,7 +197,7 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
 	// {{range .}}
 	case _TYPES_T:
 		col := m._TemplateType()
-		v := execgen.UNSAFEGET(col, int(colIdx))
+		v := execgen.UNSAFEGET(col, colIdx)
 		return fmt.Sprintf("%v", v)
 	// {{end}}
 	default:
@@ -215,13 +207,13 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
 
 // SetValueAt is an inefficient helper to set the value in a Vec when the type
 // is unknown.
-func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType coltypes.T) {
+func SetValueAt(v Vec, elem interface{}, rowIdx int, colType coltypes.T) {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
 		target := v._TemplateType()
 		newVal := elem.(_GOTYPE)
-		execgen.SET(target, int(rowIdx), newVal)
+		execgen.SET(target, rowIdx, newVal)
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
@@ -230,12 +222,12 @@ func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType coltypes.T) {
 
 // GetValueAt is an inefficient helper to get the value in a Vec when the type
 // is unknown.
-func GetValueAt(v Vec, rowIdx uint16, colType coltypes.T) interface{} {
+func GetValueAt(v Vec, rowIdx int, colType coltypes.T) interface{} {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
 		target := v._TemplateType()
-		return execgen.UNSAFEGET(target, int(rowIdx))
+		return execgen.UNSAFEGET(target, rowIdx)
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))

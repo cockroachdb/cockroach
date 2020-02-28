@@ -135,7 +135,7 @@ func BenchmarkCastOp(b *testing.B) {
 						}
 						batch := randomBatchWithSel(
 							testAllocator, rng, []coltypes.T{fromType},
-							int(coldata.BatchSize()), nullProbability, selectivity,
+							coldata.BatchSize(), nullProbability, selectivity,
 						)
 						source := NewRepeatableBatchSource(testAllocator, batch)
 						op, err := GetCastOperator(testAllocator, source, 0, 1, &typePair[0], &typePair[1])

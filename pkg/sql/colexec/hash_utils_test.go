@@ -29,9 +29,9 @@ func TestHashFunctionFamily(t *testing.T) {
 
 	ctx := context.Background()
 	bucketsA, bucketsB := make([]uint64, coldata.BatchSize()), make([]uint64, coldata.BatchSize())
-	nKeys := uint64(coldata.BatchSize())
+	nKeys := coldata.BatchSize()
 	keyTypes := []coltypes.T{coltypes.Int64}
-	keys := []coldata.Vec{testAllocator.NewMemColumn(keyTypes[0], int(coldata.BatchSize()))}
+	keys := []coldata.Vec{testAllocator.NewMemColumn(keyTypes[0], coldata.BatchSize())}
 	for i := int64(0); i < int64(coldata.BatchSize()); i++ {
 		keys[0].Int64()[i] = i
 	}
@@ -50,7 +50,7 @@ func TestHashFunctionFamily(t *testing.T) {
 		finalizeHash(buckets, nKeys, numBuckets)
 	}
 
-	numKeysInSameBucket := uint64(0)
+	numKeysInSameBucket := 0
 	for key := range bucketsA {
 		if bucketsA[key] == bucketsB[key] {
 			numKeysInSameBucket++
@@ -58,8 +58,8 @@ func TestHashFunctionFamily(t *testing.T) {
 	}
 	// We expect that about 1/numBuckets keys remained in the same bucket, so if
 	// the actual number deviates by more than a factor of 3, we fail the test.
-	if nKeys*3/numBuckets < numKeysInSameBucket {
+	if nKeys*3/int(numBuckets) < numKeysInSameBucket {
 		t.Fatal(fmt.Sprintf("too many keys remained in the same bucket: expected about %d, actual %d",
-			nKeys/numBuckets, numKeysInSameBucket))
+			nKeys/int(numBuckets), numKeysInSameBucket))
 	}
 }

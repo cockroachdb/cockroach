@@ -63,7 +63,7 @@ func TestDiskQueue(t *testing.T) {
 				op := colexec.NewRandomDataOp(testAllocator, rng, colexec.RandomDataOpArgs{
 					AvailableTyps: availableTyps,
 					NumBatches:    cap(batches),
-					BatchSize:     1 + rng.Intn(int(coldata.BatchSize())),
+					BatchSize:     1 + rng.Intn(coldata.BatchSize()),
 					Nulls:         true,
 					BatchAccumulator: func(b coldata.Batch) {
 						batches = append(batches, colexec.CopyBatch(testAllocator, b))
@@ -175,7 +175,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 
 	rng, _ := randutil.NewPseudoRand()
 	typs := []coltypes.T{coltypes.Int64}
-	batch := colexec.RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0, 0)
+	batch := colexec.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0, 0)
 	op := colexec.NewRepeatableBatchSource(testAllocator, batch)
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {

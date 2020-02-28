@@ -48,7 +48,7 @@ var _ = math.MaxInt64
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
-func _ASSIGN_NE(_, _, _ interface{}) uint64 {
+func _ASSIGN_NE(_, _, _ interface{}) int {
 	execerror.VectorizedInternalPanic("")
 }
 
@@ -64,7 +64,7 @@ func _CHECK_COL_BODY(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
 	probeKeys, buildKeys []interface{},
-	nToCheck uint16,
+	nToCheck uint64,
 	_PROBE_HAS_NULLS bool,
 	_BUILD_HAS_NULLS bool,
 	_ALLOW_NULL_EQUALITY bool,
@@ -74,7 +74,7 @@ func _CHECK_COL_BODY(
 	buildIsNull := false
 	// Early bounds check.
 	_ = ht.toCheck[nToCheck-1]
-	for i := uint16(0); i < nToCheck; i++ {
+	for i := uint64(0); i < nToCheck; i++ {
 		// keyID of 0 is reserved to represent the end of the next chain.
 
 		toCheck := ht.toCheck[i]
@@ -86,14 +86,14 @@ func _CHECK_COL_BODY(
 			// {{if .UseSel}}
 			selIdx := sel[toCheck]
 			// {{else}}
-			selIdx := toCheck
+			selIdx := int(toCheck)
 			// {{end}}
 			/* {{if .ProbeHasNulls }} */
 			probeIsNull = probeVec.Nulls().NullAt(selIdx)
 			/* {{end}} */
 
 			/* {{if .BuildHasNulls }} */
-			buildIsNull = buildVec.Nulls().NullAt64(keyID - 1)
+			buildIsNull = buildVec.Nulls().NullAt(int(keyID - 1))
 			/* {{end}} */
 
 			/* {{if .AllowNullEquality}} */
@@ -116,7 +116,7 @@ func _CHECK_COL_BODY(
 			} else if buildIsNull {
 				ht.differs[toCheck] = true
 			} else {
-				probeVal := execgen.UNSAFEGET(probeKeys, int(selIdx))
+				probeVal := execgen.UNSAFEGET(probeKeys, selIdx)
 				buildVal := execgen.UNSAFEGET(buildKeys, int(keyID-1))
 				var unique bool
 				_ASSIGN_NE(unique, probeVal, buildVal)
@@ -133,7 +133,7 @@ func _CHECK_COL_WITH_NULLS(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
 	probeKeys, buildKeys []interface{},
-	nToCheck uint16,
+	nToCheck uint64,
 	_USE_SEL bool,
 ) { // */}}
 	// {{define "checkColWithNulls" -}}
@@ -168,7 +168,7 @@ func _CHECK_COL_WITH_NULLS(
 // hashTable disallows null equality, then if any element in the key is null,
 // there is no match.
 func (ht *hashTable) checkCol(
-	probeType, buildType coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16,
+	probeType, buildType coltypes.T, keyColIdx int, nToCheck uint64, sel []int,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// `decimalScratch` local variable of type `decimalOverloadScratch`.
@@ -180,7 +180,7 @@ func (ht *hashTable) checkCol(
 		// {{range $rTyp, $overload := $rTypToOverload}}
 		case _BUILD_TYPE:
 			probeVec := ht.keys[keyColIdx]
-			buildVec := ht.vals.colVecs[ht.keyCols[keyColIdx]]
+			buildVec := ht.vals.ColVec(int(ht.keyCols[keyColIdx]))
 			probeKeys := probeVec._ProbeType()
 			buildKeys := buildVec._BuildType()
 
@@ -212,7 +212,7 @@ func (ht *hashTable) checkCol(
 // {{/*
 func _CHECK_BODY(_IS_HASHTABLE_IN_FULL_MODE bool) { // */}}
 	// {{define "checkBody" -}}
-	for i := uint16(0); i < nToCheck; i++ {
+	for i := uint64(0); i < nToCheck; i++ {
 		if !ht.differs[ht.toCheck[i]] {
 			// If the current key matches with the probe key, we want to update headID
 			// with the current key if it has not been set yet.
@@ -261,9 +261,9 @@ func _CHECK_BODY(_IS_HASHTABLE_IN_FULL_MODE bool) { // */}}
 // key is removed from toCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of toCheck is returned by this function.
-func (ht *hashTable) check(probeKeyTypes []coltypes.T, nToCheck uint16, sel []uint16) uint16 {
+func (ht *hashTable) check(probeKeyTypes []coltypes.T, nToCheck uint64, sel []int) uint64 {
 	ht.checkCols(probeKeyTypes, nToCheck, sel)
-	nDiffers := uint16(0)
+	nDiffers := uint64(0)
 
 	switch ht.mode {
 	case hashTableFullMode:

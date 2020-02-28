@@ -62,7 +62,7 @@ func WriteCSVRows(
 		} else {
 			rowStrings = rowStrings[:numCols]
 		}
-		for rowIdx, numRows := 0, int(cb.Length()); rowIdx < numRows; rowIdx++ {
+		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
 			for colIdx, col := range cb.ColVecs() {
 				rowStrings[colIdx] = colDatumToCSVString(col, rowIdx)
 			}
@@ -110,7 +110,7 @@ func (r *csvRowsReader) Read(p []byte) (n int, err error) {
 		} else {
 			r.stringsBuf = r.stringsBuf[:numCols]
 		}
-		for rowIdx, numRows := 0, int(r.cb.Length()); rowIdx < numRows; rowIdx++ {
+		for rowIdx, numRows := 0, r.cb.Length(); rowIdx < numRows; rowIdx++ {
 			for colIdx, col := range r.cb.ColVecs() {
 				r.stringsBuf[colIdx] = colDatumToCSVString(col, rowIdx)
 			}
@@ -135,7 +135,7 @@ func NewCSVRowsReader(t Table, batchStart, batchEnd int) io.Reader {
 }
 
 func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
-	if col.Nulls().NullAt64(uint64(rowIdx)) {
+	if col.Nulls().NullAt(rowIdx) {
 		return `NULL`
 	}
 	switch col.Type() {

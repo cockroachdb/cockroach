@@ -140,7 +140,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	// TODO(yuzefovich): template out sel vs non-sel cases.
 	if sel != nil {
-		for i := uint16(0); i < batch.Length(); i++ {
+		for i := 0; i < batch.Length(); i++ {
 			// {{ if .HasPartition }}
 			if partitionCol[sel[i]] {
 				r.rank = 1
@@ -158,7 +158,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := uint16(0); i < batch.Length(); i++ {
+		for i := 0; i < batch.Length(); i++ {
 			// {{ if .HasPartition }}
 			if partitionCol[i] {
 				r.rank = 1

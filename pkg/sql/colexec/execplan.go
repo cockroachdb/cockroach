@@ -1026,10 +1026,10 @@ func NewColOperator(
 		result.ColumnTypes = newTypes
 	}
 	if post.Offset != 0 {
-		result.Op = NewOffsetOp(result.Op, post.Offset)
+		result.Op = NewOffsetOp(result.Op, int(post.Offset))
 	}
 	if post.Limit != 0 {
-		result.Op = NewLimitOp(result.Op, post.Limit)
+		result.Op = NewLimitOp(result.Op, int(post.Limit))
 	}
 	return result, err
 }

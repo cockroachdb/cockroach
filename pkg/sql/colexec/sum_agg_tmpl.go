@@ -104,7 +104,7 @@ func (a *sum_TYPEAgg) CurrentOutputIndex() int {
 func (a *sum_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
-		a.scratch.nulls.UnsetNullsAfter(uint16(idx + 1))
+		a.scratch.nulls.UnsetNullsAfter(idx + 1)
 	}
 }
 
@@ -118,7 +118,7 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// any non-nulls for this group so far, the output for this group should be
 		// null.
 		if !a.scratch.foundNonNullForCurrentGroup {
-			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+			a.scratch.nulls.SetNull(a.scratch.curIdx)
 		} else {
 			a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
 		}
@@ -175,7 +175,7 @@ func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS boo
 		// a.scratch.curIdx is negative, it means that this is the first group.
 		if a.scratch.curIdx >= 0 {
 			if !a.scratch.foundNonNullForCurrentGroup {
-				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+				a.scratch.nulls.SetNull(a.scratch.curIdx)
 			} else {
 				a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
 			}
@@ -195,7 +195,7 @@ func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS boo
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
-	isNull = nulls.NullAt(uint16(i))
+	isNull = nulls.NullAt(i)
 	// {{ else }}
 	isNull = false
 	// {{ end }}

@@ -28,7 +28,7 @@ import (
 func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nBatches := 10
-	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize())))
+	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
 	vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
 	vsc.Init()
 	for {
@@ -69,14 +69,14 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
 
 		leftSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize()))),
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(leftSource, 0 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		leftInput.SetOutputWatch(mjInputWatch)
 
 		rightSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize()))),
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(rightSource, 1 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
@@ -119,7 +119,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 
 		require.Equal(t, nBatches, batchCount)
 		require.Equal(t, nBatches, int(mjStatsCollector.NumBatches))
-		require.Equal(t, nBatches*int(coldata.BatchSize()), int(mjStatsCollector.NumTuples))
+		require.Equal(t, nBatches*coldata.BatchSize(), int(mjStatsCollector.NumTuples))
 		// Two inputs are advancing the time source for a total of 2 * nBatches
 		// advances, but these do not count towards merge joiner execution time.
 		// Merge joiner advances the time on its every non-empty batch totaling
@@ -134,7 +134,7 @@ func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)
 	}
-	batch.SetLength(uint16(batchSize))
+	batch.SetLength(batchSize)
 	return newFiniteChunksSource(batch, nBatches, 1 /* matchLen */)
 }
 
