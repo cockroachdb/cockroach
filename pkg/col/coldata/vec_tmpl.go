@@ -213,7 +213,8 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
 	}
 }
 
-// Helper to set the value in a Vec when the type is unknown.
+// SetValueAt is an inefficient helper to set the value in a Vec when the type
+// is unknown.
 func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType coltypes.T) {
 	switch colType {
 	// {{range .}}
@@ -221,7 +222,21 @@ func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType coltypes.T) {
 		target := v._TemplateType()
 		newVal := elem.(_GOTYPE)
 		execgen.SET(target, int(rowIdx), newVal)
-		// {{end}}
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
+// GetValueAt is an inefficient helper to get the value in a Vec when the type
+// is unknown.
+func GetValueAt(v Vec, rowIdx uint16, colType coltypes.T) interface{} {
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		target := v._TemplateType()
+		return execgen.UNSAFEGET(target, int(rowIdx))
+	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}

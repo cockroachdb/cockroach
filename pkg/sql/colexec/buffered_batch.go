@@ -102,6 +102,12 @@ func (b *bufferedBatch) ResetInternalBatch() {
 	execerror.VectorizedInternalPanic("ResetInternalBatch() should not be called on bufferedBatch")
 }
 
+// String is not implemented yet.
+func (b *bufferedBatch) String() string {
+	execerror.VectorizedInternalPanic("String() should not be called on bufferedBatch")
+	return ""
+}
+
 // reset resets the state of the buffered group so that we can reuse the
 // underlying memory. Note that the underlying memory is not released, so there
 // is no need to update memory account while performing this operation.
