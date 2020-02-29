@@ -37,6 +37,15 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	makeArgs := func(r *Replica, ts, aliveAt hlc.Timestamp) roachpb.AdminVerifyProtectedTimestampRequest {
+		args := roachpb.AdminVerifyProtectedTimestampRequest{
+			RecordID:      uuid.MakeV4(),
+			Protected:     ts,
+			RecordAliveAt: aliveAt,
+		}
+		args.Key, args.EndKey = r.Desc().StartKey.AsRawKey(), r.Desc().EndKey.AsRawKey()
+		return args
+	}
 	for _, testCase := range []struct {
 		name string
 		// Note that the store underneath the passed in Replica has been stopped.
@@ -53,10 +62,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				r.mu.state.Lease.Start = r.store.Clock().Now()
 				l, _ := r.GetLease()
-				id := uuid.MakeV4()
 				aliveAt := l.Start.Prev()
 				ts := aliveAt.Prev()
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.True(t, willApply)
 				require.NoError(t, err)
 			},
@@ -68,10 +77,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				thresh := r.store.Clock().Now()
 				r.mu.state.GCThreshold = &thresh
-				id := uuid.MakeV4()
 				ts := thresh.Prev().Prev()
 				aliveAt := ts.Next()
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.NoError(t, err)
 			},
@@ -84,10 +93,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				thresh := r.store.Clock().Now()
 				require.NoError(t, r.markPendingGC(hlc.Timestamp{}, thresh))
-				id := uuid.MakeV4()
 				ts := thresh.Prev().Prev()
 				aliveAt := ts.Next()
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.NoError(t, err)
 			},
@@ -101,13 +110,13 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			name: "newer aliveAt triggers refresh leading to success",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				ts := r.store.Clock().Now()
-				id := uuid.MakeV4()
 				aliveAt := ts.Next()
 				mt.asOf = ts.Prev()
+				args := makeArgs(r, ts, aliveAt)
 				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
 					require.Equal(t, refreshTo, aliveAt)
 					mt.records = append(mt.records, &ptpb.Record{
-						ID:        id,
+						ID:        args.RecordID,
 						Timestamp: ts,
 						Spans: []roachpb.Span{
 							{
@@ -119,7 +128,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 					mt.asOf = refreshTo.Next()
 					return nil
 				}
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.True(t, willApply)
 				require.NoError(t, err)
 				require.Equal(t,
@@ -136,10 +145,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			name: "record does not exist",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				ts := r.store.Clock().Now()
-				id := uuid.MakeV4()
 				aliveAt := ts.Next()
 				mt.asOf = aliveAt.Next()
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.NoError(t, err)
 			},
@@ -149,11 +158,11 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			name: "record already exists",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				ts := r.store.Clock().Now()
-				id := uuid.MakeV4()
 				aliveAt := ts.Next()
+				args := makeArgs(r, ts, aliveAt)
 				mt.asOf = aliveAt.Next()
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        id,
+					ID:        args.RecordID,
 					Timestamp: ts,
 					Spans: []roachpb.Span{
 						{
@@ -162,7 +171,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 						},
 					},
 				})
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.True(t, willApply)
 				require.NoError(t, err)
 			},
@@ -172,13 +181,13 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			name: "refresh fails",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				ts := r.store.Clock().Now()
-				id := uuid.MakeV4()
 				aliveAt := ts.Next()
 				mt.asOf = ts.Prev()
 				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
 					return errors.New("boom")
 				}
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.EqualError(t, err, "boom")
 			},
@@ -198,10 +207,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				r.mu.state.Lease = &lease
 				r.mu.Unlock()
 				ts := r.store.Clock().Now()
-				id := uuid.MakeV4()
 				aliveAt := ts.Prev().Prev()
 				mt.asOf = ts.Prev()
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.Regexp(t, "NotLeaseHolderError", err.Error())
 			},
@@ -211,7 +220,6 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			name: "not leaseholder after refresh",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				ts := r.store.Clock().Now()
-				id := uuid.MakeV4()
 				aliveAt := ts.Next()
 				mt.asOf = ts.Prev()
 				mt.refresh = func(ctx context.Context, refreshTo hlc.Timestamp) error {
@@ -227,7 +235,8 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 					r.mu.state.Lease = &lease
 					return nil
 				}
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.Regexp(t, "NotLeaseHolderError", err.Error())
 			},
@@ -238,16 +247,31 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			name: "successful refresh does not update timestamp (assertion failure)",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				ts := r.store.Clock().Now()
-				id := uuid.MakeV4()
 				aliveAt := ts.Next()
 				mt.asOf = ts.Prev()
 				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
 					return nil
 				}
-				willApply, err := r.protectedTimestampRecordApplies(ctx, ts, aliveAt, id)
+				args := makeArgs(r, ts, aliveAt)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
 				require.EqualError(t, err, "cache was not updated after being refreshed")
 				require.True(t, errors.IsAssertionFailure(err), "%v", err)
+			},
+		},
+		// If a request header is for a key span which is not owned by this replica,
+		// ensure that a roachpb.RangeKeyMismatchError is returned.
+		{
+			name: "request span is respected",
+			test: func(t *testing.T, r *Replica, mt *manualCache) {
+				ts := r.store.Clock().Now()
+				aliveAt := ts.Next()
+				mt.asOf = ts.Prev()
+				args := makeArgs(r, ts, aliveAt)
+				r.mu.state.Desc.StartKey = roachpb.RKey(keys.TableDataMax)
+				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
+				require.False(t, willApply)
+				require.EqualError(t, err, "key range /Min-/Max outside of bounds of range /Table/Max-/Max")
 			},
 		},
 	} {
