@@ -1219,6 +1219,9 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	if c.curIdx >= c.len {
 		return coldata.ZeroBatch
 	}
+	// Explicitly set to false since this could be modified by the downstream
+	// operators.
+	c.batch.SetSelection(false)
 	lastIdx := c.curIdx + uint64(coldata.BatchSize())
 	if lastIdx > c.len {
 		lastIdx = c.len
