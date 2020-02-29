@@ -2425,8 +2425,7 @@ func (r *Replica) adminScatter(
 func (r *Replica) adminVerifyProtectedTimestamp(
 	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
 ) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
-	resp.Verified, err = r.protectedTimestampRecordApplies(ctx, args.Protected,
-		args.RecordAliveAt, args.RecordID)
+	resp.Verified, err = r.protectedTimestampRecordApplies(ctx, &args)
 	if err == nil && !resp.Verified {
 		resp.FailedRanges = append(resp.FailedRanges, *r.Desc())
 	}
