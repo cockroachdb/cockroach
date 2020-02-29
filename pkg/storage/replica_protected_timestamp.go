@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/gc"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -29,10 +29,10 @@ import (
 // the record will apply, the cache is refreshed and then the check is performed
 // again. See r.protectedTimestampRecordCurrentlyApplies() for more details.
 func (r *Replica) protectedTimestampRecordApplies(
-	ctx context.Context, protected, recordAliveAt hlc.Timestamp, id uuid.UUID,
+	ctx context.Context, args *roachpb.AdminVerifyProtectedTimestampRequest,
 ) (willApply bool, _ error) {
 	// Check the state of the cache without a refresh.
-	willApply, cacheTooOld, err := r.protectedTimestampRecordCurrentlyApplies(ctx, protected, recordAliveAt, id)
+	willApply, cacheTooOld, err := r.protectedTimestampRecordCurrentlyApplies(ctx, args)
 	if err != nil {
 		return false, err
 	}
@@ -42,10 +42,10 @@ func (r *Replica) protectedTimestampRecordApplies(
 	// Refresh the cache so that we know that the next time we come around we're
 	// certain to either see the record or see a timestamp for readAt that is
 	// greater than or equal to recordAliveAt.
-	if err := r.store.protectedtsCache.Refresh(ctx, recordAliveAt); err != nil {
+	if err := r.store.protectedtsCache.Refresh(ctx, args.RecordAliveAt); err != nil {
 		return false, err
 	}
-	willApply, cacheTooOld, err = r.protectedTimestampRecordCurrentlyApplies(ctx, protected, recordAliveAt, id)
+	willApply, cacheTooOld, err = r.protectedTimestampRecordCurrentlyApplies(ctx, args)
 	if err != nil {
 		return false, err
 	}
@@ -63,7 +63,7 @@ func (r *Replica) protectedTimestampRecordApplies(
 // will apply. In such cases the cache should be refreshed to recordAliveAt and
 // then this method should be called again.
 func (r *Replica) protectedTimestampRecordCurrentlyApplies(
-	ctx context.Context, protected, recordAliveAt hlc.Timestamp, id uuid.UUID,
+	ctx context.Context, args *roachpb.AdminVerifyProtectedTimestampRequest,
 ) (willApply, cacheTooOld bool, _ error) {
 	// We first need to check that we're the current leaseholder.
 	// TODO(ajwerner): what other conditions with regards to time do we need to
@@ -90,10 +90,17 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if protected.LessEq(*r.mu.state.GCThreshold) {
+	// If the key that routed this request to this range is now out of this
+	// range's bounds, return an error for the client to try again on the
+	// correct range.
+	desc := r.descRLocked()
+	if !storagebase.ContainsKeyRange(desc, args.Key, args.EndKey) {
+		return false, false, roachpb.NewRangeKeyMismatchError(args.Key, args.EndKey, desc)
+	}
+	if args.Protected.LessEq(*r.mu.state.GCThreshold) {
 		return false, false, nil
 	}
-	if recordAliveAt.Less(ls.Lease.Start) {
+	if args.RecordAliveAt.Less(ls.Lease.Start) {
 		return true, false, nil
 	}
 
@@ -102,16 +109,15 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// that we add some state to the replica.
 	r.protectedTimestampMu.Lock()
 	defer r.protectedTimestampMu.Unlock()
-	if protected.Less(r.protectedTimestampMu.pendingGCThreshold) {
+	if args.Protected.Less(r.protectedTimestampMu.pendingGCThreshold) {
 		return false, false, nil
 	}
 
 	var seen bool
-	desc := r.mu.state.Desc
 	readAt := r.store.protectedtsCache.Iterate(ctx,
 		roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey),
 		func(r *ptpb.Record) (wantMore bool) {
-			if r.ID == id {
+			if r.ID == args.RecordID {
 				seen = true
 			}
 			return !seen
@@ -131,7 +137,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 
 	// Protected timestamp state has progressed past the point at which we
 	// should see this record. This implies that the record has been removed.
-	return false, readAt.Less(recordAliveAt), nil
+	return false, readAt.Less(args.RecordAliveAt), nil
 }
 
 // checkProtectedTimestampsForGC determines whether the Replica can run GC.
