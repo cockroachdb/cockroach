@@ -52,9 +52,11 @@ func MakeStatusFunc(jr *jobs.Registry) ptreconcile.StatusFunc {
 
 // MakeRecord makes a protected timestamp record to protect a timestamp on
 // behalf of this job.
-func MakeRecord(jobID int64, tsToProtect hlc.Timestamp, spans []roachpb.Span) *ptpb.Record {
+func MakeRecord(
+	id uuid.UUID, jobID int64, tsToProtect hlc.Timestamp, spans []roachpb.Span,
+) *ptpb.Record {
 	return &ptpb.Record{
-		ID:        uuid.MakeV4(),
+		ID:        id,
 		Timestamp: tsToProtect,
 		Mode:      ptpb.PROTECT_AFTER,
 		MetaType:  MetaType,
