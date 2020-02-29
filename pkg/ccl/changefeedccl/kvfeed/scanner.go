@@ -103,15 +103,13 @@ func (p *scanRequestScanner) exportSpan(
 	txn.SetFixedTimestamp(ctx, ts)
 	stopwatchStart := timeutil.Now()
 	var scanDuration, bufferDuration time.Duration
-	// TODO(ajwerner): Adopt the byte limit here as soon as it merges. This must
-	// happen in 20.1!
-	const maxKeysPerScan = 1 << 18
+	const targetBytesPerScan = 16 << 20 // 16 MiB
 	for remaining := span; ; {
 		start := timeutil.Now()
 		b := txn.NewBatch()
 		r := roachpb.NewScan(remaining.Key, remaining.EndKey).(*roachpb.ScanRequest)
 		r.ScanFormat = roachpb.BATCH_RESPONSE
-		b.Header.MaxSpanRequestKeys = maxKeysPerScan
+		b.Header.TargetBytes = targetBytesPerScan
 		// NB: We use a raw request rather than the Scan() method because we want
 		// the MVCC timestamps which are encoded in the response but are filtered
 		// during result parsing.
