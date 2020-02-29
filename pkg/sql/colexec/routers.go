@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -391,9 +392,12 @@ func NewHashRouter(
 	types []coltypes.T,
 	hashCols []uint32,
 	memoryLimit int64,
-	cfg colcontainer.DiskQueueCfg,
+	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 ) (*HashRouter, []Operator) {
+	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
+		execerror.VectorizedInternalPanic(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
+	}
 	outputs := make([]routerOutput, len(unlimitedAllocators))
 	outputsAsOps := make([]Operator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
@@ -406,7 +410,7 @@ func NewHashRouter(
 	unblockEventsChan := make(chan struct{}, 2*len(unlimitedAllocators))
 	memoryLimitPerOutput := memoryLimit / int64(len(unlimitedAllocators))
 	for i := range unlimitedAllocators {
-		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, cfg, fdSemaphore)
+		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, diskQueueCfg, fdSemaphore)
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}

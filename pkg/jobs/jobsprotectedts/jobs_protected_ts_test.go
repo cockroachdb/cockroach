@@ -75,7 +75,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 			if j, err = jr.CreateJobWithTxn(ctx, mkJobRec(), txn); err != nil {
 				return err
 			}
-			rec = jobsprotectedts.MakeRecord(*j.ID(), ts, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
+			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), *j.ID(), ts, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
 			return ptp.Protect(ctx, txn, rec)
 		}))
 		return j, rec

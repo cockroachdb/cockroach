@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -619,20 +622,65 @@ func importPlanHook(
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
 
-		_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
+		// Here we create the job and protected timestamp records in a side
+		// transaction and then kick off the job. This is awful. Rather we should be
+		// disallowing this statement in an explicit transaction and then we should
+		// create the job in the user's transaction here and then in a post-commit
+		// hook we should kick of the StartableJob which we attached to the
+		// connExecutor somehow.
+
+		importDetails := jobspb.ImportDetails{
+			URIs:       files,
+			Format:     format,
+			ParentID:   parentID,
+			Tables:     tableDetails,
+			SSTSize:    sstSize,
+			Oversample: oversample,
+			SkipFKs:    skipFKs,
+		}
+
+		// Prepare the protected timestamp record.
+		var spansToProtect []roachpb.Span
+		for i := range tableDetails {
+			if td := &tableDetails[i]; !td.IsNew {
+				spansToProtect = append(spansToProtect, td.Desc.TableSpan())
+			}
+		}
+		if len(spansToProtect) > 0 {
+			protectedtsID := uuid.MakeV4()
+			importDetails.ProtectedTimestampRecord = &protectedtsID
+		}
+		jr := jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
-			Details: jobspb.ImportDetails{
-				URIs:       files,
-				Format:     format,
-				ParentID:   parentID,
-				Tables:     tableDetails,
-				SSTSize:    sstSize,
-				Oversample: oversample,
-				SkipFKs:    skipFKs,
-			},
-			Progress: jobspb.ImportProgress{},
-		})
+			Details:     importDetails,
+			Progress:    jobspb.ImportProgress{},
+		}
+		var sj *jobs.StartableJob
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+			if err != nil {
+				return err
+			}
+
+			if len(spansToProtect) > 0 {
+				// NB: We protect the timestamp preceding the import statement timestamp
+				// because that's the timestamp to which we want to revert.
+				tsToProtect := hlc.Timestamp{WallTime: walltime}.Prev()
+				rec := jobsprotectedts.MakeRecord(*importDetails.ProtectedTimestampRecord,
+					*sj.ID(), tsToProtect, spansToProtect)
+				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+			}
+			return nil
+		}); err != nil {
+			if sj != nil {
+				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+				}
+			}
+			return err
+		}
+		errCh, err := sj.Start(ctx)
 		if err != nil {
 			return err
 		}
@@ -726,8 +774,9 @@ type importResumer struct {
 	res      backupccl.RowCount
 
 	testingKnobs struct {
-		afterImport            func(summary backupccl.RowCount) error
-		alwaysFlushJobProgress bool
+		afterImport               func(summary backupccl.RowCount) error
+		alwaysFlushJobProgress    bool
+		ignoreProtectedTimestamps bool
 	}
 }
 
@@ -925,6 +974,12 @@ func (r *importResumer) Resume(
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
+	ptsID := details.ProtectedTimestampRecord
+	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
+		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
+			return err
+		}
+	}
 
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
@@ -995,7 +1050,18 @@ func (r *importResumer) Resume(
 	if err := r.publishTables(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
-
+	// TODO(ajwerner): Should this actually return the error? At this point we've
+	// successfully finished the import but failed to drop the protected
+	// timestamp. The reconciliation loop ought to pick it up. Ideally we'd do
+	// this in OnSuccess but we don't have access to the protectedts.Storage
+	// there.
+	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+		}); err != nil {
+			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
+		}
+	}
 	return nil
 }
 
@@ -1091,7 +1157,32 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
-	return phs.(sql.PlanHookState).ExecCfg().DB.Txn(ctx, r.dropTables)
+	cfg := phs.(sql.PlanHookState).ExecCfg()
+	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := r.dropTables(ctx, txn); err != nil {
+			return err
+		}
+		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+	})
+}
+
+func (r *importResumer) releaseProtectedTimestamp(
+	ctx context.Context, txn *client.Txn, pts protectedts.Storage,
+) error {
+	details := r.job.Details().(jobspb.ImportDetails)
+	ptsID := details.ProtectedTimestampRecord
+	// If the job doesn't have a protected timestamp then there's nothing to do.
+	if ptsID == nil {
+		return nil
+	}
+	err := pts.Release(ctx, txn, *ptsID)
+	if errors.Is(err, protectedts.ErrNotExists) {
+		// No reason to return an error which might cause problems if it doesn't
+		// seem to exist.
+		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		err = nil
+	}
+	return err
 }
 
 // dropTables implements the OnFailOrCancel logic.
