@@ -112,9 +112,13 @@ type NewColOperatorArgs struct {
 		// DiskSpillingDisabled specifies whether only in-memory operators should
 		// be created.
 		DiskSpillingDisabled bool
-		// MaxNumberPartitions determines the maximum number of "active"
-		// partitions for Partitioner interface.
-		MaxNumberPartitions int
+		// NumForcedRepartitions specifies a number of "repartitions" that a
+		// disk-backed operator should be forced to perform. "Repartition" can mean
+		// different things depending on the operator (for example, for hash joiner
+		// it is dividing original partition into multiple new partitions; for
+		// sorter it is merging already created partitions into new one before
+		// proceeding to the next partition from the input).
+		NumForcedRepartitions int
 	}
 }
 
@@ -580,15 +584,18 @@ func NewColOperator(
 					hashJoinerMemMonitorName,
 					func(inputOne, inputTwo Operator) Operator {
 						monitorNamePrefix := "external-hash-joiner"
-						allocator := NewAllocator(
-							// Pass in the default limit explicitly since we don't want to
-							// use the default memory limit of 1 if ForceDiskSpill is true, to
-							// allow for the external hash join to have a normal amount of
-							// memory (for initialization and internal joining).
-							ctx, result.createBufferingMemAccountWithLimit(
-								ctx, flowCtx, monitorNamePrefix, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+						unlimitedAllocator := NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(
+								ctx, flowCtx, monitorNamePrefix,
 							))
-						return newExternalHashJoiner(allocator, hjSpec, inputOne, inputTwo, args.DiskQueueCfg, args.FDSemaphore)
+						return newExternalHashJoiner(
+							unlimitedAllocator, hjSpec,
+							inputOne, inputTwo,
+							execinfra.GetWorkMemLimit(flowCtx.Cfg),
+							args.DiskQueueCfg,
+							args.FDSemaphore,
+							args.TestingKnobs.NumForcedRepartitions,
+						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
@@ -807,7 +814,7 @@ func NewColOperator(
 							standaloneMemAccount,
 							input, inputTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
-							args.TestingKnobs.MaxNumberPartitions,
+							args.TestingKnobs.NumForcedRepartitions,
 							args.DiskQueueCfg,
 							args.FDSemaphore,
 						)
@@ -1008,21 +1015,6 @@ func (r *NewColOperatorResult) createBufferingMemAccount(
 	)
 	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
-	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount
-}
-
-// createBufferingMemAccountWithLimit is identical to createBufferingMemAccount
-// although it creates a monitor with the provided limit, rather than using the
-// default limit. Only disk-aware operators should use this method, as it is
-// useful to enforce different limits in testing scenarios.
-func (r *NewColOperatorResult) createBufferingMemAccountWithLimit(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, limit int64,
-) *mon.BoundAccount {
-	limitedMon := mon.MakeMonitorInheritWithLimit(name+"-limited", limit, flowCtx.EvalCtx.Mon)
-	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, &limitedMon)
-	limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-	bufferingMemAccount := limitedMon.MakeBoundAccount()
 	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
 	return &bufferingMemAccount
 }

@@ -72,6 +72,17 @@ func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Ba
 	return coldata.NewMemBatchWithSize(types, size)
 }
 
+// NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
+// allocates memory for the selection vector but does *not* allocate any memory
+// for the column vectors - those will have to be added separately.
+func (a *Allocator) NewMemBatchNoCols(types []coltypes.T, size int) coldata.Batch {
+	estimatedMemoryUsage := selVectorSize(size)
+	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	return coldata.NewMemBatchNoCols(types, size)
+}
+
 // RetainBatch adds the size of the batch to the memory account. This shouldn't
 // need to be used regularly, since most memory accounting necessary is done
 // through PerformOperation. Use this if you want to explicitly manage the

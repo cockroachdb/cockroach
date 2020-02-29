@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1642,7 +1643,9 @@ func (s *statusServer) iterateNodes(
 	}
 
 	// Issue the requests concurrently.
-	sem := make(chan struct{}, maxConcurrentRequests)
+	sem := quotapool.NewIntPool("node status", maxConcurrentRequests)
+	ctx, cancel := s.stopper.WithCancelOnStop(ctx)
+	defer cancel()
 	for nodeID := range nodeStatuses {
 		nodeID := nodeID // needed to ensure the closure below captures a copy.
 		if err := s.stopper.RunLimitedAsyncTask(

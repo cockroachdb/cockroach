@@ -13,8 +13,11 @@ package quotapool_test
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,8 +27,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
+
+// logSlowAcquisition is an Option to log slow acquisitions.
+var logSlowAcquisition = quotapool.OnSlowAcquisition(2*time.Second, quotapool.LogSlowAcquisition)
 
 // TestQuotaPoolBasic tests the minimal expected behavior of the quota pool
 // with different sized quota pool and a varying number of goroutines, each
@@ -301,6 +306,8 @@ func TestQuotaPoolCappedAcquisition(t *testing.T) {
 }
 
 func TestOnAcquisition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	const quota = 100
 	var called bool
 	qp := quotapool.NewIntPool("test", quota,
@@ -319,6 +326,8 @@ func TestOnAcquisition(t *testing.T) {
 // TestSlowAcquisition ensures that the SlowAcquisition callback is called
 // when an Acquire call takes longer than the configured timeout.
 func TestSlowAcquisition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// The test will set up an IntPool with 1 quota and a SlowAcquisition callback
 	// which closes channels when called by the second goroutine. An initial call
 	// to Acquire will take all of the quota. Then a second call with go should be
@@ -371,6 +380,8 @@ func TestSlowAcquisition(t *testing.T) {
 // Test that AcquireFunc() is called after IntAlloc.Freeze() is called - so that an ongoing acquisition gets
 // the chance to observe that there's no capacity for its request.
 func TestQuotaPoolCapacityDecrease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	qp := quotapool.NewIntPool("test", 100)
 	ctx := context.Background()
 
@@ -383,17 +394,16 @@ func TestQuotaPoolCapacityDecrease(t *testing.T) {
 	firstCh := make(chan struct{})
 	doneCh := make(chan struct{})
 	go func() {
-		_, err = qp.AcquireFunc(ctx,
-			func(_ context.Context, pi quotapool.PoolInfo) (took uint64, err error) {
-				if first {
-					first = false
-					close(firstCh)
-				}
-				if pi.Capacity < 100 {
-					return 0, fmt.Errorf("hopeless")
-				}
-				return 0, quotapool.ErrNotEnoughQuota
-			})
+		_, err = qp.AcquireFunc(ctx, func(_ context.Context, pi quotapool.PoolInfo) (took uint64, err error) {
+			if first {
+				first = false
+				close(firstCh)
+			}
+			if pi.Capacity < 100 {
+				return 0, fmt.Errorf("hopeless")
+			}
+			return 0, quotapool.ErrNotEnoughQuota
+		})
 		close(doneCh)
 	}()
 
@@ -407,72 +417,56 @@ func TestQuotaPoolCapacityDecrease(t *testing.T) {
 	}
 }
 
-// BenchmarkIntQuotaPool benchmarks the common case where we have sufficient
-// quota available in the pool and we repeatedly acquire and release quota.
-func BenchmarkIntQuotaPool(b *testing.B) {
-	qp := quotapool.NewIntPool("test", 1)
-	ctx := context.Background()
-	for n := 0; n < b.N; n++ {
-		alloc, err := qp.Acquire(ctx, 1)
-		if err != nil {
-			b.Fatal(err)
-		}
-		alloc.Release()
-	}
-	qp.Close("")
-}
+func TestIntpoolNoWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
-// BenchmarkConcurrentIntQuotaPool benchmarks concurrent workers in a variety
-// of ratios between adequate and inadequate quota to concurrently serve all
-// workers.
-func BenchmarkConcurrentIntQuotaPool(b *testing.B) {
-	// test returns the arguments to b.Run for a given number of workers and
-	// quantity of quota.
-	test := func(workers int, quota uint64) (string, func(b *testing.B)) {
-		return fmt.Sprintf("workers=%d,quota=%d", workers, quota), func(b *testing.B) {
-			qp := quotapool.NewIntPool("test", quota, quotapool.LogSlowAcquisition)
-			g, ctx := errgroup.WithContext(context.Background())
-			runWorker := func(workerNum int) {
-				g.Go(func() error {
-					for i := workerNum; i < b.N; i += workers {
-						alloc, err := qp.Acquire(ctx, 1)
-						if err != nil {
-							b.Fatal(err)
-						}
-						runtime.Gosched()
-						alloc.Release()
-					}
-					return nil
-				})
-			}
-			for i := 0; i < workers; i++ {
-				runWorker(i)
-			}
-			if err := g.Wait(); err != nil {
-				b.Fatal(err)
-			}
-			qp.Close("")
-		}
-	}
-	for _, c := range []struct {
-		workers int
-		quota   uint64
-	}{
-		{1, 1},
-		{2, 2},
-		{8, 4},
-		{128, 4},
-		{512, 128},
-		{512, 513},
-		{512, 511},
-	} {
-		b.Run(test(c.workers, c.quota))
-	}
+	ctx := context.Background()
+	qp := quotapool.NewIntPool("test", 2)
+
+	acq1, err := qp.TryAcquire(ctx, 1)
+	require.NoError(t, err)
+
+	acq2, err := qp.TryAcquire(ctx, 1)
+	require.NoError(t, err)
+
+	failed, err := qp.TryAcquire(ctx, 1)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	acq1.Release()
+
+	failed, err = qp.TryAcquire(ctx, 2)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	acq2.Release()
+
+	acq5, err := qp.TryAcquire(ctx, 3)
+	require.NoError(t, err)
+	require.NotNil(t, acq5)
+
+	failed, err = qp.TryAcquireFunc(ctx, func(ctx context.Context, p quotapool.PoolInfo) (took uint64, err error) {
+		require.Equal(t, uint64(0), p.Available)
+		return 0, quotapool.ErrNotEnoughQuota
+	})
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	acq5.Release()
+
+	acq6, err := qp.TryAcquireFunc(ctx, func(ctx context.Context, p quotapool.PoolInfo) (took uint64, err error) {
+		return 1, nil
+	})
+	require.NoError(t, err)
+
+	acq6.Release()
 }
 
 // TestIntpoolRelease tests the Release method of intpool to ensure that it releases
 // what is expected and behaves as documented.
 func TestIntpoolRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
 	const numPools = 3
 	const capacity = 3
@@ -572,7 +566,9 @@ func TestIntpoolRelease(t *testing.T) {
 
 // TestLen verifies that the Len() method of the IntPool works as expected.
 func TestLen(t *testing.T) {
-	qp := quotapool.NewIntPool("test", 1, quotapool.LogSlowAcquisition)
+	defer leaktest.AfterTest(t)()
+
+	qp := quotapool.NewIntPool("test", 1, logSlowAcquisition)
 	ctx := context.Background()
 	allocCh := make(chan *quotapool.IntAlloc)
 	doAcquire := func(ctx context.Context) {
@@ -625,30 +621,168 @@ func TestLen(t *testing.T) {
 	assert.Equal(t, 0, qp.Len())
 }
 
-// BenchmarkIntQuotaPoolFunc benchmarks the common case where we have sufficient
-// quota available in the pool and we repeatedly acquire and release quota.
-func BenchmarkIntQuotaPoolFunc(b *testing.B) {
-	qp := quotapool.NewIntPool("test", 1, quotapool.LogSlowAcquisition)
-	ctx := context.Background()
-	toAcquire := intRequest(1)
-	for n := 0; n < b.N; n++ {
-		alloc, err := qp.AcquireFunc(ctx, toAcquire.acquire)
-		if err != nil {
-			b.Fatal(err)
-		} else if acquired := alloc.Acquired(); acquired != 1 {
-			b.Fatalf("expected to acquire %d, got %d", 1, acquired)
-		}
-		alloc.Release()
+// TestIntpoolIllegalCapacity ensures that constructing an IntPool with capacity
+// in excess of math.MaxInt64 will panic.
+func TestIntpoolWithExcessCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, c := range []uint64{
+		1, math.MaxInt64 - 1, math.MaxInt64,
+	} {
+		require.NotPanics(t, func() {
+			quotapool.NewIntPool("test", c)
+		})
 	}
-	qp.Close("")
+	for _, c := range []uint64{
+		math.MaxUint64, math.MaxUint64 - 1, math.MaxInt64 + 1,
+	} {
+		require.Panics(t, func() {
+			quotapool.NewIntPool("test", c)
+		})
+	}
 }
 
-// intRequest is a wrapper to create a IntRequestFunc from an int64.
-type intRequest uint64
+// TestUpdateCapacityFluctuationsPermitExcessAllocs exercises the case where the
+// capacity of the IntPool fluctuates. We want to ensure that the amount of
+// outstanding quota never exceeds the largest capacity available during the
+// time when any of the outstanding allocations were acquired.
+func TestUpdateCapacityFluctuationsPreventsExcessAllocs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
-func (ir intRequest) acquire(_ context.Context, pi quotapool.PoolInfo) (took uint64, err error) {
-	if uint64(ir) < pi.Available {
-		return 0, quotapool.ErrNotEnoughQuota
+	ctx := context.Background()
+	qp := quotapool.NewIntPool("test", 1)
+	var allocs []*quotapool.IntAlloc
+	allocCh := make(chan *quotapool.IntAlloc)
+	defer close(allocCh)
+	go func() {
+		for a := range allocCh {
+			if a == nil {
+				continue // allow nil channel sends to synchronize
+			}
+			allocs = append(allocs, a)
+		}
+	}()
+	acquireN := func(n int) {
+		var wg sync.WaitGroup
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				alloc, err := qp.Acquire(ctx, 1)
+				assert.NoError(t, err)
+				allocCh <- alloc
+			}()
+		}
+		wg.Wait()
 	}
-	return uint64(ir), nil
+
+	acquireN(1)
+	qp.UpdateCapacity(100)
+	acquireN(99)
+	require.Equal(t, uint64(0), qp.ApproximateQuota())
+	qp.UpdateCapacity(1)
+	// Internally the representation of the quota should be -99 but we don't
+	// expose negative quota to users.
+	require.Equal(t, uint64(0), qp.ApproximateQuota())
+
+	// Update the capacity so now there's actually 0.
+	qp.UpdateCapacity(100)
+	require.Equal(t, uint64(0), qp.ApproximateQuota())
+	_, err := qp.TryAcquire(ctx, 1)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+
+	// Now update the capacity so that there's 1.
+	qp.UpdateCapacity(101)
+	require.Equal(t, uint64(1), qp.ApproximateQuota())
+	_, err = qp.TryAcquire(ctx, 2)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	acquireN(1)
+	allocCh <- nil // synchronize
+	// Release all of the quota back to the pool.
+	for _, a := range allocs {
+		a.Release()
+	}
+	allocs = nil
+	require.Equal(t, uint64(101), qp.ApproximateQuota())
+}
+
+func TestQuotaPoolUpdateCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	ch := make(chan *quotapool.IntAlloc, 1)
+	qp := quotapool.NewIntPool("test", 1)
+	alloc, err := qp.Acquire(ctx, 1)
+	require.NoError(t, err)
+	go func() {
+		blocked, err := qp.Acquire(ctx, 2)
+		assert.NoError(t, err)
+		ch <- blocked
+	}()
+	ensureBlocked := func() {
+		t.Helper()
+		select {
+		case <-time.After(10 * time.Millisecond): // ensure the acquisition fails for now
+		case got := <-ch:
+			got.Release()
+			t.Fatal("expected acquisition to fail")
+		}
+	}
+	ensureBlocked()
+	// Update the capacity to 2, the request should still be blocked.
+	qp.UpdateCapacity(2)
+	ensureBlocked()
+	qp.UpdateCapacity(3)
+	got := <-ch
+	require.Equal(t, uint64(2), got.Acquired())
+	require.Equal(t, uint64(3), qp.Capacity())
+	alloc.Release()
+	require.Equal(t, uint64(1), qp.ApproximateQuota())
+}
+
+func TestConcurrentUpdatesAndAcquisitions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	const maxCap = 100
+	qp := quotapool.NewIntPool("test", maxCap, logSlowAcquisition)
+	const N = 100
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			newCap := uint64(rand.Intn(maxCap-1)) + 1
+			qp.UpdateCapacity(newCap)
+		}()
+	}
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			acq, err := qp.Acquire(ctx, uint64(rand.Intn(maxCap)))
+			assert.NoError(t, err)
+			runtime.Gosched()
+			acq.Release()
+		}()
+	}
+	wg.Wait()
+	qp.UpdateCapacity(maxCap)
+	assert.Equal(t, uint64(maxCap), qp.ApproximateQuota())
+}
+
+// This test ensures that if you attempt to freeze an alloc which would make
+// the IntPool have negative capacity a panic occurs.
+func TestFreezeUnavailableCapacityPanics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	qp := quotapool.NewIntPool("test", 10)
+	acq, err := qp.Acquire(ctx, 10)
+	require.NoError(t, err)
+	qp.UpdateCapacity(9)
+	require.Panics(t, func() {
+		acq.Freeze()
+	})
 }

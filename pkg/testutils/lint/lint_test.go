@@ -1451,6 +1451,7 @@ func TestLint(t *testing.T) {
 			// - coldata.NewMemBatchWithSize
 			// - coldata.NewMemColumn
 			// - coldata.Batch.AppendCol
+			// TODO(yuzefovich): prohibit call to coldata.NewMemBatchNoCols.
 			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithSize|Column)|\.AppendCol)\(`),
 			"--",
 			"sql/colexec",

@@ -11,9 +11,13 @@
 package colexec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -95,4 +99,40 @@ func makeWindowIntoBatch(
 		windowedBatch.ReplaceCol(window, i)
 	}
 	windowedBatch.SetLength(inputBatchLen - startIdx)
+}
+
+func newPartitionerToOperator(
+	allocator *Allocator,
+	types []coltypes.T,
+	partitioner colcontainer.PartitionedQueue,
+	partitionIdx int,
+) *partitionerToOperator {
+	return &partitionerToOperator{
+		partitioner:  partitioner,
+		partitionIdx: partitionIdx,
+		batch:        allocator.NewMemBatchNoCols(types, 0 /* size */),
+	}
+}
+
+// partitionerToOperator is an Operator that Dequeue's from the corresponding
+// partition on every call to Next. It is a converter from filled in
+// PartitionedQueue to Operator.
+type partitionerToOperator struct {
+	ZeroInputNode
+	NonExplainable
+
+	partitioner  colcontainer.PartitionedQueue
+	partitionIdx int
+	batch        coldata.Batch
+}
+
+var _ Operator = &partitionerToOperator{}
+
+func (p *partitionerToOperator) Init() {}
+
+func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
+	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	return p.batch
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -275,6 +276,7 @@ func sendBatch(
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: transportFactory,
 		},
+		Settings: cluster.MakeTestingClusterSettings(),
 	}, nil)
 	return ds.sendToReplicas(
 		ctx,

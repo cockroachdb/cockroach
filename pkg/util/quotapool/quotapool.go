@@ -66,6 +66,12 @@ type Request interface {
 	// may make sense for implementers to special case zero-valued acquisitions
 	// entirely as IntPool does.
 	Acquire(context.Context, Resource) (fulfilled bool, unused Resource)
+
+	// ShouldWait indicates whether this request should be queued. If this method
+	// returns false and there is insufficient capacity in the pool when the
+	// request is queued then ErrNotEnoughQuota will be returned from calls to
+	// Acquire.
+	ShouldWait() bool
 }
 
 // ErrClosed is returned from Acquire after Close has been called.
@@ -276,6 +282,9 @@ func (qp *QuotaPool) acquireFastPath(
 			qp.mu.quota = unused
 			return true, nil, nil
 		}
+	}
+	if !r.ShouldWait() {
+		return false, nil, ErrNotEnoughQuota
 	}
 	c := chanSyncPool.Get().(chan struct{})
 	return false, qp.mu.q.enqueue(c), nil
