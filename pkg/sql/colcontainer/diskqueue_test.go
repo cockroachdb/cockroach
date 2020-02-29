@@ -45,7 +45,19 @@ func TestDiskQueue(t *testing.T) {
 	for _, bufferSizeBytes := range []int{0, 16<<10 + rng.Intn(1<<20) /* 16 KiB up to 1 MiB */} {
 		for _, maxFileSizeBytes := range []int{10 << 10 /* 10 KiB */, 1<<20 + rng.Intn(64<<20) /* 1 MiB up to 64 MiB */} {
 			alwaysCompress := rng.Float64() < 0.5
-			t.Run(fmt.Sprintf("AlwaysCompress=%t/BufferSizeBytes=%s/MaxFileSizeBytes=%s", alwaysCompress, humanizeutil.IBytes(int64(bufferSizeBytes)), humanizeutil.IBytes(int64(maxFileSizeBytes))), func(t *testing.T) {
+			diskQueueCacheMode := colcontainer.DiskQueueCacheModeDefault
+			// testReuseCache will test the reuse cache modes.
+			testReuseCache := rng.Float64() < 0.5
+			dequeuedProbabilityBeforeAllEnqueuesAreDone := 0.5
+			if testReuseCache {
+				dequeuedProbabilityBeforeAllEnqueuesAreDone = 0
+				if rng.Float64() < 0.5 {
+					diskQueueCacheMode = colcontainer.DiskQueueCacheModeReuseCache
+				} else {
+					diskQueueCacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
+				}
+			}
+			t.Run(fmt.Sprintf("DiskQueueCacheMode=%d/AlwaysCompress=%t/BufferSizeBytes=%s/MaxFileSizeBytes=%s", diskQueueCacheMode, alwaysCompress, humanizeutil.IBytes(int64(bufferSizeBytes)), humanizeutil.IBytes(int64(maxFileSizeBytes))), func(t *testing.T) {
 				// Create random input.
 				batches := make([]coldata.Batch, 0, 1+rng.Intn(2048))
 				op := colexec.NewRandomDataOp(testAllocator, rng, colexec.RandomDataOpArgs{
@@ -58,6 +70,9 @@ func TestDiskQueue(t *testing.T) {
 					},
 				})
 				typs := op.Typs()
+
+				queueCfg.CacheMode = diskQueueCacheMode
+				queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
 				// Create queue.
 				queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
@@ -77,7 +92,7 @@ func TestDiskQueue(t *testing.T) {
 					if b.Length() == 0 {
 						break
 					}
-					if rng.Float64() < 0.5 {
+					if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
 						if ok, err := q.Dequeue(b); !ok {
 							t.Fatal("queue incorrectly considered empty")
 						} else if err != nil {
@@ -98,6 +113,12 @@ func TestDiskQueue(t *testing.T) {
 					coldata.AssertEquivalentBatches(t, batches[0], b)
 					batches = batches[1:]
 					i++
+				}
+
+				if testReuseCache {
+					// Trying to Enqueue after a Dequeue should return an error in these
+					// CacheModes.
+					require.Error(t, q.Enqueue(b))
 				}
 
 				if ok, err := q.Dequeue(b); ok {
