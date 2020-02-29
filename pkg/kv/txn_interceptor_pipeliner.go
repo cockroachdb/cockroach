@@ -467,7 +467,10 @@ func (tp *txnPipeliner) updateWriteTracking(
 			// in-flight writes, so clear them. Technically we should move all
 			// of these to the write footprint, but since the transaction is
 			// already committed, there's no reason to.
-			tp.ifWrites.clear(false /* reuse */)
+			tp.ifWrites.clear(
+				/* reuse - we're not going to use this Btree again, so there's no point in
+				   moving the nodes to a free list */
+				false)
 		default:
 			panic("unexpected")
 		}
