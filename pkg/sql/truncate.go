@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -272,7 +273,10 @@ func (p *planner) truncateTable(
 	}
 	newTableDesc.Mutations = nil
 	newTableDesc.GCMutations = nil
-	newTableDesc.ModificationTime = p.txn.CommitTimestamp()
+	// NB: Set the modification time to a zero value so that it is interpreted
+	// as the commit timestamp for the new descriptor. See the comment on
+	// sqlbase.Descriptor.Table().
+	newTableDesc.ModificationTime = hlc.Timestamp{}
 	if err := p.createDescriptorWithID(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err
