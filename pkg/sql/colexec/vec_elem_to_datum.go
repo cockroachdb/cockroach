@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -24,8 +25,9 @@ import (
 )
 
 // PhysicalTypeColElemToDatum converts an element in a colvec to a datum of
-// semtype ct. Note that this function handles nulls as well, so there is no
-// need for a separate null check.
+// semtype ct. The returned Datum is a deep copy of the colvec element. Note
+// that this function handles nulls as well, so there is no need for a separate
+// null check.
 func PhysicalTypeColElemToDatum(
 	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct *types.T,
 ) tree.Datum {
@@ -52,20 +54,31 @@ func PhysicalTypeColElemToDatum(
 	case types.FloatFamily:
 		return da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
 	case types.DecimalFamily:
-		return da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
+		d := da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
+		// Clear the Coeff so that the Set below allocates a new slice for the
+		// Coeff.abs field.
+		d.Coeff = big.Int{}
+		d.Coeff.Set(&col.Decimal()[rowIdx].Coeff)
+		return d
 	case types.DateFamily:
 		return tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
 	case types.StringFamily:
+		// Note that there is no need for a copy since casting to a string will do
+		// that.
 		b := col.Bytes().Get(int(rowIdx))
 		if ct.Oid() == oid.T_name {
 			return da.NewDName(tree.DString(string(b)))
 		}
 		return da.NewDString(tree.DString(string(b)))
 	case types.BytesFamily:
+		// Note that there is no need for a copy since DBytes uses a string as
+		// underlying storage, which will perform the copy for us.
 		return da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
 	case types.OidFamily:
 		return da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 	case types.UuidFamily:
+		// Note that there is no need for a copy because uuid.FromBytes will perform
+		// a copy.
 		id, err := uuid.FromBytes(col.Bytes().Get(int(rowIdx)))
 		if err != nil {
 			execerror.VectorizedInternalPanic(err)

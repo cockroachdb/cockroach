@@ -13,6 +13,7 @@ package coldata
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
@@ -57,6 +58,8 @@ type Batch interface {
 	// batches that they reuse as not doing this could result in correctness
 	// or memory blowup issues.
 	ResetInternalBatch()
+	// String returns a pretty representation of this batch.
+	String() string
 }
 
 var _ Batch = &MemBatch{}
@@ -268,4 +271,23 @@ func (m *MemBatch) ResetInternalBatch() {
 			v.Bytes().Reset()
 		}
 	}
+}
+
+// String returns a pretty representation of this batch.
+func (m *MemBatch) String() string {
+	if m.Length() == 0 {
+		return "[zero-length batch]"
+	}
+	var builder strings.Builder
+	strs := make([]string, len(m.ColVecs()))
+	for i := 0; i < int(m.Length()); i++ {
+		builder.WriteString("\n[")
+		for colIdx, v := range m.ColVecs() {
+			strs[colIdx] = fmt.Sprintf("%v", GetValueAt(v, uint16(i), v.Type()))
+		}
+		builder.WriteString(strings.Join(strs, ", "))
+		builder.WriteString("]")
+	}
+	builder.WriteString("\n")
+	return builder.String()
 }
