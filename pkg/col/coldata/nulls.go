@@ -10,8 +10,6 @@
 
 package coldata
 
-import "fmt"
-
 // zeroedNulls is a zeroed out slice representing a bitmap of size MaxBatchSize.
 // This is copied to efficiently set all nulls.
 var zeroedNulls [(MaxBatchSize-1)/8 + 1]byte
@@ -67,18 +65,8 @@ func (n *Nulls) MaybeHasNulls() bool {
 	return n.maybeHasNulls
 }
 
-func assertNonNegativeIndices(startIdx, endIdx int) {
-	if startIdx < 0 {
-		panic(fmt.Sprintf("negative start index %d", startIdx))
-	}
-	if endIdx < 0 {
-		panic(fmt.Sprintf("negative end index %d", endIdx))
-	}
-}
-
 // SetNullRange sets all the values in [startIdx, endIdx) to null.
 func (n *Nulls) SetNullRange(startIdx int, endIdx int) {
-	assertNonNegativeIndices(startIdx, endIdx)
 	start, end := uint64(startIdx), uint64(endIdx)
 	if start >= end {
 		return
@@ -119,7 +107,6 @@ func (n *Nulls) SetNullRange(startIdx int, endIdx int) {
 // After using UnsetNullRange, n might not contain any null values,
 // but maybeHasNulls could still be true.
 func (n *Nulls) UnsetNullRange(startIdx, endIdx int) {
-	assertNonNegativeIndices(startIdx, endIdx)
 	start, end := uint64(startIdx), uint64(endIdx)
 	if start >= end {
 		return
@@ -268,7 +255,6 @@ func (n *Nulls) set(args SliceArgs) {
 // Slice returns a new Nulls representing a slice of the current Nulls from
 // [start, end).
 func (n *Nulls) Slice(start int, end int) Nulls {
-	assertNonNegativeIndices(start, end)
 	startUnsigned, endUnsigned := uint64(start), uint64(end)
 	if !n.maybeHasNulls {
 		return NewNulls(end - start)
