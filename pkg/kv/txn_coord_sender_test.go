@@ -231,6 +231,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 				TransportFactory: adaptSimpleTransport(sendFn),
 			},
 			RangeDescriptorDB: descDB,
+			Settings:          cluster.MakeTestingClusterSettings(),
 		},
 		s.Gossip,
 	)

@@ -13,11 +13,13 @@ package quotapool
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // IntPool manages allocating integer units of quota to clients.
@@ -33,11 +35,17 @@ type IntPool struct {
 	// The capacity is originally set when the IntPool is constructed, and then it
 	// can be decreased by IntAlloc.Freeze().
 	capacity uint64
+
+	// updateCapacityMu synchronizes accesses to the capacity.
+	updateCapacityMu syncutil.Mutex
 }
 
 // IntAlloc is an allocated quantity which should be released.
 type IntAlloc struct {
-	alloc uint64
+	// alloc may be negative when used as the current quota for an IntPool or when
+	// lowering the capacity (see UpdateCapacity). Allocs acquired by clients of
+	// this package will never be negative.
+	alloc int64
 	p     *IntPool
 }
 
@@ -49,7 +57,7 @@ func (ia *IntAlloc) Release() {
 
 // Acquired returns the quantity that this alloc has acquired.
 func (ia *IntAlloc) Acquired() uint64 {
-	return ia.alloc
+	return uint64(ia.alloc)
 }
 
 // Merge adds the acquired resources in other to ia. Other may not be used after
@@ -59,17 +67,28 @@ func (ia *IntAlloc) Merge(other *IntAlloc) {
 	if ia.p != other.p {
 		panic("cannot merge IntAllocs from two different pools")
 	}
-	ia.alloc = min(ia.p.Capacity(), ia.alloc+other.alloc)
+	ia.alloc = min(int64(ia.p.Capacity()), ia.alloc+other.alloc)
 	ia.p.putIntAlloc(other)
 }
 
 // Freeze informs the quota pool that this allocation will never be Release()ed.
-// Releasing it later is illegal.
+// Releasing it later is illegal and will lead to panics.
+//
+// Using Freeze and UpdateCapacity on the same pool may require explicit
+// coordination. It is illegal to freeze allocated capacity which is no longer
+// available - specifically it is illegal to make the capacity of an IntPool
+// negative. Imagine the case where the capacity of an IntPool is initially 10.
+// An allocation of 10 is acquired. Then, while it is held, the pool's capacity
+// is updated to be 9. Then the outstanding allocation is frozen. This would
+// make the total capacity of the IntPool negative which is not allowed and will
+// lead to a panic. In general it's a bad idea to freeze allocated quota from a
+// pool which will ever have its capacity decreased.
 //
 // AcquireFunc() requests will be woken up with an updated Capacity, and Alloc()
 // requests will be trimmed accordingly.
 func (ia *IntAlloc) Freeze() {
-	ia.p.decCapacity(ia.alloc)
+	ia.p.decCapacity(uint64(ia.alloc))
+	ia.p = nil // ensure that future uses of this alloc will panic
 }
 
 // String formats an IntAlloc as a string.
@@ -77,7 +96,7 @@ func (ia *IntAlloc) String() string {
 	if ia == nil {
 		return strconv.Itoa(0)
 	}
-	return strconv.FormatUint(ia.alloc, 10)
+	return strconv.FormatInt(ia.alloc, 10)
 }
 
 // from returns true if this IntAlloc is from p.
@@ -96,12 +115,15 @@ func (ia *intAlloc) Merge(other Resource) {
 
 // NewIntPool creates a new named IntPool.
 //
-// capacity is the amount of quota initially available.
+// capacity is the amount of quota initially available. The maximum capacity
+// is math.MaxInt64. If the capacity argument exceeds that value, this function
+// will panic.
 func NewIntPool(name string, capacity uint64, options ...Option) *IntPool {
+	assertCapacityIsValid(capacity)
 	p := IntPool{
 		capacity: capacity,
 	}
-	p.qp = New(name, (*intAlloc)(p.newIntAlloc(capacity)), options...)
+	p.qp = New(name, (*intAlloc)(p.newIntAlloc(int64(capacity))), options...)
 	return &p
 }
 
@@ -119,16 +141,37 @@ func NewIntPool(name string, capacity uint64, options ...Option) *IntPool {
 //
 // Safe for concurrent use.
 func (p *IntPool) Acquire(ctx context.Context, v uint64) (*IntAlloc, error) {
+	return p.acquireMaybeWait(ctx, v, true /* wait */)
+}
+
+// TryAcquire is like Acquire but if there is insufficient quota to acquire
+// immediately the method will return ErrNotEnoughQuota.
+func (p *IntPool) TryAcquire(ctx context.Context, v uint64) (*IntAlloc, error) {
+	return p.acquireMaybeWait(ctx, v, false /* wait */)
+}
+
+func (p *IntPool) acquireMaybeWait(ctx context.Context, v uint64, wait bool) (*IntAlloc, error) {
 	// Special case acquisitions of size 0.
 	if v == 0 {
-		return p.newIntAlloc(v), nil
+		return p.newIntAlloc(0), nil
+	}
+	// The maximum capacity is math.MaxInt64 so we can always truncate requests
+	// to that value.
+	if v > math.MaxInt64 {
+		v = math.MaxInt64
 	}
 	r := p.newIntRequest(v)
 	defer p.putIntRequest(r)
-	if err := p.qp.Acquire(ctx, r); err != nil {
+	var req Request
+	if wait {
+		req = r
+	} else {
+		req = (*intRequestNoWait)(r)
+	}
+	if err := p.qp.Acquire(ctx, req); err != nil {
 		return nil, err
 	}
-	return p.newIntAlloc(r.want), nil
+	return p.newIntAlloc(int64(r.want)), nil
 }
 
 // Release will release allocs back to their pool. Allocs which are from p are
@@ -173,6 +216,17 @@ type IntRequestFunc func(ctx context.Context, p PoolInfo) (took uint64, err erro
 // again once there's new resources.
 var ErrNotEnoughQuota = fmt.Errorf("not enough quota available")
 
+// HasErrClosed returns true if this error is or contains an ErrClosed error.
+func HasErrClosed(err error) bool {
+	_, hasErrClosed := errors.If(err, func(err error) (unwrapped interface{}, ok bool) {
+		if _, hasErrClosed := err.(*ErrClosed); hasErrClosed {
+			return err, hasErrClosed
+		}
+		return nil, false
+	})
+	return hasErrClosed
+}
+
 // PoolInfo represents the information that the IntRequestFunc gets about the current quota pool conditions.
 type PoolInfo struct {
 	// Available is the amount of quota available to be consumed. This is the
@@ -191,9 +245,28 @@ type PoolInfo struct {
 // AcquireFunc acquires a quantity of quota determined by a function which is
 // called with a quantity of available quota.
 func (p *IntPool) AcquireFunc(ctx context.Context, f IntRequestFunc) (*IntAlloc, error) {
+	return p.acquireFuncMaybeWait(ctx, f, true /* wait */)
+}
+
+// TryAcquireFunc is like AcquireFunc but if insufficient quota exists the
+// method will return ErrNotEnoughQuota rather than waiting for quota to become
+// available.
+func (p *IntPool) TryAcquireFunc(ctx context.Context, f IntRequestFunc) (*IntAlloc, error) {
+	return p.acquireFuncMaybeWait(ctx, f, false /* wait */)
+}
+
+func (p *IntPool) acquireFuncMaybeWait(
+	ctx context.Context, f IntRequestFunc, wait bool,
+) (*IntAlloc, error) {
 	r := p.newIntFuncRequest(f)
 	defer p.putIntFuncRequest(r)
-	err := p.qp.Acquire(ctx, r)
+	var req Request
+	if wait {
+		req = r
+	} else {
+		req = (*intFuncRequestNoWait)(r)
+	}
+	err := p.qp.Acquire(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +276,9 @@ func (p *IntPool) AcquireFunc(ctx context.Context, f IntRequestFunc) (*IntAlloc,
 		}
 		return nil, r.err
 	}
-	return p.newIntAlloc(r.took), nil
+	// NB: We know that r.took must be less than math.MaxInt64 because capacity
+	// cannot exceed that value and took cannot exceed capacity.
+	return p.newIntAlloc(int64(r.took)), nil
 }
 
 // Len returns the current length of the queue for this IntPool.
@@ -216,7 +291,7 @@ func (p *IntPool) Len() int {
 func (p *IntPool) ApproximateQuota() (q uint64) {
 	p.qp.ApproximateQuota(func(r Resource) {
 		if ia, ok := r.(*intAlloc); ok {
-			q = ia.alloc
+			q = uint64(max(0, ia.alloc))
 		}
 	})
 	return q
@@ -230,11 +305,27 @@ func (p *IntPool) Close(reason string) {
 	p.qp.Close(reason)
 }
 
+// IntPoolCloser implements stop.Closer.
+type IntPoolCloser struct {
+	reason string
+	p      *IntPool
+}
+
+// Close makes the IntPoolCloser a stop.Closer.
+func (ipc IntPoolCloser) Close() {
+	ipc.p.Close(ipc.reason)
+}
+
+// Closer returns a struct which implements stop.Closer.
+func (p *IntPool) Closer(reason string) IntPoolCloser {
+	return IntPoolCloser{p: p, reason: reason}
+}
+
 var intAllocSyncPool = sync.Pool{
 	New: func() interface{} { return new(IntAlloc) },
 }
 
-func (p *IntPool) newIntAlloc(v uint64) *IntAlloc {
+func (p *IntPool) newIntAlloc(v int64) *IntAlloc {
 	ia := intAllocSyncPool.Get().(*IntAlloc)
 	*ia = IntAlloc{p: p, alloc: v}
 	return ia
@@ -284,14 +375,64 @@ func (p *IntPool) Capacity() uint64 {
 	return atomic.LoadUint64(&p.capacity)
 }
 
+// UpdateCapacity sets the capacity to newCapacity. If the current capacity
+// is higher than the new capacity, currently running requests will not be
+// affected. When the capacity is increased, new quota will be added. The total
+// quantity of outstanding quota will never exceed the maximum value of the
+// capacity which existed when any outstanding quota was acquired.
+func (p *IntPool) UpdateCapacity(newCapacity uint64) {
+	assertCapacityIsValid(newCapacity)
+
+	// Synchronize updates so that we never lose any quota. If we did not
+	// synchronize then a rapid succession of increases and decreases could have
+	// their associated updates to the current quota re-ordered.
+	//
+	// Imagine the capacity moves through:
+	//   100, 1, 100, 1, 100
+	// It would lead to the following intAllocs being released:
+	//   -99, 99, -99, 99
+	// If was reordered to:
+	//   99, 99, -99, -99
+	// Then we'd effectively ignore the additions at the beginning because they
+	// would push the alloc above the capacity and then we'd make the
+	// corresponding subtractions, leading to a final state of -98 even though
+	// we'd like it to be 1.
+	p.updateCapacityMu.Lock()
+	defer p.updateCapacityMu.Unlock()
+
+	// NB: if we're going to be lowering the capacity, we need to remove the
+	// quota from the pool before we update the capacity value. Imagine the case
+	// where there's a concurrent release of quota back into the pool. If it sees
+	// the newer capacity but the old quota value, it would push the value above
+	// the new capacity and thus get truncated. This is a bummer. We prevent this
+	// by subtracting from the quota pool (perhaps pushing it into negative
+	// territory), before we change the capacity.
+	oldCapacity := atomic.LoadUint64(&p.capacity)
+	delta := int64(newCapacity) - int64(oldCapacity)
+	if delta < 0 {
+		p.newIntAlloc(delta).Release()
+		delta = 0 // we still want to release after the update to wake goroutines
+	}
+	atomic.SwapUint64(&p.capacity, newCapacity)
+	p.newIntAlloc(delta).Release()
+}
+
 // decCapacity decrements the capacity by c.
 func (p *IntPool) decCapacity(c uint64) {
-	// This is how you decrement from a uint64.
-	atomic.AddUint64(&p.capacity, ^(c - 1))
+	p.updateCapacityMu.Lock()
+	defer p.updateCapacityMu.Unlock()
+
+	oldCapacity := p.Capacity()
+	if int64(oldCapacity)-int64(c) < 0 {
+		panic("cannot freeze quota which is no longer part of the pool")
+	}
+	newCapacity := oldCapacity - c
+	atomic.SwapUint64(&p.capacity, newCapacity)
+
 	// Wake up the request at the front of the queue. The decrement above may race
 	// with an ongoing request (which is why it's an atomic access), but in any
 	// case that request is evaluated again.
-	p.qp.Add(&intAlloc{alloc: 0, p: p})
+	p.newIntAlloc(0).Release()
 }
 
 // intRequest is used to acquire a quantity from the quota known ahead of time.
@@ -301,13 +442,26 @@ type intRequest struct {
 
 func (r *intRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
 	ia := v.(*intAlloc)
-	r.want = min(r.want, ia.p.Capacity())
-	if ia.alloc < r.want {
+	want := min(int64(r.want), int64(ia.p.Capacity()))
+	if ia.alloc < want {
 		return false, nil
 	}
-	ia.alloc -= r.want
+	r.want = uint64(want)
+	ia.alloc -= want
 	return true, ia
 }
+
+func (r *intRequest) ShouldWait() bool { return true }
+
+type intRequestNoWait intRequest
+
+func (r *intRequestNoWait) Acquire(
+	ctx context.Context, v Resource,
+) (fulfilled bool, extra Resource) {
+	return (*intRequest)(r).Acquire(ctx, v)
+}
+
+func (r *intRequestNoWait) ShouldWait() bool { return false }
 
 // intFuncRequest is used to acquire a quantity from the pool which is not
 // known ahead of time.
@@ -322,7 +476,7 @@ type intFuncRequest struct {
 func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
 	ia := v.(*intAlloc)
 	pi := PoolInfo{
-		Available: ia.alloc,
+		Available: uint64(max(0, ia.alloc)),
 		Capacity:  ia.p.Capacity(),
 	}
 	took, err := r.f(ctx, pi)
@@ -337,17 +491,43 @@ func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled boo
 		// Take the request out of the queue and put all the quota back.
 		return true, ia
 	}
-	if took > ia.alloc {
+	if took > math.MaxInt64 || int64(took) > ia.alloc {
 		panic(errors.Errorf("took %d quota > %d allocated", took, ia.alloc))
 	}
 	r.took = took
-	ia.alloc -= took
+	ia.alloc -= int64(took)
 	return true, ia
 }
 
-func min(a, b uint64) (v uint64) {
+func min(a, b int64) (v int64) {
 	if a < b {
 		return a
 	}
 	return b
+}
+
+func max(a, b int64) (v int64) {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func (r *intFuncRequest) ShouldWait() bool { return true }
+
+type intFuncRequestNoWait intFuncRequest
+
+func (r *intFuncRequestNoWait) Acquire(
+	ctx context.Context, v Resource,
+) (fulfilled bool, extra Resource) {
+	return (*intFuncRequest)(r).Acquire(ctx, v)
+}
+
+func (r *intFuncRequestNoWait) ShouldWait() bool { return false }
+
+// assertCapacityIsValid panics if capacity exceeds math.MaxInt64.
+func assertCapacityIsValid(capacity uint64) {
+	if capacity > math.MaxInt64 {
+		panic(errors.Errorf("capacity %d exceeds max capacity %d", capacity, math.MaxInt64))
+	}
 }
