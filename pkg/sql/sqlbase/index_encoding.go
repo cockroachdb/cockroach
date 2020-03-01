@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -855,21 +856,51 @@ func EncodeInvertedIndexKeys(
 	return EncodeInvertedIndexTableKeys(val, keyPrefix)
 }
 
-// EncodeInvertedIndexTableKeys encodes the paths in a JSON `val` and
-// concatenates it with `inKey`and returns a list of buffers per
-// path. The encoded values is guaranteed to be lexicographically
-// sortable, but not guaranteed to be round-trippable during decoding.
-// A (SQL) NULL input Datum produces no keys, because inverted indexes
-// cannot and do not need to satisfy the predicate col IS NULL.
+// EncodeInvertedIndexTableKeys produces one inverted index key per element in
+// the input datum, which should be a container (either JSON or Array). For
+// JSON, "element" means unique path through the document. Each output key is
+// prefixed by inKey, and is guaranteed to be lexicographically sortable, but
+// not guaranteed to be round-trippable during decoding. If the input Datum
+// is (SQL) NULL, no inverted index keys will be produced, because inverted
+// indexes cannot and do not need to satisfy the predicate col IS NULL.
 func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	switch t := tree.UnwrapDatum(nil, val).(type) {
-	case *tree.DJSON:
-		return json.EncodeInvertedIndexKeys(inKey, (t.JSON))
+	datum := tree.UnwrapDatum(nil, val)
+	switch val.ResolvedType().Family() {
+	case types.JsonFamily:
+		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
+	case types.ArrayFamily:
+		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey)
 	}
-	return nil, errors.AssertionFailedf("trying to apply inverted index to non JSON type")
+	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
+}
+
+// encodeArrayInvertedIndexTableKeys returns a list of inverted index keys for
+// the given input array, one per entry in the array. The input inKey is
+// prefixed to all returned keys.
+// N.B.: This won't return any keys for
+func encodeArrayInvertedIndexTableKeys(val *tree.DArray, inKey []byte) (key [][]byte, err error) {
+	outKeys := make([][]byte, 0, len(val.Array))
+	for i := range val.Array {
+		d := val.Array[i]
+		if d == tree.DNull {
+			// We don't need to make keys for NULL, since in SQL:
+			// SELECT ARRAY[1, NULL, 2] @> ARRAY[NULL]
+			// returns false.
+			continue
+		}
+		outKey := make([]byte, len(inKey))
+		copy(outKey, inKey)
+		newKey, err := EncodeTableKey(outKey, d, encoding.Ascending)
+		if err != nil {
+			return nil, err
+		}
+		outKeys = append(outKeys, newKey)
+	}
+	outKeys = unique.UniquifyByteSlices(outKeys)
+	return outKeys, nil
 }
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a
