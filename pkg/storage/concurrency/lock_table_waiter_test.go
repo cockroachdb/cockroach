@@ -170,6 +170,28 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 	})
 }
 
+// TestLockTableWaiterWithTxnWithoutObservedTS tests that if a transactional
+// request is forced to push a lock holder or reservation holder and is missing
+// an observed timestamp for the current node then it pushes all the way up to
+// its maximum timestamp.
+func TestLockTableWaiterWithTxnWithoutObservedTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	maxTS := hlc.Timestamp{WallTime: 20}
+	wrongObservedTS := hlc.Timestamp{WallTime: 15}
+	makeReq := func() Request {
+		txn := makeTxnProto("request")
+		txn.MaxTimestamp = maxTS
+		txn.UpdateObservedTimestamp(1, wrongObservedTS) // wrong node
+		return Request{
+			Txn:       &txn,
+			Timestamp: txn.ReadTimestamp,
+		}
+	}
+
+	testWaitPush(t, waitFor, makeReq, maxTS)
+}
+
 // TestLockTableWaiterWithNonTxn tests the lockTableWaiter's behavior under
 // different waiting states while a non-transactional request is waiting.
 func TestLockTableWaiterWithNonTxn(t *testing.T) {

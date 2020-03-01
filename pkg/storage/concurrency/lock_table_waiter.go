@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -249,14 +250,19 @@ func (w *lockTableWaiterImpl) pushTxn(ctx context.Context, req Request, ws waiti
 		// See #9130.
 		h.Txn = req.Txn.Clone()
 
-		// We must push at least to h.Timestamp, but in fact we want to
-		// go all the way up to a timestamp which was taken off the HLC
-		// after our operation started. This allows us to not have to
-		// restart for uncertainty as we come back and read.
-		obsTS, ok := h.Txn.GetObservedTimestamp(w.nodeID)
-		if ok {
-			h.Timestamp.Forward(obsTS)
+		// We must push at least to h.Timestamp, but in fact we want to go all
+		// the way up to at least a timestamp which was taken off the HLC after
+		// our operation started. This allows us to not have to restart for
+		// uncertainty as we come back and read. If we don't have an observed
+		// timestamp from this node, push all the way up to our MaxTimestamp.
+		// NB: this timestamp is treated as exclusive by PushTransaction.
+		var aboveUncertaintyTS hlc.Timestamp
+		if obsTS, ok := h.Txn.GetObservedTimestamp(w.nodeID); ok {
+			aboveUncertaintyTS = obsTS
+		} else {
+			aboveUncertaintyTS = h.Txn.MaxTimestamp
 		}
+		h.Timestamp.Forward(aboveUncertaintyTS)
 	}
 
 	var pushType roachpb.PushTxnType
