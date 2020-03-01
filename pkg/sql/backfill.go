@@ -1243,7 +1243,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
 					sqlbase.InternalExecutorSessionDataOverride{},
 					fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.json_num_index_entries(%q)), 0) FROM [%d AS t]`,
+						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q)), 0) FROM [%d AS t]`,
 						col, tableDesc.ID,
 					),
 				)

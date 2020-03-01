@@ -8,7 +8,25 @@ CREATE TABLE d (
 )
 
 statement ok
+CREATE TABLE e (
+  a INT PRIMARY KEY,
+  b INT[],
+  FAMILY (a,b),
+  INVERTED INDEX(b)
+)
+
+statement ok
+CREATE TABLE f (
+  a INT PRIMARY KEY,
+  b DECIMAL[],
+  FAMILY (a,b),
+  INVERTED INDEX(b)
+)
+
+statement ok
 CREATE INVERTED INDEX foo_inv ON d(b)
+
+# Tests for json inverted indexes.
 
 query T kvtrace
 INSERT INTO d VALUES(0, '{"a": "b"}')
@@ -77,6 +95,60 @@ DELETE FROM d WHERE a=4
 ----
 Scan /Table/53/1/4{-/#}
 Del /Table/53/1/4/0
+
+# Tests for array inverted indexes.
+
+# Make sure that duplicate entries do not get emitted more than once, and that
+# null keys don't get emitted.
+query T kvtrace
+INSERT INTO e VALUES(0, ARRAY[7,0,0,1,NULL,10,0,1,7,NULL])
+----
+CPut /Table/54/1/0/0 -> /TUPLE/
+InitPut /Table/54/2/0/0/0 -> /BYTES/
+InitPut /Table/54/2/1/0/0 -> /BYTES/
+InitPut /Table/54/2/7/0/0 -> /BYTES/
+InitPut /Table/54/2/10/0/0 -> /BYTES/
+
+# Make sure that empty arrays do not emit any keys at all.
+query T kvtrace
+INSERT INTO e VALUES(1, ARRAY[])
+----
+CPut /Table/54/1/1/0 -> /TUPLE/
+
+# Make sure that NULL arrays do not emit any keys at all.
+query T kvtrace
+INSERT INTO e VALUES(2, NULL)
+----
+CPut /Table/54/1/2/0 -> /TUPLE/
+
+# Make sure that NULL entries within an array don't emit any keys.
+query T kvtrace
+INSERT INTO e VALUES(3, ARRAY[NULL])
+----
+CPut /Table/54/1/3/0 -> /TUPLE/
+
+# Test that array inverted indexes work okay with decimals (a type with
+# composite encoding). Also, make sure that the composite encoding is
+# de-duplicated - 1.0 and 1.00 should just have one entry.
+
+query T kvtrace
+INSERT INTO f VALUES(0, ARRAY[7,0,0,1.000,10,0,1,7,1.0,1.00])
+----
+CPut /Table/55/1/0/0 -> /TUPLE/
+InitPut /Table/55/2/0/0/0 -> /BYTES/
+InitPut /Table/55/2/1/0/0 -> /BYTES/
+InitPut /Table/55/2/7/0/0 -> /BYTES/
+InitPut /Table/55/2/1E+1/0/0 -> /BYTES/
+
+query T kvtrace
+INSERT INTO f VALUES(1, ARRAY[])
+----
+CPut /Table/55/1/1/0 -> /TUPLE/
+
+query T kvtrace
+INSERT INTO f VALUES(2, NULL)
+----
+CPut /Table/55/1/2/0 -> /TUPLE/
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
@@ -400,3 +472,98 @@ scan  ·            ·                          (a, b)  ·
 ·     table        d@primary                  ·       ·
 ·     spans        ALL                        ·       ·
 ·     filter       b @> '{"a": {}, "b": {}}'  ·       ·
+
+subtest array
+
+# Tests for array inverted indexes.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1]
+----
+·           distributed  false      ·       ·
+·           vectorized   false      ·       ·
+index-join  ·            ·          (a, b)  ·
+ │          table        e@primary  ·       ·
+ │          key columns  a          ·       ·
+ └── scan   ·            ·          (a)     ·
+·           table        e@e_b_idx  ·       ·
+·           spans        /1-/2      ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[]::INT[]
+----
+·     distributed  false         ·       ·
+·     vectorized   false         ·       ·
+scan  ·            ·             (a, b)  ·
+·     table        e@primary     ·       ·
+·     spans        ALL           ·       ·
+·     filter       b @> ARRAY[]  ·       ·
+
+# Test that searching for a NULL element using the inverted index.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
+----
+·            distributed  false      ·       ·
+·            vectorized   false      ·       ·
+index-join   ·            ·          (a, b)  ·
+ │           table        e@primary  ·       ·
+ │           key columns  a          ·       ·
+ └── norows  ·            ·          (a)     ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from e where b @> NULL
+----
+·       distributed  false  ·       ·
+·       vectorized   false  ·       ·
+norows  ·            ·      (a, b)  ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
+----
+·     distributed  false      ·       ·
+·     vectorized   false      ·       ·
+scan  ·            ·          (a, b)  ·
+·     table        e@primary  ·       ·
+·     spans        ALL        ·       ·
+·     filter       b IS NULL  ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
+----
+·                 distributed            false             ·       ·
+·                 vectorized             false             ·       ·
+lookup-join       ·                      ·                 (a, b)  ·
+ │                table                  e@primary         ·       ·
+ │                type                   inner             ·       ·
+ │                equality               (a) = (a)         ·       ·
+ │                equality cols are key  ·                 ·       ·
+ │                parallel               ·                 ·       ·
+ │                pred                   @2 @> ARRAY[1,2]  ·       ·
+ └── zigzag-join  ·                      ·                 (a)     ·
+      │           type                   inner             ·       ·
+      ├── scan    ·                      ·                 (a)     ·
+      │           table                  e@e_b_idx         ·       ·
+      │           fixedvals              1 column          ·       ·
+      └── scan    ·                      ·                 ()      ·
+·                 table                  e@e_b_idx         ·       ·
+·                 fixedvals              1 column          ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
+----
+·                 distributed            false                                  ·       ·
+·                 vectorized             false                                  ·       ·
+lookup-join       ·                      ·                                      (a, b)  ·
+ │                table                  e@primary                              ·       ·
+ │                type                   inner                                  ·       ·
+ │                equality               (a) = (a)                              ·       ·
+ │                equality cols are key  ·                                      ·       ·
+ │                parallel               ·                                      ·       ·
+ │                pred                   (@2 @> ARRAY[1]) AND (@2 @> ARRAY[2])  ·       ·
+ └── zigzag-join  ·                      ·                                      (a)     ·
+      │           type                   inner                                  ·       ·
+      ├── scan    ·                      ·                                      (a)     ·
+      │           table                  e@e_b_idx                              ·       ·
+      │           fixedvals              1 column                               ·       ·
+      └── scan    ·                      ·                                      ()      ·
+·                 table                  e@e_b_idx                              ·       ·
+·                 fixedvals              1 column                               ·       ·
