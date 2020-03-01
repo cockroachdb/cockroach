@@ -865,6 +865,9 @@ type logicQuery struct {
 	// expectedHash is set.
 	expectedValues int
 
+	// kvtrace indicates that we're comparing the output of a kv trace.
+	kvtrace bool
+
 	// rawOpts are the query options, before parsing. Used to display in error
 	// messages.
 	rawOpts string
@@ -1574,6 +1577,9 @@ func (t *logicTest) processSubtest(
 						case "retry":
 							query.retry = true
 
+						case "kvtrace":
+							query.kvtrace = true
+
 						default:
 							return errors.Errorf("%s: unknown sort mode: %s", query.pos, opt)
 						}
@@ -1658,6 +1664,32 @@ func (t *logicTest) processSubtest(
 			}
 
 			if !s.skip {
+				if query.kvtrace {
+					_, err := t.db.Exec("SET TRACING=on,kv")
+					if err != nil {
+						return err
+					}
+					_, err = t.db.Exec(query.sql)
+					if err != nil {
+						t.Error(err)
+					}
+					_, err = t.db.Exec("SET TRACING=off")
+					if err != nil {
+						return err
+					}
+					query.colTypes = "T"
+					query.sql = `SELECT message FROM [SHOW KV TRACE FOR SESSION]
+					WHERE message LIKE 'CPut%'
+					OR message LIKE 'Put%'
+          OR message LIKE 'InitPut%'
+          OR message LIKE 'Del%'
+          OR message LIKE 'ClearRange%'
+          OR message LIKE 'Get%'
+          OR message LIKE 'Scan%'
+          OR message LIKE 'FKScan%'
+          OR message LIKE 'CascadeScan%'`
+				}
+
 				for i := 0; i < repeat; i++ {
 					if query.retry && !*rewriteResultsInTestfiles {
 						testutils.SucceedsSoon(t.rootT, func() error {
