@@ -30,6 +30,21 @@ import (
 var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 	"kv.lock_table.coordinator_liveness_push_delay",
 	"the delay before pushing in order to detect coordinator failures of conflicting transactions",
+	// This is set to a short duration to ensure that we quickly detect failed
+	// transaction coordinators that have abandoned one or many locks. We don't
+	// want to wait out a long timeout on each of these locks to detect that
+	// they are abandoned. However, we also don't want to push immediately in
+	// cases where the lock is going to be resolved shortly.
+	//
+	// We could increase this default to somewhere on the order of the
+	// transaction heartbeat timeout (5s) if we had a better way to avoid paying
+	// the cost on each of a transaction's abandoned locks and instead only pay
+	// it once per abandoned transaction per range or per node. This could come
+	// in a few different forms, including:
+	// - a per-wide cache of recently detected abandoned transaction IDs
+	// - a per-range reverse index from transaction ID to locked keys
+	//
+	// TODO(nvanbenschoten): increasing this default value.
 	10*time.Millisecond,
 )
 
@@ -38,6 +53,26 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
 	"kv.lock_table.deadlock_detection_push_delay",
 	"the delay before pushing in order to detect dependency cycles between transactions",
+	// This is set to a medium duration to ensure that deadlock caused by
+	// dependency cycles between transactions are eventually detected, but that
+	// the deadlock detection does not impose any overhead in the vastly common
+	// case where there are no dependency cycles. We optimistically assume that
+	// deadlocks are not common in production applications and wait locally on
+	// locks for a while before checking for a deadlock. Increasing this value
+	// reduces the amount of time wasted in needless deadlock checks, but slows
+	// down reporting of real deadlock scenarios.
+	//
+	// The value is analogous to Postgres' deadlock_timeout setting, which has a
+	// default value of 1s:
+	//  https://www.postgresql.org/docs/current/runtime-config-locks.html#GUC-DEADLOCK-TIMEOUT.
+	//
+	// We could increase this default to somewhere around 250ms - 1000ms if we
+	// confirmed that we do not observe deadlocks in any of the workloads that
+	// we care about. When doing so, we should be conscious that even once
+	// distributed deadlock detection begins, there is some latency proportional
+	// to the length of the dependency cycle before the deadlock is detected.
+	//
+	// TODO(nvanbenschoten): increasing this default value.
 	100*time.Millisecond,
 )
 
