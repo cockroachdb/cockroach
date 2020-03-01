@@ -1255,6 +1255,11 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	if c.curIdx >= c.len {
 		return coldata.ZeroBatch
 	}
+	// Explicitly set to false since this could be modified by the downstream
+	// operators. This is sufficient because both the vectors and the nulls are
+	// explicitly set below. ResetInternalBatch cannot be used here because we're
+	// operating on Windows into the vectors.
+	c.batch.SetSelection(false)
 	lastIdx := c.curIdx + uint64(coldata.BatchSize())
 	if lastIdx > c.len {
 		lastIdx = c.len
