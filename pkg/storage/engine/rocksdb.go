@@ -2877,7 +2877,7 @@ func dbGetProto(
 		// Make a byte slice that is backed by result.data. This slice
 		// cannot live past the lifetime of this method, but we're only
 		// using it to unmarshal the roachpb.
-		data := cSliceToUnsafeGoBytes(result)
+		data := cSliceToUnsafeGoBytes(C.DBSlice{data: result.data, len: result.len})
 		err = protoutil.Unmarshal(data, msg)
 	}
 	C.free(unsafe.Pointer(result.data))
