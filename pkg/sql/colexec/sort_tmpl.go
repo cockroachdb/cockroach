@@ -158,12 +158,12 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(ctx context.Context, part
 	for i, partitionStart := range partitions {
 		var partitionEnd int
 		if i == len(partitions)-1 {
-			partitionEnd = int(len(order))
+			partitionEnd = len(order)
 		} else {
 			partitionEnd = partitions[i+1]
 		}
 		s.order = order[partitionStart:partitionEnd]
-		n := int(partitionEnd - partitionStart)
+		n := partitionEnd - partitionStart
 		s.quickSort(ctx, 0, n, maxDepth(n))
 	}
 }
@@ -194,8 +194,8 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{end}}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := execgen.UNSAFEGET(s.sortCol, int(s.order[i]))
-	arg2 := execgen.UNSAFEGET(s.sortCol, int(s.order[j]))
+	arg1 := execgen.UNSAFEGET(s.sortCol, s.order[i])
+	arg2 := execgen.UNSAFEGET(s.sortCol, s.order[j])
 	_ASSIGN_LT(lt, arg1, arg2)
 	return lt
 }

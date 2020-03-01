@@ -238,7 +238,7 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	lastVal := p.lastVal
 	lastValNull := p.lastValNull
 	sel := batch.Selection()
-	firstIdx := int(0)
+	firstIdx := 0
 	if sel != nil {
 		firstIdx = sel[0]
 	}
@@ -259,26 +259,26 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		if nulls != nil {
 			for _, checkIdx := range sel {
 				outputIdx := checkIdx
-				_CHECK_DISTINCT_WITH_NULLS(int(checkIdx), outputIdx, lastVal, nulls, lastValNull, col, outputCol)
+				_CHECK_DISTINCT_WITH_NULLS(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol)
 			}
 		} else {
 			for _, checkIdx := range sel {
 				outputIdx := checkIdx
-				_CHECK_DISTINCT(int(checkIdx), outputIdx, lastVal, col, outputCol)
+				_CHECK_DISTINCT(checkIdx, outputIdx, lastVal, col, outputCol)
 			}
 		}
 	} else {
 		// Bounds check elimination.
-		col = execgen.SLICE(col, 0, int(n))
+		col = execgen.SLICE(col, 0, n)
 		outputCol = outputCol[:n]
 		_ = outputCol[n-1]
 		if nulls != nil {
-			for execgen.RANGE(checkIdx, col, 0, int(n)) {
+			for execgen.RANGE(checkIdx, col, 0, n) {
 				outputIdx := checkIdx
 				_CHECK_DISTINCT_WITH_NULLS(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol)
 			}
 		} else {
-			for execgen.RANGE(checkIdx, col, 0, int(n)) {
+			for execgen.RANGE(checkIdx, col, 0, n) {
 				outputIdx := checkIdx
 				_CHECK_DISTINCT(checkIdx, outputIdx, lastVal, col, outputCol)
 			}
@@ -308,7 +308,7 @@ func (p partitioner_TYPE) partitionWithOrder(
 	}
 
 	col := colVec._TemplateType()
-	col = execgen.SLICE(col, 0, int(n))
+	col = execgen.SLICE(col, 0, n)
 	outputCol = outputCol[:n]
 	outputCol[0] = true
 	if nulls != nil {
@@ -333,16 +333,16 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec._TemplateType()
-	col = execgen.SLICE(col, 0, int(n))
+	col = execgen.SLICE(col, 0, n)
 	outputCol = outputCol[:n]
 	outputCol[0] = true
 	if nulls != nil {
-		for execgen.RANGE(checkIdx, col, 0, int(n)) {
+		for execgen.RANGE(checkIdx, col, 0, n) {
 			outputIdx := checkIdx
 			_CHECK_DISTINCT_WITH_NULLS(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol)
 		}
 	} else {
-		for execgen.RANGE(checkIdx, col, 0, int(n)) {
+		for execgen.RANGE(checkIdx, col, 0, n) {
 			outputIdx := checkIdx
 			_CHECK_DISTINCT(checkIdx, outputIdx, lastVal, col, outputCol)
 		}
@@ -361,7 +361,7 @@ func _CHECK_DISTINCT(
 ) { // */}}
 
 	// {{define "checkDistinct" -}}
-	v := execgen.UNSAFEGET(col, int(checkIdx))
+	v := execgen.UNSAFEGET(col, checkIdx)
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
@@ -386,14 +386,14 @@ func _CHECK_DISTINCT_WITH_NULLS(
 ) { // */}}
 
 	// {{define "checkDistinctWithNulls" -}}
-	null := nulls.NullAt(int(checkIdx))
+	null := nulls.NullAt(checkIdx)
 	if null {
 		if !lastValNull {
 			// The current value is null while the previous was not.
 			outputCol[outputIdx] = true
 		}
 	} else {
-		v := execgen.UNSAFEGET(col, int(checkIdx))
+		v := execgen.UNSAFEGET(col, checkIdx)
 		if lastValNull {
 			// The previous value was null while the current is not.
 			outputCol[outputIdx] = true

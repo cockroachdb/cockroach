@@ -88,22 +88,22 @@ func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n int, s
 						if inputNulls.NullAt(i) {
 							outputNulls.SetNull(i)
 						} else {
-							v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+							v := _FROM_TYPE_UNSAFEGET(inputCol, i)
 							var r _GOTYPE
 							_ASSIGN_CAST(r, v)
-							_TO_TYPE_SET(outputCol, int(i), r)
+							_TO_TYPE_SET(outputCol, i, r)
 						}
 					}
 				} else {
-					inputCol = _FROM_TYPE_SLICE(inputCol, 0, int(n))
-					for execgen.RANGE(i, inputCol, 0, int(n)) {
-						if inputNulls.NullAt(int(i)) {
-							outputNulls.SetNull(int(i))
+					inputCol = _FROM_TYPE_SLICE(inputCol, 0, n)
+					for execgen.RANGE(i, inputCol, 0, n) {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
 						} else {
-							v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+							v := _FROM_TYPE_UNSAFEGET(inputCol, i)
 							var r _GOTYPE
 							_ASSIGN_CAST(r, v)
-							_TO_TYPE_SET(outputCol, int(i), r)
+							_TO_TYPE_SET(outputCol, i, r)
 						}
 					}
 				}
@@ -111,18 +111,18 @@ func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n int, s
 				if sel != nil {
 					sel = sel[:n]
 					for _, i := range sel {
-						v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+						v := _FROM_TYPE_UNSAFEGET(inputCol, i)
 						var r _GOTYPE
 						_ASSIGN_CAST(r, v)
-						_TO_TYPE_SET(outputCol, int(i), r)
+						_TO_TYPE_SET(outputCol, i, r)
 					}
 				} else {
-					inputCol = _FROM_TYPE_SLICE(inputCol, 0, int(n))
-					for execgen.RANGE(i, inputCol, 0, int(n)) {
-						v := _FROM_TYPE_UNSAFEGET(inputCol, int(i))
+					inputCol = _FROM_TYPE_SLICE(inputCol, 0, n)
+					for execgen.RANGE(i, inputCol, 0, n) {
+						v := _FROM_TYPE_UNSAFEGET(inputCol, i)
 						var r _GOTYPE
 						_ASSIGN_CAST(r, v)
-						_TO_TYPE_SET(outputCol, int(i), r)
+						_TO_TYPE_SET(outputCol, i, r)
 					}
 				}
 			}
@@ -215,9 +215,9 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := int(0); i < n; i++ {
-			if vecNulls.NullAt(int(i)) {
-				projNulls.SetNull(int(i))
+		for i := 0; i < n; i++ {
+			if vecNulls.NullAt(i) {
+				projNulls.SetNull(i)
 			} else {
 				execerror.VectorizedInternalPanic(fmt.Errorf("unexpected non-null at index %d", i))
 			}

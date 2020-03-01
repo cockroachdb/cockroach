@@ -157,11 +157,11 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 		sel := batch.Selection()
 		if leftCol.MaybeHasNulls() {
 			leftNulls := leftCol.Nulls()
-			for i := int(0); i < origLen; i++ {
+			for i := 0; i < origLen; i++ {
 				_ADD_TUPLE_FOR_RIGHT(true)
 			}
 		} else {
-			for i := int(0); i < origLen; i++ {
+			for i := 0; i < origLen; i++ {
 				_ADD_TUPLE_FOR_RIGHT(false)
 			}
 		}
@@ -274,11 +274,7 @@ func _SET_VALUES(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
 // to two boolean values which can be null.
 func _SET_SINGLE_VALUE(_IS_OR_OP bool, _USES_SEL bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
 	// {{ define "setSingleValue" -}}
-	// {{ if _USES_SEL }}
 	idx := i
-	// {{ else }}
-	idx := int(i)
-	// {{ end }}
 	// {{ if _L_HAS_NULLS }}
 	isLeftNull := leftNulls.NullAt(idx)
 	// {{ else }}

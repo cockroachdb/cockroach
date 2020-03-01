@@ -66,7 +66,7 @@ func randomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 		execerror.VectorizedInternalPanic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
 	sel := make([]int, 0, batchSize)
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		if rng.Float64() < probOfOmitting {
 			continue
 		}

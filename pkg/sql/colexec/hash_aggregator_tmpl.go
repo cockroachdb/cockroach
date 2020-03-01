@@ -67,7 +67,7 @@ func _MATCH_LOOP(
 ) { // */}}
 	// {{define "matchLoop" -}}
 
-	lhsVal := execgen.UNSAFEGET(lhsCol, int(aggKeyIdx))
+	lhsVal := execgen.UNSAFEGET(lhsCol, aggKeyIdx)
 
 	for selIdx, rowIdx := range sel {
 		// {{if .LhsMaybeHasNulls}}
@@ -85,7 +85,7 @@ func _MATCH_LOOP(
 		// {{end}}
 		// {{end}}
 
-		rhsVal := execgen.UNSAFEGET(rhsCol, int(rowIdx))
+		rhsVal := execgen.UNSAFEGET(rhsCol, rowIdx)
 
 		var cmp bool
 		_ASSIGN_NE(cmp, lhsVal, rhsVal)
@@ -165,12 +165,12 @@ func (v hashAggFuncs) match(
 	}
 
 	if len(matched) > 0 {
-		b.SetLength(int(len(matched)))
+		b.SetLength(len(matched))
 		anyMatched = true
 	}
 
 	// Reset diff slice back to all false.
-	for n := int(0); n < int(len(diff)); n += int(copy(diff, zeroBoolColumn)) {
+	for n := 0; n < len(diff); n += copy(diff, zeroBoolColumn) {
 	}
 
 	return anyMatched, remaining

@@ -101,8 +101,8 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	} else if n2 {
 		return 1
 	}
-	left := execgen.UNSAFEGET(c.vecs[vecIdx1], int(valIdx1))
-	right := execgen.UNSAFEGET(c.vecs[vecIdx2], int(valIdx2))
+	left := execgen.UNSAFEGET(c.vecs[vecIdx1], valIdx1)
+	right := execgen.UNSAFEGET(c.vecs[vecIdx2], valIdx2)
 	var cmp int
 	_COMPARE(cmp, left, right)
 	return cmp
@@ -125,10 +125,10 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		// variable number of bytes in `dstVecIdx`, so we will have to either shift
 		// the bytes after that element left or right, depending on how long the
 		// source bytes slice is. Refer to the CopySlice comment for an example.
-		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], int(dstIdx), int(srcIdx), int(srcIdx+1))
+		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
 		// {{ else }}
-		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], int(srcIdx))
-		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
+		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], srcIdx)
+		execgen.SET(c.vecs[dstVecIdx], dstIdx, v)
 		// {{ end }}
 	}
 }

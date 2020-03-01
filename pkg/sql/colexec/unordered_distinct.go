@@ -107,7 +107,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	// Create and return the next batch of input to a maximum size of
 	// coldata.BatchSize(). The rows in the new batch are specified by the
 	// corresponding slice in the selection vector.
-	nSelected := int(0)
+	nSelected := 0
 	batchEnd := op.outputBatchStart + coldata.BatchSize()
 	if batchEnd > op.distinctCount {
 		batchEnd = op.distinctCount

@@ -142,7 +142,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		heap.Init(o)
 	}
 	o.output.ResetInternalBatch()
-	outputIdx := int(0)
+	outputIdx := 0
 	o.allocator.PerformOperation(o.output.ColVecs(), func() {
 		for outputIdx < coldata.BatchSize() {
 			if o.Len() == 0 {
@@ -167,8 +167,8 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 					case _TYPES_T:
 						srcCol := vec._TYPE()
 						outCol := o.out_TYPECols[o.outColsMap[i]]
-						v := execgen.UNSAFEGET(srcCol, int(srcRowIdx))
-						execgen.SET(outCol, int(outputIdx), v)
+						v := execgen.UNSAFEGET(srcCol, srcRowIdx)
+						execgen.SET(outCol, outputIdx, v)
 					// {{end}}
 					default:
 						execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))

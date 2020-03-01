@@ -44,7 +44,7 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 		// tuple whose outputCol value is true.
 		// Note that, if the input already had a selection vector, the output
 		// selection vector will be a subset of the input selection vector.
-		idx := int(0)
+		idx := 0
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for s := range sel {

@@ -50,7 +50,7 @@ func TestHashFunctionFamily(t *testing.T) {
 		finalizeHash(buckets, nKeys, numBuckets)
 	}
 
-	numKeysInSameBucket := int(0)
+	numKeysInSameBucket := 0
 	for key := range bucketsA {
 		if bucketsA[key] == bucketsB[key] {
 			numKeysInSameBucket++

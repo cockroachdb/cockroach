@@ -83,7 +83,7 @@ func makeWindowIntoBatch(
 		windowedBatch.SetSelection(true)
 		windowIntoSel := sel[startIdx:inputBatchLen]
 		copy(windowedBatch.Selection(), windowIntoSel)
-		maxSelIdx := int(0)
+		maxSelIdx := 0
 		for _, selIdx := range windowIntoSel {
 			if selIdx > maxSelIdx {
 				maxSelIdx = selIdx

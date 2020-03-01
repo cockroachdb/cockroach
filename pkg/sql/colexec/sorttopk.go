@@ -130,7 +130,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 func (t *topKSorter) spool(ctx context.Context) {
 	// Fill up t.topK by spooling up to K rows from the input.
 	t.inputBatch = t.input.Next(ctx)
-	spooledRows := int(0)
+	spooledRows := 0
 	remainingRows := int(t.k)
 	for remainingRows > 0 && t.inputBatch.Length() > 0 {
 		toLength := spooledRows

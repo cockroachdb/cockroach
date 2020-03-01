@@ -194,7 +194,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 					// considering the entire batch of tuples for this case arm. Make a new
 					// selection vector with all of the tuples but the ones that just matched.
 					c.prevSel = c.prevSel[:cap(c.prevSel)]
-					for i := int(0); i < origLen; i++ {
+					for i := 0; i < origLen; i++ {
 						if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
 							subtractIdx++
 							continue

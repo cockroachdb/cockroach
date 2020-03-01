@@ -72,7 +72,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			coldata.BatchSize() + 1,
 		} {
 			rows := make(sqlbase.EncDatumRows, numRows)
-			for i := int(0); i < numRows; i++ {
+			for i := 0; i < numRows; i++ {
 				rows[i] = make(sqlbase.EncDatumRow, 1)
 				rows[i][0] = sqlbase.DatumToEncDatum(&typ, sqlbase.RandDatum(rng, &typ, true /* nullOk */))
 			}

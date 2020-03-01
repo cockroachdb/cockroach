@@ -84,7 +84,7 @@ func NewRepeatableBatchSource(allocator *Allocator, batch coldata.Batch) *Repeat
 	batchLen := batch.Length()
 	numToCopy := batchLen
 	if sel != nil {
-		maxIdx := int(0)
+		maxIdx := 0
 		for _, selIdx := range sel[:batchLen] {
 			if selIdx > maxIdx {
 				maxIdx = selIdx
