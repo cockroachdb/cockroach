@@ -3,12 +3,16 @@ CREATE DATABASE d;
 CREATE TABLE d.t (
 	a JSON,
 	b JSON,
-	INVERTED INDEX idx (a)
+	c INT[],
+	d INT[],
+	INVERTED INDEX idx (a),
+	INVERTED INDEX idx3 (c)
 );
 
 CREATE INVERTED INDEX idx2 ON d.t (b);
+CREATE INVERTED INDEX idx4 ON d.t (d);
 
-INSERT INTO d.t VALUES ('{"a": "b"}', '{"c": "d"}');
+INSERT INTO d.t VALUES ('{"a": "b"}', '{"c": "d"}', ARRAY[1], ARRAY[2]);
 ----
 INSERT 1
 
@@ -18,12 +22,16 @@ dump d t
 CREATE TABLE t (
 	a JSONB NULL,
 	b JSONB NULL,
+	c INT8[] NULL,
+	d INT8[] NULL,
 	INVERTED INDEX idx (a),
+	INVERTED INDEX idx3 (c),
 	INVERTED INDEX idx2 (b),
-	FAMILY "primary" (a, b, rowid)
+	INVERTED INDEX idx4 (d),
+	FAMILY "primary" (a, b, c, d, rowid)
 );
 
-INSERT INTO t (a, b) VALUES
-	('{"a": "b"}', '{"c": "d"}');
+INSERT INTO t (a, b, c, d) VALUES
+	('{"a": "b"}', '{"c": "d"}', ARRAY[1], ARRAY[2]);
 ----
 ----
