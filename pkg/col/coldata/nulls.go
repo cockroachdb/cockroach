@@ -178,18 +178,21 @@ func (n *Nulls) SetNulls() {
 
 // NullAt returns true if the ith value of the column is null.
 func (n *Nulls) NullAt(i int) bool {
-	return n.nulls[i/8]&bitMask[i%8] == 0
+	//return n.nulls[i/8]&bitMask[i%8] == 0
+	return n.nulls[i>>3]&bitMask[i&7] == 0
 }
 
 // SetNull sets the ith value of the column to null.
 func (n *Nulls) SetNull(i int) {
 	n.maybeHasNulls = true
-	n.nulls[i/8] &= flippedBitMask[i%8]
+	//n.nulls[i/8] &= flippedBitMask[i%8]
+	n.nulls[i>>3] &= flippedBitMask[i&7]
 }
 
 // UnsetNull unsets the ith values of the column.
 func (n *Nulls) UnsetNull(i int) {
-	n.nulls[i/8] |= bitMask[i%8]
+	//n.nulls[i/8] |= bitMask[i%8]
+	n.nulls[i>>3] |= bitMask[i&7]
 }
 
 // Remove the unused warning.
