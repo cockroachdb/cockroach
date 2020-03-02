@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1225,4 +1226,113 @@ func TestTxnPipelinerRecordsWritesOnFailure(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 	require.Len(t, tp.footprint.asSlice(), 2)
+}
+
+// Test that the pipeliners knows how to save and restore its state.
+func TestTxnPipelinerSavepoints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner()
+
+	tp.ifWrites.insert(roachpb.Key("a"), 10)
+	tp.ifWrites.insert(roachpb.Key("b"), 11)
+	tp.ifWrites.insert(roachpb.Key("c"), 12)
+	require.Equal(t, 3, tp.ifWrites.len())
+
+	s := &savepoint{}
+	tp.createSavepoint(ctx, s)
+
+	// Some more writes after the savepoint. One of them is on key "c" that is
+	// part of the savepoint too, so we'll check that, upon rollback, the savepoint is
+	// updated to remove the lower-seq-num write to "c" that it was tracking as in-flight.
+	tp.ifWrites.insert(roachpb.Key("c"), 13)
+	tp.ifWrites.insert(roachpb.Key("d"), 14)
+	require.Empty(t, tp.footprint.asSlice())
+
+	// Check that the savepoint has the correct writes.
+	{
+		var savepointWrites []inFlightWrite
+		s.ifWrites.Ascend(func(i btree.Item) bool {
+			savepointWrites = append(savepointWrites, *(i.(*inFlightWrite)))
+			return true
+		})
+		require.Equal(t,
+			[]inFlightWrite{
+				{roachpb.SequencedWrite{Key: roachpb.Key("a"), Sequence: 10}},
+				{roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11}},
+				{roachpb.SequencedWrite{Key: roachpb.Key("c"), Sequence: 12}},
+			},
+			savepointWrites)
+	}
+
+	// Now verify one of the writes. When we'll rollback to the savepoint below,
+	// we'll check that the verified write stayed verified.
+	txn := makeTxnProto()
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[1].GetInner())
+
+		qiReq := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
+		require.Equal(t, roachpb.Key("a"), qiReq.Key)
+		require.Equal(t, enginepb.TxnSeq(10), qiReq.Txn.Sequence)
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetQueryIntent().FoundIntent = true
+		return br, nil
+	})
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, []roachpb.Span{{Key: roachpb.Key("a")}}, tp.footprint.asSlice())
+	require.Equal(t, 3, tp.ifWrites.len()) // We've verified one out of 4 writes.
+
+	// Now restore the savepoint and check that the in-flight write state has been restored
+	// and all rolled-back writes were moved to the write footprint.
+	bytesBeforeRollback := s.ifBytes
+	tp.rollbackToSavepoint(ctx, s)
+
+	// Check that the savepoint itself was updated by the rollback. The key that
+	// had been verified ("a") should have been taken out of the savepoint. Same
+	// for the "c", for which the pipeliner is now tracking a
+	// higher-sequence-number (which implies that it must have verified the lower
+	// sequence number write).
+	expectedIfWrites := []inFlightWrite{
+		{roachpb.SequencedWrite{Key: roachpb.Key("b"), Sequence: 11}},
+	}
+	{
+		var savepointWrites []inFlightWrite
+		s.ifWrites.Ascend(func(i btree.Item) bool {
+			savepointWrites = append(savepointWrites, *(i.(*inFlightWrite)))
+			return true
+		})
+		require.Equal(t, expectedIfWrites, savepointWrites)
+		// Check that the size of the savepoint was decremented too.
+		require.Less(t, s.ifBytes, bytesBeforeRollback)
+	}
+
+	// Check that the tracked inflight writes were updated correctly.
+	{
+		var ifWrites []inFlightWrite
+		tp.ifWrites.ascend(func(w *inFlightWrite) {
+			ifWrites = append(ifWrites, *w)
+		})
+		require.Equal(t, expectedIfWrites, ifWrites)
+	}
+
+	// Check that the footprint was updated correctly. In addition to the "a"
+	// which it had before, it will also have "d" because it's not part of the
+	// savepoint.
+	require.Equal(t,
+		[]roachpb.Span{
+			{Key: roachpb.Key("a")},
+			{Key: roachpb.Key("d")},
+		},
+		tp.footprint.asSlice())
+
 }

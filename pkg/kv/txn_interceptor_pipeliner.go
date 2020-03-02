@@ -601,6 +601,71 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 	}
 }
 
+// createSavepoint is part of the txnReqInterceptor interface.
+func (tp *txnPipeliner) createSavepoint(ctx context.Context, s *savepoint) {
+	if tp.ifWrites.len() > 0 {
+		s.ifWrites = tp.ifWrites.t.Clone()
+		tp.ifWrites.cloned = true
+	}
+	s.ifBytes = tp.ifWrites.bytes
+}
+
+// rollbackToSavepoint is part of the txnReqInterceptor interface.
+func (tp *txnPipeliner) rollbackToSavepoint(ctx context.Context, s *savepoint) {
+	// Move all the writes in txnPipeliner that are not in the savepoint to the
+	// write footprint. We no longer care if these write succeed or fail, so we're
+	// going to stop tracking these as in-flight writes. The respective
+	// intents still need to be cleaned up at the end of the transaction.
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		if s.ifWrites == nil || s.ifWrites.Get(w) == nil {
+			tp.footprint.insert(roachpb.Span{Key: w.Key})
+		}
+	})
+	tp.footprint.mergeAndSort()
+
+	// Intersect the inflight writes from the savepoint with the ones from the
+	// txnPipeliner to avoid re-installing inflight writes that have been verified
+	// in the meantime.
+	if s.ifWrites != nil {
+		var alreadyVerified []btree.Item
+		s.ifWrites.Ascend(func(i btree.Item) bool {
+			sifw := i.(*inFlightWrite)
+			// If tp is not currently tracking this write as inflight, then we'll
+			// delete it from the savepoint. If tp is tracking a write on that key at
+			// a higher sequence number, that also means recursively that we've
+			// verified the seq num tracked by the savepoint.
+			ifw := tp.ifWrites.t.Get(i)
+			if ifw == nil || ifw.(*inFlightWrite).Sequence > sifw.Sequence {
+				alreadyVerified = append(alreadyVerified, i)
+			}
+			return true
+		})
+		for _, i := range alreadyVerified {
+			// Note that we modify the savepoint to optimize future rollbacks.
+			s.ifWrites.Delete(i)
+			s.ifBytes -= keySize(i.(*inFlightWrite).Key)
+		}
+	}
+
+	// Restore the inflightWrites from the savepoint.
+	if s.ifWrites == nil {
+		if !s.active {
+			// In the special case of an initial savepoint, we can clear our allocs.
+			// Otherwise we generally can't, because there might be earlier savepoint
+			// that have in-flight writes sharing memory with it. Even if the rollback
+			// we're currently rolling back to doesn't, other earlier ones might. This
+			// savepoint's writes might have become empty because we cleared them
+			// above or on a previous rollback.
+			tp.ifWrites.clear(true /* reuse */)
+		} else {
+			tp.ifWrites.t = nil
+		}
+	} else {
+		tp.ifWrites.t = s.ifWrites.Clone()
+		tp.ifWrites.bytes = s.ifBytes
+	}
+}
+
 // closeLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {}
 
@@ -633,6 +698,9 @@ type inFlightWriteSet struct {
 	// Avoids allocs.
 	tmp1, tmp2 inFlightWrite
 	alloc      inFlightWriteAlloc
+	// cloned is set if the BTree has been cloned. If it has, then the elements
+	// (*inFlightWrite's) might be shared, and so their memory cannot be reused.
+	cloned bool
 }
 
 // insert attempts to insert an in-flight write that has not been proven to have
@@ -644,15 +712,19 @@ func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
 		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
-	s.tmp1.Key = key
-	item := s.t.Get(&s.tmp1)
-	if item != nil {
-		otherW := item.(*inFlightWrite)
-		if seq > otherW.Sequence {
-			// Existing in-flight write has old information.
-			otherW.Sequence = seq
+	// If the tree has not been cloned before, we can attempt a fast path where we
+	// update an existing element.
+	if !s.cloned {
+		s.tmp1.Key = key
+		item := s.t.Get(&s.tmp1)
+		if item != nil {
+			otherW := item.(*inFlightWrite)
+			if seq > otherW.Sequence {
+				// Existing in-flight write has old information.
+				otherW.Sequence = seq
+			}
+			return
 		}
-		return
 	}
 
 	w := s.alloc.alloc(key, seq)
@@ -687,7 +759,7 @@ func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq) {
 
 	// Delete the write from the in-flight writes set.
 	delItem := s.t.Delete(item)
-	if delItem != nil {
+	if delItem != nil && !s.cloned {
 		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	}
 	s.bytes -= keySize(key)
@@ -749,8 +821,12 @@ func (s *inFlightWriteSet) byteSize() int64 {
 }
 
 // clear purges all elements from the in-flight write set and frees associated
-// memory. The reuse flag indicates whether the caller is intending to reu-use
+// memory. The reuse flag indicates whether the caller is intending to reuse
 // the set or not.
+//
+// This should not be called while there are active savepoints (i.e. savepoints
+// that we might rollback to) that might have in-flight writes in them. These
+// savepoints might share memory with the alloc.
 func (s *inFlightWriteSet) clear(reuse bool) {
 	if s.t == nil {
 		return
