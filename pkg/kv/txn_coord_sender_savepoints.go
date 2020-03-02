@@ -19,35 +19,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 )
 
-// savepointToken captures the state in the TxnCoordSender necessary
-// to restore that state upon a savepoint rollback.
-//
-// TODO(knz,andrei): Currently this definition is only sufficient for
-// just a few cases of rollbacks. This should be extended to cover
-// more ground:
-//
-// - We also need the current size of txnSpanRefresher.refreshSpans the
-//   list of tracked reads, such that upon rollback we tell the
-//   refresher interceptor to discard further reads.
-// - We also need something about in-flight writes
-//   (txnPipeliner.ifWrites). There I guess we need to take some sort of
-//   snapshot of the current in-flight writes and, on rollback, discard
-//   in-flight writes that are not part of the savepoint. But, on
-//   rollback, I don't think we should (nor am I sure that we could)
-//   simply overwrite the set of in-flight writes with the ones from the
-//   savepoint because writes that have been verified since the snapshot
-//   has been taken should continue to be verified. Basically, on
-//   rollback I think we need to intersect the savepoint with the
-//   current set of in-flight writes.
-type savepointToken struct {
-	// seqNum is currently the only field that helps to "restore"
-	// anything upon a rollback. When used, it does not change anything
-	// in the TCS; instead it simply configures the txn to ignore all
-	// seqnums from this value until the most recent seqnum emitted by
-	// the TCS.
+// savepoint captures the state in the TxnCoordSender necessary to restore that
+// state upon a savepoint rollback.
+type savepoint struct {
+	// seqNum represents the write seq num at the time the savepoint was created.
+	// On rollback, it configures the txn to ignore all seqnums from this value
+	// until the most recent seqnum.
 	seqNum enginepb.TxnSeq
+
+	// txnSpanRefresher fields
+	refreshSpans     []roachpb.Span
+	refreshInvalid   bool
+	refreshSpanBytes int64
+
+	// txnPipeliner fields
+	ifWrites *btree.BTree // can be nil if no reads were tracked
+	ifBytes  int64
 
 	// txnID is used to verify that a rollback is not used to paper
 	// over a txn abort error.
@@ -61,10 +51,10 @@ type savepointToken struct {
 	epoch enginepb.TxnEpoch
 }
 
-var _ client.SavepointToken = (*savepointToken)(nil)
+var _ client.SavepointToken = (*savepoint)(nil)
 
 // SavepointToken implements the client.SavepointToken interface.
-func (s *savepointToken) SavepointToken() {}
+func (s *savepoint) SavepointToken() {}
 
 // CreateSavepoint is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (client.SavepointToken, error) {
@@ -83,11 +73,15 @@ func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (client.Savepoint
 		return nil, ErrSavepointOperationInErrorTxn
 	}
 
-	return &savepointToken{
-		txnID:  tc.mu.txn.ID,
-		epoch:  tc.mu.txn.Epoch,
-		seqNum: tc.interceptorAlloc.txnSeqNumAllocator.writeSeq,
-	}, nil
+	s := &savepoint{
+		txnID: tc.mu.txn.ID,
+		epoch: tc.mu.txn.Epoch,
+	}
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.createSavepoint(nil, s)
+	}
+
+	return s, nil
 }
 
 // RollbackToSavepoint is part of the client.TxnSender interface.
@@ -108,9 +102,15 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s client.Save
 		return err
 	}
 
-	// TODO(knz): handle recoverable errors.
-	if tc.mu.txnState == txnError {
-		return unimplemented.New("rollback_error", "savepoint rollback after error")
+	if tc.mu.txnState == txnFinalized {
+		return unimplemented.New("rollback_error", "savepoint rollback finalized txn")
+	}
+
+	// Restore the transaction's state, in case we're rewiding after an error.
+	tc.mu.txnState = txnPending
+
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.rollbackToSavepoint(ctx, st)
 	}
 
 	if st.seqNum == tc.interceptorAlloc.txnSeqNumAllocator.writeSeq {
@@ -163,17 +163,17 @@ func (tc *TxnCoordSender) assertNotFinalized() error {
 
 func (tc *TxnCoordSender) checkSavepointLocked(
 	s client.SavepointToken, opName string,
-) (*savepointToken, error) {
-	st, ok := s.(*savepointToken)
+) (*savepoint, error) {
+	st, ok := s.(*savepoint)
 	if !ok {
 		return nil, errors.AssertionFailedf("expected savepointToken, got %T", s)
 	}
 
-	if st.txnID != tc.mu.txn.ID {
+	if st.seqNum > 0 && st.txnID != tc.mu.txn.ID {
 		return nil, errors.Newf("cannot %s savepoint across transaction retries", opName)
 	}
 
-	if st.epoch != tc.mu.txn.Epoch {
+	if st.seqNum > 0 && st.epoch != tc.mu.txn.Epoch {
 		return nil, errors.Newf("cannot %s savepoint across transaction retries", opName)
 	}
 

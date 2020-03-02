@@ -601,6 +601,64 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 	}
 }
 
+// createSavepoint is part of the txnReqInterceptor interface.
+func (tp *txnPipeliner) createSavepoint(ctx context.Context, s *savepoint) {
+	if tp.ifWrites.len() > 0 {
+		s.ifWrites = tp.ifWrites.t.Clone()
+		tp.ifWrites.cloned = true
+	}
+	s.ifBytes = tp.ifWrites.bytes
+}
+
+// rollbackToSavepoint is part of the txnReqInterceptor interface.
+func (tp *txnPipeliner) rollbackToSavepoint(ctx context.Context, s *savepoint) {
+	// Intersect the inflight writes from the savepoint to the ones from the
+	// txnPipeliner to avoid re-installing inflight writes that have been verified
+	// in the meantime.
+	if s.ifWrites != nil {
+		var alreadyVerified []btree.Item
+		s.ifWrites.Ascend(func(i btree.Item) bool {
+			// If tp is not currently tracking this write as inflight, then we'll
+			// delete it from the savepoint.
+			// Note that we're slightly pessimistic here: we might have verified the
+			// write captured by the savepoint and then started tracking a write at a
+			// higher seqnum for the same key. We don't keep track of what sequence
+			// numbers we've verified and which we haven't, so we're going to assume
+			// that the savepoint's write has not been verified.
+			// Note that having verified a write at seq num 2 recursively implies that
+			// we had verified a write at seq num 1.
+			if tp.ifWrites.t.Get(i) == nil {
+				alreadyVerified = append(alreadyVerified, i)
+			}
+			return true
+		})
+		// TODO(andrei): Can I delete directly during the iteration above?
+		for _, i := range alreadyVerified {
+			s.ifWrites.Delete(i)
+			s.ifBytes -= keySize(i.(*inFlightWrite).Key)
+		}
+	}
+
+	// Move all the writes in txnPipeliner that are not in the savepoint to the
+	// write footprint. We no longer care if these write succeed or fail, so we're
+	// going to stop tracking these as in-flight writes. The respective
+	// intents still need to be cleaned up at the end of the transaction.
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		if s.ifWrites == nil || s.ifWrites.Get(w) == nil {
+			tp.footprint.insert(roachpb.Span{Key: w.Key})
+		}
+	})
+	tp.footprint.mergeAndSort()
+
+	// Restore the inflightWrites from the savepoint.
+	if s.ifWrites == nil {
+		tp.ifWrites.t = nil
+	} else {
+		tp.ifWrites.t = s.ifWrites.Clone()
+	}
+	tp.ifWrites.bytes = s.ifBytes
+}
+
 // closeLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {}
 
@@ -633,6 +691,9 @@ type inFlightWriteSet struct {
 	// Avoids allocs.
 	tmp1, tmp2 inFlightWrite
 	alloc      inFlightWriteAlloc
+	// cloned is set if the BTree has been cloned. If it has, then the elements
+	// (*inFlightWrite's) might be shared, and so their memory cannot be reused.
+	cloned bool
 }
 
 // insert attempts to insert an in-flight write that has not been proven to have
@@ -644,15 +705,19 @@ func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
 		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
-	s.tmp1.Key = key
-	item := s.t.Get(&s.tmp1)
-	if item != nil {
-		otherW := item.(*inFlightWrite)
-		if seq > otherW.Sequence {
-			// Existing in-flight write has old information.
-			otherW.Sequence = seq
+	// If the tree has not been cloned before, we can attempt a fast path where we
+	// update an existing element.
+	if !s.cloned {
+		s.tmp1.Key = key
+		item := s.t.Get(&s.tmp1)
+		if item != nil {
+			otherW := item.(*inFlightWrite)
+			if seq > otherW.Sequence {
+				// Existing in-flight write has old information.
+				otherW.Sequence = seq
+			}
+			return
 		}
-		return
 	}
 
 	w := s.alloc.alloc(key, seq)
@@ -687,7 +752,7 @@ func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq) {
 
 	// Delete the write from the in-flight writes set.
 	delItem := s.t.Delete(item)
-	if delItem != nil {
+	if delItem != nil && !s.cloned {
 		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	}
 	s.bytes -= keySize(key)
@@ -749,7 +814,7 @@ func (s *inFlightWriteSet) byteSize() int64 {
 }
 
 // clear purges all elements from the in-flight write set and frees associated
-// memory. The reuse flag indicates whether the caller is intending to reu-use
+// memory. The reuse flag indicates whether the caller is intending to reuse
 // the set or not.
 func (s *inFlightWriteSet) clear(reuse bool) {
 	if s.t == nil {

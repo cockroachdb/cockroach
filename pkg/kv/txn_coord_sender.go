@@ -176,6 +176,16 @@ type txnInterceptor interface {
 	// increment.
 	epochBumpedLocked()
 
+	// createSavepoint is used to populate a savepoint with all the state the
+	// needs to be restored on a rollback.
+	createSavepoint(context.Context, *savepoint)
+
+	// rollbackToSavepoint is used to restore the state previously saved by createSavepoint().
+	// implementations are allowed to modify the savepoint if they want to, optimizing it for future
+	// rollbacks. For example, the txnPipeliner removes tracked writes from the savepoint which have
+	// already been verified since the savepoint has been created.
+	rollbackToSavepoint(context.Context, *savepoint)
+
 	// closeLocked closes the interceptor. It is called when the TxnCoordSender
 	// shuts down due to either a txn commit or a txn abort. The method will
 	// be called exactly once from cleanupTxnLocked.

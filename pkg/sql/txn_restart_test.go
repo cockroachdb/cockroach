@@ -1065,13 +1065,12 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	if err := tx.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
 		t.Fatal(err)
 	}
-	if state != "RestartWait" {
-		t.Fatalf("expected state %s, got: %s", "RestartWait", state)
+	if state != "Aborted" {
+		t.Fatalf("expected state %s, got: %s", "Aborted", state)
 	}
 
 	if _, err := tx.Exec("SELECT 1"); !testutils.IsError(err,
-		`pq: Expected "ROLLBACK TO SAVEPOINT cockroach_restart": `+
-			"current transaction is aborted, commands ignored until end of transaction block") {
+		`pq: current transaction is aborted, commands ignored until end of transaction block`) {
 		t.Fatal(err)
 	}
 	if err := tx.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
@@ -1449,12 +1448,6 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 		}
 	}
 
-	// ROLLBACK TO SAVEPOINT with a wrong name
-	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
-	if !testutils.IsError(err, "SAVEPOINT not supported except for cockroach_restart") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -1513,12 +1506,12 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 		{
 			name:                              "client_directed_retries",
 			clientDirectedRetry:               true,
-			expectedTxnStateAfterRetriableErr: "RestartWait",
+			expectedTxnStateAfterRetriableErr: "Aborted",
 		},
 		{
 			name:                              "no_client_directed_retries",
 			clientDirectedRetry:               false,
-			expectedTxnStateAfterRetriableErr: "RestartWait",
+			expectedTxnStateAfterRetriableErr: "Aborted",
 		},
 		{
 			name:                              "autocommit",

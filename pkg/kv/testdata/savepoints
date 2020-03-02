@@ -319,56 +319,57 @@ commit
 
 subtest end
 
-subtest rollback_across_retry
-
-# TODO(knz): change this test when rolling back across retries becomes
-# supported.
-
-begin
-----
-0 <noignore>
-
-savepoint x
-----
-0 <noignore>
-
-retry
-----
-synthetic error: TransactionRetryWithProtoRefreshError: forced retry
-epoch: 0 -> 1
-
-release x
-----
-(*withstack.withStack) cannot release savepoint across transaction retries
-
-rollback x
-----
-(*withstack.withStack) cannot rollback savepoint across transaction retries
-
-subtest end
-
-subtest rollback_across_abort
-
-begin
-----
-0 <noignore>
-
-savepoint x
-----
-0 <noignore>
-
-abort
-----
-(*roachpb.TransactionRetryWithProtoRefreshError)
-txn id changed
-
-release x
-----
-(*withstack.withStack) cannot release savepoint across transaction retries
-
-rollback x
-----
-(*withstack.withStack) cannot rollback savepoint across transaction retries
-
-
-subtest end
+# !!!
+# subtest rollback_across_retry
+#
+# # TODO(knz): change this test when rolling back across retries becomes
+# # supported.
+#
+# begin
+# ----
+# 0 <noignore>
+#
+# savepoint x
+# ----
+# 0 <noignore>
+#
+# retry
+# ----
+# synthetic error: TransactionRetryWithProtoRefreshError: forced retry
+# epoch: 0 -> 1
+#
+# release x
+# ----
+# (*withstack.withStack) cannot release savepoint across transaction retries
+#
+# rollback x
+# ----
+# (*withstack.withStack) cannot rollback savepoint across transaction retries
+#
+# subtest end
+#
+# subtest rollback_across_abort
+#
+# begin
+# ----
+# 0 <noignore>
+#
+# savepoint x
+# ----
+# 0 <noignore>
+#
+# abort
+# ----
+# (*roachpb.TransactionRetryWithProtoRefreshError)
+# txn id changed
+#
+# release x
+# ----
+# (*withstack.withStack) cannot release savepoint across transaction retries
+#
+# rollback x
+# ----
+# (*withstack.withStack) cannot rollback savepoint across transaction retries
+#
+#
+# subtest end
