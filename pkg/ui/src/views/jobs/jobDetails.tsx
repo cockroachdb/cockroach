@@ -34,6 +34,7 @@ import {
 import { Duration } from "src/views/jobs/duration";
 import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
 import { Button, BackIcon } from "src/components/button";
+import { DATE_FORMAT } from "src/util/format";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -121,7 +122,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
             <Row>
               <Col span={24}>
                 <div className="summary--card__counting">
-                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format("MMM DD, YYYY [at] hh:mma")}</h3>
+                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format(DATE_FORMAT)}</h3>
                   <p className="summary--card__counting--label">Creation time</p>
                 </div>
               </Col>
