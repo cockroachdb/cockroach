@@ -182,12 +182,22 @@ var reGRPCConnFailed = regexp.MustCompile(`desc = (transport is closing|all SubC
 func MaybeDecorateGRPCError(
 	wrapped func(*cobra.Command, []string) error,
 ) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		err := wrapped(cmd, args)
+	return func(cmd *cobra.Command, args []string) (err error) {
+		err = wrapped(cmd, args)
 
 		if err == nil {
 			return nil
 		}
+
+		defer func() {
+			// We want to flatten the error to reveal the hints, details etc.
+			// However we can't do it twice, so we need to detect first if
+			// some code already added the formattedError{} wrapper.
+			var f *formattedError
+			if !errors.As(err, &f) {
+				err = &formattedError{err: err, showSeverity: true}
+			}
+		}()
 
 		extraInsecureHint := func() string {
 			extra := ""
@@ -256,8 +266,9 @@ func MaybeDecorateGRPCError(
 			if wErr.Code == pgcode.ProtocolViolation {
 				return connSecurityHint()
 			}
-			// Otherwise, there was a regular SQL error. Just report that.
-			return wErr
+			// Otherwise, there was a regular SQL error. Just report
+			// that.
+			return err
 		}
 
 		if wErr := (*net.OpError)(nil); errors.As(err, &wErr) {
