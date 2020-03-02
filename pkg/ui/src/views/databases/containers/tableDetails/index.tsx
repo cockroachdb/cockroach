@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Icon, Row, Tabs } from "antd";
+import { Col, Row, Tabs } from "antd";
 import { Highlight } from "oss/src/views/shared/components/sql/highlight";
 import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
 import { selectStatements } from "oss/src/views/statements/statementsPage";
@@ -27,10 +27,10 @@ import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import "./styles.styl";
-
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
+import { Button, BackIcon } from "oss/src/components/button";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -114,9 +114,16 @@ export class TableMain extends React.Component<TableMainProps, {}> {
         <div>
           <Helmet title={`${title} Table | Databases`} />
           <div className="page--header">
-            <div className="page--header__back-btn">
-              <Icon type="arrow-left" /> <a onClick={this.prevPage}>Databases</a>
-            </div>
+            <Button
+              onClick={this.prevPage}
+              type="flat"
+              size="small"
+              className="crl-button--link-to"
+              icon={BackIcon}
+              iconPosition="left"
+            >
+              Databases
+            </Button>
             <div className="database-summary-title">
               <h2 className="base-heading">{ title }</h2>
             </div>
