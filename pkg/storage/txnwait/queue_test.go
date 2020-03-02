@@ -164,38 +164,21 @@ func TestIsPushed(t *testing.T) {
 	}
 }
 
-// mockRepl implements the ReplicaInterface interface.
-type mockRepl struct{}
-
-func (mockRepl) ContainsKey(_ roachpb.Key) bool { return true }
-
-// mockStore implements the StoreInterface interface.
-type mockStore struct {
-	manual  *hlc.ManualClock
-	clock   *hlc.Clock
-	stopper *stop.Stopper
-	db      *client.DB
-	metrics *Metrics
-}
-
-func newMockStore(s client.SenderFunc) StoreInterface {
-	var ms mockStore
-	ms.manual = hlc.NewManualClock(123)
-	ms.clock = hlc.NewClock(ms.manual.UnixNano, time.Nanosecond)
-	ms.stopper = stop.NewStopper()
-	ms.metrics = NewMetrics(time.Minute)
+func makeConfig(s client.SenderFunc) Config {
+	var cfg Config
+	cfg.RangeDesc = &roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax,
+	}
+	manual := hlc.NewManualClock(123)
+	cfg.Clock = hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	cfg.Stopper = stop.NewStopper()
+	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {
 		factory := client.NonTransactionalFactoryFunc(s)
-		ms.db = client.NewDB(testutils.MakeAmbientCtx(), factory, ms.clock)
+		cfg.DB = client.NewDB(testutils.MakeAmbientCtx(), factory, cfg.Clock)
 	}
-	return ms
+	return cfg
 }
-
-func (s mockStore) Clock() *hlc.Clock             { return s.clock }
-func (s mockStore) Stopper() *stop.Stopper        { return s.stopper }
-func (s mockStore) DB() *client.DB                { return s.db }
-func (s mockStore) GetTxnWaitKnobs() TestingKnobs { return TestingKnobs{} }
-func (s mockStore) GetTxnWaitMetrics() *Metrics   { return s.metrics }
 
 // TestMaybeWaitForQueryWithContextCancellation adds a new waiting query to the
 // queue and cancels its context. It then verifies that the query was cleaned
@@ -203,9 +186,9 @@ func (s mockStore) GetTxnWaitMetrics() *Metrics   { return s.metrics }
 // leak.
 func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ms := newMockStore(nil)
-	defer ms.Stopper().Stop(context.Background())
-	q := NewQueue(ms, mockRepl{})
+	cfg := makeConfig(nil)
+	defer cfg.Stopper.Stop(context.Background())
+	q := NewQueue(cfg)
 	q.Enable()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -223,7 +206,7 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 		t.Errorf("expected no waiting queries, found %v", q.mu.queries)
 	}
 
-	metrics := ms.GetTxnWaitMetrics()
+	metrics := cfg.Metrics
 	allMetricsAreZero := metrics.PusheeWaiting.Value() == 0 &&
 		metrics.PusherWaiting.Value() == 0 &&
 		metrics.QueryWaiting.Value() == 0 &&
@@ -241,13 +224,13 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var mockSender client.SenderFunc
-	ms := newMockStore(func(
+	cfg := makeConfig(func(
 		ctx context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		return mockSender(ctx, ba)
 	})
-	defer ms.Stopper().Stop(context.Background())
-	q := NewQueue(ms, mockRepl{})
+	defer cfg.Stopper.Stop(context.Background())
+	q := NewQueue(cfg)
 	q.Enable()
 
 	// Set an extremely high transaction liveness threshold so that the pushee
@@ -255,7 +238,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	// Enqueue pushee transaction in the queue.
-	txn := roachpb.MakeTransaction("test", nil, 0, ms.Clock().Now(), 0)
+	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0)
 	q.EnqueueTxn(&txn)
 
 	const numPushees = 3

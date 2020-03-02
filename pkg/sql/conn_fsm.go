@@ -48,10 +48,6 @@ func (stateNoTxn) String() string {
 
 type stateOpen struct {
 	ImplicitTxn fsm.Bool
-	// RetryIntent, if set, means the user declared the intention to retry the txn
-	// in case of retriable errors by running a SAVEPOINT cockroach_restart. The
-	// txn will enter a RestartWait state in case of such errors.
-	RetryIntent fsm.Bool
 }
 
 var _ fsm.State = &stateOpen{}
@@ -60,11 +56,7 @@ func (stateOpen) String() string {
 	return OpenStateStr
 }
 
-type stateAborted struct {
-	// RetryIntent carries over the setting from stateOpen, in case we move back
-	// to Open.
-	RetryIntent fsm.Bool
-}
+type stateAborted struct{}
 
 var _ fsm.State = &stateAborted{}
 
@@ -141,9 +133,6 @@ func makeEventTxnStartPayload(
 	}
 }
 
-// eventRetryIntentSet is generated in the Open state when a SAVEPOINT
-// cockroach_restart is seen.
-type eventRetryIntentSet struct{}
 type eventTxnFinish struct{}
 
 // eventTxnFinishPayload represents the payload for eventTxnFinish.
@@ -203,7 +192,6 @@ type payloadWithError interface {
 	errorCause() error
 }
 
-func (eventRetryIntentSet) Event()  {}
 func (eventTxnStart) Event()        {}
 func (eventTxnFinish) Event()       {}
 func (eventTxnRestart) Event()      {}
@@ -233,7 +221,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	stateNoTxn{}: {
 		eventTxnStart{fsm.Var("implicitTxn")}: {
 			Description: "BEGIN, or before a statement running as an implicit txn",
-			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn"), RetryIntent: fsm.False},
+			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn")},
 			Action:      noTxnToOpen,
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
@@ -250,7 +238,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	},
 
 	/// Open
-	stateOpen{ImplicitTxn: fsm.Any, RetryIntent: fsm.Any}: {
+	stateOpen{ImplicitTxn: fsm.Any}: {
 		eventTxnFinish{}: {
 			Description: "COMMIT/ROLLBACK, or after a statement running as an implicit txn",
 			Next:        stateNoTxn{},
@@ -272,7 +260,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: cleanupAndFinishOnError,
 		},
 	},
-	stateOpen{ImplicitTxn: fsm.Var("implicitTxn"), RetryIntent: fsm.Var("retryIntent")}: {
+	stateOpen{ImplicitTxn: fsm.Var("implicitTxn")}: {
 		// This is the case where we auto-retry.
 		eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.Any}: {
 			// We leave the transaction in Open. In particular, we don't move to
@@ -281,7 +269,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			// Note: Preparing the KV txn for restart has already happened by this
 			// point.
 			Description: "Retriable err; will auto-retry",
-			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn"), RetryIntent: fsm.Var("retryIntent")},
+			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn")},
 			Action: func(args fsm.Args) error {
 				// The caller will call rewCap.rewindAndUnlock().
 				args.Extended.(*txnState).setAdvanceInfo(
@@ -293,7 +281,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		},
 	},
 	// Handle the errors in implicit txns. They move us to NoTxn.
-	stateOpen{ImplicitTxn: fsm.True, RetryIntent: fsm.False}: {
+	stateOpen{ImplicitTxn: fsm.True}: {
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
 			Next:   stateNoTxn{},
 			Action: cleanupAndFinishOnError,
@@ -304,34 +292,11 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		},
 	},
 	// Handle the errors in explicit txns. They move us to Aborted.
-	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.Var("retryIntent")}: {
+	stateOpen{ImplicitTxn: fsm.False}: {
 		eventNonRetriableErr{IsCommit: fsm.False}: {
-			Next:   stateAborted{RetryIntent: fsm.Var("retryIntent")},
+			Next:   stateAborted{},
 			Action: cleanupOnError,
 		},
-		// SAVEPOINT cockroach_restart: we just change the state (RetryIntent) if it
-		// wasn't set already.
-		eventRetryIntentSet{}: {
-			Description: "SAVEPOINT cockroach_restart",
-			Next:        stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
-			Action: func(args fsm.Args) error {
-				// We flush after setting the retry intent; we know what statement
-				// caused this event and we don't need to rewind past it.
-				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, noEvent)
-				return nil
-			},
-		},
-	},
-	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False}: {
-		// Retriable errors when RetryIntent is not set behave like non-retriable
-		// errors.
-		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
-			Description: "RetryIntent not set, so handled like non-retriable err",
-			Next:        stateAborted{RetryIntent: fsm.False},
-			Action:      cleanupOnError,
-		},
-	},
-	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True}: {
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
 			Next: stateRestartWait{},
 			Action: func(args fsm.Args) error {
@@ -352,7 +317,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		// ROLLBACK TO SAVEPOINT
 		eventTxnRestart{}: {
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
-			Next:        stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
+			Next:        stateOpen{ImplicitTxn: fsm.False},
 			Action: func(args fsm.Args) error {
 				state := args.Extended.(*txnState)
 				// NOTE: We don't bump the txn timestamp on this restart. Should we?
@@ -371,7 +336,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	//
 	// Note that we don't handle any error events here. Any statement but a
 	// ROLLBACK is expected to not be passed to the state machine.
-	stateAborted{RetryIntent: fsm.Var("retryIntent")}: {
+	stateAborted{}: {
 		eventTxnFinish{}: {
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
@@ -384,20 +349,18 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
 			// This event doesn't change state, but it returns a skipBatch code.
 			Description: "any other statement",
-			Next:        stateAborted{RetryIntent: fsm.Var("retryIntent")},
+			Next:        stateAborted{},
 			Action: func(args fsm.Args) error {
 				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
 				return nil
 			},
 		},
-	},
-	stateAborted{RetryIntent: fsm.True}: {
 		// ROLLBACK TO SAVEPOINT. We accept this in the Aborted state for the
 		// convenience of clients who want to issue ROLLBACK TO SAVEPOINT regardless
 		// of the preceding query error.
 		eventTxnStart{ImplicitTxn: fsm.False}: {
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
-			Next:        stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
+			Next:        stateOpen{ImplicitTxn: fsm.False},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn()
@@ -427,6 +390,10 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
+				ts := args.Extended.(*txnState)
+				// The client is likely rolling back because it can't do retries. Let's
+				// count it as an abort.
+				ts.txnAbortCount.Inc(1)
 				return args.Extended.(*txnState).finishTxn(
 					args.Payload.(eventTxnFinishPayload),
 				)
@@ -435,14 +402,14 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		// ROLLBACK TO SAVEPOINT
 		eventTxnRestart{}: {
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
-			Next:        stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
+			Next:        stateOpen{ImplicitTxn: fsm.False},
 			Action: func(args fsm.Args) error {
 				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnRestart)
 				return nil
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
-			Next:   stateAborted{RetryIntent: fsm.True},
+			Next:   stateAborted{},
 			Action: cleanupOnError,
 		},
 	},
@@ -539,7 +506,7 @@ func cleanupAndFinishOnError(args fsm.Args) error {
 // when running SQL inside a higher-level txn. It's a very limited state
 // machine: it doesn't allow starting or finishing txns, auto-retries, etc.
 var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
-	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False}: {
+	stateOpen{ImplicitTxn: fsm.False}: {
 		// We accept eventNonRetriableErr with both IsCommit={True, fsm.False}, even
 		// though this state machine does not support COMMIT statements because
 		// connExecutor.close() sends an eventNonRetriableErr{IsCommit: fsm.True} event.

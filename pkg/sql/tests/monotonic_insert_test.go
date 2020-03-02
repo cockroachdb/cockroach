@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -107,6 +108,10 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondata.DistSQLExecMode)
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
 		sql.DistSQLClusterExecMode.Override(&st.SV, int64(distSQLMode))
+		// Let transactions push immediately to detect deadlocks. The test creates a
+		// large amount of contention and dependency cycles, and could take a long
+		// time to complete without this.
+		concurrency.LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0)
 	}
 
 	var clients []mtClient

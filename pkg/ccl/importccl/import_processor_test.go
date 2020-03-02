@@ -577,7 +577,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
-	defer TestingSetCsvInputReaderBatchSize(batchSize)()
+	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
 	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 
@@ -683,7 +683,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const batchSize = 5
-	defer TestingSetCsvInputReaderBatchSize(batchSize)()
+	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
 	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 

@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
@@ -38,8 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -81,7 +79,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
 		c := newCluster()
-		m := concurrency.NewManager(c, c.rangeDesc)
+		m := concurrency.NewManager(c.makeConfig())
 		c.m = m
 		mon := newMonitor()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -110,7 +108,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					},
 					ReadTimestamp: ts,
 				}
-				txn.UpdateObservedTimestamp(c.NodeDescriptor().NodeID, ts)
+				txn.UpdateObservedTimestamp(c.nodeDesc.NodeID, ts)
 				c.registerTxn(txnName, txn)
 				return ""
 
@@ -149,7 +147,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				for i, req := range reqs {
 					reqUnions[i].MustSetInner(req)
 				}
-				spans := c.collectSpans(t, txn, ts, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
 
 				c.requestsByName[reqName] = concurrency.Request{
 					Txn:       txn,
@@ -157,7 +155,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					// TODO(nvanbenschoten): test Priority
 					ReadConsistency: readConsistency,
 					Requests:        reqUnions,
-					Spans:           spans,
+					LatchSpans:      latchSpans,
+					LockSpans:       lockSpans,
 				}
 				return ""
 
@@ -364,17 +363,18 @@ func newCluster() *cluster {
 	}
 }
 
-// cluster implements the Store interface. Many of these methods are only used
-// by the txnWaitQueue, whose functionality is fully mocked out in this test by
-// cluster's implementation of concurrency.IntentResolver.
-func (c *cluster) NodeDescriptor() *roachpb.NodeDescriptor    { return c.nodeDesc }
-func (c *cluster) DB() *client.DB                             { return nil }
-func (c *cluster) Clock() *hlc.Clock                          { return nil }
-func (c *cluster) Stopper() *stop.Stopper                     { return nil }
-func (c *cluster) IntentResolver() concurrency.IntentResolver { return c }
-func (c *cluster) GetTxnWaitKnobs() txnwait.TestingKnobs      { return txnwait.TestingKnobs{} }
-func (c *cluster) GetTxnWaitMetrics() *txnwait.Metrics        { return txnwait.NewMetrics(time.Minute) }
-func (c *cluster) GetSlowLatchGauge() *metric.Gauge           { return nil }
+func (c *cluster) makeConfig() concurrency.Config {
+	st := clustersettings.MakeTestingClusterSettings()
+	concurrency.LockTableLivenessPushDelay.Override(&st.SV, 1*time.Millisecond)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(&st.SV, 1*time.Millisecond)
+	return concurrency.Config{
+		NodeDesc:       c.nodeDesc,
+		RangeDesc:      c.rangeDesc,
+		Settings:       st,
+		IntentResolver: c,
+		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+	}
+}
 
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
@@ -491,7 +491,7 @@ func (c *cluster) reset() error {
 		return errors.Errorf("outstanding latches")
 	}
 	// Clear the lock table by marking the range as merged.
-	c.m.OnMerge()
+	c.m.OnRangeMerge()
 	return nil
 }
 
@@ -499,12 +499,12 @@ func (c *cluster) reset() error {
 // Its logic mirrors that in Replica.collectSpans.
 func (c *cluster) collectSpans(
 	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []roachpb.Request,
-) *spanset.SpanSet {
-	spans := &spanset.SpanSet{}
+) (latchSpans, lockSpans *spanset.SpanSet) {
+	latchSpans, lockSpans = &spanset.SpanSet{}, &spanset.SpanSet{}
 	h := roachpb.Header{Txn: txn, Timestamp: ts}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
-			cmd.DeclareKeys(c.rangeDesc, h, req, spans)
+			cmd.DeclareKeys(c.rangeDesc, h, req, latchSpans, lockSpans)
 		} else {
 			t.Fatalf("unrecognized command %s", req.Method())
 		}
@@ -512,12 +512,13 @@ func (c *cluster) collectSpans(
 
 	// Commands may create a large number of duplicate spans. De-duplicate
 	// them to reduce the number of spans we pass to the spanlatch manager.
-	spans.SortAndDedup()
-	if err := spans.Validate(); err != nil {
-		t.Fatal(err)
+	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
+		s.SortAndDedup()
+		if err := s.Validate(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	return spans
-
+	return latchSpans, lockSpans
 }
 
 // monitor tracks a set of running goroutines as they execute and captures
@@ -666,15 +667,17 @@ func (m *monitor) hasNewEvents(g *monitoredGoroutine) bool {
 // performs an action that may unblock any of the goroutines.
 func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
 	// Iterate until we see two iterations in a row that both observe all
-	// monitored goroutines to be stalled and also both observe the exact
-	// same goroutine state. Waiting for two iterations to be identical
-	// isn't required for correctness because the goroutine dump itself
-	// should provide a consistent snapshot of all goroutine states and
-	// statuses (runtime.Stack(all=true) stops the world), but it still
-	// seems like a generally good idea.
+	// monitored goroutines to be stalled and also both observe the exact same
+	// goroutine state. The goroutine dump provides a consistent snapshot of all
+	// goroutine states and statuses (runtime.Stack(all=true) stops the world).
 	var status []*stack.Goroutine
 	filter := funcName((*monitor).runAsync)
 	testutils.SucceedsSoon(t, func() error {
+		// Add a small fixed delay after each iteration. This is sufficient to
+		// prevents false detection of stalls in a few cases, like when
+		// receiving on a buffered channel that already has an element in it.
+		defer time.Sleep(1 * time.Millisecond)
+
 		prevStatus := status
 		status = goroutineStatus(t, filter, &m.buf)
 		if len(status) == 0 {

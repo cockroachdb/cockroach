@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.ReverseScan, DefaultDeclareKeys, ReverseScan)
+	RegisterReadOnlyCommand(roachpb.ReverseScan, DefaultDeclareIsolatedKeys, ReverseScan)
 }
 
 // ReverseScan scans the key range specified by start key through

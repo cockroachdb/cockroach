@@ -21,7 +21,10 @@ import (
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
-	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
 ) {
 	var access spanset.SpanAccess
 	if roachpb.IsReadOnly(req) {
@@ -29,24 +32,45 @@ func DefaultDeclareKeys(
 	} else {
 		access = spanset.SpanReadWrite
 	}
-	spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+	latchSpans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+}
+
+// DefaultDeclareIsolatedKeys is similar to DefaultDeclareKeys, but it declares
+// both lock spans in addition to latch spans. When used, commands will wait on
+// locks and wait-queues owned by other transactions before evaluating. This
+// ensures that the commands are fully isolated from conflicting transactions
+// when it evaluated.
+func DefaultDeclareIsolatedKeys(
+	_ *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+) {
+	var access spanset.SpanAccess
+	if roachpb.IsReadOnly(req) {
+		access = spanset.SpanReadOnly
+	} else {
+		access = spanset.SpanReadWrite
+	}
+	latchSpans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+	lockSpans.AddNonMVCC(access, req.Header().Span())
 }
 
 // DeclareKeysForBatch adds all keys that the batch with the provided header
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.
 func DeclareKeysForBatch(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
 	if header.ReturnRangeInfo {
-		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 	}
 }
 

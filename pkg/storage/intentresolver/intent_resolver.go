@@ -36,14 +36,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// CleanupFunc is used to report the result of later writes in the face of
-// WriteIntentError. It should never be called with both a newWIErr and a
-// newIntentTxn.
-type CleanupFunc func(
-	newWIErr *roachpb.WriteIntentError,
-	newIntentTxn *enginepb.TxnMeta,
-)
-
 const (
 	// defaultTaskLimit is the maximum number of asynchronous tasks
 	// that may be started by intentResolver. When this limit is reached
@@ -125,8 +117,7 @@ type IntentResolver struct {
 	stopper      *stop.Stopper
 	testingKnobs storagebase.IntentResolverTestingKnobs
 	ambientCtx   log.AmbientContext
-	sem          *quotapool.IntPool // Semaphore to limit async goroutines.
-	contentionQ  *contentionQueue   // manages contention on individual keys
+	sem          *quotapool.IntPool // semaphore to limit async goroutines
 
 	rdc kvbase.RangeDescriptorCache
 
@@ -188,7 +179,6 @@ func New(c Config) *IntentResolver {
 		db:           c.DB,
 		stopper:      c.Stopper,
 		sem:          quotapool.NewIntPool("intent resolver", uint64(c.TaskLimit)),
-		contentionQ:  newContentionQueue(c.Clock, c.DB),
 		every:        log.Every(time.Minute),
 		Metrics:      makeMetrics(),
 		rdc:          c.RangeDescriptorCache,
@@ -224,72 +214,6 @@ func New(c Config) *IntentResolver {
 	return ir
 }
 
-// NumContended exists to ease writing tests at the storage level above which
-// want to verify that contention is occurring within the IntentResolver.
-func (ir *IntentResolver) NumContended(key roachpb.Key) int {
-	return ir.contentionQ.numContended(key)
-}
-
-// ProcessWriteIntentError tries to push the conflicting
-// transaction(s) responsible for the given WriteIntentError, and to
-// resolve those intents if possible. Returns a cleanup function and
-// potentially a new error to be used in place of the original. The
-// cleanup function should be invoked by the caller after the request
-// which experienced the conflict has completed with a parameter
-// specifying a transaction in the event that the request left its own
-// intent.
-func (ir *IntentResolver) ProcessWriteIntentError(
-	ctx context.Context, wiPErr *roachpb.Error, h roachpb.Header, pushType roachpb.PushTxnType,
-) (CleanupFunc, *roachpb.Error) {
-	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
-	if !ok {
-		return nil, roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
-	}
-
-	if log.V(6) {
-		log.Infof(ctx, "resolving write intent %s", wiErr)
-	}
-
-	// Possibly queue this processing if the write intent error is for a
-	// single intent affecting a unitary key.
-	var cleanup func(*roachpb.WriteIntentError, *enginepb.TxnMeta)
-	if len(wiErr.Intents) == 1 {
-		var done bool
-		var pErr *roachpb.Error
-		// Note that the write intent error may be mutated here in the event
-		// that this pusher is queued to wait for a different transaction
-		// instead.
-		cleanup, wiErr, done, pErr = ir.contentionQ.add(ctx, wiErr, h)
-		if done || pErr != nil {
-			return cleanup, pErr
-		}
-	}
-
-	resolveIntents, pErr := ir.maybePushIntents(
-		ctx, wiErr.Intents, h, pushType, false, /* skipIfInFlight */
-	)
-	if pErr != nil {
-		return cleanup, pErr
-	}
-
-	// We always poison due to limitations of the API: not poisoning equals
-	// clearing the AbortSpan, and if our pushee transaction first got pushed
-	// for timestamp (by us), then (by someone else) aborted and poisoned, and
-	// then we run the below code, we're clearing the AbortSpan illegaly.
-	// Furthermore, even if our pushType is not PUSH_ABORT, we may have ended
-	// up with the responsibility to abort the intents (for example if we find
-	// the transaction aborted).
-	//
-	// To do better here, we need per-intent information on whether we need to
-	// poison.
-	opts := ResolveOptions{Wait: false, Poison: true}
-	if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
-		return cleanup, pErr
-	}
-
-	return cleanup, nil
-}
-
 func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 	// If the txn is nil, we communicate a priority by sending an empty
 	// txn with only the priority set. This is official usage of PushTxn.
@@ -302,51 +226,6 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 		}
 	}
 	return *txn
-}
-
-// maybePushIntents tries to push the conflicting transaction(s)
-// responsible for the given intents: either move its
-// timestamp forward on a read/write conflict, abort it on a
-// write/write conflict, or do nothing if the transaction is no longer
-// pending.
-//
-// Returns a slice of intents which can now be resolved, and an error.
-// The returned intents should be resolved via IntentResolver.ResolveIntents.
-//
-// If skipIfInFlight is true, then no PushTxns will be sent and no
-// intents will be returned for any transaction for which there is
-// another push in progress. This should only be used by callers who
-// are not relying on the side effect of a push (i.e. only
-// pushType==PUSH_TOUCH), and who also don't need to synchronize with
-// the resolution of those intents (e.g. asynchronous resolutions of
-// intents skipped on inconsistent reads).
-//
-// Callers are involved with
-// a) conflict resolution for commands being executed at the Store with the
-//    client waiting,
-// b) resolving intents encountered during inconsistent operations, and
-// c) resolving intents upon EndTxn which are not local to the given range.
-//    This is the only path in which the transaction is going to be in
-//    non-pending state and doesn't require a push.
-func (ir *IntentResolver) maybePushIntents(
-	ctx context.Context,
-	intents []roachpb.Intent,
-	h roachpb.Header,
-	pushType roachpb.PushTxnType,
-	skipIfInFlight bool,
-) ([]roachpb.LockUpdate, *roachpb.Error) {
-	// Attempt to push the transaction(s) which created the conflicting intent(s).
-	pushTxns := make(map[uuid.UUID]*enginepb.TxnMeta)
-	for i := range intents {
-		intent := &intents[i]
-		pushTxns[intent.Txn.ID] = &intent.Txn
-	}
-
-	pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
-	if pErr != nil {
-		return nil, pErr
-	}
-	return updateIntentTxnStatus(ctx, pushedTxns, intents, skipIfInFlight, nil), nil
 }
 
 // updateIntentTxnStatus takes a slice of intents and a set of pushed
@@ -396,10 +275,28 @@ func (ir *IntentResolver) PushTransaction(
 	return pushedTxn, nil
 }
 
-// MaybePushTransactions is like maybePushIntents except it takes a set of
-// transactions to push instead of a set of intents. This set of provided
-// transactions may be modified by the method. It returns a set of transaction
-// protos corresponding to the pushed transactions.
+// MaybePushTransactions tries to push the conflicting transaction(s):
+// either moving their timestamp forward on a read/write conflict, aborting
+// it on a write/write conflict, or doing nothing if the transaction is no
+// longer pending.
+//
+// Returns a set of transaction protos who correspond to the pushed
+// transactions and whose intents can now be resolved, and an error.
+//
+// If skipIfInFlight is true, then no PushTxns will be sent and no intents
+// will be returned for any transaction for which there is another push in
+// progress. This should only be used by callers who are not relying on the
+// side effect of a push (i.e. only pushType==PUSH_TOUCH), and who also
+// don't need to synchronize with the resolution of those intents (e.g.
+// asynchronous resolutions of intents skipped on inconsistent reads).
+//
+// Callers are involved with
+// a) conflict resolution for commands being executed at the Store with the
+//    client waiting,
+// b) resolving intents encountered during inconsistent operations, and
+// c) resolving intents upon EndTxn which are not local to the given range.
+//    This is the only path in which the transaction is going to be in
+//    non-pending state and doesn't require a push.
 func (ir *IntentResolver) MaybePushTransactions(
 	ctx context.Context,
 	pushTxns map[uuid.UUID]*enginepb.TxnMeta,
@@ -544,13 +441,13 @@ func (ir *IntentResolver) CleanupIntents(
 ) (int, error) {
 	h := roachpb.Header{Timestamp: now}
 
-	// All transactions in MaybePushTxns (called by maybePushIntents) will be sent
-	// in a single batch. In order to ensure that progress is made, we want to
-	// ensure that this batch does not become too big as to time out due to a
-	// deadline set above this call. If the attempt to push intents times out
-	// before any intents have been resolved, no progress is made. Since batches
-	// are atomic, a batch that times out has no effect. Hence, we chunk the work
-	// to ensure progress even when a timeout is eventually hit.
+	// All transactions in MaybePushTransactions will be sent in a single batch.
+	// In order to ensure that progress is made, we want to ensure that this
+	// batch does not become too big as to time out due to a deadline set above
+	// this call. If the attempt to push intents times out before any intents
+	// have been resolved, no progress is made. Since batches are atomic, a
+	// batch that times out has no effect. Hence, we chunk the work to ensure
+	// progress even when a timeout is eventually hit.
 	sort.Sort(intentsByTxn(intents))
 	resolved := 0
 	const skipIfInFlight = true
@@ -597,7 +494,7 @@ func (ir *IntentResolver) CleanupIntents(
 		//   same situation as above.
 		//
 		// Thus, we must poison.
-		opts := ResolveOptions{Wait: true, Poison: true}
+		opts := ResolveOptions{Poison: true}
 		if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
 			return 0, errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 		}
@@ -817,7 +714,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		}
 	}()
 	// Resolve intents.
-	opts := ResolveOptions{Wait: true, Poison: poison, MinTimestamp: txn.MinTimestamp}
+	opts := ResolveOptions{Poison: poison, MinTimestamp: txn.MinTimestamp}
 	if pErr := ir.ResolveIntents(ctx, intents, opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
@@ -842,15 +739,6 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 // caller wants the call to block, and whether the ranges containing the intents
 // are to be poisoned.
 type ResolveOptions struct {
-	// Resolve intents synchronously. When set to `false`, requests a
-	// semi-synchronous operation, returning when all local commands have
-	// been *proposed* but not yet committed or executed. This ensures that
-	// if a waiting client retries immediately after calling this function,
-	// it will not hit the same intents again.
-	//
-	// TODO(bdarnell): Note that this functionality has been removed and
-	// will be ignored, pending resolution of #8360.
-	Wait   bool
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
@@ -896,7 +784,7 @@ func (ir *IntentResolver) ResolveIntents(
 	if err := ctx.Err(); err != nil {
 		return roachpb.NewError(err)
 	}
-	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)
+	log.Eventf(ctx, "resolving intents")
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	type resolveReq struct {

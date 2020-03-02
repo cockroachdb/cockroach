@@ -18,7 +18,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -53,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestImportData(t *testing.T) {
@@ -2123,9 +2121,8 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
-		stripFilenameQuotes := strings.ReplaceAll(testFiles.files[0][1:len(testFiles.files[0])-1], "?", "\\?")
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("%s: row 1: expected 3 fields, got 2", stripFilenameQuotes),
+			t, "row 1: expected 3 fields, got 2",
 			fmt.Sprintf(`IMPORT INTO t (a, b, c) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -2136,9 +2133,8 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
-		stripFilenameQuotes := strings.ReplaceAll(testFiles.files[0][1:len(testFiles.files[0])-1], "?", "\\?")
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("%s: row 1: expected 1 fields, got 2", stripFilenameQuotes),
+			t, "row 1: expected 1 fields, got 2",
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -2374,6 +2370,46 @@ func BenchmarkImport(b *testing.B) {
 		))
 }
 
+// a importRowProducer implementation that returns 'n' rows.
+type csvBenchmarkStream struct {
+	n    int
+	pos  int
+	data [][]string
+}
+
+func (s *csvBenchmarkStream) Progress() float32 {
+	return float32(s.pos) / float32(s.n)
+}
+
+func (s *csvBenchmarkStream) Scan() bool {
+	s.pos++
+	return s.pos <= s.n
+}
+
+func (s *csvBenchmarkStream) Err() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Skip() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Row() (interface{}, error) {
+	return s.data[s.pos%len(s.data)], nil
+}
+
+var _ importRowProducer = &csvBenchmarkStream{}
+
+// BenchmarkConvertRecord-16    	 1000000	      2107 ns/op	  56.94 MB/s	    3600 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2106 ns/op	  56.97 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2100 ns/op	  57.14 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2286 ns/op	  52.49 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2378 ns/op	  50.46 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2427 ns/op	  49.43 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2399 ns/op	  50.02 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2365 ns/op	  50.73 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2376 ns/op	  50.49 MB/s	    3606 B/op	     101 allocs/op
+// BenchmarkConvertRecord-16    	  500000	      2390 ns/op	  50.20 MB/s	    3606 B/op	     101 allocs/op
 func BenchmarkConvertRecord(b *testing.B) {
 	ctx := context.TODO()
 
@@ -2429,58 +2465,31 @@ func BenchmarkConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	recordCh := make(chan csvRecord)
-	kvCh := make(chan row.KVBatch)
-	group := errgroup.Group{}
 
+	kvCh := make(chan row.KVBatch)
 	// no-op drain kvs channel.
 	go func() {
 		for range kvCh {
 		}
 	}()
 
-	c := &csvInputReader{
+	descr := tableDesc.TableDesc()
+	importCtx := &parallelImportContext{
 		evalCtx:   &evalCtx,
+		tableDesc: descr,
 		kvCh:      kvCh,
-		recordCh:  recordCh,
-		tableDesc: tableDesc.TableDesc(),
-	}
-	// start up workers.
-	numWorkers := runtime.NumCPU()
-	for i := 0; i < numWorkers; i++ {
-		workerID := i
-		group.Go(func() error {
-			return c.convertRecordWorker(ctx, workerID)
-		})
-	}
-	const batchSize = 500
-
-	minEmitted := make([]int64, numWorkers)
-	batch := csvRecord{
-		file:       "some/path/to/some/file/of/csv/data.tbl",
-		rowOffset:  1,
-		r:          make([][]string, 0, batchSize),
-		minEmitted: &minEmitted,
 	}
 
+	producer := &csvBenchmarkStream{
+		n:    b.N,
+		pos:  0,
+		data: tpchLineItemDataRows,
+	}
+	consumer := &csvRowConsumer{importCtx: importCtx, opts: &roachpb.CSVOptions{}}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if len(batch.r) > batchSize {
-			recordCh <- batch
-			batch.r = make([][]string, 0, batchSize)
-			batch.rowOffset = int64(i)
-			minEmitted = make([]int64, numWorkers)
-		}
-
-		batch.r = append(batch.r, tpchLineItemDataRows[i%len(tpchLineItemDataRows)])
-	}
-	recordCh <- batch
-	close(recordCh)
-
-	if err := group.Wait(); err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, runParallelImport(ctx, importCtx, &importFileContext{}, producer, consumer))
 	close(kvCh)
+	b.ReportAllocs()
 }
 
 // TestImportControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
@@ -3556,8 +3565,11 @@ func TestImportAvro(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Play a bit with producer/consumer batch sizes.
+			defer TestingSetParallelImporterReaderBatchSize(13 * i)()
+
 			_, err := sqlDB.DB.ExecContext(context.Background(), `DROP TABLE IF EXISTS simple CASCADE`)
 			require.NoError(t, err)
 

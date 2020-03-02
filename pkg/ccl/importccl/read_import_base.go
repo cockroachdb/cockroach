@@ -18,7 +18,10 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"runtime"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -26,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -347,4 +352,299 @@ func wrapRowErr(err error, _ string, row int64, code, format string, args ...int
 		err = pgerror.WithCandidateCode(err, code)
 	}
 	return err
+}
+
+// importRowError is an error type describing malformed import data.
+type importRowError struct {
+	err    error
+	row    string
+	rowNum int64
+}
+
+func (e *importRowError) Error() string {
+	return fmt.Sprintf("error parsing row %d: %v (row: %q)", e.rowNum, e.err, e.row)
+}
+
+func newImportRowError(err error, row string, num int64) error {
+	return &importRowError{
+		err:    err,
+		row:    row,
+		rowNum: num,
+	}
+}
+
+// parallelImportContext describes state associated with the import.
+type parallelImportContext struct {
+	walltime   int64                    // Import time stamp.
+	numWorkers int                      // Parallelism
+	batchSize  int                      // Number of records to batch
+	evalCtx    *tree.EvalContext        // Evaluation context.
+	tableDesc  *sqlbase.TableDescriptor // Table descriptor we're importing into.
+	targetCols tree.NameList            // List of columns to import.  nil if importing all columns.
+	kvCh       chan row.KVBatch         // Channel for sending KV batches.
+}
+
+// importFileContext describes state specific to a file being imported.
+type importFileContext struct {
+	source   int32       // Source is where the row data in the batch came from.
+	skip     int64       // Number of records to skip
+	rejected chan string // Channel for reporting corrupt "rows"
+}
+
+// handleCorruptRow reports an error encountered while processing a row
+// in an input file.
+func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error) error {
+	log.Error(ctx, err)
+
+	if rowErr, isRowErr := err.(*importRowError); isRowErr && fileCtx.rejected != nil {
+		fileCtx.rejected <- rowErr.row + "\n"
+		return nil
+	}
+
+	return err
+}
+
+func makeDatumConverter(
+	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
+) (*row.DatumRowConverter, error) {
+	conv, err := row.NewDatumRowConverter(
+		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx.Copy(), importCtx.kvCh)
+	if err == nil {
+		conv.KvBatch.Source = fileCtx.source
+	}
+	return conv, err
+}
+
+// importRowProducer is producer of "rows" that must be imported.
+// Row is an opaque interface{} object which will be passed onto
+// the consumer implementation.
+// The implementations of this interface need not need to be thread safe.
+// However, since the data returned by the Row() method may be
+// handled by a different go-routine, the data returned must not access,
+// or reference internal state in a thread-unsafe way.
+type importRowProducer interface {
+	// Scan returns true if there is more data available.
+	// After Scan() returns false, the caller should verify
+	// that the scanner has not encountered an error (Err() == nil).
+	Scan() bool
+
+	// Err returns an error (if any) encountered while processing rows.
+	Err() error
+
+	// Skip, as the name implies, skips the current record in this stream.
+	Skip() error
+
+	// Row returns current row (record).
+	Row() (interface{}, error)
+
+	// Progress returns a fraction of the input that has been consumed so far.
+	Progress() float32
+}
+
+// importRowConsumer consumes the data produced by the importRowProducer.
+// Implementations of this interface do not need to be thread safe.
+type importRowConsumer interface {
+	// FillDatums sends row data to the provide datum converter.
+	FillDatums(row interface{}, rowNum int64, conv *row.DatumRowConverter) error
+}
+
+// batch represents batch of data to convert.
+type batch struct {
+	data     []interface{}
+	startPos int64
+	progress float32
+}
+
+// parallelImporter is a helper to facilitate running input
+// conversion using parallel workers.
+type parallelImporter struct {
+	b         batch
+	batchSize int
+	recordCh  chan batch
+}
+
+var parallelImporterReaderBatchSize = 500
+
+// TestingSetParallelImporterReaderBatchSize is a testing knob to modify
+// csv input reader batch size.
+// Returns a function that resets the value back to the default.
+func TestingSetParallelImporterReaderBatchSize(s int) func() {
+	parallelImporterReaderBatchSize = s
+	return func() {
+		parallelImporterReaderBatchSize = 500
+	}
+}
+
+// runParallelImport reads the data produced by 'producer' and sends
+// the data to a set of workers responsible for converting this data to the
+// appropriate key/values.
+func runParallelImport(
+	ctx context.Context,
+	importCtx *parallelImportContext,
+	fileCtx *importFileContext,
+	producer importRowProducer,
+	consumer importRowConsumer,
+) error {
+	batchSize := importCtx.batchSize
+	if batchSize <= 0 {
+		batchSize = parallelImporterReaderBatchSize
+	}
+	importer := &parallelImporter{
+		b: batch{
+			data: make([]interface{}, 0, batchSize),
+		},
+		batchSize: batchSize,
+		recordCh:  make(chan batch),
+	}
+
+	group := ctxgroup.WithContext(ctx)
+
+	// Start consumers.
+	parallelism := importCtx.numWorkers
+	if parallelism <= 0 {
+		parallelism = runtime.NumCPU()
+	}
+
+	minEmited := make([]int64, parallelism)
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "inputconverter")
+		defer tracing.FinishSpan(span)
+		return ctxgroup.GroupWorkers(ctx, parallelism, func(ctx context.Context, id int) error {
+			return importer.importWorker(ctx, id, consumer, importCtx, fileCtx, minEmited)
+		})
+	})
+
+	// Read data from producer and send it to consumers.
+	group.GoCtx(func(ctx context.Context) error {
+		defer close(importer.recordCh)
+
+		var count int64
+		for producer.Scan() {
+			// Skip rows if needed.
+			count++
+			if count <= fileCtx.skip {
+				if err := producer.Skip(); err != nil {
+					return err
+				}
+				continue
+			}
+
+			// Batch parsed data.
+			data, err := producer.Row()
+			if err != nil {
+				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if err := importer.add(ctx, data, count, producer.Progress); err != nil {
+				return err
+			}
+		}
+
+		if producer.Err() == nil {
+			return importer.flush(ctx)
+		}
+		return producer.Err()
+	})
+
+	return group.Wait()
+}
+
+// Adds data to the current batch, flushing batches as needed.
+func (p *parallelImporter) add(
+	ctx context.Context, data interface{}, pos int64, progress func() float32,
+) error {
+	if len(p.b.data) == 0 {
+		p.b.startPos = pos
+	}
+	p.b.data = append(p.b.data, data)
+
+	if len(p.b.data) == p.batchSize {
+		p.b.progress = progress()
+		return p.flush(ctx)
+	}
+	return nil
+}
+
+// Flush flushes currently accumulated data.
+func (p *parallelImporter) flush(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// if the batch isn't empty, we need to flush it.
+	if len(p.b.data) > 0 {
+		p.recordCh <- p.b
+		p.b = batch{
+			data: make([]interface{}, 0, cap(p.b.data)),
+		}
+	}
+	return nil
+}
+
+func (p *parallelImporter) importWorker(
+	ctx context.Context,
+	workerID int,
+	consumer importRowConsumer,
+	importCtx *parallelImportContext,
+	fileCtx *importFileContext,
+	minEmitted []int64,
+) error {
+	conv, err := makeDatumConverter(ctx, importCtx, fileCtx)
+	if err != nil {
+		return err
+	}
+	if conv.EvalCtx.SessionData == nil {
+		panic("uninitialized session data")
+	}
+
+	var rowNum int64
+	epoch := time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
+	const precision = uint64(10 * time.Microsecond)
+	timestamp := uint64(importCtx.walltime-epoch) / precision
+
+	conv.CompletedRowFn = func() int64 {
+		m := emittedRowLowWatermark(workerID, rowNum, minEmitted)
+		return m
+	}
+
+	for batch := range p.recordCh {
+		conv.KvBatch.Progress = batch.progress
+		for batchIdx, record := range batch.data {
+			rowNum = batch.startPos + int64(batchIdx)
+			if err := consumer.FillDatums(record, rowNum, conv); err != nil {
+				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
+					return err
+				}
+				continue
+			}
+
+			rowIndex := int64(timestamp) + rowNum
+			if err := conv.Row(ctx, conv.KvBatch.Source, rowIndex); err != nil {
+				return newImportRowError(err, fmt.Sprintf("%v", record), rowNum)
+			}
+		}
+	}
+	return conv.SendBatch(ctx)
+}
+
+// Updates emitted row for the specified worker and returns
+// low watermark for the emitted rows across all workers.
+func emittedRowLowWatermark(workerID int, emittedRow int64, minEmitted []int64) int64 {
+	atomic.StoreInt64(&minEmitted[workerID], emittedRow)
+
+	for i := 0; i < len(minEmitted); i++ {
+		if i != workerID {
+			w := atomic.LoadInt64(&minEmitted[i])
+			if w < emittedRow {
+				emittedRow = w
+			}
+		}
+	}
+
+	return emittedRow
 }

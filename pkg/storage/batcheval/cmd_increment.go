@@ -19,7 +19,7 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Increment, DefaultDeclareKeys, Increment)
+	RegisterReadWriteCommand(roachpb.Increment, DefaultDeclareIsolatedKeys, Increment)
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and
@@ -34,5 +34,11 @@ func Increment(
 
 	newVal, err := engine.MVCCIncrement(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, h.Txn, args.Increment)
 	reply.NewValue = newVal
-	return result.Result{}, err
+	// NB: even if MVCC returns an error, it may still have written an intent
+	// into the batch. This allows callers to consume errors like WriteTooOld
+	// without re-evaluating the batch. This behavior isn't particularly
+	// desirable, but while it remains, we need to assume that an intent could
+	// have been written even when an error is returned. This is harmless if the
+	// error is not consumed by the caller because the result will be discarded.
+	return result.FromWrittenIntents(h.Txn, args.Key), err
 }

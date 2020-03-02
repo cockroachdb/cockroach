@@ -64,7 +64,7 @@ func (r *Replica) Metrics(
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
 	r.store.unquiescedReplicas.Unlock()
 
-	latchInfoGlobal, latchInfoLocal := r.latchMgr.Info()
+	latchInfoGlobal, latchInfoLocal := r.concMgr.LatchMetrics()
 
 	return calcReplicaMetrics(
 		ctx,

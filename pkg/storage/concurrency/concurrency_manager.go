@@ -15,9 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,54 +39,68 @@ type managerImpl struct {
 	ltw lockTableWaiter
 	// Waits for transaction completion and detects deadlocks.
 	twq txnWaitQueue
-	// The Store and Range that the manager is responsible for.
-	str Store
-	rng *roachpb.RangeDescriptor
 }
 
-// Store provides some parts of a Store without incurring a dependency. It is a
-// superset of txnwait.StoreInterface.
-type Store interface {
+// Config contains the dependencies to construct a Manager.
+type Config struct {
 	// Identification.
-	NodeDescriptor() *roachpb.NodeDescriptor
+	NodeDesc  *roachpb.NodeDescriptor
+	RangeDesc *roachpb.RangeDescriptor
 	// Components.
-	DB() *client.DB
-	Clock() *hlc.Clock
-	Stopper() *stop.Stopper
-	IntentResolver() IntentResolver
-	// Knobs.
-	GetTxnWaitKnobs() txnwait.TestingKnobs
+	Settings       *cluster.Settings
+	DB             *client.DB
+	Clock          *hlc.Clock
+	Stopper        *stop.Stopper
+	IntentResolver IntentResolver
 	// Metrics.
-	GetTxnWaitMetrics() *txnwait.Metrics
-	GetSlowLatchGauge() *metric.Gauge
+	TxnWaitMetrics *txnwait.Metrics
+	SlowLatchGauge *metric.Gauge
+	// Configs + Knobs.
+	MaxLockTableSize  int64
+	DisableTxnPushing bool
+	TxnWaitKnobs      txnwait.TestingKnobs
+}
+
+func (c *Config) initDefaults() {
+	if c.MaxLockTableSize == 0 {
+		c.MaxLockTableSize = defaultLockTableSize
+	}
 }
 
 // NewManager creates a new concurrency Manager structure.
-func NewManager(store Store, rng *roachpb.RangeDescriptor) Manager {
-	// TODO(nvanbenschoten): make the lockTable size and lockTableWaiter
-	// dependencyCyclePushDelay configurable.
-	m := new(managerImpl)
-	*m = managerImpl{
+func NewManager(cfg Config) Manager {
+	cfg.initDefaults()
+	return &managerImpl{
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
 		// latchManager interface directly, if possible.
 		lm: &latchManagerImpl{
-			m: spanlatch.Make(store.Stopper(), store.GetSlowLatchGauge()),
+			m: spanlatch.Make(
+				cfg.Stopper,
+				cfg.SlowLatchGauge,
+			),
 		},
-		lt: &lockTableImpl{maxLocks: 10000 /* arbitrary */},
+		lt: &lockTableImpl{
+			maxLocks: cfg.MaxLockTableSize,
+		},
 		ltw: &lockTableWaiterImpl{
-			nodeID:                   store.NodeDescriptor().NodeID,
-			stopper:                  store.Stopper(),
-			ir:                       store.IntentResolver(),
-			dependencyCyclePushDelay: defaultDependencyCyclePushDelay,
+			nodeID:            cfg.NodeDesc.NodeID,
+			st:                cfg.Settings,
+			stopper:           cfg.Stopper,
+			ir:                cfg.IntentResolver,
+			disableTxnPushing: cfg.DisableTxnPushing,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
-		twq: txnwait.NewQueue(store, m),
-		str: store,
-		rng: rng,
+		twq: txnwait.NewQueue(txnwait.Config{
+			RangeDesc: cfg.RangeDesc,
+			DB:        cfg.DB,
+			Clock:     cfg.Clock,
+			Stopper:   cfg.Stopper,
+			Metrics:   cfg.TxnWaitMetrics,
+			Knobs:     cfg.TxnWaitKnobs,
+		}),
 	}
-	return m
 }
 
 // SequenceReq implements the RequestSequencer interface.
@@ -98,7 +113,7 @@ func (m *managerImpl) SequenceReq(
 		log.Event(ctx, "sequencing request")
 	} else {
 		g = prev
-		g.assertNoLatches()
+		g.AssertNoLatches()
 		log.Event(ctx, "re-sequencing request")
 	}
 
@@ -138,20 +153,20 @@ func (m *managerImpl) sequenceReqWithGuard(
 		}
 
 		// Some requests don't want the wait on locks.
-		if !shouldWaitOnConflicts(req) {
+		if req.LockSpans.Empty() {
 			return nil, nil
 		}
 
 		// Scan for conflicting locks.
 		log.Event(ctx, "scanning lock table for conflicting locks")
-		g.ltg = m.lt.ScanAndEnqueue(g.req, g.ltg)
+		g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
 
 		// Wait on conflicting locks, if necessary.
 		if g.ltg.ShouldWait() {
 			m.lm.Release(g.moveLatchGuard())
 
 			log.Event(ctx, "waiting in lock wait-queues")
-			if err := m.ltw.WaitOn(ctx, g.req, g.ltg); err != nil {
+			if err := m.ltw.WaitOn(ctx, g.Req, g.ltg); err != nil {
 				return nil, err
 			}
 			continue
@@ -214,30 +229,6 @@ func shouldAcquireLatches(req Request) bool {
 	return true
 }
 
-// shouldWaitOnConflicts determines whether the request should wait on locks and
-// wait-queues owned by other transactions before proceeding to evaluate. Most
-// requests will want to wait on conflicting transactions to ensure that they
-// are sufficiently isolated during their evaluation, but some "isolation aware"
-// requests want to proceed to evaluation even in the presence of conflicts
-// because they know how to handle them.
-func shouldWaitOnConflicts(req Request) bool {
-	for _, ru := range req.Requests {
-		arg := ru.GetInner()
-		if roachpb.IsTransactional(arg) {
-			switch arg.Method() {
-			case roachpb.Refresh, roachpb.RefreshRange:
-				// Refresh and RefreshRange requests scan inconsistently so that
-				// they can collect all intents in their key span. If they run
-				// into intents written by other transactions, they simply fail
-				// the refresh without trying to push the intents and blocking.
-			default:
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // FinishReq implements the RequestSequencer interface.
 func (m *managerImpl) FinishReq(g *Guard) {
 	if ltg := g.moveLockTableGuard(); ltg != nil {
@@ -252,6 +243,11 @@ func (m *managerImpl) FinishReq(g *Guard) {
 func (m *managerImpl) HandleWriterIntentError(
 	ctx context.Context, g *Guard, t *roachpb.WriteIntentError,
 ) *Guard {
+	if g.ltg == nil {
+		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
+			"lockTableGuard; were lock spans declared for this request?", t)
+	}
+
 	// Add a discovered lock to lock-table for each intent and enter each lock's
 	// wait-queue.
 	for i := range t.Intents {
@@ -308,13 +304,13 @@ func (m *managerImpl) GetDependents(txnID uuid.UUID) []uuid.UUID {
 	return m.twq.GetDependents(txnID)
 }
 
-// OnDescriptorUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnDescriptorUpdated(desc *roachpb.RangeDescriptor) {
-	m.rng = desc
+// OnRangeDescUpdated implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
+	m.twq.OnRangeDescUpdated(desc)
 }
 
-// OnLeaseUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnLeaseUpdated(iAmTheLeaseHolder bool) {
+// OnRangeLeaseUpdated implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeLeaseUpdated(iAmTheLeaseHolder bool) {
 	if iAmTheLeaseHolder {
 		m.twq.Enable()
 	} else {
@@ -323,8 +319,8 @@ func (m *managerImpl) OnLeaseUpdated(iAmTheLeaseHolder bool) {
 	}
 }
 
-// OnSplit implements the RangeStateListener interface.
-func (m *managerImpl) OnSplit() {
+// OnRangeSplit implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeSplit() {
 	// TODO(nvanbenschoten): it only essential that we clear the half of the
 	// lockTable which contains locks in the key range that is being split off
 	// from the current range. For now though, we clear it all.
@@ -332,10 +328,27 @@ func (m *managerImpl) OnSplit() {
 	m.twq.Clear(false /* disable */)
 }
 
-// OnMerge implements the RangeStateListener interface.
-func (m *managerImpl) OnMerge() {
+// OnRangeMerge implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeMerge() {
 	m.lt.Clear()
 	m.twq.Clear(true /* disable */)
+}
+
+// OnReplicaSnapshotApplied implements the RangeStateListener interface.
+func (m *managerImpl) OnReplicaSnapshotApplied() {
+	// A snapshot can cause discontinuities in raft entry application. The
+	// lockTable expects to observe all lock state transitions on the range
+	// through LockManager listener methods. If there's a chance it missed a
+	// state transition, it is safer to simply clear the lockTable and rebuild
+	// it from persistent intent state by allowing requests to discover locks
+	// and inform the manager through calls to HandleWriterIntentError.
+	//
+	// A range only maintains locks in the lockTable of its leaseholder replica
+	// even thought it runs a concurrency manager on all replicas. Because of
+	// this, we expect it to be very rare that this actually clears any locks.
+	// Still, it is possible for the leaseholder replica to receive a snapshot
+	// when it is not also the raft leader.
+	m.lt.Clear()
 }
 
 // LatchMetrics implements the MetricExporter interface.
@@ -348,9 +361,9 @@ func (m *managerImpl) LockTableDebug() string {
 	return m.lt.String()
 }
 
-// ContainsKey implements the txnwait.ReplicaInterface interface.
-func (m *managerImpl) ContainsKey(key roachpb.Key) bool {
-	return storagebase.ContainsKey(m.rng, key)
+// TxnWaitQueue implements the MetricExporter interface.
+func (m *managerImpl) TxnWaitQueue() *txnwait.Queue {
+	return m.twq.(*txnwait.Queue)
 }
 
 func (r *Request) isSingle(m roachpb.Method) bool {
@@ -362,11 +375,29 @@ func (r *Request) isSingle(m roachpb.Method) bool {
 
 func newGuard(req Request) *Guard {
 	// TODO(nvanbenschoten): Pool these guard objects.
-	return &Guard{req: req}
+	return &Guard{Req: req}
 }
 
-func (g *Guard) assertNoLatches() {
-	if g.lg != nil {
+// LatchSpans returns the maximal set of spans that the request will access.
+func (g *Guard) LatchSpans() *spanset.SpanSet {
+	return g.Req.LatchSpans
+}
+
+// HoldingLatches returned whether the guard is holding latches or not.
+func (g *Guard) HoldingLatches() bool {
+	return g != nil && g.lg != nil
+}
+
+// AssertLatches asserts that the guard is non-nil and holding latches.
+func (g *Guard) AssertLatches() {
+	if !g.HoldingLatches() {
+		panic("expected latches held, found none")
+	}
+}
+
+// AssertNoLatches asserts that the guard is non-nil and not holding latches.
+func (g *Guard) AssertNoLatches() {
+	if g.HoldingLatches() {
 		panic("unexpected latches held")
 	}
 }

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
@@ -90,6 +91,15 @@ var allSpans = func() spanset.SpanSet {
 	})
 	return ss
 }()
+
+// allSpansGuard is a concurrency guard that indicates that it provides
+// isolation across all key spans for use in tests that don't care about
+// properly declaring their spans or sequencing with the concurrency manager.
+var allSpansGuard = concurrency.Guard{
+	Req: concurrency.Request{
+		LatchSpans: &allSpans,
+	},
+}
 
 func testRangeDescriptor() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{
@@ -593,7 +603,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, pErr := r.evalAndPropose(context.TODO(), &exLease, &ba, &allSpans, endCmds{})
+	ch, _, _, _, pErr := r.evalAndPropose(context.TODO(), &ba, &allSpansGuard, &exLease)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1374,7 +1384,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), &exLease, &ba, &allSpans, endCmds{})
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(context.Background(), &ba, &allSpansGuard, &exLease)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -2687,7 +2697,9 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 				},
 			},
 		},
-		&spans)
+		&spans,
+		nil,
+	)
 	for _, tc := range []struct {
 		access       spanset.SpanAccess
 		key          roachpb.Key
@@ -4305,7 +4317,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			if pErr := tc.store.intentResolver.ResolveIntents(context.TODO(),
 				[]roachpb.LockUpdate{
 					roachpb.MakeLockUpdate(&txnRecord, roachpb.Span{Key: key}),
-				}, intentresolver.ResolveOptions{Wait: true, Poison: true}); pErr != nil {
+				}, intentresolver.ResolveOptions{Poison: true}); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
@@ -4975,44 +4987,6 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 	if !testutils.IsPError(pErr, "could not commit in one phase as requested") {
 		t.Fatalf("expected requires 1PC error; fgot %v", pErr)
 	}
-}
-
-func TestReplicaResolveIntentNoWait(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var seen int32
-	key := roachpb.Key("zresolveme")
-	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
-				filterArgs.Req.Header().Key.Equal(key) {
-				atomic.StoreInt32(&seen, 1)
-			}
-			return nil
-		}
-
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.StartWithStoreConfig(t, stopper, tsc)
-	splitKey := roachpb.RKey("aa")
-	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
-	txn := newTransaction("name", key, 1, tc.Clock())
-	txn.Status = roachpb.COMMITTED
-	if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
-		[]roachpb.LockUpdate{
-			roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
-		},
-		intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */},
-	); pErr != nil {
-		t.Fatal(pErr)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		if atomic.LoadInt32(&seen) > 0 {
-			return nil
-		}
-		return fmt.Errorf("no intent resolution on %q so far", key)
-	})
 }
 
 // TestAbortSpanPoisonOnResolve verifies that when an intent is
@@ -7354,7 +7328,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	}
 
 	// The request should still be holding its latches.
-	latchInfoGlobal, _ := tc.repl.latchMgr.Info()
+	latchInfoGlobal, _ := tc.repl.concMgr.LatchMetrics()
 	if w := latchInfoGlobal.WriteCount; w == 0 {
 		t.Fatal("expected non-empty latch manager")
 	}
@@ -7365,7 +7339,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	// Even though we canceled the command it will still get executed and its
 	// latches cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		latchInfoGlobal, _ := tc.repl.latchMgr.Info()
+		latchInfoGlobal, _ := tc.repl.concMgr.LatchMetrics()
 		if w := latchInfoGlobal.WriteCount; w != 0 {
 			return errors.Errorf("expected empty latch manager")
 		}
@@ -7670,7 +7644,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, err := repl.evalAndPropose(ctx, &lease, &ba, &allSpans, endCmds{})
+		ch, _, idx, _, err := repl.evalAndPropose(ctx, &ba, &allSpansGuard, &lease)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7739,7 +7713,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, err := tc.repl.evalAndPropose(ctx, &lease, &ba, &allSpans, endCmds{})
+		ch, _, idx, _, err := tc.repl.evalAndPropose(ctx, &ba, &allSpansGuard, &lease)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -8159,7 +8133,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
+			cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
 
 			expSpans := 1
 			if !keyThresh.IsEmpty() {
@@ -9057,9 +9031,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 
 	exLease, _ := repl.GetLease()
-	ch, _, _, pErr := repl.evalAndPropose(
-		context.Background(), &exLease, &ba, &allSpans, endCmds{},
-	)
+	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, &allSpansGuard, &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9104,9 +9076,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	ch, _, _, pErr := repl.evalAndPropose(
-		context.Background(), &exLease, &ba, &allSpans, endCmds{},
-	)
+	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, &allSpansGuard, &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9169,7 +9139,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	_, _, _, pErr := repl.evalAndPropose(ctx, &exLease, &ba, &allSpans, endCmds{})
+	_, _, _, _, pErr := repl.evalAndPropose(ctx, &ba, &allSpansGuard, &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9187,7 +9157,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, pErr = repl.evalAndPropose(ctx, &exLease, &ba, &allSpans, endCmds{})
+		ch, _, _, _, pErr = repl.evalAndPropose(ctx, &ba, &allSpansGuard, &exLease)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -11857,7 +11827,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// the proposal map. Entries are only removed from that map underneath raft.
 	tc.repl.RaftLock()
 	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
-	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &lease, &ba, &allSpans, endCmds{})
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, &allSpansGuard, &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -11953,7 +11923,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &lease, &ba, &allSpans, endCmds{})
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, &allSpansGuard, &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -12253,7 +12223,7 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 	}
 
 	batcheval.UnregisterCommand(roachpb.Put)
-	batcheval.RegisterReadWriteCommand(roachpb.Put, batcheval.DefaultDeclareKeys, mockPut)
+	batcheval.RegisterReadWriteCommand(roachpb.Put, batcheval.DefaultDeclareIsolatedKeys, mockPut)
 	return func() {
 		batcheval.UnregisterCommand(roachpb.Put)
 		batcheval.RegisterReadWriteCommand(roachpb.Put, prev.DeclareKeys, prev.EvalRW)

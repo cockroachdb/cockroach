@@ -170,7 +170,7 @@ func prepareRightReplicaForSplit(
 	// The right hand side of the split was already created (and its raftMu
 	// acquired) in Replica.acquireSplitLock. It must be present here.
 	rightRng, err := r.store.GetReplica(split.RightDesc.RangeID)
-	// If the RHS replica at the point of the split was known to be removed when
+	// If the RHS replica at the point of the split was known to be removed
 	// during the application of the split then we may not find it here. That's
 	// fine, carry on. See also:
 	_, _ = r.acquireSplitLock, splitPostApply
@@ -277,11 +277,11 @@ func (s *Store) SplitRange(
 
 	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc)
 
-	// Clear the LHS txn wait queue, to redirect to the RHS if
-	// appropriate. We do this after setDescWithoutProcessUpdate
-	// to ensure that no pre-split commands are inserted into the
-	// txnWaitQueue after we clear it.
-	leftRepl.txnWaitQueue.Clear(false /* disable */)
+	// Clear the LHS lock and txn wait-queues, to redirect to the RHS if
+	// appropriate. We do this after setDescWithoutProcessUpdate to ensure
+	// that no pre-split commands are inserted into the wait-queues after we
+	// clear them.
+	leftRepl.concMgr.OnRangeSplit()
 
 	// The rangefeed processor will no longer be provided logical ops for
 	// its entire range, so it needs to be shut down and all registrations

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -252,22 +253,27 @@ type TransactionManager interface {
 // RangeStateListener is concerned with observing updates to the concurrency
 // manager's range. It is one of the roles of Manager.
 type RangeStateListener interface {
-	// OnDescriptorUpdated informs the manager that its range's descriptor has
-	// been updated.
-	OnDescriptorUpdated(*roachpb.RangeDescriptor)
+	// OnRangeDescUpdated informs the manager that its range's descriptor has been
+	// updated.
+	OnRangeDescUpdated(*roachpb.RangeDescriptor)
 
-	// OnLeaseUpdated informs the concurrency manager that its range's lease has
-	// been updated. The argument indicates whether this manager's replica is
-	// the leaseholder going forward.
-	OnLeaseUpdated(isleaseholder bool)
+	// OnRangeLeaseUpdated informs the concurrency manager that its range's
+	// lease has been updated. The argument indicates whether this manager's
+	// replica is the leaseholder going forward.
+	OnRangeLeaseUpdated(isleaseholder bool)
 
-	// OnSplit informs the concurrency manager that its range has split off a
-	// new range to its RHS.
-	OnSplit()
+	// OnRangeSplit informs the concurrency manager that its range has split off
+	// a new range to its RHS.
+	OnRangeSplit()
 
-	// OnMerge informs the concurrency manager that its range has merged into
-	// its LHS neighbor. This is not called on the LHS range being merged into.
-	OnMerge()
+	// OnRangeMerge informs the concurrency manager that its range has merged
+	// into its LHS neighbor. This is not called on the LHS range being merged
+	// into.
+	OnRangeMerge()
+
+	// OnReplicaSnapshotApplied informs the concurrency manager that its replica
+	// has received a snapshot from another replica in its range.
+	OnReplicaSnapshotApplied()
 }
 
 // MetricExporter is concerned with providing observability into the state of
@@ -279,6 +285,12 @@ type MetricExporter interface {
 	// LockTableDebug returns a debug string representing the state of the
 	// lockTable.
 	LockTableDebug() string
+
+	// TxnWaitQueue returns the concurrency manager's txnWaitQueue.
+	// TODO(nvanbenschoten): this doesn't really fit into this interface. It
+	// would be nice if the txnWaitQueue was hidden behind the concurrency
+	// manager abstraction entirely, but tests want to access it directly.
+	TxnWaitQueue() *txnwait.Queue
 
 	// TODO(nvanbenschoten): fill out this interface to provide observability
 	// into the state of the concurrency manager.
@@ -312,14 +324,29 @@ type Request struct {
 	// The individual requests in the batch.
 	Requests []roachpb.RequestUnion
 
-	// The maximal set of spans that the request will access.
-	Spans *spanset.SpanSet
+	// The maximal set of spans that the request will access. Latches
+	// will be acquired for these spans.
+	// TODO(nvanbenschoten): don't allocate these SpanSet objects.
+	LatchSpans *spanset.SpanSet
+
+	// The maximal set of spans within which the request expects to have
+	// isolation from conflicting transactions. Conflicting locks within
+	// these spans will be queued on and conditionally pushed.
+	//
+	// Note that unlike LatchSpans, the timestamps that these spans are
+	// declared at are NOT consulted. All read spans are considered to take
+	// place at the transaction's read timestamp (Txn.ReadTimestamp) and all
+	// write spans are considered to take place the transaction's write
+	// timestamp (Txn.WriteTimestamp). If the request is non-transactional
+	// (Txn == nil), all reads and writes are considered to take place at
+	// Timestamp.
+	LockSpans *spanset.SpanSet
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
 // Manager.FinishReq to release the request's resources when it has completed.
 type Guard struct {
-	req Request
+	Req Request
 	lg  latchGuard
 	ltg lockTableGuard
 }
@@ -739,4 +766,8 @@ type txnWaitQueue interface {
 	// Clear empties all queues and causes all waiters to return. If disable is
 	// true, future transactions may not be enqueued or waiting pushers added.
 	Clear(disable bool)
+
+	// OnRangeDescUpdated informs the Queue that its range's descriptor has been
+	// updated.
+	OnRangeDescUpdated(*roachpb.RangeDescriptor)
 }

@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.Get, DefaultDeclareKeys, Get)
+	RegisterReadOnlyCommand(roachpb.Get, DefaultDeclareIsolatedKeys, Get)
 }
 
 // Get returns the value for a specified key.

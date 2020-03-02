@@ -53,7 +53,7 @@ type RespWithErr struct {
 }
 
 func checkAllGaugesZero(tc testContext) error {
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	if act := m.PusheeWaiting.Value(); act != 0 {
 		return errors.Errorf("expected PusheeWaiting to be 0, got %d instead", act)
 	}
@@ -82,7 +82,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	}
 
 	// Queue starts enabled.
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	if !q.IsEnabled() {
 		t.Errorf("expected push txn queue is enabled")
 	}
@@ -94,7 +94,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	if _, ok := q.TrackedTxns()[txn.ID]; !ok {
 		t.Fatalf("expected pendingTxn to be in txns map after enqueue")
 	}
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
 
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
@@ -185,13 +185,13 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 		PusheeTxn: txn.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	if err := checkAllGaugesZero(tc); err != nil {
 		t.Fatal(err.Error())
 	}
 	q.EnqueueTxn(txn)
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
 	assert.EqualValues(tc, 0, m.PusherWaiting.Value())
 
@@ -251,10 +251,10 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	req2 := req1
 	req2.PusherTxn = *pusher2
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
 
 	retCh := make(chan RespWithErr, 2)
@@ -369,7 +369,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 		PusheeTxn: txn.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
 
@@ -379,7 +379,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	testutils.SucceedsSoon(t, func() error {
 		expDeps := []uuid.UUID{pusher.ID}
 		if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
@@ -444,7 +444,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 		PusheeTxn: txn.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
 
@@ -519,7 +519,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 	q.EnqueueTxn(txn)
 
@@ -558,7 +558,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 		}
 	}
 
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	testutils.SucceedsSoon(t, func() error {
 		if act, exp := m.PusherWaiting.Value(), int64(2); act != exp {
 			return errors.Errorf("%d pushers, but want %d", act, exp)
@@ -607,7 +607,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 			PusheeTxn: txn.TxnMeta,
 		}
 
-		q := tc.repl.txnWaitQueue
+		q := tc.repl.concMgr.TxnWaitQueue()
 		q.Enable()
 		q.EnqueueTxn(txn)
 
@@ -648,7 +648,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 			t.Errorf("expected %s; got %v", expErr, respWithErr.pErr)
 		}
 
-		m := tc.store.GetTxnWaitMetrics()
+		m := tc.store.txnWaitMetrics
 		testutils.SucceedsSoon(t, func() error {
 			if act, exp := m.PusherWaiting.Value(), int64(1); act != exp {
 				return errors.Errorf("%d pushers, but want %d", act, exp)
@@ -718,7 +718,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 		PusheeTxn: txnA.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -726,7 +726,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	for _, txn := range []*roachpb.Transaction{txnA, txnB, txnC} {
 		q.EnqueueTxn(txn)
 	}
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	assert.EqualValues(tc, 0, m.DeadlocksTotal.Count())
 
 	reqs := []*roachpb.PushTxnRequest{reqA, reqB, reqC}
@@ -809,13 +809,13 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 		PusheeTxn: updatedTxnA.TxnMeta,
 	}
 
-	q := tc.repl.txnWaitQueue
+	q := tc.repl.concMgr.TxnWaitQueue()
 	q.Enable()
 
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 		q.EnqueueTxn(txn)
 	}
-	m := tc.store.GetTxnWaitMetrics()
+	m := tc.store.txnWaitMetrics
 	assert.EqualValues(tc, 0, m.DeadlocksTotal.Count())
 
 	reqs := []*roachpb.PushTxnRequest{reqA, reqB}
