@@ -337,6 +337,14 @@ const (
 	// from the SQL gateway.
 	ScalarOperationCannotRunWithoutFullSessionContext = "22C01"
 
+	// Class 55C - Object Not In Prerequisite State (Cockroach extension)
+
+	// SchemaChangeOccurred signals that a DDL change to the targets of a
+	// CHANGEFEED has lead to its termination. If this error code is received
+	// the CHANGEFEED will have previously emitted a resolved timestamp which
+	// precedes the hlc timestamp of the relevant DDL transaction.
+	SchemaChangeOccurred = "55C01"
+
 	// Class 58C - System errors related to CockroachDB node problems.
 
 	// RangeUnavailable signals that some data from the cluster cannot be
