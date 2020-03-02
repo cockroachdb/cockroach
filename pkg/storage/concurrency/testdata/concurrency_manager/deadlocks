@@ -1,0 +1,627 @@
+# -------------------------------------------------------------
+# Deadlock due to lock ordering.
+#
+# Setup: txn1, txn2, txn3 acquire locks a, b, c
+#
+# Test:  txn1, txn2, txn3 read b, c, a 
+#        txn1 is aborted to break deadlock
+#        txn3 proceeds and commits
+#        txn2 proceeds and commits
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req1w txn=txn1 ts=10,1
+  put key=a value=v
+----
+
+new-request name=req2w txn=txn2 ts=10,1
+  put key=b value=v
+----
+
+new-request name=req3w txn=txn3 ts=10,1
+  put key=c value=v
+----
+
+sequence req=req1w
+----
+[1] sequence req1w: sequencing request
+[1] sequence req1w: acquiring latches
+[1] sequence req1w: scanning lock table for conflicting locks
+[1] sequence req1w: sequencing complete, returned guard
+
+sequence req=req2w
+----
+[2] sequence req2w: sequencing request
+[2] sequence req2w: acquiring latches
+[2] sequence req2w: scanning lock table for conflicting locks
+[2] sequence req2w: sequencing complete, returned guard
+
+sequence req=req3w
+----
+[3] sequence req3w: sequencing request
+[3] sequence req3w: acquiring latches
+[3] sequence req3w: scanning lock table for conflicting locks
+[3] sequence req3w: sequencing complete, returned guard
+
+on-lock-acquired txn=txn1 key=a
+----
+[-] acquire lock: txn1 @ a
+
+on-lock-acquired txn=txn2 key=b
+----
+[-] acquire lock: txn2 @ b
+
+on-lock-acquired txn=txn3 key=c
+----
+[-] acquire lock: txn3 @ c
+
+finish req=req1w
+----
+[-] finish req1w: finishing request
+
+finish req=req2w
+----
+[-] finish req2w: finishing request
+
+finish req=req3w
+----
+[-] finish req3w: finishing request
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+new-request name=req1r txn=txn1 ts=10,1
+  get key=b
+----
+
+new-request name=req2r txn=txn2 ts=10,1
+  get key=c
+----
+
+new-request name=req3r txn=txn3 ts=10,1
+  get key=a
+----
+
+sequence req=req1r
+----
+[4] sequence req1r: sequencing request
+[4] sequence req1r: acquiring latches
+[4] sequence req1r: scanning lock table for conflicting locks
+[4] sequence req1r: waiting in lock wait-queues
+[4] sequence req1r: pushing txn 00000002
+[4] sequence req1r: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req2r
+----
+[5] sequence req2r: sequencing request
+[5] sequence req2r: acquiring latches
+[5] sequence req2r: scanning lock table for conflicting locks
+[5] sequence req2r: waiting in lock wait-queues
+[5] sequence req2r: pushing txn 00000003
+[5] sequence req2r: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req3r
+----
+[4] sequence req1r: dependency cycle detected 00000001->00000002->00000003->00000001
+[5] sequence req2r: dependency cycle detected 00000002->00000003->00000001->00000002
+[6] sequence req3r: sequencing request
+[6] sequence req3r: acquiring latches
+[6] sequence req3r: scanning lock table for conflicting locks
+[6] sequence req3r: waiting in lock wait-queues
+[6] sequence req3r: pushing txn 00000001
+[6] sequence req3r: blocked on select in concurrency_test.(*cluster).PushTransaction
+[6] sequence req3r: dependency cycle detected 00000003->00000001->00000002->00000003
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+   waiting readers:
+    req: 6, txn: 00000003-0000-0000-0000-000000000000
+   distinguished req: 6
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1
+   waiting readers:
+    req: 4, txn: 00000001-0000-0000-0000-000000000000
+   distinguished req: 4
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1
+   waiting readers:
+    req: 5, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 5
+local: num=0
+
+# Break the deadlock by aborting txn1.
+on-txn-updated txn=txn1 status=aborted
+----
+[-] update txn: aborting txn1
+[4] sequence req1r: detected pusher aborted
+[4] sequence req1r: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[6] sequence req3r: resolving intent "a" for txn 00000001 with ABORTED status
+[6] sequence req3r: acquiring latches
+[6] sequence req3r: scanning lock table for conflicting locks
+[6] sequence req3r: sequencing complete, returned guard
+
+# Txn3 can proceed and eventually commit.
+finish req=req3r
+----
+[-] finish req3r: finishing request
+
+on-txn-updated txn=txn3 status=committed
+----
+[-] update txn: committing txn3
+[5] sequence req2r: resolving intent "c" for txn 00000003 with COMMITTED status
+[5] sequence req2r: acquiring latches
+[5] sequence req2r: scanning lock table for conflicting locks
+[5] sequence req2r: sequencing complete, returned guard
+
+# Txn2 can proceed and eventually commit.
+finish req=req2r
+----
+[-] finish req2r: finishing request
+
+on-txn-updated txn=txn2 status=committed
+----
+[-] update txn: committing txn2
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# More complex deadlock due to lock ordering where not all of the
+# members of the deadlock are distinguished waiters.
+#
+# Setup: txn1, txn2, txn3 acquire locks a, b, c
+#
+# Test:  txn4 writes a
+#        txn1, txn2, txn3 write b, c, a 
+#        txn1 is aborted to break deadlock
+#        txn3 proceeds and commits
+#        txn2 proceeds and commits
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-txn name=txn4 ts=10,1 epoch=0
+----
+
+new-request name=req1w txn=txn1 ts=10,1
+  put key=a value=v
+----
+
+new-request name=req2w txn=txn2 ts=10,1
+  put key=b value=v
+----
+
+new-request name=req3w txn=txn3 ts=10,1
+  put key=c value=v
+----
+
+sequence req=req1w
+----
+[1] sequence req1w: sequencing request
+[1] sequence req1w: acquiring latches
+[1] sequence req1w: scanning lock table for conflicting locks
+[1] sequence req1w: sequencing complete, returned guard
+
+sequence req=req2w
+----
+[2] sequence req2w: sequencing request
+[2] sequence req2w: acquiring latches
+[2] sequence req2w: scanning lock table for conflicting locks
+[2] sequence req2w: sequencing complete, returned guard
+
+sequence req=req3w
+----
+[3] sequence req3w: sequencing request
+[3] sequence req3w: acquiring latches
+[3] sequence req3w: scanning lock table for conflicting locks
+[3] sequence req3w: sequencing complete, returned guard
+
+on-lock-acquired txn=txn1 key=a
+----
+[-] acquire lock: txn1 @ a
+
+on-lock-acquired txn=txn2 key=b
+----
+[-] acquire lock: txn2 @ b
+
+on-lock-acquired txn=txn3 key=c
+----
+[-] acquire lock: txn3 @ c
+
+finish req=req1w
+----
+[-] finish req1w: finishing request
+
+finish req=req2w
+----
+[-] finish req2w: finishing request
+
+finish req=req3w
+----
+[-] finish req3w: finishing request
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+new-request name=req4w txn=txn4 ts=10,1
+  put key=a value=v2
+----
+
+new-request name=req1w2 txn=txn1 ts=10,1
+  put key=b value=v2
+----
+
+new-request name=req2w2 txn=txn2 ts=10,1
+  put key=c value=v2
+----
+
+new-request name=req3w2 txn=txn3 ts=10,1
+  put key=a value=v2
+----
+
+sequence req=req4w
+----
+[4] sequence req4w: sequencing request
+[4] sequence req4w: acquiring latches
+[4] sequence req4w: scanning lock table for conflicting locks
+[4] sequence req4w: waiting in lock wait-queues
+[4] sequence req4w: pushing txn 00000001
+[4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req1w2
+----
+[5] sequence req1w2: sequencing request
+[5] sequence req1w2: acquiring latches
+[5] sequence req1w2: scanning lock table for conflicting locks
+[5] sequence req1w2: waiting in lock wait-queues
+[5] sequence req1w2: pushing txn 00000002
+[5] sequence req1w2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req2w2
+----
+[6] sequence req2w2: sequencing request
+[6] sequence req2w2: acquiring latches
+[6] sequence req2w2: scanning lock table for conflicting locks
+[6] sequence req2w2: waiting in lock wait-queues
+[6] sequence req2w2: pushing txn 00000003
+[6] sequence req2w2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req3w2
+----
+[5] sequence req1w2: dependency cycle detected 00000001->00000002->00000003->00000001
+[6] sequence req2w2: dependency cycle detected 00000002->00000003->00000001->00000002
+[7] sequence req3w2: sequencing request
+[7] sequence req3w2: acquiring latches
+[7] sequence req3w2: scanning lock table for conflicting locks
+[7] sequence req3w2: waiting in lock wait-queues
+[7] sequence req3w2: pushing txn 00000001
+[7] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
+[7] sequence req3w2: dependency cycle detected 00000003->00000001->00000002->00000003
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+   queued writers:
+    active: true req: 10, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 13, txn: 00000003-0000-0000-0000-000000000000
+   distinguished req: 10
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1
+   queued writers:
+    active: true req: 11, txn: 00000001-0000-0000-0000-000000000000
+   distinguished req: 11
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1
+   queued writers:
+    active: true req: 12, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 12
+local: num=0
+
+# Break the deadlock by aborting txn1.
+on-txn-updated txn=txn1 status=aborted
+----
+[-] update txn: aborting txn1
+[4] sequence req4w: resolving intent "a" for txn 00000001 with ABORTED status
+[4] sequence req4w: acquiring latches
+[4] sequence req4w: scanning lock table for conflicting locks
+[4] sequence req4w: sequencing complete, returned guard
+[5] sequence req1w2: detected pusher aborted
+[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[7] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
+[7] sequence req3w2: pushing txn 00000004
+[7] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Txn4 can proceed.
+finish req=req4w
+----
+[-] finish req4w: finishing request
+[7] sequence req3w2: acquiring latches
+[7] sequence req3w2: scanning lock table for conflicting locks
+[7] sequence req3w2: sequencing complete, returned guard
+
+# Txn3 can proceed and eventually commit.
+finish req=req3w2
+----
+[-] finish req3w2: finishing request
+
+on-txn-updated txn=txn3 status=committed
+----
+[-] update txn: committing txn3
+[6] sequence req2w2: resolving intent "c" for txn 00000003 with COMMITTED status
+[6] sequence req2w2: acquiring latches
+[6] sequence req2w2: scanning lock table for conflicting locks
+[6] sequence req2w2: sequencing complete, returned guard
+
+# Txn2 can proceed and eventually commit.
+finish req=req2w2
+----
+[-] finish req2w2: finishing request
+
+on-txn-updated txn=txn2 status=committed
+----
+[-] update txn: committing txn2
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Deadlock due to request ordering.
+#
+# Setup: txn1, txn2, txn3 acquire locks a, b, c
+#        txn4 writes to b and c
+#        txn2 commits
+#        txn4 acquires reservation for b and blocks on c
+#
+# Test:  txn1 writes to b
+#        txn3 writes to a
+#        txn4 is aborted to break deadlock
+#        txn1 proceeds and commits
+#        txn3 proceeds and commits
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-txn name=txn4 ts=10,1 epoch=0
+----
+
+new-request name=req1w txn=txn1 ts=10,1
+  put key=a value=v
+----
+
+new-request name=req2w txn=txn2 ts=10,1
+  put key=b value=v
+----
+
+new-request name=req3w txn=txn3 ts=10,1
+  put key=c value=v
+----
+
+sequence req=req1w
+----
+[1] sequence req1w: sequencing request
+[1] sequence req1w: acquiring latches
+[1] sequence req1w: scanning lock table for conflicting locks
+[1] sequence req1w: sequencing complete, returned guard
+
+sequence req=req2w
+----
+[2] sequence req2w: sequencing request
+[2] sequence req2w: acquiring latches
+[2] sequence req2w: scanning lock table for conflicting locks
+[2] sequence req2w: sequencing complete, returned guard
+
+sequence req=req3w
+----
+[3] sequence req3w: sequencing request
+[3] sequence req3w: acquiring latches
+[3] sequence req3w: scanning lock table for conflicting locks
+[3] sequence req3w: sequencing complete, returned guard
+
+on-lock-acquired txn=txn1 key=a
+----
+[-] acquire lock: txn1 @ a
+
+on-lock-acquired txn=txn2 key=b
+----
+[-] acquire lock: txn2 @ b
+
+on-lock-acquired txn=txn3 key=c
+----
+[-] acquire lock: txn3 @ c
+
+finish req=req1w
+----
+[-] finish req1w: finishing request
+
+finish req=req2w
+----
+[-] finish req2w: finishing request
+
+finish req=req3w
+----
+[-] finish req3w: finishing request
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1
+local: num=0
+
+new-request name=req4w txn=txn4 ts=10,1
+  put key=b value=v2
+  put key=c value=v2
+----
+
+sequence req=req4w
+----
+[4] sequence req4w: sequencing request
+[4] sequence req4w: acquiring latches
+[4] sequence req4w: scanning lock table for conflicting locks
+[4] sequence req4w: waiting in lock wait-queues
+[4] sequence req4w: pushing txn 00000002
+[4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn2 status=committed
+----
+[-] update txn: committing txn2
+[4] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
+[4] sequence req4w: pushing txn 00000003
+[4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "b"
+  res: req: 17, txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000010,1
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1
+   queued writers:
+    active: true req: 17, txn: 00000004-0000-0000-0000-000000000000
+   distinguished req: 17
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+new-request name=req1w2 txn=txn1 ts=10,1
+  put key=b value=v2
+----
+
+new-request name=req3w2 txn=txn3 ts=10,1
+  put key=a value=v2
+----
+
+sequence req=req1w2
+----
+[5] sequence req1w2: sequencing request
+[5] sequence req1w2: acquiring latches
+[5] sequence req1w2: scanning lock table for conflicting locks
+[5] sequence req1w2: waiting in lock wait-queues
+[5] sequence req1w2: pushing txn 00000004
+[5] sequence req1w2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req3w2
+----
+[4] sequence req4w: dependency cycle detected 00000004->00000003->00000001->00000004
+[5] sequence req1w2: dependency cycle detected 00000001->00000004->00000003->00000001
+[6] sequence req3w2: sequencing request
+[6] sequence req3w2: acquiring latches
+[6] sequence req3w2: scanning lock table for conflicting locks
+[6] sequence req3w2: waiting in lock wait-queues
+[6] sequence req3w2: pushing txn 00000001
+[6] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
+[6] sequence req3w2: dependency cycle detected 00000003->00000001->00000004->00000003
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+   queued writers:
+    active: true req: 19, txn: 00000003-0000-0000-0000-000000000000
+   distinguished req: 19
+ lock: "b"
+  res: req: 17, txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000010,1
+   queued writers:
+    active: true req: 18, txn: 00000001-0000-0000-0000-000000000000
+   distinguished req: 18
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1
+   queued writers:
+    active: true req: 17, txn: 00000004-0000-0000-0000-000000000000
+   distinguished req: 17
+local: num=0
+
+# Break the deadlock by aborting txn4.
+on-txn-updated txn=txn4 status=aborted
+----
+[-] update txn: aborting txn4
+[4] sequence req4w: detected pusher aborted
+[4] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req1w2: acquiring latches
+[5] sequence req1w2: scanning lock table for conflicting locks
+[5] sequence req1w2: sequencing complete, returned guard
+
+# Txn1 can proceed and eventually commit.
+finish req=req1w2
+----
+[-] finish req1w2: finishing request
+
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[6] sequence req3w2: resolving intent "a" for txn 00000001 with COMMITTED status
+[6] sequence req3w2: acquiring latches
+[6] sequence req3w2: scanning lock table for conflicting locks
+[6] sequence req3w2: sequencing complete, returned guard
+
+# Txn3 can proceed and eventually commit.
+finish req=req3w2
+----
+[-] finish req3w2: finishing request
+
+on-txn-updated txn=txn3 status=committed
+----
+[-] update txn: committing txn3
+
+reset namespace
+----
