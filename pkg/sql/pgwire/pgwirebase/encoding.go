@@ -456,6 +456,16 @@ func DecodeOidDatum(
 					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
 						return err
 					}
+					// Each 16-bit "digit" can represent a 4 digit number.
+					// In the case where each digit is not 4 digits, we must append
+					// padding to the beginning, i.e.
+					// * "1234" stays "1234"
+					// * "123" becomes "0123"
+					// * "12" becomes "12"
+					// * "1" becomes "0001"
+					// * "123456" becomes ["0012", "3456"]
+					// * "123456.789" becomes ["0012", "3456", "7890"]
+					// * "120123.45678" becomes ["0012", "0123", "4567", "8000"]
 					numZeroes := PGDecDigits
 					for i16 := alloc.i16; i16 > 0; i16 /= 10 {
 						numZeroes--
@@ -479,6 +489,32 @@ func DecodeOidDatum(
 				if err := nextDigit(); err != nil {
 					return nil, err
 				}
+
+				// In the case of padding zero at the end, we may have padded too many
+				// digits in nextDigit() if the weight is less than the digits given.
+				// We need to correct the digits to match the scale.
+				//
+				// In Postgres, this is handled by the "remove trailing zeros" in
+				// `make_result_opt_error`, with the zeroes implicitly added back in
+				// when operating on the decimal value.
+				//
+				// Examples (with "," in the digit string for clarity):
+				// * for "1234.0", we have digits ["1234", "0"] for scale 0, which would
+				// make the digit string "1234,0000". For scale 0, we need to cut it back
+				// to "1234".
+				// * for "1234.0", we have digits ["1234", "0"] for scale 1, which would
+				// make the digit string "1234,0000". For scale 1, we need to cut it back
+				// to "1234.0".
+				// * for "1234.000000" we have digits ["1234", "0", "0"] with scale 6,
+				// which would make the digit string "1234,0000,0000". We need to cut it
+				// back to "1234,0000,00" for this to be correct.
+				// * for "123456.00000", we have digits ["12", "3456", "0", "0"] with
+				// scale 5, which would make digit string "0012,3456,0000,0000". We need
+				// to cut it back to "0012,3456,0000,0" for this to be correct.
+				if alloc.i16 == 0 && (alloc.pgNum.Weight+1) < alloc.pgNum.Ndigits {
+					decDigits = decDigits[:len(decDigits)-int(PGDecDigits-(alloc.pgNum.Dscale%PGDecDigits))]
+				}
+
 				Dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
 				if overScale := Dscale - alloc.pgNum.Dscale; overScale > 0 {
 					Dscale -= overScale
@@ -489,11 +525,13 @@ func DecodeOidDatum(
 				if alloc.i16 > 0 {
 					decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
 				}
-				decString := string(decDigits)
-				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
-					return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as decimal", decString)
+				if len(decDigits) > 0 {
+					decString := string(decDigits)
+					if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
+						return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as decimal", decString)
+					}
+					alloc.dd.Exponent = -int32(Dscale)
 				}
-				alloc.dd.Exponent = -int32(Dscale)
 			}
 
 			switch alloc.pgNum.Sign {
