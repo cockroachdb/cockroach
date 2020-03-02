@@ -1414,7 +1414,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				}
 
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
-				// a job for the index deletion mutations that the primary key swap mutation added, if any.
+				// a job for the index deletion mutations that the primary key swap mutation added.
 				mutationID := scDesc.ClusterVersion.NextMutationID
 				span := scDesc.PrimaryIndexSpan()
 				var spanList []jobspb.ResumeSpanList
@@ -1425,21 +1425,26 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						},
 					)
 				}
-				jobRecord := jobs.Record{
-					Description:   fmt.Sprintf("Cleanup job for '%s'", sc.job.Payload().Description),
-					Username:      sc.job.Payload().Username,
-					DescriptorIDs: sqlbase.IDs{scDesc.GetID()},
-					Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
-					Progress:      jobspb.SchemaChangeProgress{},
+				// Only start a job if spanList has any spans. If len(spanList) == 0, then
+				// no mutations were enqueued by the primary key change.
+				if len(spanList) > 0 {
+					jobRecord := jobs.Record{
+						Description:   fmt.Sprintf("CLEANUP JOB for '%s'", sc.job.Payload().Description),
+						Username:      sc.job.Payload().Username,
+						DescriptorIDs: sqlbase.IDs{scDesc.GetID()},
+						Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
+						Progress:      jobspb.SchemaChangeProgress{},
+						NonCancelable: true,
+					}
+					job := sc.jobRegistry.NewJob(jobRecord)
+					if err := job.Created(ctx); err != nil {
+						return err
+					}
+					scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+						MutationID: mutationID,
+						JobID:      *job.ID(),
+					})
 				}
-				job := sc.jobRegistry.NewJob(jobRecord)
-				if err := job.Created(ctx); err != nil {
-					return err
-				}
-				scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
-					MutationID: mutationID,
-					JobID:      *job.ID(),
-				})
 			}
 			i++
 		}
