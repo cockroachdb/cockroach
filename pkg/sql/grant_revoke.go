@@ -13,9 +13,11 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/pkg/errors"
 )
 
@@ -29,6 +31,12 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
+	if n.Targets.Databases != nil {
+		telemetry.Inc(sqltelemetry.IAMGrantPrivileges("on_database"))
+	} else {
+		telemetry.Inc(sqltelemetry.IAMGrantPrivileges("on_table"))
+	}
+
 	return &changePrivilegesNode{
 		targets:  n.Targets,
 		grantees: n.Grantees,
@@ -48,6 +56,12 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
+	if n.Targets.Databases != nil {
+		telemetry.Inc(sqltelemetry.IAMRevokePrivileges("on_database"))
+	} else {
+		telemetry.Inc(sqltelemetry.IAMRevokePrivileges("on_table"))
+	}
+
 	return &changePrivilegesNode{
 		targets:  n.Targets,
 		grantees: n.Grantees,

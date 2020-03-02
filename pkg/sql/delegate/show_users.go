@@ -10,11 +10,16 @@
 
 package delegate
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+)
 
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
 func (d *delegator) delegateShowUsers(n *tree.ShowUsers) (tree.Statement, error) {
+	telemetry.Inc(sqltelemetry.IAMShow("users"))
 	return parse(`SELECT username AS user_name FROM ` +
 		`system.role_options WHERE option = 'LOGIN' ORDER BY 1`)
 }

@@ -15,8 +15,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 //go:generate stringer -type=Option
@@ -83,7 +85,7 @@ type List []RoleOption
 
 // GetSQLStmts returns a map of SQL stmts to apply each role option.
 // Maps stmts to values (value of the role option).
-func (rol List) GetSQLStmts() (map[string]func() (bool, string, error), error) {
+func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error), error) {
 	if len(rol) <= 0 {
 		return nil, nil
 	}
@@ -96,6 +98,9 @@ func (rol List) GetSQLStmts() (map[string]func() (bool, string, error), error) {
 	}
 
 	for _, ro := range rol {
+		telemetry.Inc(
+			sqltelemetry.IAMOption("role", strings.ToLower(
+				ro.Option.String())))
 		// Skip PASSWORD option.
 		// Since PASSWORD still resides in system.users, we handle setting PASSWORD
 		// outside of this set stmt.
