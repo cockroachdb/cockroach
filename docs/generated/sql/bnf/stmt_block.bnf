@@ -1546,6 +1546,7 @@ d_expr ::=
 	| 'PLACEHOLDER'
 	| '(' a_expr ')' '.' '*'
 	| '(' a_expr ')' '.' unrestricted_name
+	| '(' a_expr ')' '.' '@' 'ICONST'
 	| '(' a_expr ')'
 	| func_expr
 	| select_with_parens

@@ -62,7 +62,7 @@ func (b *Builder) expandStar(
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
 		typ := texpr.ResolvedType()
-		if typ.Family() != types.TupleFamily || typ.TupleLabels() == nil {
+		if typ.Family() != types.TupleFamily {
 			panic(tree.NewTypeIsNotCompositeError(typ))
 		}
 
@@ -88,14 +88,27 @@ func (b *Builder) expandStar(
 		tTuple, isTuple := texpr.(*tree.Tuple)
 
 		aliases = typ.TupleLabels()
+		for i := len(aliases); i < len(typ.TupleContents()); i++ {
+			// Add aliases for all the non-named columns in the tuple.
+			aliases = append(aliases, "?column?")
+		}
 		exprs = make([]tree.TypedExpr, len(typ.TupleContents()))
 		for i := range typ.TupleContents() {
 			if isTuple {
 				// De-tuplify: ((a,b,c)).* -> a, b, c
 				exprs[i] = tTuple.Exprs[i].(tree.TypedExpr)
 			} else {
-				// Can't de-tuplify: (Expr).* -> (Expr).a, (Expr).b, (Expr).c
-				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, typ.TupleLabels()[i], i)
+				// Can't de-tuplify:
+				// either (Expr).* -> (Expr).a, (Expr).b, (Expr).c if there are enough labels,
+				// or (Expr).* -> (Expr).@1, (Expr).@2, (Expr).@3 if labels are missing.
+				//
+				// We keep the labels if available so that the column name
+				// generation still produces column label "x" for, e.g. (E).x.
+				colName := ""
+				if i < len(typ.TupleContents()) {
+					colName = aliases[i]
+				}
+				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, colName, i)
 			}
 		}
 
