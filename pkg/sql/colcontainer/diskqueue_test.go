@@ -42,101 +42,135 @@ func TestDiskQueue(t *testing.T) {
 	}
 
 	rng, _ := randutil.NewPseudoRand()
-	for _, bufferSizeBytes := range []int{0, 16<<10 + rng.Intn(1<<20) /* 16 KiB up to 1 MiB */} {
-		for _, maxFileSizeBytes := range []int{10 << 10 /* 10 KiB */, 1<<20 + rng.Intn(64<<20) /* 1 MiB up to 64 MiB */} {
-			alwaysCompress := rng.Float64() < 0.5
-			diskQueueCacheMode := colcontainer.DiskQueueCacheModeDefault
-			// testReuseCache will test the reuse cache modes.
-			testReuseCache := rng.Float64() < 0.5
-			dequeuedProbabilityBeforeAllEnqueuesAreDone := 0.5
-			if testReuseCache {
-				dequeuedProbabilityBeforeAllEnqueuesAreDone = 0
-				if rng.Float64() < 0.5 {
-					diskQueueCacheMode = colcontainer.DiskQueueCacheModeReuseCache
-				} else {
-					diskQueueCacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-				}
-			}
-			t.Run(fmt.Sprintf("DiskQueueCacheMode=%d/AlwaysCompress=%t/BufferSizeBytes=%s/MaxFileSizeBytes=%s", diskQueueCacheMode, alwaysCompress, humanizeutil.IBytes(int64(bufferSizeBytes)), humanizeutil.IBytes(int64(maxFileSizeBytes))), func(t *testing.T) {
-				// Create random input.
-				batches := make([]coldata.Batch, 0, 1+rng.Intn(2048))
-				op := colexec.NewRandomDataOp(testAllocator, rng, colexec.RandomDataOpArgs{
-					AvailableTyps: availableTyps,
-					NumBatches:    cap(batches),
-					BatchSize:     1 + rng.Intn(coldata.BatchSize()),
-					Nulls:         true,
-					BatchAccumulator: func(b coldata.Batch) {
-						batches = append(batches, colexec.CopyBatch(testAllocator, b))
-					},
-				})
-				typs := op.Typs()
-
-				queueCfg.CacheMode = diskQueueCacheMode
-				queueCfg.SetDefaultBufferSizeBytesForCacheMode()
-
-				// Create queue.
-				queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
-				q, err := colcontainer.NewDiskQueue(typs, queueCfg)
-				require.NoError(t, err)
-
-				// Verify that a directory was created.
-				directories, err := queueCfg.FS.ListDir(queueCfg.Path)
-				require.NoError(t, err)
-				require.Equal(t, 1, len(directories))
-
-				// Run verification.
-				ctx := context.Background()
-				for {
-					b := op.Next(ctx)
-					require.NoError(t, q.Enqueue(b))
-					if b.Length() == 0 {
-						break
+	for _, rewindable := range []bool{false, true} {
+		for _, bufferSizeBytes := range []int{0, 16<<10 + rng.Intn(1<<20) /* 16 KiB up to 1 MiB */} {
+			for _, maxFileSizeBytes := range []int{10 << 10 /* 10 KiB */, 1<<20 + rng.Intn(64<<20) /* 1 MiB up to 64 MiB */} {
+				alwaysCompress := rng.Float64() < 0.5
+				diskQueueCacheMode := colcontainer.DiskQueueCacheModeDefault
+				// testReuseCache will test the reuse cache modes.
+				testReuseCache := rng.Float64() < 0.5
+				dequeuedProbabilityBeforeAllEnqueuesAreDone := 0.5
+				if testReuseCache {
+					dequeuedProbabilityBeforeAllEnqueuesAreDone = 0
+					if rng.Float64() < 0.5 {
+						diskQueueCacheMode = colcontainer.DiskQueueCacheModeReuseCache
+					} else {
+						diskQueueCacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
 					}
-					if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
-						if ok, err := q.Dequeue(b); !ok {
-							t.Fatal("queue incorrectly considered empty")
+				}
+				prefix, suffix := "", fmt.Sprintf("/BufferSizeBytes=%s/MaxFileSizeBytes=%s",
+					humanizeutil.IBytes(int64(bufferSizeBytes)),
+					humanizeutil.IBytes(int64(maxFileSizeBytes)))
+				if rewindable {
+					dequeuedProbabilityBeforeAllEnqueuesAreDone = 0
+					prefix, suffix = "Rewindable/", ""
+				}
+				numBatches := 1 + rng.Intn(1024)
+				t.Run(fmt.Sprintf("%sDiskQueueCacheMode=%d/AlwaysCompress=%t%s/NumBatches=%d",
+					prefix, diskQueueCacheMode, alwaysCompress, suffix, numBatches), func(t *testing.T) {
+					// Create random input.
+					batches := make([]coldata.Batch, 0, numBatches)
+					op := colexec.NewRandomDataOp(testAllocator, rng, colexec.RandomDataOpArgs{
+						AvailableTyps: availableTyps,
+						NumBatches:    cap(batches),
+						BatchSize:     1 + rng.Intn(coldata.BatchSize()),
+						Nulls:         true,
+						BatchAccumulator: func(b coldata.Batch) {
+							batches = append(batches, colexec.CopyBatch(testAllocator, b))
+						},
+					})
+					typs := op.Typs()
+
+					queueCfg.CacheMode = diskQueueCacheMode
+					queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+					if !rewindable {
+						if !testReuseCache {
+							queueCfg.BufferSizeBytes = bufferSizeBytes
+						}
+						queueCfg.MaxFileSizeBytes = maxFileSizeBytes
+					}
+					queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
+
+					// Create queue.
+					var (
+						q   colcontainer.Queue
+						err error
+					)
+					if rewindable {
+						q, err = colcontainer.NewRewindableDiskQueue(typs, queueCfg)
+					} else {
+						q, err = colcontainer.NewDiskQueue(typs, queueCfg)
+					}
+					require.NoError(t, err)
+
+					// Verify that a directory was created.
+					directories, err := queueCfg.FS.ListDir(queueCfg.Path)
+					require.NoError(t, err)
+					require.Equal(t, 1, len(directories))
+
+					// Run verification.
+					ctx := context.Background()
+					for {
+						b := op.Next(ctx)
+						require.NoError(t, q.Enqueue(b))
+						if b.Length() == 0 {
+							break
+						}
+						if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
+							if ok, err := q.Dequeue(b); !ok {
+								t.Fatal("queue incorrectly considered empty")
+							} else if err != nil {
+								t.Fatal(err)
+							}
+							coldata.AssertEquivalentBatches(t, batches[0], b)
+							batches = batches[1:]
+						}
+					}
+					numReadIterations := 1
+					if rewindable {
+						numReadIterations = 2
+					}
+					for i := 0; i < numReadIterations; i++ {
+						batchIdx := 0
+						b := coldata.NewMemBatch(typs)
+						for batchIdx < len(batches) {
+							if ok, err := q.Dequeue(b); !ok {
+								t.Fatal("queue incorrectly considered empty")
+							} else if err != nil {
+								t.Fatal(err)
+							}
+							coldata.AssertEquivalentBatches(t, batches[batchIdx], b)
+							batchIdx++
+						}
+
+						if testReuseCache {
+							// Trying to Enqueue after a Dequeue should return an error in these
+							// CacheModes.
+							require.Error(t, q.Enqueue(b))
+						}
+
+						if ok, err := q.Dequeue(b); ok {
+							if b.Length() != 0 {
+								t.Fatal("queue should be empty")
+							}
 						} else if err != nil {
 							t.Fatal(err)
 						}
-						coldata.AssertEquivalentBatches(t, batches[0], b)
-						batches = batches[1:]
+
+						if rewindable {
+							require.NoError(t, q.(colcontainer.RewindableQueue).Rewind())
+						}
 					}
-				}
-				b := coldata.NewMemBatch(typs)
-				i := 0
-				for len(batches) > 0 {
-					if ok, err := q.Dequeue(b); !ok {
-						t.Fatal("queue incorrectly considered empty")
-					} else if err != nil {
-						t.Fatal(err)
-					}
-					coldata.AssertEquivalentBatches(t, batches[0], b)
-					batches = batches[1:]
-					i++
-				}
 
-				if testReuseCache {
-					// Trying to Enqueue after a Dequeue should return an error in these
-					// CacheModes.
-					require.Error(t, q.Enqueue(b))
-				}
+					// Close queue.
+					require.NoError(t, q.Close())
 
-				if ok, err := q.Dequeue(b); ok {
-					if b.Length() != 0 {
-						t.Fatal("queue should be empty")
-					}
-				} else if err != nil {
-					t.Fatal(err)
-				}
-
-				// Close queue.
-				require.NoError(t, q.Close())
-
-				// Verify no directories are left over.
-				directories, err = queueCfg.FS.ListDir(queueCfg.Path)
-				require.NoError(t, err)
-				require.Equal(t, 0, len(directories))
-			})
+					// Verify no directories are left over.
+					directories, err = queueCfg.FS.ListDir(queueCfg.Path)
+					require.NoError(t, err)
+					require.Equal(t, 0, len(directories))
+				})
+			}
 		}
 	}
 }
@@ -144,7 +178,7 @@ func TestDiskQueue(t *testing.T) {
 // Flags for BenchmarkQueue.
 var (
 	bufferSizeBytes = flag.String("bufsize", "128KiB", "number of bytes to buffer in memory before flushing")
-	blockSizeBytes  = flag.String("blocksize", "32MiB", "block size for the number of bytes stored ina block. In pebble, this is the value size, with the flat implementation, this is the file size")
+	blockSizeBytes  = flag.String("blocksize", "32MiB", "block size for the number of bytes stored in a block. In pebble, this is the value size, with the flat implementation, this is the file size")
 	dataSizeBytes   = flag.String("datasize", "512MiB", "size of data in bytes to sort")
 )
 
