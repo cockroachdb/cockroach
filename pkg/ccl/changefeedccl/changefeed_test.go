@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -545,75 +546,6 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	}
 }
 
-func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(mrtracy): Re-enable when allow-backfill option is added.")
-
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-
-		t.Run(`add column not null`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE add_column_notnull (a INT PRIMARY KEY)`)
-			addColumnNotNull := feed(t, f, `CREATE CHANGEFEED FOR add_column_notnull WITH resolved`)
-			defer closeFeed(t, addColumnNotNull)
-			sqlDB.Exec(t, `ALTER TABLE add_column_notnull ADD COLUMN b STRING NOT NULL`)
-			sqlDB.Exec(t, `INSERT INTO add_column_notnull VALUES (2, '2')`)
-			skipResolvedTimestamps(t, addColumnNotNull)
-			if _, err := addColumnNotNull.Next(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-
-		t.Run(`add column with default`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
-			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
-			addColumnDef := feed(t, f, `CREATE CHANGEFEED FOR add_column_def`)
-			defer closeFeed(t, addColumnDef)
-			assertPayloads(t, addColumnDef, []string{
-				`add_column_def: [1]->{"after": {"a": 1}}`,
-			})
-			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
-			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2, '2')`)
-			if _, err := addColumnDef.Next(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-
-		t.Run(`add column computed`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE add_col_comp (a INT PRIMARY KEY, b INT AS (a + 5) STORED)`)
-			sqlDB.Exec(t, `INSERT INTO add_col_comp VALUES (1)`)
-			addColComp := feed(t, f, `CREATE CHANGEFEED FOR add_col_comp`)
-			defer closeFeed(t, addColComp)
-			assertPayloads(t, addColComp, []string{
-				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
-			})
-			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
-			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
-			if _, err := addColComp.Next(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-
-		t.Run(`drop column`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
-			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
-			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column`)
-			defer closeFeed(t, dropColumn)
-			assertPayloads(t, dropColumn, []string{
-				`drop_column: [1]->{"after": {"a": 1, "b": "1"}}`,
-			})
-			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
-			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2)`)
-			if _, err := dropColumn.Next(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-	}
-
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-}
-
 // Test schema changes that require a backfill when the backfill option is
 // allowed.
 func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
@@ -973,6 +905,267 @@ func TestChangefeedColumnFamily(t *testing.T) {
 		if _, err := bar.Next(); !testutils.IsError(err, `exactly 1 column family`) {
 			t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
 		}
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedStopOnSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testing.Short() || util.RaceEnabled {
+		t.Skip("takes too long with race enabled")
+	}
+	schemaChangeTimestampRegexp := regexp.MustCompile(`schema change occurred at ([0-9]+\.[0-9]+)`)
+	timestampStrFromError := func(t *testing.T, err error) string {
+		require.Regexp(t, schemaChangeTimestampRegexp, err)
+		m := schemaChangeTimestampRegexp.FindStringSubmatch(err.Error())
+		return m[1]
+	}
+	waitForSchemaChangeErrorAndCloseFeed := func(t *testing.T, f cdctest.TestFeed) (tsStr string) {
+		t.Helper()
+		for {
+			if ev, err := f.Next(); err != nil {
+				log.Infof(context.TODO(), "got event %v %v", ev, err)
+				tsStr = timestampStrFromError(t, err)
+				_ = f.Close()
+				return tsStr
+			}
+		}
+	}
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		// Shorten the intervals so this test doesn't take so long. We need to wait
+		// for timestamps to get resolved.
+		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.close_fraction = .99")
+
+		t.Run("add column not null", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_column_not_null`)
+			sqlDB.Exec(t, `INSERT INTO add_column_not_null VALUES (0)`)
+			addColumnNotNull := feed(t, f, `CREATE CHANGEFEED FOR add_column_not_null `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop'`)
+			sqlDB.Exec(t, `INSERT INTO add_column_not_null VALUES (1)`)
+			assertPayloads(t, addColumnNotNull, []string{
+				`add_column_not_null: [0]->{"after": {"a": 0}}`,
+				`add_column_not_null: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_not_null ADD COLUMN b INT NOT NULL DEFAULT 0`)
+			sqlDB.Exec(t, "INSERT INTO add_column_not_null VALUES (2, 1)")
+			tsStr := waitForSchemaChangeErrorAndCloseFeed(t, addColumnNotNull)
+			addColumnNotNull = feed(t, f, `CREATE CHANGEFEED FOR add_column_not_null `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop', cursor = '`+tsStr+`'`)
+			defer closeFeed(t, addColumnNotNull)
+			assertPayloads(t, addColumnNotNull, []string{
+				`add_column_not_null: [2]->{"after": {"a": 2, "b": 1}}`,
+			})
+		})
+		t.Run("add column null", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_null (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_column_null`)
+			sqlDB.Exec(t, `INSERT INTO add_column_null VALUES (0)`)
+			addColumnNull := feed(t, f, `CREATE CHANGEFEED FOR add_column_null `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop'`)
+			sqlDB.Exec(t, `INSERT INTO add_column_null VALUES (1)`)
+			assertPayloads(t, addColumnNull, []string{
+				`add_column_null: [0]->{"after": {"a": 0}}`,
+				`add_column_null: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_null ADD COLUMN b INT`)
+			sqlDB.Exec(t, "INSERT INTO add_column_null VALUES (2, NULL)")
+			tsStr := waitForSchemaChangeErrorAndCloseFeed(t, addColumnNull)
+			addColumnNull = feed(t, f, `CREATE CHANGEFEED FOR add_column_null `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop', cursor = '`+tsStr+`'`)
+			defer closeFeed(t, addColumnNull)
+			assertPayloads(t, addColumnNull, []string{
+				`add_column_null: [2]->{"after": {"a": 2, "b": null}}`,
+			})
+		})
+		t.Run(`add column computed`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_comp_col (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_comp_col`)
+			sqlDB.Exec(t, `INSERT INTO add_comp_col VALUES (0)`)
+			addCompCol := feed(t, f, `CREATE CHANGEFEED FOR add_comp_col `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop'`)
+			sqlDB.Exec(t, `INSERT INTO add_comp_col VALUES (1)`)
+			assertPayloads(t, addCompCol, []string{
+				`add_comp_col: [0]->{"after": {"a": 0}}`,
+				`add_comp_col: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_comp_col ADD COLUMN b INT AS (a + 1) STORED`)
+			sqlDB.Exec(t, "INSERT INTO add_comp_col VALUES (2)")
+			tsStr := waitForSchemaChangeErrorAndCloseFeed(t, addCompCol)
+			addCompCol = feed(t, f, `CREATE CHANGEFEED FOR add_comp_col `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop', cursor = '`+tsStr+`'`)
+			defer closeFeed(t, addCompCol)
+			assertPayloads(t, addCompCol, []string{
+				`add_comp_col: [2]->{"after": {"a": 2, "b": 3}}`,
+			})
+		})
+		t.Run("drop column", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE drop_column`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (0, NULL)`)
+			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop'`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, 2)`)
+			assertPayloads(t, dropColumn, []string{
+				`drop_column: [0]->{"after": {"a": 0, "b": null}}`,
+				`drop_column: [1]->{"after": {"a": 1, "b": 2}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2)`)
+			tsStr := waitForSchemaChangeErrorAndCloseFeed(t, dropColumn)
+			dropColumn = feed(t, f, `CREATE CHANGEFEED FOR drop_column `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop', cursor = '`+tsStr+`'`)
+			defer closeFeed(t, dropColumn)
+			// NB: You might expect to only see the new row here but we'll see them
+			// all because we cannot distinguish between the index backfill and
+			// foreground writes. See #35738.
+			assertPayloads(t, dropColumn, []string{
+				`drop_column: [0]->{"after": {"a": 0}}`,
+				`drop_column: [1]->{"after": {"a": 1}}`,
+				`drop_column: [2]->{"after": {"a": 2}}`,
+			})
+		})
+		t.Run("add index", func(t *testing.T) {
+			// This case does not exit
+			sqlDB.Exec(t, `CREATE TABLE add_index (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_index`)
+			sqlDB.Exec(t, `INSERT INTO add_index VALUES (0, NULL)`)
+			addIndex := feed(t, f, `CREATE CHANGEFEED FOR add_index `+
+				`WITH schema_change_events='column_changes', schema_change_policy='stop'`)
+			defer closeFeed(t, addIndex)
+			sqlDB.Exec(t, `INSERT INTO add_index VALUES (1, 2)`)
+			assertPayloads(t, addIndex, []string{
+				`add_index: [0]->{"after": {"a": 0, "b": null}}`,
+				`add_index: [1]->{"after": {"a": 1, "b": 2}}`,
+			})
+			sqlDB.Exec(t, `CREATE INDEX ON add_index (b)`)
+			sqlDB.Exec(t, `INSERT INTO add_index VALUES (2, NULL)`)
+			assertPayloads(t, addIndex, []string{
+				`add_index: [2]->{"after": {"a": 2, "b": null}}`,
+			})
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedNoBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testing.Short() || util.RaceEnabled {
+		t.Skip("takes too long with race enabled")
+	}
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		// Shorten the intervals so this test doesn't take so long. We need to wait
+		// for timestamps to get resolved.
+		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.close_fraction = .99")
+
+		t.Run("add column not null", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_column_not_null`)
+			sqlDB.Exec(t, `INSERT INTO add_column_not_null VALUES (0)`)
+			addColumnNotNull := feed(t, f, `CREATE CHANGEFEED FOR add_column_not_null `+
+				`WITH schema_change_policy='nobackfill'`)
+			defer closeFeed(t, addColumnNotNull)
+			sqlDB.Exec(t, `INSERT INTO add_column_not_null VALUES (1)`)
+			assertPayloads(t, addColumnNotNull, []string{
+				`add_column_not_null: [0]->{"after": {"a": 0}}`,
+				`add_column_not_null: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_not_null ADD COLUMN b INT NOT NULL DEFAULT 0`)
+			sqlDB.Exec(t, "INSERT INTO add_column_not_null VALUES (2, 1)")
+			assertPayloads(t, addColumnNotNull, []string{
+				`add_column_not_null: [2]->{"after": {"a": 2, "b": 1}}`,
+			})
+		})
+		t.Run("add column null", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_null (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_column_null`)
+			sqlDB.Exec(t, `INSERT INTO add_column_null VALUES (0)`)
+			addColumnNull := feed(t, f, `CREATE CHANGEFEED FOR add_column_null `+
+				`WITH schema_change_policy='nobackfill'`)
+			defer closeFeed(t, addColumnNull)
+			sqlDB.Exec(t, `INSERT INTO add_column_null VALUES (1)`)
+			assertPayloads(t, addColumnNull, []string{
+				`add_column_null: [0]->{"after": {"a": 0}}`,
+				`add_column_null: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_null ADD COLUMN b INT`)
+			sqlDB.Exec(t, "INSERT INTO add_column_null VALUES (2, NULL)")
+			assertPayloads(t, addColumnNull, []string{
+				`add_column_null: [2]->{"after": {"a": 2, "b": null}}`,
+			})
+		})
+		t.Run(`add column computed`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_comp_col (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_comp_col`)
+			sqlDB.Exec(t, `INSERT INTO add_comp_col VALUES (0)`)
+			addCompCol := feed(t, f, `CREATE CHANGEFEED FOR add_comp_col `+
+				`WITH schema_change_policy='nobackfill'`)
+			defer closeFeed(t, addCompCol)
+			sqlDB.Exec(t, `INSERT INTO add_comp_col VALUES (1)`)
+			assertPayloads(t, addCompCol, []string{
+				`add_comp_col: [0]->{"after": {"a": 0}}`,
+				`add_comp_col: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_comp_col ADD COLUMN b INT AS (a + 1) STORED`)
+			sqlDB.Exec(t, "INSERT INTO add_comp_col VALUES (2)")
+			assertPayloads(t, addCompCol, []string{
+				`add_comp_col: [2]->{"after": {"a": 2, "b": 3}}`,
+			})
+		})
+		t.Run("drop column", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE drop_column`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (0, NULL)`)
+			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column `+
+				`WITH schema_change_policy='nobackfill'`)
+			defer closeFeed(t, dropColumn)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, 2)`)
+			assertPayloads(t, dropColumn, []string{
+				`drop_column: [0]->{"after": {"a": 0, "b": null}}`,
+				`drop_column: [1]->{"after": {"a": 1, "b": 2}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2)`)
+			// NB: You might expect to only see the new row here but we'll see them
+			// all because we cannot distinguish between the index backfill and
+			// foreground writes. See #35738.
+			assertPayloads(t, dropColumn, []string{
+				`drop_column: [0]->{"after": {"a": 0}}`,
+				`drop_column: [1]->{"after": {"a": 1}}`,
+				`drop_column: [2]->{"after": {"a": 2}}`,
+			})
+		})
+		t.Run("add index", func(t *testing.T) {
+			// This case does not exit
+			sqlDB.Exec(t, `CREATE TABLE add_index (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE add_index`)
+			sqlDB.Exec(t, `INSERT INTO add_index VALUES (0, NULL)`)
+			addIndex := feed(t, f, `CREATE CHANGEFEED FOR add_index `+
+				`WITH schema_change_policy='nobackfill'`)
+			defer closeFeed(t, addIndex)
+			sqlDB.Exec(t, `INSERT INTO add_index VALUES (1, 2)`)
+			assertPayloads(t, addIndex, []string{
+				`add_index: [0]->{"after": {"a": 0, "b": null}}`,
+				`add_index: [1]->{"after": {"a": 1, "b": 2}}`,
+			})
+			sqlDB.Exec(t, `CREATE INDEX ON add_index (b)`)
+			sqlDB.Exec(t, `INSERT INTO add_index VALUES (2, NULL)`)
+			assertPayloads(t, addIndex, []string{
+				`add_index: [2]->{"after": {"a": 2, "b": null}}`,
+			})
+		})
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))

@@ -327,39 +327,69 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		// the job gets restarted.
 		details.Opts = map[string]string{}
 	}
-
-	if r, ok := details.Opts[changefeedbase.OptResolvedTimestamps]; ok && r != `` {
-		if d, err := time.ParseDuration(r); err != nil {
-			return jobspb.ChangefeedDetails{}, err
-		} else if d < 0 {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`negative durations are not accepted: %s='%s'`,
-				changefeedbase.OptResolvedTimestamps, details.Opts[changefeedbase.OptResolvedTimestamps])
+	{
+		const opt = changefeedbase.OptResolvedTimestamps
+		if o, ok := details.Opts[opt]; ok && o != `` {
+			if d, err := time.ParseDuration(o); err != nil {
+				return jobspb.ChangefeedDetails{}, err
+			} else if d < 0 {
+				return jobspb.ChangefeedDetails{}, errors.Errorf(
+					`negative durations are not accepted: %s='%s'`, opt, o)
+			}
 		}
 	}
-
-	switch changefeedbase.EnvelopeType(details.Opts[changefeedbase.OptEnvelope]) {
-	case changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow:
-		details.Opts[changefeedbase.OptEnvelope] = string(changefeedbase.OptEnvelopeRow)
-	case changefeedbase.OptEnvelopeKeyOnly:
-		details.Opts[changefeedbase.OptEnvelope] = string(changefeedbase.OptEnvelopeKeyOnly)
-	case ``, changefeedbase.OptEnvelopeWrapped:
-		details.Opts[changefeedbase.OptEnvelope] = string(changefeedbase.OptEnvelopeWrapped)
-	default:
-		return jobspb.ChangefeedDetails{}, errors.Errorf(
-			`unknown %s: %s`, changefeedbase.OptEnvelope, details.Opts[changefeedbase.OptEnvelope])
+	{
+		const opt = changefeedbase.OptSchemaChangeEvents
+		switch v := changefeedbase.SchemaChangeEventClass(details.Opts[opt]); v {
+		case ``, changefeedbase.OptSchemaChangeEventClassDefault:
+			details.Opts[opt] = string(changefeedbase.OptSchemaChangeEventClassDefault)
+		case changefeedbase.OptSchemaChangeEventClassColumnChange:
+			// No-op
+		default:
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`unknown %s: %s`, opt, v)
+		}
 	}
-
-	switch changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]) {
-	case ``, changefeedbase.OptFormatJSON:
-		details.Opts[changefeedbase.OptFormat] = string(changefeedbase.OptFormatJSON)
-	case changefeedbase.OptFormatAvro:
-		// No-op.
-	default:
-		return jobspb.ChangefeedDetails{}, errors.Errorf(
-			`unknown %s: %s`, changefeedbase.OptFormat, details.Opts[changefeedbase.OptFormat])
+	{
+		const opt = changefeedbase.OptSchemaChangePolicy
+		switch v := changefeedbase.SchemaChangePolicy(details.Opts[opt]); v {
+		case ``, changefeedbase.OptSchemaChangePolicyBackfill:
+			details.Opts[opt] = string(changefeedbase.OptSchemaChangePolicyBackfill)
+		case changefeedbase.OptSchemaChangePolicyNoBackfill:
+			// No-op
+		case changefeedbase.OptSchemaChangePolicyStop:
+			// No-op
+		default:
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`unknown %s: %s`, opt, v)
+		}
 	}
-
+	{
+		const opt = changefeedbase.OptEnvelope
+		switch v := changefeedbase.EnvelopeType(details.Opts[opt]); v {
+		case changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow:
+			details.Opts[opt] = string(changefeedbase.OptEnvelopeRow)
+		case changefeedbase.OptEnvelopeKeyOnly:
+			details.Opts[opt] = string(changefeedbase.OptEnvelopeKeyOnly)
+		case ``, changefeedbase.OptEnvelopeWrapped:
+			details.Opts[opt] = string(changefeedbase.OptEnvelopeWrapped)
+		default:
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`unknown %s: %s`, opt, v)
+		}
+	}
+	{
+		const opt = changefeedbase.OptFormat
+		switch v := changefeedbase.FormatType(details.Opts[opt]); v {
+		case ``, changefeedbase.OptFormatJSON:
+			details.Opts[opt] = string(changefeedbase.OptFormatJSON)
+		case changefeedbase.OptFormatAvro:
+			// No-op.
+		default:
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`unknown %s: %s`, opt, v)
+		}
+	}
 	return details, nil
 }
 

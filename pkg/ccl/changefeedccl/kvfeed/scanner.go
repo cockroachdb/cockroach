@@ -132,7 +132,7 @@ func (p *scanRequestScanner) exportSpan(
 		}
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
-	if err := sink.AddResolved(ctx, span, ts); err != nil {
+	if err := sink.AddResolved(ctx, span, ts, false); err != nil {
 		return err
 	}
 	if log.V(2) {
