@@ -2045,7 +2045,7 @@ func (c *CustomFuncs) CanInlineWith(binding, expr memo.RelExpr, private *memo.Wi
 	if binding.Relational().CanHaveSideEffects {
 		return false
 	}
-	return c.WithUses(expr)[private.ID] <= 1
+	return c.WithUses(expr)[private.ID].Count <= 1
 }
 
 // InlineWith replaces all references to the With expression in input (via
@@ -2079,9 +2079,8 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 	return replace(input).(memo.RelExpr)
 }
 
-// WithUses returns a map mapping WithIDs to the number of times a given With
-// expression is referenced in the given expression.
-func (c *CustomFuncs) WithUses(r opt.Expr) map[opt.WithID]int {
+// WithUses returns the WithUsesMap for the given expression.
+func (c *CustomFuncs) WithUses(r opt.Expr) props.WithUsesMap {
 	switch e := r.(type) {
 	case memo.RelExpr:
 		relProps := e.Relational()
@@ -2106,29 +2105,46 @@ func (c *CustomFuncs) WithUses(r opt.Expr) map[opt.WithID]int {
 	}
 }
 
-// deriveWithUses computes the number of times each WithScan is referenced. It's
-// used to decide if we can inline a With or not.
-func (c *CustomFuncs) deriveWithUses(r opt.Expr) map[opt.WithID]int {
-	var result map[opt.WithID]int
+// deriveWithUses collects information about WithScans in the expression.
+func (c *CustomFuncs) deriveWithUses(r opt.Expr) props.WithUsesMap {
+	// We don't allow the information to escape the scope of the WITH itself, so
+	// we exclude that ID from the results.
+	var excludedID opt.WithID
+
 	switch e := r.(type) {
 	case *memo.WithScanExpr:
-		result = map[opt.WithID]int{e.With: 1}
+		info := props.WithUseInfo{
+			Count:    1,
+			UsedCols: e.InCols.ToSet(),
+		}
+		return props.WithUsesMap{e.With: info}
+
+	case *memo.WithExpr:
+		excludedID = e.ID
+
 	default:
-		for i, n := 0, r.ChildCount(); i < n; i++ {
-			for id, useCount := range c.WithUses(r.Child(i)) {
-				if result == nil {
-					result = make(map[opt.WithID]int)
-				}
-				result[id] = result[id] + useCount
-			}
+		if opt.IsMutationOp(e) {
+			// Note: this can still be 0.
+			excludedID = e.Private().(*memo.MutationPrivate).WithID
 		}
 	}
 
-	// Don't allow the use count to escape the scope of the WITH itself.
-	if w, ok := r.(*memo.WithExpr); ok {
-		delete(result, w.ID)
+	var result props.WithUsesMap
+	for i, n := 0, r.ChildCount(); i < n; i++ {
+		childUses := c.WithUses(r.Child(i))
+		for id, info := range childUses {
+			if id == excludedID {
+				continue
+			}
+			if result == nil {
+				result = make(props.WithUsesMap, len(childUses))
+			}
+			existing := result[id]
+			existing.Count += info.Count
+			existing.UsedCols.UnionWith(info.UsedCols)
+			result[id] = existing
+		}
 	}
-
 	return result
 }
 

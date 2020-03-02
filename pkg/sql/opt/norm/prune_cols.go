@@ -42,7 +42,9 @@ func (c *CustomFuncs) NeededExplainCols(private *memo.ExplainPrivate) opt.ColSet
 // needed by the mutation private; it simply returns the input columns that are
 // referenced by it. Other rules filter the FetchCols, CheckCols, etc. and can
 // in turn trigger the PruneMutationInputCols rule.
-func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColSet {
+func (c *CustomFuncs) NeededMutationCols(
+	private *memo.MutationPrivate, checks memo.FKChecksExpr,
+) opt.ColSet {
 	var cols opt.ColSet
 
 	// Add all input columns referenced by the mutation private.
@@ -62,6 +64,13 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 	addCols(private.PassthroughCols)
 	if private.CanaryCol != 0 {
 		cols.Add(private.CanaryCol)
+	}
+
+	if private.WithID != 0 {
+		for i := range checks {
+			withUses := c.WithUses(checks[i].Check)
+			cols.UnionWith(withUses[private.WithID].UsedCols)
+		}
 	}
 
 	return cols
