@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/syncmap"
 )
 
@@ -131,6 +132,17 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 	}, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const seed = 1
+	var ms enginepb.MVCCStats
+	ms.SysCount += probablyLargeAbortSpanSysCountThreshold
+	ms.SysBytes += probablyLargeAbortSpanSysBytesThreshold
+	r := makeGCQueueScoreImpl(context.Background(), seed, hlc.Timestamp{Logical: 1}, ms, zonepb.GCPolicy{TTLSeconds: 10000})
+	require.True(t, r.ShouldQueue)
+	require.NotZero(t, r.FinalScore)
 }
 
 const cacheFirstLen = 3
