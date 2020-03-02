@@ -152,6 +152,7 @@ func TestTypeCheck(t *testing.T) {
 		{`((ROW (1) AS a)).a`, `1:::INT8`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
 		{`((('1', 2) AS a, b)).b`, `2:::INT8`},
+		{`((('1', 2) AS a, b)).@2`, `2:::INT8`},
 		{`(pg_get_keywords()).word`, `(pg_get_keywords()).word`},
 		{
 			`(information_schema._pg_expandarray(ARRAY[1,3])).x`,

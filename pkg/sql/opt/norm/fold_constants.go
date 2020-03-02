@@ -313,8 +313,7 @@ func (c *CustomFuncs) FoldColumnAccess(input opt.ScalarExpr, idx memo.TupleOrdin
 	if memo.CanExtractConstDatum(input) {
 		datum := memo.ExtractConstDatum(input)
 
-		colName := input.DataType().TupleLabels()[idx]
-		texpr := tree.NewTypedColumnAccessExpr(datum, colName, int(idx))
+		texpr := tree.NewTypedColumnAccessExpr(datum, "" /* by-index access */, int(idx))
 		result, err := texpr.Eval(c.f.evalCtx)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType())
