@@ -12,7 +12,7 @@ query TTT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 render          ·            ·
  └── hash-join  ·            ·
       │         type         inner
@@ -28,7 +28,7 @@ query TTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 hash-join  ·            ·
  │         type         inner
  │         equality     (x) = (y)
@@ -43,7 +43,7 @@ query TTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 ·                distributed  false
-·                vectorized   false
+·                vectorized   true
 render           ·            ·
  └── cross-join  ·            ·
       │          type         cross
@@ -59,7 +59,7 @@ query TTT
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 hash-join  ·            ·
  │         type         inner
  │         equality     (x) = (y)
@@ -74,7 +74,7 @@ query TTT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 hash-join  ·            ·
  │         type         inner
  │         equality     (x) = (y)
@@ -94,7 +94,7 @@ EXPLAIN SELECT * FROM
 LIMIT 1
 ----
 ·                    distributed  false
-·                    vectorized   false
+·                    vectorized   true
 limit                ·            ·
  │                   count        1
  └── hash-join       ·            ·
@@ -124,7 +124,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
 ·           distributed  false              ·       ·
-·           vectorized   false              ·       ·
+·           vectorized   true               ·       ·
 cross-join  ·            ·                  (x, y)  ·
  │          type         cross              ·       ·
  ├── scan   ·            ·                  (x)     ·
@@ -138,7 +138,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
 ·               distributed  false              ·          ·
-·               vectorized   false              ·          ·
+·               vectorized   true               ·          ·
 render          ·            ·                  (y)        ·
  │              render 0     y                  ·          ·
  └── hash-join  ·            ·                  (x, x, y)  ·
@@ -155,7 +155,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
 ·               distributed  false              ·          ·
-·               vectorized   false              ·          ·
+·               vectorized   true               ·          ·
 render          ·            ·                  (y)        ·
  │              render 0     y                  ·          ·
  └── hash-join  ·            ·                  (x, x, y)  ·
@@ -172,7 +172,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
 ·                distributed  false              ·       ·
-·                vectorized   false              ·       ·
+·                vectorized   true               ·       ·
 render           ·            ·                  (x)     ·
  │               render 0     x                  ·       ·
  └── cross-join  ·            ·                  (x, y)  ·
@@ -435,7 +435,7 @@ query TTT
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 ·          distributed         false
-·          vectorized          false
+·          vectorized          true
 hash-join  ·                   ·
  │         type                inner
  │         equality            (b) = (n)
@@ -452,7 +452,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
 ·                    distributed  false             ·                       ·
-·                    vectorized   false             ·                       ·
+·                    vectorized   true              ·                       ·
 render               ·            ·                 (a, b, n, sq)           ·
  │                   render 0     a                 ·                       ·
  │                   render 1     b                 ·                       ·
@@ -478,7 +478,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
 ----
 ·                          distributed  false           ·                   ·
-·                          vectorized   false           ·                   ·
+·                          vectorized   true            ·                   ·
 render                     ·            ·               (a, b, n, sq)       ·
  │                         render 0     a               ·                   ·
  │                         render 1     b               ·                   ·
@@ -506,7 +506,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
 ·                    distributed  false             ·                       ·
-·                    vectorized   false             ·                       ·
+·                    vectorized   true              ·                       ·
 render               ·            ·                 (a, b, n, sq)           ·
  │                   render 0     a                 ·                       ·
  │                   render 1     b                 ·                       ·
@@ -618,7 +618,7 @@ SELECT *
 ]
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 hash-join  ·            ·
  │         type         inner
  │         equality     (b) = (sq)
@@ -642,7 +642,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
 ·               distributed  false            ·             ·
-·               vectorized   false            ·             ·
+·               vectorized   true             ·             ·
 render          ·            ·                (x)           ·
  │              render 0     x                ·             ·
  └── hash-join  ·            ·                (x, y, y, x)  ·
@@ -672,7 +672,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
 ·          distributed         false                  ·                         ·
-·          vectorized          false                  ·                         ·
+·          vectorized          true                   ·                         ·
 hash-join  ·                   ·                      (a, b, c, d, a, b, c, d)  ·
  │         type                inner                  ·                         ·
  │         equality            (a, b, c) = (a, b, c)  ·                         ·
@@ -689,7 +689,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
 ·               distributed         false                        ·                         ·
-·               vectorized          false                        ·                         ·
+·               vectorized          true                         ·                         ·
 render          ·                   ·                            (a, b, c, d)              ·
  │              render 0            a                            ·                         ·
  │              render 1            b                            ·                         ·
@@ -1301,7 +1301,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo NATURAL JOIN bar
 ]
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 render          ·            ·
  │              render 0     a
  │              render 1     b
@@ -1325,7 +1325,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
 ]
 ----
 ·                distributed  false
-·                vectorized   false
+·                vectorized   true
 render           ·            ·
  │               render 0     b
  │               render 1     a
@@ -1351,7 +1351,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b)
 ]
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 render          ·            ·
  │              render 0     a
  │              render 1     b
@@ -1377,7 +1377,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b, c)
 ]
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 render          ·            ·
  │              render 0     a
  │              render 1     b
@@ -1402,7 +1402,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ]
 ----
 ·           distributed  false
-·           vectorized   false
+·           vectorized   true
 cross-join  ·            ·
  │          type         inner
  │          pred         b = b
@@ -1420,7 +1420,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ]
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 hash-join  ·            ·
  │         type         inner
  │         equality     (a) = (a)
@@ -1438,7 +1438,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ]
 ----
 ·           distributed  false
-·           vectorized   false
+·           vectorized   true
 cross-join  ·            ·
  │          type         inner
  │          pred         b = b
@@ -1456,7 +1456,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ]
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 hash-join  ·            ·
  │         type         inner
  │         equality     (a) = (a)
@@ -1473,7 +1473,7 @@ query TTT
 EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 render          ·            ·
  └── hash-join  ·            ·
       │         type         inner
@@ -1688,7 +1688,7 @@ query TTT
 EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = cards.cust
 ----
 ·          distributed         false
-·          vectorized          false
+·          vectorized          true
 hash-join  ·                   ·
  │         type                inner
  │         equality            (cust) = (id)

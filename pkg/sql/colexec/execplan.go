@@ -753,6 +753,9 @@ func NewColOperator(
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
+				// A hash joiner can run in auto mode because it falls back to disk if
+				// there is not enough memory available.
+				result.CanRunInAutoMode = true
 			}
 			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
 
