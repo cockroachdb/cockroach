@@ -145,6 +145,7 @@ func (ex *connExecutor) execSavepointInAbortedState(
 	if ex.state.readOnly {
 		rwMode = tree.ReadOnly
 	}
+	ex.rollbackSQLTransaction(ctx)
 	payload := makeEventTxnStartPayload(
 		ex.state.priority, rwMode, ex.state.sqlTimestamp,
 		nil /* historicalTimestamp */, ex.transitionCtx)
