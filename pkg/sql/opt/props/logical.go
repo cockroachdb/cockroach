@@ -170,10 +170,24 @@ type Shared struct {
 	// Rule props are lazily calculated and typically only apply to a single
 	// rule. See the comment above Relational.Rule for more details.
 	Rule struct {
-		// WithUses tracks the number of times each With expression has been
-		// referenced in the given expression.
-		WithUses map[opt.WithID]int
+		// WithUses tracks information about the WithScans inside the given
+		// expression which reference WithIDs outside of that expression.
+		WithUses WithUsesMap
 	}
+}
+
+// WithUsesMap stores information about each WithScan referencing an outside
+// WithID, grouped by each WithID.
+type WithUsesMap map[opt.WithID]WithUseInfo
+
+// WithUseInfo contains information about the usage of a specific WithID.
+type WithUseInfo struct {
+	// Count is the number of WithScan operators which reference this WithID.
+	Count int
+
+	// UsedCols is the union of columns used by all WithScan operators which
+	// reference this WithID.
+	UsedCols opt.ColSet
 }
 
 // Relational properties describe the content and characteristics of relational

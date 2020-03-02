@@ -662,9 +662,19 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if r.JoinSize > 1 {
 			tp.Childf("join-size: %d", r.JoinSize)
 		}
-		if len(relational.Shared.Rule.WithUses) > 0 {
-			// Go map
-			tp.Childf("cte-uses: %v", relational.Shared.Rule.WithUses)
+		if withUses := relational.Shared.Rule.WithUses; len(withUses) > 0 {
+			n := tp.Childf("cte-uses")
+			ids := make([]opt.WithID, 0, len(withUses))
+			for id := range withUses {
+				ids = append(ids, id)
+			}
+			sort.Slice(ids, func(i, j int) bool {
+				return ids[i] < ids[j]
+			})
+			for _, id := range ids {
+				info := withUses[id]
+				n.Childf("&%d: count=%d used-columns=%s", id, info.Count, info.UsedCols)
+			}
 		}
 	}
 
