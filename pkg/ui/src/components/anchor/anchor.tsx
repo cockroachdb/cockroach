@@ -12,13 +12,21 @@ import React from "react";
 import "./anchor.styl";
 
 interface AnchorProps {
-  href: string;
+  onClick?: () => void;
+  href?: string;
   target?: "_blank" | "_parent" | "_self";
 }
 export function Anchor(props: React.PropsWithChildren<AnchorProps>) {
-  const { href, target, children } = props;
+  const { href, target, children, onClick } = props;
   return (
-    <a className="crl-anchor" href={href} target={target}>{children}</a>
+    <a
+      className="crl-anchor"
+      href={href}
+      target={target}
+      onClick={onClick}
+    >
+      {children}
+    </a>
   );
 }
 
