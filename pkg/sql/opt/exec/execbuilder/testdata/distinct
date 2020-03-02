@@ -36,7 +36,7 @@ query TTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 sort            ·            ·
  │              order        +y
  └── distinct   ·            ·
@@ -50,7 +50,7 @@ query TTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 sort            ·            ·
  │              order        +y,+z
  └── distinct   ·            ·
@@ -64,7 +64,7 @@ query TTT
 EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
 ----
 ·                    distributed  false
-·                    vectorized   false
+·                    vectorized   true
 distinct             ·            ·
  │                   distinct on  r
  │                   order key    r

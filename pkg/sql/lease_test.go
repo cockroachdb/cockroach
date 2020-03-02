@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type leaseTest struct {
@@ -868,7 +869,10 @@ CREATE TABLE t.foo (v INT);
 		t.Fatal(err)
 	}
 
-	// This select can be retried in which case the descriptor gets reacquired.
+	_, err = tx.Exec("SAVEPOINT cockroach_restart")
+	require.NoError(t, err)
+
+	// This will acquire a descriptor. We'll check that it gets released before we retry.
 	if _, err := tx.Exec(`
 		SELECT * FROM t.foo;
 		`); err != nil {
@@ -882,18 +886,17 @@ CREATE TABLE t.foo (v INT);
 	}
 
 	if _, err := tx.Exec(
-		"SELECT crdb_internal.force_retry('1s':::INTERVAL)"); !testutils.IsError(
+		"SELECT crdb_internal.force_retry('100s':::INTERVAL)"); !testutils.IsError(
 		err, `forced by crdb_internal\.force_retry\(\)`) {
 		t.Fatal(err)
 	}
 
-	if cnt := atomic.LoadInt32(&fooAcquiredCount); cnt != aCount {
-		t.Fatalf("descriptor reacquired, %d != %d", cnt, aCount)
-	}
+	_, err = tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
+	require.NoError(t, err)
 
 	testutils.SucceedsSoon(t, func() error {
-		if cnt := atomic.LoadInt32(&fooReleaseCount); cnt != aCount {
-			return errors.Errorf("didnt release descriptor, %d != %d", cnt, aCount)
+		if rCount = atomic.LoadInt32(&fooReleaseCount); rCount != aCount {
+			return errors.Errorf("didnt release descriptor, %d != %d", rCount, aCount)
 		}
 		return nil
 	})

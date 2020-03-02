@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -757,7 +758,7 @@ func TestReportUsage(t *testing.T) {
 		"diagnostics.reporting.enabled":            "true",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
-		"version":                                  cluster.BinaryServerVersion.String(),
+		"version":                                  clusterversion.TestingBinaryVersion.String(),
 		"cluster.secret":                           "<redacted>",
 	} {
 		if got, ok := r.last.AlteredSettings[key]; !ok {

@@ -3208,7 +3208,7 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				v := cluster.Version.BinaryVersion(ctx.Settings).String()
+				v := ctx.Settings.Version.BinaryVersion().String()
 				return tree.NewDString(v), nil
 			},
 			Info: "Returns the version of CockroachDB this node is running.",

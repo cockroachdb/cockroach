@@ -21,8 +21,8 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -190,5 +190,5 @@ func checkEntry(entry hba.Entry) error {
 }
 
 func init() {
-	pgwire.RegisterAuthMethod("gss", authGSS, cluster.Version19_1, hba.ConnHostSSL, checkEntry)
+	pgwire.RegisterAuthMethod("gss", authGSS, clusterversion.Version19_1, hba.ConnHostSSL, checkEntry)
 }

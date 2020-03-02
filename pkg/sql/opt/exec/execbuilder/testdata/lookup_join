@@ -284,7 +284,7 @@ EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = 
 ----
 tree                 field        description       columns              ordering
 ·                    distributed  true              ·                    ·
-·                    vectorized   false             ·                    ·
+·                    vectorized   true              ·                    ·
 render               ·            ·                 (name)               +name
  │                   render 0     name              ·                    ·
  └── lookup-join     ·            ·                 (name, book, title)  +name
@@ -303,7 +303,7 @@ EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
 tree             field        description     columns                                         ordering
 ·                distributed  true            ·                                               ·
-·                vectorized   false           ·                                               ·
+·                vectorized   true            ·                                               ·
 render           ·            ·               (title, edition, shelf, title, edition, shelf)  ·
  │               render 0     title           ·                                               ·
  │               render 1     edition         ·                                               ·
@@ -512,7 +512,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
 ·               distributed  true           ·          ·
-·               vectorized   false          ·          ·
+·               vectorized   true           ·          ·
 render          ·            ·              (c, d)     ·
  │              render 0     c              ·          ·
  │              render 1     d              ·          ·
@@ -695,7 +695,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
 ·               distributed  true         ·                   ·
-·               vectorized   false        ·                   ·
+·               vectorized   true         ·                   ·
 sort            ·            ·            (d, e, f, a, b, c)  +f
  │              order        +f           ·                   ·
  └── hash-join  ·            ·            (d, e, f, a, b, c)  ·

@@ -1023,7 +1023,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
 ----
 ·               distributed  false       ·       ·
-·               vectorized   false       ·       ·
+·               vectorized   true        ·       ·
 render          ·            ·           (k)     ·
  │              render 0     k           ·       ·
  └── sort       ·            ·           (k, s)  +s
@@ -1079,7 +1079,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM xyz JOIN kv ON y=v
 ----
 ·                    distributed  false         ·        ·
-·                    vectorized   false         ·        ·
+·                    vectorized   true          ·        ·
 group                ·            ·             (count)  ·
  │                   aggregate 0  count_rows()  ·        ·
  │                   scalar       ·             ·        ·
@@ -1149,7 +1149,7 @@ EXPLAIN (VERBOSE)
         company_id
 ----
 ·                    distributed  false                          ·                                ·
-·                    vectorized   false                          ·                                ·
+·                    vectorized   true                           ·                                ·
 sort                 ·            ·                              (company_id, string_agg)         +company_id
  │                   order        +company_id                    ·                                ·
  └── group           ·            ·                              (company_id, string_agg)         ·

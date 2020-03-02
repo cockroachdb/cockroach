@@ -15,10 +15,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,7 +34,7 @@ func TestInitialKeys(t *testing.T) {
 	const nonDescKeys = 10
 
 	ms := sqlbase.MakeMetadataSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-	kv, _ /* splits */ := ms.GetInitialValues(cluster.TestingClusterVersion)
+	kv, _ /* splits */ := ms.GetInitialValues(clusterversion.TestingClusterVersion)
 	expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
@@ -53,7 +53,7 @@ func TestInitialKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
-	kv, _ /* splits */ = ms.GetInitialValues(cluster.TestingClusterVersion)
+	kv, _ /* splits */ = ms.GetInitialValues(clusterversion.TestingClusterVersion)
 	expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)

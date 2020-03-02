@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cluster
+package clusterversion
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
@@ -20,7 +20,7 @@ type VersionKey int
 // To add a version:
 //   - Add it at the end of this block.
 //   - Add it at the end of the `Versions` block below.
-//   - For major or minor versions, bump BinaryMinimumSupportedVersion. For
+//   - For major or minor versions, bump binaryMinSupportedVersion. For
 //     example, if introducing the `20.1` release, bump it to
 //     VersionStart19_2 (i.e. `19.1-1`).
 //
@@ -431,23 +431,26 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 
 })
 
+// TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
+// feels out of place. A "cluster version" and a "binary version" are two
+// separate concepts.
 var (
-	// BinaryMinimumSupportedVersion is the earliest version of data supported by
+	// binaryMinSupportedVersion is the earliest version of data supported by
 	// this binary. If this binary is started using a store marked with an older
-	// version than BinaryMinimumSupportedVersion, then the binary will exit with
+	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error.
 	// We support everything after 19.1, including pre-release 19.2 versions.
 	// This is generally beneficial, but in particular it allows the
 	// version-upgrade roachtest to use a pre-release 19.2 binary before upgrading
-	// to HEAD; if we were to set BinaryMinimumSupportedVersion to Version19_2,
+	// to HEAD; if we were to set binaryMinSupportedVersion to Version19_2,
 	// that wouldn't work since you'd have to go through the final 19.2 binary
 	// before going to HEAD.
-	BinaryMinimumSupportedVersion = VersionByKey(VersionStart19_2)
+	binaryMinSupportedVersion = VersionByKey(VersionStart19_2)
 
-	// BinaryServerVersion is the version of this binary.
+	// binaryVersion is the version of this binary.
 	//
 	// This is the version that a new cluster will use when created.
-	BinaryServerVersion = versionsSingleton[len(versionsSingleton)-1].Version
+	binaryVersion = versionsSingleton[len(versionsSingleton)-1].Version
 )
 
 // VersionByKey returns the roachpb.Version for a given key.

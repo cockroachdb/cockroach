@@ -18,12 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -446,7 +446,7 @@ func (rq *replicateQueue) addOrReplace(
 		removeIdx = -1
 	}
 	st := rq.store.cfg.Settings
-	if !cluster.Version.IsActive(ctx, st, cluster.VersionAtomicChangeReplicas) {
+	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicas) {
 		// If we can't swap yet, don't.
 		removeIdx = -1
 	}

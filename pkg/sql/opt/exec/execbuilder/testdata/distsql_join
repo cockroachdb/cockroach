@@ -113,7 +113,7 @@ query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
 ·               distributed  true             ·             ·
-·               vectorized   false            ·             ·
+·               vectorized   true             ·             ·
 sort            ·            ·                (a, b, c, d)  +b,+a
  │              order        +b,+a            ·             ·
  └── hash-join  ·            ·                (a, b, c, d)  ·

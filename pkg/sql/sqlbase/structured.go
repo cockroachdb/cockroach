@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1542,7 +1543,7 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 	//
 	// TODO(ajwerner): remove this check in 20.1.
 	var modTime hlc.Timestamp
-	if !cluster.Version.IsActive(ctx, settings, cluster.VersionTableDescModificationTimeFromMVCC) {
+	if !settings.Version.IsActive(ctx, clusterversion.VersionTableDescModificationTimeFromMVCC) {
 		modTime = txn.CommitTimestamp()
 	}
 	desc.ModificationTime = modTime

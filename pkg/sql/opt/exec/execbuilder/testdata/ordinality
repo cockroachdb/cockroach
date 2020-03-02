@@ -32,7 +32,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
 ----
 ·                     distributed  false             ·                  ·
-·                     vectorized   false             ·                  ·
+·                     vectorized   true              ·                  ·
 sort                  ·            ·                 (x, "ordinality")  -"ordinality"
  │                    order        -"ordinality"     ·                  ·
  └── filter           ·            ·                 (x, "ordinality")  ·

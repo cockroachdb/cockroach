@@ -16,13 +16,13 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -782,8 +782,8 @@ func (sc *SchemaChanger) distBackfill(
 	filter backfill.MutationFilter,
 	targetSpans []roachpb.Span,
 ) error {
-	inMemoryStatusEnabled := cluster.Version.IsActive(
-		ctx, sc.execCfg.Settings, cluster.VersionAtomicChangeReplicasTrigger)
+	inMemoryStatusEnabled := sc.execCfg.Settings.Version.IsActive(
+		ctx, clusterversion.VersionAtomicChangeReplicasTrigger)
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
 		duration = sc.testingKnobs.WriteCheckpointInterval

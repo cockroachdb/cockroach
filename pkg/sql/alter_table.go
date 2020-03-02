@@ -16,9 +16,9 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -346,8 +346,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableAlterPrimaryKey:
 			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
-			version := cluster.Version.ActiveVersionOrEmpty(params.ctx, params.p.ExecCfg().Settings)
-			if !version.IsActive(cluster.VersionPrimaryKeyChanges) {
+			version := params.p.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
+			if !version.IsActive(clusterversion.VersionPrimaryKeyChanges) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"all nodes are not the correct version for primary key changes")
 			}
@@ -358,7 +358,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if t.Sharded != nil {
-				if !version.IsActive(cluster.VersionHashShardedIndexes) {
+				if !version.IsActive(clusterversion.VersionHashShardedIndexes) {
 					return invalidClusterForShardedIndexError
 				}
 				if !params.p.EvalContext().SessionData.HashShardedIndexesEnabled {
