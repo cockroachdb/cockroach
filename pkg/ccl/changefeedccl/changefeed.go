@@ -280,6 +280,7 @@ func emitEntries(
 		if err != nil {
 			return nil, err
 		}
+		var boundaryReached bool
 		for _, input := range inputs {
 			if input.bufferGetTimestamp == (time.Time{}) {
 				// We could gracefully handle this instead of panic'ing, but
@@ -298,6 +299,7 @@ func emitEntries(
 				}
 			}
 			if input.resolved != nil {
+				boundaryReached = boundaryReached || input.resolved.BoundaryReached
 				_ = sf.Forward(input.resolved.Span, input.resolved.Timestamp)
 				resolvedSpans = append(resolvedSpans, *input.resolved)
 			}
@@ -328,7 +330,8 @@ func emitEntries(
 		} else {
 			timeBetweenFlushes = changefeedbase.TableDescriptorPollInterval.Get(&settings.SV) / 5
 		}
-		if len(resolvedSpans) == 0 || timeutil.Since(lastFlush) < timeBetweenFlushes {
+		if len(resolvedSpans) == 0 ||
+			(timeutil.Since(lastFlush) < timeBetweenFlushes && !boundaryReached) {
 			return nil, nil
 		}
 

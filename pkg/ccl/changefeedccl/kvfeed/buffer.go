@@ -41,7 +41,7 @@ type EventBufferReader interface {
 // EventBufferWriter is the write portion of the EventBuffer interface.
 type EventBufferWriter interface {
 	AddKV(ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp) error
-	AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error
+	AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp, boundaryReached bool) error
 	Close(ctx context.Context)
 }
 
@@ -163,8 +163,10 @@ func (b *chanBuffer) AddKV(
 }
 
 // AddResolved inserts a Resolved timestamp notification in the buffer.
-func (b *chanBuffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
-	return b.addEvent(ctx, Event{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts}})
+func (b *chanBuffer) AddResolved(
+	ctx context.Context, span roachpb.Span, ts hlc.Timestamp, boundaryReached bool,
+) error {
+	return b.addEvent(ctx, Event{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts, BoundaryReached: boundaryReached}})
 }
 
 func (b *chanBuffer) Close(_ context.Context) {
@@ -269,7 +271,9 @@ func (b *memBuffer) AddKV(
 }
 
 // AddResolved inserts a Resolved timestamp notification in the buffer.
-func (b *memBuffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
+func (b *memBuffer) AddResolved(
+	ctx context.Context, span roachpb.Span, ts hlc.Timestamp, boundaryReached bool,
+) error {
 	b.allocMu.Lock()
 	row := tree.Datums{
 		tree.DNull,

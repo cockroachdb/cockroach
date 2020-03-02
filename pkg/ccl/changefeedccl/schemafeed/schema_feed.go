@@ -46,10 +46,6 @@ func (e TableEvent) Timestamp() hlc.Timestamp {
 	return e.After.ModificationTime
 }
 
-// FilterFunc allows a client to control which events are added to the
-// SchemaFeed.
-type FilterFunc func(context.Context, TableEvent) (shouldFilter bool, err error)
-
 // Config configures a SchemaFeed.
 type Config struct {
 	DB       *client.DB
@@ -57,7 +53,9 @@ type Config struct {
 	Settings *cluster.Settings
 	Targets  jobspb.ChangefeedTargets
 
-	FilterFunc FilterFunc
+	// SchemaChangeEvents controls the class of events which are emitted by this
+	// SchemaFeed.
+	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
 
 	// InitialHighWater is the timestamp after which events should occur.
 	//
@@ -88,7 +86,7 @@ type Config struct {
 // invariant (via `validateFn`). An error timestamp is also kept, which is the
 // lowest timestamp where at least one table doesn't meet the invariant.
 type SchemaFeed struct {
-	filterFn FilterFunc
+	filter   tableEventFilter
 	db       *client.DB
 	clock    *hlc.Clock
 	settings *cluster.Settings
@@ -132,7 +130,7 @@ type tableHistoryWaiter struct {
 func New(cfg Config) *SchemaFeed {
 	// TODO(ajwerner): validate config.
 	m := &SchemaFeed{
-		filterFn: cfg.FilterFunc,
+		filter:   schemaChangeEventFilters[cfg.SchemaChangeEvents],
 		db:       cfg.DB,
 		clock:    cfg.Clock,
 		settings: cfg.Settings,
@@ -431,7 +429,7 @@ func (tf *SchemaFeed) validateTable(ctx context.Context, desc *sqlbase.TableDesc
 			Before: lastVersion,
 			After:  desc,
 		}
-		shouldFilter, err := tf.filterFn(ctx, e)
+		shouldFilter, err := tf.filter.shouldFilter(ctx, e)
 		log.Infof(ctx, "validate shouldFilter %v %v", formatEvent(e), shouldFilter)
 		if err != nil {
 			return err
