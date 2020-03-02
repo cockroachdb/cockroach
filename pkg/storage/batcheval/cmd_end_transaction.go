@@ -163,10 +163,12 @@ func EndTransaction(
 	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
 	}
-
-	// If a 1PC txn was required and we're in EndTransaction, something went wrong.
 	if args.Require1PC {
+		// If a 1PC txn was required and we're in EndTransaction, something went wrong.
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
+	}
+	if args.Commit && args.Poison {
+		return result.Result{}, errors.Errorf("cannot poison during a committing EndTxn request")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -486,8 +488,11 @@ func resolveLocalIntents(
 					return nil
 				}
 				resolveMS := ms
-				resolveAllowance--
-				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
+				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
+				if ok {
+					resolveAllowance--
+				}
+				return err
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
@@ -517,13 +522,13 @@ func resolveLocalIntents(
 			return nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
 		}
 	}
-	// If the poison arg is set, make sure to set the abort span entry.
-	if args.Poison && txn.Status == roachpb.ABORTED {
-		if err := SetAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, true /* poison */); err != nil {
+
+	removedAny := resolveAllowance != intentResolutionBatchSize
+	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
+		if err := UpdateAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, args.Poison); err != nil {
 			return nil, err
 		}
 	}
-
 	return externalIntents, nil
 }
 

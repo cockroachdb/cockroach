@@ -83,7 +83,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// (committed). The sstable also has a second write at a different (older)
 	// timestamp, because if it were empty other than the deletion tombstone, it
 	// would not have any timestamp bounds and would be selected for every read.
-	if err := engine.MVCCResolveWriteIntent(ctx, db, nil, roachpb.Intent{
+	if _, err := engine.MVCCResolveWriteIntent(ctx, db, nil, roachpb.Intent{
 		Span:   roachpb.Span{Key: k},
 		Txn:    txn.TxnMeta,
 		Status: roachpb.COMMITTED,

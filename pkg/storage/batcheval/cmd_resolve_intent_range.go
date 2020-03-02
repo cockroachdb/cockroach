@@ -67,8 +67,8 @@ func ResolveIntentRange(
 	var res result.Result
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
-	if WriteAbortSpanOnResolve(args.Status) {
-		if err := SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
+	if WriteAbortSpanOnResolve(args.Status, args.Poison, numKeys > 0) {
+		if err := UpdateAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
 			return result.Result{}, err
 		}
 	}

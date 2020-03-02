@@ -54,16 +54,31 @@ func VerifyTransaction(
 }
 
 // WriteAbortSpanOnResolve returns true if the abort span must be written when
-// the transaction with the given status is resolved.
-func WriteAbortSpanOnResolve(status roachpb.TransactionStatus) bool {
-	return status == roachpb.ABORTED
+// the transaction with the given status is resolved. It avoids instructing the
+// caller to write to the abort span if the caller didn't actually remove any
+// intents but intends to poison.
+func WriteAbortSpanOnResolve(status roachpb.TransactionStatus, poison, removedIntents bool) bool {
+	if status != roachpb.ABORTED {
+		// Only update the AbortSpan for aborted transactions.
+		return false
+	}
+	if !poison {
+		// We can remove any entries from the AbortSpan.
+		return true
+	}
+	// We only need to add AbortSpan entries for transactions that we have
+	// invalidated by removing intents. This avoids leaking AbortSpan entries if
+	// a request raced with txn record GC and mistakenly interpreted a committed
+	// txn as aborted only to return to the intent it wanted to push and find it
+	// already resolved. We're only required to write an entry if we do
+	// something that could confuse/invalidate a zombie transaction.
+	return removedIntents
 }
 
-// SetAbortSpan clears any AbortSpan entry if poison is false.
-// Otherwise, if poison is true, creates an entry for this transaction
-// in the AbortSpan to prevent future reads or writes from
-// spuriously succeeding on this range.
-func SetAbortSpan(
+// UpdateAbortSpan clears any AbortSpan entry if poison is false. Otherwise, if
+// poison is true, it creates an entry for this transaction in the AbortSpan to
+// prevent future reads or writes from spuriously succeeding on this range.
+func UpdateAbortSpan(
 	ctx context.Context,
 	rec EvalContext,
 	batch engine.ReadWriter,
