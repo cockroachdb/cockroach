@@ -375,6 +375,18 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaReleaseSavepointStarted = metric.Metadata{
+		Name:        "sql.savepoint.release.started.count",
+		Help:        "Number of `RELEASE SAVEPOINT` statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRollbackToSavepointStarted = metric.Metadata{
+		Name:        "sql.savepoint.rollback.started.count",
+		Help:        "Number of `ROLLBACK TO SAVEPOINT` statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaRestartSavepointStarted = metric.Metadata{
 		Name:        "sql.restart_savepoint.started.count",
 		Help:        "Number of `SAVEPOINT cockroach_restart` statements started",
@@ -458,6 +470,18 @@ var (
 	MetaSavepointExecuted = metric.Metadata{
 		Name:        "sql.savepoint.count",
 		Help:        "Number of SQL SAVEPOINT statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaReleaseSavepointExecuted = metric.Metadata{
+		Name:        "sql.savepoint.release.count",
+		Help:        "Number of `RELEASE SAVEPOINT` statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRollbackToSavepointExecuted = metric.Metadata{
+		Name:        "sql.savepoint.rollback.count",
+		Help:        "Number of `ROLLBACK TO SAVEPOINT` statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
