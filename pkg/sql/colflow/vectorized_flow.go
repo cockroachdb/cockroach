@@ -940,14 +940,11 @@ func (s *vectorizedFlowCreator) setupFlow(
 			op = vsc
 		}
 
-		if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize192Auto ||
-			flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto) &&
+		if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize192Auto) &&
 			pspec.Output[0].Type == execinfrapb.OutputRouterSpec_BY_HASH {
 			// colexec.HashRouter is not supported when vectorize=192auto since it can
 			// buffer an unlimited number of tuples, even though it falls back to
 			// disk. vectorize=auto does support this.
-			// TODO(asubiotto): Currently unsupported with vectorize=auto as well,
-			//  will be enabled in a future PR.
 			return nil, errors.Errorf("hash router encountered when vectorize=auto")
 		}
 		opOutputTypes, err := typeconv.FromColumnTypes(result.ColumnTypes)
