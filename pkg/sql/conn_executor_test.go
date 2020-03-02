@@ -119,7 +119,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	// the kv-level transaction has already been committed). But we still
 	// exercise this state to check that the server doesn't crash (which used to
 	// happen - #9879).
-	tests := []string{"Open", "RestartWait", "CommitWait"}
+	tests := []string{"Open", "Aborted", "CommitWait"}
 	for _, state := range tests {
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
@@ -151,7 +151,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				t.Fatal(err)
 			}
 
-			if state == "RestartWait" || state == "CommitWait" {
+			if state == "CommitWait" {
 				if _, err := tx.ExecContext(ctx, "SAVEPOINT cockroach_restart", nil); err != nil {
 					t.Fatal(err)
 				}
@@ -173,7 +173,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				t.Fatal(err)
 			}
 
-			if state == "RestartWait" || state == "CommitWait" {
+			if state == "CommitWait" {
 				_, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT cockroach_restart", nil)
 				if state == "CommitWait" {
 					if err != nil {

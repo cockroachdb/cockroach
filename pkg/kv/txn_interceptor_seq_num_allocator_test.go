@@ -353,3 +353,33 @@ func TestSequenceNumberAllocationAfterLeafInitialization(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 }
+
+// TestSequenceNumberAllocationSavepoint tests that the allocator populates a
+// savepoint with the cur seq num.
+func TestSequenceNumberAllocationSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, mockSender := makeMockTxnSeqNumAllocator()
+	txn := makeTxnProto()
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+	// Perform a few writes to increase the sequence number counter.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+	br, pErr := s.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, enginepb.TxnSeq(2), s.writeSeq)
+
+	sp := &savepoint{}
+	s.createSavepointLocked(ctx, sp)
+	require.Equal(t, enginepb.TxnSeq(2), sp.seqNum)
+}

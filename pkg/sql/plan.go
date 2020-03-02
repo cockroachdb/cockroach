@@ -442,6 +442,9 @@ const (
 	// planFlagImplicitTxn marks that the plan was run inside of an implicit
 	// transaction.
 	planFlagImplicitTxn
+
+	// planFlagIsDDL marks that the plan contains DDL.
+	planFlagIsDDL
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

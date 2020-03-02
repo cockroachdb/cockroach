@@ -320,10 +320,6 @@ commit
 subtest end
 
 subtest rollback_across_retry
-
-# TODO(knz): change this test when rolling back across retries becomes
-# supported.
-
 begin
 ----
 0 <noignore>
@@ -339,11 +335,11 @@ epoch: 0 -> 1
 
 release x
 ----
-(*withstack.withStack) cannot release savepoint across transaction retries
+0 <noignore>
 
 rollback x
 ----
-(*withstack.withStack) cannot rollback savepoint across transaction retries
+0 <noignore>
 
 subtest end
 
@@ -364,11 +360,35 @@ txn id changed
 
 release x
 ----
-(*withstack.withStack) cannot release savepoint across transaction retries
+0 <noignore>
 
 rollback x
 ----
-(*withstack.withStack) cannot rollback savepoint across transaction retries
+0 <noignore>
 
+subtest end
+
+subtest rollback_across_retry_fails_for_non-initial_savepoint
+# The difference from the previous test is that here we do a write before
+# creating the savepoint.
+begin
+----
+0 <noignore>
+
+put k a
+----
+
+savepoint x
+----
+1 <noignore>
+
+retry
+----
+synthetic error: TransactionRetryWithProtoRefreshError: forced retry
+epoch: 0 -> 1
+
+rollback x
+----
+(*roachpb.TransactionRetryWithProtoRefreshError) TransactionRetryWithProtoRefreshError: cannot rollback to savepoint after a transaction restart
 
 subtest end

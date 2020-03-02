@@ -304,8 +304,13 @@ const (
 
 // SavepointToken represents a savepoint.
 type SavepointToken interface {
-	// SavepointToken is a marker interface.
-	SavepointToken()
+	// Initial returns true if this savepoint has been created before performing
+	// any KV operations. If so, it is possible to rollback to it after a
+	// retriable error. If not, then rolling back to it after a retriable error
+	// will return the retriable error again because reads might have been
+	// evaluated before the savepoint and such reads cannot have their timestamp
+	// forwarded without a refresh.
+	Initial() bool
 }
 
 // TxnStatusOpt represents options for TxnSender.GetMeta().

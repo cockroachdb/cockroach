@@ -30,7 +30,8 @@ const (
 )
 
 // NewTransactionAbortedError creates an error for trying to run a command in
-// the context of transaction that's already aborted.
+// the context of transaction that's in the aborted state. Any statement other
+// than ROLLBACK TO SAVEPOINT will return this error.
 func NewTransactionAbortedError(customMsg string) error {
 	if customMsg != "" {
 		return pgerror.Newf(

@@ -123,7 +123,7 @@ eexpect root@
 send "SELECT crdb_internal.force_retry('1s':::INTERVAL);\r"
 eexpect "ERROR: restart transaction"
 eexpect root@
-eexpect "RETRY>"
+eexpect "ERROR>"
 end_test
 
 start_test "Test that prompt reverts to OPEN at beginning of new attempt."

@@ -555,3 +555,71 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	require.Equal(t, int64(0), tsr.refreshSpansBytes)
 	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
 }
+
+// TestTxnSpanRefresherSavepoint checks that the span refresher can savepoint
+// its state and restore it.
+func TestTxnSpanRefresherSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tsr, mockSender := makeMockTxnSpanRefresher()
+
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	txn := makeTxnProto()
+
+	read := func(key roachpb.Key) {
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: &txn}
+		getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
+		ba.Add(&getArgs)
+		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+		br, pErr := tsr.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	}
+	read(keyA)
+	require.Equal(t, []roachpb.Span{{Key: keyA}}, tsr.refreshSpans)
+
+	s := savepoint{}
+	tsr.createSavepointLocked(ctx, &s)
+
+	// Another read after the savepoint was created.
+	read(keyB)
+	require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, tsr.refreshSpans)
+
+	require.Equal(t, []roachpb.Span{{Key: keyA}}, s.refreshSpans)
+	require.Less(t, s.refreshSpanBytes, tsr.refreshSpansBytes)
+	require.False(t, s.refreshInvalid)
+
+	// Rollback the savepoint and check that refresh spans were overwritten.
+	tsr.rollbackToSavepointLocked(ctx, s)
+	require.Equal(t, []roachpb.Span{{Key: keyA}}, tsr.refreshSpans)
+
+	// Set MaxTxnRefreshSpansBytes limit low and then exceed it.
+	MaxTxnRefreshSpansBytes.Override(&tsr.st.SV, 1)
+	read(keyB)
+	require.True(t, tsr.refreshInvalid)
+
+	// Check that rolling back to the savepoint resets refreshInvalid.
+	tsr.rollbackToSavepointLocked(ctx, s)
+	require.Equal(t, tsr.refreshSpansBytes, s.refreshSpanBytes)
+	require.False(t, tsr.refreshInvalid)
+
+	// Exceed the limit again and then create a savepoint.
+	read(keyB)
+	require.True(t, tsr.refreshInvalid)
+	s = savepoint{}
+	tsr.createSavepointLocked(ctx, &s)
+	require.True(t, s.refreshInvalid)
+	require.Empty(t, s.refreshSpans)
+	// Rollback to the savepoint check that refreshes are still invalid.
+	tsr.rollbackToSavepointLocked(ctx, s)
+	require.Empty(t, tsr.refreshSpans)
+	require.True(t, tsr.refreshInvalid)
+}
