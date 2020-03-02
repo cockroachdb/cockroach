@@ -783,6 +783,14 @@ func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION S
 func (*ShowTransactionStatus) observerStatement() {}
 
 // StatementType implements the Statement interface.
+func (*ShowSavepointStatus) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowSavepointStatus) StatementTag() string { return "SHOW SAVEPOINT STATUS" }
+
+func (*ShowSavepointStatus) observerStatement() {}
+
+// StatementType implements the Statement interface.
 func (*ShowUsers) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -976,6 +984,7 @@ func (n *ShowRanges) String() string                     { return AsString(n) }
 func (n *ShowRangeForRow) String() string                { return AsString(n) }
 func (n *ShowRoleGrants) String() string                 { return AsString(n) }
 func (n *ShowRoles) String() string                      { return AsString(n) }
+func (n *ShowSavepointStatus) String() string            { return AsString(n) }
 func (n *ShowSchemas) String() string                    { return AsString(n) }
 func (n *ShowSequences) String() string                  { return AsString(n) }
 func (n *ShowSessions) String() string                   { return AsString(n) }

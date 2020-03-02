@@ -69,6 +69,11 @@ type Builder struct {
 	// set to true, it ensures that a FOR UPDATE row-level locking mode is used
 	// by scans. See forUpdateLocking.
 	forceForUpdateLocking bool
+
+	// -- output --
+
+	// IsDDL is set to true if the statement contains DDL.
+	IsDDL bool
 }
 
 // New constructs an instance of the execution node builder using the

@@ -141,13 +141,16 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	var ep execPlan
 	var err error
 
-	// This will set the system DB trigger for transactions containing
-	// schema-modifying statements that have no effect, such as
-	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
-	// where the table already exists. This will generate some false schema
-	// cache refreshes, but that's expected to be quite rare in practice.
-	isDDL := opt.IsDDLOp(e)
-	if isDDL {
+	if opt.IsDDLOp(e) {
+		// Mark the statement as containing DDL for use
+		// in the SQL executor.
+		b.IsDDL = true
+
+		// This will set the system DB trigger for transactions containing
+		// schema-modifying statements that have no effect, such as
+		// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
+		// where the table already exists. This will generate some false schema
+		// cache refreshes, but that's expected to be quite rare in practice.
 		if err := b.evalCtx.Txn.SetSystemConfigTrigger(); err != nil {
 			return execPlan{}, errors.WithSecondaryError(
 				unimplemented.NewWithIssuef(26508,
