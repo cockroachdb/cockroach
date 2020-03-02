@@ -12,13 +12,21 @@ import React from "react";
 import "./link.styl";
 
 interface LinkProps {
-  href: string;
+  onClick?: () => void;
+  href?: string;
   target?: "_blank" | "_parent" | "_self";
 }
 export function Link(props: React.PropsWithChildren<LinkProps>) {
-  const { href, target, children } = props;
+  const { href, target, children, onClick } = props;
   return (
-    <a className="crl-link" href={href} target={target}>{children}</a>
+    <a
+      className="crl-link"
+      href={href}
+      target={target}
+      onClick={onClick}
+    >
+      {children}
+    </a>
   );
 }
 

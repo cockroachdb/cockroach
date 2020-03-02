@@ -12,12 +12,16 @@ import { Tooltip } from "antd";
 import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router-dom";
+import { isEmpty, last } from "lodash";
+
 import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
 import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
+import { Link as NavLink } from "src/components";
 import "./statements.styl";
+import { DiagnosticStatusBadge } from "oss/src/views/statements/diagnostics/diagnosticStatusBadge";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -28,6 +32,7 @@ export interface AggregateStatistics {
   stats: StatementStatistics;
   drawer?: boolean;
   firstCellBordered?: boolean;
+  diagnostics?: any[];
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
@@ -79,7 +84,33 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
     },
   ];
 
-  return original.concat(makeCommonColumns(statements));
+  const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
+      title: "Diagnostics",
+      cell: (stmt) => {
+        if (!isEmpty(stmt.diagnostics)) {
+          const lastDiagnostic = last(stmt.diagnostics);
+          return <DiagnosticStatusBadge status={lastDiagnostic.status} />;
+        }
+        return (
+          <NavLink
+            onClick={() => stmt.stats}
+          >
+            Activate
+          </NavLink>
+        );
+      },
+      sort: (stmt) => {
+        if (!isEmpty(stmt.diagnostics)) {
+          const lastDiagnostic = last(stmt.diagnostics);
+          return lastDiagnostic.status;
+        }
+        return null;
+      },
+  };
+
+  return original
+    .concat(makeCommonColumns(statements))
+    .concat([diagnosticsColumn]);
 }
 
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
