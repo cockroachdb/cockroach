@@ -724,35 +724,6 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{KVTransactionLayer, "Transactions", "Savepoints"}},
-		Charts: []chartDescription{
-			{
-				Title: "Count",
-				Metrics: []string{
-					"sql.savepoint.count",
-					"sql.savepoint.count.internal",
-				},
-				AxisLabel: "SQL Statements",
-			},
-			{
-				Title: "Restarts (Internal)",
-				Metrics: []string{
-					"sql.restart_savepoint.count.internal",
-					"sql.restart_savepoint.release.count.internal",
-					"sql.restart_savepoint.rollback.count.internal",
-				},
-			},
-			{
-				Title: "Restarts",
-				Metrics: []string{
-					"sql.restart_savepoint.count",
-					"sql.restart_savepoint.release.count",
-					"sql.restart_savepoint.rollback.count",
-				},
-			},
-		},
-	},
-	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
 		Charts: []chartDescription{
 			{
