@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -87,10 +86,10 @@ type alterRoleRun struct {
 func (n *alterRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		telemetry.Inc(sqltelemetry.SchemaChangeAlter("role"))
+		sqltelemetry.IAMAlter(sqltelemetry.Role)
 		opName = "alter-role"
 	} else {
-		telemetry.Inc(sqltelemetry.SchemaChangeAlter("user"))
+		sqltelemetry.IAMAlter(sqltelemetry.User)
 		opName = "alter-user"
 	}
 	name, err := n.name()
@@ -171,7 +170,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts()
+	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.AlterRole)
 	if err != nil {
 		return err
 	}

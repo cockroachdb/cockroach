@@ -16,7 +16,6 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -98,10 +97,10 @@ func (p *planner) CreateRoleNode(
 func (n *CreateRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		telemetry.Inc(sqltelemetry.SchemaChangeCreate("role"))
+		sqltelemetry.IncIAMCreate(sqltelemetry.Role)
 		opName = "create-role"
 	} else {
-		telemetry.Inc(sqltelemetry.SchemaChangeCreate("user"))
+		sqltelemetry.IncIAMCreate(sqltelemetry.User)
 		opName = "create-user"
 	}
 
@@ -175,7 +174,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts()
+	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.CreateRole)
 	if err != nil {
 		return err
 	}
