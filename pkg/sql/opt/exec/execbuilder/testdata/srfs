@@ -89,7 +89,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2
 ----
 ·                 distributed  false                        ·                     ·
-·                 vectorized   false                        ·                     ·
+·                 vectorized   true                         ·                     ·
 sort              ·            ·                            (a, generate_series)  +a,+generate_series
  │                order        +a,+generate_series          ·                     ·
  └── project set  ·            ·                            (a, generate_series)  ·
