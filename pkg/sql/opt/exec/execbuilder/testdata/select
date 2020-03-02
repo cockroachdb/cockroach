@@ -1506,7 +1506,7 @@ query TTT
 EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e.y = s.y ORDER BY s.z LIMIT 10
 ----
 ·                              distributed  false
-·                              vectorized   false
+·                              vectorized   true
 render                         ·            ·
  └── limit                     ·            ·
       │                        count        10

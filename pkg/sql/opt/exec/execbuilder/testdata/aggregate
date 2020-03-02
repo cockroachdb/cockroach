@@ -1079,7 +1079,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM xyz JOIN kv ON y=v
 ----
 ·                    distributed  false         ·        ·
-·                    vectorized   false         ·        ·
+·                    vectorized   true          ·        ·
 group                ·            ·             (count)  ·
  │                   aggregate 0  count_rows()  ·        ·
  │                   scalar       ·             ·        ·
