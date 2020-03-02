@@ -2870,7 +2870,8 @@ with &1 (foo)
       ├── stats: [rows=1000]
       ├── cost: 0.01
       ├── prune: (6)
-      └── cte-uses: map[1:1]
+      └── cte-uses
+           └── &1: count=1 used-columns=(2)
 
 # --------------------------------------------------
 # PruneUnionAllCols
