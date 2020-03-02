@@ -184,7 +184,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
 ·               distributed        false            ·          ·
-·               vectorized         false            ·          ·
+·               vectorized         true             ·          ·
 hash-join       ·                  ·                (x, y)     ·
  │              type               semi             ·          ·
  │              equality           (x) = (column5)  ·          ·
@@ -220,7 +220,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
 ·               distributed        false            ·          ·
-·               vectorized         false            ·          ·
+·               vectorized         true             ·          ·
 hash-join       ·                  ·                (x, z)     ·
  │              type               anti             ·          ·
  │              equality           (x) = (column5)  ·          ·

@@ -47,7 +47,7 @@ SELECT * FROM (SELECT x||x FROM foo) WITH ORDINALITY
 aa 1
 bb 2
 
-query TII
+query TII rowsort
 SELECT * FROM (SELECT x, ordinality*2 FROM foo WITH ORDINALITY AS a) JOIN foo WITH ORDINALITY AS b USING(x)
 ----
 a 2 1
