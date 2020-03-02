@@ -93,7 +93,7 @@ func NewSecondaryLogger(
 			if thatLogger != l {
 				continue
 			}
-			secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers[:i], secondaryLogRegistry.mu.loggers[i+1:])
+			secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers[:i], secondaryLogRegistry.mu.loggers[i+1:]...)
 			return
 		}
 	}()
