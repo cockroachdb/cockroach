@@ -22,7 +22,7 @@ import (
 func TestOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
-		offset   uint64
+		offset   int
 		tuples   []tuple
 		expected []tuple
 	}{

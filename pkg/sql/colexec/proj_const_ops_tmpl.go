@@ -141,9 +141,9 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	} else {
-		col = execgen.SLICE(col, 0, int(n))
-		_ = _RET_UNSAFEGET(projCol, int(n)-1)
-		for execgen.RANGE(i, col, 0, int(n)) {
+		col = execgen.SLICE(col, 0, n)
+		_ = _RET_UNSAFEGET(projCol, n-1)
+		for execgen.RANGE(i, col, 0, n) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	}
@@ -164,10 +164,10 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 	// {{$hasNulls := $.HasNulls}}
 	// {{with $.Overload}}
 	// {{if _HAS_NULLS}}
-	if !colNulls.NullAt(uint16(i)) {
+	if !colNulls.NullAt(i) {
 		// We only want to perform the projection operation if the value is not null.
 		// {{end}}
-		arg := execgen.UNSAFEGET(col, int(i))
+		arg := execgen.UNSAFEGET(col, i)
 		// {{if _IS_CONST_LEFT}}
 		_ASSIGN(projCol[i], p.constArg, arg)
 		// {{else}}

@@ -649,7 +649,7 @@ func (d *diskQueue) Dequeue(b coldata.Batch) (bool, error) {
 				// TODO(asubiotto): This is a stop-gap solution. The issue is that
 				//  ownership semantics are a bit murky. Can we do better? Refer to the
 				//  issue.
-				vecs[i] = coldata.NewMemColumn(d.typs[i], int(coldata.BatchSize()))
+				vecs[i] = coldata.NewMemColumn(d.typs[i], coldata.BatchSize())
 			}
 		}
 		if err := d.deserializerState.GetBatch(d.deserializerState.curBatch, b); err != nil {

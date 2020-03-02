@@ -169,8 +169,7 @@ func calcRangeCounter(
 	// unavailable ranges for each range based on the liveness table.
 	if rangeCounter {
 		unavailable = !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
-			_, live := livenessMap[rDesc.NodeID]
-			return live
+			return livenessMap[rDesc.NodeID].IsLive
 		})
 		needed := GetNeededReplicas(numReplicas, clusterNodes)
 		liveVoterReplicas := calcLiveVoterReplicas(desc, livenessMap)

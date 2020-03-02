@@ -120,7 +120,7 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 	setOneSide := func(colOffset int, batch coldata.Batch, sourceTypes []coltypes.T, idx int) {
 		sel := batch.Selection()
 		if sel != nil {
-			idx = int(sel[idx])
+			idx = sel[idx]
 		}
 		f.allocator.PerformOperation(f.input.batch.ColVecs(), func() {
 			for colIdx := 0; colIdx < batch.Width(); colIdx++ {
@@ -129,8 +129,8 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 						Src:         batch.ColVec(colIdx),
 						ColType:     sourceTypes[colIdx],
 						DestIdx:     0,
-						SrcStartIdx: uint64(idx),
-						SrcEndIdx:   uint64(idx + 1),
+						SrcStartIdx: idx,
+						SrcEndIdx:   idx + 1,
 					})
 			}
 		})

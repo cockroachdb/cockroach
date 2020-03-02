@@ -170,7 +170,7 @@ func newExternalSorter(
 		// Each disk queue will use up to BufferSizeBytes of RAM, so we will give
 		// it almost all of the available memory (except for a single output batch
 		// that mergers will use).
-		batchMemSize := estimateBatchSizeBytes(inputTypes, int(coldata.BatchSize()))
+		batchMemSize := estimateBatchSizeBytes(inputTypes, coldata.BatchSize())
 		maxNumberPartitions = (int(memoryLimit) - batchMemSize) / (diskQueueCfg.BufferSizeBytes + batchMemSize)
 	}
 	// In order to make progress when merging we have to merge at least two

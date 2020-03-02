@@ -272,8 +272,8 @@ func makeAggregateFuncs(
 	return funcs, outTyps, nil
 }
 
-func (a *orderedAggregator) initWithOutputBatchSize(outputSize uint16) {
-	a.initWithInputAndOutputBatchSize(int(coldata.BatchSize()), int(outputSize))
+func (a *orderedAggregator) initWithOutputBatchSize(outputSize int) {
+	a.initWithInputAndOutputBatchSize(coldata.BatchSize(), outputSize)
 }
 
 func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSize int) {
@@ -292,7 +292,7 @@ func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSiz
 }
 
 func (a *orderedAggregator) Init() {
-	a.initWithInputAndOutputBatchSize(int(coldata.BatchSize()), int(coldata.BatchSize()))
+	a.initWithInputAndOutputBatchSize(coldata.BatchSize(), coldata.BatchSize())
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
@@ -323,8 +323,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 						Src:         vec,
 						ColType:     a.outputTypes[i],
 						DestIdx:     0,
-						SrcStartIdx: uint64(a.scratch.outputSize),
-						SrcEndIdx:   uint64(a.scratch.resumeIdx + 1),
+						SrcStartIdx: a.scratch.outputSize,
+						SrcEndIdx:   a.scratch.resumeIdx + 1,
 					},
 				)
 				// Now we need to restore the desired length for the Vec.
@@ -335,7 +335,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		a.scratch.resumeIdx = newResumeIdx
 		if a.scratch.resumeIdx >= a.scratch.outputSize {
 			// We still have overflow output values.
-			a.scratch.SetLength(uint16(a.scratch.outputSize))
+			a.scratch.SetLength(a.scratch.outputSize)
 			a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 				for i := 0; i < len(a.outputTypes); i++ {
 					a.unsafeBatch.ColVec(i).Copy(
@@ -344,7 +344,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 								Src:         a.scratch.ColVec(i),
 								ColType:     a.outputTypes[i],
 								SrcStartIdx: 0,
-								SrcEndIdx:   uint64(a.scratch.Length()),
+								SrcEndIdx:   a.scratch.Length(),
 							},
 						},
 					)
@@ -390,7 +390,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 
 	batchToReturn := a.scratch.Batch
 	if a.scratch.resumeIdx > a.scratch.outputSize {
-		a.scratch.SetLength(uint16(a.scratch.outputSize))
+		a.scratch.SetLength(a.scratch.outputSize)
 		a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 			for i := 0; i < len(a.outputTypes); i++ {
 				a.unsafeBatch.ColVec(i).Copy(
@@ -399,7 +399,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 							Src:         a.scratch.ColVec(i),
 							ColType:     a.outputTypes[i],
 							SrcStartIdx: 0,
-							SrcEndIdx:   uint64(a.scratch.Length()),
+							SrcEndIdx:   a.scratch.Length(),
 						},
 					},
 				)
@@ -409,7 +409,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		batchToReturn = a.unsafeBatch
 		a.scratch.shouldResetInternalBatch = false
 	} else {
-		a.scratch.SetLength(uint16(a.scratch.resumeIdx))
+		a.scratch.SetLength(a.scratch.resumeIdx)
 		a.scratch.shouldResetInternalBatch = true
 	}
 

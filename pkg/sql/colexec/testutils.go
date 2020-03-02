@@ -57,12 +57,12 @@ type RepeatableBatchSource struct {
 
 	colVecs  []coldata.Vec
 	typs     []coltypes.T
-	sel      []uint16
-	batchLen uint16
+	sel      []int
+	batchLen int
 	// numToCopy indicates the number of tuples that needs to be copied. It is
 	// equal to batchLen when sel is nil and is equal to maxSelIdx+1 when sel is
 	// non-nil.
-	numToCopy uint16
+	numToCopy int
 	output    coldata.Batch
 
 	batchesToReturn int
@@ -84,7 +84,7 @@ func NewRepeatableBatchSource(allocator *Allocator, batch coldata.Batch) *Repeat
 	batchLen := batch.Length()
 	numToCopy := batchLen
 	if sel != nil {
-		maxIdx := uint16(0)
+		maxIdx := 0
 		for _, selIdx := range sel[:batchLen] {
 			if selIdx > maxIdx {
 				maxIdx = selIdx
@@ -92,7 +92,7 @@ func NewRepeatableBatchSource(allocator *Allocator, batch coldata.Batch) *Repeat
 		}
 		numToCopy = maxIdx + 1
 	}
-	output := allocator.NewMemBatchWithSize(typs, int(numToCopy))
+	output := allocator.NewMemBatchWithSize(typs, numToCopy)
 	src := &RepeatableBatchSource{
 		colVecs:   batch.ColVecs(),
 		typs:      typs,
@@ -122,7 +122,7 @@ func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
 			SliceArgs: coldata.SliceArgs{
 				ColType:   typ,
 				Src:       s.colVecs[i],
-				SrcEndIdx: uint64(s.numToCopy),
+				SrcEndIdx: s.numToCopy,
 			},
 		})
 	}

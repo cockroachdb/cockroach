@@ -68,7 +68,7 @@ type _GOTYPE interface{}
 
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the the second input == the third input.
-func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
+func _ASSIGN_EQ(_, _, _ interface{}) int {
 	execerror.VectorizedInternalPanic("")
 }
 
@@ -86,11 +86,11 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	if input == &o.right {
 		bufferedGroup = o.proberState.rBufferedGroup
 	}
-	lastBufferedTupleIdx := bufferedGroup.length - 1
-	tupleToLookAtIdx := uint64(rowIdx)
+	lastBufferedTupleIdx := bufferedGroup.Length() - 1
+	tupleToLookAtIdx := rowIdx
 	sel := batch.Selection()
 	if sel != nil {
-		tupleToLookAtIdx = uint64(sel[rowIdx])
+		tupleToLookAtIdx = sel[rowIdx]
 	}
 
 	// Check all equality columns in the first row of batch to make sure we're in
@@ -106,17 +106,17 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			// per batch. In some cases (like INNER JOIN, or LEFT OUTER JOIN with the
 			// right side being an input) this check will always return false since
 			// nulls couldn't be buffered up though.
-			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
+			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt(lastBufferedTupleIdx) {
 				return true
 			}
 			bufferedCol := bufferedGroup.ColVec(int(colIdx))._TemplateType()
-			prevVal := execgen.UNSAFEGET(bufferedCol, int(lastBufferedTupleIdx))
+			prevVal := execgen.UNSAFEGET(bufferedCol, lastBufferedTupleIdx)
 			var curVal _GOTYPE
-			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(tupleToLookAtIdx) {
+			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx) {
 				return true
 			}
 			col := batch.ColVec(int(colIdx))._TemplateType()
-			curVal = execgen.UNSAFEGET(col, int(tupleToLookAtIdx))
+			curVal = execgen.UNSAFEGET(col, tupleToLookAtIdx)
 			var match bool
 			_ASSIGN_EQ(match, prevVal, curVal)
 			if !match {

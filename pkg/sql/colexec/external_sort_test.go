@@ -134,7 +134,7 @@ func TestExternalSortRandomized(t *testing.T) {
 		},
 	}
 	rng, _ := randutil.NewPseudoRand()
-	nTups := int(coldata.BatchSize()*4 + 1)
+	nTups := coldata.BatchSize()*4 + 1
 	maxCols := 2
 	// TODO(yuzefovich): randomize types as well.
 	logTypes := make([]types.T, maxCols)
@@ -159,7 +159,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	require.NoError(t, err)
 	// memoryToSort is the total amount of memory that will be sorted in this
 	// test.
-	memoryToSort := (nTups / int(coldata.BatchSize())) * estimateBatchSizeBytes(colTyps, int(coldata.BatchSize()))
+	memoryToSort := (nTups / coldata.BatchSize()) * estimateBatchSizeBytes(colTyps, coldata.BatchSize())
 	// partitionSize will be the memory limit passed in to tests with a memory
 	// limit. With a maximum number of partitions of 2 this will result in
 	// repartitioning twice.
@@ -244,11 +244,11 @@ func BenchmarkExternalSort(b *testing.B) {
 		for _, nCols := range []int{1, 2, 4} {
 			for _, spillForced := range []bool{false, true} {
 				flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-				name := fmt.Sprintf("rows=%d/cols=%d/spilled=%t", nBatches*int(coldata.BatchSize()), nCols, spillForced)
+				name := fmt.Sprintf("rows=%d/cols=%d/spilled=%t", nBatches*coldata.BatchSize(), nCols, spillForced)
 				b.Run(name, func(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
-					b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols))
+					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
 					logTypes := make([]types.T, nCols)
 					for i := range logTypes {
 						logTypes[i] = *types.Int
@@ -262,7 +262,7 @@ func BenchmarkExternalSort(b *testing.B) {
 						ordCols[i].ColIdx = uint32(i)
 						ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
 						col := batch.ColVec(i).Int64()
-						for j := 0; j < int(coldata.BatchSize()); j++ {
+						for j := 0; j < coldata.BatchSize(); j++ {
 							col[j] = rng.Int63() % int64((i*1024)+1)
 						}
 					}

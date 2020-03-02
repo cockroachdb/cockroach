@@ -34,7 +34,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	typs := []types.T{*types.Int}
 	// There will be at least two batches of rows so that we can see whether the
 	// internal batch is reset.
-	nRows := int(coldata.BatchSize()) * 2
+	nRows := coldata.BatchSize() * 2
 	nCols := len(typs)
 	rows := sqlbase.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(typs, rows)
@@ -60,7 +60,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 		if batch.Length() == 0 {
 			break
 		}
-		foundRows += int(batch.Length())
+		foundRows += batch.Length()
 		// The "meat" of the test - we're updating the batch that the Columnarizer
 		// owns.
 		batch.SetSelection(true)
@@ -123,7 +123,7 @@ func BenchmarkColumnarize(b *testing.B) {
 			if batch.Length() == 0 {
 				break
 			}
-			foundRows += int(batch.Length())
+			foundRows += batch.Length()
 		}
 		if foundRows != nRows {
 			b.Fatalf("found %d rows, expected %d", foundRows, nRows)

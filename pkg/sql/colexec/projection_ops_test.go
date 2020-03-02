@@ -84,13 +84,13 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col := batch.ColVec(0).Int64()
-	for i := 0; i < int(coldata.BatchSize()); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		col[i] = 1
 	}
 	if hasNulls {
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(i)
 			}
 		}
 	}
@@ -98,8 +98,8 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < int(coldata.BatchSize()); i++ {
-			sel[i] = uint16(i)
+		for i := 0; i < coldata.BatchSize(); i++ {
+			sel[i] = i
 		}
 	}
 	source := NewRepeatableBatchSource(testAllocator, batch)
@@ -137,7 +137,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	binOp := tree.Mult
 	var input Operator
 	colIdx := 3
-	constVal := float64(31.37)
+	constVal := 31.37
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(testAllocator, types.Float, types.Float, binOp, input, colIdx, constArg, outputIdx)
@@ -220,8 +220,8 @@ func TestRandomComparisons(t *testing.T) {
 		coldata.RandomVec(rng, typ, bytesFixedLength, lVec, numTuples, 0)
 		coldata.RandomVec(rng, typ, bytesFixedLength, rVec, numTuples, 0)
 		for i := range lDatums {
-			lDatums[i] = PhysicalTypeColElemToDatum(lVec, uint16(i), da, ct)
-			rDatums[i] = PhysicalTypeColElemToDatum(rVec, uint16(i), da, ct)
+			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, da, ct)
+			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, da, ct)
 		}
 		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 			for i := range lDatums {
@@ -249,9 +249,9 @@ func TestRandomComparisons(t *testing.T) {
 				t.Fatal(err)
 			}
 			op.Init()
-			var idx uint16
+			var idx int
 			for batch := op.Next(ctx); batch.Length() > 0; batch = op.Next(ctx) {
-				for i := uint16(0); i < batch.Length(); i++ {
+				for i := 0; i < batch.Length(); i++ {
 					absIdx := idx + i
 					assert.Equal(t, expected[absIdx], batch.ColVec(2).Bool()[i],
 						"expected %s %s %s (%s[%d]) to be %t found %t", lDatums[absIdx], cmpOp, rDatums[absIdx], ct, absIdx,
@@ -304,14 +304,14 @@ func benchmarkProjOp(
 	case coltypes.Int64:
 		col1 := batch.ColVec(0).Int64()
 		col2 := batch.ColVec(1).Int64()
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			col1[i] = 1
 			col2[i] = 1
 		}
 	case coltypes.Int32:
 		col1 := batch.ColVec(0).Int32()
 		col2 := batch.ColVec(1).Int32()
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			col1[i] = 1
 			col2[i] = 1
 		}
@@ -319,12 +319,12 @@ func benchmarkProjOp(
 		b.Fatalf("unsupported type: %s", intType)
 	}
 	if hasNulls {
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(i)
 			}
 			if rand.Float64() < nullProbability {
-				batch.ColVec(1).Nulls().SetNull(uint16(i))
+				batch.ColVec(1).Nulls().SetNull(i)
 			}
 		}
 	}
@@ -332,7 +332,7 @@ func benchmarkProjOp(
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := uint16(0); i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			sel[i] = i
 		}
 	}

@@ -65,23 +65,9 @@ func (n *Nulls) MaybeHasNulls() bool {
 	return n.maybeHasNulls
 }
 
-// NullAt returns true if the ith value of the column is null.
-func (n *Nulls) NullAt(i uint16) bool {
-	return n.NullAt64(uint64(i))
-}
-
-// SetNull sets the ith value of the column to null.
-func (n *Nulls) SetNull(i uint16) {
-	n.SetNull64(uint64(i))
-}
-
-// UnsetNull unsets the ith value of the column.
-func (n *Nulls) UnsetNull(i uint16) {
-	n.UnsetNull64(uint64(i))
-}
-
-// SetNullRange sets all the values in [start, end) to null.
-func (n *Nulls) SetNullRange(start uint64, end uint64) {
+// SetNullRange sets all the values in [startIdx, endIdx) to null.
+func (n *Nulls) SetNullRange(startIdx int, endIdx int) {
+	start, end := uint64(startIdx), uint64(endIdx)
 	if start >= end {
 		return
 	}
@@ -117,10 +103,11 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 	}
 }
 
-// UnsetNullRange unsets all the nulls in the range [start, end).
+// UnsetNullRange unsets all the nulls in the range [startIdx, endIdx).
 // After using UnsetNullRange, n might not contain any null values,
 // but maybeHasNulls could still be true.
-func (n *Nulls) UnsetNullRange(start, end uint64) {
+func (n *Nulls) UnsetNullRange(startIdx, endIdx int) {
+	start, end := uint64(startIdx), uint64(endIdx)
 	if start >= end {
 		return
 	}
@@ -157,9 +144,9 @@ func (n *Nulls) UnsetNullRange(start, end uint64) {
 }
 
 // Truncate sets all values with index greater than or equal to start to null.
-func (n *Nulls) Truncate(start uint16) {
-	end := uint64(len(n.nulls) * 8)
-	n.SetNullRange(uint64(start), end)
+func (n *Nulls) Truncate(start int) {
+	end := len(n.nulls) * 8
+	n.SetNullRange(start, end)
 }
 
 // UnsetNulls sets the column to have no null values.
@@ -174,9 +161,9 @@ func (n *Nulls) UnsetNulls() {
 
 // UnsetNullsAfter sets all values with index greater than or equal to idx to
 // non-null.
-func (n *Nulls) UnsetNullsAfter(idx uint16) {
-	end := uint64(len(n.nulls) * 8)
-	n.UnsetNullRange(uint64(idx), end)
+func (n *Nulls) UnsetNullsAfter(idx int) {
+	end := len(n.nulls) * 8
+	n.UnsetNullRange(idx, end)
 }
 
 // SetNulls sets the column to have only null values.
@@ -189,20 +176,20 @@ func (n *Nulls) SetNulls() {
 	}
 }
 
-// NullAt64 returns true if the ith value of the column is null.
-func (n *Nulls) NullAt64(i uint64) bool {
-	return n.nulls[i/8]&bitMask[i%8] == 0
+// NullAt returns true if the ith value of the column is null.
+func (n *Nulls) NullAt(i int) bool {
+	return n.nulls[i>>3]&bitMask[i&7] == 0
 }
 
-// SetNull64 sets the ith value of the column to null.
-func (n *Nulls) SetNull64(i uint64) {
+// SetNull sets the ith value of the column to null.
+func (n *Nulls) SetNull(i int) {
 	n.maybeHasNulls = true
-	n.nulls[i/8] &= flippedBitMask[i%8]
+	n.nulls[i>>3] &= flippedBitMask[i&7]
 }
 
-// UnsetNull64 unsets the ith values of the column.
-func (n *Nulls) UnsetNull64(i uint64) {
-	n.nulls[i/8] |= bitMask[i%8]
+// UnsetNull unsets the ith values of the column.
+func (n *Nulls) UnsetNull(i int) {
+	n.nulls[i>>3] |= bitMask[i&7]
 }
 
 // Remove the unused warning.
@@ -214,7 +201,8 @@ var (
 // swap swaps the null values at the argument indices. We implement the logic
 // directly on the byte array rather than case on the result of NullAt to avoid
 // having to take some branches.
-func (n *Nulls) swap(i, j uint64) {
+func (n *Nulls) swap(iIdx, jIdx int) {
+	i, j := uint64(iIdx), uint64(jIdx)
 	// Get original null values.
 	ni := (n.nulls[i/8] >> (i % 8)) & 0x1
 	nj := (n.nulls[j/8] >> (j % 8)) & 0x1
@@ -238,7 +226,7 @@ func (n *Nulls) set(args SliceArgs) {
 	outputLen := args.DestIdx + toDuplicate
 	// We will need ceil(outputLen/8) bytes to encode the combined nulls.
 	needed := (outputLen-1)/8 + 1
-	current := uint64(len(n.nulls))
+	current := len(n.nulls)
 	if current < needed {
 		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
 	}
@@ -248,17 +236,17 @@ func (n *Nulls) set(args SliceArgs) {
 	if args.Src.MaybeHasNulls() {
 		src := args.Src.Nulls()
 		if args.Sel != nil {
-			for i := uint64(0); i < toDuplicate; i++ {
+			for i := 0; i < toDuplicate; i++ {
 				if src.NullAt(args.Sel[args.SrcStartIdx+i]) {
-					n.SetNull64(args.DestIdx + i)
+					n.SetNull(args.DestIdx + i)
 				}
 			}
 		} else {
-			for i := uint64(0); i < toDuplicate; i++ {
+			for i := 0; i < toDuplicate; i++ {
 				// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
 				// like n.nulls[i] |= vec.nulls[i].
-				if src.NullAt64(args.SrcStartIdx + i) {
-					n.SetNull64(args.DestIdx + i)
+				if src.NullAt(args.SrcStartIdx + i) {
+					n.SetNull(args.DestIdx + i)
 				}
 			}
 		}
@@ -267,17 +255,18 @@ func (n *Nulls) set(args SliceArgs) {
 
 // Slice returns a new Nulls representing a slice of the current Nulls from
 // [start, end).
-func (n *Nulls) Slice(start uint64, end uint64) Nulls {
+func (n *Nulls) Slice(start int, end int) Nulls {
+	startUnsigned, endUnsigned := uint64(start), uint64(end)
 	if !n.maybeHasNulls {
-		return NewNulls(int(end - start))
+		return NewNulls(end - start)
 	}
 	if start >= end {
 		return NewNulls(0)
 	}
-	s := NewNulls(int(end - start))
+	s := NewNulls(end - start)
 	s.maybeHasNulls = true
-	mod := start % 8
-	startIdx := int(start / 8)
+	mod := startUnsigned % 8
+	startIdx := start / 8
 	if mod == 0 {
 		copy(s.nulls, n.nulls[startIdx:])
 	} else {
@@ -288,12 +277,12 @@ func (n *Nulls) Slice(start uint64, end uint64) Nulls {
 			if startIdx+i+1 < len(n.nulls) {
 				// And now bitwise or the remaining bits with the bits we want to
 				// bring over from the next index.
-				s.nulls[i] |= (n.nulls[startIdx+i+1] << (8 - mod))
+				s.nulls[i] |= n.nulls[startIdx+i+1] << (8 - mod)
 			}
 		}
 	}
 	// Zero out any trailing bits in the final byte.
-	endBits := (end - start) % 8
+	endBits := (endUnsigned - startUnsigned) % 8
 	if endBits != 0 {
 		mask := onesMask << endBits
 		s.nulls[len(s.nulls)-1] |= mask

@@ -82,7 +82,7 @@ func (b *bool_OP_TYPEAgg) CurrentOutputIndex() int {
 func (b *bool_OP_TYPEAgg) SetOutputIndex(idx int) {
 	if b.curIdx != -1 {
 		b.curIdx = idx
-		b.nulls.UnsetNullsAfter(uint16(idx))
+		b.nulls.UnsetNullsAfter(idx)
 	}
 }
 
@@ -93,7 +93,7 @@ func (b *bool_OP_TYPEAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 	inputLen := batch.Length()
 	if inputLen == 0 {
 		if !b.sawNonNull {
-			b.nulls.SetNull(uint16(b.curIdx))
+			b.nulls.SetNull(b.curIdx)
 		} else {
 			b.vec[b.curIdx] = b.curAgg
 		}
@@ -129,7 +129,7 @@ func _ACCUMULATE_BOOLEAN(b *bool_OP_TYPEAgg, nulls *coldata.Nulls, i int) { // *
 	if b.groups[i] {
 		if b.curIdx >= 0 {
 			if !b.sawNonNull {
-				b.nulls.SetNull(uint16(b.curIdx))
+				b.nulls.SetNull(b.curIdx)
 			} else {
 				b.vec[b.curIdx] = b.curAgg
 			}
@@ -140,7 +140,7 @@ func _ACCUMULATE_BOOLEAN(b *bool_OP_TYPEAgg, nulls *coldata.Nulls, i int) { // *
 		// {{end}}
 		b.sawNonNull = false
 	}
-	isNull := nulls.NullAt(uint16(i))
+	isNull := nulls.NullAt(i)
 	if !isNull {
 		// {{with .Global}}
 		_ASSIGN_BOOL_OP(b.curAgg, b.curAgg, col[i])

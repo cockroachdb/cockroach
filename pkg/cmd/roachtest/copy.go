@@ -127,8 +127,8 @@ func registerCopy(r *testRegistry) {
 			}
 			rc := rangeCount()
 			t.l.Printf("range count after copy = %d\n", rc)
-			highExp := (rows * rowEstimate) / (rangeMinBytes * 2)
-			lowExp := (rows * rowEstimate) / (rangeMaxBytes)
+			highExp := (rows * rowEstimate) / rangeMinBytes
+			lowExp := (rows * rowEstimate) / rangeMaxBytes
 			if rc > highExp || rc < lowExp {
 				return errors.Errorf("expected range count for table between %d and %d, found %d",
 					lowExp, highExp, rc)

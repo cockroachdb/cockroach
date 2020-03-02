@@ -29,7 +29,7 @@ import (
 // that this function handles nulls as well, so there is no need for a separate
 // null check.
 func PhysicalTypeColElemToDatum(
-	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct *types.T,
+	col coldata.Vec, rowIdx int, da sqlbase.DatumAlloc, ct *types.T,
 ) tree.Datum {
 	if col.MaybeHasNulls() {
 		if col.Nulls().NullAt(rowIdx) {
@@ -65,7 +65,7 @@ func PhysicalTypeColElemToDatum(
 	case types.StringFamily:
 		// Note that there is no need for a copy since casting to a string will do
 		// that.
-		b := col.Bytes().Get(int(rowIdx))
+		b := col.Bytes().Get(rowIdx)
 		if ct.Oid() == oid.T_name {
 			return da.NewDName(tree.DString(string(b)))
 		}
@@ -73,13 +73,13 @@ func PhysicalTypeColElemToDatum(
 	case types.BytesFamily:
 		// Note that there is no need for a copy since DBytes uses a string as
 		// underlying storage, which will perform the copy for us.
-		return da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
+		return da.NewDBytes(tree.DBytes(col.Bytes().Get(rowIdx)))
 	case types.OidFamily:
 		return da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 	case types.UuidFamily:
 		// Note that there is no need for a copy because uuid.FromBytes will perform
 		// a copy.
-		id, err := uuid.FromBytes(col.Bytes().Get(int(rowIdx)))
+		id, err := uuid.FromBytes(col.Bytes().Get(rowIdx))
 		if err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}

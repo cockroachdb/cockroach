@@ -59,11 +59,11 @@ type unorderedDistinct struct {
 	buildFinished bool
 
 	// sel is a list of indices to select representing the distinct rows.
-	sel           []uint64
-	distinctCount uint64
+	sel           []int
+	distinctCount int
 
 	output           coldata.Batch
-	outputBatchStart uint64
+	outputBatchStart int
 }
 
 var _ Operator = &unorderedDistinct{}
@@ -87,7 +87,10 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 		// Since next is no longer useful and pre-allocated to the appropriate
 		// size, we can use it as the selection vector. This way we don't have to
 		// reallocate a huge array.
-		op.sel = op.ht.next
+		//op.sel = op.ht.next
+		// TODO(yuzefovich): consider changing hash table to operate on ints
+		// instead of uint64s. Then we'll be able to reuse op.ht.next.
+		op.sel = make([]int, op.ht.vals.Length())
 		// We calculate keyID for tuple at index i as "i+1," so we start from
 		// position 1.
 		for i, isHead := range op.ht.head[1:] {
@@ -95,7 +98,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 				// The tuple at index i is the "head" of the linked list of tuples that
 				// are the same on the distinct columns, so we will include it while
 				// all other tuples from the linked list will be skipped.
-				op.sel[op.distinctCount] = uint64(i)
+				op.sel[op.distinctCount] = i
 				op.distinctCount++
 			}
 		}
@@ -104,26 +107,26 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	// Create and return the next batch of input to a maximum size of
 	// coldata.BatchSize(). The rows in the new batch are specified by the
 	// corresponding slice in the selection vector.
-	nSelected := uint16(0)
-	batchEnd := op.outputBatchStart + uint64(coldata.BatchSize())
+	nSelected := 0
+	batchEnd := op.outputBatchStart + coldata.BatchSize()
 	if batchEnd > op.distinctCount {
 		batchEnd = op.distinctCount
 	}
-	nSelected = uint16(batchEnd - op.outputBatchStart)
+	nSelected = batchEnd - op.outputBatchStart
 
 	op.allocator.PerformOperation(op.output.ColVecs(), func() {
 		for i, colIdx := range op.ht.outCols {
 			toCol := op.output.ColVec(i)
-			fromCol := op.ht.vals.colVecs[colIdx]
+			fromCol := op.ht.vals.ColVec(int(colIdx))
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
 						ColType:     op.ht.valTypes[op.ht.outCols[i]],
 						Src:         fromCol,
+						Sel:         op.sel,
 						SrcStartIdx: op.outputBatchStart,
 						SrcEndIdx:   batchEnd,
 					},
-					Sel64: op.sel,
 				},
 			)
 		}
@@ -138,6 +141,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 // benchmarks.
 func (op *unorderedDistinct) reset() {
 	op.outputBatchStart = 0
-	op.ht.vals.reset()
+	op.ht.vals.ResetInternalBatch()
+	op.ht.vals.SetLength(0)
 	op.buildFinished = false
 }

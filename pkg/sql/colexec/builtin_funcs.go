@@ -58,7 +58,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
-			for i := uint16(0); i < n; i++ {
+			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]

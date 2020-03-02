@@ -34,14 +34,14 @@ type caseOp struct {
 	// origSel is a buffer used to keep track of the original selection vector of
 	// the input batch. We need to do this because we're going to destructively
 	// modify the selection vector in order to do the work of the case statement.
-	origSel []uint16
+	origSel []int
 	// prevSel is a buffer used to keep track of the selection vector before
 	// running a case arm (i.e. "previous to the current case arm"). We need to
 	// keep track of it because case arm will modify the selection vector of the
 	// batch, and then we need to figure out which tuples have not been matched
 	// by the current case arm (those present in the "previous" sel and not
 	// present in the "current" sel).
-	prevSel []uint16
+	prevSel []int
 }
 
 var _ InternalMemoryOperator = &caseOp{}
@@ -95,8 +95,8 @@ func NewCaseOp(
 		thenIdxs:  thenIdxs,
 		outputIdx: outputIdx,
 		typ:       typ,
-		origSel:   make([]uint16, coldata.BatchSize()),
-		prevSel:   make([]uint16, coldata.BatchSize()),
+		origSel:   make([]int, coldata.BatchSize()),
+		prevSel:   make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -157,7 +157,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 			// toSubtract is now a selection vector containing all matched tuples of the
 			// current case arm.
 			var subtractIdx int
-			var curIdx uint16
+			var curIdx int
 			if batch.Length() > 0 {
 				inputCol := batch.ColVec(c.thenIdxs[i])
 				// Copy the results into the output vector, using the toSubtract selection
@@ -170,7 +170,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 							Src:         inputCol,
 							Sel:         toSubtract,
 							SrcStartIdx: 0,
-							SrcEndIdx:   uint64(len(toSubtract)),
+							SrcEndIdx:   len(toSubtract),
 						},
 						SelOnDest: true,
 					})
@@ -194,7 +194,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 					// considering the entire batch of tuples for this case arm. Make a new
 					// selection vector with all of the tuples but the ones that just matched.
 					c.prevSel = c.prevSel[:cap(c.prevSel)]
-					for i := uint16(0); i < origLen; i++ {
+					for i := 0; i < origLen; i++ {
 						if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
 							subtractIdx++
 							continue
@@ -237,7 +237,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 						Src:         inputCol,
 						Sel:         batch.Selection(),
 						SrcStartIdx: 0,
-						SrcEndIdx:   uint64(batch.Length()),
+						SrcEndIdx:   batch.Length(),
 					},
 					SelOnDest: true,
 				})
