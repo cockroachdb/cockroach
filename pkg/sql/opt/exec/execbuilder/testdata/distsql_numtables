@@ -167,7 +167,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
 ·                    distributed  true               ·              ·
-·                    vectorized   false              ·              ·
+·                    vectorized   true               ·              ·
 render               ·            ·                  (y, str, res)  ·
  │                   render 0     y                  ·              ·
  │                   render 1     str                ·              ·
@@ -186,7 +186,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
 ·                         distributed  true               ·              ·
-·                         vectorized   false              ·              ·
+·                         vectorized   true               ·              ·
 render                    ·            ·                  (y, str, res)  ·
  │                        render 0     y                  ·              ·
  │                        render 1     str                ·              ·

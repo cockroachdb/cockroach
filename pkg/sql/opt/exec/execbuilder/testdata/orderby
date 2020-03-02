@@ -12,7 +12,7 @@ query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 sort       ·            ·
  │         order        +b
  └── scan  ·            ·
@@ -23,7 +23,7 @@ query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 sort       ·            ·
  │         order        -b
  └── scan  ·            ·
@@ -35,7 +35,7 @@ query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 limit           ·            ·
  │              count        2
  └── sort       ·            ·
@@ -108,7 +108,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
 ·          distributed  false      ·          ·
-·          vectorized   false      ·          ·
+·          vectorized   true       ·          ·
 sort       ·            ·          (a, b, c)  +b,+a
  │         order        +b,+a      ·          ·
  └── scan  ·            ·          (a, b, c)  ·
@@ -119,7 +119,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
 ·          distributed  false      ·          ·
-·          vectorized   false      ·          ·
+·          vectorized   true       ·          ·
 sort       ·            ·          (a, b, c)  +b,+a
  │         order        +b,+a      ·          ·
  └── scan  ·            ·          (a, b, c)  ·
@@ -130,7 +130,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
 ·          distributed  false      ·          ·
-·          vectorized   false      ·          ·
+·          vectorized   true       ·          ·
 sort       ·            ·          (a, b, c)  +b,+a
  │         order        +b,+a      ·          ·
  └── scan  ·            ·          (a, b, c)  ·
@@ -141,7 +141,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
 ·          distributed  false      ·          ·
-·          vectorized   false      ·          ·
+·          vectorized   true       ·          ·
 sort       ·            ·          (a, b, c)  +b,+a
  │         order        +b,+a      ·          ·
  └── scan  ·            ·          (a, b, c)  ·
@@ -182,7 +182,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT b+2 r FROM t ORDER BY b+2
 ----
 ·               distributed  false      ·    ·
-·               vectorized   false      ·    ·
+·               vectorized   true       ·    ·
 sort            ·            ·          (r)  +r
  │              order        +r         ·    ·
  └── render     ·            ·          (r)  ·
@@ -196,7 +196,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
 ·               distributed  false      ·    ·
-·               vectorized   false      ·    ·
+·               vectorized   true       ·    ·
 sort            ·            ·          (y)  +y
  │              order        +y         ·    ·
  └── render     ·            ·          (y)  ·
@@ -265,7 +265,7 @@ query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 30 ORDER BY b, a, d
 ----
 ·                     distributed      false
-·                     vectorized       false
+·                     vectorized       true
 render                ·                ·
  └── sort             ·                ·
       │               order            +b,+a,+d
@@ -282,7 +282,7 @@ query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 render          ·            ·
  └── sort       ·            ·
       │         order        +b,+a,+d
@@ -307,7 +307,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
 ·          distributed  false        ·             ·
-·          vectorized   false        ·             ·
+·          vectorized   true         ·             ·
 sort       ·            ·            (a, b, c, d)  +b,+a,+c
  │         order        +b,+a,+c     ·             ·
  └── scan  ·            ·            (a, b, c, d)  ·
@@ -686,7 +686,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
 ·                    distributed  false        ·                ·
-·                    vectorized   false        ·                ·
+·                    vectorized   true         ·                ·
 render               ·            ·            (b, a)           ·
  │                   render 0     b            ·                ·
  │                   render 1     a            ·                ·
@@ -704,7 +704,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
 ·                    distributed  false        ·                ·
-·                    vectorized   false        ·                ·
+·                    vectorized   true         ·                ·
 render               ·            ·            (b, a)           ·
  │                   render 0     b            ·                ·
  │                   render 1     a            ·                ·
@@ -730,7 +730,7 @@ EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
 ]
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 sort       ·            ·
  │         order        +x,+y
  └── scan  ·            ·
@@ -743,7 +743,7 @@ EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
 ]
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 sort       ·            ·
  │         order        +x,+y
  └── scan  ·            ·
@@ -795,7 +795,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
 ·               distributed  false       ·       ·
-·               vectorized   false       ·       ·
+·               vectorized   true        ·       ·
 render          ·            ·           (k)     ·
  │              render 0     k           ·       ·
  └── sort       ·            ·           (k, v)  +v,+k
@@ -906,7 +906,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 ----
 ·                     distributed  false            ·                      ·
-·                     vectorized   false            ·                      ·
+·                     vectorized   true             ·                      ·
 sort                  ·            ·                (x, y, z)              +x
  │                    order        +x               ·                      ·
  └── filter           ·            ·                (x, y, z)              ·

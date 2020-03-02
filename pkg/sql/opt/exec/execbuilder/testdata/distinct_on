@@ -76,7 +76,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
 ·          distributed  false        ·    ·
-·          vectorized   false        ·    ·
+·          vectorized   true         ·    ·
 sort       ·            ·            (b)  +b
  │         order        +b           ·    ·
  └── scan  ·            ·            (b)  ·
@@ -193,7 +193,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
 ·                    distributed      false        ·          ·
-·                    vectorized       false        ·          ·
+·                    vectorized       true         ·          ·
 render               ·                ·            (a, c)     +a
  │                   render 0         a            ·          ·
  │                   render 1         c            ·          ·
@@ -246,7 +246,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
 ----
 ·                    distributed  false        ·          ·
-·                    vectorized   false        ·          ·
+·                    vectorized   true         ·          ·
 render               ·            ·            (y, z, x)  ·
  │                   render 0     y            ·          ·
  │                   render 1     z            ·          ·
@@ -429,7 +429,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
 ----
 ·          distributed  false        ·          ·
-·          vectorized   false        ·          ·
+·          vectorized   true         ·          ·
 sort       ·            ·            (x, y, z)  +x,+y
  │         order        +x,+y        ·          ·
  └── scan  ·            ·            (x, y, z)  ·
@@ -457,7 +457,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
 ----
 ·               distributed  false        ·       ·
-·               vectorized   false        ·       ·
+·               vectorized   true         ·       ·
 limit           ·            ·            (x, y)  +y
  │              count        1            ·       ·
  └── sort       ·            ·            (x, y)  +y
@@ -471,7 +471,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
 ----
 ·                         distributed  false         ·        ·
-·                         vectorized   false         ·        ·
+·                         vectorized   true          ·        ·
 group                     ·            ·             (count)  ·
  │                        aggregate 0  count_rows()  ·        ·
  │                        scalar       ·             ·        ·
