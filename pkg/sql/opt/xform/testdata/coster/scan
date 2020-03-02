@@ -12,6 +12,87 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(3)
 
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100
+  }
+]'
+----
+
+# The limit hint is propagated to the scan and the cost is slightly more than
+# the limit hint * 2 (the scan soft limit multiplier).
+opt
+SELECT * FROM a WHERE k > 5 AND i IN (1, 3, 5, 7, 9) LIMIT 20
+----
+limit
+ ├── columns: k:1!null i:2!null s:3 d:4!null
+ ├── cardinality: [0 - 20]
+ ├── stats: [rows=20]
+ ├── cost: 1197.56333
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1!null i:2!null s:3 d:4!null
+ │    ├── stats: [rows=1666.66667, distinct(1)=1666.66667, null(1)=0, distinct(2)=5, null(2)=0]
+ │    ├── cost: 1197.35333
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 20.00
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 s:3 d:4!null
+ │    │    ├── constraint: /1: [/6 - ]
+ │    │    ├── stats: [rows=33333.3333, distinct(1)=33333.3333, null(1)=0]
+ │    │    ├── cost: 864.01
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── limit hint: 400.00
+ │    └── filters
+ │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
+ └── 20
+
+# The limit hint is propagated, but the cost is not multiplied by 2 (the scan
+# soft limit multiplier) since the row count is known to be less than 400 * 2.
+opt
+SELECT * FROM a WHERE k > 0 AND k <= 450 AND i IN (1, 3, 5, 7, 9) LIMIT 20
+----
+limit
+ ├── columns: k:1!null i:2!null s:3 d:4!null
+ ├── cardinality: [0 - 20]
+ ├── stats: [rows=20]
+ ├── cost: 490.73
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── select
+ │    ├── columns: k:1!null i:2!null s:3 d:4!null
+ │    ├── cardinality: [0 - 450]
+ │    ├── stats: [rows=22.5, distinct(1)=22.5, null(1)=0, distinct(2)=5, null(2)=0]
+ │    ├── cost: 490.52
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── limit hint: 20.00
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 s:3 d:4!null
+ │    │    ├── constraint: /1: [/1 - /450]
+ │    │    ├── cardinality: [0 - 450]
+ │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
+ │    │    ├── cost: 486.01
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    └── limit hint: 400.00
+ │    └── filters
+ │         └── i:2 IN (1, 3, 5, 7, 9) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
+ └── 20
+
 # Regression test for #35042. Ensure we always prefer constrained scans.
 exec-ddl
 CREATE TABLE speed_test (id INT PRIMARY KEY DEFAULT unique_rowid())

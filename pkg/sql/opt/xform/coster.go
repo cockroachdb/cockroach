@@ -415,12 +415,8 @@ func (c *coster) computeLookupJoinCost(
 	// expensive lookup join might have a lower cost if its limit hint estimates
 	// that most rows will not be needed.
 	if required.LimitHint != 0 {
-		// Estimate the number of lookups needed to output LimitHint rows.
-		expectedLookupCount := required.LimitHint * lookupCount / join.Relational().Stats.RowCount
-
-		// Round up to the nearest multiple of a batch.
-		expectedLookupCount = math.Ceil(expectedLookupCount/joinReaderBatchSize) * joinReaderBatchSize
-		lookupCount = math.Min(lookupCount, expectedLookupCount)
+		outputRows := join.Relational().Stats.RowCount
+		lookupCount = lookupJoinInputLimitHint(lookupCount, outputRows, required.LimitHint)
 	}
 
 	// The rows in the (left) input are used to probe into the (right) table.
@@ -791,4 +787,15 @@ func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
 
 	// Weight the constraintScore twice as much as the lease score.
 	return (constraintScore*2 + leaseScore) / 3
+}
+
+// lookupJoinInputLimitHint calculates an appropriate limit hint for the input
+// to a lookup join.
+func lookupJoinInputLimitHint(inputRowCount, outputRowCount, outputLimitHint float64) float64 {
+	// Estimate the number of lookups needed to output LimitHint rows.
+	expectedLookupCount := outputLimitHint * inputRowCount / outputRowCount
+
+	// Round up to the nearest multiple of a batch.
+	expectedLookupCount = math.Ceil(expectedLookupCount/joinReaderBatchSize) * joinReaderBatchSize
+	return math.Min(inputRowCount, expectedLookupCount)
 }

@@ -112,6 +112,118 @@ inner-join (hash)
  └── filters
       └── k:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+# Lookup join with no limit hint.
+opt
+SELECT * FROM a JOIN b ON k=z WHERE x > 0 AND x <= 5000
+----
+inner-join (lookup a)
+ ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ ├── key columns: [6] = [1]
+ ├── lookup columns are key
+ ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(6)=1000, null(6)=0]
+ ├── cost: 71400.04
+ ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ ├── select
+ │    ├── columns: x:5!null z:6!null
+ │    ├── stats: [rows=10000, distinct(5)=1000, null(5)=0, distinct(6)=1000, null(6)=0]
+ │    ├── cost: 10600.03
+ │    ├── scan b
+ │    │    ├── columns: x:5 z:6!null
+ │    │    ├── stats: [rows=10000, distinct(5)=1000, null(5)=0, distinct(6)=1000, null(6)=0]
+ │    │    └── cost: 10500.02
+ │    └── filters
+ │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5), constraints=(/5: [/1 - /5000]; tight)]
+ └── filters (true)
+
+# With the limit hint, the cost of the lookup join is reduced.
+opt
+SELECT * FROM a JOIN b ON k=z WHERE x > 0 AND x <= 5000 LIMIT 6000
+----
+limit
+ ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ ├── cardinality: [0 - 6000]
+ ├── stats: [rows=6000]
+ ├── cost: 55460.05
+ ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ ├── inner-join (lookup a)
+ │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ │    ├── key columns: [6] = [1]
+ │    ├── lookup columns are key
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(6)=1000, null(6)=0]
+ │    ├── cost: 55400.04
+ │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ │    ├── limit hint: 6000.00
+ │    ├── select
+ │    │    ├── columns: x:5!null z:6!null
+ │    │    ├── stats: [rows=10000, distinct(5)=1000, null(5)=0, distinct(6)=1000, null(6)=0]
+ │    │    ├── cost: 10600.03
+ │    │    ├── limit hint: 6000.00
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:5 z:6!null
+ │    │    │    ├── stats: [rows=10000, distinct(5)=1000, null(5)=0, distinct(6)=1000, null(6)=0]
+ │    │    │    ├── cost: 10500.02
+ │    │    │    └── limit hint: 6000.00
+ │    │    └── filters
+ │    │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5), constraints=(/5: [/1 - /5000]; tight)]
+ │    └── filters (true)
+ └── 6000
+
+# The limit hint for the lookup join input will be rounded up to the nearest
+# multiple of the batch size, so the cost of the lookup join here is the same
+# as the test case above.
+opt
+SELECT * FROM a JOIN b ON k=z WHERE x > 0 AND x <= 5000 LIMIT 5950
+----
+limit
+ ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ ├── cardinality: [0 - 5950]
+ ├── stats: [rows=5950]
+ ├── cost: 55459.55
+ ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ ├── inner-join (lookup a)
+ │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ │    ├── key columns: [6] = [1]
+ │    ├── lookup columns are key
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(6)=1000, null(6)=0]
+ │    ├── cost: 55400.04
+ │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ │    ├── limit hint: 5950.00
+ │    ├── select
+ │    │    ├── columns: x:5!null z:6!null
+ │    │    ├── stats: [rows=10000, distinct(5)=1000, null(5)=0, distinct(6)=1000, null(6)=0]
+ │    │    ├── cost: 10600.03
+ │    │    ├── limit hint: 6000.00
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:5 z:6!null
+ │    │    │    ├── stats: [rows=10000, distinct(5)=1000, null(5)=0, distinct(6)=1000, null(6)=0]
+ │    │    │    ├── cost: 10500.02
+ │    │    │    └── limit hint: 6000.00
+ │    │    └── filters
+ │    │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5), constraints=(/5: [/1 - /5000]; tight)]
+ │    └── filters (true)
+ └── 5950
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX c_idx (c))
@@ -365,3 +477,133 @@ project
       └── filters
            ├── a:12 = 'foo' [outer=(12), constraints=(/12: [/'foo' - /'foo']; tight), fd=()-->(12)]
            └── b:13 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(13), constraints=(/13: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(13)]
+
+exec-ddl
+DROP TABLE abcde
+----
+
+exec-ddl
+DROP TABLE wxyz
+----
+
+exec-ddl
+CREATE TABLE abcde (
+  a TEXT NOT NULL,
+  b UUID NOT NULL,
+  c UUID NOT NULL,
+  d VARCHAR(255) NOT NULL,
+  e TEXT NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (a, b, c),
+  UNIQUE INDEX idx_abd (a, b, d),
+  UNIQUE INDEX idx_abcd (a, b, c, d)
+)
+----
+
+exec-ddl
+ALTER TABLE abcde INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 250000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 250000,
+    "distinct_count": 2
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 250000,
+    "distinct_count": 125000
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE wxyz (
+  w TEXT NOT NULL,
+  x UUID NOT NULL,
+  y UUID NOT NULL,
+  z TEXT NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (w, x, y),
+  CONSTRAINT "foreign" FOREIGN KEY (w, x, y) REFERENCES abcde (a, b, c)
+)
+----
+
+exec-ddl
+ALTER TABLE wxyz INJECT STATISTICS '[
+  {
+    "columns": ["w"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["x"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 10000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 10000,
+    "distinct_count": 2500
+  }
+]'
+----
+
+# Regression test for #34811. Ensure the soft limit propagation causes us to
+# select a lookup join.
+opt
+SELECT w, x, y, z
+FROM wxyz
+INNER JOIN abcde
+ON w = a AND x = b AND y = c
+WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2'
+ORDER BY d
+LIMIT 10
+----
+project
+ ├── columns: w:1!null x:2!null y:3!null z:4!null  [hidden: d:8!null]
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 104717.922
+ ├── key: (8)
+ ├── fd: ()-->(1,2), (3)-->(4,8), (8)-->(3,4)
+ ├── ordering: +8 opt(1,2) [actual: +8]
+ └── limit
+      ├── columns: w:1!null x:2!null y:3!null z:4!null a:5!null b:6!null c:7!null d:8!null
+      ├── internal-ordering: +8 opt(1,2,5,6)
+      ├── cardinality: [0 - 10]
+      ├── stats: [rows=10]
+      ├── cost: 104717.812
+      ├── key: (7)
+      ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+      ├── ordering: +8 opt(1,2,5,6) [actual: +8]
+      ├── inner-join (lookup wxyz)
+      │    ├── columns: w:1!null x:2!null y:3!null z:4!null a:5!null b:6!null c:7!null d:8!null
+      │    ├── key columns: [5 6 7] = [1 2 3]
+      │    ├── lookup columns are key
+      │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0]
+      │    ├── cost: 104717.702
+      │    ├── key: (7)
+      │    ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+      │    ├── ordering: +8 opt(1,2,5,6) [actual: +8]
+      │    ├── limit hint: 10.00
+      │    ├── scan abcde@idx_abd
+      │    │    ├── columns: a:5!null b:6!null c:7!null d:8!null
+      │    │    ├── constraint: /5/6/8: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
+      │    │    ├── stats: [rows=125000, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=24975.5859, null(7)=0, distinct(8)=93750, null(8)=0]
+      │    │    ├── cost: 216.01
+      │    │    ├── key: (7)
+      │    │    ├── fd: ()-->(5,6), (7)-->(8), (8)-->(7)
+      │    │    ├── ordering: +8 opt(5,6) [actual: +8]
+      │    │    └── limit hint: 100.00
+      │    └── filters
+      │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
+      │         └── x:2 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
+      └── 10

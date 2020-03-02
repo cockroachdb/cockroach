@@ -123,10 +123,15 @@ func BuildChildPhysicalProps(
 		}
 		if input, ok := parent.Child(nth).(memo.RelExpr); ok {
 			inputRows := input.Relational().Stats.RowCount
-			// outputRows / inputRows is roughly the number of output rows produced
-			// for each input row. Reduce the number of required input rows so that
-			// the expected number of output rows is equal to the parent limit hint.
-			childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
+			switch parent.Op() {
+			case opt.SelectOp:
+				// outputRows / inputRows is roughly the number of output rows produced
+				// for each input row. Reduce the number of required input rows so that
+				// the expected number of output rows is equal to the parent limit hint.
+				childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
+			case opt.LookupJoinOp:
+				childProps.LimitHint = lookupJoinInputLimitHint(inputRows, outputRows, parentProps.LimitHint)
+			}
 		}
 
 	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
