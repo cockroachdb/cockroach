@@ -76,7 +76,7 @@ type Result struct {
 // MergeResults returns a result value constructed by merging the arguments.
 // It should only be used if the number of ActiveWarehouses matches and will
 // panic if they differ. Elapsed is computed as the max of all elapsed values
-// and makes the assumption that the distibutions roughly overlap in time.
+// and makes the assumption that the distributions roughly overlap in time.
 // This should be used when merging from multiple load generators during the
 // same test run.
 func MergeResults(results ...*Result) *Result {

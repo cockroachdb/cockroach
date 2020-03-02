@@ -104,7 +104,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
 	if params.Settings == nil {
-		st = cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+		st = cluster.MakeClusterSettings()
 	}
 	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)
@@ -660,8 +660,8 @@ func (ts *TestServer) DistSQLServer() interface{} {
 }
 
 // SetDistSQLSpanResolver is part of TestServerInterface.
-func (ts *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
-	ts.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
+func (s *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
+	s.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
 // GetFirstStoreID is part of TestServerInterface.

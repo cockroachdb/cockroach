@@ -370,16 +370,13 @@ const (
 	// This event is produced both when entering the CommitWait state and also
 	// when leaving it.
 	txnCommit
-	// txnAborted means that the transaction will not commit. This doesn't mean
-	// that the SQL txn is necessarily "finished" - the connection might be in the
-	// Aborted state.
-	// This event is produced both when entering the Aborted state and sometimes
-	// when leaving it.
-	txnAborted
-	// txnRestart means that the transaction is expecting a retry. The iteration
-	// of the txn just finished will not commit.
-	// This event is produced both when entering the RetryWait state and sometimes
-	// when exiting it.
+	// txnRollback means that the SQL transaction has been rolled back (completely
+	// rolled back, not to a savepoint). It is generated when an implicit
+	// transaction fails and when an explicit transaction runs a ROLLBACK.
+	txnRollback
+	// txnRestart means that the transaction is restarting. The iteration of the
+	// txn just finished will not commit. It is generated when we're about to
+	// auto-retry a txn and after a "ROLLBACK TO SAVEPOINT cockroach_restart".
 	txnRestart
 )
 

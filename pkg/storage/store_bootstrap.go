@@ -13,9 +13,9 @@ package storage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
@@ -32,7 +32,10 @@ import (
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
 func InitEngine(
-	ctx context.Context, eng engine.Engine, ident roachpb.StoreIdent, cv cluster.ClusterVersion,
+	ctx context.Context,
+	eng engine.Engine,
+	ident roachpb.StoreIdent,
+	cv clusterversion.ClusterVersion,
 ) error {
 	exIdent, err := ReadStoreIdent(ctx, eng)
 	if err == nil {

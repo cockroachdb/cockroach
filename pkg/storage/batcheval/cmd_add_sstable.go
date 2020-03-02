@@ -13,9 +13,9 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -173,7 +173,7 @@ func EvalAddSSTable(
 		stats.Subtract(skippedKVStats)
 		stats.ContainsEstimates = 0
 	} else {
-		_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+		_ = clusterversion.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
 		stats.ContainsEstimates++
 	}
 

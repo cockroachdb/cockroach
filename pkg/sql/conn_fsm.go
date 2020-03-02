@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -153,14 +152,6 @@ type eventTxnFinishPayload struct {
 	commit bool
 }
 
-// toEvent turns the eventTxnFinishPayload into a txnEvent.
-func (e eventTxnFinishPayload) toEvent() txnEvent {
-	if e.commit {
-		return txnCommit
-	}
-	return txnAborted
-}
-
 type eventTxnRestart struct{}
 
 type eventNonRetriableErr struct {
@@ -243,11 +234,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventTxnStart{fsm.Var("implicitTxn")}: {
 			Description: "BEGIN, or before a statement running as an implicit txn",
 			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn"), RetryIntent: fsm.False},
-			Action: func(args fsm.Args) error {
-				return args.Extended.(*txnState).noTxnToOpen(
-					args.Ctx, args.Event.(eventTxnStart),
-					args.Payload.(eventTxnStartPayload))
-			},
+			Action:      noTxnToOpen,
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
 			// This event doesn't change state, but it produces a skipBatch advance
@@ -278,11 +265,11 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.True}: {
 			Description: "Retriable err on COMMIT",
 			Next:        stateNoTxn{},
-			Action:      cleanupAndFinish,
+			Action:      cleanupAndFinishOnError,
 		},
 		eventNonRetriableErr{IsCommit: fsm.True}: {
 			Next:   stateNoTxn{},
-			Action: cleanupAndFinish,
+			Action: cleanupAndFinishOnError,
 		},
 	},
 	stateOpen{ImplicitTxn: fsm.Var("implicitTxn"), RetryIntent: fsm.Var("retryIntent")}: {
@@ -309,24 +296,18 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	stateOpen{ImplicitTxn: fsm.True, RetryIntent: fsm.False}: {
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
 			Next:   stateNoTxn{},
-			Action: cleanupAndFinish,
+			Action: cleanupAndFinishOnError,
 		},
 		eventNonRetriableErr{IsCommit: fsm.False}: {
 			Next:   stateNoTxn{},
-			Action: cleanupAndFinish,
+			Action: cleanupAndFinishOnError,
 		},
 	},
 	// Handle the errors in explicit txns. They move us to Aborted.
 	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.Var("retryIntent")}: {
 		eventNonRetriableErr{IsCommit: fsm.False}: {
-			Next: stateAborted{RetryIntent: fsm.Var("retryIntent")},
-			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
-				ts.txnAbortCount.Inc(1)
-				return nil
-			},
+			Next:   stateAborted{RetryIntent: fsm.Var("retryIntent")},
+			Action: cleanupOnError,
 		},
 		// SAVEPOINT cockroach_restart: we just change the state (RetryIntent) if it
 		// wasn't set already.
@@ -347,13 +328,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
 			Description: "RetryIntent not set, so handled like non-retriable err",
 			Next:        stateAborted{RetryIntent: fsm.False},
-			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
-				ts.txnAbortCount.Inc(1)
-				return nil
-			},
+			Action:      cleanupOnError,
 		},
 	},
 	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True}: {
@@ -362,7 +337,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				// Note: Preparing the KV txn for restart has already happened by this
 				// point.
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, txnRestart)
+				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
 				return nil
 			},
 		},
@@ -440,7 +415,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 					nil, /* txn */
 					args.Payload.(eventTxnStartPayload).tranCtx,
 				)
-				ts.setAdvanceInfo(advanceOne, noRewind, noEvent)
+				ts.setAdvanceInfo(advanceOne, noRewind, txnRestart)
 				return nil
 			},
 		},
@@ -467,14 +442,8 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
-			Next: stateAborted{RetryIntent: fsm.True},
-			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(eventNonRetriableErrPayload).err)
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
-				ts.txnAbortCount.Inc(1)
-				return nil
-			},
+			Next:   stateAborted{RetryIntent: fsm.True},
+			Action: cleanupOnError,
 		},
 	},
 
@@ -503,20 +472,14 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	},
 })
 
-// cleanupAndFinish rolls back the KV txn and finishes the SQL txn.
-func cleanupAndFinish(args fsm.Args) error {
-	ts := args.Extended.(*txnState)
-	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-	ts.finishSQLTxn()
-	ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
-	return nil
-}
-
 // noTxnToOpen implements the side effects of starting a txn. It also calls
 // setAdvanceInfo().
-func (ts *txnState) noTxnToOpen(
-	connCtx context.Context, ev eventTxnStart, payload eventTxnStartPayload,
-) error {
+func noTxnToOpen(args fsm.Args) error {
+	connCtx := args.Ctx
+	ev := args.Event.(eventTxnStart)
+	payload := args.Payload.(eventTxnStartPayload)
+	ts := args.Extended.(*txnState)
+
 	txnTyp := explicitTxn
 	advCode := advanceOne
 	if ev.ImplicitTxn.Get() {
@@ -543,7 +506,32 @@ func (ts *txnState) noTxnToOpen(
 // finishTxn finishes the transaction. It also calls setAdvanceInfo().
 func (ts *txnState) finishTxn(payload eventTxnFinishPayload) error {
 	ts.finishSQLTxn()
-	ts.setAdvanceInfo(advanceOne, noRewind, payload.toEvent())
+
+	var ev txnEvent
+	if payload.commit {
+		ev = txnCommit
+	} else {
+		ev = txnRollback
+	}
+	ts.setAdvanceInfo(advanceOne, noRewind, ev)
+	return nil
+}
+
+// cleanupOnError rolls back the KV txn.
+func cleanupOnError(args fsm.Args) error {
+	ts := args.Extended.(*txnState)
+	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
+	ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
+	ts.txnAbortCount.Inc(1)
+	return nil
+}
+
+// cleanupAndFinishOnError rolls back the KV txn and finishes the SQL txn.
+func cleanupAndFinishOnError(args fsm.Args) error {
+	ts := args.Extended.(*txnState)
+	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
+	ts.finishSQLTxn()
+	ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
 	return nil
 }
 
@@ -553,14 +541,14 @@ func (ts *txnState) finishTxn(payload eventTxnFinishPayload) error {
 var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
 	stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False}: {
 		// We accept eventNonRetriableErr with both IsCommit={True, fsm.False}, even
-		// those this state machine does not support COMMIT statements because
+		// though this state machine does not support COMMIT statements because
 		// connExecutor.close() sends an eventNonRetriableErr{IsCommit: fsm.True} event.
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
 			Next: stateInternalError{},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn()
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
 				return nil
 			},
 		},
@@ -569,7 +557,7 @@ var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn()
-				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
 				return nil
 			},
 		},

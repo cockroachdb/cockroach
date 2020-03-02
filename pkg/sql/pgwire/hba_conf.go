@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -133,21 +134,21 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			"To use the default configuration, assign the empty string ('').")
 	}
 
-	// Retrieve the cluster settings. We'll need to check the current cluster version.
-	var st *cluster.Settings
+	// Retrieve the cluster version handle. We'll need to check the current cluster version.
+	var vh clusterversion.Handle
 	if values != nil {
-		st = values.Opaque().(*cluster.Settings)
+		vh = values.Opaque().(clusterversion.Handle)
 	}
 
 	for _, entry := range conf.Entries {
 		switch entry.ConnType {
 		case hba.ConnHostAny:
 		case hba.ConnLocal:
-			if st != nil &&
-				!cluster.Version.IsActive(context.TODO(), st, cluster.VersionAuthLocalAndTrustRejectMethods) {
+			if vh != nil &&
+				!vh.IsActive(context.TODO(), clusterversion.VersionAuthLocalAndTrustRejectMethods) {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					`authentication rule type 'local' requires all nodes to be upgraded to %s`,
-					cluster.VersionByKey(cluster.VersionAuthLocalAndTrustRejectMethods),
+					clusterversion.VersionByKey(clusterversion.VersionAuthLocalAndTrustRejectMethods),
 				)
 			}
 		default:
@@ -190,11 +191,11 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 				"Supported methods: %s", listRegisteredMethods())
 		}
 		// Verify that the cluster setting is at least the required version.
-		if st != nil && !cluster.Version.IsActive(context.TODO(), st, method.minReqVersion) {
+		if vh != nil && !vh.IsActive(context.TODO(), method.minReqVersion) {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				`authentication method '%s' requires all nodes to be upgraded to %s`,
 				entry.Method.Value,
-				cluster.VersionByKey(method.minReqVersion))
+				clusterversion.VersionByKey(method.minReqVersion))
 		}
 		// Run the per-method validation.
 		if check := hbaCheckHBAEntries[entry.Method.Value]; check != nil {
@@ -308,7 +309,7 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 func RegisterAuthMethod(
 	method string,
 	fn AuthMethod,
-	minReqVersion cluster.VersionKey,
+	minReqVersion clusterversion.VersionKey,
 	validConnTypes hba.ConnType,
 	checkEntry CheckHBAEntry,
 ) {
@@ -336,7 +337,7 @@ var (
 
 type authMethodEntry struct {
 	methodInfo
-	minReqVersion cluster.VersionKey
+	minReqVersion clusterversion.VersionKey
 }
 
 type methodInfo struct {

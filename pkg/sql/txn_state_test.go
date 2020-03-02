@@ -457,7 +457,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateRestartWait{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnRestart,
+				expEv:   noEvent,
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{},
@@ -484,7 +484,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnAborted,
+				expEv:   txnRollback,
 			},
 			// Expect nil txn.
 			expTxn: nil,
@@ -501,7 +501,7 @@ func TestTransitions(t *testing.T) {
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnAborted,
+				expEv:   txnRollback,
 			},
 			// Expect nil txn.
 			expTxn: nil,
@@ -524,7 +524,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateAborted{RetryIntent: fsm.False},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnAborted,
+				expEv:   noEvent,
 			},
 			expTxn: &expKVTxn{},
 		},
@@ -546,7 +546,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnAborted,
+				expEv:   txnRollback,
 			},
 			// Expect the txn to have been cleared.
 			expTxn: nil,
@@ -563,7 +563,7 @@ func TestTransitions(t *testing.T) {
 			expState:  stateAborted{RetryIntent: fsm.False},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnAborted,
+				expEv:   noEvent,
 			},
 			expTxn: &expKVTxn{},
 		},
@@ -616,7 +616,7 @@ func TestTransitions(t *testing.T) {
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   txnAborted,
+				expEv:   txnRollback,
 			},
 			expTxn: nil,
 		},
@@ -633,7 +633,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   noEvent,
+				expEv:   txnRestart,
 			},
 			expTxn: &expKVTxn{},
 		},
@@ -652,7 +652,7 @@ func TestTransitions(t *testing.T) {
 			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   noEvent,
+				expEv:   txnRestart,
 			},
 			expTxn: &expKVTxn{
 				tsNanos: proto.Int64(now.WallTime),
@@ -674,7 +674,7 @@ func TestTransitions(t *testing.T) {
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
-				expEv:   txnAborted,
+				expEv:   txnRollback,
 			},
 			expTxn: nil,
 		},
@@ -704,7 +704,7 @@ func TestTransitions(t *testing.T) {
 			expState:  stateAborted{RetryIntent: fsm.True},
 			expAdv: expAdvance{
 				expCode: skipBatch,
-				expEv:   txnAborted,
+				expEv:   noEvent,
 			},
 			expTxn: &expKVTxn{},
 		},

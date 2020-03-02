@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
@@ -1292,7 +1292,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			return err
 		}
 		descTablePrefix := keys.MakeTablePrefix(keys.DescriptorTableID)
-		kvs, _ /* splits */ := schema.GetInitialValues(cluster.TestingClusterVersion)
+		kvs, _ /* splits */ := schema.GetInitialValues(clusterversion.TestingClusterVersion)
 		for _, kv := range kvs {
 			if !bytes.HasPrefix(kv.Key, descTablePrefix) {
 				continue

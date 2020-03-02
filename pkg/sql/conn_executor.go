@@ -863,7 +863,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	ev := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
-		ev = txnAborted
+		ev = txnRollback
 	}
 
 	if closeType == normalClose {
@@ -1195,7 +1195,7 @@ func (ex *connExecutor) resetExtraTxnState(
 	}
 
 	switch ev {
-	case txnCommit, txnAborted:
+	case txnCommit, txnRollback:
 		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
 		if ex.extraTxnState.onTxnFinish != nil {
 			ex.extraTxnState.onTxnFinish(ev)
@@ -2201,7 +2201,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		ex.extraTxnState.tables.waitForCacheToDropDatabases(ex.Ctx())
 
 		fallthrough
-	case txnRestart, txnAborted:
+	case txnRestart, txnRollback:
 		if err := ex.resetExtraTxnState(ex.Ctx(), ex.server.dbCache, advInfo.txnEvent); err != nil {
 			return advanceInfo{}, err
 		}

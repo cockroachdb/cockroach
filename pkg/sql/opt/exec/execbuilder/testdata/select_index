@@ -1110,7 +1110,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
 ·          distributed  false             ·             ·
-·          vectorized   false             ·             ·
+·          vectorized   true              ·             ·
 sort       ·            ·                 (a, b, c, d)  -c
  │         order        -c                ·             ·
  └── scan  ·            ·                 (a, b, c, d)  ·
@@ -1122,7 +1122,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
 ----
 ·          distributed  false             ·             ·
-·          vectorized   false             ·             ·
+·          vectorized   true              ·             ·
 sort       ·            ·                 (a, b, c, d)  +c
  │         order        +c                ·             ·
  └── scan  ·            ·                 (a, b, c, d)  ·
@@ -1147,7 +1147,7 @@ query TTT
 EXPLAIN SELECT * FROM noncover ORDER BY c
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 sort       ·            ·
  │         order        +c
  └── scan  ·            ·
@@ -1173,7 +1173,7 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
 ]
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 limit           ·            ·
  │              offset       5
  └── sort       ·            ·
@@ -1206,7 +1206,7 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ]
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 limit           ·            ·
  │              count        1000000
  └── sort       ·            ·

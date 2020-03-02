@@ -14,7 +14,7 @@ query TTT
 EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
 ·                   distributed  false
-·                   vectorized   false
+·                   vectorized   true
 cross-join          ·            ·
  │                  type         cross
  ├── project set    ·            ·
@@ -59,7 +59,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 ----
 ·                             distributed  false                  ·                                         ·
-·                             vectorized   false                  ·                                         ·
+·                             vectorized   true                   ·                                         ·
 render                        ·            ·                      (a, b, generate_series, generate_series)  ·
  │                            render 0     a                      ·                                         ·
  │                            render 1     b                      ·                                         ·
@@ -89,7 +89,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2
 ----
 ·                 distributed  false                        ·                     ·
-·                 vectorized   false                        ·                     ·
+·                 vectorized   true                         ·                     ·
 sort              ·            ·                            (a, generate_series)  +a,+generate_series
  │                order        +a,+generate_series          ·                     ·
  └── project set  ·            ·                            (a, generate_series)  ·

@@ -21,6 +21,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -762,8 +763,8 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.Timestamp = ba.Timestamp
 		res.Replicated.Delta = ms.ToStatsDelta()
 
-		_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
-		if cluster.Version.IsActive(ctx, r.ClusterSettings(), cluster.VersionContainsEstimatesCounter) {
+		_ = clusterversion.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+		if r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
 			// Encode that this command (and any that follow) uses regular arithmetic for ContainsEstimates
 			// by making sure ContainsEstimates is > 1.
 			// This will be interpreted during command application.

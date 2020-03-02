@@ -399,11 +399,9 @@ type testClusterConfig struct {
 	// If not empty, bootstrapVersion controls what version the cluster will be
 	// bootstrapped at.
 	bootstrapVersion roachpb.Version
-	// If not empty, serverVersion is used to set what the Server will consider to
-	// be "the server version".
-	// TODO(andrei): clarify this comment and many others around the "server
-	// version".
-	serverVersion  roachpb.Version
+	// If not empty, binaryVersion is used to set what the Server will consider
+	// to be the binary version.
+	binaryVersion  roachpb.Version
 	disableUpgrade bool
 }
 
@@ -433,7 +431,7 @@ var logicTestConfigs = []testClusterConfig{
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
 		bootstrapVersion:    roachpb.Version{Major: 1},
-		serverVersion:       roachpb.Version{Major: 1, Minor: 1},
+		binaryVersion:       roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade:      true,
 	},
 	{
@@ -455,7 +453,7 @@ var logicTestConfigs = []testClusterConfig{
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
 		bootstrapVersion:    roachpb.Version{Major: 19, Minor: 2},
-		serverVersion:       roachpb.Version{Major: 20, Minor: 1},
+		binaryVersion:       roachpb.Version{Major: 20, Minor: 1},
 		disableUpgrade:      true,
 	},
 	{
@@ -1110,17 +1108,18 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
 	}
 
-	if cfg.serverVersion != (roachpb.Version{}) {
+	if cfg.binaryVersion != (roachpb.Version{}) {
 		// If we want to run a specific server version, we assume that it
 		// supports at least the bootstrap version.
 		paramsPerNode := map[int]base.TestServerArgs{}
-		minVersion := cfg.serverVersion
+		binaryMinSupportedVersion := cfg.binaryVersion
 		if cfg.bootstrapVersion != (roachpb.Version{}) {
-			minVersion = cfg.bootstrapVersion
+			binaryMinSupportedVersion = cfg.bootstrapVersion
 		}
 		for i := 0; i < cfg.numNodes; i++ {
 			nodeParams := params.ServerArgs
-			nodeParams.Settings = cluster.MakeClusterSettings(minVersion, cfg.serverVersion)
+			nodeParams.Settings = cluster.MakeTestingClusterSettingsWithVersions(
+				cfg.binaryVersion, binaryMinSupportedVersion, false /* initializeVersion */)
 			paramsPerNode[i] = nodeParams
 		}
 		params.ServerArgsPerNode = paramsPerNode

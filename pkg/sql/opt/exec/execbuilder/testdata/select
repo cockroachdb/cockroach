@@ -1143,7 +1143,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY b
 ----
 ·                    distributed  false              ·                ·
-·                    vectorized   false              ·                ·
+·                    vectorized   true               ·                ·
 render               ·            ·                  ("?column?")     ·
  │                   render 0     "?column?"         ·                ·
  └── sort            ·            ·                  ("?column?", b)  +b
@@ -1182,7 +1182,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
 ----
 ·          distributed  false         ·             ·
-·          vectorized   false         ·             ·
+·          vectorized   true          ·             ·
 sort       ·            ·             (a, b, c, d)  -a,-b
  │         order        -a,-b         ·             ·
  └── scan  ·            ·             (a, b, c, d)  ·
@@ -1506,7 +1506,7 @@ query TTT
 EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e.y = s.y ORDER BY s.z LIMIT 10
 ----
 ·                              distributed  false
-·                              vectorized   false
+·                              vectorized   true
 render                         ·            ·
  └── limit                     ·            ·
       │                        count        10

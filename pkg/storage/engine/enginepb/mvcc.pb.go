@@ -66,7 +66,7 @@ type MVCCMetadata struct {
 func (m *MVCCMetadata) Reset()      { *m = MVCCMetadata{} }
 func (*MVCCMetadata) ProtoMessage() {}
 func (*MVCCMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_2c11e92a624b4450, []int{0}
+	return fileDescriptor_mvcc_35fd6658362a4458, []int{0}
 }
 func (m *MVCCMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -106,7 +106,7 @@ type MVCCMetadata_SequencedIntent struct {
 func (m *MVCCMetadata_SequencedIntent) Reset()      { *m = MVCCMetadata_SequencedIntent{} }
 func (*MVCCMetadata_SequencedIntent) ProtoMessage() {}
 func (*MVCCMetadata_SequencedIntent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_2c11e92a624b4450, []int{0, 0}
+	return fileDescriptor_mvcc_35fd6658362a4458, []int{0, 0}
 }
 func (m *MVCCMetadata_SequencedIntent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -165,8 +165,8 @@ type MVCCStats struct {
 	// contains_estimates indicates that the MVCCStats object contains values
 	// which have been estimated. This means that the stats should not be used
 	// where complete accuracy is required, and instead should be recomputed
-	// when necessary. See cluster.VersionContainsEstimatesCounter for details
-	// about the migration from bool to int64.
+	// when necessary. See clusterversion.VersionContainsEstimatesCounter for
+	// details about the migration from bool to int64.
 	ContainsEstimates int64 `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates" json:"contains_estimates"`
 	// last_update_nanos is a timestamp at which the ages were last
 	// updated. See the comment on MVCCStats.
@@ -221,7 +221,7 @@ func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 func (*MVCCStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_2c11e92a624b4450, []int{1}
+	return fileDescriptor_mvcc_35fd6658362a4458, []int{1}
 }
 func (m *MVCCStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1523,10 +1523,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_2c11e92a624b4450)
+	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_35fd6658362a4458)
 }
 
-var fileDescriptor_mvcc_2c11e92a624b4450 = []byte{
+var fileDescriptor_mvcc_35fd6658362a4458 = []byte{
 	// 658 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0x3d, 0x4f, 0xdb, 0x4e,
 	0x18, 0xc0, 0xe3, 0x7f, 0x78, 0x71, 0x2e, 0x26, 0xfc, 0x39, 0x31, 0x58, 0x54, 0xb2, 0x03, 0x0c,

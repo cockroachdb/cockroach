@@ -14,11 +14,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -137,7 +137,7 @@ func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	st := b.flowCtx.Cfg.Settings
-	if !cluster.Version.IsActive(ctx, st, cluster.VersionAtomicChangeReplicasTrigger) {
+	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicasTrigger) {
 		// There is a node of older version which could be the coordinator.
 		// So we communicate the finished work by writing to the jobs row.
 		err = WriteResumeSpan(ctx,

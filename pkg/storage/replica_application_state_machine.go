@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -757,7 +757,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	// has used the old cluster version: it's when the incoming
 	// ContainsEstimates is 1. If so, we need to assume that an old node is processing
 	// the same commands (as `true + true = true`), so make sure that `1 + 1 = 1`.
-	_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+	_ = clusterversion.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
 	deltaStats := res.Delta.ToStats()
 	if deltaStats.ContainsEstimates == 1 && b.state.Stats.ContainsEstimates == 1 {
 		deltaStats.ContainsEstimates = 0

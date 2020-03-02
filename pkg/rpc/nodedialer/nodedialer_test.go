@@ -20,6 +20,7 @@ import (
 	"time"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -268,7 +269,7 @@ func newTestServer(
 	if useHeartbeat {
 		hb = &heartbeatService{
 			clock:         clock,
-			serverVersion: cluster.BinaryServerVersion,
+			serverVersion: clusterversion.TestingBinaryVersion,
 		}
 		rpc.RegisterHeartbeatServer(s, hb)
 	}

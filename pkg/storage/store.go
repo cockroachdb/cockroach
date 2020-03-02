@@ -26,6 +26,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -2528,20 +2529,22 @@ func (s *Store) ManuallyEnqueue(
 
 // GetClusterVersion reads the the cluster version from the store-local version
 // key. Returns an empty version if the key is not found.
-func (s *Store) GetClusterVersion(ctx context.Context) (cluster.ClusterVersion, error) {
+func (s *Store) GetClusterVersion(ctx context.Context) (clusterversion.ClusterVersion, error) {
 	return ReadClusterVersion(ctx, s.engine)
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local cluster version key.
 func WriteClusterVersion(
-	ctx context.Context, writer engine.ReadWriter, cv cluster.ClusterVersion,
+	ctx context.Context, writer engine.ReadWriter, cv clusterversion.ClusterVersion,
 ) error {
 	return engine.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
 }
 
 // ReadClusterVersion reads the the cluster version from the store-local version key.
-func ReadClusterVersion(ctx context.Context, reader engine.Reader) (cluster.ClusterVersion, error) {
-	var cv cluster.ClusterVersion
+func ReadClusterVersion(
+	ctx context.Context, reader engine.Reader,
+) (clusterversion.ClusterVersion, error) {
+	var cv clusterversion.ClusterVersion
 	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{},
 		&cv, engine.MVCCGetOptions{})
 	return cv, err
