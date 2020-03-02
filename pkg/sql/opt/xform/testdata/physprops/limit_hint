@@ -402,6 +402,95 @@ limit
  │         └── generate_series(1, x:1) [outer=(1), side-effects]
  └── 10
 
+# --------------------------------------------------
+# Lookup join.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
+----
+
+exec-ddl
+CREATE TABLE b (x INT, z INT NOT NULL)
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+# Ensure the limit hint is propagated to the lookup join input as a multiple
+# of the batch size.
+opt
+SELECT * FROM a JOIN b ON k=z WHERE x > 0 AND x <= 5000 LIMIT 6003
+----
+limit
+ ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ ├── cardinality: [0 - 6003]
+ ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ ├── inner-join (lookup a)
+ │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ │    ├── key columns: [6] = [1]
+ │    ├── lookup columns are key
+ │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ │    ├── limit hint: 6003.00
+ │    ├── select
+ │    │    ├── columns: x:5!null z:6!null
+ │    │    ├── limit hint: 6100.00
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:5 z:6!null
+ │    │    │    └── limit hint: 6100.00
+ │    │    └── filters
+ │    │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5)]
+ │    └── filters (true)
+ └── 6003
+
+# The limit hint for the lookup join input must be at least the batch size.
+opt
+SELECT * FROM a JOIN b ON k=z WHERE x > 0 AND x <= 5000 LIMIT 3
+----
+limit
+ ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ ├── cardinality: [0 - 3]
+ ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ ├── inner-join (lookup a)
+ │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ │    ├── key columns: [6] = [1]
+ │    ├── lookup columns are key
+ │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ │    ├── limit hint: 3.00
+ │    ├── select
+ │    │    ├── columns: x:5!null z:6!null
+ │    │    ├── limit hint: 100.00
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:5 z:6!null
+ │    │    │    └── limit hint: 100.00
+ │    │    └── filters
+ │    │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5)]
+ │    └── filters (true)
+ └── 3
+
+# --------------------------------------------------
+# Negative limits.
+# --------------------------------------------------
+
 # Regression test for #44683.
 exec-ddl
 CREATE TABLE t44683(c0 INT)
