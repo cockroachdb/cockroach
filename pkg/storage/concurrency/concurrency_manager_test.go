@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -333,7 +332,7 @@ type cluster struct {
 	m         concurrency.Manager
 
 	// Definitions.
-	txnCounter     uint128.Uint128
+	txnCounter     uint32
 	txnsByName     map[string]*roachpb.Transaction
 	requestsByName map[string]concurrency.Request
 
@@ -380,7 +379,7 @@ func (c *cluster) makeConfig() concurrency.Config {
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
 ) (roachpb.Transaction, *roachpb.Error) {
-	log.Eventf(ctx, "pushing txn %s", pushee.ID)
+	log.Eventf(ctx, "pushing txn %s", pushee.ID.Short())
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
 		return roachpb.Transaction{}, roachpb.NewError(err)
@@ -410,7 +409,7 @@ func (c *cluster) PushTransaction(
 func (c *cluster) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
 ) *roachpb.Error {
-	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID, intent.Status)
+	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID.Short(), intent.Status)
 	c.m.OnLockUpdated(ctx, &intent)
 	return nil
 }
