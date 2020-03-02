@@ -32,6 +32,7 @@ export enum TextTypes {
   BodyStrong,
   Caption,
   CaptionStrong,
+  Code,
 }
 
 const getClassByTextType = (textType: TextTypes) => {
@@ -56,6 +57,8 @@ const getClassByTextType = (textType: TextTypes) => {
       return "text--caption";
     case TextTypes.CaptionStrong:
       return "text--caption-strong";
+    case TextTypes.Code:
+      return "text--code";
     default:
       return "text--body";
   }
@@ -79,6 +82,7 @@ const getElementByTextType = (textType: TextTypes) => {
     case TextTypes.BodyStrong:
     case TextTypes.Caption:
     case TextTypes.CaptionStrong:
+    case TextTypes.Code:
     default:
       return "span";
   }
