@@ -51,21 +51,51 @@ SELECT currval('s')
 statement ok
 COMMIT
 
-subtest savepoint_name
+# subtest savepoint_name
+
+# Check that releasing the special cockroach_restart savepoint moves us to CommitWait.
 
 statement ok
 BEGIN
 
+statement ok
+SAVEPOINT cockroach_restart
+
+query T
+SHOW TRANSACTION STATUS
+----
+Open
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart
+
+query T
+SHOW TRANSACTION STATUS
+----
+CommitWait
+
+statement ok
+ROLLBACK
+
 # Ensure that ident case rules are used.
-statement error pq: unimplemented: SAVEPOINT not supported except for cockroach_restart
+statement ok
+BEGIN
+
+statement ok
 SAVEPOINT "COCKROACH_RESTART"
 
-statement ok
-ROLLBACK; BEGIN
+query T
+SHOW TRANSACTION STATUS
+----
+Open
 
-# Ensure that ident case rules are used.
 statement ok
-SAVEPOINT COCKROACH_RESTART
+RELEASE SAVEPOINT "COCKROACH_RESTART"
+
+query T
+SHOW TRANSACTION STATUS
+----
+Open
 
 statement ok
 ROLLBACK
@@ -132,33 +162,51 @@ BEGIN TRANSACTION; SAVEPOINT something_else; COMMIT
 statement ok
 BEGIN TRANSACTION; SAVEPOINT foo
 
-statement error pq: SAVEPOINT "foo" is in use
+statement error pq: savepoint "bar" does not exist
 ROLLBACK TO SAVEPOINT bar
 
 # Verify we're doing the right thing for non-quoted idents.
 statement ok
 ROLLBACK TO SAVEPOINT FOO
 
+statement ok
+ABORT; BEGIN TRANSACTION
+
 # Verify use of quoted idents.
 statement ok
 SAVEPOINT "Foo Bar"
 
-statement error pq: SAVEPOINT "Foo Bar" is in use
+statement error pq: savepoint "foobar" does not exist
 ROLLBACK TO SAVEPOINT FooBar
 
 # Verify case-sensitivity of quoted idents.
-statement error pq: SAVEPOINT "Foo Bar" is in use
+statement error pq: savepoint "foo bar" does not exist
 ROLLBACK TO SAVEPOINT "foo bar"
 
 statement ok
 ROLLBACK TO SAVEPOINT "Foo Bar"
 
+query TB colnames
+SHOW SAVEPOINT STATUS
+----
+savepoint_name is_initial_savepoint
+Foo Bar  true
+
+statement ok
+ABORT; BEGIN TRANSACTION
+
 # Verify case-sensitivity of quoted vs. unquoted idents.
 statement ok
 SAVEPOINT "UpperCase"
 
-statement error pq: SAVEPOINT "UpperCase" is in use
+statement error pq: savepoint "uppercase" does not exist
 ROLLBACK TO SAVEPOINT UpperCase
+
+query TB colnames
+SHOW SAVEPOINT STATUS
+----
+savepoint_name is_initial_savepoint
+UpperCase  true
 
 statement ok
 ABORT

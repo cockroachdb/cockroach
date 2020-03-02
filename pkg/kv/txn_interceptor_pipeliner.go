@@ -574,12 +574,20 @@ func (tp *txnPipeliner) setWrapped(wrapped lockedSender) {
 
 // populateLeafInputState is part of the txnInterceptor interface.
 func (tp *txnPipeliner) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
-	if l := tp.ifWrites.len(); l > 0 {
-		tis.InFlightWrites = make([]roachpb.SequencedWrite, 0, l)
-		tp.ifWrites.ascend(func(w *inFlightWrite) {
-			tis.InFlightWrites = append(tis.InFlightWrites, w.SequencedWrite)
-		})
+	tis.InFlightWrites = tp.inFlightWritesAsSlice()
+}
+
+// inFlightWritesAsSlice returns the in-flight writes, ordered by key.
+func (tp *txnPipeliner) inFlightWritesAsSlice() []roachpb.SequencedWrite {
+	l := tp.ifWrites.len()
+	if l == 0 {
+		return nil
 	}
+	writes := make([]roachpb.SequencedWrite, 0, l)
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		writes = append(writes, w.SequencedWrite)
+	})
+	return writes
 }
 
 // initializeLeaf loads the in-flight writes for a leaf transaction.
@@ -606,6 +614,62 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 			tp.footprint.insert(roachpb.Span{Key: w.Key})
 		})
 		tp.footprint.mergeAndSort()
+		tp.ifWrites.clear(true /* reuse */)
+	}
+}
+
+// createSavepointLocked is part of the txnReqInterceptor interface.
+func (tp *txnPipeliner) createSavepointLocked(ctx context.Context, s *savepoint) {
+	s.ifWrites = tp.inFlightWritesAsSlice()
+}
+
+// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
+	savepointHasIfWrite := func(k roachpb.Key) (enginepb.TxnSeq, bool) {
+		writes := s.ifWrites
+		pos := sort.Search(len(writes), func(i int) bool {
+			return writes[i].Key.Compare(k) >= 0
+		})
+		if pos == len(writes) {
+			return enginepb.TxnSeq(0), false
+		}
+		if writes[pos].Key.Compare(k) == 0 {
+			return writes[pos].Sequence, true
+		}
+		return enginepb.TxnSeq(0), false
+	}
+
+	// Move all the writes in txnPipeliner that are not in the savepoint to the
+	// write footprint. We no longer care if these write succeed or fail, so we're
+	// going to stop tracking these as in-flight writes. The respective intents
+	// still need to be cleaned up at the end of the transaction.
+	var writesToDelete []*inFlightWrite
+	needCollecting := len(s.ifWrites) > 0
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		seq, found := savepointHasIfWrite(w.Key)
+		// If tp is not currently tracking this write as inflight, then we don't
+		// need to re-install it. If tp is tracking a write on that key at a
+		// higher sequence number, that also means recursively that we've verified
+		// the seq num tracked by the savepoint.
+		if !found || seq < w.Sequence {
+			if !found {
+				// If we're tracking a write at a higher seq num, then we don't need to
+				// update the footprint.
+				tp.footprint.insert(roachpb.Span{Key: w.Key})
+			}
+			if needCollecting {
+				writesToDelete = append(writesToDelete, w)
+			}
+		}
+	})
+	tp.footprint.mergeAndSort()
+	// Restore the inflight writes from the savepoint (minus the ones that have
+	// been verified in the meantime) by removing all the extra ones.
+	if len(s.ifWrites) > 0 {
+		for _, ifw := range writesToDelete {
+			tp.ifWrites.remove(ifw.Key, ifw.Sequence)
+		}
+	} else {
 		tp.ifWrites.clear(true /* reuse */)
 	}
 }
@@ -653,6 +717,8 @@ func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
 		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
+	// If the tree has not been cloned before, we can attempt a fast path where we
+	// update an existing element.
 	s.tmp1.Key = key
 	item := s.t.Get(&s.tmp1)
 	if item != nil {
@@ -758,7 +824,7 @@ func (s *inFlightWriteSet) byteSize() int64 {
 }
 
 // clear purges all elements from the in-flight write set and frees associated
-// memory. The reuse flag indicates whether the caller is intending to reu-use
+// memory. The reuse flag indicates whether the caller is intending to reuse
 // the set or not.
 func (s *inFlightWriteSet) clear(reuse bool) {
 	if s.t == nil {

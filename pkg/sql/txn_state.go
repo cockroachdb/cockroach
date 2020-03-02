@@ -104,11 +104,6 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
-
-	// activeRestartSavepointName stores the name of the active
-	// top-level restart savepoint, or is empty if no top-level restart
-	// savepoint is active.
-	activeRestartSavepointName tree.Name
 }
 
 // txnType represents the type of a SQL transaction.
@@ -376,7 +371,9 @@ const (
 	txnRollback
 	// txnRestart means that the transaction is restarting. The iteration of the
 	// txn just finished will not commit. It is generated when we're about to
-	// auto-retry a txn and after a "ROLLBACK TO SAVEPOINT cockroach_restart".
+	// auto-retry a txn and after a rollback to a savepoint placed at the start of
+	// the transaction. This allows such savepoints to reset more state than other
+	// savepoints.
 	txnRestart
 )
 

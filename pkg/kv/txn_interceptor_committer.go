@@ -465,6 +465,12 @@ func (*txnCommitter) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tc *txnCommitter) epochBumpedLocked() {}
 
+// createSavepointLocked is part of the txnReqInterceptor interface.
+func (*txnCommitter) createSavepointLocked(context.Context, *savepoint) {}
+
+// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+func (*txnCommitter) rollbackToSavepointLocked(context.Context, savepoint) {}
+
 // closeLocked implements the txnReqInterceptor interface.
 func (tc *txnCommitter) closeLocked() {}
 
