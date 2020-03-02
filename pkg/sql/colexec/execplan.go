@@ -885,8 +885,7 @@ func NewColOperator(
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			// A sorter can run in auto mode because it falls back to disk if there
 			// is not enough memory available.
-			// TODO(asubiotto): Currently disabled
-			// result.CanRunInAutoMode = true
+			result.CanRunInAutoMode = true
 
 		case core.Windower != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
