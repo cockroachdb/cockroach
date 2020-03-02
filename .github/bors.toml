@@ -7,6 +7,8 @@ pr_status = [
 block_labels = [
   "do-not-merge"
 ]
+# Set to 4 hours
+timeout_sec = 14400
 
 [committer]
 name = "craig[bot]"
