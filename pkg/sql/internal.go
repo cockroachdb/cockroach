@@ -368,49 +368,22 @@ func (ie *InternalExecutor) execInternal(
 ) (retRes result, retErr error) {
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
-	var sd *sessiondata.SessionData
-	if ie.sessionData != nil {
-		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
-		sdCopy := *ie.sessionData
-		sd = &sdCopy
-	} else {
-		sd = ie.s.newSessionData(SessionArgs{})
+	sd, err := ie.getSessionData(opName, sessionDataOverride)
+	if err != nil {
+		return result{}, err
 	}
-	applyOverrides(sessionDataOverride, sd)
-	if sd.User == "" {
-		return result{}, errors.AssertionFailedf("no user specified for internal query")
-	}
-	if sd.ApplicationName == "" {
-		sd.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
-	}
-	sdMutator := ie.s.makeSessionDataMutator(sd, nil /* defaults */)
 
-	defer func() {
-		// We wrap errors with the opName, but not if they're retriable - in that
-		// case we need to leave the error intact so that it can be retried at a
-		// higher level.
-		if retErr != nil && !errIsRetriable(retErr) {
-			retErr = errors.Wrapf(retErr, opName)
-		}
-		if retRes.err != nil && !errIsRetriable(retRes.err) {
-			retRes.err = errors.Wrapf(retRes.err, opName)
-		}
-	}()
+	defer maybeWrap(opName, &retRes, &retErr)
 
 	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 	defer sp.Finish()
 
-	parseStart := timeutil.Now()
-	parsed, err := parser.ParseOne(stmt)
+	sdMutator := ie.s.makeSessionDataMutator(sd, nil /* defaults */)
+	parsedStmt, err := ie.getParsedStmt(ctx, opName, stmt)
 	if err != nil {
 		return result{}, err
 	}
-	parsedStmt := ParsedStmt{
-		Statement: parsed,
-		ParseStart:  parseStart,
-		ParseEnd:  timeutil.Now(),
-	}
-	return ie.execBuffered(ctx, txn, sd, sdMutator, &parsedStmt, qargs...)
+	return ie.execBuffered(ctx, txn, sd, sdMutator , &parsedStmt, qargs...)
 }
 
 // execInternalStreaming executes a statement and returns results on a channel.
@@ -429,6 +402,61 @@ func (ie *InternalExecutor) execInternalStreaming(
 	datumsCh := make(chan tree.Datums)
 	errCh := make(chan error, 1)
 	return datumsCh, errCh
+}
+
+func  maybeWrap(opName string, retRes *result, retErr *error) {
+	// We wrap errors with the opName, but not if they're retriable - in that
+	// case we need to leave the error intact so that it can be retried at a
+	// higher level.
+	if retErr != nil && !errIsRetriable(*retErr) {
+		*retErr = errors.Wrapf(*retErr, opName)
+	}
+	if retRes.err != nil && !errIsRetriable(retRes.err) {
+		retRes.err = errors.Wrapf(retRes.err, opName)
+	}
+}
+
+// initExecInternal parses a statement for execution.
+func (ie *InternalExecutor) getParsedStmt(
+	ctx context.Context,
+	opName string,
+	stmt string,
+) (parsedStmt ParsedStmt, err error) {
+	ctx = logtags.AddTag(ctx, "intExec", opName)
+	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
+	defer sp.Finish()
+
+	parseStart := timeutil.Now()
+	parsed, err := parser.ParseOne(stmt)
+	if err != nil {
+		return ParsedStmt{}, err
+	}
+	return ParsedStmt{
+		Statement: parsed,
+		ParseStart:  parseStart,
+		ParseEnd:  timeutil.Now(),
+	}, nil
+}
+
+func (ie *InternalExecutor) getSessionData(
+	opName string, sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
+) (*sessiondata.SessionData, error) {
+	var sd *sessiondata.SessionData
+	if ie.sessionData != nil {
+		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
+		sdCopy := *ie.sessionData
+		sd = &sdCopy
+	} else {
+		sd = ie.s.newSessionData(SessionArgs{})
+	}
+	applyOverrides(sessionDataOverride, sd)
+	if sd.User == "" {
+		return nil, errors.AssertionFailedf("no user specified for internal query")
+	}
+	if sd.ApplicationName == "" {
+		sd.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
+	}
+	return sd, nil
 }
 
 // execBuffered executes a parsed statement with buffered rows.
