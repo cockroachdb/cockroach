@@ -98,10 +98,10 @@ func (p *planner) CreateRoleNode(
 func (n *CreateRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		telemetry.Inc(sqltelemetry.SchemaChangeCreate("role"))
+		telemetry.Inc(sqltelemetry.IAMCreate("role"))
 		opName = "create-role"
 	} else {
-		telemetry.Inc(sqltelemetry.SchemaChangeCreate("user"))
+		telemetry.Inc(sqltelemetry.IAMCreate("user"))
 		opName = "create-user"
 	}
 
@@ -175,7 +175,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts()
+	stmts, err := n.roleOptions.GetSQLStmts("create")
 	if err != nil {
 		return err
 	}
