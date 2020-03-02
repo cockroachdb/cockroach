@@ -50,7 +50,8 @@ type file struct {
 	totalSize    int
 	// finishedWriting specifies whether this file will be written to in the
 	// future or not. If finishedWriting is true and the reader reaches the end of
-	// the file, the file represented by this struct should be closed and removed.
+	// the file, the file represented by this struct should be closed and
+	// (depending on the read mode) removed.
 	finishedWriting bool
 }
 
@@ -143,8 +144,9 @@ const (
 // using sequence numbers.
 // When a file reaches DiskQueueCfg.MaxFileSizeBytes, a new file is created with
 // the next sequential file number to store the next batches in the queue.
-// Note that files will be cleaned up as coldata.Batches are dequeued from the
-// diskQueue. DiskQueueCfg.Dir will also be removed on Close, deleting all files.
+// Note that, with the default read mode, files will be cleaned up as
+// coldata.Batches are dequeued from the diskQueue. DiskQueueCfg.Dir will also
+// be removed on Close, deleting all files.
 // A diskQueue will never use more memory than cfg.BufferSizeBytes, but not all
 // the available memory will be used to buffer only writes. Refer to the
 // DiskQueueCacheMode comment as to how cfg.BufferSizeBytes is divided in each
@@ -155,7 +157,7 @@ type diskQueue struct {
 
 	typs  []coltypes.T
 	cfg   DiskQueueCfg
-	files []file
+	files []*file
 	seqNo int
 
 	state diskQueueState
@@ -186,7 +188,7 @@ type diskQueue struct {
 	scratchDecompressedReadBytes []byte
 }
 
-var _ Queue = &diskQueue{}
+var _ RewindableQueue = &diskQueue{}
 
 // Queue describes a simple queue interface to which coldata.Batches can be
 // Enqueued and Dequeued.
@@ -207,6 +209,16 @@ type Queue interface {
 	CloseRead() error
 	// Close closes any resources associated with the Queue.
 	Close() error
+}
+
+// RewindableQueue is a Queue that can be read from multiple times. Note that
+// in order for this Queue to return the same data after rewinding, all
+// Enqueueing *must* occur before any Dequeueing.
+type RewindableQueue interface {
+	Queue
+	// Rewind resets the Queue so that it Dequeues all Enqueued batches from the
+	// start.
+	Rewind() error
 }
 
 const (
@@ -263,6 +275,9 @@ type DiskQueueCfg struct {
 	// CacheMode defines the way a DiskQueue should use its cache. Refer to the
 	// comment of DiskQueueCacheModes for more information.
 	CacheMode DiskQueueCacheMode
+	// ReadMode defines the way a DiskQueue manages the files. Refer to the
+	// comment of diskQueueReadModes for more information.
+	ReadMode DiskQueueReadMode
 	// BufferSizeBytes is the number of bytes to buffer before compressing and
 	// writing to disk.
 	BufferSizeBytes int
@@ -308,6 +323,21 @@ func (cfg *DiskQueueCfg) SetDefaultBufferSizeBytesForCacheMode() {
 	}
 }
 
+// DiskQueueReadMode specifies a pattern that a diskQueue should employ while
+// reading enqueued batches regarding the files' management.
+type DiskQueueReadMode int
+
+const (
+	// DiskQueueReadModeDefault is the default read mode for diskQueue in which
+	// the read file is closed and removed once diskQueue reaches its end.
+	DiskQueueReadModeDefault DiskQueueReadMode = iota
+	// DiskQueueReadModeRewindable is a special read mode for diskQueue in which
+	// the read file is closed but *not* removed once diskQueue reaches its end.
+	// This allows for diskQueue to be "replayable" (i.e. read from multiple
+	// times).
+	DiskQueueReadModeRewindable
+)
+
 // NewDiskQueue creates a Queue that spills to disk.
 // TODO(asubiotto): Plumb down a monitor for disk space.
 func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
@@ -317,11 +347,15 @@ func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
 	if cfg.OnNewDiskQueueCb != nil {
 		cfg.OnNewDiskQueueCb()
 	}
+	if cfg.ReadMode == DiskQueueReadModeRewindable &&
+		cfg.CacheMode == DiskQueueCacheModeClearAndReuseCache {
+		return nil, errors.Errorf("rewindable read mode is incompatible with clear-and-reuse cache mode")
+	}
 	d := &diskQueue{
 		dirName:          uuid.FastMakeV4().String(),
 		typs:             typs,
 		cfg:              cfg,
-		files:            make([]file, 0, 4),
+		files:            make([]*file, 0, 4),
 		writeBufferLimit: cfg.BufferSizeBytes / 3,
 	}
 	// Refer to the DiskQueueCacheMode comment for why this division of
@@ -346,6 +380,16 @@ func (d *diskQueue) CloseRead() error {
 	return nil
 }
 
+func (d *diskQueue) closeFileDeserializer() error {
+	if d.deserializerState.FileDeserializer != nil {
+		if err := d.deserializerState.Close(); err != nil {
+			return err
+		}
+	}
+	d.deserializerState.FileDeserializer = nil
+	return nil
+}
+
 func (d *diskQueue) Close() error {
 	if d.serializer != nil {
 		if err := d.writeFooterAndFlush(); err != nil {
@@ -353,11 +397,8 @@ func (d *diskQueue) Close() error {
 		}
 		d.serializer = nil
 	}
-	if d.deserializerState.FileDeserializer != nil {
-		if err := d.deserializerState.Close(); err != nil {
-			return err
-		}
-		d.deserializerState.FileDeserializer = nil
+	if err := d.closeFileDeserializer(); err != nil {
+		return err
 	}
 	if d.writeFile != nil {
 		if err := d.writeFile.Close(); err != nil {
@@ -413,7 +454,7 @@ func (d *diskQueue) rotateFile() error {
 	}
 
 	d.writeFileIdx = len(d.files)
-	d.files = append(d.files, file{name: fName, offsets: make([]int, 1, 16)})
+	d.files = append(d.files, &file{name: fName, offsets: make([]int, 1, 16)})
 	d.writeFile = f
 	return nil
 }
@@ -507,12 +548,15 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 		// either the region to read from next is currently being written to or the
 		// writer has rotated to a new file.
 		if fileToRead.finishedWriting {
-			// Close and remove current file.
+			// Close current file.
 			if err := d.CloseRead(); err != nil {
 				return false, err
 			}
-			if err := d.cfg.FS.DeleteFile(d.files[d.readFileIdx].name); err != nil {
-				return false, err
+			if d.cfg.ReadMode != DiskQueueReadModeRewindable {
+				// Remove current file.
+				if err := d.cfg.FS.DeleteFile(d.files[d.readFileIdx].name); err != nil {
+					return false, err
+				}
 			}
 			d.readFile = nil
 			// Read next file.
@@ -582,10 +626,9 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 	if d.deserializerState.NumBatches() == 0 {
 		// Zero batches to deserialize in this region. This shouldn't happen but we
 		// might as well handle it.
-		if err := d.deserializerState.FileDeserializer.Close(); err != nil {
+		if err := d.closeFileDeserializer(); err != nil {
 			return false, err
 		}
-		d.deserializerState.FileDeserializer = nil
 		d.files[d.readFileIdx].curOffsetIdx++
 		return d.maybeInitDeserializer()
 	}
@@ -616,10 +659,9 @@ func (d *diskQueue) Dequeue(b coldata.Batch) (bool, error) {
 	if d.deserializerState.FileDeserializer != nil && d.deserializerState.curBatch >= d.deserializerState.NumBatches() {
 		// Finished all the batches, set the deserializer to nil to initialize a new
 		// one to read the next region.
-		if err := d.deserializerState.FileDeserializer.Close(); err != nil {
+		if err := d.closeFileDeserializer(); err != nil {
 			return false, err
 		}
-		d.deserializerState.FileDeserializer = nil
 		d.files[d.readFileIdx].curOffsetIdx++
 	}
 
@@ -659,4 +701,18 @@ func (d *diskQueue) Dequeue(b coldata.Batch) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// Rewind is part of the RewindableQueue interface.
+func (d *diskQueue) Rewind() error {
+	if err := d.closeFileDeserializer(); err != nil {
+		return err
+	}
+	d.deserializerState.curBatch = 0
+	d.readFile = nil
+	d.readFileIdx = 0
+	for _, file := range d.files {
+		file.curOffsetIdx = 0
+	}
+	return nil
 }

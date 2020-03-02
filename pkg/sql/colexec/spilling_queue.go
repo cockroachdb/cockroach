@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -47,14 +48,24 @@ type spillingQueue struct {
 	numInMemoryItems int
 	numOnDiskItems   int
 
-	diskQueueCfg colcontainer.DiskQueueCfg
-	diskQueue    colcontainer.Queue
-	fdSemaphore  semaphore.Semaphore
+	diskQueueCfg   colcontainer.DiskQueueCfg
+	diskQueue      colcontainer.Queue
+	fdSemaphore    semaphore.Semaphore
+	dequeueScratch coldata.Batch
+
+	rewindable      bool
+	rewindableState struct {
+		numItemsDequeuedFromMemory int
+		numItemsDequeuedFromDisk   int
+	}
 }
 
 // newSpillingQueue creates a new spillingQueue. An unlimited allocator must be
 // passed in. The spillingQueue will use this allocator to check whether memory
 // usage exceeds the given memory limit and use disk if so.
+// Note that this spillingQueue will be rewindable (and will not discard any
+// of the dequeued batches) if the read mode of the passed-in disk queue config
+// is colcontainer.DiskQueueReadModeRewindable.
 func newSpillingQueue(
 	unlimitedAllocator *Allocator,
 	typs []coltypes.T,
@@ -84,6 +95,8 @@ func newSpillingQueue(
 		items:              make([]coldata.Batch, itemsLen),
 		diskQueueCfg:       cfg,
 		fdSemaphore:        fdSemaphore,
+		dequeueScratch:     unlimitedAllocator.NewMemBatchWithSize(typs, 0 /* size */),
+		rewindable:         cfg.ReadMode == colcontainer.DiskQueueReadModeRewindable,
 	}
 }
 
@@ -102,8 +115,11 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 			return err
 		}
 		q.unlimitedAllocator.ReleaseBatch(batch)
+		if err := q.diskQueue.Enqueue(batch); err != nil {
+			return err
+		}
 		q.numOnDiskItems++
-		return q.diskQueue.Enqueue(batch)
+		return nil
 	}
 
 	q.items[q.curTailIdx] = batch
@@ -120,10 +136,11 @@ func (q *spillingQueue) dequeue() (coldata.Batch, error) {
 		return coldata.ZeroBatch, nil
 	}
 
-	if q.numInMemoryItems == 0 {
+	if (q.rewindable && q.numInMemoryItems == q.rewindableState.numItemsDequeuedFromMemory) ||
+		(!q.rewindable && q.numInMemoryItems == 0) {
 		// No more in-memory items. Fill the circular buffer as much as possible.
 		// Note that there must be at least one element on disk.
-		if q.curHeadIdx != q.curTailIdx {
+		if !q.rewindable && q.curHeadIdx != q.curTailIdx {
 			execerror.VectorizedInternalPanic(fmt.Sprintf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
 		}
 		// NOTE: Only one item is dequeued from disk since a deserialized batch is
@@ -131,16 +148,9 @@ func (q *spillingQueue) dequeue() (coldata.Batch, error) {
 		// up until a new file region is loaded (which will overwrite the memory of
 		// the previous batches), but Dequeue calls are already amortized, so this
 		// is acceptable.
-		if q.items[q.curTailIdx] == nil {
-			// This occurs when q.items is not enqueued to. This might be due to
-			// some batches taking too much memory at the front of the buffer, so
-			// we never end up using the whole length of q.items and prefer to
-			// enqueue to disk directly.
-			q.items[q.curTailIdx] = q.unlimitedAllocator.NewMemBatchWithSize(q.typs, 0 /* size */)
-		}
 		// Release a batch to make space for a new batch from disk.
-		q.unlimitedAllocator.ReleaseBatch(q.items[q.curTailIdx])
-		ok, err := q.diskQueue.Dequeue(q.items[q.curTailIdx])
+		q.unlimitedAllocator.ReleaseBatch(q.dequeueScratch)
+		ok, err := q.diskQueue.Dequeue(q.dequeueScratch)
 		if err != nil {
 			return nil, err
 		}
@@ -149,11 +159,15 @@ func (q *spillingQueue) dequeue() (coldata.Batch, error) {
 			// happen, as it should have been caught by the q.empty() check above.
 			execerror.VectorizedInternalPanic("disk queue was not empty but failed to dequeue element in spillingQueue")
 		}
+		// Account for this batch's memory.
+		q.unlimitedAllocator.RetainBatch(q.dequeueScratch)
+		if q.rewindable {
+			q.rewindableState.numItemsDequeuedFromDisk++
+			return q.dequeueScratch, nil
+		}
 		q.numOnDiskItems--
 		q.numInMemoryItems++
-		// Account for this batch's memory.
-		q.unlimitedAllocator.RetainBatch(q.items[q.curTailIdx])
-		// Move to the next slot in the circular buffer.
+		q.items[q.curTailIdx] = q.dequeueScratch
 		q.curTailIdx++
 		if q.curTailIdx == len(q.items) {
 			q.curTailIdx = 0
@@ -165,7 +179,11 @@ func (q *spillingQueue) dequeue() (coldata.Batch, error) {
 	if q.curHeadIdx == len(q.items) {
 		q.curHeadIdx = 0
 	}
-	q.numInMemoryItems--
+	if q.rewindable {
+		q.rewindableState.numItemsDequeuedFromMemory++
+	} else {
+		q.numInMemoryItems--
+	}
 	return res, nil
 }
 
@@ -189,6 +207,10 @@ func (q *spillingQueue) maybeSpillToDisk(ctx context.Context) error {
 
 // empty returns whether there are currently no items to be dequeued.
 func (q *spillingQueue) empty() bool {
+	if q.rewindable {
+		return q.numInMemoryItems == q.rewindableState.numItemsDequeuedFromMemory &&
+			q.numOnDiskItems == q.rewindableState.numItemsDequeuedFromDisk
+	}
 	return q.numInMemoryItems == 0 && q.numOnDiskItems == 0
 }
 
@@ -204,6 +226,21 @@ func (q *spillingQueue) close() error {
 	return nil
 }
 
+func (q *spillingQueue) rewind() error {
+	if !q.rewindable {
+		return errors.Newf("unexpectedly rewind() called when spilling queue is not rewindable")
+	}
+	if q.diskQueue != nil {
+		if err := q.diskQueue.(colcontainer.RewindableQueue).Rewind(); err != nil {
+			return err
+		}
+	}
+	q.curHeadIdx = 0
+	q.rewindableState.numItemsDequeuedFromMemory = 0
+	q.rewindableState.numItemsDequeuedFromDisk = 0
+	return nil
+}
+
 func (q *spillingQueue) reset() {
 	if err := q.close(); err != nil {
 		execerror.VectorizedInternalPanic(err)
@@ -213,4 +250,6 @@ func (q *spillingQueue) reset() {
 	q.numOnDiskItems = 0
 	q.curHeadIdx = 0
 	q.curTailIdx = 0
+	q.rewindableState.numItemsDequeuedFromMemory = 0
+	q.rewindableState.numItemsDequeuedFromDisk = 0
 }
