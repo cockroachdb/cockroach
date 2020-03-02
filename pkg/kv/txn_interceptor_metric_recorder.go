@@ -75,6 +75,12 @@ func (*txnMetricRecorder) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) epochBumpedLocked() {}
 
+// createSavepointLocked is part of the txnReqInterceptor interface.
+func (*txnMetricRecorder) createSavepointLocked(context.Context, *savepoint) {}
+
+// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+func (*txnMetricRecorder) rollbackToSavepointLocked(context.Context, savepoint) {}
+
 // closeLocked is part of the txnInterceptor interface.
 func (m *txnMetricRecorder) closeLocked() {
 	if m.onePCCommit {

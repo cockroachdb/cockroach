@@ -103,7 +103,9 @@ type TxnCoordSender struct {
 		// clients on Send().
 		storedErr *roachpb.Error
 
-		// active is set whenever the transaction has sent any requests.
+		// active is set whenever the transaction has sent any requests. Rolling
+		// back to a savepoint taken before the TxnCoordSender became active resets
+		// the field to false.
 		active bool
 
 		// closed is set once this transaction has either committed or rolled back
@@ -175,6 +177,14 @@ type txnInterceptor interface {
 	// epochBumpedLocked resets the interceptor in the case of a txn epoch
 	// increment.
 	epochBumpedLocked()
+
+	// createSavepointLocked is used to populate a savepoint with all the state
+	// that needs to be restored on a rollback.
+	createSavepointLocked(context.Context, *savepoint)
+
+	// rollbackToSavepointLocked is used to restore the state previously saved by
+	// createSavepointLocked().
+	rollbackToSavepointLocked(context.Context, savepoint)
 
 	// closeLocked closes the interceptor. It is called when the TxnCoordSender
 	// shuts down due to either a txn commit or a txn abort. The method will
@@ -943,7 +953,8 @@ func (tc *TxnCoordSender) IsTracking() bool {
 	return tc.interceptorAlloc.txnHeartbeater.heartbeatLoopRunningLocked()
 }
 
-// Active returns true iff there were commands executed already.
+// Active returns true if requests were sent already. Rolling back to a
+// savepoint taken before any requests were sent resets this to false.
 func (tc *TxnCoordSender) Active() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
