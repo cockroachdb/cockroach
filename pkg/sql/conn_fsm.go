@@ -243,6 +243,8 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "COMMIT/ROLLBACK, or after a statement running as an implicit txn",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
+				// Note that the KV txn has been committed or rolled back by the
+				// statement execution by this point.
 				return args.Extended.(*txnState).finishTxn(
 					args.Payload.(eventTxnFinishPayload),
 				)
@@ -294,8 +296,13 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 	// Handle the errors in explicit txns. They move us to Aborted.
 	stateOpen{ImplicitTxn: fsm.False}: {
 		eventNonRetriableErr{IsCommit: fsm.False}: {
-			Next:   stateAborted{},
-			Action: cleanupOnError,
+			Next: stateAborted{},
+			Action: func(args fsm.Args) error {
+				ts := args.Extended.(*txnState)
+				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
+				ts.txnAbortCount.Inc(1)
+				return nil
+			},
 		},
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
 			Next: stateRestartWait{},
@@ -341,6 +348,8 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
+				// Note that the KV txn has been rolled back by now by statement
+				// execution.
 				return args.Extended.(*txnState).finishTxn(
 					args.Payload.(eventTxnFinishPayload),
 				)
@@ -409,8 +418,13 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
-			Next:   stateAborted{},
-			Action: cleanupOnError,
+			Next: stateAborted{},
+			Action: func(args fsm.Args) error {
+				ts := args.Extended.(*txnState)
+				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
+				ts.txnAbortCount.Inc(1)
+				return nil
+			},
 		},
 	},
 
@@ -481,15 +495,6 @@ func (ts *txnState) finishTxn(payload eventTxnFinishPayload) error {
 		ev = txnRollback
 	}
 	ts.setAdvanceInfo(advanceOne, noRewind, ev)
-	return nil
-}
-
-// cleanupOnError rolls back the KV txn.
-func cleanupOnError(args fsm.Args) error {
-	ts := args.Extended.(*txnState)
-	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-	ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
-	ts.txnAbortCount.Inc(1)
 	return nil
 }
 
