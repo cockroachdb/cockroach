@@ -114,7 +114,6 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 // createAbortedState returns a txnState initialized with an aborted txn.
 func (tc *testContext) createAbortedState() (fsm.State, *txnState) {
 	_, ts := tc.createOpenState(explicitTxn)
-	ts.mu.txn.CleanupOnError(ts.Ctx, errors.Errorf("dummy error"))
 	return stateAborted{}, ts
 }
 
