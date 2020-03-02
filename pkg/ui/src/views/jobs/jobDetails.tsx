@@ -28,12 +28,12 @@ import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import {
-  JOB_STATUS_CANCELED, JOB_STATUS_FAILED,
-  JOB_STATUS_SUCCEEDED,
+  JobStatusVisual,
+  jobToVisual,
 } from "src/views/jobs/jobStatusOptions";
-import {Duration} from "oss/src/views/jobs/duration";
-import {Progress} from "oss/src/views/jobs/progress";
-import { Button, BackIcon } from "oss/src/components/button";
+import { Duration } from "src/views/jobs/duration";
+import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
+import { Button, BackIcon } from "src/components/button";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -62,29 +62,44 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
   renderStatus = () => {
     const { job } = this.props;
     const percent = job.fraction_completed * 100;
-    switch (job.status) {
-      case JOB_STATUS_SUCCEEDED:
+    const jobStatusVisual = jobToVisual(job);
+    switch (jobStatusVisual) {
+      case JobStatusVisual.BadgeOnly:
+        return (
+          <div>
+            <JobStatusBadge jobStatus={this.props.job.status} />
+          </div>
+        );
+      case JobStatusVisual.BadgeWithDuration:
         return (
           <div className="job-status__line">
-            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
+            <JobStatusBadge jobStatus={this.props.job.status} />
             <Divider type="vertical" />
             <span><Duration job={this.props.job} /></span>
           </div>
         );
-      case JOB_STATUS_FAILED || JOB_STATUS_CANCELED:
+      case JobStatusVisual.BadgeWithMessage:
+        return (
+          <div className="job-status__line">
+            <JobStatusBadge jobStatus={this.props.job.status} />
+            <Divider type="vertical" />
+            <span>{this.props.job.running_status}</span>
+          </div>
+        );
+      case JobStatusVisual.ProgressBarWithDuration:
         return (
           <div>
-            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
+            <ProgressBar job={this.props.job} lineWidth={2} showPercentage={false} />
+            <div className="job-status__line--percentage">
+              <span>{percent.toFixed() + "%"} done</span>
+              <Divider type="vertical" /><Duration job={this.props.job} />
+            </div>
           </div>
         );
       default:
         return (
           <div>
-            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
-            <div className="job-status__line--percentage">
-              <span>{percent.toFixed() + "%"} done</span>
-              <Divider type="vertical" /><Duration job={this.props.job} />
-            </div>
+            <JobStatusBadge jobStatus={this.props.job.status} />
           </div>
         );
     }
