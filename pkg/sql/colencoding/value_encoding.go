@@ -26,7 +26,7 @@ import (
 // the result to the idx'th position of the input exec.Vec.
 // See the analog in sqlbase/column_type_encoding.go.
 func DecodeTableValueToCol(
-	vec coldata.Vec, idx uint16, typ encoding.Type, dataOffset int, valTyp *types.T, b []byte,
+	vec coldata.Vec, idx int, typ encoding.Type, dataOffset int, valTyp *types.T, b []byte,
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
@@ -50,7 +50,7 @@ func DecodeTableValueToCol(
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
 // See the analog in sqlbase/column_type_encoding.go.
-func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byte) ([]byte, error) {
+func decodeUntaggedDatumToCol(vec coldata.Vec, idx int, t *types.T, buf []byte) ([]byte, error) {
 	var err error
 	switch t.Family() {
 	case types.BoolFamily:
@@ -62,7 +62,7 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 	case types.BytesFamily, types.StringFamily:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
-		vec.Bytes().Set(int(idx), data)
+		vec.Bytes().Set(idx, data)
 	case types.DateFamily, types.OidFamily:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
@@ -92,7 +92,7 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 		// TODO(yuzefovich): we could peek inside the encoding package to skip a
 		// couple of conversions.
 		if err == nil {
-			vec.Bytes().Set(int(idx), data.GetBytes())
+			vec.Bytes().Set(idx, data.GetBytes())
 		}
 	case types.TimestampFamily, types.TimestampTZFamily:
 		var t time.Time

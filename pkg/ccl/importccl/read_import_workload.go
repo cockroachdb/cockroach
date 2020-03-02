@@ -54,7 +54,7 @@ func (w *workloadReader) start(ctx ctxgroup.Group) {
 func makeDatumFromColOffset(
 	alloc *sqlbase.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
 ) (tree.Datum, error) {
-	if col.Nulls().NullAt64(uint64(rowIdx)) {
+	if col.Nulls().NullAt(rowIdx) {
 		return tree.DNull, nil
 	}
 	switch col.Type() {
@@ -233,7 +233,7 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 		}
 		a = a[:0]
 		w.rows.FillBatch(batchIdx, cb, &a)
-		for rowIdx, numRows := 0, int(cb.Length()); rowIdx < numRows; rowIdx++ {
+		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
 			for colIdx, col := range cb.ColVecs() {
 				// TODO(dan): This does a type switch once per-datum. Reduce this to
 				// a one-time switch per column.

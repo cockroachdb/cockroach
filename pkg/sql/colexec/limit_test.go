@@ -19,7 +19,7 @@ import (
 func TestLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
-		limit    uint64
+		limit    int
 		tuples   []tuple
 		expected []tuple
 	}{

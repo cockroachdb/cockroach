@@ -34,7 +34,7 @@ type routerOutput interface {
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
-	addBatch(context.Context, coldata.Batch, []uint16) bool
+	addBatch(context.Context, coldata.Batch, []int) bool
 	// cancel tells the output to stop producing batches.
 	cancel(ctx context.Context)
 }
@@ -45,7 +45,7 @@ type routerOutput interface {
 // coldata.BatchSize() (if it were a variable, then its value would be
 // evaluated before we set the desired batch size).
 func getDefaultRouterOutputBlockedThreshold() int {
-	return int(coldata.BatchSize()) * 2
+	return coldata.BatchSize() * 2
 }
 
 type routerOutputOp struct {
@@ -145,7 +145,7 @@ func newRouterOutputOp(
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 ) *routerOutputOp {
-	return newRouterOutputOpWithBlockedThresholdAndBatchSize(unlimitedAllocator, types, unblockedEventsChan, memoryLimit, cfg, fdSemaphore, getDefaultRouterOutputBlockedThreshold(), int(coldata.BatchSize()))
+	return newRouterOutputOpWithBlockedThresholdAndBatchSize(unlimitedAllocator, types, unblockedEventsChan, memoryLimit, cfg, fdSemaphore, getDefaultRouterOutputBlockedThreshold(), coldata.BatchSize())
 }
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
@@ -204,7 +204,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 			execerror.VectorizedInternalPanic(err)
 		}
 	}
-	o.mu.numUnread -= int(b.Length())
+	o.mu.numUnread -= b.Length()
 	if o.mu.numUnread <= o.blockedThreshold {
 		o.maybeUnblockLocked()
 	}
@@ -253,10 +253,8 @@ func (o *routerOutputOp) cancel(ctx context.Context) {
 //  disk as the code is written, meaning that we impact the performance of
 //  writing rows to a fast output if we have to write to disk for a single
 //  slow output.
-func (o *routerOutputOp) addBatch(
-	ctx context.Context, batch coldata.Batch, selection []uint16,
-) bool {
-	if len(selection) > int(batch.Length()) {
+func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, selection []int) bool {
+	if len(selection) > batch.Length() {
 		selection = selection[:batch.Length()]
 	}
 	o.mu.Lock()
@@ -281,11 +279,11 @@ func (o *routerOutputOp) addBatch(
 	// selection.
 	o.mu.numUnread += len(selection)
 
-	for toAppend := uint16(len(selection)); toAppend > 0; {
+	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
 			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithSize(o.types, o.outputBatchSize)
 		}
-		available := uint16(o.outputBatchSize) - o.mu.pendingBatch.Length()
+		available := o.outputBatchSize - o.mu.pendingBatch.Length()
 		numAppended := toAppend
 		if toAppend > available {
 			numAppended = available
@@ -298,8 +296,8 @@ func (o *routerOutputOp) addBatch(
 							ColType:   t,
 							Src:       batch.ColVec(i),
 							Sel:       selection[:numAppended],
-							DestIdx:   uint64(o.mu.pendingBatch.Length()),
-							SrcEndIdx: uint64(numAppended),
+							DestIdx:   o.mu.pendingBatch.Length(),
+							SrcEndIdx: numAppended,
 						},
 					},
 				)
@@ -307,7 +305,7 @@ func (o *routerOutputOp) addBatch(
 		})
 		newLength := o.mu.pendingBatch.Length() + numAppended
 		o.mu.pendingBatch.SetLength(newLength)
-		if o.testingKnobs.alwaysFlush || int(newLength) >= o.outputBatchSize {
+		if o.testingKnobs.alwaysFlush || newLength >= o.outputBatchSize {
 			// The capacity in o.mu.pendingBatch has been filled.
 			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)

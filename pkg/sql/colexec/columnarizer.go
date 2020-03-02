@@ -96,7 +96,7 @@ func (c *Columnarizer) Init() {
 func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
-	nRows := uint16(0)
+	nRows := 0
 	columnTypes := c.OutputTypes()
 	for ; nRows < coldata.BatchSize(); nRows++ {
 		row, meta := c.input.Next()

@@ -258,11 +258,11 @@ func BenchmarkSortChunks(b *testing.B) {
 						}
 						b.Run(
 							fmt.Sprintf("%s/rows=%d/cols=%d/matchLen=%d/avgChunkSize=%d",
-								sorterNames[sorterIdx], nBatches*int(coldata.BatchSize()), nCols, matchLen, avgChunkSize),
+								sorterNames[sorterIdx], nBatches*coldata.BatchSize(), nCols, matchLen, avgChunkSize),
 							func(b *testing.B) {
 								// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 								// batch) * nCols (number of columns / row).
-								b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols))
+								b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
 								typs := make([]coltypes.T, nCols)
 								for i := range typs {
 									typs[i] = coltypes.Int64
@@ -280,7 +280,7 @@ func BenchmarkSortChunks(b *testing.B) {
 
 									col := batch.ColVec(i).Int64()
 									col[0] = 0
-									for j := 1; j < int(coldata.BatchSize()); j++ {
+									for j := 1; j < coldata.BatchSize(); j++ {
 										if i < matchLen {
 											col[j] = col[j-1]
 											if rng.Float64() < 1.0/float64(avgChunkSize) {

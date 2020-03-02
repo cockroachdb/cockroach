@@ -277,7 +277,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	seed := rand.Int()
 	rng := rand.New(rand.NewSource(int64(seed)))
 	nRuns := 5
-	nRows := 8 * int(coldata.BatchSize())
+	nRows := 8 * coldata.BatchSize()
 	maxCols := 5
 	maxNum := 10
 	intTyps := make([]types.T, maxCols)

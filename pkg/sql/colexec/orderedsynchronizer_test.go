@@ -156,7 +156,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	numInputs := 3
 	inputLen := 1024
-	batchSize := uint16(16)
+	batchSize := int(16)
 	if batchSize > coldata.BatchSize() {
 		batchSize = coldata.BatchSize()
 	}

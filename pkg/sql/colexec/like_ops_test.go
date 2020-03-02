@@ -104,7 +104,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes})
 	col := batch.ColVec(0).Bytes()
 	width := 64
-	for i := 0; i < int(coldata.BatchSize()); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		col.Set(i, randutil.RandBytes(rng, width))
 	}
 
@@ -112,7 +112,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	// everything out.
 	prefix := "abc"
 	suffix := "xyz"
-	for i := 0; i < int(coldata.BatchSize())/2; i++ {
+	for i := 0; i < coldata.BatchSize()/2; i++ {
 		copy(col.Get(i)[:3], prefix)
 		copy(col.Get(i)[width-3:], suffix)
 	}
@@ -150,7 +150,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			tc.op.Init()
-			b.SetBytes(int64(width * int(coldata.BatchSize())))
+			b.SetBytes(int64(width * coldata.BatchSize()))
 			for i := 0; i < b.N; i++ {
 				tc.op.Next(ctx)
 			}

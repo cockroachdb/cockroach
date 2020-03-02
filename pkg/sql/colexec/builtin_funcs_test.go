@@ -110,7 +110,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 
-	for i := 0; i < int(coldata.BatchSize()); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		if float64(i) < float64(coldata.BatchSize())*selectivity {
 			col[i] = -1
 		} else {
@@ -119,9 +119,9 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	}
 
 	if hasNulls {
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(i)
 			}
 		}
 	}
@@ -131,8 +131,8 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < int(coldata.BatchSize()); i++ {
-			sel[i] = uint16(i)
+		for i := 0; i < coldata.BatchSize(); i++ {
+			sel[i] = i
 		}
 	}
 
@@ -179,7 +179,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	bCol := batch.ColVec(0).Bytes()
 	sCol := batch.ColVec(1).Int64()
 	eCol := batch.ColVec(2).Int64()
-	for i := 0; i < int(coldata.BatchSize()); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		bCol.Set(i, []byte("hello there"))
 		sCol[i] = 1
 		eCol[i] = 4
@@ -221,7 +221,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	specOp.Init()
 
 	b.Run("DefaultBuiltinOperator", func(b *testing.B) {
-		b.SetBytes(int64(len("hello there") * int(coldata.BatchSize())))
+		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			b := defaultOp.Next(ctx)
@@ -232,7 +232,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	})
 
 	b.Run("SpecializedSubstringOperator", func(b *testing.B) {
-		b.SetBytes(int64(len("hello there") * int(coldata.BatchSize())))
+		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			b := specOp.Next(ctx)

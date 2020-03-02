@@ -57,8 +57,8 @@ func NewBytes(n int) *Bytes {
 
 // AssertOffsetsAreNonDecreasing asserts that all b.offsets[:n+1] are
 // non-decreasing.
-func (b *Bytes) AssertOffsetsAreNonDecreasing(n uint64) {
-	for j := uint64(1); j <= n; j++ {
+func (b *Bytes) AssertOffsetsAreNonDecreasing(n int) {
+	for j := 1; j <= n; j++ {
 		if b.offsets[j] < b.offsets[j-1] {
 			panic(errors.AssertionFailedf("unexpectedly found decreasing offsets: %v", b.offsets))
 		}
@@ -71,12 +71,12 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n uint64) {
 // returning it as an output. A convenient place for this is Batch.SetLength()
 // method - we assume that *always*, before returning a batch, the length is
 // set on it.
-func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
+func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n int) {
 	// Note that we're not checking whether this Bytes is a window because
 	// although this function might modify the "window" Bytes, it maintains the
 	// invariant that we need to have.
 	prev := b.offsets[0]
-	for j := uint64(1); j <= n; j++ {
+	for j := 1; j <= n; j++ {
 		if b.offsets[j] > prev {
 			prev = b.offsets[j]
 		} else {

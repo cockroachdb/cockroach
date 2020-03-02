@@ -679,15 +679,15 @@ func init() {
 
 			// Test equality columns of type float.
 			leftTuples: tuples{
-				{float64(33.333)},
-				{float64(44.4444)},
-				{float64(55.55555)},
-				{float64(44.4444)},
+				{33.333},
+				{44.4444},
+				{55.55555},
+				{44.4444},
 			},
 			rightTuples: tuples{
-				{float64(44.4444)},
-				{float64(55.55555)},
-				{float64(33.333)},
+				{44.4444},
+				{55.55555},
+				{33.333},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -699,10 +699,10 @@ func init() {
 			rightEqColsAreKey: true,
 
 			expected: tuples{
-				{float64(55.55555)},
-				{float64(44.4444)},
-				{float64(44.4444)},
-				{float64(33.333)},
+				{55.55555},
+				{44.4444},
+				{44.4444},
+				{33.333},
 			},
 		},
 		{
@@ -969,7 +969,7 @@ func TestHashJoiner(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 
-	for _, outputBatchSize := range []uint16{1, 17, coldata.BatchSize()} {
+	for _, outputBatchSize := range []int{1, 17, coldata.BatchSize()} {
 		if outputBatchSize > coldata.BatchSize() {
 			// It is possible for varied coldata.BatchSize() to be smaller than
 			// requested outputBatchSize. Such configuration is invalid, and we skip
@@ -1014,7 +1014,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < int(coldata.BatchSize()); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			col[i] = int64(i)
 		}
 	}
@@ -1041,10 +1041,10 @@ func BenchmarkHashJoiner(b *testing.B) {
 					for _, rightDistinct := range []bool{true, false} {
 						b.Run(fmt.Sprintf("distinct=%v", rightDistinct), func(b *testing.B) {
 							for _, nBatches := range []int{1 << 1, 1 << 8, 1 << 12} {
-								b.Run(fmt.Sprintf("rows=%d", nBatches*int(coldata.BatchSize())), func(b *testing.B) {
+								b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
 									// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
 									// batch) * nCols (number of columns / row) * 2 (number of sources).
-									b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols * 2))
+									b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
 										leftSource := NewRepeatableBatchSource(testAllocator, batch)

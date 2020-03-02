@@ -107,11 +107,11 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		func() {
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					execgen.SET(col, int(i), c.constVal)
+					execgen.SET(col, i, c.constVal)
 				}
 			} else {
-				col = execgen.SLICE(col, 0, int(n))
-				for execgen.RANGE(i, col, 0, int(n)) {
+				col = execgen.SLICE(col, 0, n)
+				for execgen.RANGE(i, col, 0, n) {
 					execgen.SET(col, i, c.constVal)
 				}
 			}

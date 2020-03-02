@@ -152,7 +152,7 @@ func TestSort(t *testing.T) {
 func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
-	nTups := int(coldata.BatchSize()*2 + 1)
+	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
 	// TODO(yuzefovich): randomize types as well.
 	typs := make([]coltypes.T, maxCols)
@@ -259,7 +259,7 @@ func TestAllSpooler(t *testing.T) {
 			allSpooler := newAllSpooler(testAllocator, input[0], tc.typ)
 			allSpooler.init()
 			allSpooler.spool(context.Background())
-			if len(tc.tuples) != int(allSpooler.getNumTuples()) {
+			if len(tc.tuples) != allSpooler.getNumTuples() {
 				t.Fatal(fmt.Sprintf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples()))
 			}
 			if allSpooler.getPartitionsCol() != nil {
@@ -267,7 +267,7 @@ func TestAllSpooler(t *testing.T) {
 			}
 			for col := 0; col < len(tc.typ); col++ {
 				colVec := allSpooler.getValues(col).Int64()
-				for i := 0; i < int(allSpooler.getNumTuples()); i++ {
+				for i := 0; i < allSpooler.getNumTuples(); i++ {
 					if colVec[i] != int64(tc.tuples[i][col].(int)) {
 						t.Fatal(fmt.Sprintf("allSpooler returned wrong value in %d column of %d'th tuple : expected %v, but received %v",
 							col, i, tc.tuples[i][col].(int), colVec[i]))
@@ -286,11 +286,11 @@ func BenchmarkSort(b *testing.B) {
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
 			for _, topK := range []bool{false, true} {
-				name := fmt.Sprintf("rows=%d/cols=%d/topK=%t", nBatches*int(coldata.BatchSize()), nCols, topK)
+				name := fmt.Sprintf("rows=%d/cols=%d/topK=%t", nBatches*coldata.BatchSize(), nCols, topK)
 				b.Run(name, func(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
-					b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols))
+					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
 					typs := make([]coltypes.T, nCols)
 					for i := range typs {
 						typs[i] = coltypes.Int64
@@ -303,7 +303,7 @@ func BenchmarkSort(b *testing.B) {
 						ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
 
 						col := batch.ColVec(i).Int64()
-						for j := 0; j < int(coldata.BatchSize()); j++ {
+						for j := 0; j < coldata.BatchSize(); j++ {
 							col[j] = rng.Int63() % int64((i*1024)+1)
 						}
 					}
@@ -336,10 +336,10 @@ func BenchmarkAllSpooler(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*int(coldata.BatchSize()), nCols), func(b *testing.B) {
+			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*coldata.BatchSize(), nCols), func(b *testing.B) {
 				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
 				// batch) * nCols (number of columns / row).
-				b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols))
+				b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
 				typs := make([]coltypes.T, nCols)
 				for i := range typs {
 					typs[i] = coltypes.Int64
@@ -348,7 +348,7 @@ func BenchmarkAllSpooler(b *testing.B) {
 				batch.SetLength(coldata.BatchSize())
 				for i := 0; i < nCols; i++ {
 					col := batch.ColVec(i).Int64()
-					for j := 0; j < int(coldata.BatchSize()); j++ {
+					for j := 0; j < coldata.BatchSize(); j++ {
 						col[j] = rng.Int63() % int64((i*1024)+1)
 					}
 				}

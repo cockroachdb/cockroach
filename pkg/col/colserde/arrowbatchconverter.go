@@ -104,7 +104,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 	if batch.Width() != len(c.typs) {
 		return nil, errors.AssertionFailedf("mismatched batch width and schema length: %d != %d", batch.Width(), len(c.typs))
 	}
-	n := int(batch.Length())
+	n := batch.Length()
 	for i, typ := range c.typs {
 		vec := batch.ColVec(i)
 
@@ -248,7 +248,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 	// overwriting it. If the passed-in Batch is not suitable for use, a new one
 	// is allocated.
 	b.Reset(c.typs, n)
-	b.SetLength(uint16(n))
+	b.SetLength(n)
 	// Reset the batch, this resets the selection vector as well.
 	b.ResetInternalBatch()
 

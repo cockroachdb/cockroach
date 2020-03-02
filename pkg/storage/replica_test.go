@@ -12413,3 +12413,38 @@ func enableTraceDebugUseAfterFree() (restore func()) {
 	trace.DebugUseAfterFinish = true
 	return func() { trace.DebugUseAfterFinish = prev }
 }
+
+func TestRangeUnavailableMessage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var repls roachpb.ReplicaDescriptors
+	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 10, ReplicaID: 100})
+	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 20, ReplicaID: 200})
+	desc := roachpb.NewRangeDescriptor(10, roachpb.RKey("a"), roachpb.RKey("z"), repls)
+	dur := time.Minute
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.RequestLeaseRequest{})
+	lm := IsLiveMap{
+		1: IsLiveMapEntry{IsLive: true},
+	}
+	rs := raft.Status{}
+	act := rangeUnavailableMessage(desc, lm, &rs, &ba, dur)
+	const exp = `have been waiting 60.00s for proposing command RequestLease [/Min,/Min).
+This range is likely unavailable.
+Please submit this message to Cockroach Labs support along with the following information:
+
+Descriptor:  r10:{-} [(n1,s10):1, (n2,s20):2, next=3, gen=0?]
+Live:        (n1,s10):1
+Non-live:    (n2,s20):2
+Raft Status: {"id":"0","term":0,"vote":"0","commit":0,"lead":"0","raftState":"StateFollower","applied":0,"progress":{},"leadtransferee":"0"}
+
+and a copy of https://yourhost:8080/#/reports/range/10
+
+If you are using CockroachDB Enterprise, reach out through your
+support contract. Otherwise, please open an issue at:
+
+  https://github.com/cockroachdb/cockroach/issues/new/choose
+`
+
+	require.Equal(t, exp, act)
+}

@@ -131,10 +131,10 @@ func (tc *aggregatorTestCase) init() error {
 		tc.colTypes = defaultColTyps
 	}
 	if tc.batchSize == 0 {
-		tc.batchSize = int(coldata.BatchSize())
+		tc.batchSize = coldata.BatchSize()
 	}
 	if tc.outputBatchSize == 0 {
-		tc.outputBatchSize = int(coldata.BatchSize())
+		tc.outputBatchSize = coldata.BatchSize()
 	}
 	return nil
 }
@@ -280,7 +280,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input, nil /* typs */)
+			tupleSource := newOpTestInput(tc.batchSize, tc.input, nil /* typs */)
 			a, err := NewOrderedAggregator(
 				testAllocator,
 				tupleSource,
@@ -538,7 +538,7 @@ func TestAggregatorRandom(t *testing.T) {
 	// This test aggregates random inputs, keeping track of the expected results
 	// to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
-	for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 4, int(coldata.BatchSize()) / 2} {
+	for _, groupSize := range []int{1, 2, coldata.BatchSize() / 4, coldata.BatchSize() / 2} {
 		if groupSize == 0 {
 			// We might be varying coldata.BatchSize() so that when it is divided by
 			// 4, groupSize is 0. We want to skip such configuration.
@@ -549,7 +549,7 @@ func TestAggregatorRandom(t *testing.T) {
 				for _, agg := range aggTypes {
 					t.Run(fmt.Sprintf("%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls),
 						func(t *testing.T) {
-							nTuples := int(coldata.BatchSize()) * numInputBatches
+							nTuples := coldata.BatchSize() * numInputBatches
 							typs := []coltypes.T{coltypes.Int64, coltypes.Float64}
 							cols := []coldata.Vec{
 								testAllocator.NewMemColumn(typs[0], nTuples),
@@ -593,7 +593,7 @@ func TestAggregatorRandom(t *testing.T) {
 								// the row counts outside of the if block.
 								expRowCounts[curGroup]++
 								if hasNulls && rng.Float64() < nullProbability {
-									aggColNulls.SetNull64(uint64(i))
+									aggColNulls.SetNull(i)
 								} else {
 									expNulls[curGroup] = false
 									expCounts[curGroup]++
@@ -614,7 +614,7 @@ func TestAggregatorRandom(t *testing.T) {
 								})
 							}
 
-							source := newChunkingBatchSource(typs, cols, uint64(nTuples))
+							source := newChunkingBatchSource(typs, cols, nTuples)
 							a, err := agg.new(
 								testAllocator,
 								source,
@@ -671,7 +671,7 @@ func BenchmarkAggregator(b *testing.B) {
 		b.Run(fName, func(b *testing.B) {
 			for _, agg := range aggTypes {
 				for _, typ := range []coltypes.T{coltypes.Int64, coltypes.Decimal} {
-					for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 2, int(coldata.BatchSize())} {
+					for _, groupSize := range []int{1, 2, coldata.BatchSize() / 2, coldata.BatchSize()} {
 						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
 								if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
@@ -681,7 +681,7 @@ func BenchmarkAggregator(b *testing.B) {
 									groupSize, hasNulls, numInputBatches),
 									func(b *testing.B) {
 										colTypes := []coltypes.T{coltypes.Int64, typ}
-										nTuples := numInputBatches * int(coldata.BatchSize())
+										nTuples := numInputBatches * coldata.BatchSize()
 										cols := []coldata.Vec{
 											testAllocator.NewMemColumn(coltypes.Int64, nTuples),
 											testAllocator.NewMemColumn(typ, nTuples),
@@ -698,7 +698,7 @@ func BenchmarkAggregator(b *testing.B) {
 											nulls := cols[1].Nulls()
 											for i := 0; i < nTuples; i++ {
 												if rng.Float64() < nullProbability {
-													nulls.SetNull(uint16(i))
+													nulls.SetNull(i)
 												}
 											}
 										}
@@ -719,7 +719,7 @@ func BenchmarkAggregator(b *testing.B) {
 												vals[i] = rng.Float64() < 0.5
 											}
 										}
-										source := newChunkingBatchSource(colTypes, cols, uint64(nTuples))
+										source := newChunkingBatchSource(colTypes, cols, nTuples)
 
 										nCols := 1
 										if aggFn == execinfrapb.AggregatorSpec_COUNT_ROWS {
@@ -869,7 +869,7 @@ func TestHashAggregator(t *testing.T) {
 		},
 	}
 
-	for _, numOfHashBuckets := range []uint64{0 /* no limit */, 1, uint64(coldata.BatchSize())} {
+	for _, numOfHashBuckets := range []int{0 /* no limit */, 1, coldata.BatchSize()} {
 		for _, tc := range tcs {
 			if err := tc.init(); err != nil {
 				t.Fatal(err)
@@ -877,7 +877,7 @@ func TestHashAggregator(t *testing.T) {
 			t.Run(fmt.Sprintf("numOfHashBuckets=%d", numOfHashBuckets), func(t *testing.T) {
 				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []Operator) (Operator, error) {
 					a, err := NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
-					a.(*hashAggregator).testingKnobs.numOfHashBuckets = numOfHashBuckets
+					a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
 					return a, err
 				})
 			})

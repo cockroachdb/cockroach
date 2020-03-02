@@ -200,7 +200,7 @@ func TestInboxShutdown(t *testing.T) {
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
 		typs               = []coltypes.T{coltypes.Int64}
-		batch              = colexec.RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
+		batch              = colexec.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
 	)
 
 	for _, runDrainMetaGoroutine := range []bool{false, true} {
