@@ -295,6 +295,11 @@ message Payload {
   // needed.
   errorspb.EncodedError final_resume_error = 19;
   Lease lease = 9;
+  // Noncancelable is used to denote when a job cannot be canceled. This field
+  // will not be respected in mixed version clusters where some nodes have
+  // a version < 20.1, so it can only be used in cases where all nodes having
+  // versions >= 20.1 is guaranteed.
+  bool noncancelable = 20;
   oneof details {
     BackupDetails backup = 10;
     RestoreDetails restore = 11;
