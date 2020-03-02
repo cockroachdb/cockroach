@@ -19,7 +19,7 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.InitPut, DefaultDeclareKeys, InitPut)
+	RegisterReadWriteCommand(roachpb.InitPut, DefaultDeclareIsolatedKeys, InitPut)
 }
 
 // InitPut sets the value for a specified key only if it doesn't exist. It
@@ -41,8 +41,17 @@ func InitPut(
 			defer readWriter.Close()
 		}
 	}
+	var err error
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+		err = engine.MVCCBlindInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	} else {
+		err = engine.MVCCInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
 	}
-	return result.Result{}, engine.MVCCInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	// NB: even if MVCC returns an error, it may still have written an intent
+	// into the batch. This allows callers to consume errors like WriteTooOld
+	// without re-evaluating the batch. This behavior isn't particularly
+	// desirable, but while it remains, we need to assume that an intent could
+	// have been written even when an error is returned. This is harmless if the
+	// error is not consumed by the caller because the result will be discarded.
+	return result.FromWrittenIntents(h.Txn, args.Key), err
 }

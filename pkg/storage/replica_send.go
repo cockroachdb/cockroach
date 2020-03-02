@@ -16,8 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -121,10 +120,26 @@ func (r *Replica) sendWithRangeID(
 // batchExecutionFn is a method on Replica that is able to execute a
 // BatchRequest. It is called with the batch, along with the span bounds that
 // the batch will operate over and a guard for the latches protecting the span
-// bounds. The function must ensure that the latch guard is eventually released.
+// bounds.
+//
+// The function will return either a batch response or an error. The function
+// also has the option to pass ownership of the concurrency guard back to the
+// caller. However, it does not need to. Instead, it can assume responsibility
+// for releasing the concurrency guard it was provided by returning nil. This is
+// useful is cases where the function:
+// 1. eagerly released the concurrency guard after it determined that isolation
+//    from conflicting requests was no longer needed.
+// 2. is continuing to execute asynchronously and needs to maintain isolation
+//    from conflicting requests throughout the lifetime of its asynchronous
+//    processing. The most prominent example of asynchronous processing is
+//    with requests that have the "async consensus" flag set. A more subtle
+//    case is with requests that are acknowledged by the Raft machinery after
+//    their Raft entry has been committed but before it has been applied to
+//    the replicated state machine. In all of these cases, responsibility
+//    for releasing the concurrency guard is handed to Raft.
 type batchExecutionFn func(
-	*Replica, context.Context, *roachpb.BatchRequest, *spanset.SpanSet, *spanlatch.Guard,
-) (*roachpb.BatchResponse, *roachpb.Error)
+	*Replica, context.Context, *roachpb.BatchRequest, *concurrency.Guard,
+) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
 var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
@@ -147,76 +162,91 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *roachpb.BatchRequest, fn batchExecutionFn,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Determine the maximal set of key spans that the batch will operate on.
-	spans, err := r.collectSpans(ba)
+	latchSpans, lockSpans, err := r.collectSpans(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
 	// Handle load-based splitting.
-	r.recordBatchForLoadBasedSplitting(ctx, ba, spans)
-
-	// TODO(nvanbenschoten): Clean this up once it's pulled inside the
-	// concurrency manager.
-	var cleanup intentresolver.CleanupFunc
-	defer func() {
-		if cleanup != nil {
-			// This request wrote an intent only if there was no error, the
-			// request is transactional, the transaction is not yet finalized,
-			// and the request wasn't read-only.
-			if pErr == nil && ba.Txn != nil && !br.Txn.Status.IsFinalized() && !ba.IsReadOnly() {
-				cleanup(nil, &br.Txn.TxnMeta)
-			} else {
-				cleanup(nil, nil)
-			}
-		}
-	}()
+	r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
 
 	// Try to execute command; exit retry loop on success.
+	var g *concurrency.Guard
+	defer func() {
+		// NB: wrapped to delay g evaluation to its value when returning.
+		if g != nil {
+			r.concMgr.FinishReq(g)
+		}
+	}()
 	for {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
 		}
 
-		// If necessary, the request may need to wait in the txn wait queue,
-		// pending updates to the target transaction for either PushTxn or
-		// QueryTxn requests.
-		// TODO(nvanbenschoten): Push this into the concurrency package.
-		br, pErr = r.maybeWaitForPushee(ctx, ba)
-		if br != nil || pErr != nil {
-			return br, pErr
+		// Acquire latches to prevent overlapping requests from executing until
+		// this request completes. After latching, wait on any conflicting locks
+		// to ensure that the request has full isolation during evaluation. This
+		// returns a request guard that must be eventually released.
+		var resp []roachpb.ResponseUnion
+		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
+			Txn:             ba.Txn,
+			Timestamp:       ba.Timestamp,
+			Priority:        ba.UserPriority,
+			ReadConsistency: ba.ReadConsistency,
+			Requests:        ba.Requests,
+			LatchSpans:      latchSpans,
+			LockSpans:       lockSpans,
+		})
+		if pErr != nil {
+			return nil, pErr
+		} else if resp != nil {
+			br = new(roachpb.BatchResponse)
+			br.Responses = resp
+			return br, nil
 		}
 
-		// Acquire latches to prevent overlapping commands from executing until
-		// this command completes.
-		// TODO(nvanbenschoten): Replace this with a call into the upcoming
-		// concurrency package when it is introduced.
-		lg, err := r.beginCmds(ctx, ba, spans)
-		if err != nil {
-			return nil, roachpb.NewError(err)
+		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
+			if pErr := filter(ctx, *ba); pErr != nil {
+				return nil, pErr
+			}
 		}
 
-		br, pErr = fn(r, ctx, ba, spans, lg)
+		br, g, pErr = fn(r, ctx, ba, g)
 		switch t := pErr.GetDetail().(type) {
 		case nil:
 			// Success.
 			return br, nil
 		case *roachpb.WriteIntentError:
-			if cleanup, pErr = r.handleWriteIntentError(ctx, ba, pErr, t, cleanup); pErr != nil {
+			// Drop latches, but retain lock wait-queues.
+			g.AssertLatches()
+			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
 			// Retry...
 		case *roachpb.TransactionPushError:
-			if pErr = r.handleTransactionPushError(ctx, ba, pErr, t); pErr != nil {
+			// Drop latches, but retain lock wait-queues.
+			g.AssertLatches()
+			if g, pErr = r.handleTransactionPushError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
 			// Retry...
 		case *roachpb.IndeterminateCommitError:
+			// Drop latches and lock wait-queues.
+			g.AssertLatches()
+			r.concMgr.FinishReq(g)
+			g = nil
+			// Then launch a task to handle the indeterminate commit error.
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
 			// Retry...
 		case *roachpb.MergeInProgressError:
+			// Drop latches and lock wait-queues.
+			g.AssertLatches()
+			r.concMgr.FinishReq(g)
+			g = nil
+			// Then listen for the merge to complete.
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
@@ -231,73 +261,24 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 func (r *Replica) handleWriteIntentError(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
 	pErr *roachpb.Error,
 	t *roachpb.WriteIntentError,
-	cleanup intentresolver.CleanupFunc,
-) (intentresolver.CleanupFunc, *roachpb.Error) {
+) (*concurrency.Guard, *roachpb.Error) {
 	if r.store.cfg.TestingKnobs.DontPushOnWriteIntentError {
-		return cleanup, pErr
+		return g, pErr
 	}
-
-	// Process and resolve write intent error.
-	var pushType roachpb.PushTxnType
-	if ba.IsWrite() {
-		pushType = roachpb.PUSH_ABORT
-	} else {
-		pushType = roachpb.PUSH_TIMESTAMP
-	}
-
-	index := pErr.Index
-	// Make a copy of the header for the upcoming push; we will update the
-	// timestamp.
-	h := ba.Header
-	if h.Txn != nil {
-		// We must push at least to h.Timestamp, but in fact we want to
-		// go all the way up to a timestamp which was taken off the HLC
-		// after our operation started. This allows us to not have to
-		// restart for uncertainty as we come back and read.
-		obsTS, ok := h.Txn.GetObservedTimestamp(ba.Replica.NodeID)
-		if !ok {
-			// This was set earlier in this method, so it's
-			// completely unexpected to not be found now.
-			log.Fatalf(ctx, "missing observed timestamp: %+v", h.Txn)
-		}
-		h.Timestamp.Forward(obsTS)
-		// We are going to hand the header (and thus the transaction proto)
-		// to the RPC framework, after which it must not be changed (since
-		// that could race). Since the subsequent execution of the original
-		// request might mutate the transaction, make a copy here.
-		//
-		// See #9130.
-		h.Txn = h.Txn.Clone()
-	}
-
-	// Handle the case where we get more than one write intent error;
-	// we need to cleanup the previous attempt to handle it to allow
-	// any other pusher queued up behind this RPC to proceed.
-	if cleanup != nil {
-		cleanup(t, nil)
-	}
-	cleanup, pErr = r.store.intentResolver.ProcessWriteIntentError(ctx, pErr, h, pushType)
-	if pErr != nil {
-		// Do not propagate ambiguous results; assume success and retry original op.
-		if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
-			return cleanup, nil
-		}
-		// Propagate new error. Preserve the error index.
-		pErr.Index = index
-		return cleanup, pErr
-	}
-	// We've resolved the write intent; retry command.
-	return cleanup, nil
+	// g's latches will be dropped, but it retains its spot in lock wait-queues.
+	return r.concMgr.HandleWriterIntentError(ctx, g, t), nil
 }
 
 func (r *Replica) handleTransactionPushError(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
 	pErr *roachpb.Error,
 	t *roachpb.TransactionPushError,
-) *roachpb.Error {
+) (*concurrency.Guard, *roachpb.Error) {
 	// On a transaction push error, retry immediately if doing so will enqueue
 	// into the txnWaitQueue in order to await further updates to the unpushed
 	// txn's status. We check ShouldPushImmediately to avoid retrying
@@ -308,11 +289,11 @@ func (r *Replica) handleTransactionPushError(
 		dontRetry = txnwait.ShouldPushImmediately(pushReq)
 	}
 	if dontRetry {
-		return pErr
+		return g, pErr
 	}
-	// Enqueue unsuccessfully pushed transaction on the txnWaitQueue and retry.
-	r.txnWaitQueue.EnqueueTxn(&t.PusheeTxn)
-	return nil
+	// g's latches will be dropped, but it retains its spot in lock wait-queues
+	// (though a PushTxn shouldn't be in any lock wait-queues).
+	return r.concMgr.HandleTransactionPushError(ctx, g, t), nil
 }
 
 func (r *Replica) handleIndeterminateCommitError(
@@ -506,8 +487,10 @@ func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) e
 	return nil
 }
 
-func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, error) {
-	spans := &spanset.SpanSet{}
+func (r *Replica) collectSpans(
+	ba *roachpb.BatchRequest,
+) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
+	latchSpans, lockSpans = new(spanset.SpanSet), new(spanset.SpanSet)
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -519,14 +502,14 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	// TODO(bdarnell): revisit as the local portion gets its appropriate
 	// use.
 	if ba.IsReadOnly() {
-		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
+		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	} else {
 		guess := len(ba.Requests)
 		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
 			// EndTxn declares a global write for each of its intent spans.
 			guess += len(et.(*roachpb.EndTxnRequest).IntentSpans) - 1
 		}
-		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
+		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	}
 
 	// For non-local, MVCC spans we annotate them with the request timestamp
@@ -537,26 +520,29 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	// This is still safe as we're only ever writing at timestamps higher than the
 	// timestamp any write latch would be declared at.
 	desc := r.Desc()
-	batcheval.DeclareKeysForBatch(desc, ba.Header, spans)
+	batcheval.DeclareKeysForBatch(desc, ba.Header, latchSpans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, ba.Header, inner, spans)
+			cmd.DeclareKeys(desc, ba.Header, inner, latchSpans, lockSpans)
 		} else {
-			return nil, errors.Errorf("unrecognized command %s", inner.Method())
+			return nil, nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
 	// Commands may create a large number of duplicate spans. De-duplicate
 	// them to reduce the number of spans we pass to the spanlatch manager.
-	spans.SortAndDedup()
+	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
+		s.SortAndDedup()
 
-	// If any command gave us spans that are invalid, bail out early
-	// (before passing them to the spanlatch manager, which may panic).
-	if err := spans.Validate(); err != nil {
-		return nil, err
+		// If any command gave us spans that are invalid, bail out early
+		// (before passing them to the spanlatch manager, which may panic).
+		if err := s.Validate(); err != nil {
+			return nil, nil, err
+		}
 	}
-	return spans, nil
+
+	return latchSpans, lockSpans, nil
 }
 
 // limitTxnMaxTimestamp limits the batch transaction's max timestamp

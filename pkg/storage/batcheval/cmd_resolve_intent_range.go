@@ -24,9 +24,12 @@ func init() {
 }
 
 func declareKeysResolveIntentRange(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
 ) {
-	declareKeysResolveIntentCombined(desc, header, req, spans)
+	declareKeysResolveIntentCombined(header, req, latchSpans)
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -56,11 +59,13 @@ func ResolveIntentRange(
 	reply := resp.(*roachpb.ResolveIntentRangeResponse)
 	reply.NumKeys = numKeys
 	if resumeSpan != nil {
+		update.EndKey = resumeSpan.Key
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
 	var res result.Result
+	res.Local.ResolvedIntents = []roachpb.LockUpdate{update}
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, numKeys > 0) {

@@ -88,7 +88,7 @@ type ProposalData struct {
 	tmpFooter storagepb.RaftCommandFooter
 
 	// ec.done is called after command application to update the timestamp
-	// cache and release latches.
+	// cache and optionally release latches and exits lock wait-queues.
 	ec endCmds
 
 	// applied is set when the a command finishes application. It is used to
@@ -414,12 +414,6 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		}
 	}
 
-	if leaseChangingHands && !iAmTheLeaseHolder {
-		// Also clear and disable the push transaction queue. Any waiters
-		// must be redirected to the new lease holder.
-		r.txnWaitQueue.Clear(true /* disable */)
-	}
-
 	// If we're the current raft leader, may want to transfer the leadership to
 	// the new leaseholder. Note that this condition is also checked periodically
 	// when ticking the replica.
@@ -440,6 +434,9 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		}
 	}
 
+	// Inform the concurrency manager that the lease holder has been updated.
+	r.concMgr.OnRangeLeaseUpdated(iAmTheLeaseHolder)
+
 	// Potentially re-gossip if the range contains system data (e.g. system
 	// config or node liveness). We need to perform this gossip at startup as
 	// soon as possible. Trying to minimize how often we gossip is a fool's
@@ -454,8 +451,6 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		if err := r.MaybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
 			log.Error(ctx, err)
 		}
-		// Make sure the push transaction queue is enabled.
-		r.txnWaitQueue.Enable()
 
 		// Emit an MLAI on the leaseholder replica, as follower will be looking
 		// for one and if we went on to quiesce, they wouldn't necessarily get
@@ -610,9 +605,23 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
 	}
 
+	if lResult.WrittenIntents != nil {
+		for i := range lResult.WrittenIntents {
+			r.concMgr.OnLockAcquired(ctx, &lResult.WrittenIntents[i])
+		}
+		lResult.WrittenIntents = nil
+	}
+
+	if lResult.ResolvedIntents != nil {
+		for i := range lResult.ResolvedIntents {
+			r.concMgr.OnLockUpdated(ctx, &lResult.ResolvedIntents[i])
+		}
+		lResult.ResolvedIntents = nil
+	}
+
 	if lResult.UpdatedTxns != nil {
 		for _, txn := range lResult.UpdatedTxns {
-			r.txnWaitQueue.UpdateTxn(ctx, txn)
+			r.concMgr.OnTransactionUpdated(ctx, txn)
 		}
 		lResult.UpdatedTxns = nil
 	}

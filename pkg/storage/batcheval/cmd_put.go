@@ -25,15 +25,16 @@ func init() {
 }
 
 func declareKeysPut(
-	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
 ) {
 	args := req.(*roachpb.PutRequest)
-	access := spanset.SpanReadWrite
-
 	if args.Inline {
-		spans.AddNonMVCC(access, req.Header().Span())
+		DefaultDeclareKeys(desc, header, req, latchSpans, lockSpans)
 	} else {
-		spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+		DefaultDeclareIsolatedKeys(desc, header, req, latchSpans, lockSpans)
 	}
 }
 
@@ -58,8 +59,17 @@ func Put(
 			defer readWriter.Close()
 		}
 	}
+	var err error
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+		err = engine.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+	} else {
+		err = engine.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
 	}
-	return result.Result{}, engine.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
+	// NB: even if MVCC returns an error, it may still have written an intent
+	// into the batch. This allows callers to consume errors like WriteTooOld
+	// without re-evaluating the batch. This behavior isn't particularly
+	// desirable, but while it remains, we need to assume that an intent could
+	// have been written even when an error is returned. This is harmless if the
+	// error is not consumed by the caller because the result will be discarded.
+	return result.FromWrittenIntents(h.Txn, args.Key), err
 }

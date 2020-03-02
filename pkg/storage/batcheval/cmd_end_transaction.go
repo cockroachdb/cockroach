@@ -44,21 +44,27 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
 	}
 }
 
 func declareKeysEndTxn(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
 ) {
 	et := req.(*roachpb.EndTxnRequest)
-	declareKeysWriteTransaction(desc, header, req, spans)
+	declareKeysWriteTransaction(desc, header, req, latchSpans)
 	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -67,7 +73,7 @@ func declareKeysEndTxn(
 		if !et.Commit && et.Poison {
 			abortSpanAccess = spanset.SpanReadWrite
 		}
-		spans.AddNonMVCC(abortSpanAccess, roachpb.Span{
+		latchSpans.AddNonMVCC(abortSpanAccess, roachpb.Span{
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
@@ -78,13 +84,13 @@ func declareKeysEndTxn(
 		// All requests that intent on resolving local intents need to depend on
 		// the range descriptor because they need to determine which intents are
 		// within the local range.
-		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
 		// The spans may extend beyond this Range, but it's ok for the
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
 		for _, span := range et.IntentSpans {
-			spans.AddMVCC(spanset.SpanReadWrite, span, minTxnTS)
+			latchSpans.AddMVCC(spanset.SpanReadWrite, span, minTxnTS)
 		}
 
 		if et.InternalCommitTrigger != nil {
@@ -99,44 +105,44 @@ func declareKeysEndTxn(
 				// all concurrent reads and writes to the RHS because they will
 				// fail if applied after the split. (see
 				// https://github.com/cockroachdb/cockroach/issues/14881)
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    st.LeftDesc.StartKey.AsRawKey(),
 					EndKey: st.LeftDesc.EndKey.AsRawKey(),
 				})
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    st.RightDesc.StartKey.AsRawKey(),
 					EndKey: st.RightDesc.EndKey.AsRawKey(),
 				})
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 				})
 
 				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
 				})
 				rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDPrefix,
 					EndKey: rightRangeIDPrefix.PrefixEnd(),
 				})
 
 				rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDUnreplicatedPrefix,
 					EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 				})
 
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
 				})
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
 				})
 
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    abortspan.MinKey(header.RangeID),
 					EndKey: abortspan.MaxKey(header.RangeID),
 				})
@@ -144,11 +150,11 @@ func declareKeysEndTxn(
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 				// Merges copy over the RHS abort span to the LHS, and compute
 				// replicated range ID stats over the RHS in the merge trigger.
-				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    abortspan.MinKey(mt.LeftDesc.RangeID),
 					EndKey: abortspan.MaxKey(mt.LeftDesc.RangeID).PrefixEnd(),
 				})
-				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
 					EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
 				})
@@ -225,7 +231,7 @@ func EndTxn(
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				desc := cArgs.EvalCtx.Desc()
-				externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+				resolvedIntents, externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 				if err != nil {
 					return result.Result{}, err
 				}
@@ -236,7 +242,9 @@ func EndTxn(
 				}
 				// Use alwaysReturn==true because the transaction is definitely
 				// aborted, no matter what happens to this command.
-				return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), nil
+				res := result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison)
+				res.Local.ResolvedIntents = resolvedIntents
+				return res, nil
 			}
 			// If the transaction was previously aborted by a concurrent writer's
 			// push, any intents written are still open. It's only now that we know
@@ -331,7 +339,7 @@ func EndTxn(
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve intents for this transaction in the future.
 	desc := cArgs.EvalCtx.Desc()
-	externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+	resolvedIntents, externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -375,6 +383,7 @@ func EndTxn(
 	// if the commit actually happens; otherwise, we risk losing writes.
 	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
 	intentsResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
+	intentsResult.Local.ResolvedIntents = resolvedIntents
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
 	}
@@ -437,14 +446,13 @@ func CanForwardCommitTimestampWithoutRefresh(
 
 const intentResolutionBatchSize = 500
 
-// resolveLocalIntents synchronously resolves any intents that are
-// local to this range in the same batch. The remainder are collected
-// and returned so that they can be handed off to asynchronous
-// processing. Note that there is a maximum intent resolution
-// allowance of intentResolutionBatchSize meant to avoid creating a
-// batch which is too large for Raft. Any local intents which exceed
-// the allowance are treated as external and are resolved
-// asynchronously with the external intents.
+// resolveLocalIntents synchronously resolves any intents that are local to this
+// range in the same batch and returns those intent spans. The remainder are
+// collected and returned so that they can be handed off to asynchronous
+// processing. Note that there is a maximum intent resolution allowance of
+// intentResolutionBatchSize meant to avoid creating a batch which is too large
+// for Raft. Any local intents which exceed the allowance are treated as
+// external and are resolved asynchronously with the external intents.
 func resolveLocalIntents(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -453,7 +461,7 @@ func resolveLocalIntents(
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
-) ([]roachpb.Span, error) {
+) (resolvedIntents []roachpb.LockUpdate, externalIntents []roachpb.Span, _ error) {
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which intents are local (note that for a split, we want to use the
@@ -467,7 +475,6 @@ func resolveLocalIntents(
 	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
-	var externalIntents []roachpb.Span
 	var resolveAllowance int64 = intentResolutionBatchSize
 	if args.InternalCommitTrigger != nil {
 		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
@@ -490,10 +497,14 @@ func resolveLocalIntents(
 				}
 				resolveMS := ms
 				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
+				if err != nil {
+					return err
+				}
 				if ok {
 					resolveAllowance--
 				}
-				return err
+				resolvedIntents = append(resolvedIntents, intent)
+				return nil
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
@@ -514,23 +525,25 @@ func resolveLocalIntents(
 					if resolveAllowance != 0 {
 						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", intent.Span, resolveAllowance)
 					}
+					intent.EndKey = resumeSpan.Key
 					externalIntents = append(externalIntents, *resumeSpan)
 				}
+				resolvedIntents = append(resolvedIntents, intent)
 				return nil
 			}
 			return nil
 		}(); err != nil {
-			return nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
+			return nil, nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
 		}
 	}
 
 	removedAny := resolveAllowance != intentResolutionBatchSize
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
 		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return externalIntents, nil
+	return resolvedIntents, externalIntents, nil
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status

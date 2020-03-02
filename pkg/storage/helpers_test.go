@@ -458,10 +458,6 @@ func (r *Replica) IsQuiescent() bool {
 	return r.mu.quiescent
 }
 
-func (r *Replica) IsTxnWaitQueueEnabled() bool {
-	return r.txnWaitQueue.IsEnabled()
-}
-
 // GetQueueLastProcessed returns the last processed timestamp for the
 // specified queue, or the zero timestamp if not available.
 func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {

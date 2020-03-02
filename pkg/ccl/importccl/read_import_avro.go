@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -156,14 +157,15 @@ var familyToAvroT = map[types.Family][]string{
 	types.DecimalFamily:        {"string"},
 }
 
-type nativeConverter struct {
-	conv           *row.DatumRowConverter
+// avroConsumer implements importRowConsumer interface.
+type avroConsumer struct {
+	importCtx      *parallelImportContext
 	fieldNameToIdx map[string]int
 	strict         bool
 }
 
 // Converts avro record to datums as expected by DatumRowConverter.
-func (c *nativeConverter) convertNative(x interface{}, evalCtx *tree.EvalContext) error {
+func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter) error {
 	record, ok := x.(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("unexpected native type; expected map[string]interface{} found %T instead", x)
@@ -171,98 +173,85 @@ func (c *nativeConverter) convertNative(x interface{}, evalCtx *tree.EvalContext
 
 	for f, v := range record {
 		field := lex.NormalizeName(f)
-		idx, ok := c.fieldNameToIdx[field]
+		idx, ok := a.fieldNameToIdx[field]
 		if !ok {
-			if c.strict {
+			if a.strict {
 				return fmt.Errorf("could not find column for record field %s", field)
 			}
 			continue
 		}
 
-		typ := c.conv.VisibleColTypes[idx]
+		typ := conv.VisibleColTypes[idx]
 		avroT, ok := familyToAvroT[typ.Family()]
 		if !ok {
-			return fmt.Errorf("cannot convert avro value %v to col %s", v, c.conv.VisibleCols[idx].Type.Name())
+			return fmt.Errorf("cannot convert avro value %v to col %s", v, conv.VisibleCols[idx].Type.Name())
 		}
 
-		datum, err := nativeToDatum(v, typ, avroT, evalCtx)
+		datum, err := nativeToDatum(v, typ, avroT, conv.EvalCtx)
 		if err != nil {
 			return err
 		}
-		c.conv.Datums[idx] = datum
+		conv.Datums[idx] = datum
 	}
 	return nil
 }
 
-// Emits row into DatumRowConverter
-func (c *nativeConverter) Row(
-	ctx context.Context, native interface{}, sourceID int32, rowIndex int64,
+// FillDatums implements importRowStream interface.
+func (a *avroConsumer) FillDatums(
+	native interface{}, rowIndex int64, conv *row.DatumRowConverter,
 ) error {
-	if err := c.convertNative(native, c.conv.EvalCtx); err != nil {
+	if err := a.convertNative(native, conv); err != nil {
 		return err
 	}
 
 	// Set any nil datums to DNull (in case native
 	// record didn't have the value set at all)
-	for i := range c.conv.Datums {
-		if c.conv.Datums[i] == nil {
-			if c.strict {
-				return fmt.Errorf("field %s was not set in the avro import", c.conv.VisibleCols[i].Name)
+	for i := range conv.Datums {
+		if conv.Datums[i] == nil {
+			if a.strict {
+				return fmt.Errorf("field %s was not set in the avro import", conv.VisibleCols[i].Name)
 			}
-			c.conv.Datums[i] = tree.DNull
+			conv.Datums[i] = tree.DNull
 		}
 	}
-
-	return c.conv.Row(ctx, sourceID, rowIndex)
+	return nil
 }
 
-// A scanner over avro input.
-type avroRowStream interface {
-	// Scan returns true if there is more data available.
-	// After Scan() returns false, the caller should verify
-	// that the scanner has not encountered an error (Err() == nil).
-	Scan() bool
-
-	// Err returns an error (if any) encountered when processing avro stream.
-	Err() error
-
-	// Skip, as the name implies, skips the current record in this stream.
-	Skip() error
-
-	// Row emits current row (record).
-	Row(ctx context.Context, sourceID int32, rowIndex int64) error
-}
+var _ importRowConsumer = &avroConsumer{}
 
 // An OCF (object container file) input scanner
 type ocfStream struct {
-	nativeConverter
-	ocf *goavro.OCFReader
-	err error
+	ocf      *goavro.OCFReader
+	progress func() float32
+	err      error
 }
 
-var _ avroRowStream = &ocfStream{}
+var _ importRowProducer = &ocfStream{}
 
-// Scan implements avroRowStream interface.
+// Progress implements importRowProducer interface
+func (o *ocfStream) Progress() float32 {
+	if o.progress != nil {
+		return o.progress()
+	}
+	return 0
+}
+
+// Scan implements importRowProducer interface.
 func (o *ocfStream) Scan() bool {
 	return o.ocf.Scan()
 }
 
-// Err implements avroRowStream interface.
+// Err implements importRowProducer interface.
 func (o *ocfStream) Err() error {
 	return o.err
 }
 
-// Row implements avroRowStream interface.
-func (o *ocfStream) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
-	var native interface{}
-	native, o.err = o.ocf.Read()
-	if o.err == nil {
-		o.err = o.nativeConverter.Row(ctx, native, sourceID, rowIndex)
-	}
-	return o.err
+// Row implements importRowProducer interface.
+func (o *ocfStream) Row() (interface{}, error) {
+	return o.ocf.Read()
 }
 
-// Skip implements avroRowStream interface.
+// Skip implements importRowProducer interface.
 func (o *ocfStream) Skip() error {
 	_, o.err = o.ocf.Read()
 	return o.err
@@ -270,45 +259,60 @@ func (o *ocfStream) Skip() error {
 
 // A scanner over a file containing avro records in json or binary format.
 type avroRecordStream struct {
-	nativeConverter
-	opts       roachpb.AvroOptions
-	input      io.Reader
-	buf        *bytes.Buffer
+	importCtx  *parallelImportContext
+	opts       *roachpb.AvroOptions
+	input      *fileReader
 	codec      *goavro.Codec
-	eof        bool  // Input eof reached
-	err        error // Error, other than io.EOF
-	maxBufSize int   // Error if buf exceeds this threshold
-	minBufSize int   // Issue additional reads if buffer below this threshold
-	readSize   int   // Read that many bytes at a time.
+	row        interface{} // Row to return
+	buf        []byte      // Buffered data from input.  See note in fill() method.
+	eof        bool        // Input eof reached
+	err        error       // Error, other than io.EOF
+	trimLeft   bool        // Trim record separator at the start of the buffer.
+	maxBufSize int         // Error if buf exceeds this threshold
+	minBufSize int         // Issue additional reads if buffer below this threshold
+	readSize   int         // Read that many bytes at a time.
 }
 
-var _ avroRowStream = &avroRecordStream{}
+var _ importRowProducer = &avroRecordStream{}
 
-func (r *avroRecordStream) trimRecordSeparator() {
+func (r *avroRecordStream) Progress() float32 {
+	return r.input.ReadFraction()
+}
+
+func (r *avroRecordStream) trimRecordSeparator() bool {
 	if r.opts.RecordSeparator == 0 {
-		return
+		return true
 	}
 
-	if r.buf.Len() == 0 {
-		r.fill(r.readSize)
-	}
-
-	if r.buf.Len() > 0 {
-		var c rune
-		c, _, r.err = r.buf.ReadRune()
-		if r.err == nil {
-			if c != r.opts.RecordSeparator {
-				r.err = r.buf.UnreadRune()
-			}
+	if len(r.buf) > 0 {
+		c, n := utf8.DecodeRune(r.buf)
+		if n > 0 && c == r.opts.RecordSeparator {
+			r.buf = r.buf[n:]
+			return true
 		}
 	}
+	return false
 }
 
 func (r *avroRecordStream) fill(sz int) {
 	if r.eof || r.err != nil {
 		return
 	}
-	_, r.err = io.CopyN(r.buf, r.input, int64(sz))
+
+	// NB: We use bytes.Buffer for writing into our internal buf, but we cannot
+	// use bytes.Buffer for reading. The reason is that bytes.Buffer tries
+	// to be efficient in its memory management. In particular, it can reuse
+	// underlying memory if the buffer becomes empty (buf = buf[:0]).  This is
+	// problematic for us because the avro stream sends interface{} objects
+	// to the consumer workers. Those interface objects may (infrequently)
+	// reference the underlying byte array from which those interface objects
+	// were constructed (e.g. if we are decoding avro bytes data type, we may
+	// actually return []byte as an interface{} referencing underlying buffer).
+	// To avoid this unpleasant situation, we never reset the head of our
+	// buffer.
+	sink := bytes.NewBuffer(r.buf)
+	_, r.err = io.CopyN(sink, r.input, int64(sz))
+	r.buf = sink.Bytes()
 
 	if r.err == io.EOF {
 		r.eof = true
@@ -316,101 +320,107 @@ func (r *avroRecordStream) fill(sz int) {
 	}
 }
 
-// Scan implements avroRowStream interface.
+// Scan implements importRowProducer interface.
 func (r *avroRecordStream) Scan() bool {
-	if !r.eof && r.buf.Len() < r.minBufSize {
-		r.fill(r.readSize)
+	if r.row != nil {
+		panic("must call Row() or Skip() before calling Scan()")
 	}
-	return r.err == nil && (!r.eof || r.buf.Len() > 0)
+
+	r.readNative()
+	return r.err == nil && (!r.eof || r.row != nil)
 }
 
-// Err implements avroRowStream interface.
+// Err implements importRowProducer interface.
 func (r *avroRecordStream) Err() error {
 	return r.err
 }
 
 func (r *avroRecordStream) decode() (interface{}, []byte, error) {
 	if r.opts.Format == roachpb.AvroOptions_BIN_RECORDS {
-		return r.codec.NativeFromBinary(r.buf.Bytes())
+		return r.codec.NativeFromBinary(r.buf)
 	}
-	return r.codec.NativeFromTextual(r.buf.Bytes())
+	return r.codec.NativeFromTextual(r.buf)
 }
 
-func (r *avroRecordStream) readNative() interface{} {
-	native, remaining, err := r.decode()
+func (r *avroRecordStream) readNative() {
+	var remaining []byte
+	var decodeErr error
+	r.row = nil
 
-	// Read more data if we get an error decoding
-	// (in case we have partial record in the buffer).
-	for sz := r.readSize; err != nil && !r.eof && r.buf.Len() < r.maxBufSize; sz *= 2 {
-		err = nil
+	canReadMoreData := func() bool {
+		return !r.eof && len(r.buf) < r.maxBufSize
+	}
+
+	for sz := r.readSize; r.row == nil && (len(r.buf) > 0 || canReadMoreData()); sz *= 2 {
 		r.fill(sz)
-		native, remaining, err = r.decode()
+
+		if r.trimLeft {
+			r.trimLeft = !r.trimRecordSeparator()
+		}
+
+		if len(r.buf) > 0 {
+			r.row, remaining, decodeErr = r.decode()
+		}
 	}
 
-	if err != nil {
-		r.err = err
-		return nil
+	if decodeErr != nil {
+		r.err = decodeErr
+		return
 	}
 
-	r.buf.Next(r.buf.Len() - len(remaining))
-	r.trimRecordSeparator()
-	return native
+	r.buf = remaining
+	r.trimLeft = !r.trimRecordSeparator()
 }
 
-// Skip implements avroRowStream interface.
+// Skip implements importRowProducer interface.
 func (r *avroRecordStream) Skip() error {
-	_ = r.readNative()
-	return r.err
+	r.row = nil
+	return nil
 }
 
-// Row implements avroRowStream interface.
-func (r *avroRecordStream) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
-	native := r.readNative()
-	if r.err == nil {
-		r.err = r.nativeConverter.Row(ctx, native, sourceID, rowIndex)
-	}
-	return r.err
+// Row implements importRowProducer interface.
+func (r *avroRecordStream) Row() (interface{}, error) {
+	res := r.row
+	r.row = nil
+	return res, nil
 }
 
-func newRowStream(
-	avro roachpb.AvroOptions, conv *row.DatumRowConverter, input *fileReader,
-) (avroRowStream, error) {
+func newImportAvroPipeline(
+	avro *avroInputReader, input *fileReader,
+) (importRowProducer, importRowConsumer, error) {
 	fieldIdxByName := make(map[string]int)
-	for idx, col := range conv.VisibleCols {
+	for idx, col := range avro.importContext.tableDesc.VisibleColumns() {
 		fieldIdxByName[col.Name] = idx
 	}
 
-	if avro.Format == roachpb.AvroOptions_OCF {
+	consumer := &avroConsumer{
+		importCtx:      avro.importContext,
+		fieldNameToIdx: fieldIdxByName,
+		strict:         avro.opts.StrictMode,
+	}
+
+	if avro.opts.Format == roachpb.AvroOptions_OCF {
 		ocf, err := goavro.NewOCFReader(bufio.NewReaderSize(input, 64<<10))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-
-		return &ocfStream{
-			nativeConverter: nativeConverter{
-				conv:           conv,
-				fieldNameToIdx: fieldIdxByName,
-				strict:         avro.StrictMode,
-			},
-			ocf: ocf,
-		}, nil
+		producer := &ocfStream{
+			ocf:      ocf,
+			progress: func() float32 { return input.ReadFraction() },
+		}
+		return producer, consumer, nil
 	}
 
-	codec, err := goavro.NewCodec(avro.SchemaJSON)
+	codec, err := goavro.NewCodec(avro.opts.SchemaJSON)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	stream := &avroRecordStream{
-		nativeConverter: nativeConverter{
-			conv:           conv,
-			fieldNameToIdx: fieldIdxByName,
-			strict:         avro.StrictMode,
-		},
-		opts:  avro,
-		input: input,
-		codec: codec,
-		buf:   bytes.NewBuffer(nil),
+	producer := &avroRecordStream{
+		importCtx: avro.importContext,
+		opts:      &avro.opts,
+		input:     input,
+		codec:     codec,
 		// We don't really know how large the records are, but if we have
 		// "too little" data in our buffer, we would probably not be able to parse
 		// avro record.  So, if our available bytes is below this threshold,
@@ -420,36 +430,38 @@ func newRowStream(
 		readSize:   4 << 10, // Just like bufio
 	}
 
-	if int(avro.MaxRecordSize) > stream.maxBufSize {
-		stream.maxBufSize = int(avro.MaxRecordSize)
+	if int(avro.opts.MaxRecordSize) > producer.maxBufSize {
+		producer.maxBufSize = int(avro.opts.MaxRecordSize)
 	}
 
-	return stream, nil
+	return producer, consumer, nil
 }
 
 type avroInputReader struct {
-	opts roachpb.AvroOptions
-	conv *row.DatumRowConverter
+	importContext *parallelImportContext
+	opts          roachpb.AvroOptions
 }
 
 var _ inputConverter = &avroInputReader{}
 
 func newAvroInputReader(
-	ctx context.Context,
 	kvCh chan row.KVBatch,
 	tableDesc *sqlbase.TableDescriptor,
-	avro roachpb.AvroOptions,
+	avroOpts roachpb.AvroOptions,
+	walltime int64,
+	parallelism int,
 	evalCtx *tree.EvalContext,
 ) (*avroInputReader, error) {
-	conv, err := row.NewDatumRowConverter(ctx, tableDesc, nil /* targetColNames */, evalCtx, kvCh)
-
-	if err != nil {
-		return nil, err
-	}
 
 	return &avroInputReader{
-		opts: avro,
-		conv: conv,
+		importContext: &parallelImportContext{
+			walltime:   walltime,
+			numWorkers: parallelism,
+			evalCtx:    evalCtx,
+			tableDesc:  tableDesc,
+			kvCh:       kvCh,
+		},
+		opts: avroOpts,
 	}, nil
 }
 
@@ -473,36 +485,15 @@ func (a *avroInputReader) readFile(
 	resumePos int64,
 	rejected chan string,
 ) error {
-	stream, err := newRowStream(a.opts, a.conv, input)
+	producer, consumer, err := newImportAvroPipeline(a, input)
 	if err != nil {
 		return err
 	}
 
-	var count int64
-	a.conv.KvBatch.Source = inputIdx
-	a.conv.FractionFn = input.ReadFraction
-	a.conv.CompletedRowFn = func() int64 {
-		return count
+	fileCtx := &importFileContext{
+		source:   inputIdx,
+		skip:     resumePos,
+		rejected: rejected,
 	}
-
-	for stream.Scan() {
-		count++
-		if count <= resumePos {
-			if err := stream.Skip(); err != nil {
-				return err
-			}
-			continue
-		}
-
-		if err := stream.Row(ctx, inputIdx, count); err != nil {
-			// TODO(yevgeniy): Report corrupt rows.
-			return err
-		}
-	}
-
-	if stream.Err() == nil {
-		return a.conv.SendBatch(ctx)
-	}
-
-	return stream.Err()
+	return runParallelImport(ctx, a.importContext, fileCtx, producer, consumer)
 }

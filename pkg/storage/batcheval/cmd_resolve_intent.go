@@ -27,7 +27,7 @@ func init() {
 }
 
 func declareKeysResolveIntentCombined(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	header roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
 ) {
 	var status roachpb.TransactionStatus
 	var txnID uuid.UUID
@@ -42,18 +42,21 @@ func declareKeysResolveIntentCombined(
 		txnID = t.IntentTxn.ID
 		minTxnTS = t.IntentTxn.MinTimestamp
 	}
-	spans.AddMVCC(spanset.SpanReadWrite, req.Header().Span(), minTxnTS)
+	latchSpans.AddMVCC(spanset.SpanReadWrite, req.Header().Span(), minTxnTS)
 	if status == roachpb.ABORTED {
 		// We don't always write to the abort span when resolving an ABORTED
 		// intent, but we can't tell whether we will or not ahead of time.
-		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
+		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
 	}
 }
 
 func declareKeysResolveIntent(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
 ) {
-	declareKeysResolveIntentCombined(desc, header, req, spans)
+	declareKeysResolveIntentCombined(header, req, latchSpans)
 }
 
 func resolveToMetricType(status roachpb.TransactionStatus, poison bool) *result.Metrics {
@@ -90,6 +93,7 @@ func ResolveIntent(
 	}
 
 	var res result.Result
+	res.Local.ResolvedIntents = []roachpb.LockUpdate{update}
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, ok) {
