@@ -87,10 +87,10 @@ type alterRoleRun struct {
 func (n *alterRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		telemetry.Inc(sqltelemetry.SchemaChangeAlter("role"))
+		telemetry.Inc(sqltelemetry.IAMAlter("role"))
 		opName = "alter-role"
 	} else {
-		telemetry.Inc(sqltelemetry.SchemaChangeAlter("user"))
+		telemetry.Inc(sqltelemetry.IAMAlter("user"))
 		opName = "alter-user"
 	}
 	name, err := n.name()
@@ -171,7 +171,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts()
+	stmts, err := n.roleOptions.GetSQLStmts("alter")
 	if err != nil {
 		return err
 	}
