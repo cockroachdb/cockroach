@@ -2374,6 +2374,46 @@ func BenchmarkImport(b *testing.B) {
 		))
 }
 
+// a importRowProducer implementation that returns 'n' rows.
+type csvBenchmarkStream struct {
+	n    int
+	pos  int
+	data [][]string
+}
+
+func (s *csvBenchmarkStream) Progress() float32 {
+	return float32(s.pos) / float32(s.n)
+}
+
+func (s *csvBenchmarkStream) Scan() bool {
+	s.pos++
+	return s.pos <= s.n
+}
+
+func (s *csvBenchmarkStream) Err() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Skip() error {
+	return nil
+}
+
+func (s *csvBenchmarkStream) Row() (interface{}, error) {
+	return s.data[s.pos%len(s.data)], nil
+}
+
+var _ importRowProducer = &csvBenchmarkStream{}
+
+// BenchmarkConvertRecord-16        1000000              2023 ns/op          59.30 MB/s        3624 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2108 ns/op          56.91 MB/s        3631 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2147 ns/op          55.89 MB/s        3631 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2435 ns/op          49.27 MB/s        3631 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2325 ns/op          51.60 MB/s        3631 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2295 ns/op          52.28 MB/s        3630 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2342 ns/op          51.22 MB/s        3632 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2326 ns/op          51.58 MB/s        3630 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2345 ns/op          51.17 MB/s        3631 B/op        100 allocs/op
+// BenchmarkConvertRecord-16         500000              2365 ns/op          50.73 MB/s        3630 B/op        100 allocs/op
 func BenchmarkConvertRecord(b *testing.B) {
 	ctx := context.TODO()
 
@@ -2481,6 +2521,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	close(kvCh)
+	b.ReportAllocs()
 }
 
 // TestImportControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
