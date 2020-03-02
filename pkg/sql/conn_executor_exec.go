@@ -939,6 +939,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 			ev, payload := ex.rollbackSQLTransaction(ctx)
 			return ev, payload
 		}
+		ex.rollbackSQLTransaction(ctx)
 		ex.clearSavepoints()
 
 		// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
