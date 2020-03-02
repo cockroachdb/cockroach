@@ -1029,8 +1029,15 @@ func (t *Transaction) Update(o *Transaction) {
 			t.IgnoredSeqNums = o.IgnoredSeqNums
 		}
 	} else /* t.Epoch > o.Epoch */ {
-		// Ignore epoch-specific state from previous epoch.
-		if o.Status == COMMITTED {
+		// Ignore epoch-specific state from previous epoch. However, ensure that
+		// the transaction status still makes sense.
+		switch o.Status {
+		case ABORTED:
+			// Once aborted, always aborted. The transaction coordinator might
+			// have incremented the txn's epoch without realizing that it was
+			// aborted.
+			t.Status = ABORTED
+		case COMMITTED:
 			log.Warningf(context.Background(), "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
 		}
 	}
