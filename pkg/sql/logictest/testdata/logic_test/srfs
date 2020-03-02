@@ -1083,8 +1083,12 @@ unnest
 (1,2)
 (3,4)
 
-query error pq: type tuple{int, int} is not composite
+query II colnames
 SELECT (unnest(ARRAY[(1,2),(3,4)])).*
+----
+?column?  ?column?
+1         1
+3         3
 
 query T colnames
 SELECT * FROM unnest(ARRAY[(1,2),(3,4)])

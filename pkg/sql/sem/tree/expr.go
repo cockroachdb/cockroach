@@ -1675,21 +1675,34 @@ func (node *TupleStar) Format(ctx *FmtCtx) {
 // ColumnAccessExpr represents (E).x expressions. Specifically, it
 // allows accessing the column(s) from a Set Returning Function.
 type ColumnAccessExpr struct {
-	Expr    Expr
+	Expr Expr
+
+	// ColName is the name of the column to access.
 	ColName string
+	// ByIndex, if set, indicates that the access is using a numeric
+	// column reference and ColIndex below is the input to type
+	// checking, not the output.
+	ByIndex bool
 
 	// ColIndex indicates the index of the column in the tuple. This is
-	// set during type checking based on the label in ColName.
+	// either:
+	// - set during type checking based on the label in ColName if
+	//   ByIndex is false,
+	// - or checked for validity during type checking if ByIndex is true.
+	// The first column in the tuple is at index 0. The input
+	// syntax (E).@N populates N-1 in this field.
 	ColIndex int
 
 	typeAnnotation
 }
 
 // NewTypedColumnAccessExpr creates a pre-typed ColumnAccessExpr.
+// A by-index ColumnAccessExpr can be specified by passing an empty string as colName.
 func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *ColumnAccessExpr {
 	return &ColumnAccessExpr{
 		Expr:           expr,
 		ColName:        colName,
+		ByIndex:        len(colName) == 0,
 		ColIndex:       colIdx,
 		typeAnnotation: typeAnnotation{typ: &expr.ResolvedType().TupleContents()[colIdx]},
 	}
@@ -1700,7 +1713,11 @@ func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteString(").")
-	ctx.WriteString(node.ColName)
+	if node.ByIndex {
+		fmt.Fprintf(ctx, "@%d", node.ColIndex+1)
+	} else {
+		ctx.WriteString(node.ColName)
+	}
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }
