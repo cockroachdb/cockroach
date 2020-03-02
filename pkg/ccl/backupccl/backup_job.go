@@ -462,7 +462,13 @@ func (b *backupResumer) Resume(
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
-			return err
+			if errors.Is(err, protectedts.ErrNotExists) {
+				// No reason to return an error which might cause problems if it doesn't
+				// seem to exist.
+				log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+			} else {
+				return err
+			}
 		}
 	}
 
