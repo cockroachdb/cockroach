@@ -385,14 +385,28 @@ func (ie *InternalExecutor) execInternal(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 	defer sp.Finish()
 
-	timeReceived := timeutil.Now()
-	parseStart := timeReceived
+	parseStart := timeutil.Now()
 	parsed, err := parser.ParseOne(stmt)
 	if err != nil {
 		return result{}, err
 	}
-	parseEnd := timeutil.Now()
+	parsedStmt := ParsedStmt{
+		Statement: parsed,
+		ParseStart:  parseStart,
+		ParseEnd:  timeutil.Now(),
+	}
+	return ie.execBuffered(ctx, txn, sd, sdMutator, &parsedStmt, qargs...)
+}
 
+// execBuffered executes a parsed statement with buffered rows.
+func (ie *InternalExecutor) execBuffered(
+	ctx context.Context,
+	txn *client.Txn,
+	sd *sessiondata.SessionData,
+	sdMutator sessionDataMutator,
+	parsedStmt *ParsedStmt,
+	qargs ...interface{},
+) (result, error) {
 	// resPos will be set to the position of the command that represents the
 	// statement we care about before that command is sent for execution.
 	var resPos CmdPos
@@ -439,10 +453,8 @@ func (ie *InternalExecutor) execInternal(
 		if err := stmtBuf.Push(
 			ctx,
 			ExecStmt{
-				Statement:    parsed,
-				TimeReceived: timeReceived,
-				ParseStart:   parseStart,
-				ParseEnd:     parseEnd,
+				ParsedStmt: *parsedStmt,
+				TimeReceived: parsedStmt.ParseStart,
 			}); err != nil {
 			return result{}, err
 		}
@@ -451,9 +463,7 @@ func (ie *InternalExecutor) execInternal(
 		if err := stmtBuf.Push(
 			ctx,
 			PrepareStmt{
-				Statement:  parsed,
-				ParseStart: parseStart,
-				ParseEnd:   parseEnd,
+				ParsedStmt: *parsedStmt,
 				TypeHints:  typeHints,
 			},
 		); err != nil {
@@ -464,7 +474,7 @@ func (ie *InternalExecutor) execInternal(
 			return result{}, err
 		}
 
-		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: timeReceived}); err != nil {
+		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: parsedStmt.ParseStart}); err != nil {
 			return result{}, err
 		}
 	}

@@ -663,10 +663,12 @@ func (c *conn) handleSimpleQuery(
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
 			ctx, sql.ExecStmt{
-				Statement:    parser.Statement{},
+				ParsedStmt: sql.ParsedStmt{
+					Statement:    parser.Statement{},
+					ParseStart:   startParse,
+					ParseEnd:     endParse,
+				},
 				TimeReceived: timeReceived,
-				ParseStart:   startParse,
-				ParseEnd:     endParse,
 			})
 	}
 
@@ -699,10 +701,12 @@ func (c *conn) handleSimpleQuery(
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
-				Statement:    stmts[i],
+				ParsedStmt: sql.ParsedStmt{
+					Statement:    stmts[i],
+					ParseStart:   startParse,
+					ParseEnd:     endParse,
+				},
 				TimeReceived: timeReceived,
-				ParseStart:   startParse,
-				ParseEnd:     endParse,
 			}); err != nil {
 			return err
 		}
@@ -794,11 +798,13 @@ func (c *conn) handleParse(
 		ctx,
 		sql.PrepareStmt{
 			Name:         name,
-			Statement:    stmt,
 			TypeHints:    sqlTypeHints,
 			RawTypeHints: inTypeHints,
-			ParseStart:   startParse,
-			ParseEnd:     endParse,
+			ParsedStmt: sql.ParsedStmt{
+				Statement:    stmt,
+				ParseStart:   startParse,
+				ParseEnd:     endParse,
+			},
 		})
 }
 

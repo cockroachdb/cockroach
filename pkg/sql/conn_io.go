@@ -119,21 +119,27 @@ type Command interface {
 	command() string
 }
 
-// ExecStmt is the command for running a query sent through the "simple" pgwire
-// protocol.
-type ExecStmt struct {
+// ParsedStmt is a parsed command sent through the "simple" pgwire  protocol.
+type ParsedStmt struct {
 	// Information returned from parsing: AST, SQL, NumPlaceholders.
 	// Note that AST can be nil, in which case executing it should produce an
 	// "empty query response" message.
 	parser.Statement
 
-	// TimeReceived is the time at which the exec message was received
-	// from the client. Used to compute the service latency.
-	TimeReceived time.Time
 	// ParseStart/ParseEnd are the timing info for parsing of the query. Used for
 	// stats reporting.
 	ParseStart time.Time
 	ParseEnd   time.Time
+}
+
+// ExecStmt is the command for running a query sent through the "simple" pgwire
+// protocol.
+type ExecStmt struct {
+	ParsedStmt
+
+	// TimeReceived is the time at which the exec message was received
+	// from the client. Used to compute the service latency.
+	TimeReceived time.Time
 }
 
 // command implements the Command interface.
@@ -174,20 +180,15 @@ var _ Command = ExecPortal{}
 
 // PrepareStmt is the command for creating a prepared statement.
 type PrepareStmt struct {
+	ParsedStmt
+
 	// Name of the prepared statement (optional).
 	Name string
-
-	// Information returned from parsing: AST, SQL, NumPlaceholders.
-	// Note that AST can be nil, in which case executing it should produce an
-	// "empty query response" message.
-	parser.Statement
 
 	TypeHints tree.PlaceholderTypes
 	// RawTypeHints is the representation of type hints exactly as specified by
 	// the client.
 	RawTypeHints []oid.Oid
-	ParseStart   time.Time
-	ParseEnd     time.Time
 }
 
 // command implements the Command interface.

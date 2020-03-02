@@ -68,10 +68,10 @@ func TestStmtBuf(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := NewStmtBuf()
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s2})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s3})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s4})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s2}})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s3}})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s4}})
 
 	// Check that, while we don't manually advance the cursor, we keep getting the
 	// same statement.
@@ -145,7 +145,7 @@ func TestStmtBufSignal(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() {
-		_ = buf.Push(ctx, ExecStmt{Statement: s1})
+		_ = buf.Push(ctx, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
 	}()
 
 	expPos := CmdPos(0)
@@ -170,7 +170,7 @@ func TestStmtBufLtrim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		mustPush(ctx, t, buf, ExecStmt{Statement: stmt})
+		mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: stmt}})
 	}
 	// Advance the cursor so that we can trim.
 	buf.AdvanceOne()
@@ -196,7 +196,7 @@ func TestStmtBufClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustPush(ctx, t, buf, ExecStmt{Statement: stmt})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: stmt}})
 	buf.Close()
 
 	_, _, err = buf.CurCmd()
@@ -233,7 +233,7 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
 	mustPush(ctx, t, buf, PrepareStmt{Name: "p1"})
 	mustPush(ctx, t, buf, PrepareStmt{Name: "p2"})
 
@@ -280,20 +280,20 @@ func TestStmtBufBatching(t *testing.T) {
 	// Start a new batch.
 	mustPush(ctx, t, buf, Sync{})
 
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
 
 	// Start a new batch.
 	mustPush(ctx, t, buf, Sync{})
 
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
 
 	// Start a new batch.
 	mustPush(ctx, t, buf, Sync{})
 
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+	mustPush(ctx, t, buf, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
 
 	// Go to 2nd batch.
 	if err := buf.seekToNextBatch(); err != nil {
@@ -322,7 +322,7 @@ func TestStmtBufBatching(t *testing.T) {
 	// Async start a 4th batch; that will unblock the seek below.
 	go func() {
 		mustPush(ctx, t, buf, Sync{})
-		_ = buf.Push(ctx, ExecStmt{Statement: s1})
+		_ = buf.Push(ctx, ExecStmt{ParsedStmt: ParsedStmt{Statement: s1}})
 	}()
 
 	// Go to 4th batch.

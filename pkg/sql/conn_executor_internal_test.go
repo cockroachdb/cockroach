@@ -64,7 +64,10 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = buf.Push(ctx, PrepareStmt{Name: "ps_nontxn", Statement: stmt}); err != nil {
+	if err = buf.Push(ctx, PrepareStmt{
+		Name:       "ps_nontxn",
+		ParsedStmt: ParsedStmt{Statement: stmt},
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -129,7 +132,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := buf.Push(ctx, ExecStmt{Statement: stmt}); err != nil {
+	if err := buf.Push(ctx, ExecStmt{ParsedStmt: ParsedStmt{Statement: stmt}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +141,10 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = buf.Push(ctx, PrepareStmt{Name: "ps1", Statement: stmt}); err != nil {
+	if err = buf.Push(ctx, PrepareStmt{
+		Name:       "ps1",
+		ParsedStmt: ParsedStmt{Statement: stmt},
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -155,7 +161,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := buf.Push(ctx, ExecStmt{Statement: stmt}); err != nil {
+	if err := buf.Push(ctx, ExecStmt{ParsedStmt: ParsedStmt{Statement: stmt}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -173,7 +179,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := buf.Push(ctx, ExecStmt{Statement: stmt}); err != nil {
+	if err := buf.Push(ctx, ExecStmt{ParsedStmt: ParsedStmt{Statement: stmt}}); err != nil {
 		t.Fatal(err)
 	}
 
