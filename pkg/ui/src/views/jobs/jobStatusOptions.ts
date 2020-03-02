@@ -9,8 +9,44 @@
 // licenses/APL.txt.
 
 import {cockroach} from "src/js/protos";
-import _ from "lodash";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import {BadgeStatus} from "src/components";
+
+export enum JobStatusVisual {
+  BadgeOnly,
+  BadgeWithDuration,
+  ProgressBarWithDuration,
+  BadgeWithMessage,
+}
+
+export function jobToVisual(job: Job): JobStatusVisual {
+  if (job.type === "CHANGEFEED") {
+    return JobStatusVisual.BadgeOnly;
+  }
+  switch (job.status) {
+    case JOB_STATUS_SUCCEEDED:
+      return JobStatusVisual.BadgeWithDuration;
+    case JOB_STATUS_FAILED:
+      return JobStatusVisual.BadgeOnly;
+    case JOB_STATUS_CANCELED:
+      return JobStatusVisual.BadgeOnly;
+    case JOB_STATUS_PAUSED:
+      return JobStatusVisual.BadgeOnly;
+    case JOB_STATUS_RUNNING:
+      return JobStatusVisual.ProgressBarWithDuration;
+    case JOB_STATUS_PENDING:
+      return JobStatusVisual.BadgeWithMessage;
+    default:
+      return JobStatusVisual.BadgeOnly;
+  }
+}
+
+export const JOB_STATUS_SUCCEEDED = "succeeded";
+export const JOB_STATUS_FAILED = "failed";
+export const JOB_STATUS_CANCELED = "canceled";
+export const JOB_STATUS_PAUSED = "paused";
+export const JOB_STATUS_RUNNING = "running";
+export const JOB_STATUS_PENDING = "pending";
 
 export const statusOptions = [
   {value: "", label: "All"},
@@ -25,49 +61,21 @@ export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
   return statuses.indexOf(job.status) !== -1;
 }
 
-export const renamedStatuses = (status: string) => {
+export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
   switch (status) {
     case JOB_STATUS_SUCCEEDED:
-      return {
-        label: JOB_STATUS_SUCCEEDED,
-        value: "success",
-      };
+        return "success";
     case JOB_STATUS_FAILED:
-      return {
-        label: JOB_STATUS_FAILED,
-        value: "danger",
-      };
+        return "danger";
     case JOB_STATUS_CANCELED:
-      return {
-        label: JOB_STATUS_CANCELED,
-        value: "default",
-      };
+        return "default";
     case JOB_STATUS_PAUSED:
-      return {
-        label: JOB_STATUS_PAUSED,
-        value: "default",
-      };
+        return "default";
     case JOB_STATUS_RUNNING:
-      return {
-        label: "CDC Running",
-        value: "info",
-      };
+        return "info";
     case JOB_STATUS_PENDING:
-      return {
-        label: JOB_STATUS_PENDING,
-        value: "warning",
-      };
+        return "warning";
     default:
-      return {
-        label: _.capitalize(status),
-        value: "info",
-      };
+        return "info";
   }
 };
-
-export const JOB_STATUS_SUCCEEDED = "succeeded";
-export const JOB_STATUS_FAILED = "failed";
-export const JOB_STATUS_CANCELED = "canceled";
-export const JOB_STATUS_PAUSED = "paused";
-export const JOB_STATUS_RUNNING = "running";
-export const JOB_STATUS_PENDING = "pending";
