@@ -979,6 +979,119 @@ func TestChangefeedColumnFamily(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestChangefeedFailOnSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	schemaChangeTimestampRegexp := regexp.MustCompile(`schema change occurred at ([0-9]+\.[0-9]+)`)
+	timestampStrFromError := func(t *testing.T, err error) string {
+		require.Regexp(t, schemaChangeTimestampRegexp, err)
+		m := schemaChangeTimestampRegexp.FindStringSubmatch(err.Error())
+		return m[1]
+	}
+	waitForSchemaChangeErrorAndCloseFeed := func(t *testing.T, f cdctest.TestFeed) (tsStr string) {
+		t.Helper()
+		for {
+			if _, err := f.Next(); err != nil {
+				tsStr = timestampStrFromError(t, err)
+				_ = f.Close()
+				return tsStr
+			}
+		}
+		t.Fatal("no error found")
+		return ""
+	}
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		// Shorten the intervals so this test doesn't take so long. We need to wait
+		// for timestamps to get resolved.
+		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'")
+		t.Run("add column with backfill", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE foo`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH fail_on_schema_change`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+			assertPayloads(t, foo, []string{
+				`foo: [0]->{"after": {"a": 0}}`,
+				`foo: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b INT NOT NULL DEFAULT 0`)
+			sqlDB.Exec(t, "INSERT INTO foo VALUES (2, 1)")
+			tsStr := waitForSchemaChangeErrorAndCloseFeed(t, foo)
+			foo = feed(t, f, `CREATE CHANGEFEED FOR foo WITH fail_on_schema_change, cursor = '`+tsStr+`'`)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{
+				`foo: [2]->{"after": {"a": 2, "b": 1}}`,
+			})
+		})
+		t.Run("add column no backfill", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+			defer sqlDB.Exec(t, `DROP TABLE foo`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH fail_on_schema_change`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+			assertPayloads(t, foo, []string{
+				`foo: [0]->{"after": {"a": 0}}`,
+				`foo: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b INT`)
+			sqlDB.Exec(t, "INSERT INTO foo VALUES (2, NULL)")
+			tsStr := waitForSchemaChangeErrorAndCloseFeed(t, foo)
+			foo = feed(t, f, `CREATE CHANGEFEED FOR foo WITH fail_on_schema_change, cursor = '`+tsStr+`'`)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{
+				`foo: [2]->{"after": {"a": 2, "b": null}}`,
+			})
+		})
+		t.Run("drop column", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE foo`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0, NULL)`)
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH fail_on_schema_change`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 2)`)
+			assertPayloads(t, foo, []string{
+				`foo: [0]->{"after": {"a": 0, "b": null}}`,
+				`foo: [1]->{"after": {"a": 1, "b": 2}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE foo DROP COLUMN b`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+			tsStr := waitForSchemaChangeErrorAndCloseFeed(t, foo)
+			log.Infof(context.TODO(), "restarting at %s", tsStr)
+			foo = feed(t, f, `CREATE CHANGEFEED FOR foo WITH fail_on_schema_change, cursor = '`+tsStr+`'`)
+			defer closeFeed(t, foo)
+			// NB: You might expect to only see the new row here but we'll see them
+			// all because we cannot distinguish between the index backfill and
+			// foreground writes. See #35738.
+			assertPayloads(t, foo, []string{
+				`foo: [0]->{"after": {"a": 0}}`,
+				`foo: [1]->{"after": {"a": 1}}`,
+				`foo: [2]->{"after": {"a": 2}}`,
+			})
+		})
+		t.Run("add index", func(t *testing.T) {
+			// This case does not exit
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE foo`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0, NULL)`)
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH fail_on_schema_change`)
+			defer closeFeed(t, foo)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 2)`)
+			assertPayloads(t, foo, []string{
+				`foo: [0]->{"after": {"a": 0, "b": null}}`,
+				`foo: [1]->{"after": {"a": 1, "b": 2}}`,
+			})
+			sqlDB.Exec(t, `CREATE INDEX ON foo (b)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (2, NULL)`)
+			assertPayloads(t, foo, []string{
+				`foo: [2]->{"after": {"a": 2, "b": null}}`,
+			})
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestChangefeedComputedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

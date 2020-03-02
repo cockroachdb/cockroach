@@ -71,17 +71,19 @@ func TestKVFeed(t *testing.T) {
 	}
 
 	type testCase struct {
-		name             string
-		needsInitialScan bool
-		withDiff         bool
-		initialHighWater hlc.Timestamp
-		spans            []roachpb.Span
-		events           []roachpb.RangeFeedEvent
+		name               string
+		needsInitialScan   bool
+		withDiff           bool
+		failOnSchemaChange bool
+		initialHighWater   hlc.Timestamp
+		spans              []roachpb.Span
+		events             []roachpb.RangeFeedEvent
 
 		descs []*sqlbase.TableDescriptor
 
 		expScans  []hlc.Timestamp
 		expEvents int
+		expErrRE  string
 	}
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
@@ -105,12 +107,15 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
-		f := newKVFeed(buf, tc.spans, tc.needsInitialScan, tc.withDiff, tc.initialHighWater,
+		f := newKVFeed(buf, tc.spans,
+			tc.needsInitialScan, tc.withDiff, tc.failOnSchemaChange,
+			tc.initialHighWater,
 			&tf, sf, rangefeedFactory(ref.run), bufferFactory)
 		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 		g := ctxgroup.WithContext(ctx)
-		g.GoCtx(f.run)
+		g.GoCtx(func(ctx context.Context) error {
+			return f.run(ctx)
+		})
 		testG := ctxgroup.WithContext(ctx)
 		testG.GoCtx(func(ctx context.Context) error {
 			for expScans := tc.expScans; len(expScans) > 0; expScans = expScans[1:] {
@@ -127,9 +132,20 @@ func TestKVFeed(t *testing.T) {
 			}
 			return nil
 		})
+		// Wait for the feed to fail rather than canceling it.
+		if tc.failOnSchemaChange {
+			testG.Go(func() error {
+				_ = g.Wait()
+				return nil
+			})
+		}
 		require.NoError(t, testG.Wait())
 		cancel()
-		require.Equal(t, context.Canceled, g.Wait())
+		if runErr := g.Wait(); tc.expErrRE != "" {
+			require.Regexp(t, tc.expErrRE, runErr)
+		} else {
+			require.Regexp(t, context.Canceled, runErr)
+		}
 	}
 	for _, tc := range []testCase{
 		{
@@ -170,6 +186,31 @@ func TestKVFeed(t *testing.T) {
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
 			},
 			expEvents: 2,
+		},
+		{
+			name:               "fail on one table event",
+			needsInitialScan:   true,
+			failOnSchemaChange: true,
+			initialHighWater:   ts(2),
+			spans: []roachpb.Span{
+				tableSpan(42),
+			},
+			events: []roachpb.RangeFeedEvent{
+				kvEvent(42, "a", "b", ts(3)),
+				checkpointEvent(tableSpan(42), ts(4)),
+				kvEvent(42, "a", "b", ts(5)),
+				checkpointEvent(tableSpan(42), ts(2)), // ensure that events are filtered
+				checkpointEvent(tableSpan(42), ts(5)),
+			},
+			expScans: []hlc.Timestamp{
+				ts(2),
+			},
+			descs: []*sqlbase.TableDescriptor{
+				makeTableDesc(42, 1, ts(1), 2),
+				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(4), 1)),
+			},
+			expEvents: 2,
+			expErrRE:  "schema change ...",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

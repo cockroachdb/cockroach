@@ -27,6 +27,7 @@ const (
 	OptUpdatedTimestamps       = `updated`
 	OptDiff                    = `diff`
 	OptCompression             = `compression`
+	OptFailOnSchemaChange      = `fail_on_schema_change`
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
@@ -64,4 +65,5 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
 	OptDiff:                    sql.KVStringOptRequireNoValue,
 	OptCompression:             sql.KVStringOptRequireValue,
+	OptFailOnSchemaChange:      sql.KVStringOptRequireNoValue,
 }

@@ -28,13 +28,13 @@ func TestBackfillPolicy(t *testing.T) {
 	}
 	for _, c := range []struct {
 		name string
-		p    backfillPolicy
+		p    tableEventFilter
 		e    schemafeed.TableEvent
 		exp  bool
 	}{
 		{
 			name: "don't filter drop column",
-			p:    defaultBackfillPolicy,
+			p:    defaultTableEventFilter,
 			e: schemafeed.TableEvent{
 				Before: makeTableDesc(42, 1, ts(2), 2),
 				After:  addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
@@ -43,7 +43,7 @@ func TestBackfillPolicy(t *testing.T) {
 		},
 		{
 			name: "filter first step of add column",
-			p:    defaultBackfillPolicy,
+			p:    defaultTableEventFilter,
 			e: schemafeed.TableEvent{
 				Before: makeTableDesc(42, 1, ts(2), 1),
 				After:  addNewColumnBackfillMutation(makeTableDesc(42, 2, ts(4), 1)),
@@ -52,7 +52,7 @@ func TestBackfillPolicy(t *testing.T) {
 		},
 		{
 			name: "filter rollback of add column",
-			p:    defaultBackfillPolicy,
+			p:    defaultTableEventFilter,
 			e: schemafeed.TableEvent{
 				Before: addNewColumnBackfillMutation(makeTableDesc(42, 3, ts(2), 1)),
 				After:  makeTableDesc(42, 4, ts(4), 1),
@@ -61,7 +61,7 @@ func TestBackfillPolicy(t *testing.T) {
 		},
 		{
 			name: "don't filter end of add column",
-			p:    defaultBackfillPolicy,
+			p:    defaultTableEventFilter,
 			e: schemafeed.TableEvent{
 				Before: addNewColumnBackfillMutation(makeTableDesc(42, 3, ts(2), 1)),
 				After:  makeTableDesc(42, 4, ts(4), 2),

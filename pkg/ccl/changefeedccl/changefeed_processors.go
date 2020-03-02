@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -231,6 +233,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	}
 	// The initial scan semantics are currently defined by whether this is the
 	// first run of a changefeed which did not specify a cursor.
+	_, kvfeedCfg.FailOnSchemaChange = ca.spec.Feed.Opts[changefeedbase.OptFailOnSchemaChange]
 	kvfeedCfg.NeedsInitialScan = kvfeedCfg.InitialHighWater == (hlc.Timestamp{})
 	if kvfeedCfg.NeedsInitialScan {
 		kvfeedCfg.InitialHighWater = ca.spec.Feed.StatementTime
@@ -377,6 +380,15 @@ type changeFrontier struct {
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
 	sink Sink
+	// boundary tracks scan boundaries due to schema changes. If the changefeed is
+	// configured to stop on schema change then the changeFrontier will wait for
+	// the span frontier to reach the boundary, will drain, and then will exit.
+	//
+	// boundary values are communicated to the changeFrontier view Resolved
+	// messages send from the aggregators. The policy regarding which schema
+	// change events lead to a boundary is controlled by the KV feed based on its
+	// configuration.
+	boundary hlc.Timestamp
 	// freqEmitResolved, if >= 0, is a lower bound on the duration between
 	// resolved timestamp emits.
 	freqEmitResolved time.Duration
@@ -560,6 +572,19 @@ func (cf *changeFrontier) closeMetrics() {
 	cf.metrics.mu.Unlock()
 }
 
+// NB: We don't need to check if the frontier moved past the boundary
+// because it can't. The check below is defensive. If there's a scan
+// boundary for any existing scan then
+func (cf *changeFrontier) boundaryReached() bool {
+	return !cf.boundary.IsEmpty() && cf.boundary.Equal(cf.sf.Frontier())
+}
+
+// failOnSchemaChange checks the job's spec to d
+func (cf *changeFrontier) failOnSchemaChange() bool {
+	_, failOnSchemaChange := cf.spec.Feed.Opts[changefeedbase.OptFailOnSchemaChange]
+	return failOnSchemaChange
+}
+
 // Next is part of the RowSource interface.
 func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for cf.State == execinfra.StateRunning {
@@ -567,6 +592,14 @@ func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMeta
 			return cf.passthroughBuf.Pop(), nil
 		} else if !cf.resolvedBuf.IsEmpty() {
 			return cf.resolvedBuf.Pop(), nil
+		}
+
+		if cf.boundaryReached() && cf.failOnSchemaChange() {
+			// TODO(ajwerner): make this more useful by at least informing the client
+			// of which tables changed.
+			cf.MoveToDraining(pgerror.Newf(pgcode.SchemaChangeOccurred,
+				"schema change occurred at %v", cf.boundary.Next().AsOfSystemTime()))
+			break
 		}
 
 		row, meta := cf.input.Next()
@@ -626,6 +659,12 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		return nil
 	}
 
+	// We want to ensure that we mark the boundary and then we want to detect when
+	// the frontier reaches to or past the boundary.
+	if resolved.BoundaryReached && (cf.boundary.IsEmpty() || resolved.Timestamp.Less(cf.boundary)) {
+		cf.boundary = resolved.Timestamp
+	}
+
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
 	if frontierChanged {
 		if err := cf.handleFrontierChanged(); err != nil {
@@ -657,7 +696,7 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 		return nil
 	}
 	sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
-	shouldEmit := sinceEmitted >= cf.freqEmitResolved
+	shouldEmit := sinceEmitted >= cf.freqEmitResolved || cf.boundaryReached()
 	if !shouldEmit {
 		return nil
 	}
