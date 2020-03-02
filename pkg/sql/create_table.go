@@ -1183,12 +1183,16 @@ func MakeTableDesc(
 	// We can't use cluster.Version.IsActive because this method is sometimes called
 	// before the version has been initialized, leading to a panic. There are also
 	// cases where this function is called in tests where st is nil.
-	if st != nil {
-		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
-			version.IsActive(cluster.VersionSecondaryIndexColumnFamilies) {
-			indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
-		}
+	// TODO (rohany): update this comment.
+	version := cluster.Version.ActiveVersionOrEmpty(ctx, st)
+	if version != (cluster.ClusterVersion{}) && version.IsActive(cluster.VersionSecondaryIndexColumnFamilies) {
+		indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
 	}
+	//if st != nil {
+	//	if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
+	//		version.IsActive(cluster.VersionSecondaryIndexColumnFamilies) {
+	//	}
+	//}
 
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
@@ -1202,7 +1206,7 @@ func MakeTableDesc(
 				}
 			}
 			if d.PrimaryKey.Sharded {
-				if !cluster.Version.IsActive(ctx, st, cluster.VersionHashShardedIndexes) {
+				if version == (cluster.ClusterVersion{}) || !version.IsActive(cluster.VersionHashShardedIndexes) {
 					return desc, invalidClusterForShardedIndexError
 				}
 				if !sessionData.HashShardedIndexesEnabled {

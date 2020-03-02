@@ -346,8 +346,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableAlterPrimaryKey:
 			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
-			version := cluster.Version.ActiveVersionOrEmpty(params.ctx, params.p.ExecCfg().Settings)
-			if !version.IsActive(cluster.VersionPrimaryKeyChanges) {
+			//version := cluster.Version.ActiveVersionOrEmpty(params.ctx, params.p.ExecCfg().Settings)
+			if !cluster.Version.IsActive(params.ctx, params.p.ExecCfg().Settings, cluster.VersionPrimaryKeyChanges) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"all nodes are not the correct version for primary key changes")
 			}
@@ -358,7 +358,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if t.Sharded != nil {
-				if !version.IsActive(cluster.VersionHashShardedIndexes) {
+				if !cluster.Version.IsActive(params.ctx, params.p.ExecCfg().Settings, cluster.VersionHashShardedIndexes) {
 					return invalidClusterForShardedIndexError
 				}
 				if !params.p.EvalContext().SessionData.HashShardedIndexesEnabled {
