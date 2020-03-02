@@ -213,6 +213,21 @@ func (ie *InternalExecutor) QueryWithCols(
 	return ie.queryInternal(ctx, opName, txn, session, stmt, qargs...)
 }
 
+// QueryStreaming is like Query, but instead returns rows and errors on channels.
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (ie *InternalExecutor) QueryStreaming(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	session sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (chan tree.Datums, chan error) {
+	return ie.execInternalStreaming(ctx, opName, txn, session, stmt, qargs...)
+}
+
 func (ie *InternalExecutor) queryInternal(
 	ctx context.Context,
 	opName string,
@@ -398,6 +413,24 @@ func (ie *InternalExecutor) execInternal(
 	return ie.execBuffered(ctx, txn, sd, sdMutator, &parsedStmt, qargs...)
 }
 
+// execInternalStreaming executes a statement and returns results on a channel.
+//
+// sessionDataOverride can be used to control select fields in the executor's
+// session data. It overrides what has been previously set through
+// SetSessionData(), if anything.
+func (ie *InternalExecutor) execInternalStreaming(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (retCh chan tree.Datums, retErr chan error) {
+	datumsCh := make(chan tree.Datums)
+	errCh := make(chan error, 1)
+	return datumsCh, errCh
+}
+
 // execBuffered executes a parsed statement with buffered rows.
 func (ie *InternalExecutor) execBuffered(
 	ctx context.Context,
@@ -488,6 +521,95 @@ func (ie *InternalExecutor) execBuffered(
 	return res, nil
 }
 
+// execBuffered executes a parsed statement and sends the result on a channel.
+func (ie *InternalExecutor) execChaneled(
+	ctx context.Context,
+	txn *client.Txn,
+	sd *sessiondata.SessionData,
+	sdMutator sessionDataMutator,
+	parsedStmt *ParsedStmt,
+	qargs ...interface{},
+) (result, error) {
+	// resPos will be set to the position of the command that represents the
+	// statement we care about before that command is sent for execution.
+	var resPos CmdPos
+
+	resCh := make(chan result)
+	var resultsReceived bool
+	syncCallback := func(results []resWithPos) {
+		resultsReceived = true
+		for _, res := range results {
+			if res.pos == resPos {
+				resCh <- result{rows: res.rows, rowsAffected: res.RowsAffected(), cols: res.cols, err: res.Err()}
+				return
+			}
+			if res.err != nil {
+				// If we encounter an error, there's no point in looking further; the
+				// rest of the commands in the batch have been skipped.
+				resCh <- result{err: res.Err()}
+				return
+			}
+		}
+		resCh <- result{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
+	}
+	errCallback := func(err error) {
+		if resultsReceived {
+			return
+		}
+		resCh <- result{err: err}
+	}
+	stmtBuf, wg, err := ie.initConnEx(ctx, txn, sd, sdMutator, syncCallback, errCallback)
+	if err != nil {
+		return result{}, err
+	}
+
+	// Transforms the args to datums. The datum types will be passed as type hints
+	// to the PrepareStmt command.
+	datums := golangFillQueryArguments(qargs...)
+	typeHints := make(tree.PlaceholderTypes, len(datums))
+	for i, d := range datums {
+		// Arg numbers start from 1.
+		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
+	}
+	if len(qargs) == 0 {
+		resPos = 0
+		if err := stmtBuf.Push(
+			ctx,
+			ExecStmt{
+				ParsedStmt: *parsedStmt,
+				TimeReceived: parsedStmt.ParseStart,
+			}); err != nil {
+			return result{}, err
+		}
+	} else {
+		resPos = 2
+		if err := stmtBuf.Push(
+			ctx,
+			PrepareStmt{
+				ParsedStmt: *parsedStmt,
+				TypeHints:  typeHints,
+			},
+		); err != nil {
+			return result{}, err
+		}
+
+		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
+			return result{}, err
+		}
+
+		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: parsedStmt.ParseStart}); err != nil {
+			return result{}, err
+		}
+	}
+	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
+		return result{}, err
+	}
+
+	res := <-resCh
+	stmtBuf.Close()
+	wg.Wait()
+	return res, nil
+}
 // internalClientComm is an implementation of ClientComm used by the
 // InternalExecutor. Result rows are buffered in memory.
 type internalClientComm struct {

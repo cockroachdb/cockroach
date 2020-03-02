@@ -463,15 +463,15 @@ CREATE TABLE crdb_internal.jobs (
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+		rowsCh, errCh := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryStreaming(
 			ctx, "crdb-internal-jobs-table", p.txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			query)
-		if err != nil {
+		if <-errCh != nil {
 			return err
 		}
 
-		for _, r := range rows {
+		for r := range rowsCh {
 			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
 			var jobType, description, statement, username, descriptorIDs, started, runningStatus,
