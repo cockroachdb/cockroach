@@ -55,6 +55,15 @@ func TestDockerJava(t *testing.T) {
 	testDockerFail(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o foobar"})
 }
 
+func TestDockerElixir(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+	testDockerSuccess(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && psql -c 'CREATE DATABASE IF NOT EXISTS testdb' && mix test"})
+	testDockerFail(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && mix thisshouldfail"})
+}
+
 func TestDockerNodeJS(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
