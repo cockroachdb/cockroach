@@ -12,6 +12,8 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft"
 )
 
 // executeWriteBatch is the entry point for client requests which may mutate the
@@ -206,22 +209,9 @@ func (r *Replica) executeWriteBatch(
 		case <-slowTimer.C:
 			slowTimer.Read = true
 			r.store.metrics.SlowRaftRequests.Inc(1)
-			log.Warningf(ctx, `have been waiting %.2fs for proposing command %s.
-This range is likely unavailable.
-Please submit this message at
 
-  https://github.com/cockroachdb/cockroach/issues/new/choose
-
-along with
-
-	https://yourhost:8080/#/reports/range/%d
-
-and the following Raft status: %+v`,
-				timeutil.Since(startPropTime).Seconds(),
-				ba,
-				r.RangeID,
-				r.RaftStatus(),
-			)
+			log.Error(ctx, rangeUnavailableMessage(r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
+				r.RaftStatus(), ba, timeutil.Since(startPropTime)))
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
@@ -238,6 +228,51 @@ and the following Raft status: %+v`,
 			return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
 		}
 	}
+}
+
+func rangeUnavailableMessage(
+	desc *roachpb.RangeDescriptor,
+	lm IsLiveMap,
+	rs *raft.Status,
+	ba *roachpb.BatchRequest,
+	dur time.Duration,
+) string {
+	cpy := *desc
+	desc = &cpy
+	desc.StartKey, desc.EndKey = nil, nil // scrub PII
+
+	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
+	for _, rDesc := range desc.Replicas().All() {
+		if lm[rDesc.NodeID].IsLive {
+			liveReplicas = append(liveReplicas, rDesc)
+		} else {
+			otherReplicas = append(otherReplicas, rDesc)
+		}
+	}
+	return fmt.Sprintf(`have been waiting %.2fs for proposing command %s.
+This range is likely unavailable.
+Please submit this message to Cockroach Labs support along with the following information:
+
+Descriptor:  %s
+Live:        %s
+Non-live:    %s
+Raft Status: %+v
+
+and a copy of https://yourhost:8080/#/reports/range/%d
+
+If you are using CockroachDB Enterprise, reach out through your
+support contract. Otherwise, please open an issue at:
+
+  https://github.com/cockroachdb/cockroach/issues/new/choose
+`,
+		dur.Seconds(),
+		ba,
+		desc,
+		roachpb.MakeReplicaDescriptors(liveReplicas),
+		roachpb.MakeReplicaDescriptors(otherReplicas),
+		rs,
+		desc.RangeID,
+	)
 }
 
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be
