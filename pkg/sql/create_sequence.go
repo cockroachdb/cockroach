@@ -62,7 +62,10 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
-	return doCreateSequence(params, n.n.String(), n.dbDesc, schemaID, &n.n.Name, isTemporary, n.n.Options)
+	return doCreateSequence(
+		params, n.n.String(), n.dbDesc, schemaID, &n.n.Name, isTemporary, n.n.Options,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	)
 }
 
 // doCreateSequence performs the creation of a sequence in KV. The
@@ -75,6 +78,7 @@ func doCreateSequence(
 	name *ObjectName,
 	isTemporary bool,
 	opts tree.SequenceOptions,
+	jobDesc string,
 ) error {
 	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB)
 	if err != nil {
@@ -113,7 +117,9 @@ func doCreateSequence(
 		schemaID,
 		name.Table(),
 	).Key()
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
+	if err = params.p.createDescriptorWithID(
+		params.ctx, key, id, &desc, params.EvalContext().Settings, jobDesc,
+	); err != nil {
 		return err
 	}
 

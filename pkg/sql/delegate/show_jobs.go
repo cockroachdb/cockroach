@@ -47,13 +47,17 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
 
+	// TODO (lucy): Ideally we should retry a few times with a small backoff to
+	// quickly pick up the schema change jobs that run quickly, before increasing
+	// the backoff to 1s. There's probably no way to do this in SQL as is. Maybe
+	// we can expose the retry count in force_retry.
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 	if n.Block {
 		sqlStmt = fmt.Sprintf(
 			`SELECT * FROM [%s]
 			 WHERE
 			    IF(finished IS NULL,
-			      IF(pg_sleep(1), crdb_internal.force_retry('24h'), 0),
+			      IF(pg_sleep(0.01), crdb_internal.force_retry('24h'), 0),
 			      0
 			    ) = 0`, sqlStmt)
 	}
