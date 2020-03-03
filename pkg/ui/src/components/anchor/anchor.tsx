@@ -9,19 +9,19 @@
 // licenses/APL.txt.
 
 import React from "react";
-import "./link.styl";
+import "./anchor.styl";
 
-interface LinkProps {
+interface AnchorProps {
   href: string;
   target?: "_blank" | "_parent" | "_self";
 }
-export function Link(props: React.PropsWithChildren<LinkProps>) {
+export function Anchor(props: React.PropsWithChildren<AnchorProps>) {
   const { href, target, children } = props;
   return (
-    <a className="crl-link" href={href} target={target}>{children}</a>
+    <a className="crl-anchor" href={href} target={target}>{children}</a>
   );
 }
 
-Link.defaultProps = {
+Anchor.defaultProps = {
   target: "_blank",
 };
