@@ -445,7 +445,7 @@ $left
 #
 # TODO(andyk): Add other join types.
 [HoistJoinProjectRight, Normalize]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
     $left:*
     $right:(Project $input:* $projections:[])
     $on:*
@@ -466,7 +466,7 @@ $left
 # HoistJoinProjectLeft is the same as HoistJoinProjectRight, but for the left
 # input of the join.
 [HoistJoinProjectLeft, Normalize]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
     $left:(Project $input:* $projections:[])
     $right:*
     $on:*
@@ -532,6 +532,28 @@ $left
     $private
 )
 
+#ConvertProjectionsToFiltersLeft
+[ConvertProjectionsToFiltersLeft, Normalize]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
+    $left:(Project)
+    $right:*
+    $on: * & (CanExtractTupleEqualityLeft $left $right $on)
+    $private:*
+)
+=>
+(ExtractTupleEqualityLeft (OpName) $left $right $on $private)
+
+#ConvertProjectionsToFiltersRight
+[ConvertProjectionsToFiltersRight, Normalize]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
+    $left: *
+    $right:(Project)
+    $on: * & (CanExtractTupleEqualityRight $left $right $on )
+    $private:*
+)
+=>
+(ExtractTupleEqualityRight (OpName) $left $right $on $private)
+
 # ExtractJoinEqualities finds equality conditions such that one side only
 # depends on left columns and the other only on right columns and pushes the
 # expressions down into Project operators. The result is a join that has an
@@ -582,3 +604,5 @@ $left
     (SortFilters $on)
     $private
 )
+
+
