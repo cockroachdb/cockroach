@@ -40,6 +40,18 @@ func (b *Builder) buildMutationInput(
 		return execPlan{}, err
 	}
 
+	if p.WithID != 0 {
+		// The input might have extra columns that are used only by FK checks; make
+		// sure we don't project them away.
+		cols := inputExpr.Relational().OutputCols.Copy()
+		for _, c := range colList {
+			cols.Remove(c)
+		}
+		for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+			colList = append(colList, c)
+		}
+	}
+
 	input, err = b.ensureColumns(input, colList, nil, inputExpr.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
