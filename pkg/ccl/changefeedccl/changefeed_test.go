@@ -357,6 +357,32 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 
 // Test how Changefeeds react to schema changes that do not require a backfill
 // operation.
+func TestChangefeedInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	scope := log.Scope(t)
+	defer scope.Close(t)
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		t.Run(`no cursor - no initial scan`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE no_initial_scan (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (1)`)
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
+			noInitialScan := feed(t, f, `CREATE CHANGEFEED FOR no_initial_scan WITH no_initial_scan, resolved='10ms'`)
+			expectResolvedTimestamp(t, noInitialScan)
+			defer closeFeed(t, noInitialScan)
+			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (2)`)
+			assertPayloads(t, noInitialScan, []string{
+				`no_initial_scan: [2]->{"after": {"a": 2}}`,
+			})
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+// Test how Changefeeds react to schema changes that do not require a backfill
+// operation.
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	scope := log.Scope(t)

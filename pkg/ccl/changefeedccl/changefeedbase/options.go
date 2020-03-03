@@ -56,6 +56,8 @@ const (
 	// exit with an error indicating the HLC timestamp of the change from which
 	// the user could continue.
 	OptSchemaChangePolicyStop SchemaChangePolicy = `stop`
+	OptInitialScan                               = `initial_scan`
+	OptNoInitialScan                             = `no_initial_scan`
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
@@ -95,4 +97,6 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptCompression:             sql.KVStringOptRequireValue,
 	OptSchemaChangeEvents:      sql.KVStringOptRequireValue,
 	OptSchemaChangePolicy:      sql.KVStringOptRequireValue,
+	OptInitialScan:             sql.KVStringOptRequireNoValue,
+	OptNoInitialScan:           sql.KVStringOptRequireNoValue,
 }
