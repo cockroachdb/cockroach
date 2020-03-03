@@ -332,14 +332,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
-	mutationID, err := params.p.createOrUpdateSchemaChangeJob(
-		params.ctx, n.tableDesc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
-	)
-	if err != nil {
-		return err
-	}
-	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
+	mutationID := n.tableDesc.ClusterVersion.NextMutationID
+	if err := params.p.writeSchemaChange(
+		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
 		return err
 	}
 
