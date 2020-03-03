@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React, { Fragment } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -92,8 +91,8 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
       this.state.queue,
       // These parseInts should succeed because <input type="number" />
       // enforces numeric input. Otherwise they're NaN.
-      _.parseInt(this.state.rangeID),
-      _.parseInt(this.state.nodeID),
+      parseInt(this.state.rangeID, 10),
+      parseInt(this.state.nodeID, 10),
       this.state.skipShouldQueue,
     ).then(
       response => {
@@ -242,7 +241,6 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
   }
 }
 
-// tslint:disable-next-line:variable-name
 const EnqueueRangeConnected = withRouter(EnqueueRange);
 
 export default EnqueueRangeConnected;
