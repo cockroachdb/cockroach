@@ -183,6 +183,9 @@ func TestRegistryCancelation(t *testing.T) {
 
 func TestRegistryGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("")
+	// TODO (lucy): This test probably shouldn't continue to exist in its current
+	// form if GCMutations will cease to be used. Refactor or get rid of it.
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})

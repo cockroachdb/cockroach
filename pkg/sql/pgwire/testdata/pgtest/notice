@@ -42,7 +42,7 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Severity":"NOTICE","Code":"00000","Message":"view \"a_view\" will be a temporary view","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"create_view.go","Line":65,"Routine":"startExec","UnknownFields":null}
+{"Severity":"NOTICE","Code":"00000","Message":"view \"a_view\" will be a temporary view","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"create_view.go","Line":66,"Routine":"startExec","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE VIEW"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 

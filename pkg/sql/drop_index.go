@@ -156,12 +156,10 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return err
 	}
-	mutationID, err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc,
-		tree.AsStringWithFQNames(n.n, params.Ann()))
-	if err != nil {
-		return err
-	}
-	if err := params.p.writeSchemaChange(params.ctx, tableDesc, mutationID); err != nil {
+	mutationID := tableDesc.ClusterVersion.NextMutationID
+	if err := params.p.writeSchemaChange(
+		params.ctx, tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
 		return err
 	}
 	return nil
@@ -468,11 +466,8 @@ func (p *planner) dropIndexByName(
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
-	mutationID, err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc)
-	if err != nil {
-		return err
-	}
-	if err := p.writeSchemaChange(ctx, tableDesc, mutationID); err != nil {
+	mutationID := tableDesc.ClusterVersion.NextMutationID
+	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err
 	}
 	p.noticeSender.AppendNotice(pgerror.Noticef(

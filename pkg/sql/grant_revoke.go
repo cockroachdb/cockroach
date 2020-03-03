@@ -137,9 +137,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 
 		case *sqlbase.MutableTableDescriptor:
+			// TODO (lucy): This should probably have a single consolidated job like
+			// DROP DATABASE.
+			// TODO (lucy): Have more consistent/informative names for dependent jobs.
+			if err := p.createOrUpdateSchemaChangeJob(
+				ctx, d, "updating privileges", sqlbase.InvalidMutationID,
+			); err != nil {
+				return err
+			}
 			if !d.Dropped() {
-				if err := p.writeSchemaChangeToBatch(
-					ctx, d, sqlbase.InvalidMutationID, b); err != nil {
+				if err := p.writeSchemaChangeToBatch(ctx, d, b); err != nil {
 					return err
 				}
 			}

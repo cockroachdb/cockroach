@@ -25,10 +25,15 @@ SELECT * FROM a
 statement ok
 DROP TABLE a
 
+# TODO (lucy): Update this once we have GC jobs.
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TT
-SELECT status, running_status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'
+SELECT status, running_status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND description != 'updating privileges'
 ----
-running  waiting for GC TTL
+succeeded  NULL
 
 query T
 SHOW TABLES FROM test

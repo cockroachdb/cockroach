@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,11 +55,6 @@ func (t *truncateNode) startExec(params runParams) error {
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.MutableTableDescriptor, 0, len(n.Tables))
 
-	// This is the list of descriptors of truncated tables in the statement. These tables will have a mutationID and
-	// MutationJob related to the created job of the TRUNCATE statement.
-	stmtTableDescs := make([]*sqlbase.MutableTableDescriptor, 0, len(n.Tables))
-	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.Tables))
-
 	for i := range n.Tables {
 		tn := &n.Tables[i]
 		tableDesc, err := p.ResolveMutableTableDescriptor(
@@ -75,23 +69,6 @@ func (t *truncateNode) startExec(params runParams) error {
 
 		toTruncate[tableDesc.ID] = tn.FQString()
 		toTraverse = append(toTraverse, *tableDesc)
-
-		stmtTableDescs = append(stmtTableDescs, tableDesc)
-		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
-			Name: tn.FQString(),
-			ID:   tableDesc.ID,
-		})
-	}
-
-	dropJobID, err := p.createDropTablesJob(
-		ctx,
-		stmtTableDescs,
-		droppedTableDetails,
-		tree.AsStringWithFQNames(n, params.Ann()),
-		false, /* drainNames */
-		sqlbase.InvalidID /* droppedDatabaseID */)
-	if err != nil {
-		return err
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE
@@ -149,7 +126,7 @@ func (t *truncateNode) startExec(params runParams) error {
 
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, dropJobID, traceKV); err != nil {
+		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann()), traceKV); err != nil {
 			return err
 		}
 
@@ -181,7 +158,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
 func (p *planner) truncateTable(
-	ctx context.Context, id sqlbase.ID, dropJobID int64, traceKV bool,
+	ctx context.Context, id sqlbase.ID, jobDesc string, traceKV bool,
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
@@ -189,7 +166,7 @@ func (p *planner) truncateTable(
 	if err != nil {
 		return err
 	}
-	tableDesc.DropJobID = dropJobID
+	// tableDesc.DropJobID = dropJobID
 	newTableDesc := sqlbase.NewMutableCreatedTableDescriptor(tableDesc.TableDescriptor)
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
 		ID: id,
@@ -229,7 +206,7 @@ func (p *planner) truncateTable(
 	}
 
 	// Drop table.
-	if err := p.initiateDropTable(ctx, tableDesc, false /* drainName */); err != nil {
+	if err := p.initiateDropTable(ctx, tableDesc, true /* queueJob */, jobDesc, false /* drainName */); err != nil {
 		return err
 	}
 
@@ -250,7 +227,10 @@ func (p *planner) truncateTable(
 	}
 
 	for _, table := range tables {
-		if err := p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID); err != nil {
+		// TODO (lucy): Have more consistent/informative names for dependent jobs.
+		if err := p.writeSchemaChange(
+			ctx, table, sqlbase.InvalidMutationID, "updating reference for truncated table",
+		); err != nil {
 			return err
 		}
 	}
@@ -277,8 +257,11 @@ func (p *planner) truncateTable(
 	// as the commit timestamp for the new descriptor. See the comment on
 	// sqlbase.Descriptor.Table().
 	newTableDesc.ModificationTime = hlc.Timestamp{}
+	// TODO (lucy): Have more consistent/informative names for dependent jobs.
 	if err := p.createDescriptorWithID(
-		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
+		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings,
+		"creating new descriptor for truncated table",
+	); err != nil {
 		return err
 	}
 
