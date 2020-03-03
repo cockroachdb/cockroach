@@ -1330,22 +1330,6 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-
-	t.Run("cannot pause or resume schema changes", func(t *testing.T) {
-		job, _ := createJob(jobs.Record{
-			Details:  jobspb.SchemaChangeDetails{},
-			Progress: jobspb.SchemaChangeProgress{},
-		})
-		if err := registry.PauseRequested(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
-			t.Fatalf("unexpected %v", err)
-		}
-		if err := registry.Resume(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
-			t.Fatalf("unexpected %v", err)
-		}
-		if err := registry.CancelRequested(ctx, nil, *job.ID()); err != nil {
-			t.Fatalf("unexpected %v", err)
-		}
-	})
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the

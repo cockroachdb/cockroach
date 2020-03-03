@@ -114,9 +114,7 @@ func TestDropDatabase(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// Disable the asynchronous path so that the table data left
-			// behind is not cleaned up.
-			AsyncExecNotification: asyncSchemaChangerDisabled,
+			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -228,7 +226,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	// Job still running, waiting for GC.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",
 		DescriptorIDs: sqlbase.IDs{
@@ -288,7 +286,7 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecQuickly: true,
+			// TODO (lucy): Un-skip this test when the GC job is implemented.
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -374,7 +372,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",
 		DescriptorIDs: sqlbase.IDs{
@@ -384,6 +382,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
+	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Push a new zone config for the table with TTL=0 so the data is
 	// deleted immediately.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tbDesc.ID); err != nil {
@@ -460,10 +459,9 @@ func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 	// get completely dropped.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
+			SchemaChangeJobNoOp: func() bool {
+				return true
 			},
-			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -506,7 +504,7 @@ func TestDropIndex(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
-			AsyncExecQuickly:  true,
+			// TODO (lucy): Un-skip this test when the GC job is implemented.
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -544,7 +542,7 @@ func TestDropIndex(t *testing.T) {
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: `DROP INDEX t.public.kv@foo`,
 		DescriptorIDs: sqlbase.IDs{
@@ -567,6 +565,7 @@ func TestDropIndex(t *testing.T) {
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 4*numRows)
 
+	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	clearIndexAttempt = true
 	// Add a zone config for the table.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
@@ -661,7 +660,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecQuickly:  true,
+			// TODO (lucy): Un-skip this test when the GC job is implemented.
 			BackfillChunkSize: chunkSize,
 		},
 	}
@@ -679,6 +678,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
 		t.Fatal(err)
 	}
+	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	tests.CheckKeyCount(t, kvDB, tableSpan, 2*numRows)
 
 	// Ensure that index is not active.
@@ -747,7 +747,7 @@ func TestDropTable(t *testing.T) {
 
 	// Job still running, waiting for GC.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: `DROP TABLE t.public.kv`,
 		DescriptorIDs: sqlbase.IDs{
@@ -781,7 +781,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecQuickly: true,
+			// TODO (lucy): Un-skip this test when the GC job is implemented.
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -826,7 +826,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		tableSpan := descs[i].TableSpan()
 		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 
-		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 2*i+1, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
+		if err := jobutils.VerifySystemJob(t, sqlRun, 2*i+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Username:    security.RootUser,
 			Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 			DescriptorIDs: sqlbase.IDs{
@@ -837,6 +837,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		}
 	}
 
+	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// The closure pushes a zone config reducing the TTL to 0 for descriptor i.
 	pushZoneCfg := func(i int) {
 		if _, err := addImmediateGCZoneConfig(sqlDB, descs[i].ID); err != nil {
@@ -918,15 +919,11 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// Block schema changes so the data is not cleaned up until we're ready.
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
+			SchemaChangeJobNoOp: func() bool {
+				return true
 			},
-			AsyncExecNotification: func() error {
-				<-blockSchemaChanges
-				return nil
-			},
-			AsyncExecQuickly: true,
+			// TODO (lucy): Un-skip this test when the GC job is implemented, and set
+			// the knob to block until we're ready to GC
 		},
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
@@ -968,6 +965,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Allow the schema change to proceed and verify that the data is eventually
 	// deleted, despite the interleaved modification to the table descriptor.
 	close(blockSchemaChanges)
@@ -985,14 +983,8 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	var enableAsync uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// Turn on quick garbage collection.
-			AsyncExecQuickly: true,
-			AsyncExecNotification: func() error {
-				if atomic.LoadUint32(&enableAsync) == 0 {
-					return errors.New("async schema changes are disabled")
-				}
-				return nil
-			},
+			// TODO (lucy): Un-skip this test when the GC job is implemented, and set
+			// the knob to block until we're ready to GC
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1018,6 +1010,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
+	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	atomic.StoreUint32(&enableAsync, 1)
 
 	testutils.SucceedsSoon(t, func() error {
@@ -1072,10 +1065,9 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
+			SchemaChangeJobNoOp: func() bool {
+				return true
 			},
-			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1097,8 +1089,8 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 
 	// Job still running, waiting for draining names.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifyRunningSystemJob(
-		t, sqlRun, 1, jobspb.TypeSchemaChange, sql.RunningStatusDrainingNames,
+	if err := jobutils.VerifySystemJob(
+		t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded,
 		jobs.Record{
 			Username:    security.RootUser,
 			Description: "DROP TABLE t.public.kv",
@@ -1159,10 +1151,9 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 	// actually dropped; it will be left in the "deleted" state.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
+			SchemaChangeJobNoOp: func() bool {
+				return true
 			},
-			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, params)
@@ -1206,18 +1197,14 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 // Tests name reuse if a DROP VIEW|TABLE succeeds but fails
 // before running the schema changer. Tests name GC via the
 // asynchrous schema change path.
+// TODO (lucy): This started as a test verifying that draining names still works
+// in the async schema changer, which no longer exists. Should the test still
+// exist?
 func TestDropNameReuse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// Block schema changes through synchronous path.
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
-			AsyncExecQuickly: true,
-		},
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},

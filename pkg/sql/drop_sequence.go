@@ -68,7 +68,9 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, toDel := range n.td {
 		droppedDesc := toDel.desc
-		err := params.p.dropSequenceImpl(ctx, droppedDesc, n.n.DropBehavior)
+		err := params.p.dropSequenceImpl(
+			ctx, droppedDesc, true /* queueJob */, tree.AsStringWithFQNames(n.n, params.Ann()), n.n.DropBehavior,
+		)
 		if err != nil {
 			return err
 		}
@@ -98,9 +100,13 @@ func (*dropSequenceNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropSequenceNode) Close(context.Context)        {}
 
 func (p *planner) dropSequenceImpl(
-	ctx context.Context, seqDesc *sqlbase.MutableTableDescriptor, behavior tree.DropBehavior,
+	ctx context.Context,
+	seqDesc *sqlbase.MutableTableDescriptor,
+	queueJob bool,
+	jobDesc string,
+	behavior tree.DropBehavior,
 ) error {
-	return p.initiateDropTable(ctx, seqDesc, true /* drainName */)
+	return p.initiateDropTable(ctx, seqDesc, queueJob, jobDesc, true /* drainName */)
 }
 
 // sequenceDependency error returns an error if the given sequence cannot be dropped because
