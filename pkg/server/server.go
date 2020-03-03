@@ -846,6 +846,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return &ie
 		}
 
+	s.jobRegistry.SetSessionBoundInternalExecutorFactory(
+		func(
+			ctx context.Context, sessionData *sessiondata.SessionData,
+		) sqlutil.InternalExecutor {
+			ie := sql.MakeInternalExecutor(
+				ctx,
+				s.pgServer.SQLServer,
+				s.sqlMemMetrics,
+				s.st,
+			)
+			ie.SetSessionData(sessionData)
+			return &ie
+		},
+	)
+
 	for _, m := range s.pgServer.Metrics() {
 		s.registry.AddMetricStruct(m)
 	}

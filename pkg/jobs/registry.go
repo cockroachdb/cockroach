@@ -100,6 +100,27 @@ type Registry struct {
 	metrics    Metrics
 	adoptionCh chan struct{}
 
+	// sessionBoundInternalExecutorFactory provides a way for jobs to create
+	// internal executors. This is rarely needed, and usually job resumers should
+	// use the internal executor from the PlanHookState. The intended user of this
+	// interface is the schema change job resumer, which needs to set the
+	// tableCollectionModifier on the internal executor to different values in
+	// multiple concurrent queries. This situation is an exception to the internal
+	// executor generally being a stateless wrapper, and makes it impossible to
+	// reuse the same internal executor across all the queries (without
+	// refactoring to get rid of the tableCollectionModifier field, which we
+	// should do eventually).
+	//
+	// Note that, while this API is not ideal, internal executors are basically
+	// lightweight wrappers requiring no additional teardown. There's not much
+	// cost incurred in creating these.
+	//
+	// TODO (lucy): We should refactor and get rid of the tableCollectionModifier
+	// field. Modifying the TableCollection is basically a per-query operation
+	// and should be a per-query setting. #34304 is the issue for creating/
+	// improving this API.
+	sessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile string
 
@@ -172,6 +193,15 @@ func MakeRegistry(
 	r.mu.jobs = make(map[int64]context.CancelFunc)
 	r.metrics.InitHooks(histogramWindowInterval)
 	return r
+}
+
+// SetSessionBoundInternalExecutorFactory sets the
+// SessionBoundInternalExecutorFactory that will be used by the job registry
+// executor.
+func (r *Registry) SetSessionBoundInternalExecutorFactory(
+	factory sqlutil.SessionBoundInternalExecutorFactory,
+) {
+	r.sessionBoundInternalExecutorFactory = factory
 }
 
 // MetricsStruct returns the metrics for production monitoring of each job type.
