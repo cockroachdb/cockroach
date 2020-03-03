@@ -10,6 +10,8 @@
 
 import { Icon, Pagination } from "antd";
 import * as React from "react";
+import { getMatchParamByName } from "oss/src/util/query";
+import { match } from "react-router";
 
 export interface PaginationSettings {
   pageSize?: number;
@@ -63,3 +65,18 @@ export function PaginationComponent(props: PaginationComponentProps) {
     />
   );
 }
+
+// tslint:disable-next-line: no-shadowed-variable
+export const paginationPageCount = (pagination: PaginationSettings, pageName: string, match?: match<any>, appAttr?: string, search?: string) => {
+  const { pageSize, current, total } = pagination;
+  const appAttrValue = match && getMatchParamByName(match, appAttr);
+  const selectedApp = appAttrValue || "";
+  const pageCount = current * pageSize > total ? total : current * pageSize;
+  const count = total > 10 ? pageCount : current * total;
+  const start = count > pageSize ? count - pageSize + 1 : 1;
+  const label = (search && search.length > 0) || selectedApp.length > 0 ? "results" : pageName;
+  if (count === 0) {
+    return `0 ${label}`;
+  }
+  return `${start}-${count} of ${total} ${label}`;
+};

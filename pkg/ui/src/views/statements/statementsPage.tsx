@@ -16,7 +16,7 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { PaginationComponent, PaginationSettings } from "src/components/pagination/pagination";
+import { PaginationComponent, PaginationSettings, paginationPageCount } from "src/components/pagination/pagination";
 import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -135,24 +135,6 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     }
   }
 
-  renderCounts = () => {
-    const { pagination: { current, pageSize }, search } = this.state;
-    const { match } = this.props;
-    const appAttrValue = getMatchParamByName(match, appAttr);
-    const selectedApp = appAttrValue || "";
-    const total = this.filteredStatementsData().length;
-    const pageCount = current * pageSize > total ? total : current * pageSize;
-    const count = total > 10 ? pageCount : current * total;
-    if (search.length > 0) {
-      const text = `${total} ${total > 1 || total === 0 ? "results" : "result"} for`;
-      const filter = selectedApp ? <React.Fragment>in <span className="label">{selectedApp}</span></React.Fragment> : null;
-      return (
-        <React.Fragment>{text} <span className="label">{search}</span> {filter}</React.Fragment>
-      );
-    }
-    return `${count} of ${total} statements`;
-  }
-
   renderLastCleared = () => {
     const { lastReset } = this.props;
     return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
@@ -187,7 +169,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
         <section className="cl-table-container">
           <div className="cl-table-statistic">
             <h4 className="cl-count-title">
-              {this.renderCounts()}
+              {paginationPageCount({ ...pagination, total: this.filteredStatementsData().length }, "statements", match, appAttr, search)}
             </h4>
             <h4 className="last-cleared-title">
               {this.renderLastCleared()}
