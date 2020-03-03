@@ -49,6 +49,9 @@ type commandResult struct {
 	conv sessiondata.DataConversionConfig
 	// pos identifies the position of the command within the connection.
 	pos sql.CmdPos
+	// flushBeforeClose contains a list of functions to flush
+	// before a command is closed.
+	flushBeforeCloseFuncs []func() error
 
 	err error
 	// errExpected, if set, enforces that an error had been set when Close is
@@ -101,6 +104,13 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 		r.conn.bufferErr(ctx, r.err)
 		return
 	}
+
+	for _, f := range r.flushBeforeCloseFuncs {
+		if err := f(); err != nil {
+			panic(fmt.Sprintf("unexpected err when closing: %s", err))
+		}
+	}
+	r.flushBeforeCloseFuncs = nil
 
 	// Send a completion message, specific to the type of result.
 	switch r.typ {
@@ -182,6 +192,14 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 func (r *commandResult) DisableBuffering() {
 	r.assertNotReleased()
 	r.bufferingDisabled = true
+}
+
+// AppendParamStatusUpdate is part of the CommandResult interface.
+func (r *commandResult) AppendParamStatusUpdate(param string, val string) {
+	r.flushBeforeCloseFuncs = append(
+		r.flushBeforeCloseFuncs,
+		func() error { return r.conn.bufferParamStatus(param, val) },
+	)
 }
 
 // SetColumns is part of the CommandResult interface.

@@ -248,8 +248,9 @@ func newInternalPlanner(
 			"application_name": "crdb-internal",
 			"database":         "system",
 		}),
-		settings:          execCfg.Settings,
-		setCurTxnReadOnly: func(bool) {},
+		settings:           execCfg.Settings,
+		paramStatusUpdater: &noopParamStatusUpdater{},
+		setCurTxnReadOnly:  func(bool) {},
 	}
 
 	var ts time.Time

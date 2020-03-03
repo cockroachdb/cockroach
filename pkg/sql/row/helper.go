@@ -88,11 +88,11 @@ func (rh *rowHelper) encodePrimaryIndex(
 func (rh *rowHelper) encodeSecondaryIndexes(
 	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
 ) (secondaryIndexEntries []sqlbase.IndexEntry, err error) {
-	if len(rh.indexEntries) != len(rh.Indexes) {
-		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.Indexes))
+	if cap(rh.indexEntries) < len(rh.Indexes) {
+		rh.indexEntries = make([]sqlbase.IndexEntry, 0, len(rh.Indexes))
 	}
 	rh.indexEntries, err = sqlbase.EncodeSecondaryIndexes(
-		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries)
+		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries[:0])
 	if err != nil {
 		return nil, err
 	}

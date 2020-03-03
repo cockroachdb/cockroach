@@ -831,8 +831,7 @@ func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 
 // EncodeInvertedIndexKeys creates a list of inverted index keys by
 // concatenating keyPrefix with the encodings of the column in the
-// index. Returns the key and whether any of the encoded values were
-// NULLs.
+// index.
 func EncodeInvertedIndexKeys(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -858,9 +857,11 @@ func EncodeInvertedIndexKeys(
 // concatenates it with `inKey`and returns a list of buffers per
 // path. The encoded values is guaranteed to be lexicographically
 // sortable, but not guaranteed to be round-trippable during decoding.
+// A (SQL) NULL input Datum produces no keys, because inverted indexes
+// cannot and do not need to satisfy the predicate col IS NULL.
 func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
 	if val == tree.DNull {
-		return [][]byte{encoding.EncodeNullAscending(inKey)}, nil
+		return nil, nil
 	}
 	switch t := tree.UnwrapDatum(nil, val).(type) {
 	case *tree.DJSON:
@@ -1194,22 +1195,18 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 ) ([]IndexEntry, error) {
-	if len(secondaryIndexEntries) != len(indexes) {
-		panic("Length of secondaryIndexEntries is not equal to the number of indexes.")
+	if len(secondaryIndexEntries) > 0 {
+		panic("Length of secondaryIndexEntries was non-zero")
 	}
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}
-		secondaryIndexEntries[i] = entries[0]
-
-		// This is specifically for inverted indexes which can have more than one entry
-		// associated with them, or secondary indexes which store columns from
-		// multiple column families.
-		if len(entries) > 1 {
-			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
-		}
+		// Normally, each index will have exactly one entry. However, inverted
+		// indexes can have 0 or >1 entries, as well as secondary indexes which
+		// store columns from multiple column families.
+		secondaryIndexEntries = append(secondaryIndexEntries, entries...)
 	}
 	return secondaryIndexEntries, nil
 }
