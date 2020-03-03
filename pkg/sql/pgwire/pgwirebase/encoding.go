@@ -452,10 +452,21 @@ func DecodeOidDatum(
 
 			if alloc.pgNum.Ndigits > 0 {
 				decDigits := make([]byte, 0, int(alloc.pgNum.Ndigits)*PGDecDigits)
-				nextDigit := func() error {
+				for i := int16(0); i < alloc.pgNum.Ndigits; i++ {
 					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
-						return err
+						return nil, err
 					}
+					// Each 16-bit "digit" can represent a 4 digit number.
+					// In the case where each digit is not 4 digits, we must append
+					// padding to the beginning, i.e.
+					// * "1234" stays "1234"
+					// * "123" becomes "0123"
+					// * "12" becomes "0012"
+					// * "1" becomes "0001"
+					// * "0" becomes "0000"
+					// * "123456" becomes ["0012", "3456"]
+					// * "123456.789" becomes ["0012", "3456", "7890"]
+					// * "120123.45678" becomes ["0012", "0123", "4567", "8000"]
 					numZeroes := PGDecDigits
 					for i16 := alloc.i16; i16 > 0; i16 /= 10 {
 						numZeroes--
@@ -463,37 +474,60 @@ func DecodeOidDatum(
 					for ; numZeroes > 0; numZeroes-- {
 						decDigits = append(decDigits, '0')
 					}
-					return nil
-				}
-
-				for i := int16(0); i < alloc.pgNum.Ndigits-1; i++ {
-					if err := nextDigit(); err != nil {
-						return nil, err
-					}
 					if alloc.i16 > 0 {
 						decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
 					}
 				}
 
-				// The last digit may contain padding, which we need to deal with.
-				if err := nextDigit(); err != nil {
-					return nil, err
+				// In the case of padding zeros at the end, we may have padded too many
+				// digits in the loop. This can be determined if the weight (defined as
+				// number of 4 digit groups left of the decimal point - 1) + the scale
+				// (total number of digits on the RHS of the decimal point) is less
+				// than the number of digits given.
+				//
+				// In Postgres, this is handled by the "remove trailing zeros" in
+				// `make_result_opt_error`, as well as `trunc_var`.
+				// Any zeroes are implicitly added back in when operating on the decimal
+				// value.
+				//
+				// Examples (with "," in the digit string for clarity):
+				// * for "1234", we have digits ["1234", "0"] for scale 0, which would
+				// make the digit string "1234,0000". For scale 0, we need to cut it back
+				// to "1234".
+				// * for "1234.0", we have digits ["1234", "0"] for scale 1, which would
+				// make the digit string "1234,0000". For scale 1, we need to cut it back
+				// to "1234.0".
+				// * for "1234.000000" we have digits ["1234", "0", "0"] with scale 6,
+				// which would make the digit string "1234,0000,0000". We need to cut it
+				// back to "1234,0000,00" for this to be correct.
+				// * for "123456.00000", we have digits ["12", "3456", "0", "0"] with
+				// scale 5, which would make digit string "0012,3456,0000,0000". We need
+				// to cut it back to "0012,3456,0000,0" for this to be correct.
+				// * for "123456.000000000", we may have digits ["12", "3456", "0", "0", "0"]
+				// with scale 5, which would make digit string "0012,3456,0000,0000".
+				// We need to cut it back to "0012,3456,0000,0" for this to be correct.
+				//
+				// This is handled by the below code, which truncates the decDigits
+				// such that it fits into the desired dscale. To do this:
+				// * ndigits [number of digits provided] - (weight+1) gives the number
+				// of digits on the RHS of the decimal place value as determined by
+				// the given input. Note dscale can be negative, meaning we truncated
+				// the leading zeroes at the front, giving a higher exponent (e.g. 0042,0000
+				// can omit the trailing 0000, giving dscale of -4, which makes the exponent 4).
+				// * if the digits we have in the buffer on the RHS, as calculated above,
+				// is larger than our calculated dscale, truncate our buffer to match the
+				// desired dscale.
+				dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
+				if overScale := dscale - alloc.pgNum.Dscale; overScale > 0 {
+					dscale -= overScale
+					decDigits = decDigits[:len(decDigits)-int(overScale)]
 				}
-				Dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
-				if overScale := Dscale - alloc.pgNum.Dscale; overScale > 0 {
-					Dscale -= overScale
-					for i := int16(0); i < overScale; i++ {
-						alloc.i16 /= 10
-					}
-				}
-				if alloc.i16 > 0 {
-					decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
-				}
+
 				decString := string(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as decimal", decString)
 				}
-				alloc.dd.Exponent = -int32(Dscale)
+				alloc.dd.Exponent = -int32(dscale)
 			}
 
 			switch alloc.pgNum.Sign {

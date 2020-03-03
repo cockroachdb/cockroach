@@ -206,6 +206,16 @@ func TestExoticNumericEncodings(t *testing.T) {
 		{apd.New(100000000, 0), []byte{0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0}},
 		{apd.New(100000000, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0}},
 		{apd.New(100000001, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1}},
+		// Elixir/Postgrex combinations.
+		{apd.New(1234, 0), []byte{0, 2, 0, 0, 0, 0, 0, 0, 0x4, 0xd2, 0, 0}},
+		{apd.New(12340, -1), []byte{0, 2, 0, 0, 0, 0, 0, 1, 0x4, 0xd2, 0, 0}},
+		{apd.New(1234123400, -2), []byte{0, 3, 0, 1, 0, 0, 0, 2, 0x4, 0xd2, 0x4, 0xd2, 0, 0}},
+		{apd.New(12340000, 0), []byte{0, 3, 0, 1, 0, 0, 0, 0, 0x4, 0xd2, 0, 0, 0, 0}},
+		{apd.New(123400000, -1), []byte{0, 3, 0, 1, 0, 0, 0, 1, 0x4, 0xd2, 0, 0, 0, 0}},
+		{apd.New(12341234000000, -2), []byte{0, 4, 0, 2, 0, 0, 0, 2, 0x4, 0xd2, 0x4, 0xd2, 0, 0, 0, 0}},
+		// Postgrex inspired -- even more trailing zeroes!
+		{apd.New(0, 0), []byte{0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+		{apd.New(1234123400, -2), []byte{0, 4, 0, 1, 0, 0, 0, 2, 0x4, 0xd2, 0x4, 0xd2, 0, 0, 0, 0}},
 	}
 
 	evalCtx := tree.MakeTestingEvalContext(nil)

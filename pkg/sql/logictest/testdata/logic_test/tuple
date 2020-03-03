@@ -825,8 +825,17 @@ SELECT ((unnest(ARRAY[1,2], ARRAY[1,2]))).unnest;
 query error pq: type tuple{int, int, int} is not composite
 SELECT ((1,2,3)).x FROM tb
 
-query error pq: type tuple{int, int, int} is not composite
+query I colnames
+SELECT ((1,2,3)).@2 FROM tb
+----
+?column?
+2
+
+query III colnames
 SELECT ((1,2,3)).* FROM tb
+----
+?column?  ?column?  ?column?
+1         2         3
 
 # Accessing all the columns
 
