@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -250,7 +251,7 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
 		req := ru.GetInner()
 		h := req.Header()
-		if roachpb.IsTransactionWrite(req) {
+		if roachpb.IsIntentWrite(req) {
 			// Ranged writes are added immediately to the intent spans because
 			// it's not clear where they will actually leave intents. Point
 			// writes are added to the in-flight writes set.
@@ -330,7 +331,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 			// If we're currently planning on performing the batch with
 			// performing async consensus, determine whether this request
 			// changes that.
-			if !roachpb.IsTransactionWrite(req) || roachpb.IsRange(req) {
+			if !roachpb.IsIntentWrite(req) || roachpb.IsRange(req) {
 				// Only allow batches consisting of solely transactional point
 				// writes to perform consensus asynchronously.
 				// TODO(nvanbenschoten): We could allow batches with reads and point
@@ -449,23 +450,23 @@ func (tp *txnPipeliner) updateWriteTracking(
 	if br == nil {
 		// The transaction cannot continue in this epoch whether this is
 		// a retryable error or not.
-		ba.IntentSpanIterate(nil, tp.footprint.insert)
+		ba.LockSpanIterate(nil, tp.trackLocks)
 		return
 	}
 
 	// Similarly, if the transaction is now finalized, we don't need to
-	// accurately update the write tracking.
+	// accurately update the lock tracking.
 	if br.Txn.Status.IsFinalized() {
 		switch br.Txn.Status {
 		case roachpb.ABORTED:
-			// If the transaction is now ABORTED, add all intent writes from
-			// the batch directly to the write footprint. We don't know which
-			// of these succeeded.
-			ba.IntentSpanIterate(nil, tp.footprint.insert)
+			// If the transaction is now ABORTED, add all locks acquired by the
+			// batch directly to the lock footprint. We don't know which of
+			// these succeeded.
+			ba.LockSpanIterate(nil, tp.trackLocks)
 		case roachpb.COMMITTED:
 			// If the transaction is now COMMITTED, it must not have any more
 			// in-flight writes, so clear them. Technically we should move all
-			// of these to the write footprint, but since the transaction is
+			// of these to the lock footprint, but since the transaction is
 			// already committed, there's no reason to.
 			tp.ifWrites.clear(
 				/* reuse - we're not going to use this Btree again, so there's no point in
@@ -492,7 +493,7 @@ func (tp *txnPipeliner) updateWriteTracking(
 				// Move to write footprint.
 				tp.footprint.insert(roachpb.Span{Key: qiReq.Key})
 			}
-		} else if roachpb.IsTransactionWrite(req) {
+		} else if roachpb.IsIntentWrite(req) {
 			// If the request was a transactional write, track its intents.
 			if ba.AsyncConsensus {
 				// Record any writes that were performed asynchronously. We'll
@@ -508,6 +509,14 @@ func (tp *txnPipeliner) updateWriteTracking(
 			}
 		}
 	}
+}
+
+func (tp *txnPipeliner) trackLocks(s roachpb.Span, dur lock.Durability) {
+	// TODO(nvanbenschoten): handle unreplicated locks.
+	if dur != lock.Replicated {
+		panic("unexpected lock durability")
+	}
+	tp.footprint.insert(s)
 }
 
 // stripQueryIntents adjusts the BatchResponse to hide the fact that this

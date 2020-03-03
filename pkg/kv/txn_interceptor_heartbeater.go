@@ -141,17 +141,16 @@ func (h *txnHeartbeater) init(
 func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	firstWriteIdx, pErr := firstWriteIndex(&ba)
+	firstLockingIndex, pErr := firstLockingIndex(&ba)
 	if pErr != nil {
 		return nil, pErr
 	}
-	haveTxnWrite := firstWriteIdx != -1
-	if haveTxnWrite {
+	if firstLockingIndex != -1 {
 		// Set txn key based on the key of the first transactional write if not
 		// already set. If it is already set, make sure we keep the anchor key
 		// the same.
 		if len(h.mu.txn.Key) == 0 {
-			anchor := ba.Requests[firstWriteIdx].GetInner().Header().Key
+			anchor := ba.Requests[firstLockingIndex].GetInner().Header().Key
 			h.mu.txn.Key = anchor
 			// Put the anchor also in the ba's copy of the txn, since this batch
 			// was prepared before we had an anchor.
@@ -396,11 +395,11 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	}
 }
 
-// firstWriteIndex returns the index of the first transactional write in the
-// BatchRequest. Returns -1 if the batch has not intention to write. It also
-// verifies that if an EndTxnRequest is included, then it is the last request
-// in the batch.
-func firstWriteIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
+// firstLockingIndex returns the index of the first request that acquires locks
+// in the BatchRequest. Returns -1 if the batch has no intention to acquire
+// locks. It also verifies that if an EndTxnRequest is included, then it is the
+// last request in the batch.
+func firstLockingIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
 		if i < len(ba.Requests)-1 /* if not last*/ {
@@ -408,7 +407,7 @@ func firstWriteIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
 				return -1, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
 			}
 		}
-		if roachpb.IsTransactionWrite(args) {
+		if roachpb.IsLocking(args) {
 			return i, nil
 		}
 	}
