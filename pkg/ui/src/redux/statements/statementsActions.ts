@@ -9,27 +9,26 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
-
 import { PayloadAction } from "src/interfaces/action";
 
-export const ENQUEUE_DIAGNOSTICS = "cockroachui/statements/ENQUEUE_DIAGNOSTICS";
-export const ENQUEUE_DIAGNOSTICS_COMPLETE = "cockroachui/statements/ENQUEUE_DIAGNOSTICS_COMPLETE";
+export const REQUEST_STATEMENT_DIAGNOSTICS = "cockroachui/statements/REQUEST_STATEMENT_DIAGNOSTICS";
+export const STATEMENT_DIAGNOSTICS_REQUEST_COMPLETE = "cockroachui/statements/STATEMENT_DIAGNOSTICS_REQUEST_COMPLETE";
 
 export type EnqueueDiagnosticsPayload = {
-  statementId: string;
+  statementFingerprint: string;
 };
 
-export function enqueueDiagnostics(statementId: string): PayloadAction<EnqueueDiagnosticsPayload> {
+export function requestStatementDiagnostics(statementFingerprint: string): PayloadAction<EnqueueDiagnosticsPayload> {
   return {
-    type: ENQUEUE_DIAGNOSTICS,
+    type: REQUEST_STATEMENT_DIAGNOSTICS,
     payload: {
-      statementId,
+      statementFingerprint,
     },
   };
 }
 
-export function completeEnqueueDiagnostics(): Action {
+export function completeStatementDiagnosticsRequest(): Action {
   return {
-    type: ENQUEUE_DIAGNOSTICS_COMPLETE,
+    type: STATEMENT_DIAGNOSTICS_REQUEST_COMPLETE,
   };
 }
