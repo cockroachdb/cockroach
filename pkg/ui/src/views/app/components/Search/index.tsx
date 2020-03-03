@@ -18,6 +18,7 @@ import "./search.styl";
 interface ISearchProps {
   onSubmit: (value: string) => void;
   onClear?: () => void;
+  defaultValue?: string;
 }
 
 interface ISearchState {
@@ -30,7 +31,7 @@ type TSearchProps = ISearchProps & InputProps;
 
 export class Search extends React.Component<TSearchProps, ISearchState> {
   state = {
-    value: "",
+    value: this.props.defaultValue || "",
     submitted: false,
   };
 

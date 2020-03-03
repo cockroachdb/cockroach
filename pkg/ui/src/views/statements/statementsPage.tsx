@@ -59,23 +59,37 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
 
   constructor(props: StatementsPageProps & RouteComponentProps<any>) {
     super(props);
+    const { history } = props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const sortKey = searchParams.get("sortKey");
+    const ascending = searchParams.get("ascending");
+    const searchQuery = searchParams.get("q");
+
     this.state = {
       sortSetting: {
-        sortKey: 6,  // Latency
-        ascending: false,
+        sortKey: sortKey || 6,  // Latency
+        ascending: Boolean(ascending) || false,
       },
       pagination: {
         pageSize: 20,
         current: 1,
       },
-      search: "",
+      search: searchQuery || "",
     };
   }
 
   changeSortSetting = (ss: SortSetting) => {
+    const { history } = this.props;
+
     this.setState({
       sortSetting: ss,
     });
+
+    const searchParams = new URLSearchParams(history.location.search);
+    searchParams.set("sortKey", ss.sortKey);
+    searchParams.set("ascending", Boolean(ss.ascending).toString());
+    history.location.search = searchParams.toString();
+    history.replace(history.location);
   }
 
   selectApp = (app: DropdownOption) => {
@@ -104,7 +118,15 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     return data;
   }
 
-  onSubmitSearchField = (search: string) => this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
+  onSubmitSearchField = (search: string) => {
+    const { history } = this.props;
+    this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
+
+    const searchParams = new URLSearchParams(history.location.search);
+    searchParams.set("q", search);
+    history.location.search = searchParams.toString();
+    history.replace(history.location);
+  }
 
   onClearSearchField = () => this.setState({ search: "" });
 
@@ -173,6 +195,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
             <Search
               onSubmit={this.onSubmitSearchField as any}
               onClear={this.onClearSearchField}
+              defaultValue={search}
             />
           </PageConfigItem>
           <PageConfigItem>
