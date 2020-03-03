@@ -3326,6 +3326,27 @@ func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 	return MVCCKey{k, ts}, value, orepr, err
 }
 
+// MVCCScanDecodeKeyValues decodes all key/value pairs returned in one or more
+// MVCCScan "batches" (this is not the RocksDB batch repr format). The provided
+// function is called for each key/value pair.
+func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte) error) error {
+	var k MVCCKey
+	var rawBytes []byte
+	var err error
+	for _, data := range repr {
+		for len(data) > 0 {
+			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
+			if err != nil {
+				return err
+			}
+			if err = fn(k, rawBytes); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func notFoundErrOrDefault(err error) error {
 	errStr := err.Error()
 	if strings.Contains(errStr, "No such") ||
