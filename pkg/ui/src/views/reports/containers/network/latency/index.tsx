@@ -159,20 +159,6 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
       />
     );
   }
-  if (latency === -2) {
-    return (
-      <td
-        className={generateClassName(["latency-table__cell", "latency-table__cell--no-connection"])}
-      >
-        <Tooltip placement="bottom" title="Disconnected">
-          <Chip
-            title="--"
-            type="yellow"
-          />
-        </Tooltip>
-      </td>
-    );
-  }
   if (latency === -1) {
     return (
       <td
@@ -211,7 +197,10 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
       std.stddev > 0 && latency > std.stddevPlus1 && latency <= std.stddevPlus2,
     "blue":
       std.stddev > 0 && latency > std.stddevPlus2,
+    "yellow":
+      latency === -2,
   });
+  const renderDescription = (data: string) => _.map(data.split(","), (identity, index) => <p key={index} className="Chip--tooltip__nodes--item-description">{`${identity},`}</p>);
   return (
     <td className={className}>
       {collapsed ? (
@@ -225,12 +214,12 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
             <div className="Chip--tooltip__nodes">
               <div className="Chip--tooltip__nodes--item">
                 <p className="Chip--tooltip__nodes--item-title">{`Node ${identityB.nodeID}`}</p>
-                <p className="Chip--tooltip__nodes--item-description">{identityB.locality}</p>
+                {renderDescription(identityB.locality)}
               </div>
               <Divider type="vertical" />
               <div className="Chip--tooltip__nodes--item">
                 <p className="Chip--tooltip__nodes--item-title">{`Node ${identityA.nodeID}`}</p>
-                <p className="Chip--tooltip__nodes--item-description">{identityA.locality}</p>
+                {renderDescription(identityA.locality)}
               </div>
             </div>
             <p className={`color--${type}`}>{`${latency.toFixed(2)}ms roundtrip`}</p>
@@ -238,7 +227,7 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
         )}>
           <div>
             <Chip
-              title={`${latency.toFixed(2)}ms`}
+              title={latency > 0 ? latency.toFixed(2) + "ms" : "--"}
               type={type}
             />
           </div>
