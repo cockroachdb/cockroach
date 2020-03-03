@@ -11,9 +11,16 @@
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 
-export const selectStatementById = createSelector(
+export const selectStatementByFingerprint = createSelector(
   (state: AdminUIState) => state.cachedData.statements.data?.statements,
-  (_state: AdminUIState, statementId: string) => statementId,
-  (statements, statementId) =>
-    (statements || []).find((statement: any) => statement.key.key_data.query === statementId),
+  (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
+  (statements, statementFingerprint) =>
+    (statements || []).find((statement: any) => statement.key.key_data.query === statementFingerprint),
+);
+
+export const selectDiagnosticRequestsByStatementFingerprint = createSelector(
+  (state: AdminUIState) => state.cachedData.statementDiagnosticsRequests.data?.requests || [],
+  (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
+  (requests, statementFingerprint) =>
+    requests.filter(request => request.statement_fingerprint === statementFingerprint),
 );
