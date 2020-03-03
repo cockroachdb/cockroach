@@ -415,6 +415,10 @@ function makeInvalidState() {
         inFlight: true,
         valid: false,
       },
+      statementDiagnosticsReports: {
+        inFlight: true,
+        valid: false,
+      },
     },
   };
 }
@@ -432,6 +436,10 @@ function makeStateWithStatementsAndLastReset(statements: CollectedStatementStati
         }),
         inFlight: false,
         valid: true,
+      },
+      statementDiagnosticsReports: {
+        inFlight: true,
+        valid: false,
       },
     },
   };

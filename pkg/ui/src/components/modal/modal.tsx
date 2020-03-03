@@ -50,12 +50,14 @@ export const Modal: React.FC<ModalProps> = (props) => {
         <Button
           onClick={onCancel}
           type="secondary"
+          key="cancelButton"
         >
           { cancelText }
         </Button>,
         <Button
           onClick={onOk}
           type="primary"
+          key="okButton"
         >
           { okText }
         </Button>,
