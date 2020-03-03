@@ -42,6 +42,7 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import { approximify, latencyBreakdown, longToInt, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
+import classNames from "classnames";
 
 const { TabPane } = Tabs;
 
@@ -123,10 +124,9 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
         <tbody>
           {
             rows.map((row: NumericStatRow) => {
-              const classNames = "sort-table__row sort-table__row--body" +
-                (row.summary ? " sort-table__row--summary" : "");
+              const className = classNames("sort-table__row sort-table__row--body", {"sort-table__row--summary": row.summary});
               return (
-                <tr className={classNames}>
+                <tr className={className}>
                   <th className="sort-table__cell sort-table__cell--header" style={{ textAlign: "left" }}>{ row.name }</th>
                   <td className="sort-table__cell">{ row.bar ? row.bar() : null }</td>
                   <td className="sort-table__cell sort-table__cell--active">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
@@ -282,11 +282,11 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Retries</h4>
-                  <p className="summary--card__item--value summary--card__item--value-red">{ retriesBarChart }</p>
+                  <p className={classNames("summary--card__item--value", { "summary--card__item--value-red": retriesBarChart > 0})}>{ retriesBarChart }</p>
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Max Retries</h4>
-                  <p className="summary--card__item--value summary--card__item--value-red">{ maxRetriesBarChart }</p>
+                  <p className={classNames("summary--card__item--value", { "summary--card__item--value-red": maxRetriesBarChart > 0})}>{ maxRetriesBarChart }</p>
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Total</h4>
