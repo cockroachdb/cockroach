@@ -110,7 +110,18 @@ func (c *sqlConn) ensureConn() error {
 			fmt.Fprintf(stderr, "warning: connection lost!\n"+
 				"opening new connection: all session settings will be lost\n")
 		}
-		conn, err := pq.Open(c.url)
+		base, err := pq.NewConnector(c.url)
+		if err != nil {
+			return wrapConnError(err)
+		}
+		// Add a notice handler - re-use the cliOutputError function in this case.
+		connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+			cliOutputError(stderr, notice, true /*showSeverity*/, false /*verbose*/)
+		})
+		// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
+		// to follow the gosql.DB interface. We should probably look at initializing
+		// connections only once instead. The context is only used for dialing.
+		conn, err := connector.Connect(context.TODO())
 		if err != nil {
 			return wrapConnError(err)
 		}

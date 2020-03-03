@@ -129,6 +129,11 @@ ignored = [
   name = "github.com/cockroachdb/pebble"
   branch = "master"
 
+# github.com/lib/pq has a newer revision that has notices, which we want
+[[override]]
+  name = "github.com/lib/pq"
+  revision = "9eb3fc897d6fd97dd4aad3d0404b54e2f7cc56be"
+
 # github.com/openzipkin-contrib/zipkin-go-opentracing requires a newer
 # version of thrift than is currently present in a release.
 [[override]]

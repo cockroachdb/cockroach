@@ -186,6 +186,9 @@ type planner struct {
 	// data structures that can be reused between queries (for efficiency).
 	optPlanningCtx optPlanningCtx
 
+	// noticeSender allows the sending of notices.
+	noticeSender noticeSender
+
 	queryCacheSession querycache.Session
 }
 

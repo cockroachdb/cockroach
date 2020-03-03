@@ -582,6 +582,13 @@ func (c *conn) bufferParamStatus(param, value string) error {
 	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }
 
+func (c *conn) bufferNotice(ctx context.Context, noticeErr error) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
+	c.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
+	c.msgBuilder.writeTerminatedString("NOTICE")
+	return writeErrFields(ctx, c.sv, noticeErr, &c.msgBuilder, &c.writerState.buf)
+}
+
 func (c *conn) sendInitialConnData(
 	ctx context.Context, sqlServer *sql.Server,
 ) (sql.ConnectionHandler, error) {
@@ -1164,14 +1171,17 @@ func writeErr(
 ) error {
 	// Record telemetry for the error.
 	sqltelemetry.RecordError(ctx, err, sv)
-
-	// Now send the error to the client.
-	pgErr := pgerror.Flatten(err)
-
 	msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
-
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
 	msgBuilder.writeTerminatedString("ERROR")
+	return writeErrFields(ctx, sv, err, msgBuilder, w)
+}
+
+func writeErrFields(
+	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
+) error {
+	// Now send the error to the client.
+	pgErr := pgerror.Flatten(err)
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)
 	msgBuilder.writeTerminatedString(pgErr.Code)
