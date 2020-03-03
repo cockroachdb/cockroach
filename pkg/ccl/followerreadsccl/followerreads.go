@@ -76,7 +76,7 @@ func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Dur
 // batchCanBeEvaluatedOnFollower determines if a batch consists exclusively of
 // requests that can be evaluated on a follower replica.
 func batchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
-	return ba.IsReadOnly() && ba.IsAllTransactional()
+	return !ba.IsLocking() && ba.IsAllTransactional()
 }
 
 // txnCanPerformFollowerRead determines if the provided transaction can perform
