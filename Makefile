@@ -825,6 +825,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/proj_non_const_ops.eg.go \
   pkg/sql/colexec/quicksort.eg.go \
   pkg/sql/colexec/rank.eg.go \
+  pkg/sql/colexec/relative_rank.eg.go \
   pkg/sql/colexec/row_number.eg.go \
   pkg/sql/colexec/rowstovec.eg.go \
   pkg/sql/colexec/selection_ops.eg.go \
@@ -833,7 +834,8 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/sum_agg.eg.go \
   pkg/sql/colexec/tuples_differ.eg.go \
-  pkg/sql/colexec/vec_comparators.eg.go
+  pkg/sql/colexec/vec_comparators.eg.go \
+  pkg/sql/colexec/window_peer_grouper.eg.go
 
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
@@ -1521,6 +1523,7 @@ pkg/sql/colexec/proj_const_right_ops.eg.go: pkg/sql/colexec/proj_const_ops_tmpl.
 pkg/sql/colexec/proj_non_const_ops.eg.go: pkg/sql/colexec/proj_non_const_ops_tmpl.go
 pkg/sql/colexec/quicksort.eg.go: pkg/sql/colexec/quicksort_tmpl.go
 pkg/sql/colexec/rank.eg.go: pkg/sql/colexec/rank_tmpl.go
+pkg/sql/colexec/relative_rank.eg.go: pkg/sql/colexec/relative_rank_tmpl.go
 pkg/sql/colexec/row_number.eg.go: pkg/sql/colexec/row_number_tmpl.go
 pkg/sql/colexec/rowstovec.eg.go: pkg/sql/colexec/rowstovec_tmpl.go
 pkg/sql/colexec/select_in.eg.go: pkg/sql/colexec/select_in_tmpl.go
@@ -1530,6 +1533,7 @@ pkg/sql/colexec/substring.eg.go: pkg/sql/colexec/substring_tmpl.go
 pkg/sql/colexec/sum_agg.eg.go: pkg/sql/colexec/sum_agg_tmpl.go
 pkg/sql/colexec/tuples_differ.eg.go: pkg/sql/colexec/tuples_differ_tmpl.go
 pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
+pkg/sql/colexec/window_peer_grouper.eg.go: pkg/sql/colexec/window_peer_grouper_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
 	execgen $@
