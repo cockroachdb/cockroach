@@ -288,7 +288,7 @@ export interface APIReducersState {
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
-  statements: CachedDataReducerState<api.StatementsResponseMessageWithDiagnostics>;
+  statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
