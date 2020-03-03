@@ -23,6 +23,7 @@ import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
 import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/components/summaryBar";
+import { Button, BackIcon } from "oss/src/components/button";
 import "./nodeOverview.styl";
 
 /**
@@ -71,6 +72,8 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
     props.refreshLiveness();
   }
 
+  prevPage = () => this.props.history.goBack();
+
   render() {
     const { node, nodesSummary } = this.props;
     if (!node) {
@@ -88,6 +91,16 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
       <div>
         <Helmet title={`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`} />
         <div className="section section--heading">
+          <Button
+            onClick={this.prevPage}
+            type="flat"
+            size="small"
+            className="crl-button--link-to"
+            icon={BackIcon}
+            iconPosition="left"
+          >
+            Overview
+          </Button>
           <h2 className="base-heading">{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
         </div>
         <section className="section l-columns">
