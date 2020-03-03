@@ -14,7 +14,7 @@ import cn from "classnames";
 import "./badge.styl";
 
 export interface BadgeProps {
-  text: string;
+  text: React.ReactNode;
   size?: "small" | "medium" | "large";
   status?: "success" | "danger" | "default" | "info" | "warning";
   tag?: boolean; // TODO (koorosh): Tag behavior isn't implemented yet.
