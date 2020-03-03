@@ -331,6 +331,10 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		if err != nil {
 			return errors.Wrapf(err, "Job %d could not be loaded. The job may not have succeeded", jobs[i])
 		}
+		if j.Payload().FinalResumeError != nil {
+			decodedErr := errors.DecodeError(ctx, *j.Payload().FinalResumeError)
+			return decodedErr
+		}
 		if j.Payload().Error != "" {
 			return errors.New(fmt.Sprintf("Job %d failed with error %s", jobs[i], j.Payload().Error))
 		}
@@ -793,6 +797,8 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
+		// TODO(spaskob,lucy): Add metrics on job retries. Consider having a backoff
+		// mechanism (possibly combined with a retry limit).
 		if e, ok := err.(retryJobError); ok {
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
 		}
@@ -913,9 +919,15 @@ func (r *Registry) resume(
 			}
 			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
 			if err != nil {
-				if errors.HasAssertionFailure(err) {
-					log.ReportOrPanic(ctx, nil, err.Error())
-				}
+				// TODO (lucy): This needs to distinguish between assertion errors in
+				// the job registry and assertion errors in job execution returned from
+				// Resume() or OnFailOrCancel(), and only fail on the former. We have
+				// tests that purposely introduce bad state in order to produce
+				// assertion errors, which shouldn't cause the test to panic. For now,
+				// comment this out.
+				// if errors.HasAssertionFailure(err) {
+				// 	log.ReportOrPanic(ctx, nil, err.Error())
+				// }
 				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 			}
 			status, err := job.CurrentStatus(ctx)

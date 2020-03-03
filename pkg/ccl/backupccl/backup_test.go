@@ -1175,9 +1175,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
 	serverArgs.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: func() error {
-			return errors.New("async schema changer disabled")
-		},
+		// TODO (lucy): if/when this test gets reinstated, figure out what knobs are
+		// needed.
 	}
 
 	// PAUSE JOB and CANCEL JOB are racy in that it's hard to guarantee that the
@@ -1350,9 +1349,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: func() error {
-			return errors.New("async schema changer disabled")
-		},
+		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 	}
 
 	const numAccounts = 1000
@@ -1397,9 +1394,7 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: func() error {
-			return errors.New("async schema changer disabled")
-		},
+		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 	}
 
 	const numAccounts = 1000
