@@ -36,8 +36,8 @@ func TestForbiddenDeps(t *testing.T) {
 		// TODO(tschottdorf): should really disallow ./storage/... but at the
 		// time of writing there's a (legit) dependency on `enginepb`.
 		[]string{
-			"github.com/cockroachdb/cockroach/pkg/storage",
-			"github.com/cockroachdb/cockroach/pkg/storage/engine",
+			"github.com/cockroachdb/cockroach/pkg/kv/storage",
+			"github.com/cockroachdb/cockroach/pkg/kv/storage/engine",
 		},
 		[]string{})
 }

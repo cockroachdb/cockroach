@@ -26,8 +26,8 @@ import (
 func TestPkgsFromDiff(t *testing.T) {
 	for filename, expPkgs := range map[string]map[string]pkg{
 		"testdata/10305.diff": {
-			"pkg/roachpb": {tests: []string{"TestLeaseEquivalence"}},
-			"pkg/storage": {tests: []string{"TestStoreRangeLease", "TestStoreRangeLeaseSwitcheroo"}},
+			"pkg/roachpb":    {tests: []string{"TestLeaseEquivalence"}},
+			"pkg/kv/storage": {tests: []string{"TestStoreRangeLease", "TestStoreRangeLeaseSwitcheroo"}},
 		},
 		"testdata/skip.diff": {
 			"pkg/ccl/storageccl": {tests: []string{"TestPutS3"}},
@@ -35,9 +35,9 @@ func TestPkgsFromDiff(t *testing.T) {
 		// This PR had some churn and renamed packages. This was formerly problematic
 		// because nonexistent packages would be emitted.
 		"testdata/27595.diff": {
-			"pkg/storage/closedts/transport": {tests: []string{"TestTransportConnectOnRequest", "TestTransportClientReceivesEntries"}},
-			"pkg/storage/closedts/container": {tests: []string{"TestTwoNodes"}},
-			"pkg/storage/closedts/storage":   {tests: []string{"TestConcurrent"}},
+			"pkg/kv/storage/closedts/transport": {tests: []string{"TestTransportConnectOnRequest", "TestTransportClientReceivesEntries"}},
+			"pkg/kv/storage/closedts/container": {tests: []string{"TestTwoNodes"}},
+			"pkg/kv/storage/closedts/storage":   {tests: []string{"TestConcurrent"}},
 		},
 		"testdata/removed.diff": {},
 	} {

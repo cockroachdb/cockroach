@@ -39,7 +39,7 @@ func Example_runTC() {
 	// parallelism.
 	runTC(func(buildID string, opts map[string]string) {
 		pkg := opts["env.PKG"]
-		if !strings.HasSuffix(pkg, "pkg/sql/logictest") && !strings.HasSuffix(pkg, "pkg/storage") {
+		if !strings.HasSuffix(pkg, "pkg/sql/logictest") && !strings.HasSuffix(pkg, "pkg/kv/storage") {
 			return
 		}
 		var keys []string
@@ -65,11 +65,11 @@ func Example_runTC() {
 	//   env.GOFLAGS:     -race -parallel=1
 	//   env.STRESSFLAGS: -p 1
 	//
-	// github.com/cockroachdb/cockroach/pkg/storage
+	// github.com/cockroachdb/cockroach/pkg/kv/storage
 	//   env.GOFLAGS:     -parallel=4
 	//   env.STRESSFLAGS: -p 4
 	//
-	// github.com/cockroachdb/cockroach/pkg/storage
+	// github.com/cockroachdb/cockroach/pkg/kv/storage
 	//   env.GOFLAGS:     -race -parallel=2
 	//   env.STRESSFLAGS: -p 2
 }

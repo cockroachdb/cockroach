@@ -49,11 +49,11 @@ add_library(roach
   protos/roachpb/errors.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
-  protos/storage/concurrency/lock/locking.pb.cc
-  protos/storage/engine/enginepb/mvcc.pb.cc
-  protos/storage/engine/enginepb/mvcc3.pb.cc
-  protos/storage/engine/enginepb/file_registry.pb.cc
-  protos/storage/engine/enginepb/rocksdb.pb.cc
+  protos/kv/storage/concurrency/lock/locking.pb.cc
+  protos/kv/storage/engine/enginepb/mvcc.pb.cc
+  protos/kv/storage/engine/enginepb/mvcc3.pb.cc
+  protos/kv/storage/engine/enginepb/file_registry.pb.cc
+  protos/kv/storage/engine/enginepb/rocksdb.pb.cc
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
   protos/util/log/log.pb.cc

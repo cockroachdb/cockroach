@@ -13,8 +13,8 @@ package client
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 

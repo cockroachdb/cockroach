@@ -24,16 +24,16 @@ interface LogTableProps {
 }
 
 function printLogEventType(
-  eventType: protos.cockroach.storage.RangeLogEventType,
+  eventType: protos.cockroach.kv.storage.RangeLogEventType,
 ) {
   switch (eventType) {
-    case protos.cockroach.storage.RangeLogEventType.add:
+    case protos.cockroach.kv.storage.RangeLogEventType.add:
       return "Add";
-    case protos.cockroach.storage.RangeLogEventType.remove:
+    case protos.cockroach.kv.storage.RangeLogEventType.remove:
       return "Remove";
-    case protos.cockroach.storage.RangeLogEventType.split:
+    case protos.cockroach.kv.storage.RangeLogEventType.split:
       return "Split";
-    case protos.cockroach.storage.RangeLogEventType.merge:
+    case protos.cockroach.kv.storage.RangeLogEventType.merge:
       return "Merge";
     default:
       return "Unknown";

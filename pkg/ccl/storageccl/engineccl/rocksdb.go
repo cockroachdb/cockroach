@@ -11,9 +11,9 @@ package engineccl
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/pkg/errors"
 )
 

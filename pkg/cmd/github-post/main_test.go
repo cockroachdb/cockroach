@@ -44,9 +44,9 @@ func TestListFailures(t *testing.T) {
 			}},
 		},
 		{
-			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/storage",
+			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/kv/storage",
 			fileName: "stress-failure.json",
-			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
+			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/storage",
 			expIssues: []issue{{
 				testName: "TestReplicateQueueRebalance",
 				title:    "storage: TestReplicateQueueRebalance failed",
@@ -55,9 +55,9 @@ func TestListFailures(t *testing.T) {
 			}},
 		},
 		{
-			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/storage",
+			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/kv/storage",
 			fileName: "stress-fatal.json",
-			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
+			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/storage",
 			expIssues: []issue{{
 				testName: "TestGossipHandlesReplacedNode",
 				title:    "storage: TestGossipHandlesReplacedNode failed",
@@ -66,9 +66,9 @@ func TestListFailures(t *testing.T) {
 			}},
 		},
 		{
-			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/storage",
+			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/kv/storage",
 			fileName: "stress-unknown.json",
-			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
+			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/storage",
 			expIssues: []issue{{
 				testName: "(unknown)",
 				title:    "storage: package failed",

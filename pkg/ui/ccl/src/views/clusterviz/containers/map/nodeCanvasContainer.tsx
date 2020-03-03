@@ -31,7 +31,7 @@ import { getLocality } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 import { NodeCanvas } from "./nodeCanvas";
 
-type Liveness = cockroach.storage.ILiveness;
+type Liveness = cockroach.kv.storage.ILiveness;
 
 interface NodeCanvasContainerProps {
   nodesSummary: NodesSummary;
