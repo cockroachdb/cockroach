@@ -44,6 +44,7 @@ import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./
 import { getMatchParamByName } from "src/util/query";
 import DiagnosticsView from "./diagnosticsView";
 import classNames from "classnames";
+import { selectDiagnosticRequestsByStatementFingerprint } from "src/redux/statements/statementsSelectors";
 import { Button, BackIcon } from "oss/src/components/button";
 
 const { TabPane } = Tabs;
@@ -500,11 +501,11 @@ export const selectStatement = createSelector(
   },
 );
 
-const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => ({
+const mapStateToProps = (state: AdminUIState, props: StatementDetailsProps) => ({
   statement: selectStatement(state, props),
   statementsError: state.cachedData.statements.lastError,
   nodeNames: nodeDisplayNameByIDSelector(state),
-  diagnosticsCount: 0,
+  diagnosticsCount: selectDiagnosticRequestsByStatementFingerprint(state, props.statement.statement).length,
 });
 
 const mapDispatchToProps = {
