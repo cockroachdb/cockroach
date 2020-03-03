@@ -12,6 +12,7 @@ package concurrency
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -82,7 +83,8 @@ type lockTableWaiterImpl struct {
 	stopper *stop.Stopper
 	ir      IntentResolver
 
-	// When set, WriteIntentError are propagated instead of pushing.
+	// When set, WriteIntentError are propagated instead of pushing
+	// conflicting transactions.
 	disableTxnPushing bool
 }
 
@@ -109,6 +111,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
+	// Used to delay liveness and deadlock detection pushes.
 	var timer *timeutil.Timer
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
@@ -117,72 +120,13 @@ func (w *lockTableWaiterImpl) WaitOn(
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
-			if !state.held {
-				// If the lock is not held and instead has a reservation, we don't
-				// want to push the reservation transaction. A transaction push will
-				// block until the pushee transaction has either committed, aborted,
-				// pushed, or rolled back savepoints, i.e., there is some state
-				// change that has happened to the transaction record that unblocks
-				// the pusher. It will not unblock merely because a request issued
-				// by the pushee transaction has completed and released a
-				// reservation. Note that:
-				// - reservations are not a guarantee that the lock will be acquired.
-				// - the following two reasons to push do not apply to requests
-				// holding reservations:
-				//  1. competing requests compete at exactly one lock table, so there
-				//  is no possibility of distributed deadlock due to reservations.
-				//  2. the lock table can prioritize requests based on transaction
-				//  priorities.
-				//
-				// TODO(sbhola): remove the need for this by only notifying waiters
-				// for held locks and never for reservations.
-				// TODO(sbhola): now that we never push reservation holders, we
-				// should stop special-casing non-transactional writes and let them
-				// acquire reservations.
-				switch state.stateKind {
-				case waitFor, waitForDistinguished:
-					continue
-				case waitElsewhere:
-					return nil
-				}
-			}
-
 			switch state.stateKind {
-			case waitFor:
+			case waitFor, waitForDistinguished:
 				// waitFor indicates that the request is waiting on another
 				// transaction. This transaction may be the lock holder of a
 				// conflicting lock or the head of a lock-wait queue that the
 				// request is a part of.
-
-				// For non-transactional requests, there's no need to perform
-				// deadlock detection and the other "distinguished" (see below)
-				// pusher will already push to detect coordinator failures and
-				// abandoned locks, so there's no need to do anything in this
-				// state.
-				if req.Txn == nil {
-					continue
-				}
-
-				// For transactional requests, the request should push to
-				// resolve this conflict and detect deadlocks, but only after
-				// delay. This delay avoids unnecessary push traffic when the
-				// conflicting transaction is continuing to make forward
-				// progress.
-				delay := LockTableDeadlockDetectionPushDelay.Get(&w.st.SV)
-				if hasMinPriority(state.txn) || hasMaxPriority(req.Txn) {
-					// However, if the pushee has the minimum priority or if the
-					// pusher has the maximum priority, push immediately.
-					delay = 0
-				}
-				if timer == nil {
-					timer = timeutil.NewTimer()
-					defer timer.Stop()
-				}
-				timer.Reset(delay)
-				timerC = timer.C
-				timerWaitingState = state
-
-			case waitForDistinguished:
+				//
 				// waitForDistinguished is like waitFor, except it instructs the
 				// waiter to quickly push the conflicting transaction after a short
 				// liveness push delay instead of waiting out the full deadlock
@@ -197,15 +141,52 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// had a cache of aborted transaction IDs that allowed us to notice
 				// and quickly resolve abandoned intents then we might be able to
 				// get rid of this state.
-				delay := minDuration(
-					LockTableLivenessPushDelay.Get(&w.st.SV),
-					LockTableDeadlockDetectionPushDelay.Get(&w.st.SV),
-				)
+				livenessPush := state.stateKind == waitForDistinguished
+				deadlockPush := true
+
+				// If the conflict is a reservation holder and not a held lock then
+				// there's no need to perform a liveness push - the request must be
+				// alive or its context would have been canceled and it would have
+				// exited its lock wait-queues.
+				if !state.held {
+					livenessPush = false
+				}
+
+				// For non-transactional requests, there's no need to perform
+				// deadlock detection because a non-transactional request can
+				// not be part of a dependency cycle. Non-transactional requests
+				// cannot hold locks or reservations.
+				if req.Txn == nil {
+					deadlockPush = false
+				}
+
+				// If the request doesn't want to perform a push for either
+				// reason, continue waiting.
+				if !livenessPush && !deadlockPush {
+					continue
+				}
+
+				// The request should push to detect abandoned locks due to
+				// failed transaction coordinators, detect deadlocks between
+				// transactions, or both, but only after delay. This delay
+				// avoids unnecessary push traffic when the conflicting
+				// transaction is continuing to make forward progress.
+				delay := time.Duration(math.MaxInt64)
+				if livenessPush {
+					delay = minDuration(delay, LockTableLivenessPushDelay.Get(&w.st.SV))
+				}
+				if deadlockPush {
+					delay = minDuration(delay, LockTableDeadlockDetectionPushDelay.Get(&w.st.SV))
+				}
+
+				// However, if the pushee has the minimum priority or if the
+				// pusher has the maximum priority, push immediately.
+				// TODO(nvanbenschoten): flesh these interactions out more and
+				// add some testing.
 				if hasMinPriority(state.txn) || hasMaxPriority(req.Txn) {
-					// However, if the pushee has the minimum priority or if the
-					// pusher has the maximum priority, push immediately.
 					delay = 0
 				}
+
 				if timer == nil {
 					timer = timeutil.NewTimer()
 					defer timer.Stop()
@@ -216,14 +197,20 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 			case waitElsewhere:
 				// The lockTable has hit a memory limit and is no longer maintaining
-				// proper lock wait-queues. However, the waiting request is still
-				// not safe to proceed with evaluation because there is still a
-				// transaction holding the lock. It should push the transaction it
-				// is blocked on immediately to wait in that transaction's
-				// txnWaitQueue. Once this completes, the request should stop
-				// waiting on this lockTableGuard, as it will no longer observe
-				// lock-table state transitions.
-				return w.pushTxn(ctx, req, state)
+				// proper lock wait-queues.
+				if !state.held {
+					// If the lock is not held, exit immediately. Requests will
+					// be ordered when acquiring latches.
+					return nil
+				}
+				// The waiting request is still not safe to proceed with
+				// evaluation because there is still a transaction holding the
+				// lock. It should push the transaction it is blocked on
+				// immediately to wait in that transaction's txnWaitQueue. Once
+				// this completes, the request should stop waiting on this
+				// lockTableGuard, as it will no longer observe lock-table state
+				// transitions.
+				return w.pushLockTxn(ctx, req, state)
 
 			case waitSelf:
 				// Another request from the same transaction is the reservation
@@ -251,7 +238,43 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// has crashed.
 			timerC = nil
 			timer.Read = true
-			if err := w.pushTxn(ctx, req, timerWaitingState); err != nil {
+
+			// If the request is conflicting with a held lock then it pushes its
+			// holder synchronously - there is no way it will be able to proceed
+			// until the lock's transaction undergoes a state transition (either
+			// completing or being pushed) and then updates the lock's state
+			// through intent resolution. The request has a dependency on the
+			// entire conflicting transaction.
+			//
+			// However, if the request is conflicting with another request (a
+			// reservation holder) then it pushes the reservation holder
+			// asynchronously while continuing to listen to state transition in
+			// the lockTable. This allows the request to cancel its push if the
+			// conflicting reservation exits the lock wait-queue without leaving
+			// behind a lock. In this case, the request has a dependency on the
+			// conflicting request but not necessarily the entire conflicting
+			// transaction.
+			var err *Error
+			if timerWaitingState.held {
+				err = w.pushLockTxn(ctx, req, timerWaitingState)
+			} else {
+				// It would be more natural to launch an async task for the push
+				// and continue listening on this goroutine for lockTable state
+				// transitions, but doing so is harder to test against. Instead,
+				// we launch an async task to listen to lockTable state and
+				// synchronously push. If the watcher goroutine detects a
+				// lockTable change, it cancels the context on the push.
+				pushCtx, pushCancel := context.WithCancel(ctx)
+				go w.watchForNotifications(pushCtx, pushCancel, newStateC)
+				err = w.pushRequestTxn(pushCtx, req, timerWaitingState)
+				pushCancel()
+				if pushCtx.Err() == context.Canceled {
+					// Ignore the context canceled error. If this was for the
+					// parent context then we'll notice on the next select.
+					err = nil
+				}
+			}
+			if err != nil {
 				return err
 			}
 
@@ -264,13 +287,112 @@ func (w *lockTableWaiterImpl) WaitOn(
 	}
 }
 
-func (w *lockTableWaiterImpl) pushTxn(ctx context.Context, req Request, ws waitingState) *Error {
+// pushLockTxn pushes the holder of the provided lock.
+//
+// The method blocks until the lock holder transaction experiences a state
+// transition such that it no longer conflicts with the pusher's request. The
+// method then synchronously updates the lock to trigger a state transition in
+// the lockTable that will free up the request to proceed. If the method returns
+// successfully then the caller can expect to have an updated waitingState.
+func (w *lockTableWaiterImpl) pushLockTxn(
+	ctx context.Context, req Request, ws waitingState,
+) *Error {
 	if w.disableTxnPushing {
 		return roachpb.NewError(&roachpb.WriteIntentError{
 			Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
 		})
 	}
 
+	// Determine which form of push to use. For read-write conflicts, try to
+	// push the lock holder's timestamp forward so the read request can read
+	// under the lock. For write-write conflicts, try to abort the lock holder
+	// entirely so the write request can revoke and replace the lock with its
+	// own lock.
+	var pushType roachpb.PushTxnType
+	switch ws.guardAccess {
+	case spanset.SpanReadOnly:
+		pushType = roachpb.PUSH_TIMESTAMP
+	case spanset.SpanReadWrite:
+		pushType = roachpb.PUSH_ABORT
+	}
+
+	h := w.pushHeader(req)
+	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
+	if err != nil {
+		return err
+	}
+
+	// If the push succeeded then the lock holder transaction must have
+	// experienced a state transition such that it no longer conflicts with
+	// the pusher's request. This state transition could have been any of the
+	// following, each of which would be captured in the pusheeTxn proto:
+	// 1. the pushee was committed
+	// 2. the pushee was aborted
+	// 3. the pushee was pushed to a higher provisional commit timestamp such
+	//    that once its locks are updated to reflect this, they will no longer
+	//    conflict with the pusher request. This is only applicable if pushType
+	//    is PUSH_TIMESTAMP.
+	// 4. the pushee rolled back all sequence numbers that it held the
+	//    conflicting lock at. This allows the lock to be revoked entirely.
+	//    TODO(nvanbenschoten): we do not currently detect this case. Doing so
+	//    would not be useful until we begin eagerly updating a transaction's
+	//    record upon rollbacks to savepoints.
+	//
+	// Update the conflicting lock to trigger the desired state transition in
+	// the lockTable itself, which will allow the request to proceed.
+	//
+	// We always poison due to limitations of the API: not poisoning equals
+	// clearing the AbortSpan, and if our pushee transaction first got pushed
+	// for timestamp (by us), then (by someone else) aborted and poisoned, and
+	// then we run the below code, we're clearing the AbortSpan illegaly.
+	// Furthermore, even if our pushType is not PUSH_ABORT, we may have ended up
+	// with the responsibility to abort the intents (for example if we find the
+	// transaction aborted). To do better here, we need per-intent information
+	// on whether we need to poison.
+	resolve := roachpb.MakeLockUpdateWithDur(&pusheeTxn, roachpb.Span{Key: ws.key}, ws.dur)
+	opts := intentresolver.ResolveOptions{Poison: true}
+	return w.ir.ResolveIntent(ctx, resolve, opts)
+}
+
+// pushRequestTxn pushes the owner of the provided request.
+//
+// The method blocks until either the pusher's transaction is aborted or the
+// pushee's transaction is finalized (committed or aborted). If the pusher's
+// transaction is aborted then the method will send an error on the channel and
+// the pusher should exit its lock wait-queues. If the pushee's transaction is
+// finalized then the method will send no error on the channel. The pushee is
+// expected to notice that it has been aborted during its next attempt to push
+// another transaction and will exit its lock wait-queues.
+//
+// However, the method responds to context cancelation and will terminate the
+// push attempt if its context is canceled. This allows the caller to revoke a
+// push if it determines that the pushee is no longer blocking the request. The
+// caller is expected to terminate the push if it observes any state transitions
+// in the lockTable. As such, the push is only expected to be allowed to run to
+// completion in cases where requests are truly deadlocked.
+func (w *lockTableWaiterImpl) pushRequestTxn(
+	ctx context.Context, req Request, ws waitingState,
+) *Error {
+	// Regardless of whether the waiting request is reading from or writing to a
+	// key, it always performs a PUSH_ABORT when pushing a conflicting request
+	// because it wants to block until either a) the pushee or the pusher is
+	// aborted due to a deadlock or b) the request exits the lock wait-queue and
+	// the caller of this function cancels the push.
+	pushType := roachpb.PUSH_ABORT
+
+	h := w.pushHeader(req)
+	_, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
+	// Even if the push succeeded and aborted the other transaction to break a
+	// deadlock, there's nothing for the pusher to clean up. The conflicting
+	// request will quickly exit the lock wait-queue and release its reservation
+	// once it notices that it is aborted and the pusher will be free to proceed
+	// because it was not waiting on any locks. If the pusher's request does end
+	// up hitting a lock which the pushee fails to clean up, it will perform the
+	// cleanup itself using pushLockTxn.
+	return err
+}
+
+func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	h := roachpb.Header{
 		Timestamp:    req.Timestamp,
 		UserPriority: req.Priority,
@@ -293,36 +415,26 @@ func (w *lockTableWaiterImpl) pushTxn(ctx context.Context, req Request, ws waiti
 			h.Timestamp.Forward(obsTS)
 		}
 	}
+	return h
+}
 
-	var pushType roachpb.PushTxnType
-	switch ws.guardAccess {
-	case spanset.SpanReadOnly:
-		pushType = roachpb.PUSH_TIMESTAMP
-	case spanset.SpanReadWrite:
-		pushType = roachpb.PUSH_ABORT
+// watchForNotifications selects on the provided channel and watches for any
+// updates. If the channel is ever notified, it calls the provided context
+// cancelation function and exits.
+func (w *lockTableWaiterImpl) watchForNotifications(
+	ctx context.Context, cancel func(), newStateC chan struct{},
+) {
+	select {
+	case <-newStateC:
+		// Re-signal the channel.
+		select {
+		case newStateC <- struct{}{}:
+		default:
+		}
+		// Cancel the context of the async task.
+		cancel()
+	case <-ctx.Done():
 	}
-
-	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
-	if err != nil {
-		return err
-	}
-	if !ws.held {
-		return nil
-	}
-
-	// We always poison due to limitations of the API: not poisoning equals
-	// clearing the AbortSpan, and if our pushee transaction first got pushed
-	// for timestamp (by us), then (by someone else) aborted and poisoned, and
-	// then we run the below code, we're clearing the AbortSpan illegaly.
-	// Furthermore, even if our pushType is not PUSH_ABORT, we may have ended
-	// up with the responsibility to abort the intents (for example if we find
-	// the transaction aborted).
-	//
-	// To do better here, we need per-intent information on whether we need to
-	// poison.
-	resolve := roachpb.MakeLockUpdateWithDur(&pusheeTxn, roachpb.Span{Key: ws.key}, ws.dur)
-	opts := intentresolver.ResolveOptions{Poison: true}
-	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
 
 func hasMinPriority(txn *enginepb.TxnMeta) bool {

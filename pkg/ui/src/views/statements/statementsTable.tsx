@@ -85,7 +85,7 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
   return (
     <Link to={ `/node/${props.nodeId}` }>
-      <div className="node-name-tooltip__info-icon">N{props.nodeId} {props.nodeNames[props.nodeId]}</div>
+      <div className="node-name-tooltip__info-icon">{props.nodeNames[props.nodeId]}</div>
     </Link>
   );
 }

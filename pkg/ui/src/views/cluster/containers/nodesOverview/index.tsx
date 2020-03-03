@@ -128,8 +128,8 @@ const getStatusDescription = (status: LivenessStatus) => {
 const NodeNameColumn: React.FC<{ record: NodeStatusRow | DecommissionedNodeStatusRow }> = ({ record }) => {
   return (
     <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
-      <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
       <Text>{record.nodeName}</Text>
+      <Text textType={TextTypes.BodyStrong}>{` (n${record.nodeId})`}</Text>
     </Link>
   );
 };

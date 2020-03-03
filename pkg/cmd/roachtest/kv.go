@@ -202,13 +202,31 @@ func registerKVContention(r *testRegistry) {
 			// If requests ever get stuck on a transaction that was abandoned
 			// then it will take 2m for them to get unstuck, at which point the
 			// QPS threshold check in the test is likely to fail.
-			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=120")
+			//
+			// Additionally, ensure that even transactions that issue a 1PC
+			// batch begin heartbeating. This ensures that if they end up in
+			// part of a dependency cycle, they can never be expire without
+			// being actively aborted.
+			args := startArgs(
+				"--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=120 COCKROACH_TXN_HEARTBEAT_DURING_1PC=true",
+			)
 			c.Start(ctx, t, args, c.Range(1, nodes))
 
+			conn := c.Conn(ctx, 1)
 			// Enable request tracing, which is a good tool for understanding
 			// how different transactions are interacting.
-			c.Run(ctx, c.Node(1),
-				`./cockroach sql --insecure -e "SET CLUSTER SETTING trace.debug.enable = true"`)
+			if _, err := conn.Exec(`
+				SET CLUSTER SETTING trace.debug.enable = true;
+			`); err != nil {
+				t.Fatal(err)
+			}
+			// Drop the deadlock detection delay because the test creates a
+			// large number transaction deadlocks.
+			if _, err := conn.Exec(`
+				SET CLUSTER SETTING kv.lock_table.deadlock_detection_push_delay = '5ms'
+			`); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
+				t.Fatal(err)
+			}
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
