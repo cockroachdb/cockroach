@@ -760,6 +760,46 @@ message StatementsResponse {
   string internal_app_name_prefix = 4;
 }
 
+message StatementDiagnosticsReport {
+  int64 id = 1;
+  bool completed = 2;
+  string statement_fingerprint = 3;
+  int64 statement_diagnostics_id = 4
+    [ (gogoproto.nullable) = true ];
+  google.protobuf.Timestamp requested_at = 5
+    [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+}
+
+message CreateStatementDiagnosticsReportRequest {
+  string statement_fingerprint = 1;
+}
+
+message CreateStatementDiagnosticsReportResponse {
+  StatementDiagnosticsReport report = 1;
+}
+
+message StatementDiagnosticsReportsRequest {}
+
+message StatementDiagnosticsReportsResponse {
+  repeated StatementDiagnosticsReport reports = 1 [ (gogoproto.nullable) = false ];
+}
+
+message StatementDiagnostics {
+  int64 id = 1;
+  string statement_fingerprint = 2;
+  google.protobuf.Timestamp collected_at = 3
+    [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  string trace = 4;
+}
+
+message StatementDiagnosticsRequest {
+  int64 statement_diagnostics_id = 1;
+}
+
+message StatementDiagnosticsResponse {
+  StatementDiagnostics diagnostics = 2;
+}
+
 message JobRegistryStatusRequest {
   string node_id = 1;
 }
@@ -932,6 +972,22 @@ service Status {
   rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
       get: "/_status/statements"
+    };
+  }
+  rpc CreateStatementDiagnosticsReport(CreateStatementDiagnosticsReportRequest) returns (CreateStatementDiagnosticsReportResponse) {
+    option (google.api.http) = {
+      post: "/_status/stmtdiagreports"
+      body: "*"
+    };
+  }
+  rpc StatementDiagnosticsRequests(StatementDiagnosticsReportsRequest) returns (StatementDiagnosticsReportsResponse) {
+    option (google.api.http) = {
+      get: "/_status/stmtdiagreports"
+    };
+  }
+  rpc StatementDiagnostics(StatementDiagnosticsRequest) returns (StatementDiagnosticsResponse) {
+    option (google.api.http) = {
+      get: "/_status/stmtdiag/{statement_diagnostics_id}"
     };
   }
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {
