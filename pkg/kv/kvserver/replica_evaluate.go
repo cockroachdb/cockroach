@@ -168,15 +168,13 @@ func evaluateBatch(
 	if baHeader.Txn != nil {
 		baHeader.Txn = baHeader.Txn.Clone()
 
-		// Check whether this transaction has been aborted, if applicable.
-		// This applies to writes that leave intents (the use of the
-		// IsTransactionWrite flag excludes operations like HeartbeatTxn),
-		// and reads that occur in a transaction that has already written
-		// (see #2231 for more about why we check for aborted transactions
-		// on reads). Note that 1PC transactions have had their
-		// transaction field cleared by this point so we do not execute
-		// this check in that case.
-		if ba.IsTransactionWrite() || baHeader.Txn.IsWriting() {
+		// Check whether this transaction has been aborted, if applicable. This
+		// applies to reads and writes once a transaction that has begun to
+		// acquire locks (see #2231 for more about why we check for aborted
+		// transactions on reads). Note that 1PC transactions have had their
+		// transaction field cleared by this point so we do not execute this
+		// check in that case.
+		if baHeader.Txn.IsLocking() {
 			// We don't check the abort span for a couple of special requests:
 			// - if the request is asking to abort the transaction, then don't check the
 			// AbortSpan; we don't want the request to be rejected if the transaction

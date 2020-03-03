@@ -473,7 +473,7 @@ func (q *Queue) MaybeWaitForPush(
 	var readyCh chan struct{}                     // signaled when pusher txn should be queried
 
 	// Query the pusher if it's a valid read-write transaction.
-	if req.PusherTxn.ID != uuid.Nil && req.PusherTxn.IsWriting() {
+	if req.PusherTxn.ID != uuid.Nil && req.PusherTxn.IsLocking() {
 		// Create a context which will be canceled once this call completes.
 		// This ensures that the goroutine created to query the pusher txn
 		// is properly cleaned up.

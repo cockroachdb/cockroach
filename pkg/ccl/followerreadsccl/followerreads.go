@@ -82,7 +82,11 @@ func batchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
 // txnCanPerformFollowerRead determines if the provided transaction can perform
 // follower reads.
 func txnCanPerformFollowerRead(txn *roachpb.Transaction) bool {
-	return txn != nil && !txn.IsWriting()
+	// If the request is transactional and that transaction has acquired any
+	// locks then that request should not perform follower reads. Doing so could
+	// allow the request to miss its own writes or observe state that conflicts
+	// with its locks.
+	return txn != nil && !txn.IsLocking()
 }
 
 // canUseFollowerRead determines if a query can be sent to a follower.
