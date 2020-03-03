@@ -21,3 +21,4 @@ export * from "./table";
 export * from "./tooltip";
 export * from "./select";
 export * from "./downloadFile";
+export * from "./modal";
