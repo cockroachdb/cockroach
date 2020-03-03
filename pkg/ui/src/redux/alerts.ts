@@ -56,6 +56,7 @@ export interface Alert extends AlertInfo {
   showAsAlert?: boolean;
   autoClose?: boolean;
   closable?: boolean;
+  autoCloseTimeout?: number;
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
@@ -261,6 +262,7 @@ export const emailSubscriptionAlertSelector = createSelector(
       title: "You successfully signed up for CockroachDB release notes",
       text: "You will receive emails about CockroachDB releases and best practices. You can unsubscribe from these emails anytime.",
       showAsAlert: true,
+      autoClose: true,
       dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
         dispatch(emailSubscriptionAlertLocalSetting.set(false));
         return Promise.resolve();
