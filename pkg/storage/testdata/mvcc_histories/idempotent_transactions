@@ -7,7 +7,7 @@ with t=a k=a
   put v=first
 ----
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=10
 data: "a"/0.000000011,0 -> /BYTES/first
 
@@ -36,7 +36,7 @@ with t=a k=a
 ----
 meta: "a" -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
 
@@ -47,7 +47,7 @@ with t=a k=a
   put v=second
 ----
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=-1} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=-1} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 1 missing an intent with lower sequence -1
@@ -67,7 +67,7 @@ inc: current value = 1
 inc: current value = 1
 inc: current value = 1
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
 meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} ts=0.000000011,0 del=false klen=12 vlen=6
@@ -89,7 +89,7 @@ inc: current value = 1
 inc: current value = 1
 inc: current value = 1
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
 meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=3} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}

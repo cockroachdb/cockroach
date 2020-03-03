@@ -11,7 +11,7 @@ with t=A v=abc resolve
   put  k=c
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000044,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000044,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000044,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000044,0 wto=false max=0,0
 data: "a"/0.000000044,0 -> /BYTES/abc
 data: "a/123"/0.000000044,0 -> /BYTES/abc
 data: "b"/0.000000044,0 -> /BYTES/abc

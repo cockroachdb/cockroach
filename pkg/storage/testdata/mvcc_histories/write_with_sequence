@@ -17,7 +17,7 @@ with t=t k=k
 ----
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} ts=0.000000001,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}}
 data: "k"/0.000000001,0 -> /BYTES/v2
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 3 missing an intent with lower sequence 1
@@ -43,7 +43,7 @@ with t=t k=k
 ----
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=2} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} ts=0.000000001,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}}
 data: "k"/0.000000001,0 -> /BYTES/v2
 
@@ -68,7 +68,7 @@ with t=t k=k
 ----
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=2} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} ts=0.000000001,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}}
 data: "k"/0.000000001,0 -> /BYTES/v2
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000003 with sequence 2 has a different value [0 0 0 0 3 118 50] after recomputing from what was written: [0 0 0 0 3 118 49]
@@ -94,7 +94,7 @@ with t=t k=k
 ----
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} ts=0.000000001,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}}
 data: "k"/0.000000001,0 -> /BYTES/v2
 
@@ -119,7 +119,7 @@ with t=t k=k
 ----
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=3} ts=0.000000001,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}}
 data: "k"/0.000000001,0 -> /BYTES/v2
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000005 with sequence 3 has a different value [0 0 0 0 3 118 51] after recomputing from what was written: [0 0 0 0 3 118 50]
@@ -147,7 +147,7 @@ with t=t k=k
 ----
 put: batch after write is non-empty
 >> at end:
-txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=4} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=4} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=4} ts=0.000000001,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}{3 /BYTES/v2}}
 data: "k"/0.000000001,0 -> /BYTES/v4
 

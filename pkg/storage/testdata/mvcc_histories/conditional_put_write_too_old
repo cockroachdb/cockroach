@@ -34,7 +34,7 @@ with t=a
   cput k=k v=v2 cond=v1
 ----
 >> at end:
-txn: "a" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "a" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 data: "k"/0.000000010,1 -> /BYTES/v2
 data: "k"/0.000000010,0 -> /BYTES/v1
 error: (*roachpb.ConditionFailedError:) unexpected value: <nil>

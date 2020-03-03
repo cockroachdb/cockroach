@@ -36,4 +36,4 @@ with t=A
 ----
 get: "a" -> /BYTES/defghi @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000033,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000033,0 wto=false max=0,0

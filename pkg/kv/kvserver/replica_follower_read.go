@@ -55,7 +55,7 @@ func (r *Replica) canServeFollowerRead(
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
 		ba.IsAllTransactional() && // followerreadsccl.batchCanBeEvaluatedOnFollower
-		(ba.Txn == nil || !ba.Txn.IsWriting()) && // followerreadsccl.txnCanPerformFollowerRead
+		(ba.Txn == nil || !ba.Txn.IsLocking()) && // followerreadsccl.txnCanPerformFollowerRead
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) {
 
 		ts := ba.Timestamp

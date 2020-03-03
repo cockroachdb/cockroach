@@ -16,7 +16,7 @@ with t=A
   txn_step  seq=40
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 data: "k"/0.000000011,0 -> /BYTES/c
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
@@ -46,7 +46,7 @@ get: "k" -> /BYTES/b @0,0
 get: "k" -> /BYTES/b @0,0
 get: "k" -> /BYTES/b @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 # Mask a write in the middle.
 
@@ -62,7 +62,7 @@ scan: "k/10" -> /BYTES/10 @0.000000011,0
 scan: "k/30" -> /BYTES/30 @0.000000011,0
 get: "k" -> /BYTES/c @0.000000011,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 # Mask all the writes.
 
@@ -76,7 +76,7 @@ with t=A
 scan: "k"-"l" -> <no data>
 get: "k" -> <no data>
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 # Disjoint masks.
 
@@ -91,7 +91,7 @@ scan: "k" -> /BYTES/b @0,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
 get: "k" -> /BYTES/b @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=2
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=2
 
 # A historical read before the ignored range should retrieve the
 # historical value visible at that point.
@@ -107,7 +107,7 @@ scan: "k" -> /BYTES/a @0,0
 scan: "k/10" -> /BYTES/10 @0.000000011,0
 get: "k" -> /BYTES/a @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=12} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=12} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 # A historical read with an ignored range before it should hide
 # the historical value hidden at that point.
@@ -123,7 +123,7 @@ scan: "k" -> /BYTES/b @0,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
 get: "k" -> /BYTES/b @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=22} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=22} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 # A historical read with an ignored range that overlaps should hide
 # the historical value hidden at that point.
@@ -140,7 +140,7 @@ scan: "k/10" -> /BYTES/10 @0.000000011,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
 get: "k" -> /BYTES/b @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=32} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=32} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 # Do an intent push by advancing the transaction timestamp, while also having
 # a range of ignored seqnums. This should permanently delete the value at seqnum
@@ -164,7 +164,7 @@ get: "k" -> /BYTES/b @0,0
 meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 get: "k" -> /BYTES/b @0.000000014,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=32} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=32} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
@@ -189,7 +189,7 @@ scan: "k/10" -> /BYTES/10 @0.000000011,0
 scan: "k/30" -> /BYTES/30 @0.000000011,0
 get: "k" -> /BYTES/a @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 run ok
 with t=A
@@ -211,7 +211,7 @@ scan: "k/10" -> /BYTES/10 @0.000000011,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
 get: "k" -> /BYTES/b @0.000000014,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=25} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=25} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
 # Call mvccResolveWriteIntent with status=COMMITTED. This should fold the
 # intent while leaving the value unmodified.
@@ -228,7 +228,7 @@ with t=B
 meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 get: "k" -> /BYTES/b @0.000000014,0
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000020,0 wto=false max=0,0
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000020,0 wto=false max=0,0
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -254,7 +254,7 @@ with t=B
 meta: "l" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} ts=0.000000020,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "l" -> /BYTES/c @0.000000020,0
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000020,0 wto=false max=0,0
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000020,0 wto=false max=0,0
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -281,7 +281,7 @@ with t=B
 meta: "l" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=30} ts=0.000000020,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "l" -> <no data>
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=35} rw=true stat=PENDING rts=0.000000020,0 wto=false max=0,0 isn=1
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=35} lock=true stat=PENDING rts=0.000000020,0 wto=false max=0,0 isn=1
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -299,7 +299,7 @@ with t=C
 ----
 get: "l" -> <no data>
 >> at end:
-txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000030,0 wto=false max=0,0
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000030,0 wto=false max=0,0
 
 
 # Put some values, then ignore all except the first, then do a commit. The
@@ -319,7 +319,7 @@ with t=C
 meta: "m" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} ts=0.000000030,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "m" -> /BYTES/c @0.000000030,0
 >> at end:
-txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000030,0 wto=false max=0,0
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000030,0 wto=false max=0,0
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -341,7 +341,7 @@ with t=C
 meta: "m" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} ts=0.000000030,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "m" -> /BYTES/a @0,0
 >> at end:
-txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000030,0 wto=false max=0,0 isn=1
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000030,0 wto=false max=0,0 isn=1
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -369,7 +369,7 @@ get: "m" -> /BYTES/a @0.000000030,0
 meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000040,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "n" -> /BYTES/c @0.000000040,0
 >> at end:
-txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000040,0 wto=false max=0,0
+txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000040,0 wto=false max=0,0
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -397,7 +397,7 @@ get: "n" -> /BYTES/c @0.000000040,0
 meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "n" -> /BYTES/c @0.000000045,0
 >> at end:
-txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000040,0 wto=false max=0,0
+txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000040,0 wto=false max=0,0
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -425,7 +425,7 @@ meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min
 get: "n" -> /BYTES/c @0.000000045,0
 get: "n" -> /BYTES/c @0.000000045,0
 >> at end:
-txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000050,0 wto=false max=0,0
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -457,7 +457,7 @@ with t=E
 get: "n" -> /BYTES/c @0.000000045,0
 get: "o" -> <no data>
 >> at end:
-txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000050,0 wto=false max=0,0
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -484,7 +484,7 @@ with t=E
 get: "n" -> /BYTES/c @0.000000045,0
 get: "o" -> <no data>
 >> at end:
-txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -532,7 +532,7 @@ with t=E
 ----
 meta: "o" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} ts=0.000000050,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 >> at end:
-txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000050,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -555,7 +555,7 @@ with t=E
 ----
 get: "o" -> <no data>
 >> at end:
-txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000055,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000055,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000050,0 wto=false max=0,0 isn=1
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
