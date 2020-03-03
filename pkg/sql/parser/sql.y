@@ -1929,14 +1929,22 @@ import_format:
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
 // %Text:
-// -- Import both schema and table data:
+// -- Import schema and row data from a SQL-formatted dump file:
 // IMPORT [ TABLE <tablename> FROM ]
-//        <format> <datafile>
+//        <format> <dumpfile>
 //        [ WITH <option> [= <value>] [, ...] ]
 //
-// -- Import using specific schema, use only table data from external file:
+// Format must be one of PGDUMP or MYSQLDUMP.
+//
+// -- Import data from external file, using specified schema to create a new table:
 // IMPORT TABLE <tablename>
 //        { ( <elements> ) | CREATE USING <schemafile> }
+//        <format>
+//        DATA ( <datafile> [, ...] )
+//        [ WITH <option> [= <value>] [, ...] ]
+//
+// -- Import data from external file into an existing table:
+// IMPORT INTO <tablename> [ ( columns ) ]
 //        <format>
 //        DATA ( <datafile> [, ...] )
 //        [ WITH <option> [= <value>] [, ...] ]
@@ -1944,14 +1952,12 @@ import_format:
 // Formats:
 //    CSV
 //    DELIMITED
-//    MYSQLDUMP
 //    PGCOPY
+//    AVRO
 //    PGDUMP
+//    MYSQLDUMP
 //
 // Options:
-//    distributed = '...'
-//    sstsize = '...'
-//    temp = '...'
 //    delimiter = '...'      [CSV, PGCOPY-specific]
 //    nullif = '...'         [CSV, PGCOPY-specific]
 //    comment = '...'        [CSV-specific]
@@ -5263,7 +5269,7 @@ create_type_stmt:
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
-// 
+//
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
