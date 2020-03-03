@@ -2972,7 +2972,7 @@ func TestCanSendToFollower(t *testing.T) {
 	defer func() { CanSendToFollower = old }()
 	canSend := true
 	CanSendToFollower = func(_ uuid.UUID, _ *cluster.Settings, ba roachpb.BatchRequest) bool {
-		return ba.IsReadOnly() && canSend
+		return !ba.IsLocking() && canSend
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)

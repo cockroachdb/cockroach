@@ -138,50 +138,58 @@ func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 	require.Equal(t, keyB, roachpb.Key(txn.Key))
 }
 
-// TestTxnHeartbeaterLoopStartedOnFirstWrite tests that the txnHeartbeater
-// doesn't start its heartbeat loop until it observes the transaction perform
-// a write.
-func TestTxnHeartbeaterLoopStartedOnFirstWrite(t *testing.T) {
+// TestTxnHeartbeaterLoopStartedOnFirstLock tests that the txnHeartbeater
+// doesn't start its heartbeat loop until it observes the transaction issues
+// a request that will acquire locks.
+func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	txn := makeTxnProto()
-	th, _, _ := makeMockTxnHeartbeater(&txn)
-	defer th.stopper.Stop(ctx)
+	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
+		ctx := context.Background()
+		txn := makeTxnProto()
+		th, _, _ := makeMockTxnHeartbeater(&txn)
+		defer th.stopper.Stop(ctx)
 
-	// Read-only requests don't start the heartbeat loop.
-	keyA := roachpb.Key("a")
-	var ba roachpb.BatchRequest
-	ba.Header = roachpb.Header{Txn: txn.Clone()}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+		// Read-only requests don't start the heartbeat loop.
+		keyA := roachpb.Key("a")
+		keyAHeader := roachpb.RequestHeader{Key: keyA}
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: txn.Clone()}
+		ba.Add(&roachpb.GetRequest{RequestHeader: keyAHeader})
 
-	br, pErr := th.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
+		br, pErr := th.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
 
-	th.mu.Lock()
-	require.False(t, th.mu.loopStarted)
-	require.False(t, th.heartbeatLoopRunningLocked())
-	th.mu.Unlock()
+		th.mu.Lock()
+		require.False(t, th.mu.loopStarted)
+		require.False(t, th.heartbeatLoopRunningLocked())
+		th.mu.Unlock()
 
-	// The heartbeat loop is started on the first writing request.
-	ba.Requests = nil
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+		// The heartbeat loop is started on the first locking request.
+		ba.Requests = nil
+		if write {
+			ba.Add(&roachpb.PutRequest{RequestHeader: keyAHeader})
+		} else {
+			t.Skip("TODO(nvanbenschoten): uncomment")
+			// ba.Add(&roachpb.ScanRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
+		}
 
-	br, pErr = th.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
+		br, pErr = th.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
 
-	th.mu.Lock()
-	require.True(t, th.mu.loopStarted)
-	require.True(t, th.heartbeatLoopRunningLocked())
-	th.mu.Unlock()
+		th.mu.Lock()
+		require.True(t, th.mu.loopStarted)
+		require.True(t, th.heartbeatLoopRunningLocked())
+		th.mu.Unlock()
 
-	// Closing the interceptor stops the heartbeat loop.
-	th.mu.Lock()
-	th.closeLocked()
-	th.mu.Unlock()
-	waitForHeartbeatLoopToStop(t, &th)
-	require.True(t, th.mu.loopStarted) // still set
+		// Closing the interceptor stops the heartbeat loop.
+		th.mu.Lock()
+		th.closeLocked()
+		th.mu.Unlock()
+		waitForHeartbeatLoopToStop(t, &th)
+		require.True(t, th.mu.loopStarted) // still set
+	})
 }
 
 // TestTxnHeartbeaterLoopNotStartedFor1PC tests that the txnHeartbeater does
