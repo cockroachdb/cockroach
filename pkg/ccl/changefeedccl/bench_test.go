@@ -231,8 +231,8 @@ func createBenchmarkChangefeed(
 
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
 	sf := span.MakeFrontier(spans...)
-	tickFn := emitEntries(
-		s.ClusterSettings(), details, sf, encoder, sink, rowsFn, TestingKnobs{}, metrics)
+	tickFn := emitEntries(s.ClusterSettings(), details, hlc.Timestamp{}, sf,
+		encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = kvfeed.Run(ctx, kvfeedCfg) }()
