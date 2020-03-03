@@ -27,7 +27,7 @@ func DefaultDeclareKeys(
 	latchSpans, _ *spanset.SpanSet,
 ) {
 	var access spanset.SpanAccess
-	if roachpb.IsReadOnly(req) {
+	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
 	} else {
 		access = spanset.SpanReadWrite
@@ -47,7 +47,7 @@ func DefaultDeclareIsolatedKeys(
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
 	var access spanset.SpanAccess
-	if roachpb.IsReadOnly(req) {
+	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
 	} else {
 		access = spanset.SpanReadWrite

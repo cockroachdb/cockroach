@@ -87,7 +87,7 @@ func (s *txnSeqNumAllocator) SendLocked(
 		// Only increment the sequence number generator for requests that
 		// will leave intents or requests that will commit the transaction.
 		// This enables ba.IsCompleteTransaction to work properly.
-		if roachpb.IsTransactionWrite(req) || req.Method() == roachpb.EndTxn {
+		if roachpb.IsIntentWrite(req) || req.Method() == roachpb.EndTxn {
 			s.writeSeq++
 		}
 
