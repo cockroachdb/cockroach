@@ -1,0 +1,78 @@
+# Test notices work as expected by creating a VIEW on a TEMP TABLE.
+
+send
+Parse {"Query": "SET experimental_enable_temp_tables = true"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE TEMP TABLE a (a int)"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE VIEW a_view AS SELECT a FROM a"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Severity":"NOTICE","Code":"00000","Message":"view \"a_view\" will be a temporary view","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"create_view.go","Line":65,"Routine":"startExec","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"CREATE VIEW"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Disable notices and assert now it is not sent.
+send
+Parse {"Query": "SET CLUSTER SETTING sql.notices.enabled = false"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE VIEW a_view_notice_disabled AS SELECT a FROM a"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE VIEW"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

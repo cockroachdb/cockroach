@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,6 +37,28 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 )
+
+// NoticesEnabled is the cluster setting that allows users
+// to enable notices.
+var NoticesEnabled = settings.RegisterPublicBoolSetting(
+	"sql.notices.enabled",
+	"enable notices in the server/client protocol being sent",
+	true,
+)
+
+// gatedNoticeSender is a noticeSender which can be gated by a cluster setting.
+type gatedNoticeSender struct {
+	noticeSender
+	sv *settings.Values
+}
+
+// AppendNotice implements the noticeSender interface.
+func (s *gatedNoticeSender) AppendNotice(notice error) {
+	if !NoticesEnabled.Get(s.sv) {
+		return
+	}
+	s.noticeSender.AppendNotice(notice)
+}
 
 // execStmt executes one statement by dispatching according to the current
 // state. Returns an Event to be passed to the state machine, or nil if no
@@ -333,6 +356,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
 	p.sessionDataMutator.paramStatusUpdater = res
+	p.noticeSender = &gatedNoticeSender{noticeSender: res, sv: &ex.server.cfg.Settings.SV}
 
 	if os.ImplicitTxn.Get() {
 		asOfTs, err := p.isAsOf(stmt.AST)
