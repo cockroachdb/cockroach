@@ -56,9 +56,11 @@ class Sidebar extends React.Component<RouteComponentProps> {
   }
 
   render() {
-    const navigationItems = this.routes.map(({ path, text }) => (
+    const navigationItems = this.routes.map(({ path, text }, idx) => (
       <SideNavigation.Item
-        isActive={this.isActiveNavigationItem(path)}>
+        isActive={this.isActiveNavigationItem(path)}
+        key={idx}
+      >
         <Link to={path}>{text}</Link>
       </SideNavigation.Item>
     ));

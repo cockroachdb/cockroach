@@ -106,10 +106,12 @@ export class Dropdown extends React.Component<DropdownProps, DropdownState> {
       },
     );
 
-    const menuItems = items.map((menuItem) => (
+    const menuItems = items.map((menuItem, idx) => (
       <DropdownItem
         value={menuItem.value}
-        onClick={this.handleItemSelection}>
+        onClick={this.handleItemSelection}
+        key={idx}
+      >
         { menuItem.name }
       </DropdownItem>
     ));
