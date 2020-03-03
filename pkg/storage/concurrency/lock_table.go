@@ -294,7 +294,7 @@ func (g *lockTableGuardImpl) ShouldWait() bool {
 	return g.mu.startWait
 }
 
-func (g *lockTableGuardImpl) NewStateChan() <-chan struct{} {
+func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.mu.signal

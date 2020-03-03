@@ -58,7 +58,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000012,1
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1
 local: num=0
 
 finish req=req2
@@ -69,7 +69,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000012,1
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1
 local: num=0
 
 reset
@@ -105,13 +105,13 @@ sequence req=req3
 [1] sequence req3: acquiring latches
 [1] sequence req3: scanning lock table for conflicting locks
 [1] sequence req3: waiting in lock wait-queues
-[1] sequence req3: pushing txn 00000000-0000-0000-0000-000000000002
-[1] sequence req3: blocked on sync.Cond.Wait in concurrency_test.(*cluster).PushTransaction
+[1] sequence req3: pushing txn 00000002
+[1] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 on-txn-updated txn=txn2 status=committed
 ----
 [-] update txn: committing txn2
-[1] sequence req3: resolving intent "k" for txn 00000000-0000-0000-0000-000000000002 with COMMITTED status
+[1] sequence req3: resolving intent "k" for txn 00000002 with COMMITTED status
 [1] sequence req3: acquiring latches
 [1] sequence req3: scanning lock table for conflicting locks
 [1] sequence req3: sequencing complete, returned guard
@@ -174,8 +174,8 @@ sequence req=req5
 [1] sequence req5: acquiring latches
 [1] sequence req5: scanning lock table for conflicting locks
 [1] sequence req5: waiting in lock wait-queues
-[1] sequence req5: pushing txn 00000000-0000-0000-0000-000000000002
-[1] sequence req5: blocked on sync.Cond.Wait in concurrency_test.(*cluster).PushTransaction
+[1] sequence req5: pushing txn 00000002
+[1] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 new-request name=req6 txn=none ts=16,1
   scan key=c endkey=z
@@ -192,7 +192,7 @@ sequence req=req6
 on-txn-updated txn=txn2 status=pending ts=18,1
 ----
 [-] update txn: increasing timestamp of txn2
-[1] sequence req5: resolving intent "k" for txn 00000000-0000-0000-0000-000000000002 with PENDING status
+[1] sequence req5: resolving intent "k" for txn 00000002 with PENDING status
 [1] sequence req5: acquiring latches
 [1] sequence req5: scanning lock table for conflicting locks
 [1] sequence req5: sequencing complete, returned guard
@@ -219,13 +219,13 @@ finish req=req6
 [-] finish req6: finishing request
 [3] sequence req7: scanning lock table for conflicting locks
 [3] sequence req7: waiting in lock wait-queues
-[3] sequence req7: pushing txn 00000000-0000-0000-0000-000000000002
-[3] sequence req7: blocked on sync.Cond.Wait in concurrency_test.(*cluster).PushTransaction
+[3] sequence req7: pushing txn 00000002
+[3] sequence req7: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 on-txn-updated txn=txn2 status=committed
 ----
 [-] update txn: committing txn2
-[3] sequence req7: resolving intent "k" for txn 00000000-0000-0000-0000-000000000002 with COMMITTED status
+[3] sequence req7: resolving intent "k" for txn 00000002 with COMMITTED status
 [3] sequence req7: acquiring latches
 [3] sequence req7: scanning lock table for conflicting locks
 [3] sequence req7: sequencing complete, returned guard

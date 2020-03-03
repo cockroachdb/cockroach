@@ -22,9 +22,10 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-func nextUUID(counter *uint128.Uint128) uuid.UUID {
-	*counter = counter.Add(1)
-	return uuid.FromUint128(*counter)
+func nextUUID(counter *uint32) uuid.UUID {
+	*counter = *counter + 1
+	hi := uint64(*counter) << 32
+	return uuid.FromUint128(uint128.Uint128{Hi: hi})
 }
 
 func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {

@@ -561,7 +561,7 @@ type lockTableGuard interface {
 	// have an initial notification. Note that notifications are collapsed if
 	// not retrieved, since it is not necessary for the waiter to see every
 	// state transition.
-	NewStateChan() <-chan struct{}
+	NewStateChan() chan struct{}
 
 	// CurState returns the latest waiting state.
 	CurState() waitingState
