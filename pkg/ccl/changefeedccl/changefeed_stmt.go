@@ -365,6 +365,15 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
+		_, withInitialScan := details.Opts[changefeedbase.OptInitialScan]
+		_, noInitialScan := details.Opts[changefeedbase.OptNoInitialScan]
+		if withInitialScan && noInitialScan {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`cannot specify both %s and %s`, changefeedbase.OptInitialScan,
+				changefeedbase.OptNoInitialScan)
+		}
+	}
+	{
 		const opt = changefeedbase.OptEnvelope
 		switch v := changefeedbase.EnvelopeType(details.Opts[opt]); v {
 		case changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow:

@@ -222,6 +222,7 @@ func kvsToRows(
 func emitEntries(
 	settings *cluster.Settings,
 	details jobspb.ChangefeedDetails,
+	cursor hlc.Timestamp,
 	sf *span.Frontier,
 	encoder Encoder,
 	sink Sink,
@@ -237,7 +238,7 @@ func emitEntries(
 		// it's forwarded before.
 		// TODO(dan): This should be an assertion once we're confident this can never
 		// happen under any circumstance.
-		if row.updated.LessEq(sf.Frontier()) {
+		if row.updated.LessEq(sf.Frontier()) && !row.updated.Equal(cursor) {
 			log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
 				"or equal to the local frontier %s.", cloudStorageFormatTime(row.updated),
 				cloudStorageFormatTime(sf.Frontier()))
