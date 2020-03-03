@@ -771,13 +771,13 @@ k  CHAR  false  NULL  ·  {primary}  false
 query error pq: index "j_idx" not found
 SELECT * FROM customers@j_idx
 
+# TODO (lucy): Update once we have a separate GC job
 query TTT
 SELECT status,
        running_status,
        regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as description
-  FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' ORDER BY job_id DESC LIMIT 2
+  FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' ORDER BY job_id DESC LIMIT 1
 ----
-running  waiting for GC TTL  ROLL BACK JOB
 failed   NULL                ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4;ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3;ALTER TABLE test.public.customers ADD COLUMN m CHAR;ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a';CREATE INDEX j_idx ON test.public.customers (j);CREATE INDEX l_idx ON test.public.customers (l);CREATE INDEX m_idx ON test.public.customers (m);CREATE UNIQUE INDEX i_idx ON test.public.customers (i);CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
 
 subtest add_multiple_computed_elements

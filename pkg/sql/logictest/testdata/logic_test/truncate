@@ -48,10 +48,18 @@ query II
 SELECT * FROM kview
 ----
 
+# TODO (lucy): update with GC job
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TT
-SELECT status, running_status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'
+SELECT status, running_status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND description != 'updating privileges'
 ----
-running  waiting for GC TTL
+succeeded  NULL
+succeeded  NULL
+succeeded  NULL
+succeeded  NULL
 
 # Ensure that TRUNCATE works with a self referential FK.
 statement ok

@@ -67,15 +67,15 @@ statement error pgcode 23505 violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
+# TODO (lucy): Update once we have a separate GC job
 query TTTTTR
 SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2)
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE'
 ORDER BY created DESC
-LIMIT 2
+LIMIT 1
 ----
-SCHEMA CHANGE  ROLL BACK JOB ...: ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00
+SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  failed     NULL  0.00
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -188,6 +188,7 @@ ALTER TABLE t DROP CONSTRAINT foo
 statement ok
 DROP INDEX foo CASCADE
 
+# TODO (lucy): Update once we have a separate GC job
 query TTTTTRT
 SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -195,7 +196,7 @@ WHERE job_type = 'SCHEMA CHANGE'
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE  root  running  waiting for GC TTL  0  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE  root  succeeded  NULL  1  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -272,6 +273,7 @@ INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECI
 statement ok
 DROP INDEX t@t_f_idx
 
+# TODO (lucy): Update once we have a separate GC job
 query TTTTTRT
 SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -279,7 +281,7 @@ WHERE job_type = 'SCHEMA CHANGE'
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  running  waiting for GC TTL  0  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  succeeded  NULL  1  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -471,6 +473,11 @@ INSERT INTO add_default (a) VALUES (1)
 
 statement ok
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 42
+
+# query TTBTTTB colnames
+# SHOW COLUMNS FROM add_default
+# ----
+# column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
 
 statement ok
 INSERT INTO add_default (a) VALUES (2)

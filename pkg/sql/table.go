@@ -813,45 +813,68 @@ func (tc *TableCollection) validatePrimaryKeys() error {
 	return nil
 }
 
-// createOrUpdateSchemaChangeJob finalizes the current mutations in the table
-// descriptor. If a schema change job in the system.jobs table has not been
-// created for mutations in the current transaction, one is created. The
-// identifiers of the mutations and newly-created job are written to a new
-// MutationJob in the table descriptor.
-//
-// The job creation is done within the planner's txn. This is important - if the
-// txn ends up rolling back, the job needs to go away.
-//
-// If a job for this table has already been created, update the job's details
-// and description.
-func (p *planner) createOrUpdateSchemaChangeJob(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, stmt string,
-) (sqlbase.MutationID, error) {
-	mutationID := tableDesc.ClusterVersion.NextMutationID
+// createDropDatabaseJob queues a job for dropping a database.
+func (p *planner) createDropDatabaseJob(
+	ctx context.Context,
+	databaseID sqlbase.ID,
+	droppedDetails []jobspb.DroppedTableDetails,
+	jobDesc string,
+) error {
+	// TODO (lucy): This should probably be deleting the queued jobs for all the
+	// tables being dropped, so that we don't have duplicate schema changers.
+	descriptorIDs := make([]sqlbase.ID, 0, len(droppedDetails))
+	for _, d := range droppedDetails {
+		descriptorIDs = append(descriptorIDs, d.ID)
+	}
+	jobRecord := jobs.Record{
+		Description:   jobDesc,
+		Username:      p.User(),
+		DescriptorIDs: descriptorIDs,
+		Details: jobspb.SchemaChangeDetails{
+			DroppedTables:     droppedDetails,
+			DroppedDatabaseID: databaseID,
+		},
+		Progress: jobspb.SchemaChangeProgress{},
+	}
+	_, err := p.extendedEvalCtx.QueueJob(jobRecord)
+	return err
+}
 
-	// If the table being schema changed was created in the same txn, we do not
-	// want to update/create a job as we expect the schema change to be executed
-	// immediately (not via the schema changer). For tables created in the same
-	// txn the next mutation ID will not have been allocated and the mutationID
-	// will be an invalid ID. This is fine because the mutation will be processed
-	// immediately.
-	if tableDesc.IsNewTable() {
-		return mutationID, nil
+// createOrUpdateSchemaChangeJob queues a new job for the schema change if there
+// is no existing schema change job for the table, or updates the existing job
+// if there is one.
+func (p *planner) createOrUpdateSchemaChangeJob(
+	ctx context.Context,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	jobDesc string,
+	mutationID sqlbase.MutationID,
+) error {
+	var job *jobs.Job
+	// Iterate through the queued jobs to find an existing schema change job for
+	// this table, if it exists.
+	// TODO (lucy): Looking up each job to determine this is not ideal. Maybe
+	// we need some additional state in extraTxnState to help with lookups.
+	for _, jobID := range *p.extendedEvalCtx.Jobs {
+		var err error
+		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+		if err != nil {
+			return err
+		}
+		schemaDetails, ok := j.Details().(jobspb.SchemaChangeDetails)
+		if !ok {
+			continue
+		}
+		if schemaDetails.TableID == tableDesc.ID {
+			job = j
+			break
+		}
 	}
 
-	var job *jobs.Job
 	var spanList []jobspb.ResumeSpanList
-	if len(tableDesc.MutationJobs) > len(tableDesc.ClusterVersion.MutationJobs) {
-		// Already created a job and appended the job ID to MutationJobs.
-		jobID := tableDesc.MutationJobs[len(tableDesc.MutationJobs)-1].JobID
-		var err error
-		job, err = p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
-		if err != nil {
-			return sqlbase.InvalidMutationID, err
-		}
+	jobExists := job != nil
+	if jobExists {
 		spanList = job.Details().(jobspb.SchemaChangeDetails).ResumeSpanList
 	}
-
 	span := tableDesc.PrimaryIndexSpan()
 	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
 		spanList = append(spanList,
@@ -861,167 +884,136 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		)
 	}
 
-	if job == nil {
+	if !jobExists {
+		// Queue a new job.
 		jobRecord := jobs.Record{
-			Description:   stmt,
+			Description:   jobDesc,
 			Username:      p.User(),
 			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-			Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
-			Progress:      jobspb.SchemaChangeProgress{},
-		}
-		job = p.ExecCfg().JobRegistry.NewJob(jobRecord)
-		if err := job.WithTxn(p.txn).Created(ctx); err != nil {
-			return sqlbase.InvalidMutationID, err
-		}
-		tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
-			MutationID: mutationID, JobID: *job.ID()})
-	} else {
-		if err := job.WithTxn(p.txn).SetDetails(
-			ctx,
-			jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
-		); err != nil {
-			return sqlbase.InvalidMutationID, err
-		}
-		if err := job.WithTxn(p.txn).SetDescription(
-			ctx,
-			func(ctx context.Context, description string) (string, error) {
-				return strings.Join([]string{description, stmt}, ";"), nil
+			Details: jobspb.SchemaChangeDetails{
+				TableID:        tableDesc.ID,
+				MutationID:     mutationID,
+				ResumeSpanList: spanList,
 			},
-		); err != nil {
-			return sqlbase.InvalidMutationID, err
+			Progress: jobspb.SchemaChangeProgress{},
 		}
+		newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+		if err != nil {
+			return err
+		}
+		// Only add a MutationJob if there's an associated mutation.
+		// TODO (lucy): get rid of this when we get rid of MutationJobs.
+		if mutationID != sqlbase.InvalidMutationID {
+			tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+				MutationID: mutationID, JobID: *newJob.ID()})
+		}
+		log.Infof(ctx, "queued new schema change job for table %d, mutation %d",
+			tableDesc.ID, mutationID)
+	} else {
+		// Update the existing job.
+		oldDetails := job.Details().(jobspb.SchemaChangeDetails)
+		newDetails := jobspb.SchemaChangeDetails{
+			TableID:        tableDesc.ID,
+			MutationID:     oldDetails.MutationID,
+			ResumeSpanList: spanList,
+		}
+		if oldDetails.MutationID != sqlbase.InvalidMutationID {
+			// The previous queued schema change job was associated with a mutation,
+			// which must have the same mutation ID as this schema change, so just
+			// check for consistency.
+			if mutationID != sqlbase.InvalidMutationID && mutationID != oldDetails.MutationID {
+				return errors.AssertionFailedf(
+					"attempted to update job for mutation %d, but job already exists with mutation %d",
+					mutationID, oldDetails.MutationID)
+			}
+		} else {
+			// The previous queued schema change job didn't have a mutation.
+			if mutationID != sqlbase.InvalidMutationID {
+				newDetails.MutationID = mutationID
+				// Also add a MutationJob on the table descriptor.
+				// TODO (lucy): get rid of this when we get rid of MutationJobs.
+				tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+					MutationID: mutationID, JobID: *job.ID()})
+			}
+		}
+		if err := job.WithTxn(p.txn).SetDetails(ctx, newDetails); err != nil {
+			return err
+		}
+		if jobDesc != "" {
+			if err := job.WithTxn(p.txn).SetDescription(
+				ctx,
+				func(ctx context.Context, description string) (string, error) {
+					return strings.Join([]string{description, jobDesc}, ";"), nil
+				},
+			); err != nil {
+				return err
+			}
+		}
+		log.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
+			*job.ID(), tableDesc.ID, mutationID)
 	}
-
-	return mutationID, nil
-}
-
-// createDropTablesJob creates a schema change job in the system.jobs table.
-// The identifiers of the newly-created job are written in the table descriptor.
-// If no job is created (no tables were dropped), a job ID of 0 is returned.
-//
-// The job creation is done within the planner's txn. This is important - if the`
-// txn ends up rolling back, the job needs to go away.
-func (p *planner) createDropTablesJob(
-	ctx context.Context,
-	tableDescs []*sqlbase.MutableTableDescriptor,
-	droppedDetails []jobspb.DroppedTableDetails,
-	stmt string,
-	drainNames bool,
-	droppedDatabaseID sqlbase.ID,
-) (int64, error) {
-
-	if len(tableDescs) == 0 {
-		return 0, nil
-	}
-
-	descriptorIDs := make([]sqlbase.ID, 0, len(tableDescs))
-
-	for _, tableDesc := range tableDescs {
-		descriptorIDs = append(descriptorIDs, tableDesc.ID)
-	}
-
-	detailStatus := jobspb.Status_DRAINING_NAMES
-	if !drainNames {
-		detailStatus = jobspb.Status_WAIT_FOR_GC_INTERVAL
-	}
-	for i := range droppedDetails {
-		droppedDetails[i].Status = detailStatus
-	}
-
-	runningStatus := RunningStatusDrainingNames
-	if !drainNames {
-		runningStatus = RunningStatusWaitingGC
-	}
-	jobRecord := jobs.Record{
-		Description:   stmt,
-		Username:      p.User(),
-		DescriptorIDs: descriptorIDs,
-		Details:       jobspb.SchemaChangeDetails{DroppedTables: droppedDetails, DroppedDatabaseID: droppedDatabaseID},
-		Progress:      jobspb.SchemaChangeProgress{},
-		RunningStatus: runningStatus,
-	}
-	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
-	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
-		return 0, err
-	}
-
-	if err := job.WithTxn(p.txn).Started(ctx); err != nil {
-		return 0, err
-	}
-
-	for _, tableDesc := range tableDescs {
-		tableDesc.DropJobID = *job.ID()
-	}
-	return *job.ID(), nil
-}
-
-// queueSchemaChange queues up a schema changer to process an outstanding
-// schema change for the table.
-func (p *planner) queueSchemaChange(
-	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
-) {
-	sc := SchemaChanger{
-		tableID:              tableDesc.GetID(),
-		mutationID:           mutationID,
-		nodeID:               p.extendedEvalCtx.NodeID,
-		leaseMgr:             p.LeaseMgr(),
-		jobRegistry:          p.ExecCfg().JobRegistry,
-		leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
-		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
-		clock:                p.ExecCfg().Clock,
-		settings:             p.ExecCfg().Settings,
-		execCfg:              p.ExecCfg(),
-	}
-	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
+	return nil
 }
 
 // writeSchemaChange effectively writes a table descriptor to the
 // database within the current planner transaction, and queues up
 // a schema changer for future processing.
+// TODO (lucy): The way job descriptions are handled needs improvement.
+// Currently, whenever we update a job, the provided job description string, if
+// non-empty, is appended to the end of the existing description, regardless of
+// whether the particular schema change written in this method call came from a
+// separate statement in the same transaction, or from updating a dependent
+// table descriptor during a schema change to another table, or from a step in a
+// larger schema change to the same table.
 func (p *planner) writeSchemaChange(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID sqlbase.MutationID,
-) error {
-	if tableDesc.Dropped() {
-		// We don't allow schema changes on a dropped table.
-		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
-	}
-	return p.writeTableDesc(ctx, tableDesc, mutationID)
-}
-
-func (p *planner) writeSchemaChangeToBatch(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	mutationID sqlbase.MutationID,
-	b *kv.Batch,
+	jobDesc string,
 ) error {
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
 	}
-	return p.writeTableDescToBatch(ctx, tableDesc, mutationID, b)
+	if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, mutationID); err != nil {
+		return err
+	}
+	return p.writeTableDesc(ctx, tableDesc)
+}
+
+func (p *planner) writeSchemaChangeToBatch(
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, b *kv.Batch,
+) error {
+	if tableDesc.Dropped() {
+		// We don't allow schema changes on a dropped table.
+		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+	}
+	return p.writeTableDescToBatch(ctx, tableDesc, b)
 }
 
 func (p *planner) writeDropTable(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, queueJob bool, jobDesc string,
 ) error {
-	return p.writeTableDesc(ctx, tableDesc, sqlbase.InvalidMutationID)
+	if queueJob {
+		if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, sqlbase.InvalidMutationID); err != nil {
+			return err
+		}
+	}
+	return p.writeTableDesc(ctx, tableDesc)
 }
 
 func (p *planner) writeTableDesc(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID sqlbase.MutationID,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
 ) error {
 	b := p.txn.NewBatch()
-	if err := p.writeTableDescToBatch(ctx, tableDesc, mutationID, b); err != nil {
+	if err := p.writeTableDescToBatch(ctx, tableDesc, b); err != nil {
 		return err
 	}
 	return p.txn.Run(ctx, b)
 }
 
 func (p *planner) writeTableDescToBatch(
-	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
-	mutationID sqlbase.MutationID,
-	b *kv.Batch,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, b *kv.Batch,
 ) error {
 	if tableDesc.IsVirtualTable() {
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)
@@ -1038,9 +1030,6 @@ func (p *planner) writeTableDescToBatch(
 		if err := tableDesc.MaybeIncrementVersion(ctx, p.txn, p.execCfg.Settings); err != nil {
 			return err
 		}
-
-		// Schedule a schema changer for later.
-		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
 	}
 
 	if err := tableDesc.ValidateTable(); err != nil {
