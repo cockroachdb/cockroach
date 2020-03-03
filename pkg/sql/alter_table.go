@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -405,7 +406,31 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			// Disable primary key changes on tables that are interleaved parents.
 			if len(n.tableDesc.PrimaryIndex.InterleavedBy) != 0 {
-				return errors.New("cannot change the primary key of an interleaved parent")
+				var sb strings.Builder
+				sb.WriteString("[")
+				comma := ", "
+				for i := range n.tableDesc.PrimaryIndex.InterleavedBy {
+					interleave := &n.tableDesc.PrimaryIndex.InterleavedBy[i]
+					if i != 0 {
+						sb.WriteString(comma)
+					}
+					childTable, err := params.p.Tables().getTableVersionByID(
+						params.ctx,
+						params.p.Txn(),
+						interleave.Table,
+						tree.ObjectLookupFlags{},
+					)
+					if err != nil {
+						return err
+					}
+					sb.WriteString(childTable.Name)
+				}
+				sb.WriteString("]")
+				return errors.Newf(
+					"cannot change primary key of table %s because table(s) %s are interleaved into it",
+					n.tableDesc.Name,
+					sb.String(),
+				)
 			}
 
 			nameExists := func(name string) bool {

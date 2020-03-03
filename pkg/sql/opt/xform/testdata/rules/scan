@@ -64,7 +64,7 @@ memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
  ├── G2: (scan a,cols=(1,3)) (scan a@s_idx,cols=(1,3))
  │    ├── [ordering: -1] [limit hint: 10.00]
  │    │    ├── best: (scan a,rev,cols=(1,3))
- │    │    └── cost: 1169.68
+ │    │    └── cost: 22.28
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,3))
  │         └── cost: 1060.02

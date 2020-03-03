@@ -130,7 +130,13 @@ SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
 1 2 3
 4 5 6
 
-statement error pq: cannot change the primary key of an interleaved parent
+statement error pq: cannot change primary key of table parent because table\(s\) \[child\] are interleaved into it
+ALTER TABLE parent ALTER PRIMARY KEY USING COLUMNS (x)
+
+statement ok
+CREATE TABLE child2 (x INT, y INT, z INT, PRIMARY KEY (x, y, z)) INTERLEAVE IN PARENT parent (x, y)
+
+statement error pq: cannot change primary key of table parent because table\(s\) \[child, child2\] are interleaved into it
 ALTER TABLE parent ALTER PRIMARY KEY USING COLUMNS (x)
 
 statement error pq: unimplemented: "parent" is interleaved by table "child"

@@ -111,12 +111,12 @@ memo (optimized, ~6KB, required=[presentation: s:4])
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(4),constrained) (scan a@si_idx,cols=(4),constrained)
  │    └── [limit hint: 1.00]
  │         ├── best: (scan a@s_idx,cols=(4),constrained)
- │         └── cost: 10.51
+ │         └── cost: 2.11
  ├── G3: (const 1)
  ├── G4: (scan a,cols=(4)) (scan a@s_idx,cols=(4)) (scan a@si_idx,cols=(4))
  │    └── [limit hint: 100.00]
  │         ├── best: (scan a@s_idx,cols=(4))
- │         └── cost: 1050.02
+ │         └── cost: 210.02
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable s)
@@ -224,29 +224,28 @@ explain
       ├── key: (1)
       ├── fd: (1)-->(2-4), (2-4)~~>(1)
       ├── ordering: -2
-      ├── sort
+      ├── select
       │    ├── columns: a:1!null b:2 c:3 d:4
       │    ├── cardinality: [0 - 11]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
       │    ├── ordering: -2
       │    ├── limit hint: 5.00
-      │    └── select
-      │         ├── columns: a:1!null b:2 c:3 d:4
-      │         ├── cardinality: [0 - 11]
-      │         ├── key: (1)
-      │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-      │         ├── index-join abcd
-      │         │    ├── columns: a:1!null b:2 c:3 d:4
-      │         │    ├── key: (1)
-      │         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
-      │         │    └── scan abcd@b
-      │         │         ├── columns: a:1!null b:2
-      │         │         ├── flags: force-index=b
-      │         │         ├── key: (1)
-      │         │         └── fd: (1)-->(2)
-      │         └── filters
-      │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+      │    ├── index-join abcd
+      │    │    ├── columns: a:1!null b:2 c:3 d:4
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+      │    │    ├── ordering: -2
+      │    │    ├── limit hint: 454.55
+      │    │    └── scan abcd@b,rev
+      │    │         ├── columns: a:1!null b:2
+      │    │         ├── flags: force-index=b
+      │    │         ├── key: (1)
+      │    │         ├── fd: (1)-->(2)
+      │    │         ├── ordering: -2
+      │    │         └── limit hint: 454.55
+      │    └── filters
+      │         └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
       └── 5
 
 optsteps
@@ -372,7 +371,7 @@ ConsolidateSelectFilters
               └── 5
 ================================================================================
 GenerateIndexScans
-  Cost: 5141.10
+  Cost: 5134.91
 ================================================================================
    explain
     ├── columns: tree:5 field:6 description:7
@@ -410,29 +409,28 @@ GenerateIndexScans
   -           │         └── filters
   -           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
   -           └── 5
-  +      ├── sort
+  +      ├── select
   +      │    ├── columns: a:1!null b:2 c:3 d:4
   +      │    ├── cardinality: [0 - 11]
   +      │    ├── key: (1)
   +      │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   +      │    ├── ordering: -2
   +      │    ├── limit hint: 5.00
-  +      │    └── select
-  +      │         ├── columns: a:1!null b:2 c:3 d:4
-  +      │         ├── cardinality: [0 - 11]
-  +      │         ├── key: (1)
-  +      │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-  +      │         ├── index-join abcd
-  +      │         │    ├── columns: a:1!null b:2 c:3 d:4
-  +      │         │    ├── key: (1)
-  +      │         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
-  +      │         │    └── scan abcd@b
-  +      │         │         ├── columns: a:1!null b:2
-  +      │         │         ├── flags: force-index=b
-  +      │         │         ├── key: (1)
-  +      │         │         └── fd: (1)-->(2)
-  +      │         └── filters
-  +      │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  +      │    ├── index-join abcd
+  +      │    │    ├── columns: a:1!null b:2 c:3 d:4
+  +      │    │    ├── key: (1)
+  +      │    │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  +      │    │    ├── ordering: -2
+  +      │    │    ├── limit hint: 454.55
+  +      │    │    └── scan abcd@b,rev
+  +      │    │         ├── columns: a:1!null b:2
+  +      │    │         ├── flags: force-index=b
+  +      │    │         ├── key: (1)
+  +      │    │         ├── fd: (1)-->(2)
+  +      │    │         ├── ordering: -2
+  +      │    │         └── limit hint: 454.55
+  +      │    └── filters
+  +      │         └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
   +      └── 5
 --------------------------------------------------------------------------------
 GenerateZigzagJoins (no changes)
@@ -442,7 +440,7 @@ GenerateConstrainedScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 5141.10
+  Cost: 5134.91
 ================================================================================
   explain
    ├── columns: tree:5 field:6 description:7
@@ -453,29 +451,28 @@ Final best expression
         ├── key: (1)
         ├── fd: (1)-->(2-4), (2-4)~~>(1)
         ├── ordering: -2
-        ├── sort
+        ├── select
         │    ├── columns: a:1!null b:2 c:3 d:4
         │    ├── cardinality: [0 - 11]
         │    ├── key: (1)
         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
         │    ├── ordering: -2
         │    ├── limit hint: 5.00
-        │    └── select
-        │         ├── columns: a:1!null b:2 c:3 d:4
-        │         ├── cardinality: [0 - 11]
-        │         ├── key: (1)
-        │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-        │         ├── index-join abcd
-        │         │    ├── columns: a:1!null b:2 c:3 d:4
-        │         │    ├── key: (1)
-        │         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
-        │         │    └── scan abcd@b
-        │         │         ├── columns: a:1!null b:2
-        │         │         ├── flags: force-index=b
-        │         │         ├── key: (1)
-        │         │         └── fd: (1)-->(2)
-        │         └── filters
-        │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+        │    ├── index-join abcd
+        │    │    ├── columns: a:1!null b:2 c:3 d:4
+        │    │    ├── key: (1)
+        │    │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+        │    │    ├── ordering: -2
+        │    │    ├── limit hint: 454.55
+        │    │    └── scan abcd@b,rev
+        │    │         ├── columns: a:1!null b:2
+        │    │         ├── flags: force-index=b
+        │    │         ├── key: (1)
+        │    │         ├── fd: (1)-->(2)
+        │    │         ├── ordering: -2
+        │    │         └── limit hint: 454.55
+        │    └── filters
+        │         └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
         └── 5
 
 # --------------------------------------------------

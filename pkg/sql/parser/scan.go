@@ -114,6 +114,9 @@ func (s *scanner) scan(lval *sqlSymType) {
 		if lex.IsDigit(s.peek()) {
 			s.scanPlaceholder(lval)
 			return
+		} else if s.scanDollarQuotedString(lval) {
+			lval.id = SCONST
+			return
 		}
 		return
 
@@ -871,6 +874,83 @@ outer:
 	}
 
 	if requireUTF8 && !utf8.Valid(buf) {
+		lval.id = ERROR
+		lval.str = errInvalidUTF8
+		return false
+	}
+
+	lval.str = s.finishString(buf)
+	return true
+}
+
+// scanDollarQuotedString scans for so called dollar-quoted strings, which start/end with either $$ or $tag$, where
+// tag is some arbitrary string.  e.g. $$a string$$ or $escaped$a string$escaped$.
+func (s *scanner) scanDollarQuotedString(lval *sqlSymType) bool {
+	buf := s.buffer()
+	start := s.pos
+
+	foundStartTag := false
+	possibleEndTag := false
+	startTagIndex := -1
+	var startTag string
+
+outer:
+	for {
+		ch := s.peek()
+		switch ch {
+		case '$':
+			s.pos++
+			if foundStartTag {
+				if possibleEndTag {
+					if len(startTag) == startTagIndex {
+						// Found end tag.
+						buf = append(buf, s.in[start+len(startTag)+1:s.pos-len(startTag)-2]...)
+						break outer
+					} else {
+						// Was not the end tag but the current $ might be the start of the end tag we are looking for, so
+						// just reset the startTagIndex.
+						startTagIndex = 0
+					}
+				} else {
+					possibleEndTag = true
+					startTagIndex = 0
+				}
+			} else {
+				startTag = s.in[start : s.pos-1]
+				foundStartTag = true
+			}
+
+		case eof:
+			if foundStartTag {
+				// A start tag was found, therefore we expect an end tag before the eof, otherwise it is an error.
+				lval.id = ERROR
+				lval.str = errUnterminated
+			} else {
+				// This is not a dollar-quoted string, reset the pos back to the start.
+				s.pos = start
+			}
+			return false
+
+		default:
+			// If we haven't found a start tag yet, check whether the current characters is a valid for a tag.
+			if !foundStartTag && !lex.IsIdentStart(ch) {
+				return false
+			}
+			s.pos++
+			if possibleEndTag {
+				// Check whether this could be the end tag.
+				if startTagIndex >= len(startTag) || ch != int(startTag[startTagIndex]) {
+					// This is not the end tag we are looking for.
+					possibleEndTag = false
+					startTagIndex = -1
+				} else {
+					startTagIndex++
+				}
+			}
+		}
+	}
+
+	if !utf8.Valid(buf) {
 		lval.id = ERROR
 		lval.str = errInvalidUTF8
 		return false
