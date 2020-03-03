@@ -1851,6 +1851,31 @@ func (desc *TableDescriptor) ValidateTable() error {
 	// run again and mixed-version clusters always write "good" descriptors.
 	desc.Privileges.MaybeFixPrivileges(desc.GetID())
 
+	// Ensure that mutations cannot be queued if a primary key change has
+	// either been started in this transaction, or is currently in progress.
+	var alterPKMutation MutationID
+	var foundAlterPK bool
+	for _, m := range desc.Mutations {
+		// If we have seen an alter primary key mutation, then
+		// m we are considering right now is invalid.
+		if foundAlterPK {
+			if alterPKMutation == m.MutationID {
+				return unimplemented.NewWithIssue(
+					45615,
+					"cannot perform other schema changes in the same transaction as a primary key change",
+				)
+			}
+			return unimplemented.NewWithIssue(
+				45615,
+				"cannot perform a schema change operation while a primary key change is in progress",
+			)
+		}
+		if m.GetPrimaryKeySwap() != nil {
+			foundAlterPK = true
+			alterPKMutation = m.MutationID
+		}
+	}
+
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }

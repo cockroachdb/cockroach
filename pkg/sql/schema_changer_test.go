@@ -2484,6 +2484,64 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
 	})
 }
 
+// TestSchemaChangeWhileExecutingPrimaryKeyChange tests that other schema
+// changes cannot be queued while a primary key change is executing.
+func TestSchemaChangeWhileExecutingPrimaryKeyChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	backfillNotification := make(chan struct{})
+	waitBeforeContinuing := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
+				backfillNotification <- struct{}{}
+				<-waitBeforeContinuing
+				return nil
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+SET experimental_enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT NOT NULL, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-backfillNotification
+
+	// Test that trying different schema changes results an error.
+	_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN z INT`)
+	expected := "pq: unimplemented: cannot perform a schema change operation while a primary key change is in progress"
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected to find error %s but found %+v", expected, err)
+	}
+
+	_, err = sqlDB.Exec(`CREATE INDEX ON t.test(v)`)
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected to find error %s but found %+v", expected, err)
+	}
+
+	waitBeforeContinuing <- struct{}{}
+	wg.Wait()
+}
+
 // TestPrimaryKeyChangeWithOperations ensures that different operations succeed
 // while a primary key change is happening.
 func TestPrimaryKeyChangeWithOperations(t *testing.T) {
