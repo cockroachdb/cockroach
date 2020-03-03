@@ -26,10 +26,11 @@ statement ok
 CREATE TABLE c (
   id INT PRIMARY KEY,
   foo JSON,
-  bar JSON,
+  "bAr" JSON,
+  "qUuX" JSON,
   INVERTED INDEX (foo),
-  INVERTED INDEX (bar),
-  FAMILY "primary" (id, foo, bar)
+  INVERTED INDEX ("bAr"),
+  FAMILY "primary" (id, foo, "bAr", "qUuX")
 )
 
 query TT
@@ -38,12 +39,18 @@ SHOW CREATE TABLE c
 c  CREATE TABLE c (
    id INT8 NOT NULL,
    foo JSONB NULL,
-   bar JSONB NULL,
+   "bAr" JSONB NULL,
+   "qUuX" JSONB NULL,
    CONSTRAINT "primary" PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX c_bar_idx (bar),
-   FAMILY "primary" (id, foo, bar)
+   INVERTED INDEX "c_bAr_idx" ("bAr"),
+   FAMILY "primary" (id, foo, "bAr", "qUuX")
 )
+
+# Regression test for #42944: make sure that mixed-case columns can be
+# inverted indexed.
+statement ok
+CREATE INVERTED INDEX ON c("qUuX")
 
 statement error indexing more than one column with an inverted index is not supported
 CREATE TABLE d (
