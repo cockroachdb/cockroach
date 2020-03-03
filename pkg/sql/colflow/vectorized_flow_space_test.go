@@ -229,7 +229,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				result, err := colexec.NewColOperator(ctx, flowCtx, args)
 				require.NoError(t, err)
-				err = execerror.CatchVectorizedRuntimeError(func() {
+				err = execerror.CatchSanitizedVectorizedRuntimeError(func() {
 					result.Op.Init()
 					result.Op.Next(ctx)
 					result.Op.Next(ctx)

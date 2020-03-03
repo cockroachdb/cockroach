@@ -58,10 +58,11 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		vee,
 		types,
 		&execinfrapb.PostProcessSpec{},
-		nil, /* output */
-		nil, /* metadataSourceQueue */
-		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		nil,   /* output */
+		nil,   /* metadataSourceQueue */
+		nil,   /* outputStatsToTrace */
+		nil,   /* cancelFlow */
+		false, /* propagateUnsanitizedErrors */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -105,10 +106,11 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		nvee,
 		types,
 		&execinfrapb.PostProcessSpec{},
-		nil, /* output */
-		nil, /* metadataSourceQueue */
-		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		nil,   /* output */
+		nil,   /* metadataSourceQueue */
+		nil,   /* outputStatsToTrace */
+		nil,   /* cancelFlow */
+		false, /* propagateUnsanitizedErrors */
 	)
 	if err != nil {
 		t.Fatal(err)

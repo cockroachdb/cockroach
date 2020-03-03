@@ -153,7 +153,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				inputIdx: inputIdx,
 			}
 			for {
-				if err := execerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
+				if err := execerror.CatchUnsanitizedVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.

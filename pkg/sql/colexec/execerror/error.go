@@ -23,10 +23,10 @@ import (
 
 const panicLineSubstring = "runtime/panic.go"
 
-// CatchVectorizedRuntimeError executes operation, catches a runtime error if
-// it is coming from the vectorized engine, and returns it. If an error not
-// related to the vectorized engine occurs, it is not recovered from.
-func CatchVectorizedRuntimeError(operation func()) (retErr error) {
+// catchVectorizedRuntimeError runs operation and catches any panics. If that
+// panic comes from the vectorized engine, the panic value is returned,
+// otherwise, a panic occurs.
+func catchVectorizedRuntimeError(operation func()) (retErr interface{}) {
 	defer func() {
 		if err := recover(); err != nil {
 			stackTrace := string(debug.Stack())
@@ -44,38 +44,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			if scanner.Scan() {
 				panicEmittedFrom := strings.TrimSpace(scanner.Text())
 				if isPanicFromVectorizedEngine(panicEmittedFrom) {
-					// We only want to catch runtime errors coming from the vectorized
-					// engine.
-					if e, ok := err.(error); ok {
-						if _, ok := err.(*StorageError); ok {
-							// A StorageError was caused by something below SQL, and represents
-							// an error that we'd simply like to propagate along.
-							// Do nothing.
-						} else {
-							doNotAnnotate := false
-							if nvie, ok := e.(*notVectorizedInternalError); ok {
-								// A notVectorizedInternalError was not caused by the
-								// vectorized engine and represents an error that we don't
-								// want to annotate in case it doesn't have a valid PG code.
-								doNotAnnotate = true
-								// We want to unwrap notVectorizedInternalError so that in case
-								// the original error does have a valid PG code, the code is
-								// correctly propagated.
-								e = nvie.error
-							}
-							if code := pgerror.GetPGCode(e); !doNotAnnotate && code == pgcode.Uncategorized {
-								// Any error without a code already is "surprising" and
-								// needs to be annotated to indicate that it was
-								// unexpected.
-								e = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", e)
-							}
-						}
-						retErr = e
-					} else {
-						// Not an error object. Definitely unexpected.
-						surprisingObject := err
-						retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", surprisingObject)
-					}
+					retErr = err
 				} else {
 					// Do not recover from the panic not related to the vectorized
 					// engine.
@@ -90,6 +59,77 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 	}()
 	operation()
 	return retErr
+}
+
+// CatchUnsanitizedVectoriezdRuntimeError does the same as
+// CatchSanitizedVectorizedRuntimeError but catches and returns panics as errors
+// from the vectorized engine without additional processing. Use this for
+// propagation. If an error not related to the vectorized engine occurs, it is
+// not recovered from.
+func CatchUnsanitizedVectorizedRuntimeError(operation func()) error {
+	err := catchVectorizedRuntimeError(operation)
+	if err == nil {
+		return nil
+	}
+	e, ok := err.(error)
+	if !ok {
+		// Not an error object. Definitely unexpected.
+		surprisingObject := err
+		return errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", surprisingObject)
+	}
+	return e
+}
+
+// SanitizeVectorizedRuntimeError sanitizes an error in the same way that
+// CatchSanitizedVectorizedRuntimeError does.
+// Behavior:
+//  - Does nothing if a StorageError is encountered.
+//  - Unwraps but does not annotate a notVectorizedInternalError.
+//  - Annotates any other error with the stack trace.
+func SanitizeVectorizedRuntimeError(err error) error {
+	retErr := err
+	if _, ok := err.(*StorageError); ok {
+		// A StorageError was caused by something below SQL, and represents
+		// an error that we'd simply like to propagate along.
+		// Do nothing.
+	} else {
+		doNotAnnotate := false
+		if nvie, ok := err.(*notVectorizedInternalError); ok {
+			// A notVectorizedInternalError was not caused by the
+			// vectorized engine and represents an error that we don't
+			// want to annotate in case it doesn't have a valid PG code.
+			doNotAnnotate = true
+			// We want to unwrap notVectorizedInternalError so that in case
+			// the original error does have a valid PG code, the code is
+			// correctly propagated.
+			retErr = nvie.error
+		}
+		if code := pgerror.GetPGCode(retErr); !doNotAnnotate && code == pgcode.Uncategorized {
+			// Any error without a code already is "surprising" and
+			// needs to be annotated to indicate that it was
+			// unexpected.
+			retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", retErr)
+		}
+	}
+	return retErr
+}
+
+// CatchSanitizedVectorizedRuntimeError executes operation, catches a runtime
+// error if it is coming from the vectorized engine, unwraps, annotates with a
+// stack trace if it is an internal error, and returns it. If an error not
+// related to the vectorized engine occurs, it is not recovered from.
+func CatchSanitizedVectorizedRuntimeError(operation func()) error {
+	err := catchVectorizedRuntimeError(operation)
+	if err == nil {
+		return nil
+	}
+	e, ok := err.(error)
+	if !ok {
+		// Not an error object. Definitely unexpected.
+		surprisingObject := err
+		return errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", surprisingObject)
+	}
+	return SanitizeVectorizedRuntimeError(e)
 }
 
 const (

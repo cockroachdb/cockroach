@@ -68,10 +68,11 @@ func wrapRowSources(
 				input,
 				inputTypes[i],
 				&execinfrapb.PostProcessSpec{},
-				nil, /* output */
-				nil, /* metadataSourcesQueue */
-				nil, /* outputStatsToTrace */
-				nil, /* cancelFlow */
+				nil,  /* output */
+				nil,  /* metadataSourcesQueue */
+				nil,  /* outputStatsToTrace */
+				nil,  /* cancelFlow */
+				true, /* propagateUnsanitizedErrors */
 			)
 			if err != nil {
 				return nil, err

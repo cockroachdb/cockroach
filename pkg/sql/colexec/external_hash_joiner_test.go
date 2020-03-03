@@ -167,7 +167,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	}()
 	require.NoError(t, err)
 	hj.Init()
-	err = execerror.CatchVectorizedRuntimeError(func() {
+	err = execerror.CatchSanitizedVectorizedRuntimeError(func() {
 		for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
 		}
 	})

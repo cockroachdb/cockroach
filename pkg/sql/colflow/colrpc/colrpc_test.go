@@ -274,7 +274,7 @@ func TestOutboxInbox(t *testing.T) {
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
-			if err := execerror.CatchVectorizedRuntimeError(func() {
+			if err := execerror.CatchSanitizedVectorizedRuntimeError(func() {
 				outputBatch = inbox.Next(readerCtx)
 			}); err != nil {
 				readerErr = err

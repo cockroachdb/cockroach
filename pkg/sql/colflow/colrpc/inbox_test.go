@@ -66,7 +66,7 @@ func TestInboxCancellation(t *testing.T) {
 		// Cancel the context.
 		cancelFn()
 		// Next should not block if the context is canceled.
-		err = execerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		err = execerror.CatchSanitizedVectorizedRuntimeError(func() { inbox.Next(ctx) })
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
 		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
@@ -159,7 +159,7 @@ func TestInboxTimeout(t *testing.T) {
 		rpcLayer    = makeMockFlowStreamRPCLayer()
 	)
 	go func() {
-		readerErrCh <- execerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		readerErrCh <- execerror.CatchSanitizedVectorizedRuntimeError(func() { inbox.Next(ctx) })
 	}()
 
 	// Timeout the inbox.
@@ -338,7 +338,7 @@ func TestInboxShutdown(t *testing.T) {
 										err  error
 									)
 									for !done && err == nil {
-										err = execerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(inboxCtx); done = b.Length() == 0 })
+										err = execerror.CatchSanitizedVectorizedRuntimeError(func() { b := inbox.Next(inboxCtx); done = b.Length() == 0 })
 									}
 									errCh <- err
 								}()

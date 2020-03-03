@@ -55,10 +55,11 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		c,
 		typs,
 		&execinfrapb.PostProcessSpec{},
-		nil, /* output */
-		nil, /* metadataSourcesQueue */
-		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		nil,   /* output */
+		nil,   /* metadataSourcesQueue */
+		nil,   /* outputStatsToTrace */
+		nil,   /* cancelFlow */
+		false, /* propagateUnsanitizedErrors */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -140,10 +141,11 @@ func TestMaterializeTypes(t *testing.T) {
 		c,
 		types,
 		&execinfrapb.PostProcessSpec{},
-		nil, /* output */
-		nil, /* metadataSourcesQueue */
-		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		nil,   /* output */
+		nil,   /* metadataSourcesQueue */
+		nil,   /* outputStatsToTrace */
+		nil,   /* cancelFlow */
+		false, /* propagateUnsanitizedErrors */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -194,10 +196,11 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			c,
 			types,
 			&execinfrapb.PostProcessSpec{},
-			nil, /* output */
-			nil, /* metadataSourcesQueue */
-			nil, /* outputStatsToTrace */
-			nil, /* cancelFlow */
+			nil,   /* output */
+			nil,   /* metadataSourcesQueue */
+			nil,   /* outputStatsToTrace */
+			nil,   /* cancelFlow */
+			false, /* propagateUnsanitizedErrors */
 		)
 		if err != nil {
 			b.Fatal(err)
