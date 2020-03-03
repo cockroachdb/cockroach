@@ -3404,6 +3404,8 @@ show_stmt:
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
 
+// Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
+// since there will be no open cursors.
 close_cursor_stmt:
 	CLOSE ALL { }
 | CLOSE cursor_name { return unimplementedWithIssue(sqllex, 41412) }
