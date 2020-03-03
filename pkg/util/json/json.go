@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -73,6 +74,8 @@ type JSON interface {
 	// one per path through the receiver.
 	encodeInvertedIndexKeys(b []byte) ([][]byte, error)
 
+	// numInvertedIndexEntries returns the number of entries that will be
+	// produced if this JSON gets included in an inverted index.
 	numInvertedIndexEntries() (int, error)
 
 	// allPaths returns a slice of new JSON documents, each a path to a leaf
@@ -681,7 +684,7 @@ func ParseJSON(s string) (JSON, error) {
 }
 
 // EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
-// one per path through the receiver.
+// one per unique path through the receiver.
 func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
 	return json.encodeInvertedIndexKeys(encoding.EncodeJSONAscending(b))
 }
@@ -712,18 +715,21 @@ func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		return [][]byte{encoding.EncodeJSONEmptyArray(b)}, nil
 	}
 
+	prefix := encoding.EncodeArrayAscending(b)
 	var outKeys [][]byte
 	for i := range j {
-		children, err := j[i].encodeInvertedIndexKeys(nil)
+		children, err := j[i].encodeInvertedIndexKeys(prefix[:len(prefix):len(prefix)])
 		if err != nil {
 			return nil, err
 		}
-		for _, childBytes := range children {
-			encodedKey := bytes.Join([][]byte{b, encoding.EncodeArrayAscending(nil), childBytes}, nil)
-			outKeys = append(outKeys, encodedKey)
-		}
+		outKeys = append(outKeys, children...)
 	}
 
+	// Deduplicate the entries, since arrays can have duplicates - we don't want
+	// to emit duplicate keys from this method, as it's more expensive to
+	// deduplicate keys via KV (which will actually write the keys) than via SQL
+	// (just an in-memory sort and distinct).
+	outKeys = unique.UniquifyByteSlices(outKeys)
 	return outKeys, nil
 }
 
@@ -785,29 +791,14 @@ func (j jsonNumber) numInvertedIndexEntries() (int, error) {
 	return 1, nil
 }
 func (j jsonArray) numInvertedIndexEntries() (int, error) {
-	switch len(j) {
-	case 0:
+	if len(j) == 0 {
 		return 1, nil
-	case 1:
-		return j[0].numInvertedIndexEntries()
-	default:
-		keys, err := j.encodeInvertedIndexKeys(make([]byte, 0))
-		if err != nil {
-			return 0, err
-		}
-
-		// Count distinct keys
-		sort.Slice(keys, func(i int, j int) bool {
-			return bytes.Compare(keys[i], keys[j]) < 0
-		})
-		n := 0
-		for i := 0; i < len(keys); i++ {
-			if i == 0 || bytes.Compare(keys[i-1], keys[i]) < 0 {
-				n++
-			}
-		}
-		return n, nil
 	}
+	keys, err := j.encodeInvertedIndexKeys(nil)
+	if err != nil {
+		return 0, err
+	}
+	return len(keys), nil
 }
 
 func (j jsonObject) numInvertedIndexEntries() (int, error) {

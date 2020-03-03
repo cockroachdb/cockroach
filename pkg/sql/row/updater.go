@@ -379,6 +379,12 @@ func (ru *Updater) UpdateRow(
 		if ru.Fks.checker != nil {
 			ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID, ru.Helper.TableDesc.PrimaryIndex.Type)
 			for i := range ru.Helper.Indexes {
+				if ru.Helper.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
+					// We ignore FK existence checks for inverted indexes.
+					//
+					// TODO(knz): verify that this is indeed correct.
+					continue
+				}
 				// * We always will have at least 1 entry in the index, so indexing 0 is safe.
 				// * The only difference between column family 0 vs other families encodings is
 				//   just the family key ending of the key, so if index[0] is different, the other

@@ -3,11 +3,80 @@
 statement ok
 CREATE TABLE d (
   a INT PRIMARY KEY,
-  b JSONB
+  b JSONB,
+  FAMILY (a,b)
 )
 
 statement ok
 CREATE INVERTED INDEX foo_inv ON d(b)
+
+query T kvtrace
+INSERT INTO d VALUES(0, '{"a": "b"}')
+----
+CPut /Table/53/1/0/0 -> /TUPLE/
+InitPut /Table/53/2/"a"/"b"/0/0 -> /BYTES/
+
+# Make sure duplicate values don't get inserted.
+query T kvtrace
+INSERT INTO d VALUES(1, '[7,0,7]')
+----
+CPut /Table/53/1/1/0 -> /TUPLE/
+InitPut /Table/53/2/Arr/0/1/0 -> /BYTES/
+InitPut /Table/53/2/Arr/7/1/0 -> /BYTES/
+
+# Make sure duplicate values don't get deleted either.
+query T kvtrace
+DELETE FROM d WHERE a=1
+----
+Scan /Table/53/1/1{-/#}
+Del /Table/53/2/Arr/0/1/0
+Del /Table/53/2/Arr/7/1/0
+Del /Table/53/1/1/0
+
+query T kvtrace
+INSERT INTO d VALUES(2, '[{"a": "b"}, 3, {"a": "b"}]')
+----
+CPut /Table/53/1/2/0 -> /TUPLE/
+InitPut /Table/53/2/Arr/3/2/0 -> /BYTES/
+InitPut /Table/53/2/Arr/"a"/"b"/2/0 -> /BYTES/
+
+query T kvtrace
+INSERT INTO d VALUES(3, '[{"a": [0,1,0]}, 3, {"a": "b"}]')
+----
+CPut /Table/53/1/3/0 -> /TUPLE/
+InitPut /Table/53/2/Arr/3/3/0 -> /BYTES/
+InitPut /Table/53/2/Arr/"a"/"b"/3/0 -> /BYTES/
+InitPut /Table/53/2/Arr/"a"/Arr/0/3/0 -> /BYTES/
+InitPut /Table/53/2/Arr/"a"/Arr/1/3/0 -> /BYTES/
+
+# Make sure that inserting NULL doesn't make an index entry.
+query T kvtrace
+INSERT INTO d VALUES(4, NULL)
+----
+CPut /Table/53/1/4/0 -> /TUPLE/
+
+# Update away from null.
+query T kvtrace
+UPDATE d SET b='[1]' WHERE a=4
+----
+Scan /Table/53/1/4{-/#}
+Put /Table/53/1/4/0 -> /TUPLE/
+InitPut /Table/53/2/Arr/1/4/0 -> /BYTES/
+
+# Update back to null.
+query T kvtrace
+UPDATE d SET b=NULL WHERE a=4
+----
+Scan /Table/53/1/4{-/#}
+Put /Table/53/1/4/0 -> /TUPLE/
+Del /Table/53/2/Arr/1/4/0
+
+# Deleting a null shouldn't remove anything from the inv idx.
+query T kvtrace
+DELETE FROM d WHERE a=4
+----
+Scan /Table/53/1/4{-/#}
+Del /Table/53/1/4/0
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
@@ -146,6 +215,7 @@ index-join  ·            ·                            (a, b)  ·
 ·           table        d@foo_inv                    ·       ·
 ·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
+# Make sure that querying for NULL equality doesn't use the inverted index.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ----

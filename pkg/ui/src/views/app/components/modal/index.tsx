@@ -15,7 +15,7 @@ import { ModalProps } from "antd/lib/modal";
 
 interface ICustomModalProps extends ModalProps {
   children?: React.ReactNode;
-  trigger?: React.ReactChildren;
+  trigger?: React.ReactChildren | React.ReactNode;
   triggerStyle?: string;
   triggerTitle?: string;
 }
