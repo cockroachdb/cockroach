@@ -2385,20 +2385,15 @@ func mvccScanToKvs(
 	kvData := res.KVData
 	res.KVData = nil
 
-	var k MVCCKey
-	var rawBytes []byte
 	var i int
-	for _, data := range kvData {
-		for len(data) > 0 {
-			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
-			if err != nil {
-				return MVCCScanResult{}, err
-			}
-			res.KVs[i].Key = k.Key
-			res.KVs[i].Value.RawBytes = rawBytes
-			res.KVs[i].Value.Timestamp = k.Timestamp
-			i++
-		}
+	if err := MVCCScanDecodeKeyValues(kvData, func(key MVCCKey, rawBytes []byte) error {
+		res.KVs[i].Key = key.Key
+		res.KVs[i].Value.RawBytes = rawBytes
+		res.KVs[i].Value.Timestamp = key.Timestamp
+		i++
+		return nil
+	}); err != nil {
+		return MVCCScanResult{}, err
 	}
 	return res, err
 }
