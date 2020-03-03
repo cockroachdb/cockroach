@@ -545,15 +545,15 @@ func (sc *SchemaChanger) validateConstraints(
 			return runHistoricalTxn(ctx, func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalContext) error {
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+					if err := validateCheckInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-					if err := validateFkInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
+					if err := validateFkInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_NOT_NULL:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+					if err := validateCheckInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
@@ -1298,27 +1298,14 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			tc := &TableCollection{
-				leaseMgr: sc.leaseMgr,
-				settings: sc.settings,
-			}
-			// pretend that the schema has been modified.
-			if err := tc.addUncommittedTable(*desc); err != nil {
-				return err
-			}
-
 			// Retrieve the row count in the index.
 			var idxLen int64
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalContext) error {
-				// TODO(vivek): This is not a great API. Leaving #34304 open.
 				ie := evalCtx.InternalExecutor.(*InternalExecutor)
-				ie.tcModifier = tc
-				defer func() {
-					ie.tcModifier = nil
-				}()
-
 				row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn,
-					sqlbase.InternalExecutorSessionDataOverride{},
+					sqlbase.InternalExecutorSessionDataOverride{
+						UncommittedTableOverride: []*MutableTableDescriptor{desc},
+					},
 					fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, tableDesc.ID, idx.ID))
 				if err != nil {
 					return err
@@ -1581,7 +1568,7 @@ func runSchemaChangesInTxn(
 		switch c.ConstraintType {
 		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 			if err := validateCheckInTxn(
-				ctx, planner.Tables().leaseMgr, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
+				ctx, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
 			); err != nil {
 				return err
 			}
@@ -1614,86 +1601,38 @@ func runSchemaChangesInTxn(
 }
 
 // validateCheckInTxn validates check constraints within the provided
-// transaction. If the provided table descriptor version is newer than the
-// cluster version, it will be used in the InternalExecutor that performs the
-// validation query.
-//
-// TODO (lucy): The special case where the table descriptor version is the same
-// as the cluster version only happens because the query in VALIDATE CONSTRAINT
-// still runs in the user transaction instead of a step in the schema changer.
-// When that's no longer true, this function should be updated.
+// transaction.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
 func validateCheckInTxn(
 	ctx context.Context,
-	leaseMgr *LeaseManager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *client.Txn,
 	checkName string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
-	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{
-			leaseMgr: leaseMgr,
-			settings: evalCtx.Settings,
-		}
-		// pretend that the schema has been modified.
-		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
-			return err
-		}
-
-		ie.tcModifier = newTc
-		defer func() {
-			ie.tcModifier = nil
-		}()
-	}
-
 	check, err := tableDesc.FindCheckByName(checkName)
 	if err != nil {
 		return err
 	}
-	return validateCheckExpr(ctx, check.Expr, tableDesc.TableDesc(), ie, txn)
+	return validateCheckExpr(ctx, check.Expr, tableDesc, ie, txn)
 }
 
 // validateFkInTxn validates foreign key constraints within the provided
-// transaction. If the provided table descriptor version is newer than the
-// cluster version, it will be used in the InternalExecutor that performs the
-// validation query.
-//
-// TODO (lucy): The special case where the table descriptor version is the same
-// as the cluster version only happens because the query in VALIDATE CONSTRAINT
-// still runs in the user transaction instead of a step in the schema changer.
-// When that's no longer true, this function should be updated.
+// transaction.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	leaseMgr *LeaseManager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *client.Txn,
 	fkName string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
-	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{
-			leaseMgr: leaseMgr,
-			settings: evalCtx.Settings,
-		}
-		// pretend that the schema has been modified.
-		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
-			return err
-		}
-
-		ie.tcModifier = newTc
-		defer func() {
-			ie.tcModifier = nil
-		}()
-	}
-
 	var fk *sqlbase.ForeignKeyConstraint
 	for i := range tableDesc.OutboundFKs {
 		def := &tableDesc.OutboundFKs[i]
@@ -1706,7 +1645,7 @@ func validateFkInTxn(
 		return errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
 
-	return validateForeignKey(ctx, tableDesc.TableDesc(), fk, ie, txn)
+	return validateForeignKey(ctx, tableDesc, fk, ie, txn)
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in

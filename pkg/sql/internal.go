@@ -59,15 +59,6 @@ type InternalExecutor struct {
 	// statements executed on this internalExecutor. Note that queries executed by
 	// the executor will run on copies of this data.
 	sessionData *sessiondata.SessionData
-
-	// The internal executor uses its own TableCollection. A TableCollection
-	// is a schema cache for each transaction and contains data like the schema
-	// modified by a transaction. Occasionally an internal executor is called
-	// within the context of a transaction that has modified the schema, the
-	// internal executor should see the modified schema. This interface allows
-	// the internal executor to modify its TableCollection to match the
-	// TableCollection of the parent executor.
-	tcModifier tableCollectionModifier
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
@@ -111,6 +102,7 @@ func (ie *InternalExecutor) initConnEx(
 	txn *client.Txn,
 	sd *sessiondata.SessionData,
 	sdMut sessionDataMutator,
+	tcModifier tableCollectionModifier,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
 ) (*StmtBuf, *sync.WaitGroup, error) {
@@ -143,7 +135,7 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			txn,
-			ie.tcModifier,
+			tcModifier,
 			dontResetSessionDataToDefaults,
 		)
 	}
@@ -421,7 +413,16 @@ func (ie *InternalExecutor) execInternal(
 		}
 		resCh <- result{err: err}
 	}
-	stmtBuf, wg, err := ie.initConnEx(ctx, txn, sd, sdMutator, syncCallback, errCallback)
+	var tcModifier *TableCollection
+	if sessionDataOverride.UncommittedTableOverride != nil {
+		tcModifier = &TableCollection{}
+		for i := range sessionDataOverride.UncommittedTableOverride {
+			if err := tcModifier.addUncommittedTable(*sessionDataOverride.UncommittedTableOverride[i]); err != nil {
+				return result{}, err
+			}
+		}
+	}
+	stmtBuf, wg, err := ie.initConnEx(ctx, txn, sd, sdMutator, tcModifier, syncCallback, errCallback)
 	if err != nil {
 		return result{}, err
 	}

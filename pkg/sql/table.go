@@ -786,7 +786,6 @@ func (tc *TableCollection) copyModifiedSchema(to *TableCollection) {
 		return
 	}
 	to.uncommittedTables = tc.uncommittedTables
-	to.uncommittedDatabases = tc.uncommittedDatabases
 	// Do not copy the leased descriptors because we do not want
 	// the leased descriptors to be released by the "to" TableCollection.
 	// The "to" TableCollection can re-lease the same descriptors.

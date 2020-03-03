@@ -19,4 +19,7 @@ type InternalExecutorSessionDataOverride struct {
 	Database string
 	// ApplicationName represents the application that the query runs under.
 	ApplicationName string
+	// UncommittedTableOverride contains table descriptors which will override the
+	// contents of UncommittedTables in the TableCollection of the transaction.
+	UncommittedTableOverride []*MutableTableDescriptor
 }

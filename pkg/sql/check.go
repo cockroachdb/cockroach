@@ -35,10 +35,20 @@ import (
 func validateCheckExpr(
 	ctx context.Context,
 	exprStr string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	ie *InternalExecutor,
 	txn *client.Txn,
 ) error {
+	// If we're passing in a table descriptor that's different from the cluster
+	// version, assume it may be an artificially constructed table descriptor to
+	// enable constraint validation via SQL (e.g., if the constraint is on a
+	// column that isn't public yet), and override the TableCollection for the
+	// query.
+	var uncommittedTableOverride []*MutableTableDescriptor
+	if tableDesc.Version > tableDesc.ClusterVersion.Version {
+		uncommittedTableOverride = append(uncommittedTableOverride, tableDesc)
+	}
+
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
 		return err
@@ -56,7 +66,9 @@ func validateCheckExpr(
 	log.Infof(ctx, "Validating check constraint %q with query %q", expr.String(), queryStr)
 
 	rows, err := ie.QueryRowEx(ctx, "validate check constraint", txn,
-		sqlbase.InternalExecutorSessionDataOverride{},
+		sqlbase.InternalExecutorSessionDataOverride{
+			UncommittedTableOverride: uncommittedTableOverride,
+		},
 		queryStr)
 	if err != nil {
 		return err
@@ -233,11 +245,21 @@ func nonMatchingRowQuery(
 // reuse an existing client.Txn safely.
 func validateForeignKey(
 	ctx context.Context,
-	srcTable *sqlbase.TableDescriptor,
+	srcTable *sqlbase.MutableTableDescriptor,
 	fk *sqlbase.ForeignKeyConstraint,
 	ie *InternalExecutor,
 	txn *client.Txn,
 ) error {
+	// If we're passing in a table descriptor that's different from the cluster
+	// version, assume it may be an artificially constructed table descriptor to
+	// enable constraint validation via SQL (e.g., if the constraint is on a
+	// column that isn't public yet), and override the TableCollection for the
+	// query.
+	var uncommittedTableOverride []*MutableTableDescriptor
+	if srcTable.Version > srcTable.ClusterVersion.Version {
+		uncommittedTableOverride = append(uncommittedTableOverride, srcTable)
+	}
+
 	targetTable, err := sqlbase.GetTableDescFromID(ctx, txn, fk.ReferencedTableID)
 	if err != nil {
 		return err
@@ -255,7 +277,7 @@ func validateForeignKey(
 	// (The matching options only matter for FKs with more than one column.)
 	if nCols > 1 && fk.Match == sqlbase.ForeignKeyReference_FULL {
 		query, colNames, err := matchFullUnacceptableKeyQuery(
-			srcTable, fk, true, /* limitResults */
+			srcTable.TableDesc(), fk, true, /* limitResults */
 		)
 		if err != nil {
 			return err
@@ -269,7 +291,9 @@ func validateForeignKey(
 		)
 
 		values, err := ie.QueryRowEx(ctx, "validate foreign key constraint", txn,
-			sqlbase.InternalExecutorSessionDataOverride{},
+			sqlbase.InternalExecutorSessionDataOverride{
+				UncommittedTableOverride: uncommittedTableOverride,
+			},
 			query)
 		if err != nil {
 			return err
@@ -282,7 +306,7 @@ func validateForeignKey(
 		}
 	}
 	query, colNames, err := nonMatchingRowQuery(
-		srcTable, fk, targetTable,
+		srcTable.TableDesc(), fk, targetTable,
 		true, /* limitResults */
 	)
 	if err != nil {
@@ -296,7 +320,9 @@ func validateForeignKey(
 	)
 
 	values, err := ie.QueryRowEx(ctx, "validate fk constraint", txn,
-		sqlbase.InternalExecutorSessionDataOverride{},
+		sqlbase.InternalExecutorSessionDataOverride{
+			UncommittedTableOverride: uncommittedTableOverride,
+		},
 		query)
 	if err != nil {
 		return err
