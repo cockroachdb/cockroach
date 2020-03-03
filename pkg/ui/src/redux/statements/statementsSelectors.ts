@@ -8,8 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { chain, sortBy, last } from "lodash";
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
+import { cockroach } from "src/js/protos";
+import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export const selectStatementByFingerprint = createSelector(
   (state: AdminUIState) => state.cachedData.statements.data?.statements,
@@ -33,4 +36,17 @@ export const selectDiagnosticsReportsCountByStatementFingerprint = createSelecto
 export const selectStatementDiagnosticsReports = createSelector(
   (state: AdminUIState) => state.cachedData.statementDiagnosticsReports.data?.reports,
   diagnosticsReports => diagnosticsReports,
+);
+
+type StatementDiagnosticsDictionary = {
+  [statementFingerprint: string]: IStatementDiagnosticsReport;
+};
+
+export const selectLastDiagnosticsReportPerStatement = createSelector(
+  selectStatementDiagnosticsReports,
+  (diagnosticsReports: IStatementDiagnosticsReport[]): StatementDiagnosticsDictionary => chain(diagnosticsReports)
+    .groupBy(diagnosticsReport => diagnosticsReport.statement_fingerprint)
+    // Perform ASC sorting and take the last item
+    .mapValues(diagnostics => last(sortBy(diagnostics, d => d.requested_at.seconds.toNumber())))
+    .value(),
 );

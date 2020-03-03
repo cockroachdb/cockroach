@@ -12,7 +12,6 @@ import { Tooltip } from "antd";
 import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router-dom";
-import { isEmpty, last } from "lodash";
 
 import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
@@ -34,7 +33,7 @@ export interface AggregateStatistics {
   stats: StatementStatistics;
   drawer?: boolean;
   firstCellBordered?: boolean;
-  diagnostics?: IStatementDiagnosticsReport[];
+  diagnosticsReport?: IStatementDiagnosticsReport;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
@@ -68,8 +67,12 @@ export function shortStatement(summary: StatementSummary, original: string) {
     default: return original;
   }
 }
-export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string, search?: string)
-    : ColumnDescriptor<AggregateStatistics>[] {
+
+export function makeStatementsColumns(
+  statements: AggregateStatistics[],
+  selectedApp: string,
+  search?: string,
+  activateDiagnostics?: (statement: string) => void): ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
@@ -95,22 +98,20 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
   const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
       title: "Diagnostics",
       cell: (stmt) => {
-        if (!isEmpty(stmt.diagnostics)) {
-          const lastDiagnostic = last(stmt.diagnostics);
-          return <DiagnosticStatusBadge status={lastDiagnostic.completed ? "READY" : "WAITING FOR QUERY"} />;
+        if (stmt.diagnosticsReport) {
+          return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"} />;
         }
         return (
           <Anchor
-            onClick={() => stmt.stats}
+            onClick={() => activateDiagnostics(stmt.label)}
           >
             Activate
           </Anchor>
         );
       },
       sort: (stmt) => {
-        if (!isEmpty(stmt.diagnostics)) {
-          const lastDiagnostic = last(stmt.diagnostics);
-          return lastDiagnostic.completed ? "READY" : "WAITING FOR QUERY";
+        if (stmt.diagnosticsReport) {
+          return stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY";
         }
         return null;
       },

@@ -18,7 +18,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 import { PaginationComponent, PaginationSettings } from "src/components/pagination/pagination";
 import * as protos from "src/js/protos";
-import { refreshStatements } from "src/redux/apiReducers";
+import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
@@ -35,8 +35,12 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
-import "./statements.styl";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
+import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
+import "./statements.styl";
+import {
+  selectLastDiagnosticsReportPerStatement,
+} from "src/redux/statements/statementsSelectors";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -47,6 +51,7 @@ interface StatementsPageProps {
   totalFingerprints: number;
   lastReset: string;
   refreshStatements: typeof refreshStatements;
+  refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
 }
 
 interface StatementsPageState {
@@ -56,6 +61,7 @@ interface StatementsPageState {
 }
 
 export class StatementsPage extends React.Component<StatementsPageProps & RouteComponentProps<any>, StatementsPageState> {
+  activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
 
   constructor(props: StatementsPageProps & RouteComponentProps<any>) {
     super(props);
@@ -70,6 +76,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
       },
       search: "",
     };
+    this.activateDiagnosticsRef = React.createRef();
   }
 
   changeSortSetting = (ss: SortSetting) => {
@@ -84,10 +91,12 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
 
   componentWillMount() {
     this.props.refreshStatements();
+    this.props.refreshStatementDiagnosticsRequests();
   }
 
   componentWillReceiveProps() {
     this.props.refreshStatements();
+    this.props.refreshStatementDiagnosticsRequests();
   }
 
   onChangePage = (current: number) => {
@@ -167,7 +176,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
     const data = this.getStatementsData();
     return (
-      <div className="section">
+      <div>
         <PageConfig>
           <PageConfigItem>
             <Search
@@ -205,7 +214,14 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
               <StatementsSortedTable
                 className="statements-table"
                 data={data}
-                columns={makeStatementsColumns(statements, selectedApp, search)}
+                columns={
+                  makeStatementsColumns(
+                    statements,
+                    selectedApp,
+                    search,
+                    this.activateDiagnosticsRef.current?.showModalFor,
+                  )
+                }
                 sortSetting={this.state.sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
               />
@@ -237,6 +253,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
           error={this.props.statementsError}
           render={this.renderStatements}
         />
+        <ActivateDiagnosticsModal ref={this.activateDiagnosticsRef} />
       </React.Fragment>
     );
   }
@@ -259,7 +276,12 @@ function keyByStatementAndImplicitTxn(stmt: ExecutionStatistics): string {
 export const selectStatements = createSelector(
   (state: StatementsState) => state.cachedData.statements,
   (_state: StatementsState, props: RouteComponentProps) => props,
-  (state: CachedDataReducerState<StatementsResponseMessage>, props: RouteComponentProps<any>) => {
+  selectLastDiagnosticsReportPerStatement,
+  (
+    state: CachedDataReducerState<StatementsResponseMessage>,
+    props: RouteComponentProps<any>,
+    lastDiagnosticsReportPerStatement,
+  ) => {
     if (!state.data) {
       return null;
     }
@@ -299,6 +321,7 @@ export const selectStatements = createSelector(
         label: stmt.statement,
         implicitTxn: stmt.implicitTxn,
         stats: combineStatementStats(stmt.stats),
+        diagnosticsReport: lastDiagnosticsReportPerStatement[stmt.statement],
       };
     });
   },
@@ -359,7 +382,7 @@ export const selectLastReset = createSelector(
 
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = withRouter(connect(
-  (state: StatementsState, props: RouteComponentProps) => ({
+  (state: AdminUIState, props: RouteComponentProps) => ({
     statements: selectStatements(state, props),
     statementsError: state.cachedData.statements.lastError,
     apps: selectApps(state),
@@ -368,6 +391,7 @@ const StatementsPageConnected = withRouter(connect(
   }),
   {
     refreshStatements,
+    refreshStatementDiagnosticsRequests,
   },
 )(StatementsPage));
 
