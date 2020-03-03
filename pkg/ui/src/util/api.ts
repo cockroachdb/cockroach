@@ -110,6 +110,12 @@ export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.Enque
 export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
 export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
 
+export type StatementDiagnosticsRequestsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequestsRequest;
+export type StatementDiagnosticsRequestsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequestsResponse;
+
+export type CreateStatementDiagnosticsRequestRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsRequestRequest;
+export type CreateStatementDiagnosticsRequestResponseMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsRequestResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -344,51 +350,18 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
   return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
 }
 
-// TODO (koorosh): It is stub. Has to be defined with protobufs
-export interface StatementsResponseMessageWithDiagnostics extends StatementsResponseMessage {
-  statements: StatementsResponseMessage["statements"] & any;
+// getStatements returns statements the cluster has recently executed, and some stats about them.
+export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessage> {
+  return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
+}
+
+export function getStatementDiagnosticsRequests(timeout?: moment.Duration): Promise<StatementDiagnosticsRequestsResponseMessage> {
+  return timeoutFetch(serverpb.StatementDiagnosticsRequestsResponse, `${STATUS_PREFIX}/statementdiagnosticsrequests`, null, timeout);
 }
 
 // getStatements returns statements the cluster has recently executed, and some stats about them.
-export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessageWithDiagnostics/*StatementsResponseMessage*/> {
-  return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout)
-    .then((response: any) => {
-      const diagnostics = [
-        {
-          uuid: Date.now().toString(),
-          initiated_at: new Date,
-          collected_at: new Date,
-          status: "READY",
-          statement: "WITH current_meta AS (SELECT version, num_records, num_spans, total_bytes FROM system.protected_ts_meta UNION ALL SELECT _ AS version, _ AS num_records, _ AS num_spans, _ AS total_bytes ORDER BY version DESC LIMIT _) SELECT version, num_records, num_spans, total_bytes FROM current_meta",
-        },
-        {
-          uuid: Date.now().toString(),
-          initiated_at: new Date,
-          status: "WAITING FOR QUERY",
-          statement: "WITH current_meta AS (SELECT version, num_records, num_spans, total_bytes FROM system.protected_ts_meta UNION ALL SELECT _ AS version, _ AS num_records, _ AS num_spans, _ AS total_bytes ORDER BY version DESC LIMIT _) SELECT version, num_records, num_spans, total_bytes FROM current_meta",
-        },
-        {
-          uuid: Date.now().toString(),
-          initiated_at: new Date,
-          status: "ERROR",
-          statement: "WITH current_meta AS (SELECT version, num_records, num_spans, total_bytes FROM system.protected_ts_meta UNION ALL SELECT _ AS version, _ AS num_records, _ AS num_spans, _ AS total_bytes ORDER BY version DESC LIMIT _) SELECT version, num_records, num_spans, total_bytes FROM current_meta",
-        },
-      ];
-      response.statements = response.statements.map((s: any) => ({
-        ...s,
-        diagnostics,
-      }));
-      return response;
-    });
-}
-
-// TODO (koorosh): It is stub. Has to be defined with protobufs
-interface EnqueueStatementDiagnosticsMessage {
-  statementId: string;
-}
-
-export function enqueueStatementDiagnostics(_req: EnqueueStatementDiagnosticsMessage, _timeout?: moment.Duration): Promise<void> {
-  return Promise.resolve();
+export function createStatementDiagnosticsRequest(req: CreateStatementDiagnosticsRequestRequestMessage, timeout?: moment.Duration): Promise<CreateStatementDiagnosticsRequestResponseMessage> {
+  return timeoutFetch(serverpb.CreateStatementDiagnosticsRequestResponse, `${STATUS_PREFIX}/statementdiagnosticsrequests`, req as any, timeout);
 }
 
 // getDataDistribution returns information about how replicas are distributed across nodes.
