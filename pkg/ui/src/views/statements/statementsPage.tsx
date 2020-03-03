@@ -278,6 +278,10 @@ export const selectStatements = createSelector(
       statements = statements.filter(
         (statement: ExecutionStatistics) => (showInternal && statement.app.startsWith(state.data.internal_app_name_prefix)) || statement.app === criteria,
       );
+    } else {
+      statements = statements.filter(
+        (statement: ExecutionStatistics) => !statement.app.startsWith(state.data.internal_app_name_prefix),
+      );
     }
 
     const statsByStatementAndImplicitTxn: { [statement: string]: StatementsSummaryData } = {};

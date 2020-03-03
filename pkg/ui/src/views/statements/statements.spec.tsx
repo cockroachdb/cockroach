@@ -50,6 +50,19 @@ describe("selectStatements", () => {
     assert.deepEqual(actualFingerprints, expectedFingerprints);
   });
 
+  it("returns the statements without Internal for default ALL filter", () => {
+    const stmtA = makeFingerprint(1);
+    const stmtB = makeFingerprint(2, "$ internal");
+    const stmtC = makeFingerprint(3, "$ internal");
+    const stmtD = makeFingerprint(3, "another");
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC, stmtD]);
+    const props = makeEmptyRouteProps();
+
+    const result = selectStatements(state, props);
+
+    assert.equal(result.length, 2);
+  });
+
   it("coalesces statements from different apps", () => {
     const stmtA = makeFingerprint(1);
     const stmtB = makeFingerprint(1, "foobar");
@@ -429,6 +442,7 @@ function makeStateWithStatementsAndLastReset(statements: CollectedStatementStati
             seconds: lastReset,
             nanos: 0,
           },
+          internal_app_name_prefix: "$ internal",
         }),
         inFlight: false,
         valid: true,
