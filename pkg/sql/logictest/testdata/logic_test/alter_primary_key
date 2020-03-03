@@ -695,6 +695,23 @@ t  CREATE TABLE t (
    FAMILY "primary" (x, rowid)
 )
 
+# Regression for #45362.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT NOT NULL)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN y INT
+
+statement error pq: unimplemented: cannot perform a primary key change on t with other schema changes on t in the same transaction
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x)
+
+statement ok
+ROLLBACK
+
 # Ensure that we cannot cancel the index cleanup jobs spawned by
 # a primary key change.
 statement ok
@@ -722,4 +739,3 @@ SELECT job_id FROM [SHOW JOBS] WHERE
 description = 'CLEANUP JOB for ''ALTER TABLE test.public.t ALTER PRIMARY KEY USING COLUMNS (y)''' AND
 status = 'running'
 ----
-

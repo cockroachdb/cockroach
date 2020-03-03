@@ -2383,11 +2383,13 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
+	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+
 	t.Run("create-index-before", func(t *testing.T) {
-		if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT NOT NULL, v INT);
-`); err != nil {
+		t.Skip("unskip once #45510 is completed")
+		if _, err := sqlDB.Exec(`CREATE TABLE t.test (k INT NOT NULL, v INT)`); err != nil {
 			t.Fatal(err)
 		}
 		if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
@@ -2460,7 +2462,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
 		_, err := sqlDB.Exec(`
 SET experimental_enable_primary_key_changes = true;
 ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
-		if !testutils.IsError(err, "pq: table test is currently undergoing a primary key change") {
+		if !testutils.IsError(err, "pq: unimplemented: table test is currently undergoing a schema change") {
 			t.Errorf("expected to concurrent primary key change to error, but got %+v", err)
 		}
 

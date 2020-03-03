@@ -374,18 +374,29 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"cannot create table and change it's primary key in the same transaction")
 			}
 
-			// Ensure that there is not another primary key change attempted within this transaction.
+			// Ensure that other schema changes on this table are not currently
+			// executing, and that other schema changes have not been performed
+			// in the current transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
 			for i := range n.tableDesc.Mutations {
-				if desc := n.tableDesc.Mutations[i].GetPrimaryKeySwap(); desc != nil {
-					if n.tableDesc.Mutations[i].MutationID == currentMutationID {
-						return unimplemented.NewWithIssue(
-							43376, "multiple primary key changes in the same transaction are unsupported")
+				mut := &n.tableDesc.Mutations[i]
+				if mut.MutationID == currentMutationID {
+					return unimplemented.NewWithIssuef(
+						45510, "cannot perform a primary key change on %s "+
+							"with other schema changes on %s in the same transaction", n.tableDesc.Name, n.tableDesc.Name)
+				}
+				if mut.MutationID < currentMutationID {
+					// We can handle indexes being deleted concurrently. We do this
+					// in order to not be blocked on index drops created by a previous
+					// primary key change. If we errored out when seeing a previous
+					// index drop, then users would see a confusing message that a
+					// schema change is in progress when it doesn't seem like one is.
+					// TODO (rohany): This feels like such a hack until (#45150) is fixed.
+					if mut.GetIndex() != nil && mut.Direction == sqlbase.DescriptorMutation_DROP {
+						continue
 					}
-					if n.tableDesc.Mutations[i].MutationID < currentMutationID {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"table %s is currently undergoing a primary key change", n.tableDesc.Name)
-					}
+					return unimplemented.NewWithIssuef(
+						45510, "table %s is currently undergoing a schema change", n.tableDesc.Name)
 				}
 			}
 
@@ -573,10 +584,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			// TODO (rohany): this loop will be unused until #45510 is resolved.
 			for i := range n.tableDesc.Mutations {
 				mut := &n.tableDesc.Mutations[i]
-				// TODO (rohany): It's unclear about what to do if there are other mutations within
-				//  this transaction too.
 				// If there is an index that is getting built right now that started in a previous txn, we
 				// need to potentially rebuild that index as well.
 				if idx := mut.GetIndex(); mut.MutationID < currentMutationID && idx != nil &&
