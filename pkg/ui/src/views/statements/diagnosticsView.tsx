@@ -11,7 +11,7 @@
 import React from "react";
 import { connect } from "react-redux";
 
-import { Button, Text, TextTypes, Link } from "src/components";
+import { Button, Text, TextTypes, Anchor } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 
@@ -66,7 +66,7 @@ export class EmptyDiagnosticsView extends React.Component<EmptyDiagnosticsViewPr
               When you activate statement diagnostics, CockroachDB will wait for the next query that matches
               this statement fingerprint. A download button will appear on the statement list and detail pages
               when the query is ready. The statement diagnostic will include EXPLAIN plans,
-              table statistics, and traces. <Link href="https://www.cockroachlabs.com/docs/stable">Learn more</Link>
+              table statistics, and traces. <Anchor href="https://www.cockroachlabs.com/docs/stable">Learn more</Anchor>
             </Text>
           {/*  TODO (koorosh): change Learn more link to something meaningful ^^^. */}
           </main>
