@@ -22,6 +22,8 @@ import { selectStatements, selectApps, selectTotalFingerprints, selectLastReset 
 import { selectStatement } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
+const INTERNAL_STATEMENT_PREFIX = "$ internal";
+
 describe("selectStatements", () => {
   it("returns null if the statements data is invalid", () => {
     const state = makeInvalidState();
@@ -48,6 +50,19 @@ describe("selectStatements", () => {
     const actualFingerprints = result.map((stmt: any) => stmt.label);
     actualFingerprints.sort();
     assert.deepEqual(actualFingerprints, expectedFingerprints);
+  });
+
+  it("returns the statements without Internal for default ALL filter", () => {
+    const stmtA = makeFingerprint(1);
+    const stmtB = makeFingerprint(2, INTERNAL_STATEMENT_PREFIX);
+    const stmtC = makeFingerprint(3, INTERNAL_STATEMENT_PREFIX);
+    const stmtD = makeFingerprint(3, "another");
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC, stmtD]);
+    const props = makeEmptyRouteProps();
+
+    const result = selectStatements(state, props);
+
+    assert.equal(result.length, 2);
   });
 
   it("coalesces statements from different apps", () => {
@@ -433,6 +448,7 @@ function makeStateWithStatementsAndLastReset(statements: CollectedStatementStati
             seconds: lastReset,
             nanos: 0,
           },
+          internal_app_name_prefix: INTERNAL_STATEMENT_PREFIX,
         }),
         inFlight: false,
         valid: true,
