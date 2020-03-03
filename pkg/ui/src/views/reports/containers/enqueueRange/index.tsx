@@ -12,6 +12,7 @@ import _ from "lodash";
 import React, { Fragment } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import moment from 'moment';
 
 import { enqueueRange } from "src/util/api";
 import { cockroach } from "src/js/protos";
@@ -81,7 +82,7 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
       node_id: nodeID,
       skip_should_queue: skipShouldQueue,
     });
-    return enqueueRange(req);
+    return enqueueRange(req, moment.duration({ hours: 1 }));
   }
 
   handleSubmit = (evt: React.FormEvent<any>) => {
