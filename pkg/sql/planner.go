@@ -67,8 +67,6 @@ type extendedEvalContext struct {
 
 	TxnModesSetter txnModesSetter
 
-	SchemaChangers *schemaChangerCollection
-
 	Jobs *jobsCollection
 
 	schemaAccessors *schemaInterface
@@ -331,16 +329,17 @@ func internalExtendedEvalCtx(
 
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:           txn,
-			SessionData:   sd,
-			TxnReadOnly:   false,
-			TxnImplicit:   true,
-			Settings:      execCfg.Settings,
-			Context:       ctx,
-			Mon:           plannerMon,
-			TestingKnobs:  evalContextTestingKnobs,
-			StmtTimestamp: stmtTimestamp,
-			TxnTimestamp:  txnTimestamp,
+			Txn:              txn,
+			SessionData:      sd,
+			TxnReadOnly:      false,
+			TxnImplicit:      true,
+			Settings:         execCfg.Settings,
+			Context:          ctx,
+			Mon:              plannerMon,
+			TestingKnobs:     evalContextTestingKnobs,
+			StmtTimestamp:    stmtTimestamp,
+			TxnTimestamp:     txnTimestamp,
+			InternalExecutor: execCfg.InternalExecutor,
 		},
 		SessionMutator:  dataMutator,
 		VirtualSchemas:  execCfg.VirtualSchemas,
@@ -349,7 +348,6 @@ func internalExtendedEvalCtx(
 		Tables:          tables,
 		ExecCfg:         execCfg,
 		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
-		SchemaChangers:  &schemaChangerCollection{},
 		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
