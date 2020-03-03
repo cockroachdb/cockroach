@@ -219,12 +219,12 @@ export default class ClusterOverview extends React.Component<any, any> {
       <div className="cluster-page">
         <Helmet title="Cluster Overview" />
         <EmailSubscription />
-        <section className="cluster-overview">
+        <section className="section cluster-overview">
           <ClusterSummaryConnected />
         </section>
-        <div className="cluster-overview--fixed">
+        <section className="cluster-overview--fixed">
           { this.props.children }
-        </div>
+        </section>
       </div>
     );
   }
