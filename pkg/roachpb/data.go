@@ -1077,9 +1077,9 @@ func (t *Transaction) UpgradePriority(minPriority enginepb.TxnPriority) {
 	}
 }
 
-// IsWriting returns whether the transaction has begun writing intents.
+// IsLocking returns whether the transaction has begun acquiring locks.
 // This method will never return true for a read-only transaction.
-func (t *Transaction) IsWriting() bool {
+func (t *Transaction) IsLocking() bool {
 	return t.Key != nil
 }
 
@@ -1092,7 +1092,7 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
-		t.TxnMeta, t.IsWriting(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1115,7 +1115,7 @@ func (t Transaction) SafeMessage() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
-		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
+		t.TxnMeta.SafeMessage(), t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
