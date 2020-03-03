@@ -11,18 +11,18 @@
 import { call, put, takeEvery } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 
-import { enqueueStatementDiagnostics } from "src/util/api";
-import { ENQUEUE_DIAGNOSTICS, EnqueueDiagnosticsPayload, completeEnqueueDiagnostics } from "./statementsActions";
+import { createStatementDiagnosticsRequest } from "src/util/api";
+import { REQUEST_STATEMENT_DIAGNOSTICS, EnqueueDiagnosticsPayload, completeStatementDiagnosticsRequest } from "./statementsActions";
+import { cockroach } from "src/js/protos";
+import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequestsRequest;
 
 export function* requestDiagnostics(action: PayloadAction<EnqueueDiagnosticsPayload>) {
-  const { statementId } = action.payload;
-
-  yield call(enqueueStatementDiagnostics, {
-    statementId,
-  });
-  yield put(completeEnqueueDiagnostics());
+  const { statementFingerprint } = action.payload;
+  const statementDiagnosticsRequest = new StatementDiagnosticsRequest({ statement_fingerprint: statementFingerprint });
+  yield call(createStatementDiagnosticsRequest, statementDiagnosticsRequest);
+  yield put(completeStatementDiagnosticsRequest());
 }
 
 export function* statementsSaga() {
-  yield takeEvery(ENQUEUE_DIAGNOSTICS, requestDiagnostics);
+  yield takeEvery(REQUEST_STATEMENT_DIAGNOSTICS, requestDiagnostics);
 }
