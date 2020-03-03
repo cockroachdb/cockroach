@@ -9,19 +9,31 @@
 // licenses/APL.txt.
 
 import { expectSaga } from "redux-saga-test-plan";
+import sinon from "sinon";
 
 import { requestDiagnostics } from "./statementsSagas";
-import { completeEnqueueDiagnostics, enqueueDiagnostics } from "./statementsActions";
-import { enqueueStatementDiagnostics } from "src/util/api";
+import { completeStatementDiagnosticsRequest, requestStatementDiagnostics } from "./statementsActions";
+import * as api from "src/util/api";
+import { cockroach } from "src/js/protos";
+import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequestsRequest;
+
+const sandbox = sinon.createSandbox();
 
 describe("statementsSagas", () => {
+  beforeEach(() => {
+    sandbox.reset();
+  });
+
   describe("requestDiagnostics generator", () => {
     it("calls api#requestDiagnostics with statement ID as payload", () => {
-      const statementId = "some-id";
-      const action = enqueueDiagnostics(statementId);
+      const createStatementDiagnosticsRequestStub = sandbox.stub(api, "createStatementDiagnosticsRequest").resolves();
+      const statementFingerprint = "some-id";
+      const action = requestStatementDiagnostics(statementFingerprint);
+      const statementDiagnosticsRequest = new StatementDiagnosticsRequest({ statement_fingerprint: statementFingerprint });
+
       return expectSaga(requestDiagnostics, action)
-        .call(enqueueStatementDiagnostics, { statementId })
-        .put(completeEnqueueDiagnostics())
+        .call(createStatementDiagnosticsRequestStub, statementDiagnosticsRequest)
+        .put(completeStatementDiagnosticsRequest())
         .dispatch(action)
         .run();
     });
