@@ -76,8 +76,27 @@ func NewSecondaryLogger(
 
 	// Ensure the registry knows about this logger.
 	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
 	secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers, l)
+	secondaryLogRegistry.mu.Unlock()
+
+	// Make the registry forget about this logger when the context is
+	// canceled. This avoids stacking many secondary loggers together
+	// when there are subsequent tests starting servers in the same
+	// package.
+	go func() {
+		// Wait for the stopper to say "goodbye".
+		<-ctx.Done()
+		// De-register.
+		secondaryLogRegistry.mu.Lock()
+		defer secondaryLogRegistry.mu.Unlock()
+		for i, thatLogger := range secondaryLogRegistry.mu.loggers {
+			if thatLogger != l {
+				continue
+			}
+			secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers[:i], secondaryLogRegistry.mu.loggers[i+1:]...)
+			return
+		}
+	}()
 
 	if enableGc {
 		// Start the log file GC for the secondary logger.

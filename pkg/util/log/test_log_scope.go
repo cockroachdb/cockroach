@@ -159,24 +159,39 @@ func calledDuringPanic() bool {
 // dirTestOverride sets the default value for the logging output directory
 // for use in tests.
 func dirTestOverride(expected, newDir string) error {
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
+	if err := mainLog.dirTestOverride(expected, newDir); err != nil {
+		return err
+	}
+	// Same with secondary loggers.
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for _, l := range secondaryLogRegistry.mu.loggers {
+		if err := l.logger.dirTestOverride(expected, newDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	mainLog.logDir.Lock()
+func (l *loggerT) dirTestOverride(expected, newDir string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.logDir.Lock()
 	// The following check is intended to catch concurrent uses of
 	// Scope() or TestLogScope.Close(), which would be invalid.
-	if mainLog.logDir.name != expected {
-		mainLog.logDir.Unlock()
+	if l.logDir.name != expected {
+		l.logDir.Unlock()
 		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
-			mainLog.logDir.name, expected)
+			l.logDir.name, expected)
 	}
-	mainLog.logDir.name = newDir
-	mainLog.logDir.Unlock()
+	l.logDir.name = newDir
+	l.logDir.Unlock()
 
 	// When we change the directory we close the current logging
 	// output, so that a rotation to the new directory is forced on
 	// the next logging event.
-	return mainLog.closeFileLocked()
+	return l.closeFileLocked()
 }
 
 func (l *loggerT) closeFileLocked() error {
