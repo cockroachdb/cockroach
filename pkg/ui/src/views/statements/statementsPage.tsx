@@ -167,7 +167,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
     const data = this.getStatementsData();
     return (
-      <React.Fragment>
+      <div className="section">
         <PageConfig>
           <PageConfigItem>
             <Search
@@ -217,7 +217,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
           onChange={this.onChangePage}
           hideOnSinglePage={data.length === 0}
         />
-      </React.Fragment>
+      </div>
     );
   }
 
