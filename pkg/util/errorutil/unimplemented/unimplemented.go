@@ -77,7 +77,7 @@ func unimplementedInternal(
 	// Create the issue link.
 	link := errors.IssueLink{Detail: detail}
 	if issue > 0 {
-		link.IssueURL = makeURL(issue)
+		link.IssueURL = MakeURL(issue)
 	}
 
 	// Instantiate the base error.
@@ -108,6 +108,7 @@ func unimplementedInternal(
 	return err
 }
 
-func makeURL(issue int) string {
+// MakeURL produces a URL to a CockroachDB issue.
+func MakeURL(issue int) string {
 	return fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }

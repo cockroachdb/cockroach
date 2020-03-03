@@ -789,6 +789,10 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 
 	ctx := context.Background()
 
+	if err := checkTzDatabaseAvailability(ctx); err != nil {
+		return err
+	}
+
 	c, err := setupTransientCluster(ctx, cmd, gen)
 	defer c.cleanup()
 	if err != nil {
@@ -834,8 +838,6 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 #
 `, c.s.AdminURL())
 	}
-
-	checkTzDatabaseAvailability(ctx)
 
 	conn := makeSQLConn(c.connURL)
 	defer conn.Close()
