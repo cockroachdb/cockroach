@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -52,10 +53,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -583,7 +584,9 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// Until/unless CockroachDB embeds its own tz database, we want
 	// an early sanity check. It's better to inform the user early
 	// than to get surprising errors during SQL queries.
-	checkTzDatabaseAvailability(ctx)
+	if err := checkTzDatabaseAvailability(ctx); err != nil {
+		return errors.Wrap(err, "failed to initialize node")
+	}
 
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
@@ -1041,13 +1044,33 @@ func clientFlagsRPC() string {
 	return strings.Join(flags, " ")
 }
 
-func checkTzDatabaseAvailability(ctx context.Context) {
+func checkTzDatabaseAvailability(ctx context.Context) error {
 	if _, err := timeutil.LoadLocation("America/New_York"); err != nil {
-		log.Shout(ctx, log.Severity_ERROR,
-			"unable to load named time zones, time zone support will be degraded.\n"+
-				"Hint: check that the time zone database is installed on your system, or\n"+
+		log.Errorf(ctx, "timeutil.LoadLocation: %v", err)
+		reportedErr := errors.WithHint(
+			errors.WithIssueLink(
+				errors.New("unable to load named timezones"),
+				errors.IssueLink{IssueURL: unimplemented.MakeURL(36864)}),
+			"Check that the time zone database is installed on your system, or\n"+
 				"set the ZONEINFO environment variable to a Go time zone .zip archive.")
+
+		if envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false) {
+			// The user tells us they really know what they want.
+			reportedErr := &formattedError{err: reportedErr}
+			log.Shout(ctx, log.Severity_WARNING, reportedErr.Error())
+		} else {
+			// Prevent a successful start.
+			//
+			// In the past, we were simply using log.Shout to emit an error,
+			// informing the user that startup could continue with degraded
+			// behavior.  However, usage demonstrated that users typically do
+			// not see the error and instead run into silently incorrect SQL
+			// results. To avoid this situation altogether, it's better to
+			// stop early.
+			return reportedErr
+		}
 	}
+	return nil
 }
 
 func reportConfiguration(ctx context.Context) {
