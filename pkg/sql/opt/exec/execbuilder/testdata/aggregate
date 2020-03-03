@@ -751,16 +751,19 @@ group      ·            ·                (min int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
-·               distributed  false             ·               ·
-·               vectorized   true              ·               ·
-group           ·            ·                 (min int)       ·
- │              aggregate 0  min(v)            ·               ·
- │              scalar       ·                 ·               ·
- └── render     ·            ·                 (v int)         ·
-      │         render 0     (v)[int]          ·               ·
-      └── scan  ·            ·                 (k int, v int)  ·
-·               table        opt_test@primary  ·               ·
-·               spans        -/3/# /5-         ·               ·
+·                    distributed  false                         ·               ·
+·                    vectorized   true                          ·               ·
+group                ·            ·                             (min int)       ·
+ │                   aggregate 0  any_not_null(v)               ·               ·
+ │                   scalar       ·                             ·               ·
+ └── render          ·            ·                             (v int)         ·
+      │              render 0     (v)[int]                      ·               ·
+      └── limit      ·            ·                             (k int, v int)  +v
+           │         count        (1)[int]                      ·               ·
+           └── scan  ·            ·                             (k int, v int)  +v
+·                    table        opt_test@v                    ·               ·
+·                    spans        /!NULL-                       ·               ·
+·                    filter       ((k)[int] != (4)[int])[bool]  ·               ·
 
 # Check that the optimization doesn't work when the argument is non-trivial (we
 # can't in general guarantee an ordering on a synthesized column).

@@ -148,7 +148,7 @@ memo (optimized, ~18KB, required=[presentation: y:2,x:3,c:6] [ordering: +2])
  ├── G5: (const 10)
  ├── G6: (plus G11 G12)
  ├── G7: (project G13 G14 y)
- │    ├── [ordering: +2]
+ │    ├── [ordering: +2] [limit hint: 100.00]
  │    │    ├── best: (sort G7)
  │    │    └── cost: 1119.26
  │    ├── [ordering: +5]
@@ -169,7 +169,7 @@ memo (optimized, ~18KB, required=[presentation: y:2,x:3,c:6] [ordering: +2])
  ├── G11: (variable y)
  ├── G12: (const 1)
  ├── G13: (select G16 G17)
- │    ├── [ordering: +2]
+ │    ├── [ordering: +2] [limit hint: 100.00]
  │    │    ├── best: (sort G13)
  │    │    └── cost: 1112.58
  │    └── []
@@ -178,7 +178,7 @@ memo (optimized, ~18KB, required=[presentation: y:2,x:3,c:6] [ordering: +2])
  ├── G14: (projections G18)
  ├── G15: (eq G19 G20)
  ├── G16: (scan a)
- │    ├── [ordering: +2]
+ │    ├── [ordering: +2] [limit hint: 300.00]
  │    │    ├── best: (sort G16)
  │    │    └── cost: 1259.35
  │    └── []

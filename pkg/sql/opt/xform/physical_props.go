@@ -99,6 +99,7 @@ func BuildChildPhysicalProps(
 		}
 
 	case opt.IndexJoinOp:
+		// For an index join, every input row results in exactly one output row.
 		childProps.LimitHint = parentProps.LimitHint
 
 	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
@@ -113,15 +114,26 @@ func BuildChildPhysicalProps(
 			childProps.LimitHint = distinctOnLimitHint(distinctCount, parentProps.LimitHint)
 		}
 
-	case opt.SelectOp:
+	case opt.SelectOp, opt.LookupJoinOp:
+		// These operations are assumed to produce a constant number of output rows
+		// for each input row, independent of already-processed rows.
 		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
 		if outputRows == 0 || outputRows < parentProps.LimitHint {
 			break
 		}
 		if input, ok := parent.Child(nth).(memo.RelExpr); ok {
 			inputRows := input.Relational().Stats.RowCount
-			childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
+			switch parent.Op() {
+			case opt.SelectOp:
+				// outputRows / inputRows is roughly the number of output rows produced
+				// for each input row. Reduce the number of required input rows so that
+				// the expected number of output rows is equal to the parent limit hint.
+				childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
+			case opt.LookupJoinOp:
+				childProps.LimitHint = lookupJoinInputLimitHint(inputRows, outputRows, parentProps.LimitHint)
+			}
 		}
+
 	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
 		childProps.LimitHint = parentProps.LimitHint
 	}
