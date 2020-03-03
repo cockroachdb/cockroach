@@ -584,9 +584,28 @@ project
       └── (((x:1, n:2) AS x, n)).x [as=x:3]
 
 build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).@2
+----
+project
+ ├── columns: "?column?":3
+ ├── project-set
+ │    ├── columns: x:1 n:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── information_schema._pg_expandarray(ARRAY['c','b','a'])
+ └── projections
+      └── (((x:1, n:2) AS x, n)).n [as="?column?":3]
+
+build
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
 ----
 error (42804): could not identify column "other" in tuple{string AS x, int AS n}
+
+build
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).@4
+----
+error (42601): tuple column 4 does not exist
 
 build
 SELECT temp.n from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;

@@ -665,6 +665,7 @@ func TestParse(t *testing.T) {
 		{`SELECT (() AS a)`},
 		{`SELECT ((() AS a)).a`},
 		{`SELECT ((() AS a)).*`},
+		{`SELECT ((() AS a)).@1`},
 		{`SELECT (TABLE a)`},
 		{`SELECT 0x1`},
 		{`SELECT 'Deutsch' COLLATE de`},
@@ -1057,10 +1058,12 @@ func TestParse(t *testing.T) {
 		{`DELETE FROM [123 AS t]@idx`},
 
 		{`SELECT (1 + 2).*`},
+		{`SELECT (1 + 2).@1`},
 		{`SELECT (1 + 2).col`},
 		{`SELECT (abc.def).col`},
 		{`SELECT (i.keys).col`},
 		{`SELECT (i.keys).*`},
+		{`SELECT (i.keys).@1`},
 		{`SELECT (ARRAY['a', 'b', 'c']).name`},
 
 		{`SELECT 1 FOR UPDATE`},
