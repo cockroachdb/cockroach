@@ -112,11 +112,6 @@ export default function Debug() {
           note="View ranges in your cluster that are unavailable, underreplicated, slow, or have other problems."
         />
         <DebugPanelLink
-          name="Network Latency"
-          url="#/reports/network"
-          note="Check latencies between all nodes in your cluster."
-        />
-        <DebugPanelLink
           name="Data Distribution and Zone Configs"
           url="#/data-distribution"
           note="View the distribution of table data across nodes and verify zone configuration."
@@ -158,18 +153,6 @@ export default function Debug() {
             name="Stores on a specific node"
             url="#/reports/stores/1"
             note="#/reports/stores/[node_id]"
-          />
-        </DebugTableRow>
-        <DebugTableRow title="Network">
-          <DebugTableLink
-            name="Latency filtered by node IDs"
-            url="#/reports/network?node_ids=1,2"
-            note="#/reports/network?node_ids=[node_id{,node_id...}]"
-          />
-          <DebugTableLink
-            name="Latency filtered by locality (regex)"
-            url="#/reports/network?locality=region=us-east"
-            note="#/reports/network?locality=[regex]"
           />
         </DebugTableRow>
         <DebugTableRow title="Security">
