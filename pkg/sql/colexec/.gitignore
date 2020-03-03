@@ -26,6 +26,7 @@ proj_const_right_ops.eg.go
 proj_non_const_ops.eg.go
 quicksort.eg.go
 rank.eg.go
+relative_rank.eg.go
 row_number.eg.go
 rowstovec.eg.go
 selection_ops.eg.go
@@ -35,3 +36,4 @@ substring.eg.go
 sum_agg.eg.go
 tuples_differ.eg.go
 vec_comparators.eg.go
+window_peer_grouper.eg.go

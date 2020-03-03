@@ -116,6 +116,63 @@ func IsScalarAggregate(spec *AggregatorSpec) bool {
 	}
 }
 
+// GetWindowFunctionInfo returns windowFunc constructor and the return type
+// when given fn is applied to given inputTypes.
+func GetWindowFunctionInfo(
+	fn WindowerSpec_Func, inputTypes ...types.T,
+) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType *types.T, err error) {
+	if fn.AggregateFunc != nil && *fn.AggregateFunc == AggregatorSpec_ANY_NOT_NULL {
+		// The ANY_NOT_NULL builtin does not have a fixed return type;
+		// handle it separately.
+		if len(inputTypes) != 1 {
+			return nil, nil, errors.Errorf("any_not_null aggregate needs 1 input")
+		}
+		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), &inputTypes[0], nil
+	}
+	datumTypes := make([]*types.T, len(inputTypes))
+	for i := range inputTypes {
+		datumTypes[i] = &inputTypes[i]
+	}
+
+	var funcStr string
+	if fn.AggregateFunc != nil {
+		funcStr = fn.AggregateFunc.String()
+	} else if fn.WindowFunc != nil {
+		funcStr = fn.WindowFunc.String()
+	} else {
+		return nil, nil, errors.Errorf(
+			"function is neither an aggregate nor a window function",
+		)
+	}
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
+	for _, b := range builtins {
+		typs := b.Types.Types()
+		if len(typs) != len(inputTypes) {
+			continue
+		}
+		match := true
+		for i, t := range typs {
+			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
+				match = false
+				break
+			}
+		}
+		if match {
+			// Found!
+			constructAgg := func(evalCtx *tree.EvalContext) tree.WindowFunc {
+				return b.WindowFunc(datumTypes, evalCtx)
+			}
+			return constructAgg, b.FixedReturnType(), nil
+		}
+	}
+	return nil, nil, errors.Errorf(
+		"no builtin aggregate/window function for %s on %v", funcStr, inputTypes,
+	)
+}
+
 func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) error {
 	switch w {
 	case tree.RANGE:

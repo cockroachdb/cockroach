@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 const nullProbability = 0.2
@@ -847,20 +848,16 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 
-	nRows := 10
+	nRows := 2 * coldata.BatchSize()
 	maxCols := 4
-	maxNum := 5
+	maxNum := 10
 	typs := make([]types.T, maxCols)
 	for i := range typs {
 		// TODO(yuzefovich): randomize the types of the columns once we support
 		// window functions that take in arguments.
 		typs[i] = *types.Int
 	}
-	for _, windowFn := range []execinfrapb.WindowerSpec_WindowFunc{
-		execinfrapb.WindowerSpec_ROW_NUMBER,
-		execinfrapb.WindowerSpec_RANK,
-		execinfrapb.WindowerSpec_DENSE_RANK,
-	} {
+	for windowFn := range colexec.SupportedWindowFns {
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
 			{0},    // Partitioning on the first input column.
@@ -875,7 +872,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					if len(partitionBy) > nCols || nOrderingCols > nCols {
 						continue
 					}
-					inputTypes := typs[:nCols]
+					inputTypes := typs[:nCols:nCols]
 					rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 
 					windowerSpec := &execinfrapb.WindowerSpec{
@@ -900,11 +897,15 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
 					}
+					// Currently, we only support window functions that take no
+					// arguments, so we leave the second argument empty.
+					_, outputType, err := execinfrapb.GetWindowFunctionInfo(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn})
+					require.NoError(t, err)
 					args := verifyColOperatorArgs{
 						anyOrder:    true,
 						inputTypes:  [][]types.T{inputTypes},
 						inputs:      []sqlbase.EncDatumRows{rows},
-						outputTypes: append(inputTypes, *types.Int),
+						outputTypes: append(inputTypes, *outputType),
 						pspec:       pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
