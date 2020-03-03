@@ -16,6 +16,7 @@ stmt ::=
 	| release_stmt
 	| nonpreparable_set_stmt
 	| transaction_stmt
+	| close_cursor_stmt
 	| 
 
 preparable_stmt ::=
@@ -89,6 +90,9 @@ transaction_stmt ::=
 	| commit_stmt
 	| rollback_stmt
 	| abort_stmt
+
+close_cursor_stmt ::=
+	'CLOSE' 'ALL'
 
 alter_stmt ::=
 	alter_ddl_stmt
@@ -642,6 +646,7 @@ unreserved_keyword ::=
 	| 'CANCEL'
 	| 'CASCADE'
 	| 'CHANGEFEED'
+	| 'CLOSE'
 	| 'CLUSTER'
 	| 'COLUMNS'
 	| 'COMMENT'
@@ -667,6 +672,7 @@ unreserved_keyword ::=
 	| 'DATE'
 	| 'DAY'
 	| 'DEALLOCATE'
+	| 'DECLARE'
 	| 'DELETE'
 	| 'DEFERRED'
 	| 'DISCARD'
