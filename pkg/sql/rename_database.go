@@ -14,11 +14,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 type renameDatabaseNode struct {
@@ -78,6 +81,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	// strings, they (may) explicitly specify the database name.
 	// Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
+	// See #34416.
 	phyAccessor := p.PhysicalSchemaAccessor()
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
@@ -116,6 +120,20 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
+
+				isAllowed, referencedCol, err := isAllowedDependentDescInRenameDatabase(
+					dependedOn,
+					tbDesc,
+					dependentDesc,
+					dbDesc.Name,
+				)
+				if err != nil {
+					return err
+				}
+				if isAllowed {
+					continue
+				}
+
 				tbTableName := tree.MakeTableNameWithSchema(
 					tree.Name(dbDesc.Name),
 					tree.Name(schema),
@@ -152,13 +170,105 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 					dependentDescQualifiedString,
 					tbTableName.String(),
 				)
-				hint := fmt.Sprintf("you can drop %s instead", dependentDescQualifiedString)
+
+				// We can have a more specific error message for sequences.
+				if tbDesc.IsSequence() {
+					hint := fmt.Sprintf(
+						"you can drop the column default %q of %q referencing %q",
+						referencedCol,
+						tbTableName.String(),
+						dependentDescQualifiedString,
+					)
+					if dependentDesc.GetParentID() == dbDesc.ID {
+						hint += fmt.Sprintf(
+							" or modify the default to not reference the database name %q",
+							dbDesc.Name,
+						)
+					}
+					return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+				}
+
+				// Otherwise, we default to the view error message.
+				hint := fmt.Sprintf("you can drop %q instead", dependentDescQualifiedString)
 				return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
 			}
 		}
 	}
 
 	return p.renameDatabase(ctx, dbDesc, n.newName)
+}
+
+// isAllowedDependentDescInRename determines when rename database is allowed with
+// a given {tbDesc, dependentDesc} with the relationship dependedOn on a db named dbName.
+// Returns a bool representing whether it's allowed, a string indicating the column name
+// found to contain the database (if it exists), and an error if any.
+// This is a workaround for #45411 until #34416 is resolved.
+func isAllowedDependentDescInRenameDatabase(
+	dependedOn sqlbase.TableDescriptor_Reference,
+	tbDesc *sqlbase.TableDescriptor,
+	dependentDesc *sqlbase.TableDescriptor,
+	dbName string,
+) (bool, string, error) {
+	// If it is a sequence, and it does not contain the database name, then we have
+	// no reason to block it's deletion.
+	if !tbDesc.IsSequence() {
+		return false, "", nil
+	}
+
+	colIDs := util.MakeFastIntSet()
+	for _, colID := range dependedOn.ColumnIDs {
+		colIDs.Add(int(colID))
+	}
+
+	for _, column := range dependentDesc.Columns {
+		if !colIDs.Contains(int(column.ID)) {
+			continue
+		}
+		colIDs.Remove(int(column.ID))
+
+		if column.DefaultExpr == nil {
+			return false, "", errors.AssertionFailedf(
+				"rename_database: expected column id %d in table id %d to have a default expr",
+				dependedOn.ID,
+				dependentDesc.ID,
+			)
+		}
+		// Try parse the default expression and find the table name direct reference.
+		parsedExpr, err := parser.ParseExpr(*column.DefaultExpr)
+		if err != nil {
+			return false, "", err
+		}
+		typedExpr, err := tree.TypeCheck(parsedExpr, nil, &column.Type)
+		if err != nil {
+			return false, "", err
+		}
+		seqNames, err := getUsedSequenceNames(typedExpr)
+		if err != nil {
+			return false, "", err
+		}
+		for _, seqName := range seqNames {
+			parsedSeqName, err := parser.ParseTableName(seqName)
+			if err != nil {
+				return false, "", err
+			}
+			// There must be at least two parts for this to work.
+			if parsedSeqName.NumParts >= 2 {
+				// We only don't allow this if the database name is in there.
+				// This is always the last argument.
+				if tree.Name(parsedSeqName.Parts[parsedSeqName.NumParts-1]).Normalize() == tree.Name(dbName).Normalize() {
+					return false, column.Name, nil
+				}
+			}
+		}
+	}
+	if colIDs.Len() > 0 {
+		return false, "", errors.AssertionFailedf(
+			"expected to find column ids %s in table id %d",
+			colIDs.String(),
+			dependentDesc.ID,
+		)
+	}
+	return true, "", nil
 }
 
 func (n *renameDatabaseNode) Next(runParams) (bool, error) { return false, nil }

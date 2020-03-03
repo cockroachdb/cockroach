@@ -319,7 +319,16 @@ func (ru *Updater) UpdateRow(
 	}
 	var deleteOldSecondaryIndexEntries []sqlbase.IndexEntry
 	if ru.DeleteHelper != nil {
-		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues)
+		// We want to include empty k/v pairs because we want
+		// to delete all k/v's for this row. By setting includeEmpty
+		// to true, we will get a k/v pair for each family in the row,
+		// which will guarantee that we delete all the k/v's in this row.
+		// N.B. that setting includeEmpty to true will sometimes cause
+		// deletes of keys that aren't present. We choose to make this
+		// compromise in order to avoid having to read all values of
+		// the row that is being updated.
+		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(
+			ru.FetchColIDtoRowIndex, oldValues, true /* includeEmpty */)
 		if err != nil {
 			return nil, err
 		}
@@ -352,15 +361,37 @@ func (ru *Updater) UpdateRow(
 	}
 
 	for i := range ru.Helper.Indexes {
-		// TODO (rohany): include a version of sqlbase.EncodeSecondaryIndex that allocates index entries
-		//  into an argument list.
+		// We don't want to insert any empty k/v's, so set includeEmpty to false.
+		// Consider the following case:
+		// TABLE t (
+		//   x INT PRIMARY KEY, y INT, z INT, w INT,
+		//   INDEX (y) STORING (z, w),
+		//   FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (w)
+		//)
+		// If we are to perform an update on row (1, 2, 3, NULL),
+		// the k/v pair for index i that encodes column w would have
+		// an empty value because w is null and the sole resident
+		// of that family. We want to ensure that we don't insert
+		// empty k/v pairs during the process of the update, so
+		// set includeEmpty to false while generating the old
+		// and new index entries.
 		ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, oldValues)
+			ru.Helper.TableDesc.TableDesc(),
+			&ru.Helper.Indexes[i],
+			ru.FetchColIDtoRowIndex,
+			oldValues,
+			false, /* includeEmpty */
+		)
 		if err != nil {
 			return nil, err
 		}
 		ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, ru.newValues)
+			ru.Helper.TableDesc.TableDesc(),
+			&ru.Helper.Indexes[i],
+			ru.FetchColIDtoRowIndex,
+			ru.newValues,
+			false, /* includeEmpty */
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -442,35 +473,115 @@ func (ru *Updater) UpdateRow(
 	for i := range ru.Helper.Indexes {
 		index := &ru.Helper.Indexes[i]
 		if index.Type == sqlbase.IndexDescriptor_FORWARD {
-			if len(ru.oldIndexEntries[i]) != len(ru.newIndexEntries[i]) {
-				panic("expected same number of index entries for old and new values")
-			}
-			for j := range ru.oldIndexEntries[i] {
-				oldEntry := &ru.oldIndexEntries[i][j]
-				newEntry := &ru.newIndexEntries[i][j]
-				var expValue *roachpb.Value
-				if !bytes.Equal(oldEntry.Key, newEntry.Key) {
-					// TODO (rohany): this check is duplicated here and above, is there a reason?
-					ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
+			oldIdx, newIdx := 0, 0
+			oldEntries, newEntries := ru.oldIndexEntries[i], ru.newIndexEntries[i]
+			// The index entries for a particular index are stored in
+			// family sorted order. We use this fact to update rows.
+			// The algorithm to update a row using the old k/v pairs
+			// for the row and the new k/v pairs for the row is very
+			// similar to the algorithm to merge two sorted lists.
+			// We move in lock step through the entries, and potentially
+			// update k/v's that belong to the same family.
+			// If we are in the case where there exists a family's k/v
+			// in the old entries but not the new entries, we need to
+			// delete that k/v. If we are in the case where a family's
+			// k/v exists in the new index entries, then we need to just
+			// insert that new k/v.
+			for oldIdx < len(oldEntries) && newIdx < len(newEntries) {
+				oldEntry, newEntry := &oldEntries[oldIdx], &newEntries[newIdx]
+				if oldEntry.Family == newEntry.Family {
+					// If the families are equal, then check if the keys have changed. If so, delete the old key.
+					// Then, issue a CPut for the new value of the key if the value has changed.
+					// Because the indexes will always have a k/v for family 0, it suffices to only
+					// add foreign key checks in this case, because we are guaranteed to enter here.
+					oldIdx++
+					newIdx++
+					var expValue *roachpb.Value
+					if !bytes.Equal(oldEntry.Key, newEntry.Key) {
+						ru.Fks.addCheckForIndex(index.ID, index.Type)
+						if traceKV {
+							log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
+						}
+						batch.Del(oldEntry.Key)
+					} else if !newEntry.Value.EqualData(oldEntry.Value) {
+						expValue = &oldEntry.Value
+					} else {
+						continue
+					}
+					if traceKV {
+						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+						v := newEntry.Value.PrettyPrint()
+						if expValue != nil {
+							log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
+						} else {
+							log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+						}
+					}
+					batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
+				} else if oldEntry.Family < newEntry.Family {
+					if oldEntry.Family == sqlbase.FamilyID(0) {
+						return nil, errors.AssertionFailedf(
+							"index entry for family 0 for table %s, index %s was not generated",
+							ru.Helper.TableDesc.Name, index.Name,
+						)
+					}
+					// In this case, the index has a k/v for a family that does not exist in
+					// the new set of k/v's for the row. So, we need to delete the old k/v.
 					if traceKV {
 						log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
 					}
 					batch.Del(oldEntry.Key)
-				} else if !newEntry.Value.EqualData(oldEntry.Value) {
-					expValue = &oldEntry.Value
+					oldIdx++
 				} else {
-					continue
+					if newEntry.Family == sqlbase.FamilyID(0) {
+						return nil, errors.AssertionFailedf(
+							"index entry for family 0 for table %s, index %s was not generated",
+							ru.Helper.TableDesc.Name, index.Name,
+						)
+					}
+					// In this case, the index now has a k/v that did not exist in the
+					// old row, so we should expect to not see a value for the new
+					// key, and put the new key in place.
+					if traceKV {
+						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+						v := newEntry.Value.PrettyPrint()
+						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+					}
+					batch.CPut(newEntry.Key, &newEntry.Value, nil)
+					newIdx++
+				}
+			}
+			for oldIdx < len(oldEntries) {
+				// Delete any remaining old entries that are not matched by new entries in this row.
+				oldEntry := &oldEntries[oldIdx]
+				if oldEntry.Family == sqlbase.FamilyID(0) {
+					return nil, errors.AssertionFailedf(
+						"index entry for family 0 for table %s, index %s was not generated",
+						ru.Helper.TableDesc.Name, index.Name,
+					)
+				}
+				if traceKV {
+					log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
+				}
+				batch.Del(oldEntry.Key)
+				oldIdx++
+			}
+			for newIdx < len(newEntries) {
+				// Insert any remaining new entries that are not present in the old row.
+				newEntry := &newEntries[newIdx]
+				if newEntry.Family == sqlbase.FamilyID(0) {
+					return nil, errors.AssertionFailedf(
+						"index entry for family 0 for table %s, index %s was not generated",
+						ru.Helper.TableDesc.Name, index.Name,
+					)
 				}
 				if traceKV {
 					k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
 					v := newEntry.Value.PrettyPrint()
-					if expValue != nil {
-						log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
-					} else {
-						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
-					}
+					log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
 				}
-				batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
+				batch.CPut(newEntry.Key, &newEntry.Value, nil)
+				newIdx++
 			}
 		} else {
 			// Remove all inverted index entries, and re-add them.

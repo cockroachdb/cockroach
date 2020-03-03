@@ -422,11 +422,12 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// We're resetting the length of this slice for variable length indexes such as inverted
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
 		// EncodeSecondaryIndexes appends to secondaryIndexEntries for a row, would stay in the slice for
-		// subsequent rows and we would then have duplicates in entries on output.
+		// subsequent rows and we would then have duplicates in entries on output. Additionally, we do
+		// not want to include empty k/v pairs while backfilling.
 		buffer = buffer[:0]
 		if buffer, err = sqlbase.EncodeSecondaryIndexes(
 			tableDesc.TableDesc(), ib.added, ib.colIdxMap,
-			ib.rowVals, buffer); err != nil {
+			ib.rowVals, buffer, false /* includeEmpty */); err != nil {
 			return nil, nil, err
 		}
 		entries = append(entries, buffer...)
