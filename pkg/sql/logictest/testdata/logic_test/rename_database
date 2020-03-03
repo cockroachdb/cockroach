@@ -136,7 +136,7 @@ ALTER DATABASE u RENAME TO v
 statement ok
 CREATE VIEW v.v AS SELECT k,v FROM v.kv
 
-statement error cannot rename database because relation "v.public.v" depends on relation "v.public.kv"
+statement error cannot rename database because relation "v.public.v" depends on relation "v.public.kv"\s.*you can drop "v.public.v" instead
 ALTER DATABASE v RENAME TO u
 
 # Check that the default databases can be renamed like any other.
@@ -173,7 +173,8 @@ t
 v
 
 # Test dependent sequences on different databases upon renames
-# return the appropriate error message.
+# return the appropriate error message, as well as testing
+# renaming databases with sequences in the same DB is successful.
 subtest regression_45411
 
 statement ok
@@ -182,8 +183,26 @@ CREATE DATABASE db1; CREATE SEQUENCE db1.seq
 statement ok
 CREATE DATABASE db2; CREATE TABLE db2.tbl (a int DEFAULT nextval('db1.seq'))
 
-statement error cannot rename database because relation "db2.public.tbl" depends on relation "db1.public.seq"
+statement error cannot rename database because relation "db2.public.tbl" depends on relation "db1.public.seq"\s.*you can drop the column default "a" of "db1.public.seq" referencing "db2.public.tbl"
 ALTER DATABASE db1 RENAME TO db3
 
 statement ok
 DROP DATABASE db2 CASCADE; DROP DATABASE db1 CASCADE
+
+statement ok
+CREATE DATABASE db1; CREATE SEQUENCE db1.a_seq; CREATE SEQUENCE db1.b_seq; USE db1;
+
+statement ok
+CREATE TABLE db1.a (a int default nextval('a_seq') + nextval('b_seq') + 1); ALTER DATABASE db1 RENAME TO db2; USE db2;
+
+statement error cannot rename database because relation "db2.public.a" depends on relation "db2.public.a_seq"\s.*you can drop the column default "a" of "db2.public.a_seq" referencing "db2.public.a" or modify the default to not reference the database name "db2"
+DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.b_seq') + 1); ALTER DATABASE db2 RENAME TO db1
+
+statement error cannot rename database because relation "db2.public.a" depends on relation "db2.public.a_seq"\s.*you can drop the column default "a" of "db2.public.a_seq" referencing "db2.public.a" or modify the default to not reference the database name "db2"
+DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('db2.public.b_seq') + 1); ALTER DATABASE db2 RENAME TO db1
+
+statement ok
+DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('public.b_seq') + 1); ALTER DATABASE db2 RENAME TO db1
+
+statement ok
+USE defaultdb; DROP DATABASE db1 CASCADE

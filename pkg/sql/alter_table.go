@@ -449,6 +449,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				CreatedExplicitly: true,
 				EncodingType:      sqlbase.PrimaryIndexEncoding,
 				Type:              sqlbase.IndexDescriptor_FORWARD,
+				Version:           sqlbase.SecondaryIndexFamilyFormatVersion,
 			}
 
 			// If the new index is requested to be sharded, set up the index descriptor
@@ -488,6 +489,25 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if err := n.tableDesc.AllocateIDs(); err != nil {
 				return err
+			}
+
+			// Ensure that the new primary index stores all columns in the table. We can't
+			// use AllocateID's to fill the stored columns here because it assumes
+			// that the indexed columns are n.PrimaryIndex.ColumnIDs, but here we want
+			// to consider the indexed columns to be newPrimaryIndexDesc.ColumnIDs.
+			newPrimaryIndexDesc.StoreColumnNames, newPrimaryIndexDesc.StoreColumnIDs = nil, nil
+			for _, col := range n.tableDesc.Columns {
+				containsCol := false
+				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
+					if colID == col.ID {
+						containsCol = true
+						break
+					}
+				}
+				if !containsCol {
+					newPrimaryIndexDesc.StoreColumnIDs = append(newPrimaryIndexDesc.StoreColumnIDs, col.ID)
+					newPrimaryIndexDesc.StoreColumnNames = append(newPrimaryIndexDesc.StoreColumnNames, col.Name)
+				}
 			}
 
 			if t.Interleave != nil {
