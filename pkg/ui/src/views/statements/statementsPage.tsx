@@ -311,6 +311,7 @@ export const selectStatements = createSelector(
     }
     let statements = flattenStatementStats(state.data.statements);
     const app = getMatchParamByName(props.match, appAttr);
+    const isInternal = (statement: ExecutionStatistics) => statement.app.startsWith(state.data.internal_app_name_prefix);
 
     if (app) {
       let criteria = app;
@@ -322,8 +323,10 @@ export const selectStatements = createSelector(
       }
 
       statements = statements.filter(
-        (statement: ExecutionStatistics) => (showInternal && statement.app.startsWith(state.data.internal_app_name_prefix)) || statement.app === criteria,
+        (statement: ExecutionStatistics) => (showInternal && isInternal(statement)) || statement.app === criteria,
       );
+    } else {
+      statements = statements.filter((statement: ExecutionStatistics) => !isInternal(statement));
     }
 
     const statsByStatementAndImplicitTxn: { [statement: string]: StatementsSummaryData } = {};
