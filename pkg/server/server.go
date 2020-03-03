@@ -854,20 +854,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
-	// SessionBoundInternalExecutorFactory.
-	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory =
-		func(
-			ctx context.Context, sessionData *sessiondata.SessionData,
-		) sqlutil.InternalExecutor {
-			ie := sql.MakeInternalExecutor(
-				ctx,
-				s.pgServer.SQLServer,
-				s.sqlMemMetrics,
-				s.st,
-			)
-			ie.SetSessionData(sessionData)
-			return &ie
-		}
+	// SessionBoundInternalExecutorFactory. The same applies for setting a
+	// SessionBoundInternalExecutor on the the job registry.
+	ieFactory := func(
+		ctx context.Context, sessionData *sessiondata.SessionData,
+	) sqlutil.InternalExecutor {
+		ie := sql.MakeInternalExecutor(
+			ctx,
+			s.pgServer.SQLServer,
+			s.sqlMemMetrics,
+			s.st,
+		)
+		ie.SetSessionData(sessionData)
+		return &ie
+	}
+	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
+	s.jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 
 	for _, m := range s.pgServer.Metrics() {
 		s.registry.AddMetricStruct(m)
