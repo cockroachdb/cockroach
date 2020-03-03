@@ -98,12 +98,12 @@ export const Legend: React.SFC <ILegendProps> = ({
               {noConnections.map(value => (
                 <tr className="noConnections__table--item">
                   <td>
-                    <span className="noConnections__table--item__bold">{`N${value.from.nodeID}: `}</span>
+                    <span className="noConnections__table--item__bold">{`(n${value.from.nodeID}): `}</span>
                     <span className="noConnections__table--item__normal">{value.from.address}</span>
                   </td>
                   <td><span className="noConnections__table--item__normal">{value.from.locality}</span></td>
                   <td>
-                    <span className="noConnections__table--item__bold">{`N${value.to.nodeID}: `}</span>
+                    <span className="noConnections__table--item__bold">{`(n${value.to.nodeID}): `}</span>
                     <span className="noConnections__table--item__normal">{value.to.address}</span>
                   </td>
                   <td><span className="noConnections__table--item__normal">{value.to.locality}</span></td>
