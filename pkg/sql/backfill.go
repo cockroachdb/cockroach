@@ -841,7 +841,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			col := idx.ColumnNames[0]
 			row, err := evalCtx.InternalExecutor.QueryRow(ctx, "verify-inverted-idx-count", txn,
 				fmt.Sprintf(
-					`SELECT coalesce(sum_int(crdb_internal.json_num_index_entries(%s)), 0) FROM [%d AS t]`,
+					`SELECT coalesce(sum_int(crdb_internal.json_num_index_entries(%q)), 0) FROM [%d AS t]`,
 					col, tableDesc.ID,
 				),
 			)
