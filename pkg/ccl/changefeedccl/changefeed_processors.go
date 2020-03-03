@@ -628,29 +628,52 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
 	if frontierChanged {
-		newResolved := cf.sf.Frontier()
-		cf.metrics.mu.Lock()
-		if cf.metricsID != -1 {
-			cf.metrics.mu.resolved[cf.metricsID] = newResolved
-		}
-		cf.metrics.mu.Unlock()
-		if err := checkpointResolvedTimestamp(cf.Ctx, cf.jobProgressedFn, cf.sf); err != nil {
+		if err := cf.handleFrontierChanged(); err != nil {
 			return err
 		}
-		sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
-		if cf.freqEmitResolved != emitNoResolved && sinceEmitted >= cf.freqEmitResolved {
-			// Keeping this after the checkpointResolvedTimestamp call will avoid
-			// some duplicates if a restart happens.
-			if err := emitResolvedTimestamp(cf.Ctx, cf.encoder, cf.sink, newResolved); err != nil {
-				return err
-			}
-			cf.lastEmitResolved = newResolved.GoTime()
-		}
 	}
+	cf.maybeLogBehindSpan(frontierChanged)
+	return nil
+}
 
-	// Potentially log the most behind span in the frontier for debugging. These
-	// two cluster setting values represent the target responsiveness of poller
-	// and range feed. The cluster setting for switching between poller and
+func (cf *changeFrontier) handleFrontierChanged() error {
+	newResolved := cf.sf.Frontier()
+	cf.metrics.mu.Lock()
+	if cf.metricsID != -1 {
+		cf.metrics.mu.resolved[cf.metricsID] = newResolved
+	}
+	cf.metrics.mu.Unlock()
+	if err := checkpointResolvedTimestamp(cf.Ctx, cf.jobProgressedFn, cf.sf); err != nil {
+		return err
+	}
+	if err := cf.maybeEmitResolved(newResolved); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
+	if cf.freqEmitResolved == emitNoResolved {
+		return nil
+	}
+	sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
+	shouldEmit := sinceEmitted >= cf.freqEmitResolved
+	if !shouldEmit {
+		return nil
+	}
+	// Keeping this after the checkpointResolvedTimestamp call will avoid
+	// some duplicates if a restart happens.
+	if err := emitResolvedTimestamp(cf.Ctx, cf.encoder, cf.sink, newResolved); err != nil {
+		return err
+	}
+	cf.lastEmitResolved = newResolved.GoTime()
+	return nil
+}
+
+// Potentially log the most behind span in the frontier for debugging.
+func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
+	// These two cluster setting values represent the target responsiveness of
+	// poller and range feed. The cluster setting for switching between poller and
 	// rangefeed is only checked at changefeed start/resume, so instead of
 	// switching on it here, just add them. Also add 1 second in case both these
 	// settings are set really low (as they are in unit tests).
@@ -659,24 +682,25 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	slownessThreshold := time.Second + 10*(pollInterval+closedtsInterval)
 	frontier := cf.sf.Frontier()
 	now := timeutil.Now()
-	if resolvedBehind := now.Sub(frontier.GoTime()); resolvedBehind > slownessThreshold {
-		description := `sinkless feed`
-		if cf.spec.JobID != 0 {
-			description = fmt.Sprintf("job %d", cf.spec.JobID)
-		}
-		if frontierChanged {
-			log.Infof(cf.Ctx, "%s new resolved timestamp %s is behind by %s",
-				description, frontier, resolvedBehind)
-		}
-		const slowSpanMaxFrequency = 10 * time.Second
-		if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
-			cf.lastSlowSpanLog = now
-			s := cf.sf.PeekFrontierSpan()
-			log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
-		}
+	resolvedBehind := now.Sub(frontier.GoTime())
+	if resolvedBehind <= slownessThreshold {
+		return
 	}
 
-	return nil
+	description := `sinkless feed`
+	if cf.spec.JobID != 0 {
+		description = fmt.Sprintf("job %d", cf.spec.JobID)
+	}
+	if frontierChanged {
+		log.Infof(cf.Ctx, "%s new resolved timestamp %s is behind by %s",
+			description, frontier, resolvedBehind)
+	}
+	const slowSpanMaxFrequency = 10 * time.Second
+	if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
+		cf.lastSlowSpanLog = now
+		s := cf.sf.PeekFrontierSpan()
+		log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
+	}
 }
 
 // ConsumerDone is part of the RowSource interface.
