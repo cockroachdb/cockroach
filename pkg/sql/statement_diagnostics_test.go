@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -48,10 +49,12 @@ func TestTraceRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check that the row from statement_diagnostics_request was marked as completed.
+	var completedAt *time.Time
 	traceRow := db.QueryRow(
-		"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
-	require.NoError(t, traceRow.Scan(&completed, &traceID))
+		"SELECT completed, completed_at, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
+	require.NoError(t, traceRow.Scan(&completed, &completedAt, &traceID))
 	require.True(t, completed)
+	require.NotNil(t, completedAt)
 	require.True(t, traceID.Valid)
 
 	// Check the trace.
@@ -110,6 +113,95 @@ func TestTraceRequestDifferentNode(t *testing.T) {
 		traceID.Int64)
 	var json string
 	require.NoError(t, row.Scan(&json))
+	require.Contains(t, json, "traced statement")
+	require.Contains(t, json, "statement execution committed the txn")
+}
+
+func TestStmtDiagnosticsRequestRegistry_GetAllRequests_singleRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	execCfg := tc.Server(0).ExecutorConfig().(ExecutorConfig)
+	stmtInfoRequestRegistry := execCfg.stmtInfoRequestRegistry
+
+	testFingerprint := "INSERT INTO test VALUES (_)"
+	_, err := stmtInfoRequestRegistry.InsertRequest(ctx, testFingerprint)
+	require.NoError(t, err)
+
+	requests, err := stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(requests))
+	require.Equal(t, testFingerprint, requests[0].StatementFingerprint)
+}
+
+func TestStmtDiagnosticsRequestRegistry_GetAllRequests_manyRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	execCfg := tc.Server(0).ExecutorConfig().(ExecutorConfig)
+	stmtInfoRequestRegistry := execCfg.stmtInfoRequestRegistry
+
+	for i := 0; i < 3; i++ {
+		testFingerprint := fmt.Sprintf("INSERT INTO test%d VALUES (_)", i)
+		_, err := stmtInfoRequestRegistry.InsertRequest(
+			ctx, testFingerprint)
+		require.NoError(t, err)
+	}
+
+	requests, err := stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 3, len(requests))
+}
+
+func TestStmtDiagnosticsRequestRegistry_GetAllRequests_and_GetStatementDiagnostics_completed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
+	require.NoError(t, err)
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	stmtInfoRequestRegistry := execCfg.stmtInfoRequestRegistry
+
+	// Ask to trace a particular query using node 0.
+	testFingerprint := "INSERT INTO test VALUES (_)"
+	_, err = stmtInfoRequestRegistry.InsertRequest(
+		ctx, testFingerprint)
+	require.NoError(t, err)
+
+	requests, err := stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(requests))
+	require.Equal(t, testFingerprint, requests[0].StatementFingerprint)
+
+	// complete the request
+	// Run the query.
+	_, err = db.Exec("INSERT INTO test VALUES (1)")
+	require.NoError(t, err)
+
+	// Check that the row from statement_diagnostics_request was marked as completed.
+	requests, err = stmtInfoRequestRegistry.GetAllRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(requests))
+	require.True(t, requests[0].Completed)
+	require.NotNil(t, requests[0].CompletedAt)
+
+	statementDiagnosticsID := requests[0].StatementDiagnosticsID
+
+	// Check that we can fetch the trace as well
+	request, err :=
+		stmtInfoRequestRegistry.GetStatementDiagnostics(
+			ctx, statementDiagnosticsID,
+		)
+	require.NoError(t, err)
+	require.NotNil(t, request.CollectedAt)
+
+	json := request.Trace
 	require.Contains(t, json, "traced statement")
 	require.Contains(t, json, "statement execution committed the txn")
 }
