@@ -20,8 +20,8 @@ import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import { Link as NavLink } from "src/components";
-import "./statements.styl";
 import { DiagnosticStatusBadge } from "oss/src/views/statements/diagnostics/diagnosticStatusBadge";
+import "./statements.styl";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -66,8 +66,12 @@ export function shortStatement(summary: StatementSummary, original: string) {
     default: return original;
   }
 }
-export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string, search?: string)
-    : ColumnDescriptor<AggregateStatistics>[] {
+
+export function makeStatementsColumns(
+  statements: AggregateStatistics[],
+  selectedApp: string,
+  search?: string,
+  activateDiagnostics?: (statement: string) => void): ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
@@ -93,7 +97,7 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
         }
         return (
           <NavLink
-            onClick={() => stmt.stats}
+            onClick={() => activateDiagnostics(stmt.label)}
           >
             Activate
           </NavLink>

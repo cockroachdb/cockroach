@@ -35,8 +35,9 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
-import "./statements.styl";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
+import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
+import "./statements.styl";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -56,6 +57,7 @@ interface StatementsPageState {
 }
 
 export class StatementsPage extends React.Component<StatementsPageProps & RouteComponentProps<any>, StatementsPageState> {
+  activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
 
   constructor(props: StatementsPageProps & RouteComponentProps<any>) {
     super(props);
@@ -70,6 +72,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
       },
       search: "",
     };
+    this.activateDiagnosticsRef = React.createRef();
   }
 
   changeSortSetting = (ss: SortSetting) => {
@@ -205,7 +208,14 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
               <StatementsSortedTable
                 className="statements-table"
                 data={data}
-                columns={makeStatementsColumns(statements, selectedApp, search)}
+                columns={
+                  makeStatementsColumns(
+                    statements,
+                    selectedApp,
+                    search,
+                    this.activateDiagnosticsRef.current?.showModalFor,
+                  )
+                }
                 sortSetting={this.state.sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
               />
@@ -237,6 +247,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
           error={this.props.statementsError}
           render={this.renderStatements}
         />
+        <ActivateDiagnosticsModal ref={this.activateDiagnosticsRef} />
       </React.Fragment>
     );
   }
