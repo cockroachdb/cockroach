@@ -70,6 +70,19 @@ func NewStores(
 	}
 }
 
+// IsMeta1Leaseholder returns whether the specified stores owns
+// the meta1 lease. Returns an error if any.
+func (ls *Stores) IsMeta1Leaseholder(now hlc.Timestamp) (bool, error) {
+	repl, _, err := ls.GetReplicaForRangeID(1)
+	if roachpb.IsRangeNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return repl.OwnsValidLease(now), nil
+}
+
 // GetStoreCount returns the number of stores this node is exporting.
 func (ls *Stores) GetStoreCount() int {
 	var count int

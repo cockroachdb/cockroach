@@ -317,6 +317,9 @@ func applyOverrides(o sqlbase.InternalExecutorSessionDataOverride, sd *sessionda
 	if o.ApplicationName != "" {
 		sd.ApplicationName = o.ApplicationName
 	}
+	if o.SearchPath != nil {
+		sd.SearchPath = *o.SearchPath
+	}
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
