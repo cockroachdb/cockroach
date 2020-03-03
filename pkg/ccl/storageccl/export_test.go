@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -484,85 +485,109 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
 
-	e, err := engine.NewDefaultEngine(
-		0,
-		base.StorageConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
-		})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer e.Close()
-
-	rnd, _ := randutil.NewPseudoRand()
-
-	var (
-		keyMin = roachpb.KeyMin
-		keyMax = roachpb.KeyMax
-
-		tsMin = hlc.Timestamp{WallTime: 0, Logical: 0}
-		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
-	)
-
-	// Store generated keys and timestamps.
-	var keys []roachpb.Key
-	var timestamps []hlc.Timestamp
-
-	// Set to > 1 to prevent random key test from panicking.
-	var numKeys = 5000
-	var curWallTime = 0
-	var curLogical = 0
-
-	batch := e.NewBatch()
-	for i := 0; i < numKeys; i++ {
-		// Ensure walltime and logical are monotonically increasing.
-		curWallTime = randutil.RandIntInRange(rnd, 0, math.MaxInt64-1)
-		curLogical = randutil.RandIntInRange(rnd, 0, math.MaxInt32-1)
-		ts := hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
-		timestamps = append(timestamps, ts)
-
-		// Make keys unique and ensure they are monotonically increasing.
-		key := roachpb.Key(randutil.RandBytes(rnd, 100))
-		key = append([]byte(fmt.Sprintf("#%d", i)), key...)
-		keys = append(keys, key)
-
-		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
-		value.InitChecksum(key)
-		if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+	mkEngine := func(t *testing.T) (e engine.Engine, cleanup func()) {
+		dir, cleanupDir := testutils.TempDir(t)
+		e, err := engine.NewDefaultEngine(
+			0,
+			base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			})
+		if err != nil {
 			t.Fatal(err)
 		}
+		return e, func() {
+			e.Close()
+			cleanupDir()
+		}
+	}
+	getNumKeys := func(t *testing.T, rnd *rand.Rand, targetSize uint64) (numKeys int) {
+		const (
+			targetPages   = 10
+			bytesPerValue = 300
+			minNumKeys    = 2 // need > 1 keys for random key test
+			maxNumKeys    = 5000
+		)
+		numKeys = maxNumKeys
+		if targetSize > 0 {
+			numKeys = rnd.Intn(int(targetSize)*targetPages*2) / bytesPerValue
+		}
+		if numKeys > maxNumKeys {
+			numKeys = maxNumKeys
+		} else if numKeys < minNumKeys {
+			numKeys = minNumKeys
+		}
+		return numKeys
+	}
+	mkData := func(
+		t *testing.T, e engine.Engine, rnd *rand.Rand, numKeys int,
+	) ([]roachpb.Key, []hlc.Timestamp) {
+		// Store generated keys and timestamps.
+		var keys []roachpb.Key
+		var timestamps []hlc.Timestamp
 
-		// Randomly decide whether to add a newer version of the same key to test
-		// MVCC_Filter_All.
-		if randutil.RandIntInRange(rnd, 0, math.MaxInt64)%2 == 0 {
-			curWallTime++
-			ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
-			value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
+		var curWallTime = 0
+		var curLogical = 0
+
+		batch := e.NewBatch()
+		for i := 0; i < numKeys; i++ {
+			// Ensure walltime and logical are monotonically increasing.
+			curWallTime = randutil.RandIntInRange(rnd, 0, math.MaxInt64-1)
+			curLogical = randutil.RandIntInRange(rnd, 0, math.MaxInt32-1)
+			ts := hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
+			timestamps = append(timestamps, ts)
+
+			// Make keys unique and ensure they are monotonically increasing.
+			key := roachpb.Key(randutil.RandBytes(rnd, 100))
+			key = append([]byte(fmt.Sprintf("#%d", i)), key...)
+			keys = append(keys, key)
+
+			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 			value.InitChecksum(key)
 			if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
 				t.Fatal(err)
 			}
-		}
-	}
-	if err := batch.Commit(true); err != nil {
-		t.Fatal(err)
-	}
-	batch.Close()
 
-	sort.Slice(timestamps, func(i, j int) bool {
-		return (timestamps[i].WallTime < timestamps[j].WallTime) ||
-			(timestamps[i].WallTime == timestamps[j].WallTime &&
-				timestamps[i].Logical < timestamps[j].Logical)
-	})
+			// Randomly decide whether to add a newer version of the same key to test
+			// MVCC_Filter_All.
+			if randutil.RandIntInRange(rnd, 0, math.MaxInt64)%2 == 0 {
+				curWallTime++
+				ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
+				value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
+				value.InitChecksum(key)
+				if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if err := batch.Commit(true); err != nil {
+			t.Fatal(err)
+		}
+		batch.Close()
+
+		sort.Slice(timestamps, func(i, j int) bool {
+			return (timestamps[i].WallTime < timestamps[j].WallTime) ||
+				(timestamps[i].WallTime == timestamps[j].WallTime &&
+					timestamps[i].Logical < timestamps[j].Logical)
+		})
+		return keys, timestamps
+	}
 
 	testWithTargetSize := func(t *testing.T, targetSize uint64) {
-		if testing.Short() && targetSize > 0 && targetSize < 1<<15 {
-			t.Skipf("testing with size %d is slow", targetSize)
-		}
+		e, cleanup := mkEngine(t)
+		defer cleanup()
+		rnd, _ := randutil.NewPseudoRand()
+		numKeys := getNumKeys(t, rnd, targetSize)
+		keys, timestamps := mkData(t, e, rnd, numKeys)
+		var (
+			keyMin = roachpb.KeyMin
+			keyMax = roachpb.KeyMax
+
+			tsMin = hlc.Timestamp{WallTime: 0, Logical: 0}
+			tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
+		)
+
 		t.Run("ts (0-∞], latest, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, false, targetSize))
 		t.Run("ts (0-∞], all, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, true, false, targetSize))
 		t.Run("ts (0-∞], latest, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, true, targetSize))
