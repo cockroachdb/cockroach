@@ -2054,6 +2054,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 
 	p.sessionDataMutator = ex.dataMutator
+	p.noticeSender = noopNoticeSender
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 
 	p.queryCacheSession.Init()

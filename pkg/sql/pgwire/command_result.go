@@ -51,7 +51,7 @@ type commandResult struct {
 	pos sql.CmdPos
 	// flushBeforeClose contains a list of functions to flush
 	// before a command is closed.
-	flushBeforeCloseFuncs []func() error
+	flushBeforeCloseFuncs []func(ctx context.Context) error
 
 	err error
 	// errExpected, if set, enforces that an error had been set when Close is
@@ -106,7 +106,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	}
 
 	for _, f := range r.flushBeforeCloseFuncs {
-		if err := f(); err != nil {
+		if err := f(ctx); err != nil {
 			panic(fmt.Sprintf("unexpected err when closing: %s", err))
 		}
 	}
@@ -198,7 +198,15 @@ func (r *commandResult) DisableBuffering() {
 func (r *commandResult) AppendParamStatusUpdate(param string, val string) {
 	r.flushBeforeCloseFuncs = append(
 		r.flushBeforeCloseFuncs,
-		func() error { return r.conn.bufferParamStatus(param, val) },
+		func(ctx context.Context) error { return r.conn.bufferParamStatus(param, val) },
+	)
+}
+
+// AppendNotice is part of the CommandResult interface.
+func (r *commandResult) AppendNotice(noticeErr error) {
+	r.flushBeforeCloseFuncs = append(
+		r.flushBeforeCloseFuncs,
+		func(ctx context.Context) error { return r.conn.bufferNotice(ctx, noticeErr) },
 	)
 }
 
