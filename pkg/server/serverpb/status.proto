@@ -754,6 +754,49 @@ message StatementsResponse {
   string internal_app_name_prefix = 4;
 }
 
+message StatementDiagnosticsRequest {
+  int64 id = 1;
+  string statement_fingerprint = 2;
+  bool completed = 3;
+  google.protobuf.Timestamp requested_at = 4
+  [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  google.protobuf.Timestamp completed_at = 5
+  [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
+}
+
+message CreateStatementDiagnosticsRequestRequest {
+  string statement_fingerprint = 1;
+}
+
+message CreateStatementDiagnosticsRequestResponse {
+  StatementDiagnosticsRequest request = 1;
+}
+
+message StatementDiagnosticsRequestsRequest {}
+
+message StatementDiagnosticsRequestsResponse {
+  repeated StatementDiagnosticsRequest requests = 1 [ (gogoproto.nullable) = false ];
+}
+
+message StatementDiagnosticsPayload {
+  string statement_fingerprint = 1;
+  bool completed = 2;
+  string trace_json = 3 [(gogoproto.customname) = "TraceJSON"];
+  google.protobuf.Timestamp requested_at = 4
+  [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  google.protobuf.Timestamp completed_at = 5
+  [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
+}
+
+message StatementDiagnosticsPayloadRequest {
+  int64 request_id = 1;
+}
+
+message StatementDiagnosticsPayloadResponse {
+  int64 request_id = 1;
+  StatementDiagnosticsPayload diagnostics = 2;
+}
+
 message JobRegistryStatusRequest {
   string node_id = 1;
 }
@@ -926,6 +969,22 @@ service Status {
   rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
       get: "/_status/statements"
+    };
+  }
+  rpc CreateStatementDiagnosticsRequest(CreateStatementDiagnosticsRequestRequest) returns (CreateStatementDiagnosticsRequestResponse) {
+    option (google.api.http) = {
+      post: "/_status/statementdiagnosticsrequests"
+      body: "*"
+    };
+  }
+  rpc StatementDiagnosticsRequests(StatementDiagnosticsRequestsRequest) returns (StatementDiagnosticsRequestsResponse) {
+    option (google.api.http) = {
+      get: "/_status/statementdiagnosticsrequests"
+    };
+  }
+  rpc StatementDiagnostics(StatementDiagnosticsPayloadRequest) returns (StatementDiagnosticsPayloadResponse) {
+    option (google.api.http) = {
+      get: "/_status/statementdiagnostics/{request_id}"
     };
   }
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {

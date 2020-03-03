@@ -110,6 +110,15 @@ export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.Enque
 export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
 export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
 
+export type StatementDiagnosticsRequestsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequestsRequest;
+export type StatementDiagnosticsRequestsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequestsResponse;
+
+export type CreateStatementDiagnosticsRequestRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsRequestRequest;
+export type CreateStatementDiagnosticsRequestResponseMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsRequestResponse;
+
+export type StatementDiagnosticsPayloadRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsPayloadRequest;
+export type StatementDiagnosticsPayloadResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsPayloadResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -347,6 +356,18 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
 // getStatements returns statements the cluster has recently executed, and some stats about them.
 export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessage> {
   return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
+}
+
+export function getStatementDiagnosticsRequests(timeout?: moment.Duration): Promise<StatementDiagnosticsRequestsResponseMessage> {
+  return timeoutFetch(serverpb.StatementDiagnosticsRequestsResponse, `${STATUS_PREFIX}/statementdiagnosticsrequests`, null, timeout);
+}
+
+export function createStatementDiagnosticsRequest(req: CreateStatementDiagnosticsRequestRequestMessage, timeout?: moment.Duration): Promise<CreateStatementDiagnosticsRequestResponseMessage> {
+  return timeoutFetch(serverpb.CreateStatementDiagnosticsRequestResponse, `${STATUS_PREFIX}/statementdiagnosticsrequests`, req as any, timeout);
+}
+
+export function getStatementDiagnostics(req: StatementDiagnosticsPayloadRequestMessage, timeout?: moment.Duration): Promise<StatementDiagnosticsPayloadResponseMessage> {
+  return timeoutFetch(serverpb.StatementDiagnosticsPayloadResponse, `${STATUS_PREFIX}/statementdiagnostics/${req.request_id}`, null, timeout);
 }
 
 // getDataDistribution returns information about how replicas are distributed across nodes.
