@@ -2127,6 +2127,26 @@ func TestImportIntoCSV(t *testing.T) {
 		)
 	})
 
+	// Tests the case where we create table columns in specific order while trying
+	// to import data from csv where columns order is different and import expression
+	// defines in what order columns should be imported to align with table definition
+	t.Run("target-cols-reordered", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE TABLE t (a INT PRIMARY KEY, b int, c STRING NOT NULL, d DECIMAL NOT NULL)")
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+
+		const data = `"3.14,c is a string",1\n"2.73,another string",2`
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (d, c, a) CSV DATA ("%s")`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT COUNT(*) FROM t`, [][]string{{"2"}})
+	})
+
 	// Tests behvior when the existing table being imported into has fewer columns
 	// in its schema then the source CSV file.
 	t.Run("fewer-table-cols-than-csv", func(t *testing.T) {
