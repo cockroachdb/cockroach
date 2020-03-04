@@ -580,6 +580,31 @@ SELECT * FROM t@i
 ----
 1 2 3
 
+# Ensure we don't rewrite default primary index even if its name isn't rowid.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (rowid INT NOT NULL);
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   rowid INT8 NOT NULL,
+   FAMILY "primary" (rowid, rowid_1)
+)
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (rowid)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   rowid INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (rowid, rowid_1)
+)
+
 # Regression for old primary key not using PrimaryIndexEncoding as its encoding type.
 subtest encoding_bug
 

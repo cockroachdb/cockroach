@@ -634,7 +634,7 @@ func ResolveFK(
 	}
 	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = generateUniqueConstraintName(
+		constraintName = sqlbase.GenerateUniqueConstraintName(
 			fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
@@ -751,18 +751,6 @@ func ResolveFK(
 	}
 
 	return nil
-}
-
-// generateUniqueConstraintName attempts to generate a unique constraint name
-// with the given prefix.
-// It will first try prefix by itself, then it will subsequently try
-// adding numeric digits at the end, starting from 1.
-func generateUniqueConstraintName(prefix string, nameExistsFunc func(name string) bool) string {
-	name := prefix
-	for i := 1; nameExistsFunc(name); i++ {
-		name = fmt.Sprintf("%s_%d", prefix, i)
-	}
-	return name
 }
 
 // Adds an index to a table descriptor (that is in the process of being created)

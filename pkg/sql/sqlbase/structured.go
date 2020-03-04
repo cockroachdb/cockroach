@@ -1244,9 +1244,13 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
+		nameExists := func(name string) bool {
+			_, _, err := desc.FindColumnByName(tree.Name(name))
+			return err == nil
+		}
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
-			Name:        "rowid",
+			Name:        GenerateUniqueConstraintName("rowid", nameExists),
 			Type:        *types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -2935,7 +2939,7 @@ func (desc *TableDescriptor) IsPrimaryIndexDefaultRowID() bool {
 		// Should never be in this case.
 		panic(err)
 	}
-	return col.Hidden && col.Name == "rowid"
+	return col.Hidden
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
@@ -4072,4 +4076,16 @@ func (ddk DeprecatedDatabaseKey) Key() roachpb.Key {
 // Name implements DescriptorKey interface.
 func (ddk DeprecatedDatabaseKey) Name() string {
 	return ddk.name
+}
+
+// GenerateUniqueConstraintName attempts to generate a unique constraint name
+// with the given prefix.
+// It will first try prefix by itself, then it will subsequently try
+// adding numeric digits at the end, starting from 1.
+func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string) bool) string {
+	name := prefix
+	for i := 1; nameExistsFunc(name); i++ {
+		name = fmt.Sprintf("%s_%d", prefix, i)
+	}
+	return name
 }
