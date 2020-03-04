@@ -260,9 +260,9 @@ export const emailSubscriptionAlertSelector = createSelector(
     return {
       level: AlertLevel.SUCCESS,
       title: "You successfully signed up for CockroachDB release notes",
-      text: "You will receive emails about CockroachDB releases and best practices. You can unsubscribe from these emails anytime.",
       showAsAlert: true,
       autoClose: true,
+      closable: false,
       dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
         dispatch(emailSubscriptionAlertLocalSetting.set(false));
         return Promise.resolve();
