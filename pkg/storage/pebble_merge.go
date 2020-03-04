@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -169,6 +170,7 @@ func ensureColumnar(ts *roachpb.InternalTimeSeriesData) {
 type MVCCValueMerger struct {
 	timeSeriesOps []roachpb.InternalTimeSeriesData
 	rawByteOps    [][]byte
+	oldestMergeTS hlc.LegacyTimestamp
 	oldToNew      bool
 
 	// Used to avoid heap allocations when passing pointer to `Unmarshal()`.
@@ -218,6 +220,11 @@ func (t *MVCCValueMerger) deserializeMVCCValueAndAppend(value []byte) error {
 			return errors.Errorf("inconsistent value types for non-timeseries merge")
 		}
 		t.rawByteOps = append(t.rawByteOps, t.meta.RawBytes[mvccHeaderSize:])
+	}
+	// Save the timestamp of the oldest value since that is consistent with the
+	// behavior of the C++ DBMergeOperator.
+	if t.meta.MergeTimestamp != nil && (t.oldestMergeTS == hlc.LegacyTimestamp{} || !t.oldToNew) {
+		t.oldestMergeTS = *t.meta.MergeTimestamp
 	}
 	return nil
 }
@@ -307,6 +314,9 @@ func (t *MVCCValueMerger) Finish() ([]byte, error) {
 		return nil, err
 	}
 	var meta enginepb.MVCCMetadata
+	if !(t.oldestMergeTS == hlc.LegacyTimestamp{}) {
+		meta.MergeTimestamp = &t.oldestMergeTS
+	}
 	tsTag := byte(roachpb.ValueType_TIMESERIES)
 	header := make([]byte, mvccHeaderSize)
 	header[mvccTagPos] = tsTag
