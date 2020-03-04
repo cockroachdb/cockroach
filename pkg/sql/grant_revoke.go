@@ -30,8 +30,9 @@ import (
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	return &changePrivilegesNode{
-		targets:  n.Targets,
-		grantees: n.Grantees,
+		targets:      n.Targets,
+		grantees:     n.Grantees,
+		desiredprivs: n.Privileges,
 		changePrivilege: func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 			privDesc.Grant(grantee, n.Privileges)
 		},
@@ -49,8 +50,9 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
 	return &changePrivilegesNode{
-		targets:  n.Targets,
-		grantees: n.Grantees,
+		targets:      n.Targets,
+		grantees:     n.Grantees,
+		desiredprivs: n.Privileges,
 		changePrivilege: func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 			privDesc.Revoke(grantee, n.Privileges)
 		},
@@ -60,6 +62,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 type changePrivilegesNode struct {
 	targets         tree.TargetList
 	grantees        tree.NameList
+	desiredprivs    privilege.List
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string)
 }
 
@@ -104,6 +107,15 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 			return err
 		}
+
+		// Only allow granting/revoking privileges that the requesting
+		// user themselves have on the descriptor.
+		for _, priv := range n.desiredprivs {
+			if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
+				return err
+			}
+		}
+
 		privileges := descriptor.GetPrivileges()
 		for _, grantee := range n.grantees {
 			n.changePrivilege(privileges, string(grantee))
