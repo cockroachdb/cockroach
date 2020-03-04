@@ -35,7 +35,6 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Make a new logger, in the same directory.
 	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
-	defer l.Close()
 
 	// Interleave some messages.
 	Infof(context.Background(), "test1")
@@ -89,7 +88,6 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
-	defer l.Close()
 
 	// Log something on the secondary logger.
 	l.Logf(context.Background(), "test456")
@@ -127,7 +125,6 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 
 	// Make a new logger, in the same directory.
 	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
-	defer l.Close()
 
 	// Emit some logging and ensure the files gets created.
 	l.Logf(ctx, "story time")

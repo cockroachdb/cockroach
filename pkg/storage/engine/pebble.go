@@ -329,12 +329,10 @@ var pebbleLog *log.SecondaryLogger
 
 // InitPebbleLogger initializes the logger to use for Pebble log messages. If
 // not called, WARNING, ERROR, and FATAL logs will be output to the normal
-// CockroachDB log. The caller is responsible for ensuring the
-// Close() method is eventually called on the new logger.
-func InitPebbleLogger(ctx context.Context) *log.SecondaryLogger {
+// CockroachDB log.
+func InitPebbleLogger(ctx context.Context) {
 	pebbleLog = log.NewSecondaryLogger(ctx, nil, "pebble",
 		true /* enableGC */, false /* forceSyncWrites */, false /* enableMsgCount */)
-	return pebbleLog
 }
 
 type pebbleLogger struct {
