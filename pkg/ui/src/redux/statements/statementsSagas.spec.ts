@@ -9,33 +9,55 @@
 // licenses/APL.txt.
 
 import { expectSaga } from "redux-saga-test-plan";
-import sinon from "sinon";
+import { call } from "redux-saga-test-plan/matchers";
 
-import { requestDiagnostics } from "./statementsSagas";
-import { completeStatementDiagnosticsRequest, requestStatementDiagnostics } from "./statementsActions";
-import * as api from "src/util/api";
+import { requestDiagnosticsReport } from "./statementsSagas";
+import {
+  completeStatementDiagnosticsReportRequest,
+  failedStatementDiagnosticsReportRequest,
+  requestStatementDiagnosticsReport,
+} from "./statementsActions";
+import { refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
+import { createStatementDiagnosticsReport } from "src/util/api";
 import { cockroach } from "src/js/protos";
-import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequestsRequest;
-
-const sandbox = sinon.createSandbox();
+import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+import { throwError } from "redux-saga-test-plan/providers";
 
 describe("statementsSagas", () => {
-  beforeEach(() => {
-    sandbox.reset();
-  });
-
   describe("requestDiagnostics generator", () => {
-    it("calls api#requestDiagnostics with statement ID as payload", () => {
-      const createStatementDiagnosticsRequestStub = sandbox.stub(api, "createStatementDiagnosticsRequest").resolves();
+    it("calls api#createStatementDiagnosticsReport with statement fingerprint as payload", () => {
       const statementFingerprint = "some-id";
-      const action = requestStatementDiagnostics(statementFingerprint);
-      const statementDiagnosticsRequest = new StatementDiagnosticsRequest({ statement_fingerprint: statementFingerprint });
+      const action = requestStatementDiagnosticsReport(statementFingerprint);
+      const diagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest({
+        statement_fingerprint: statementFingerprint,
+      });
 
-      return expectSaga(requestDiagnostics, action)
-        .call(createStatementDiagnosticsRequestStub, statementDiagnosticsRequest)
-        .put(completeStatementDiagnosticsRequest())
+      return expectSaga(requestDiagnosticsReport, action)
+        .provide([
+          [call.fn(createStatementDiagnosticsReport), Promise.resolve()],
+        ])
+        .call(createStatementDiagnosticsReport, diagnosticsReportRequest)
+        .put(completeStatementDiagnosticsReportRequest())
+        .call(refreshStatementDiagnosticsRequests)
         .dispatch(action)
         .run();
     });
+  });
+
+  it("calls dispatched failed action if api#createStatementDiagnosticsReport request failed ", () => {
+    const statementFingerprint = "some-id";
+    const action = requestStatementDiagnosticsReport(statementFingerprint);
+    const diagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest({
+      statement_fingerprint: statementFingerprint,
+    });
+
+    return expectSaga(requestDiagnosticsReport, action)
+      .provide([
+        [call.fn(createStatementDiagnosticsReport), throwError(new Error())],
+      ])
+      .call(createStatementDiagnosticsReport, diagnosticsReportRequest)
+      .put(failedStatementDiagnosticsReportRequest())
+      .dispatch(action)
+      .run();
   });
 });
