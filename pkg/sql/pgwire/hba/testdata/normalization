@@ -16,6 +16,10 @@ subtest unicode_normalization
 hba
 host all Ὀδυσσεύς all cert-password
 ----
+# Original configuration:
+# host all Ὀδυσσεύς all cert-password
+#
+# Interpreted configuration:
 # TYPE DATABASE USER     ADDRESS METHOD        OPTIONS
 host   all      ὀδυσσεύς all     cert-password
 
@@ -27,6 +31,11 @@ hba
 host some foo all cert-password
 host some,more bar all cert-password
 ----
+# Original configuration:
+# host some foo all cert-password
+# host some,more bar all cert-password
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      foo  all     cert-password
 host   all      bar  all     cert-password
@@ -38,6 +47,10 @@ subtest quoted_all_host
 hba
 host all all "all" cert-password
 ----
+# Original configuration:
+# host all all "all" cert-password
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      all  "all"   cert-password
 
@@ -49,6 +62,11 @@ hba
 host all a,all,b all cert-password
 host all a,"all",b all cert-password
 ----
+# Original configuration:
+# host all a,all,b all cert-password
+# host all a,"all",b all cert-password
+#
+# Interpreted configuration:
 # TYPE DATABASE USER  ADDRESS METHOD        OPTIONS
 host   all      all   all     cert-password
 host   all      a     all     cert-password
@@ -62,6 +80,10 @@ subtest rule_expansion
 hba
 host all a,b,c all cert-password
 ----
+# Original configuration:
+# host all a,b,c all cert-password
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      a    all     cert-password
 host   all      b    all     cert-password
