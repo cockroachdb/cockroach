@@ -71,10 +71,6 @@ type deleteRun struct {
 const maxDeleteBatchSize = 10000
 
 func (d *deleteNode) startExec(params runParams) error {
-	if err := params.p.maybeSetSystemConfig(d.run.td.tableDesc().GetID()); err != nil {
-		return err
-	}
-
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
