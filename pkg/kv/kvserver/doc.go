@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 /*
-Package storage provides access to the Store and Range
+Package kvserver provides access to the Store and Range
 abstractions. Each Cockroach node handles one or more stores, each of
 which multiplexes to one or more ranges, identified by [start, end)
 keys. Ranges are contiguous regions of the keyspace. Each range

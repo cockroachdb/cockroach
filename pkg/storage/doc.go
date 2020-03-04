@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 /*
-Package engine provides low-level storage. It interacts with storage
+Package storage provides low-level storage. It interacts with storage
 backends (e.g. LevelDB, RocksDB, etc.) via the Engine interface. At
 one level higher, MVCC provides multi-version concurrency control
 capability on top of an Engine instance.
