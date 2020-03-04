@@ -802,38 +802,19 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 		return false
 	}
 
-	// Try to match the pattern:
+	// Try to match the Update's input expression against the pattern:
 	//
-	//  (Update
-	//  	$input:(Scan $scanPrivate:*)
-	//  	$checks:*
-	//  	$mutationPrivate:*
-	//  )
+	//   [Project] [IndexJoin] Scan
 	//
-	// Or
-	//
-	//  (Update
-	//  	$input:(Project
-	//  		(Scan $scanPrivate:*)
-	//  		$projections:*
-	//  		$passthrough:*
-	//  	)
-	//  	$checks:*
-	//  	$mutationPrivate:*
-	//  )
-	//
-	_, ok := upd.Input.(*memo.ScanExpr)
-	if !ok {
-		proj, ok := upd.Input.(*memo.ProjectExpr)
-		if !ok {
-			return false
-		}
-		_, ok = proj.Input.(*memo.ScanExpr)
-		if !ok {
-			return false
-		}
+	input := upd.Input
+	if proj, ok := input.(*memo.ProjectExpr); ok {
+		input = proj.Input
 	}
-	return true
+	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
+		input = idxJoin.Input
+	}
+	_, ok := input.(*memo.ScanExpr)
+	return ok
 }
 
 // tryApplyImplicitLockingToUpsertInput determines whether or not the builder
