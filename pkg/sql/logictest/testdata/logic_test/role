@@ -107,16 +107,23 @@ SELECT * FROM privatedb.privatetable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-# Give ourselves more permissions.
+user root
+
 statement ok
 GRANT INSERT ON publicdb.publictable TO public
+
+user testuser
 
 statement ok
 INSERT INTO publicdb.publictable VALUES (1)
 
+user root
+
 # Revoke public access.
 statement ok
 REVOKE ALL ON publicdb.publictable FROM public
+
+user testuser
 
 statement error user testuser does not have SELECT privilege on relation publictable
 SELECT * FROM publicdb.publictable

@@ -271,7 +271,7 @@ func (p PrivilegeDescriptor) validateRequiredSuperuser(
 ) error {
 	superPriv, ok := p.findUser(user)
 	if !ok {
-		return fmt.Errorf("user %s does not have privileges", user)
+		return fmt.Errorf("user %s does not have privileges over system object with ID=%d", user, id)
 	}
 
 	// The super users must match the allowed privilege set exactly.
