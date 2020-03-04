@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -170,8 +171,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		if write {
 			ba.Add(&roachpb.PutRequest{RequestHeader: keyAHeader})
 		} else {
-			t.Skip("TODO(nvanbenschoten): uncomment")
-			// ba.Add(&roachpb.ScanRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
+			ba.Add(&roachpb.ScanRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
 		}
 
 		br, pErr = th.SendLocked(ctx, ba)

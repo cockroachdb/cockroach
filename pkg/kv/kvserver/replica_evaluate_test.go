@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -28,6 +30,9 @@ import (
 
 func TestEvaluateBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ts := hlc.Timestamp{WallTime: 1}
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0)
 
 	tcs := []testCase{
 		//
@@ -244,6 +249,174 @@ func TestEvaluateBatch(t *testing.T) {
 				require.Equal(t, "value-e", string(b))
 			},
 		},
+		//
+		// Test suite for KeyLocking.
+		//
+		{
+			// Three scans that observe 3, 1, and 0 keys, respectively. An
+			// unreplicated lock should be acquired on each key that is scanned.
+			name: "scan with key locking",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAD := scanArgsString("a", "d")
+				scanAD.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAD)
+				scanEF := scanArgsString("e", "f")
+				scanEF.KeyLocking = lock.Exclusive
+				d.ba.Add(scanEF)
+				scanHJ := scanArgsString("h", "j")
+				scanHJ.KeyLocking = lock.Exclusive
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, lock.Unreplicated, "a", "b", "c", "e")
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+			// Ditto in reverse.
+			name: "reverse scan with key locking",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAD := revScanArgsString("a", "d")
+				scanAD.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAD)
+				scanEF := revScanArgsString("e", "f")
+				scanEF.KeyLocking = lock.Exclusive
+				d.ba.Add(scanEF)
+				scanHJ := revScanArgsString("h", "j")
+				scanHJ.KeyLocking = lock.Exclusive
+				d.ba.Add(scanHJ)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, lock.Unreplicated, "c", "b", "a", "e")
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+			// Three scans that observe 3, 1, and 0 keys, respectively. No
+			// transaction set, so no locks should be acquired.
+			name: "scan with key locking without txn",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAD := scanArgsString("a", "d")
+				scanAD.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAD)
+				scanEF := scanArgsString("e", "f")
+				scanEF.KeyLocking = lock.Exclusive
+				d.ba.Add(scanEF)
+				scanHJ := scanArgsString("h", "j")
+				scanHJ.KeyLocking = lock.Exclusive
+				d.ba.Add(scanHJ)
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a", "b", "c"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, lock.Unreplicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+			// Ditto in reverse.
+			name: "reverse scan with key locking without txn",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAD := revScanArgsString("a", "d")
+				scanAD.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAD)
+				scanEF := revScanArgsString("e", "f")
+				scanEF.KeyLocking = lock.Exclusive
+				d.ba.Add(scanEF)
+				scanHJ := revScanArgsString("h", "j")
+				scanHJ.KeyLocking = lock.Exclusive
+				d.ba.Add(scanHJ)
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"c", "b", "a"}, []string{"e"}, nil)
+				verifyAcquiredLocks(t, r, lock.Unreplicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+
+			// Scanning with key locking and a MaxSpanRequestKeys limit should
+			// acquire an unreplicated lock on each key returned and no locks on
+			// keys past the limit.
+			name: "scan with key locking and MaxSpanRequestKeys=3",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAE := scanArgsString("a", "e")
+				scanAE.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAE)
+				d.ba.Txn = &txn
+				d.ba.MaxSpanRequestKeys = 3
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a", "b", "c"})
+				verifyResumeSpans(t, r, "d-e")
+				verifyAcquiredLocks(t, r, lock.Unreplicated, "a", "b", "c")
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+			// Ditto in reverse.
+			name: "reverse scan with key locking and MaxSpanRequestKeys=3",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAE := revScanArgsString("a", "e")
+				scanAE.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAE)
+				d.ba.Txn = &txn
+				d.ba.MaxSpanRequestKeys = 3
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"d", "c", "b"})
+				verifyResumeSpans(t, r, "a-a\x00")
+				verifyAcquiredLocks(t, r, lock.Unreplicated, "d", "c", "b")
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+			// Scanning with key locking and a TargetBytes limit should acquire
+			// an unreplicated lock on each key returned and no locks on keys
+			// past the limit.
+			name: "scan with key locking and TargetBytes=1",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAE := scanArgsString("a", "e")
+				scanAE.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAE)
+				d.ba.Txn = &txn
+				d.ba.TargetBytes = 1
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"})
+				verifyResumeSpans(t, r, "b-e")
+				verifyAcquiredLocks(t, r, lock.Unreplicated, "a")
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+			// Ditto in reverse.
+			name: "reverse scan with key locking and TargetBytes=1",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				scanAE := revScanArgsString("a", "e")
+				scanAE.KeyLocking = lock.Exclusive
+				d.ba.Add(scanAE)
+				d.ba.Txn = &txn
+				d.ba.TargetBytes = 1
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"d"})
+				verifyResumeSpans(t, r, "a-c\x00")
+				verifyAcquiredLocks(t, r, lock.Unreplicated, "d")
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -256,7 +429,8 @@ func TestEvaluateBatch(t *testing.T) {
 				idKey: storagebase.CmdIDKey("testing"),
 				eng:   eng,
 			}
-			d.ba.Header.Timestamp = hlc.Timestamp{WallTime: 1}
+			d.AbortSpan = abortspan.New(1)
+			d.ba.Header.Timestamp = ts
 
 			tc.setup(t, d)
 
@@ -354,4 +528,14 @@ func verifyResumeSpans(t *testing.T, r resp, resumeSpans ...string) {
 		}
 		require.Equal(t, span, act, "#%d", i+1)
 	}
+}
+
+func verifyAcquiredLocks(t *testing.T, r resp, dur lock.Durability, lockedKeys ...string) {
+	var foundLocked []string
+	for _, l := range r.res.Local.AcquiredLocks {
+		if l.Durability == dur {
+			foundLocked = append(foundLocked, string(l.Key))
+		}
+	}
+	require.Equal(t, lockedKeys, foundLocked)
 }

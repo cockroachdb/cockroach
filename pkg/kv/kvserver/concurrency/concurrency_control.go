@@ -234,6 +234,7 @@ type LockManager interface {
 
 	// OnLockUpdated informs the concurrency manager that a transaction has
 	// updated or released a lock or range of locks that it previously held.
+	// The Durability field of the lock update struct is ignored.
 	OnLockUpdated(context.Context, *roachpb.LockUpdate)
 }
 
@@ -495,7 +496,9 @@ type lockTable interface {
 	//
 	// The method is called during intent resolution. For spans containing
 	// Replicated locks, this must be called after intent resolution has been
-	// applied to the replicated state machine.
+	// applied to the replicated state machine. The method itself, however,
+	// ignores the Durability field in the LockUpdate. It can therefore be
+	// used to update locks for a given transaction for all durability levels.
 	//
 	// A latch with SpanReadWrite must be held on span with the lowest timestamp
 	// at which any of the locks could be held. This is explained below.
