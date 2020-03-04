@@ -10,7 +10,7 @@
 
 package roachpb
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+import "github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 
 // AddIgnoredSeqNumRange adds the given range to the given list of
 // ignored seqnum ranges.

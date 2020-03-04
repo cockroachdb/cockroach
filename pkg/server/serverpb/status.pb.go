@@ -12,9 +12,9 @@ import (
 	time "time"
 
 	build "github.com/cockroachdb/cockroach/pkg/build"
+	enginepb "github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	gossip "github.com/cockroachdb/cockroach/pkg/gossip"
 	jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	enginepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
 	storagepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"

@@ -9,7 +9,7 @@ import (
 	io "io"
 	math "math"
 
-	enginepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
