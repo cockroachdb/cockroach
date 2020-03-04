@@ -247,7 +247,7 @@ func NewDatumRowConverter(
 	}
 
 	c.IsTargetCol = make(map[int]struct{})
-	for i, col := range immutDesc.VisibleColumns() {
+	for i, col := range targetColDescriptors {
 		if _, ok := isTargetColID[col.ID]; !ok {
 			continue
 		}
@@ -274,7 +274,7 @@ func NewDatumRowConverter(
 	c.cols = cols
 	c.defaultExprs = defaultExprs
 
-	c.VisibleCols = immutDesc.VisibleColumns()
+	c.VisibleCols = targetColDescriptors
 	c.VisibleColTypes = make([]*types.T, len(c.VisibleCols))
 	for i := range c.VisibleCols {
 		c.VisibleColTypes[i] = c.VisibleCols[i].DatumType()
