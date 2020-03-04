@@ -22,18 +22,53 @@ insert child
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:6!null
-                ├── project
-                │    ├── columns: column2:6!null
-                │    └── with-scan &1
-                │         ├── columns: column1:5!null column2:6!null
-                │         └── mapping:
-                │              ├──  column1:3 => column1:5
-                │              └──  column2:4 => column2:6
+                ├── columns: column2:5!null
+                ├── with-scan &1
+                │    ├── columns: column2:5!null
+                │    └── mapping:
+                │         └──  column2:4 => column2:5
                 ├── scan parent
-                │    └── columns: parent.p:7!null
+                │    └── columns: parent.p:6!null
                 └── filters
-                     └── column2:6 = parent.p:7
+                     └── column2:5 = parent.p:6
+
+build
+INSERT INTO child VALUES (100, 1), (200, 1) ON CONFLICT DO NOTHING
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:3 => c:1
+ │    └── column2:4 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: column1:3!null column2:4!null
+ │    └── select
+ │         ├── columns: column1:3!null column2:4!null c:5 child.p:6
+ │         ├── left-join (hash)
+ │         │    ├── columns: column1:3!null column2:4!null c:5 child.p:6
+ │         │    ├── values
+ │         │    │    ├── columns: column1:3!null column2:4!null
+ │         │    │    ├── (100, 1)
+ │         │    │    └── (200, 1)
+ │         │    ├── scan child
+ │         │    │    └── columns: c:5!null child.p:6!null
+ │         │    └── filters
+ │         │         └── column1:3 = c:5
+ │         └── filters
+ │              └── c:5 IS NULL
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: column2:7!null
+                ├── with-scan &1
+                │    ├── columns: column2:7!null
+                │    └── mapping:
+                │         └──  column2:4 => column2:7
+                ├── scan parent
+                │    └── columns: parent.p:8!null
+                └── filters
+                     └── column2:7 = parent.p:8
 
 # Use a non-constant input.
 exec-ddl
@@ -46,28 +81,25 @@ INSERT INTO child SELECT x, y FROM xy
 insert child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── xy.x:3 => c:1
+ │    ├── x:3 => c:1
  │    └── xy.y:4 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: xy.x:3 xy.y:4
+ │    ├── columns: x:3 xy.y:4
  │    └── scan xy
- │         └── columns: xy.x:3 xy.y:4 rowid:5!null
+ │         └── columns: x:3 xy.y:4 rowid:5!null
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: y:7
-                ├── project
-                │    ├── columns: y:7
-                │    └── with-scan &1
-                │         ├── columns: x:6 y:7
-                │         └── mapping:
-                │              ├──  xy.x:3 => x:6
-                │              └──  xy.y:4 => y:7
+                ├── columns: y:6
+                ├── with-scan &1
+                │    ├── columns: y:6
+                │    └── mapping:
+                │         └──  xy.y:4 => y:6
                 ├── scan parent
-                │    └── columns: parent.p:8!null
+                │    └── columns: parent.p:7!null
                 └── filters
-                     └── y:7 = parent.p:8
+                     └── y:6 = parent.p:7
 
 exec-ddl
 CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
@@ -91,22 +123,19 @@ insert child_nullable
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:6!null
+                ├── columns: column2:5!null
                 ├── select
-                │    ├── columns: column2:6!null
-                │    ├── project
-                │    │    ├── columns: column2:6
-                │    │    └── with-scan &1
-                │    │         ├── columns: column1:5!null column2:6
-                │    │         └── mapping:
-                │    │              ├──  column1:3 => column1:5
-                │    │              └──  column2:4 => column2:6
+                │    ├── columns: column2:5!null
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:5
+                │    │    └── mapping:
+                │    │         └──  column2:4 => column2:5
                 │    └── filters
-                │         └── column2:6 IS NOT NULL
+                │         └── column2:5 IS NOT NULL
                 ├── scan parent
-                │    └── columns: parent.p:7!null
+                │    └── columns: parent.p:6!null
                 └── filters
-                     └── column2:6 = parent.p:7
+                     └── column2:5 = parent.p:6
 
 # The column is nullable but we know that the input is not null, so we don't
 # need to plan the filter.
@@ -126,18 +155,15 @@ insert child_nullable
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:6!null
-                ├── project
-                │    ├── columns: column2:6!null
-                │    └── with-scan &1
-                │         ├── columns: column1:5!null column2:6!null
-                │         └── mapping:
-                │              ├──  column1:3 => column1:5
-                │              └──  column2:4 => column2:6
+                ├── columns: column2:5!null
+                ├── with-scan &1
+                │    ├── columns: column2:5!null
+                │    └── mapping:
+                │         └──  column2:4 => column2:5
                 ├── scan parent
-                │    └── columns: parent.p:7!null
+                │    └── columns: parent.p:6!null
                 └── filters
-                     └── column2:6 = parent.p:7
+                     └── column2:5 = parent.p:6
 
 # Check planning of filter with FULL match (which should be the same on a
 # single column).
@@ -161,22 +187,19 @@ insert child_nullable_full
  └── f-k-checks
       └── f-k-checks-item: child_nullable_full(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:6!null
+                ├── columns: column2:5!null
                 ├── select
-                │    ├── columns: column2:6!null
-                │    ├── project
-                │    │    ├── columns: column2:6
-                │    │    └── with-scan &1
-                │    │         ├── columns: column1:5!null column2:6
-                │    │         └── mapping:
-                │    │              ├──  column1:3 => column1:5
-                │    │              └──  column2:4 => column2:6
+                │    ├── columns: column2:5!null
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:5
+                │    │    └── mapping:
+                │    │         └──  column2:4 => column2:5
                 │    └── filters
-                │         └── column2:6 IS NOT NULL
+                │         └── column2:5 IS NOT NULL
                 ├── scan parent
-                │    └── columns: parent.p:7!null
+                │    └── columns: parent.p:6!null
                 └── filters
-                     └── column2:6 = parent.p:7
+                     └── column2:5 = parent.p:6
 
 # Tests with multicolumn FKs.
 exec-ddl
@@ -209,28 +232,25 @@ insert multi_col_child
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:10!null column3:11!null column4:12!null
+                ├── columns: column2:9!null column3:10!null column4:11!null
                 ├── select
-                │    ├── columns: column2:10!null column3:11!null column4:12!null
-                │    ├── project
-                │    │    ├── columns: column2:10 column3:11 column4:12
-                │    │    └── with-scan &1
-                │    │         ├── columns: column1:9!null column2:10 column3:11 column4:12
-                │    │         └── mapping:
-                │    │              ├──  column1:5 => column1:9
-                │    │              ├──  column2:6 => column2:10
-                │    │              ├──  column3:7 => column3:11
-                │    │              └──  column4:8 => column4:12
+                │    ├── columns: column2:9!null column3:10!null column4:11!null
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:9 column3:10 column4:11
+                │    │    └── mapping:
+                │    │         ├──  column2:6 => column2:9
+                │    │         ├──  column3:7 => column3:10
+                │    │         └──  column4:8 => column4:11
                 │    └── filters
-                │         ├── column2:10 IS NOT NULL
-                │         ├── column3:11 IS NOT NULL
-                │         └── column4:12 IS NOT NULL
+                │         ├── column2:9 IS NOT NULL
+                │         ├── column3:10 IS NOT NULL
+                │         └── column4:11 IS NOT NULL
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
+                │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
-                     ├── column2:10 = multi_col_parent.p:13
-                     ├── column3:11 = multi_col_parent.q:14
-                     └── column4:12 = multi_col_parent.r:15
+                     ├── column2:9 = multi_col_parent.p:12
+                     ├── column3:10 = multi_col_parent.q:13
+                     └── column4:11 = multi_col_parent.r:14
 
 # Only p and q are nullable.
 build
@@ -251,27 +271,24 @@ insert multi_col_child
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:10!null column3:11!null column4:12!null
+                ├── columns: column2:9!null column3:10!null column4:11!null
                 ├── select
-                │    ├── columns: column2:10!null column3:11!null column4:12!null
-                │    ├── project
-                │    │    ├── columns: column2:10 column3:11 column4:12!null
-                │    │    └── with-scan &1
-                │    │         ├── columns: column1:9!null column2:10 column3:11 column4:12!null
-                │    │         └── mapping:
-                │    │              ├──  column1:5 => column1:9
-                │    │              ├──  column2:6 => column2:10
-                │    │              ├──  column3:7 => column3:11
-                │    │              └──  column4:8 => column4:12
+                │    ├── columns: column2:9!null column3:10!null column4:11!null
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:9 column3:10 column4:11!null
+                │    │    └── mapping:
+                │    │         ├──  column2:6 => column2:9
+                │    │         ├──  column3:7 => column3:10
+                │    │         └──  column4:8 => column4:11
                 │    └── filters
-                │         ├── column2:10 IS NOT NULL
-                │         └── column3:11 IS NOT NULL
+                │         ├── column2:9 IS NOT NULL
+                │         └── column3:10 IS NOT NULL
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
+                │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
-                     ├── column2:10 = multi_col_parent.p:13
-                     ├── column3:11 = multi_col_parent.q:14
-                     └── column4:12 = multi_col_parent.r:15
+                     ├── column2:9 = multi_col_parent.p:12
+                     ├── column3:10 = multi_col_parent.q:13
+                     └── column4:11 = multi_col_parent.r:14
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -291,22 +308,19 @@ insert multi_col_child
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:10!null column3:11!null column4:12!null
-                ├── project
-                │    ├── columns: column2:10!null column3:11!null column4:12!null
-                │    └── with-scan &1
-                │         ├── columns: column1:9!null column2:10!null column3:11!null column4:12!null
-                │         └── mapping:
-                │              ├──  column1:5 => column1:9
-                │              ├──  column2:6 => column2:10
-                │              ├──  column3:7 => column3:11
-                │              └──  column4:8 => column4:12
+                ├── columns: column2:9!null column3:10!null column4:11!null
+                ├── with-scan &1
+                │    ├── columns: column2:9!null column3:10!null column4:11!null
+                │    └── mapping:
+                │         ├──  column2:6 => column2:9
+                │         ├──  column3:7 => column3:10
+                │         └──  column4:8 => column4:11
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
+                │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
-                     ├── column2:10 = multi_col_parent.p:13
-                     ├── column3:11 = multi_col_parent.q:14
-                     └── column4:12 = multi_col_parent.r:15
+                     ├── column2:9 = multi_col_parent.p:12
+                     ├── column3:10 = multi_col_parent.q:13
+                     └── column4:11 = multi_col_parent.r:14
 
 exec-ddl
 CREATE TABLE multi_col_child_full  (
@@ -334,26 +348,23 @@ insert multi_col_child_full
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:10 column3:11 column4:12
+                ├── columns: column2:9 column3:10 column4:11
                 ├── select
-                │    ├── columns: column2:10 column3:11 column4:12
-                │    ├── project
-                │    │    ├── columns: column2:10 column3:11 column4:12
-                │    │    └── with-scan &1
-                │    │         ├── columns: column1:9!null column2:10 column3:11 column4:12
-                │    │         └── mapping:
-                │    │              ├──  column1:5 => column1:9
-                │    │              ├──  column2:6 => column2:10
-                │    │              ├──  column3:7 => column3:11
-                │    │              └──  column4:8 => column4:12
+                │    ├── columns: column2:9 column3:10 column4:11
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:9 column3:10 column4:11
+                │    │    └── mapping:
+                │    │         ├──  column2:6 => column2:9
+                │    │         ├──  column3:7 => column3:10
+                │    │         └──  column4:8 => column4:11
                 │    └── filters
-                │         └── ((column2:10 IS NOT NULL) OR (column3:11 IS NOT NULL)) OR (column4:12 IS NOT NULL)
+                │         └── ((column2:9 IS NOT NULL) OR (column3:10 IS NOT NULL)) OR (column4:11 IS NOT NULL)
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
+                │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
-                     ├── column2:10 = multi_col_parent.p:13
-                     ├── column3:11 = multi_col_parent.q:14
-                     └── column4:12 = multi_col_parent.r:15
+                     ├── column2:9 = multi_col_parent.p:12
+                     ├── column3:10 = multi_col_parent.q:13
+                     └── column4:11 = multi_col_parent.r:14
 
 # Only p and q are nullable; no filter necessary.
 build
@@ -374,22 +385,19 @@ insert multi_col_child_full
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:10 column3:11 column4:12!null
-                ├── project
-                │    ├── columns: column2:10 column3:11 column4:12!null
-                │    └── with-scan &1
-                │         ├── columns: column1:9!null column2:10 column3:11 column4:12!null
-                │         └── mapping:
-                │              ├──  column1:5 => column1:9
-                │              ├──  column2:6 => column2:10
-                │              ├──  column3:7 => column3:11
-                │              └──  column4:8 => column4:12
+                ├── columns: column2:9 column3:10 column4:11!null
+                ├── with-scan &1
+                │    ├── columns: column2:9 column3:10 column4:11!null
+                │    └── mapping:
+                │         ├──  column2:6 => column2:9
+                │         ├──  column3:7 => column3:10
+                │         └──  column4:8 => column4:11
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
+                │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
-                     ├── column2:10 = multi_col_parent.p:13
-                     ├── column3:11 = multi_col_parent.q:14
-                     └── column4:12 = multi_col_parent.r:15
+                     ├── column2:9 = multi_col_parent.p:12
+                     ├── column3:10 = multi_col_parent.q:13
+                     └── column4:11 = multi_col_parent.r:14
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -409,22 +417,19 @@ insert multi_col_child_full
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:10!null column3:11!null column4:12!null
-                ├── project
-                │    ├── columns: column2:10!null column3:11!null column4:12!null
-                │    └── with-scan &1
-                │         ├── columns: column1:9!null column2:10!null column3:11!null column4:12!null
-                │         └── mapping:
-                │              ├──  column1:5 => column1:9
-                │              ├──  column2:6 => column2:10
-                │              ├──  column3:7 => column3:11
-                │              └──  column4:8 => column4:12
+                ├── columns: column2:9!null column3:10!null column4:11!null
+                ├── with-scan &1
+                │    ├── columns: column2:9!null column3:10!null column4:11!null
+                │    └── mapping:
+                │         ├──  column2:6 => column2:9
+                │         ├──  column3:7 => column3:10
+                │         └──  column4:8 => column4:11
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
+                │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
-                     ├── column2:10 = multi_col_parent.p:13
-                     ├── column3:11 = multi_col_parent.q:14
-                     └── column4:12 = multi_col_parent.r:15
+                     ├── column2:9 = multi_col_parent.p:12
+                     ├── column3:10 = multi_col_parent.q:13
+                     └── column4:11 = multi_col_parent.r:14
 
 exec-ddl
 CREATE TABLE multi_ref_parent_a (a INT PRIMARY KEY, other INT)
@@ -462,43 +467,34 @@ insert multi_ref_child
  └── f-k-checks
       ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
       │    └── anti-join (hash)
-      │         ├── columns: column2:10!null
+      │         ├── columns: column2:9!null
       │         ├── select
-      │         │    ├── columns: column2:10!null
-      │         │    ├── project
-      │         │    │    ├── columns: column2:10
-      │         │    │    └── with-scan &1
-      │         │    │         ├── columns: column1:9!null column2:10 column3:11 column4:12
-      │         │    │         └── mapping:
-      │         │    │              ├──  column1:5 => column1:9
-      │         │    │              ├──  column2:6 => column2:10
-      │         │    │              ├──  column3:7 => column3:11
-      │         │    │              └──  column4:8 => column4:12
+      │         │    ├── columns: column2:9!null
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: column2:9
+      │         │    │    └── mapping:
+      │         │    │         └──  column2:6 => column2:9
       │         │    └── filters
-      │         │         └── column2:10 IS NOT NULL
+      │         │         └── column2:9 IS NOT NULL
       │         ├── scan multi_ref_parent_a
-      │         │    └── columns: multi_ref_parent_a.a:13!null
+      │         │    └── columns: multi_ref_parent_a.a:10!null
       │         └── filters
-      │              └── column2:10 = multi_ref_parent_a.a:13
+      │              └── column2:9 = multi_ref_parent_a.a:10
       └── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
            └── anti-join (hash)
-                ├── columns: column3:17!null column4:18!null
+                ├── columns: column3:12!null column4:13!null
                 ├── select
-                │    ├── columns: column3:17!null column4:18!null
-                │    ├── project
-                │    │    ├── columns: column3:17 column4:18
-                │    │    └── with-scan &1
-                │    │         ├── columns: column1:15!null column2:16 column3:17 column4:18
-                │    │         └── mapping:
-                │    │              ├──  column1:5 => column1:15
-                │    │              ├──  column2:6 => column2:16
-                │    │              ├──  column3:7 => column3:17
-                │    │              └──  column4:8 => column4:18
+                │    ├── columns: column3:12!null column4:13!null
+                │    ├── with-scan &1
+                │    │    ├── columns: column3:12 column4:13
+                │    │    └── mapping:
+                │    │         ├──  column3:7 => column3:12
+                │    │         └──  column4:8 => column4:13
                 │    └── filters
-                │         ├── column3:17 IS NOT NULL
-                │         └── column4:18 IS NOT NULL
+                │         ├── column3:12 IS NOT NULL
+                │         └── column4:13 IS NOT NULL
                 ├── scan multi_ref_parent_bc
-                │    └── columns: multi_ref_parent_bc.b:19!null multi_ref_parent_bc.c:20!null
+                │    └── columns: multi_ref_parent_bc.b:14!null multi_ref_parent_bc.c:15!null
                 └── filters
-                     ├── column3:17 = multi_ref_parent_bc.b:19
-                     └── column4:18 = multi_ref_parent_bc.c:20
+                     ├── column3:12 = multi_ref_parent_bc.b:14
+                     └── column4:13 = multi_ref_parent_bc.c:15

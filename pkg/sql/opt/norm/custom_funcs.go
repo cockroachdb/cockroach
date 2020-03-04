@@ -2084,9 +2084,11 @@ func (c *CustomFuncs) WithUses(r opt.Expr) props.WithUsesMap {
 	switch e := r.(type) {
 	case memo.RelExpr:
 		relProps := e.Relational()
+
+		// Lazily calculate and store the WithUses value.
 		if !relProps.IsAvailable(props.WithUses) {
-			relProps.SetAvailable(props.WithUses)
 			relProps.Shared.Rule.WithUses = c.deriveWithUses(r)
+			relProps.SetAvailable(props.WithUses)
 		}
 		return relProps.Shared.Rule.WithUses
 

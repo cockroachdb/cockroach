@@ -1383,10 +1383,7 @@ func (ef *execFactory) ConstructUpdate(
 		}
 	}
 
-	// Create the table updater, which does the bulk of the work. In the HP,
-	// the updater derives the columns that need to be fetched. By contrast, the
-	// CBO will have already determined the set of fetch and update columns, and
-	// passes those sets into the updater (which will basically be a no-op).
+	// Create the table updater, which does the bulk of the work.
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
@@ -1521,13 +1518,13 @@ func (ef *execFactory) ConstructUpsert(
 	checkFKs := row.SkipFKs
 	if !skipFKChecks {
 		checkFKs = row.CheckFKs
-	}
-	// Determine the foreign key tables involved in the upsert.
-	// TODO(justin): move inside conditional block once we emit update checks.
-	var err error
-	fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckUpdates)
-	if err != nil {
-		return nil, err
+
+		// Determine the foreign key tables involved in the upsert.
+		var err error
+		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckUpdates)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
@@ -1539,10 +1536,6 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table updater, which does the bulk of the update-related work.
-	// In the HP, the updater derives the columns that need to be fetched. By
-	// contrast, the CBO will have already determined the set of fetch and update
-	// columns, and passes those sets into the updater (which will basically be a
-	// no-op).
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
@@ -1551,8 +1544,7 @@ func (ef *execFactory) ConstructUpsert(
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
-		// TODO(justin): make this conditional on skipFKChecks once we emit the update checks.
-		row.CheckFKs,
+		checkFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
 	)
