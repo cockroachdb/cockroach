@@ -69,7 +69,7 @@ func (c *csvInputReader) readFile(
 	ctx context.Context,
 	input *fileReader,
 	inputIdx int32,
-	inputName string,
+	inputName string, // TODO(bartem): seems like this is unused field might need refactoring/cleanup to remove it
 	resumePos int64,
 	rejected chan string,
 ) error {
@@ -89,13 +89,14 @@ func (c *csvInputReader) readFile(
 }
 
 type csvRowProducer struct {
-	importCtx *parallelImportContext
-	opts      *roachpb.CSVOptions
-	csv       *csv.Reader
-	rowNum    int64
-	err       error
-	record    []string
-	progress  func() float32
+	importCtx       *parallelImportContext
+	opts            *roachpb.CSVOptions
+	csv             *csv.Reader
+	rowNum          int64
+	err             error
+	record          []string
+	progress        func() float32
+	expectedColumns tree.NameList
 }
 
 var _ importRowProducer = &csvRowProducer{}
@@ -134,15 +135,19 @@ func strRecord(record []string, sep rune) string {
 // Row() implements importRowProducer interface.
 func (p *csvRowProducer) Row() (interface{}, error) {
 	p.rowNum++
-	expectedCols := len(p.importCtx.tableDesc.VisibleColumns())
-	if len(p.record) == expectedCols {
+	expectedColsLen := len(p.expectedColumns)
+	if expectedColsLen == 0 {
+		expectedColsLen = len(p.importCtx.tableDesc.VisibleColumns())
+	}
+
+	if len(p.record) == expectedColsLen {
 		// Expected number of columns.
-	} else if len(p.record) == expectedCols+1 && p.record[expectedCols] == "" {
+	} else if len(p.record) == expectedColsLen+1 && p.record[expectedColsLen] == "" {
 		// Line has the optional trailing comma, ignore the empty field.
-		p.record = p.record[:expectedCols]
+		p.record = p.record[:expectedColsLen]
 	} else {
 		return nil, newImportRowError(
-			errors.Errorf("expected %d fields, got %d", expectedCols, len(p.record)),
+			errors.Errorf("expected %d fields, got %d", expectedColsLen, len(p.record)),
 			strRecord(p.record, p.opts.Comma),
 			p.rowNum)
 
@@ -205,10 +210,11 @@ func newCSVPipeline(c *csvInputReader, input *fileReader) (*csvRowProducer, *csv
 	cr.Comment = c.opts.Comment
 
 	producer := &csvRowProducer{
-		importCtx: c.importCtx,
-		opts:      &c.opts,
-		csv:       cr,
-		progress:  func() float32 { return input.ReadFraction() },
+		importCtx:       c.importCtx,
+		opts:            &c.opts,
+		csv:             cr,
+		progress:        func() float32 { return input.ReadFraction() },
+		expectedColumns: c.importCtx.targetCols,
 	}
 	consumer := &csvRowConsumer{
 		importCtx: c.importCtx,
