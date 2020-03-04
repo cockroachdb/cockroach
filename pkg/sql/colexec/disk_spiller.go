@@ -206,13 +206,15 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 		return d.diskBackedOp.Next(ctx)
 	}
 	var batch coldata.Batch
-	if err := execerror.CatchVectorizedRuntimeError(
+	unsanitizedErr := execerror.CatchUnsanitizedVectorizedRuntimeError(
 		func() {
 			batch = d.inMemoryOp.Next(ctx)
 		},
-	); err != nil {
-		if sqlbase.IsOutOfMemoryError(err) &&
-			strings.Contains(err.Error(), d.inMemoryMemMonitorName) {
+	)
+	if unsanitizedErr != nil {
+		sanitizedErr := execerror.SanitizeVectorizedRuntimeError(unsanitizedErr)
+		if sqlbase.IsOutOfMemoryError(sanitizedErr) &&
+			strings.Contains(sanitizedErr.Error(), d.inMemoryMemMonitorName) {
 			d.spilled = true
 			if d.spillingCallbackFn != nil {
 				d.spillingCallbackFn()
@@ -222,7 +224,7 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 		}
 		// Either not an out of memory error or an OOM error coming from a
 		// different operator, so we propagate it further.
-		execerror.VectorizedInternalPanic(err)
+		execerror.VectorizedInternalPanic(unsanitizedErr)
 	}
 	return batch
 }

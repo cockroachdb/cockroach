@@ -37,7 +37,8 @@ type Materializer struct {
 	// Materializer will emit.
 	curIdx int
 	// batch is the current Batch the Materializer is processing.
-	batch coldata.Batch
+	batch                      coldata.Batch
+	propagateUnsanitizedErrors bool
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
@@ -68,6 +69,8 @@ const materializerProcName = "materializer"
 // the context of the flow (i.e. it is Flow.ctxCancel). It should only be
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
 // source).
+// - propagateUnsanitizedErrors specifies whether this materializer should
+// propagate errors caught from the vectorized runtime without sanitizing them.
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -78,10 +81,12 @@ func NewMaterializer(
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
+	propagateUnsanitizedErrors bool,
 ) (*Materializer, error) {
 	m := &Materializer{
-		input: input,
-		row:   make(sqlbase.EncDatumRow, len(typs)),
+		input:                      input,
+		propagateUnsanitizedErrors: propagateUnsanitizedErrors,
+		row:                        make(sqlbase.EncDatumRow, len(typs)),
 	}
 
 	if err := m.ProcessorBase.Init(
@@ -174,7 +179,13 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 
 // Next is part of the execinfra.RowSource interface.
 func (m *Materializer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if err := execerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
+	var err error
+	if m.propagateUnsanitizedErrors {
+		err = execerror.CatchUnsanitizedVectorizedRuntimeError(m.nextAdapter)
+	} else {
+		err = execerror.CatchSanitizedVectorizedRuntimeError(m.nextAdapter)
+	}
+	if err != nil {
 		m.MoveToDraining(err)
 		return nil, m.DrainHelper()
 	}

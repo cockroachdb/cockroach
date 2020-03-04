@@ -98,9 +98,10 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 				typs,
 				&execinfrapb.PostProcessSpec{},
 				output,
-				nil, /* metadataSourcesQueue */
-				nil, /* outputStatsToTrace */
-				nil, /* cancelFlow */
+				nil,   /* metadataSourcesQueue */
+				nil,   /* outputStatsToTrace */
+				nil,   /* cancelFlow */
+				false, /* propagateUnsanitizedErrors */
 			)
 			require.NoError(t, err)
 

@@ -224,7 +224,7 @@ func (o *Outbox) sendBatches(
 			return true, nil
 		}
 
-		if err := execerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
+		if err := execerror.CatchSanitizedVectorizedRuntimeError(nextBatch); err != nil {
 			log.Warningf(ctx, "Outbox Next error: %+v", err)
 			return false, err
 		}

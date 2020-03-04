@@ -79,8 +79,9 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		[]execinfrapb.MetadataSource{col},
-		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		nil,   /* outputStatsToTrace */
+		nil,   /* cancelFlow */
+		false, /* propagateUnsanitizedErrors */
 	)
 	if err != nil {
 		t.Fatal(err)

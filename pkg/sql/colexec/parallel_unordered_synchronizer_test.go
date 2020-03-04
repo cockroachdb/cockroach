@@ -75,7 +75,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	batchesReturned := 0
 	for {
 		var b coldata.Batch
-		if err := execerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
+		if err := execerror.CatchSanitizedVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
 			if cancel {
 				require.True(t, testutils.IsError(err, "context canceled"), err)
 				break
@@ -121,7 +121,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		wg  sync.WaitGroup
 	)
 	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
-	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	err := execerror.CatchSanitizedVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 	require.True(t, testutils.IsError(err, expectedErr), err)

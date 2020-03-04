@@ -488,7 +488,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
+		if err := execerror.CatchUnsanitizedVectorizedRuntimeError(processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}

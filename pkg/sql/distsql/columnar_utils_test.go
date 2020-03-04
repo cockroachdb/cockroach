@@ -150,8 +150,9 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		result.MetadataSources,
-		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		nil,   /* outputStatsToTrace */
+		nil,   /* cancelFlow */
+		false, /* propagateUnsanitizedErrors */
 	)
 	if err != nil {
 		return err

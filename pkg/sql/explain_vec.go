@@ -104,7 +104,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 		// It is possible that when iterating over execinfra.OpNodes we will hit
 		// a panic (an input that doesn't implement OpNode interface), so we're
 		// catching such errors.
-		if err := execerror.CatchVectorizedRuntimeError(func() {
+		if err := execerror.CatchSanitizedVectorizedRuntimeError(func() {
 			for _, op := range opChains {
 				formatOpChain(op, node, verbose)
 			}

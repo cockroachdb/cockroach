@@ -238,10 +238,11 @@ func TestEval(t *testing.T) {
 				result.Op,
 				typs,
 				&execinfrapb.PostProcessSpec{},
-				nil, /* output */
-				nil, /* metadataSourcesQueue */
-				nil, /* outputStatsToTrace */
-				nil, /* cancelFlow */
+				nil,   /* output */
+				nil,   /* metadataSourcesQueue */
+				nil,   /* outputStatsToTrace */
+				nil,   /* cancelFlow */
+				false, /* propagateUnsanitizedErrors */
 			)
 			require.NoError(t, err)
 

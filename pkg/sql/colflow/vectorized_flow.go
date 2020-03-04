@@ -825,6 +825,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			metadataSourcesQueue,
 			outputStatsToTrace,
 			s.getCancelFlowFn,
+			false, /* propagateUnsanitizedErrors */
 		)
 		if err != nil {
 			return err
@@ -1167,7 +1168,7 @@ func SupportsVectorized(
 			memMon.Stop(ctx)
 		}
 	}()
-	if vecErr := execerror.CatchVectorizedRuntimeError(func() {
+	if vecErr := execerror.CatchSanitizedVectorizedRuntimeError(func() {
 		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
 	}); vecErr != nil {
 		return leaves, vecErr

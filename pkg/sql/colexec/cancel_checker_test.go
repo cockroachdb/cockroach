@@ -29,7 +29,7 @@ func TestCancelChecker(t *testing.T) {
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(testAllocator, batch)))
 	cancel()
-	err := execerror.CatchVectorizedRuntimeError(func() {
+	err := execerror.CatchSanitizedVectorizedRuntimeError(func() {
 		op.Next(ctx)
 	})
 	require.Equal(t, sqlbase.QueryCanceledError, err)

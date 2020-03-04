@@ -61,9 +61,10 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		nil, /* typs */
 		&execinfrapb.PostProcessSpec{},
 		&distsqlutils.RowBuffer{},
-		nil, /* metadataSourceQueue */
-		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		nil,   /* metadataSourceQueue */
+		nil,   /* outputStatsToTrace */
+		nil,   /* cancelFlow */
+		false, /* propagateUnsanitizedErrors */
 	)
 	if err != nil {
 		t.Fatal(err)
