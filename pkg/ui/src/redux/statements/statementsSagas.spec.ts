@@ -17,7 +17,6 @@ import {
   failedStatementDiagnosticsReportRequest,
   requestStatementDiagnosticsReport,
 } from "./statementsActions";
-import { refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 import { createStatementDiagnosticsReport } from "src/util/api";
 import { cockroach } from "src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
@@ -38,7 +37,6 @@ describe("statementsSagas", () => {
         ])
         .call(createStatementDiagnosticsReport, diagnosticsReportRequest)
         .put(completeStatementDiagnosticsReportRequest())
-        .call(refreshStatementDiagnosticsRequests)
         .dispatch(action)
         .run();
     });

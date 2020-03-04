@@ -246,6 +246,15 @@ const queriesReducerObj = new CachedDataReducer(
 );
 export const refreshStatements = queriesReducerObj.refresh;
 
+const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
+  api.getStatementDiagnosticsReports,
+  "statementDiagnosticsReports",
+  moment.duration(5, "m"),
+  moment.duration(1, "m"),
+);
+export const refreshStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.refresh;
+export const invalidateStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.invalidateData;
+
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,
   "dataDistribution",
@@ -283,6 +292,7 @@ export interface APIReducersState {
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
+  statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -312,6 +322,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]: dataDistributionReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
+  [statementDiagnosticsReportsReducerObj.actionNamespace]: statementDiagnosticsReportsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
