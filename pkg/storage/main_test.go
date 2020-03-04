@@ -10,4 +10,4 @@
 
 package storage_test
 
-//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../util/leaktest/add-leaktest.sh *_test.go
