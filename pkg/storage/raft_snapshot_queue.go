@@ -51,6 +51,7 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
 			needsLease:           false,
 			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
+			processTimeoutFunc:   makeQueueSnapshotTimeoutFunc(recoverySnapshotRate),
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,
 			failures:             store.metrics.RaftSnapshotQueueFailures,
 			pending:              store.metrics.RaftSnapshotQueuePending,
