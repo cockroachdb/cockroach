@@ -11,7 +11,10 @@
 package cli
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	enc_hex "encoding/hex"
 	"os"
 	"regexp"
 	"sort"
@@ -20,15 +23,18 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -740,4 +746,93 @@ requesting table details for system.web_sessions... writing: debug/schema/system
 requesting table details for system.zones... writing: debug/schema/system/zones.json
 `
 	assert.Equal(t, expected, out)
+}
+
+// This test the operation of zip over secure clusters.
+func TestToHex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	c := newCLITest(cliTestParams{
+		storeSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.cleanup()
+
+	// Create a job to have non-empty system.jobs table.
+	c.RunWithArgs([]string{"sql", "-e", "CREATE STATISTICS foo FROM system.namespace"})
+
+	_, err := c.RunWithCapture("debug zip " + dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := zip.OpenReader(dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type hexField struct {
+		idx int
+		msg protoutil.Message
+	}
+	// Stores index and type of marshaled messages in the table row.
+	// Negative indices work from the end - this is needed because parsing the
+	// fields is not alway s precise as there can be spaces in the fields but the
+	// hex fields are always in the end of the row and they don't contain spaces.
+	hexFiles := map[string][]hexField{
+		"debug/system.jobs.txt": {
+			{idx: -2, msg: &jobspb.Payload{}},
+			{idx: -1, msg: &jobspb.Progress{}},
+		},
+		"debug/system.descriptor.txt": {
+			{idx: 2, msg: &sqlbase.Descriptor{}},
+		},
+	}
+
+	for _, f := range r.File {
+		fieldsToCheck, ok := hexFiles[f.Name]
+		if !ok {
+			continue
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rc.Close()
+
+		buf := new(bytes.Buffer)
+		if _, err = buf.ReadFrom(rc); err != nil {
+			t.Fatal(err)
+		}
+		// Skip header.
+		if _, err = buf.ReadString('\n'); err != nil {
+			t.Fatal(err)
+		}
+		line, err := buf.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		fields := strings.Fields(line)
+		for _, hf := range fieldsToCheck {
+			i := hf.idx
+			if i < 0 {
+				i = len(fields) + i
+			}
+			bts, err := enc_hex.DecodeString(fields[i])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := protoutil.Unmarshal(bts, hf.msg); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err = r.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

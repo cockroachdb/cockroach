@@ -93,6 +93,12 @@ var debugZipTablesPerNode = []string{
 	"crdb_internal.node_txn_stats",
 }
 
+// Override for the default SELECT * when dumping the table.
+var customSelectClause = map[string]string{
+	"system.jobs":       "*, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress",
+	"system.descriptor": "*, to_hex(descriptor) AS hex_descriptor",
+}
+
 type zipper struct {
 	f *os.File
 	z *zip.Writer
@@ -308,7 +314,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, table := range debugZipTablesPerCluster {
-		if err := dumpTableDataForZip(z, sqlConn, timeout, base, table); err != nil {
+		selectClause, ok := customSelectClause[table]
+		if !ok {
+			selectClause = "*"
+		}
+		if err := dumpTableDataForZip(z, sqlConn, timeout, base, table, selectClause); err != nil {
 			return errors.Wrap(err, table)
 		}
 	}
@@ -361,7 +371,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
 
 			for _, table := range debugZipTablesPerNode {
-				if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table); err != nil {
+				selectClause, ok := customSelectClause[table]
+				if !ok {
+					selectClause = "*"
+				}
+				if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table, selectClause); err != nil {
 					return errors.Wrap(err, table)
 				}
 			}
@@ -610,9 +624,9 @@ func (fne *fileNameEscaper) escape(f string) string {
 }
 
 func dumpTableDataForZip(
-	z *zipper, conn *sqlConn, timeout time.Duration, base, table string,
+	z *zipper, conn *sqlConn, timeout time.Duration, base, table, selectClause string,
 ) error {
-	query := fmt.Sprintf(`SET statement_timeout = '%s'; SELECT * FROM %s`, timeout, table)
+	query := fmt.Sprintf(`SET statement_timeout = '%s'; SELECT %s FROM %s`, timeout, selectClause, table)
 	name := base + "/" + table + ".txt"
 
 	fmt.Printf("retrieving SQL data for %s... ", table)
