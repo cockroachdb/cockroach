@@ -425,11 +425,6 @@ type Factory interface {
 	// transaction (if appropriate, i.e. if it is in an implicit transaction).
 	// This is false if there are multiple mutations in a statement, or the output
 	// of the mutation is processed through side-effecting expressions.
-	//
-	// If skipFKChecks is set, foreign keys are not checked as part of the
-	// execution of the upsert for the insert half. This is used when the FK
-	// checks are planned by the optimizer and are run separately as plan
-	// postqueries.
 	ConstructUpsert(
 		input Node,
 		table cat.Table,
@@ -440,7 +435,6 @@ type Factory interface {
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
 		allowAutoCommit bool,
-		skipFKChecks bool,
 	) (Node, error)
 
 	// ConstructDelete creates a node that implements a DELETE statement. The
@@ -457,8 +451,8 @@ type Factory interface {
 	// of the mutation is processed through side-effecting expressions.
 	//
 	// If skipFKChecks is set, foreign keys are not checked as part of the
-	// execution of the delete. This is used when the FK checks are planned
-	// by the optimizer and are run separately as plan postqueries.
+	// execution of the insertion. This is used when the FK checks are planned by
+	// the optimizer and are run separately as plan postqueries.
 	ConstructDelete(
 		input Node,
 		table cat.Table,
