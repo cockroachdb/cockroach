@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -260,13 +262,35 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		}
 		buf.WriteString(fmt.Sprintf(" (%d)", id))
 	}
-	if _, err := ex.Exec(
-		ctx,
-		"wait-for-jobs",
-		nil, /* txn */
-		fmt.Sprintf("SHOW JOBS WHEN COMPLETE VALUES %s", buf.String()),
-	); err != nil {
-		return errors.New("could not finish waiting for queued jobs to complete")
+	// Manually retry instead of using SHOW JOBS WHEN COMPLETE so we have greater
+	// control over retries.
+	query := fmt.Sprintf(
+		"SELECT count(*) FROM [SHOW JOBS VALUES %s] WHERE finished IS NULL", buf.String())
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2,
+	}); r.Next(); {
+		// We poll the number of queued jobs that aren't finished. As with SHOW JOBS
+		// WHEN COMPLETE, if one of the jobs is missing from the jobs table for
+		// whatever reason, we'll fail later when we try to load the job.
+		row, err := ex.QueryRowEx(
+			ctx,
+			"poll-show-jobs",
+			nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			query,
+		)
+		if err != nil {
+			return errors.Wrap(err, "polling for queued jobs to complete")
+		}
+		count := int64(tree.MustBeDInt(row[0]))
+		if log.V(3) {
+			log.Infof(ctx, "waiting for %d queued jobs to complete", count)
+		}
+		if count == 0 {
+			break
+		}
 	}
 	for i, id := range jobs {
 		j, err := r.LoadJob(ctx, id)
