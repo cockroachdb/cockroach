@@ -45,7 +45,7 @@ import (
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
 
-// #cgo CPPFLAGS: -I../../../c-deps/libroach/include
+// #cgo CPPFLAGS: -I../../c-deps/libroach/include
 // #cgo LDFLAGS: -lroach
 // #cgo LDFLAGS: -lprotobuf
 // #cgo LDFLAGS: -lrocksdb
