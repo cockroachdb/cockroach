@@ -30,6 +30,7 @@ export const cancelJob = docsURL("cancel-job.html");
 export const enableNodeMap = docsURL("enable-node-map.html");
 export const configureReplicationZones = docsURL("configure-replication-zones.html");
 export const transactionalPipelining = docsURL("architecture/transaction-layer.html#transaction-pipelining");
+export const adminUIAccess = docsURL("admin-ui-overview.html#admin-ui-access");
 
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
