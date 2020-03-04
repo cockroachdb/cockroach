@@ -670,7 +670,7 @@ type lockWaitQueue struct {
 	distinguishedWaiter *lockTableGuardImpl
 }
 
-//go:generate ../../util/interval/generic/gen.sh *lockState concurrency
+//go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
 
 // Methods required by util/interval/generic type contract.
 func (l *lockState) ID() uint64         { return l.id }

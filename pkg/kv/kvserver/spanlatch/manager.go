@@ -94,7 +94,7 @@ func (la *latch) inReadSet() bool {
 	return la.next != nil
 }
 
-//go:generate ../../util/interval/generic/gen.sh *latch spanlatch
+//go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
 
 // Methods required by util/interval/generic type contract.
 func (la *latch) ID() uint64         { return la.id }
