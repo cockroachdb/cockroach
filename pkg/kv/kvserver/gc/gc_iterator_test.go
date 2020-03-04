@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -31,14 +31,14 @@ func TestGCIterator(t *testing.T) {
 	// dataItem represents a version in the storage engine and optionally a
 	// corresponding transaction which will make the MVCCKeyValue an intent.
 	type dataItem struct {
-		engine.MVCCKeyValue
+		storage.MVCCKeyValue
 		txn *roachpb.Transaction
 	}
 	// makeDataItem is a shorthand to construct dataItems.
 	makeDataItem := func(k roachpb.Key, val []byte, ts int64, txn *roachpb.Transaction) dataItem {
 		return dataItem{
-			MVCCKeyValue: engine.MVCCKeyValue{
-				Key: engine.MVCCKey{
+			MVCCKeyValue: storage.MVCCKeyValue{
+				Key: storage.MVCCKey{
 					Key:       k,
 					Timestamp: hlc.Timestamp{WallTime: ts * time.Nanosecond.Nanoseconds()},
 				},
@@ -50,9 +50,9 @@ func TestGCIterator(t *testing.T) {
 	// makeLiteralDistribution adapts dataItems for use with the data distribution
 	// infrastructure.
 	makeLiteralDataDistribution := func(items ...dataItem) dataDistribution {
-		return func() (engine.MVCCKeyValue, *roachpb.Transaction, bool) {
+		return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
 			if len(items) == 0 {
-				return engine.MVCCKeyValue{}, nil, false
+				return storage.MVCCKeyValue{}, nil, false
 			}
 			item := items[0]
 			defer func() { items = items[1:] }()
@@ -104,7 +104,7 @@ func TestGCIterator(t *testing.T) {
 	checkExpectations := func(
 		t *testing.T, data []dataItem, ex stateExpectations, s gcIteratorState,
 	) {
-		check := func(ex int, kv *engine.MVCCKeyValue) {
+		check := func(ex int, kv *storage.MVCCKeyValue) {
 			switch {
 			case ex >= 0:
 				require.EqualValues(t, &data[ex].MVCCKeyValue, kv)
@@ -122,7 +122,7 @@ func TestGCIterator(t *testing.T) {
 	}
 	makeTest := func(tc testCase) func(t *testing.T) {
 		return func(t *testing.T) {
-			eng := engine.NewDefaultInMem()
+			eng := storage.NewDefaultInMem()
 			defer eng.Close()
 			ds := makeLiteralDataDistribution(tc.data...)
 			ds.setupTest(t, eng, desc)

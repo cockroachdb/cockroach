@@ -17,7 +17,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1602,7 +1602,7 @@ func handleTruncatedStateBelowRaft(
 	ctx context.Context,
 	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,
 	loader stateloader.StateLoader,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 ) (_apply bool, _ error) {
 	// If this is a log truncation, load the resulting unreplicated or legacy
 	// replicated truncated state (in that order). If the migration is happening
@@ -1634,7 +1634,7 @@ func handleTruncatedStateBelowRaft(
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
 		// avoid allocating when constructing Raft log keys (16 bytes).
 		unsafeKey := prefixBuf.RaftLogKey(idx)
-		if err := readWriter.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+		if err := readWriter.Clear(storage.MakeMVCCMetadataKey(unsafeKey)); err != nil {
 			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
 		}
 	}
@@ -1651,7 +1651,7 @@ func handleTruncatedStateBelowRaft(
 			// new key (which wasn't touched by the batch), and we need to
 			// overwrite it if this truncation "moves it forward".
 
-			if err := engine.MVCCPutProto(
+			if err := storage.MVCCPutProto(
 				ctx, readWriter, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
 				hlc.Timestamp{}, nil /* txn */, newTruncatedState,
 			); err != nil {
@@ -1676,11 +1676,11 @@ func handleTruncatedStateBelowRaft(
 //
 // The sideloaded storage may be nil, in which case it is treated as empty.
 func ComputeRaftLogSize(
-	ctx context.Context, rangeID roachpb.RangeID, reader engine.Reader, sideloaded SideloadStorage,
+	ctx context.Context, rangeID roachpb.RangeID, reader storage.Reader, sideloaded SideloadStorage,
 ) (int64, error) {
 	prefix := keys.RaftLogPrefix(rangeID)
 	prefixEnd := prefix.PrefixEnd()
-	iter := reader.NewIterator(engine.IterOptions{
+	iter := reader.NewIterator(storage.IterOptions{
 		LowerBound: prefix,
 		UpperBound: prefixEnd,
 	})

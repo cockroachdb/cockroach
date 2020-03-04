@@ -13,10 +13,10 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -46,8 +46,8 @@ type Command struct {
 	// should treat the provided request as immutable.
 	//
 	// Only one of these is ever set at a time.
-	EvalRW func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
-	EvalRO func(context.Context, engine.Reader, CommandArgs, roachpb.Response) (result.Result, error)
+	EvalRW func(context.Context, storage.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
+	EvalRO func(context.Context, storage.Reader, CommandArgs, roachpb.Response) (result.Result, error)
 }
 
 var cmds = make(map[roachpb.Method]Command)
@@ -57,7 +57,7 @@ var cmds = make(map[roachpb.Method]Command)
 func RegisterReadWriteCommand(
 	method roachpb.Method,
 	declare declareKeysFunc,
-	impl func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
+	impl func(context.Context, storage.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{
 		DeclareKeys: declare,
@@ -70,7 +70,7 @@ func RegisterReadWriteCommand(
 func RegisterReadOnlyCommand(
 	method roachpb.Method,
 	declare declareKeysFunc,
-	impl func(context.Context, engine.Reader, CommandArgs, roachpb.Response) (result.Result, error),
+	impl func(context.Context, storage.Reader, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{
 		DeclareKeys: declare,

@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -249,7 +249,7 @@ func TestEvaluateBatch(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			eng := engine.NewDefaultInMem()
+			eng := storage.NewDefaultInMem()
 			defer eng.Close()
 
 			d := &data{
@@ -281,7 +281,7 @@ type data struct {
 	batcheval.MockEvalCtx
 	ba       roachpb.BatchRequest
 	idKey    storagebase.CmdIDKey
-	eng      engine.Engine
+	eng      storage.Engine
 	ms       enginepb.MVCCStats
 	readOnly bool
 }
@@ -301,7 +301,7 @@ type testCase struct {
 
 func writeABCDEF(t *testing.T, d *data) {
 	for _, k := range []string{"a", "b", "c", "d", "e", "f"} {
-		require.NoError(t, engine.MVCCPut(
+		require.NoError(t, storage.MVCCPut(
 			context.Background(), d.eng, nil /* ms */, roachpb.Key(k), d.ba.Timestamp,
 			roachpb.MakeValueFromString("value-"+k), nil /* txn */))
 	}

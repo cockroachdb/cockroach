@@ -15,9 +15,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -142,8 +142,8 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	var expectedSSTs [][]byte
 	for _, r := range keyRanges {
 		func() {
-			sstFile := &engine.MemFile{}
-			sst := engine.MakeIngestionSSTWriter(sstFile)
+			sstFile := &storage.MemFile{}
+			sst := storage.MakeIngestionSSTWriter(sstFile)
 			defer sst.Close()
 			err := sst.ClearRange(r.Start, r.End)
 			require.NoError(t, err)

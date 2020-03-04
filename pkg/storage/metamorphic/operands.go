@@ -15,8 +15,8 @@ import (
 	"math/rand"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -80,7 +80,7 @@ func generateBytes(rng *rand.Rand, min int, max int) []byte {
 }
 
 type keyGenerator struct {
-	liveKeys    []engine.MVCCKey
+	liveKeys    []storage.MVCCKey
 	rng         *rand.Rand
 	tsGenerator *tsGenerator
 }
@@ -96,8 +96,8 @@ func (k *keyGenerator) count() int {
 	return len(k.liveKeys) + 1
 }
 
-func (k *keyGenerator) open() engine.MVCCKey {
-	var key engine.MVCCKey
+func (k *keyGenerator) open() storage.MVCCKey {
+	var key storage.MVCCKey
 	key.Key = generateBytes(k.rng, 8, maxValueSize)
 	key.Timestamp = k.tsGenerator.lastTS
 	k.liveKeys = append(k.liveKeys, key)
@@ -105,7 +105,7 @@ func (k *keyGenerator) open() engine.MVCCKey {
 	return key
 }
 
-func (k *keyGenerator) toString(key engine.MVCCKey) string {
+func (k *keyGenerator) toString(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s/%d", key.Key, key.Timestamp.WallTime)
 }
 
@@ -126,8 +126,8 @@ func (k *keyGenerator) closeAll() {
 	// No-op.
 }
 
-func (k *keyGenerator) parse(input string) engine.MVCCKey {
-	var key engine.MVCCKey
+func (k *keyGenerator) parse(input string) storage.MVCCKey {
+	var key storage.MVCCKey
 	key.Key = make([]byte, 0, maxValueSize)
 	_, err := fmt.Sscanf(input, "%q/%d", &key.Key, &key.Timestamp.WallTime)
 	if err != nil {
@@ -320,7 +320,7 @@ type readWriterGenerator struct {
 	rng             *rand.Rand
 	m               *metaTestRunner
 	liveBatches     []readWriterID
-	batchIDMap      map[readWriterID]engine.Batch
+	batchIDMap      map[readWriterID]storage.Batch
 	batchGenCounter uint64
 }
 
@@ -377,13 +377,13 @@ func (w *readWriterGenerator) closeAll() {
 		}
 	}
 	w.liveBatches = w.liveBatches[:0]
-	w.batchIDMap = make(map[readWriterID]engine.Batch)
+	w.batchIDMap = make(map[readWriterID]storage.Batch)
 }
 
 type iteratorID string
 type iteratorInfo struct {
 	id          iteratorID
-	iter        engine.Iterator
+	iter        storage.Iterator
 	lowerBound  roachpb.Key
 	isBatchIter bool
 }

@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -165,8 +165,8 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		//   to RocksDB will be asynchronous.
 		var kvs []roachpb.KeyValue
 		testutils.SucceedsSoon(t, func() error {
-			res, err := engine.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax,
-				hlc.MaxTimestamp, engine.MVCCScanOptions{})
+			res, err := storage.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax,
+				hlc.MaxTimestamp, storage.MVCCScanOptions{})
 			if err != nil {
 				// Wait for the intent to be resolved.
 				if _, ok := err.(*roachpb.WriteIntentError); ok {

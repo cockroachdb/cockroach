@@ -18,19 +18,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func hashRange(t *testing.T, reader engine.Reader, start, end roachpb.Key) []byte {
+func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
 	if err := reader.Iterate(start, end,
-		func(kv engine.MVCCKeyValue) (bool, error) {
+		func(kv storage.MVCCKeyValue) (bool, error) {
 			h.Write(kv.Key.Key)
 			h.Write(kv.Value)
 			return false, nil
@@ -41,11 +41,11 @@ func hashRange(t *testing.T, reader engine.Reader, start, end roachpb.Key) []byt
 	return h.Sum(nil)
 }
 
-func getStats(t *testing.T, reader engine.Reader) enginepb.MVCCStats {
+func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+	iter := reader.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
-	s, err := engine.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 1100)
+	s, err := storage.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 1100)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -54,18 +54,18 @@ func getStats(t *testing.T, reader engine.Reader) enginepb.MVCCStats {
 
 // createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
 // storage capacity.
-func createTestRocksDBEngine(ctx context.Context) engine.Engine {
-	return engine.NewInMem(ctx, enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
+func createTestRocksDBEngine(ctx context.Context) storage.Engine {
+	return storage.NewInMem(ctx, enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
 }
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
-func createTestPebbleEngine(ctx context.Context) engine.Engine {
-	return engine.NewInMem(ctx, enginepb.EngineTypePebble, roachpb.Attributes{}, 1<<20)
+func createTestPebbleEngine(ctx context.Context) storage.Engine {
+	return storage.NewInMem(ctx, enginepb.EngineTypePebble, roachpb.Attributes{}, 1<<20)
 }
 
 var engineImpls = []struct {
 	name   string
-	create func(context.Context) engine.Engine
+	create func(context.Context) storage.Engine
 }{
 	{"rocksdb", createTestRocksDBEngine},
 	{"pebble", createTestPebbleEngine},
@@ -95,7 +95,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d", i))
-				if err := engine.MVCCPut(ctx, eng, &stats, key, baseTime.Add(int64(i%10), 0), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, baseTime.Add(int64(i%10), 0), value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -109,7 +109,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d-rev-a", i))
-				if err := engine.MVCCPut(ctx, eng, &stats, key, tsA.Add(int64(i%5), 1), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, tsA.Add(int64(i%5), 1), value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -122,7 +122,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d-rev-b", i))
-				if err := engine.MVCCPut(ctx, eng, &stats, key, tsB.Add(1, int32(i%5)), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, tsB.Add(1, int32(i%5)), value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -200,7 +200,7 @@ func TestCmdRevertRange(t *testing.T) {
 			})
 
 			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1)
-			if err := engine.MVCCPut(
+			if err := storage.MVCCPut(
 				ctx, eng, &stats, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), &txn,
 			); err != nil {
 				t.Fatal(err)
@@ -212,7 +212,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d-rev-b", i))
-				if err := engine.MVCCPut(ctx, eng, &stats, key, tsC.Add(10, int32(i%5)), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, tsC.Add(10, int32(i%5)), value, nil); err != nil {
 					t.Fatalf("writing key %s: %+v", key, err)
 				}
 			}

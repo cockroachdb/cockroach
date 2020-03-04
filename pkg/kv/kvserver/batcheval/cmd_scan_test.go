@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,12 +56,12 @@ func testScanReverseScanInner(
 	k1, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts := hlc.Timestamp{WallTime: 1}
 
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
 	// Write to k1 and k2.
 	for _, k := range []roachpb.Key{k1, k2} {
-		err := engine.MVCCPut(ctx, eng, nil, k, ts, roachpb.MakeValueFromString("value-"+string(k)), nil)
+		err := storage.MVCCPut(ctx, eng, nil, k, ts, roachpb.MakeValueFromString("value-"+string(k)), nil)
 		require.NoError(t, err)
 	}
 

@@ -14,11 +14,11 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -45,7 +45,7 @@ func declareKeysQueryTransaction(
 // other txns which are waiting on this transaction in order
 // to find dependency cycles.
 func QueryTxn(
-	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryTxnRequest)
 	h := cArgs.Header
@@ -64,8 +64,8 @@ func QueryTxn(
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
-	if ok, err := engine.MVCCGetProto(
-		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn, engine.MVCCGetOptions{},
+	if ok, err := storage.MVCCGetProto(
+		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn, storage.MVCCGetOptions{},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {

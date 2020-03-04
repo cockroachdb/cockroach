@@ -15,8 +15,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -110,7 +110,7 @@ func (is Server) WaitForApplication(
 				// everything up to this point to disk.
 				//
 				// https://github.com/cockroachdb/cockroach/issues/33120
-				return engine.WriteSyncNoop(ctx, s.engine)
+				return storage.WriteSyncNoop(ctx, s.engine)
 			}
 		}
 		if ctx.Err() == nil {

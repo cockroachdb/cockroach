@@ -20,8 +20,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -29,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,9 +38,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue {
+func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValue {
 	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
-	kvs := make([]engine.MVCCKeyValue, numKeys)
+	kvs := make([]storage.MVCCKeyValue, numKeys)
 	r, _ := randutil.NewPseudoRand()
 
 	var k int
@@ -64,8 +64,8 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue
 	return kvs
 }
 
-func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
-	w, err := engine.MakeRocksDBSstFileWriter()
+func makeRocksSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
+	w, err := storage.MakeRocksDBSstFileWriter()
 	require.NoError(t, err)
 	defer w.Close()
 

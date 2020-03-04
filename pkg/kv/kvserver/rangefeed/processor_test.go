@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -132,7 +132,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 const testProcessorEventCCap = 16
 
 func newTestProcessorWithTxnPusher(
-	rtsIter engine.SimpleIterator, txnPusher TxnPusher,
+	rtsIter storage.SimpleIterator, txnPusher TxnPusher,
 ) (*Processor, *stop.Stopper) {
 	stopper := stop.NewStopper()
 
@@ -156,7 +156,7 @@ func newTestProcessorWithTxnPusher(
 	return p, stopper
 }
 
-func newTestProcessor(rtsIter engine.SimpleIterator) (*Processor, *stop.Stopper) {
+func newTestProcessor(rtsIter storage.SimpleIterator) (*Processor, *stop.Stopper) {
 	return newTestProcessorWithTxnPusher(rtsIter, nil /* pusher */)
 }
 
@@ -528,7 +528,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	rtsIter := newTestIterator([]engine.MVCCKeyValue{
+	rtsIter := newTestIterator([]storage.MVCCKeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),

@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
@@ -28,16 +28,16 @@ func init() {
 // maxKeys stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func ReverseScan(
-	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ReverseScanRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.ReverseScanResponse)
 
-	var res engine.MVCCScanResult
+	var res storage.MVCCScanResult
 	var err error
 
-	opts := engine.MVCCScanOptions{
+	opts := storage.MVCCScanOptions{
 		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:          h.Txn,
 		MaxKeys:      h.MaxSpanRequestKeys,
@@ -47,14 +47,14 @@ func ReverseScan(
 
 	switch args.ScanFormat {
 	case roachpb.BATCH_RESPONSE:
-		res, err = engine.MVCCScanToBytes(
+		res, err = storage.MVCCScanToBytes(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
 		reply.BatchResponses = res.KVData
 	case roachpb.KEY_VALUES:
-		res, err = engine.MVCCScan(
+		res, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err

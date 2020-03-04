@@ -14,9 +14,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -58,16 +58,16 @@ func TestUpdateAbortSpan(t *testing.T) {
 	}
 
 	// Setup helpers.
-	type evalFn func(engine.ReadWriter, EvalContext) error
-	addIntent := func(b engine.ReadWriter, _ EvalContext) error {
+	type evalFn func(storage.ReadWriter, EvalContext) error
+	addIntent := func(b storage.ReadWriter, _ EvalContext) error {
 		val := roachpb.MakeValueFromString("val")
-		return engine.MVCCPut(ctx, b, nil /* ms */, intentKey, txn.ReadTimestamp, val, &txn)
+		return storage.MVCCPut(ctx, b, nil /* ms */, intentKey, txn.ReadTimestamp, val, &txn)
 	}
-	addPrevAbortSpanEntry := func(b engine.ReadWriter, rec EvalContext) error {
+	addPrevAbortSpanEntry := func(b storage.ReadWriter, rec EvalContext) error {
 		return UpdateAbortSpan(ctx, rec, b, nil /* ms */, prevTxn.TxnMeta, true /* poison */)
 	}
 	compose := func(fns ...evalFn) evalFn {
-		return func(b engine.ReadWriter, rec EvalContext) error {
+		return func(b storage.ReadWriter, rec EvalContext) error {
 			for _, fn := range fns {
 				if err := fn(b, rec); err != nil {
 					return err
@@ -78,7 +78,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	}
 
 	// Request helpers.
-	endTxn := func(b engine.ReadWriter, rec EvalContext, commit bool, poison bool) error {
+	endTxn := func(b storage.ReadWriter, rec EvalContext, commit bool, poison bool) error {
 		req := roachpb.EndTxnRequest{
 			RequestHeader: roachpb.RequestHeader{Key: txnKey},
 			Commit:        commit,
@@ -99,7 +99,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		return err
 	}
 	resolveIntent := func(
-		b engine.ReadWriter, rec EvalContext, status roachpb.TransactionStatus, poison bool,
+		b storage.ReadWriter, rec EvalContext, status roachpb.TransactionStatus, poison bool,
 	) error {
 		req := roachpb.ResolveIntentRequest{
 			RequestHeader: roachpb.RequestHeader{Key: intentKey},
@@ -117,7 +117,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		return err
 	}
 	resolveIntentRange := func(
-		b engine.ReadWriter, rec EvalContext, status roachpb.TransactionStatus, poison bool,
+		b storage.ReadWriter, rec EvalContext, status roachpb.TransactionStatus, poison bool,
 	) error {
 		req := roachpb.ResolveIntentRangeRequest{
 			RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
@@ -147,7 +147,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		///////////////////////////////////////////////////////////////////////
 		{
 			name: "end txn, rollback, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -156,7 +156,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "end txn, rollback, no poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
@@ -164,7 +164,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "end txn, rollback, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
 			// Poisoning, but no intents found, should not add an abort span entry.
@@ -173,7 +173,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "end txn, rollback, poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
 			// Poisoning, but no intents found, don't touch abort span.
@@ -181,7 +181,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "end txn, commit, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -195,7 +195,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name: "end txn, commit, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
 			expErr: "cannot poison during a committing EndTxn request",
@@ -204,7 +204,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name:   "end txn, commit, poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
 			expErr: "cannot poison during a committing EndTxn request",
@@ -212,7 +212,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "end txn, rollback, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -221,7 +221,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "end txn, rollback, no poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
@@ -230,7 +230,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "end txn, rollback, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
 			// Poisoning, should add an abort span entry.
@@ -239,7 +239,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "end txn, rollback, poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
 			// Poisoning, should update abort span entry.
@@ -248,7 +248,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "end txn, commit, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -263,7 +263,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name:   "end txn, commit, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
 			expErr: "cannot poison during a committing EndTxn request",
@@ -272,7 +272,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name:   "end txn, commit, poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
 			expErr: "cannot poison during a committing EndTxn request",
@@ -282,7 +282,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		///////////////////////////////////////////////////////////////////////
 		{
 			name: "resolve intent, txn pending, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -291,7 +291,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn pending, no poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -300,7 +300,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn pending, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -309,7 +309,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn pending, no poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -317,7 +317,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent, txn pending, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -326,7 +326,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn pending, poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -335,7 +335,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn pending, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -344,7 +344,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn pending, poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -352,7 +352,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent, txn aborted, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -361,7 +361,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn aborted, no poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
@@ -370,7 +370,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn aborted, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -379,7 +379,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn aborted, no poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
@@ -387,7 +387,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent, txn aborted, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, but no intents found, should not add an abort span entry.
@@ -396,7 +396,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn aborted, poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, but no intents found, don't touch abort span.
@@ -405,7 +405,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn aborted, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should add an abort span entry.
@@ -414,7 +414,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn aborted, poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should update abort span entry.
@@ -422,7 +422,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent, txn committed, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.COMMITTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -436,7 +436,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn committed, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.COMMITTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -449,7 +449,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent, txn committed, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.COMMITTED, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -463,7 +463,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent, txn committed, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.COMMITTED, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -479,7 +479,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		///////////////////////////////////////////////////////////////////////
 		{
 			name: "resolve intent range, txn pending, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -488,7 +488,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn pending, no poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -497,7 +497,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn pending, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -506,7 +506,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn pending, no poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, false /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -514,7 +514,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent range, txn pending, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -523,7 +523,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn pending, poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -532,7 +532,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn pending, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -541,7 +541,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn pending, poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.PENDING, true /* poison */)
 			},
 			// Not aborted, don't touch abort span.
@@ -549,7 +549,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent range, txn aborted, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -558,7 +558,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn aborted, no poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
@@ -567,7 +567,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn aborted, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -576,7 +576,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn aborted, no poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
@@ -584,7 +584,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent range, txn aborted, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, but no intents found, should not add an abort span entry.
@@ -593,7 +593,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn aborted, poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, but no intents found, don't touch abort span.
@@ -602,7 +602,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn aborted, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should add an abort span entry.
@@ -611,7 +611,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn aborted, poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should update abort span entry.
@@ -619,7 +619,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent range, txn committed, no poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.COMMITTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -633,7 +633,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn committed, no poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.COMMITTED, false /* poison */)
 			},
 			// Not poisoning, should not add an abort span entry.
@@ -646,7 +646,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			name: "resolve intent range, txn committed, poison, intent missing, abort span missing",
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.COMMITTED, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -660,7 +660,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		{
 			name:   "resolve intent range, txn committed, poison, intent present, abort span missing",
 			before: addIntent,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
+			run: func(b storage.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.COMMITTED, true /* poison */)
 			},
 			// Poisoning but not aborted, should not add an abort span entry.
@@ -678,7 +678,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 				t.Skip("invalid test case")
 			}
 
-			db := engine.NewDefaultInMem()
+			db := storage.NewDefaultInMem()
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()

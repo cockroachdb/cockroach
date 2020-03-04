@@ -9,9 +9,9 @@ import (
 	io "io"
 	math "math"
 
-	enginepb "github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"

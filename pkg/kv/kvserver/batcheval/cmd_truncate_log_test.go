@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -25,7 +25,7 @@ import (
 
 func putTruncatedState(
 	t *testing.T,
-	eng engine.Engine,
+	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	truncState roachpb.RaftTruncatedState,
 	legacy bool,
@@ -34,7 +34,7 @@ func putTruncatedState(
 	if legacy {
 		key = keys.RaftTruncatedStateLegacyKey(rangeID)
 	}
-	if err := engine.MVCCPutProto(
+	if err := storage.MVCCPutProto(
 		context.Background(), eng, nil, key,
 		hlc.Timestamp{}, nil /* txn */, &truncState,
 	); err != nil {
@@ -43,12 +43,12 @@ func putTruncatedState(
 }
 
 func readTruncStates(
-	t *testing.T, eng engine.Engine, rangeID roachpb.RangeID,
+	t *testing.T, eng storage.Engine, rangeID roachpb.RangeID,
 ) (legacy roachpb.RaftTruncatedState, unreplicated roachpb.RaftTruncatedState) {
 	t.Helper()
-	legacyFound, err := engine.MVCCGetProto(
+	legacyFound, err := storage.MVCCGetProto(
 		context.Background(), eng, keys.RaftTruncatedStateLegacyKey(rangeID),
-		hlc.Timestamp{}, &legacy, engine.MVCCGetOptions{},
+		hlc.Timestamp{}, &legacy, storage.MVCCGetOptions{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -57,9 +57,9 @@ func readTruncStates(
 		t.Fatalf("legacy key found=%t but state is %+v", legacyFound, legacy)
 	}
 
-	unreplicatedFound, err := engine.MVCCGetProto(
+	unreplicatedFound, err := storage.MVCCGetProto(
 		context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
-		hlc.Timestamp{}, &unreplicated, engine.MVCCGetOptions{},
+		hlc.Timestamp{}, &unreplicated, storage.MVCCGetOptions{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func runUnreplicatedTruncatedState(t *testing.T, tc unreplicatedTruncStateTest) 
 		FirstIndex: firstIndex,
 	}
 
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
 	truncState := roachpb.RaftTruncatedState{

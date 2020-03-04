@@ -17,10 +17,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -120,7 +120,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 }
 
 func init() {
-	if engine.DefaultStorageEngine != enginepb.EngineTypeRocksDB && engine.DefaultStorageEngine != enginepb.EngineTypeDefault {
+	if storage.DefaultStorageEngine != enginepb.EngineTypeRocksDB && storage.DefaultStorageEngine != enginepb.EngineTypeDefault {
 		// This is marshaled below Raft by the Pebble merge operator. The Pebble
 		// merge operator can be called below Raft whenever a Pebble Iterator is
 		// used. Note that we only see this proto marshaled below Raft when the

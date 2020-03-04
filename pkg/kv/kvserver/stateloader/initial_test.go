@@ -15,8 +15,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -27,7 +27,7 @@ func TestSynthesizeHardState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 
 	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4}

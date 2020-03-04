@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -203,7 +203,7 @@ func GetBootstrapSchema(
 // engines are initialized with their StoreIdent.
 func bootstrapCluster(
 	ctx context.Context,
-	engines []engine.Engine,
+	engines []storage.Engine,
 	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
@@ -306,7 +306,7 @@ func (n *Node) AnnotateCtxWithSpan(
 
 func (n *Node) bootstrapCluster(
 	ctx context.Context,
-	engines []engine.Engine,
+	engines []storage.Engine,
 	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
@@ -339,7 +339,7 @@ func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.Clu
 func (n *Node) start(
 	ctx context.Context,
 	addr, sqlAddr net.Addr,
-	initializedEngines, emptyEngines []engine.Engine,
+	initializedEngines, emptyEngines []storage.Engine,
 	clusterName string,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
@@ -507,7 +507,7 @@ func (n *Node) start(
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
 
-	allEngines := append([]engine.Engine(nil), initializedEngines...)
+	allEngines := append([]storage.Engine(nil), initializedEngines...)
 	allEngines = append(allEngines, emptyEngines...)
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
 	return nil
@@ -573,7 +573,7 @@ func (n *Node) validateStores(ctx context.Context) error {
 // allocated via a sequence id generator stored at a system key per
 // node. The new stores are added to n.stores.
 func (n *Node) bootstrapStores(
-	ctx context.Context, emptyEngines []engine.Engine, stopper *stop.Stopper,
+	ctx context.Context, emptyEngines []storage.Engine, stopper *stop.Stopper,
 ) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("ClusterID missing during store bootstrap of auxiliary store")

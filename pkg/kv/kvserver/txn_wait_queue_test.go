@@ -20,12 +20,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,7 +38,7 @@ import (
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
-	return engine.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, nil, txn)
+	return storage.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, nil, txn)
 }
 
 // createTxnForPushQueue creates a txn struct and writes a "fake"
@@ -347,7 +347,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 	tc := testContext{}

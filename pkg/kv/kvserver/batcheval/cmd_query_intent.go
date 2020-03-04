@@ -13,10 +13,10 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -46,7 +46,7 @@ func declareKeysQueryIntent(
 // request is special-cased to return a SERIALIZABLE retry error if a transaction
 // queries its own intent and finds it has been pushed.
 func QueryIntent(
-	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryIntentRequest)
 	h := cArgs.Header
@@ -55,7 +55,7 @@ func QueryIntent(
 	// Read at the specified key at the maximum timestamp. This ensures that we
 	// see an intent if one exists, regardless of what timestamp it is written
 	// at.
-	_, intent, err := engine.MVCCGet(ctx, reader, args.Key, hlc.MaxTimestamp, engine.MVCCGetOptions{
+	_, intent, err := storage.MVCCGet(ctx, reader, args.Key, hlc.MaxTimestamp, storage.MVCCGetOptions{
 		// Perform an inconsistent read so that intents are returned instead of
 		// causing WriteIntentErrors.
 		Inconsistent: true,

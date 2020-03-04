@@ -13,11 +13,11 @@ package abortspan
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -75,8 +75,8 @@ func (sc *AbortSpan) max() roachpb.Key {
 }
 
 // ClearData removes all persisted items stored in the cache.
-func (sc *AbortSpan) ClearData(e engine.Engine) error {
-	iter := e.NewIterator(engine.IterOptions{UpperBound: sc.max()})
+func (sc *AbortSpan) ClearData(e storage.Engine) error {
+	iter := e.NewIterator(storage.IterOptions{UpperBound: sc.max()})
 	defer iter.Close()
 	b := e.NewWriteOnlyBatch()
 	defer b.Close()
@@ -90,20 +90,20 @@ func (sc *AbortSpan) ClearData(e engine.Engine) error {
 // Get looks up an AbortSpan entry recorded for this transaction ID.
 // Returns whether an abort record was found and any error.
 func (sc *AbortSpan) Get(
-	ctx context.Context, reader engine.Reader, txnID uuid.UUID, entry *roachpb.AbortSpanEntry,
+	ctx context.Context, reader storage.Reader, txnID uuid.UUID, entry *roachpb.AbortSpanEntry,
 ) (bool, error) {
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	ok, err := engine.MVCCGetProto(ctx, reader, key, hlc.Timestamp{}, entry, engine.MVCCGetOptions{})
+	ok, err := storage.MVCCGetProto(ctx, reader, key, hlc.Timestamp{}, entry, storage.MVCCGetOptions{})
 	return ok, err
 }
 
 // Iterate walks through the AbortSpan, invoking the given callback for
 // each unmarshaled entry with the MVCC key and the decoded entry.
 func (sc *AbortSpan) Iterate(
-	ctx context.Context, reader engine.Reader, f func(roachpb.Key, roachpb.AbortSpanEntry) error,
+	ctx context.Context, reader storage.Reader, f func(roachpb.Key, roachpb.AbortSpanEntry) error,
 ) error {
-	_, err := engine.MVCCIterate(ctx, reader, sc.min(), sc.max(), hlc.Timestamp{}, engine.MVCCScanOptions{},
+	_, err := storage.MVCCIterate(ctx, reader, sc.min(), sc.max(), hlc.Timestamp{}, storage.MVCCScanOptions{},
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortSpanEntry
 			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {
@@ -119,22 +119,22 @@ func (sc *AbortSpan) Iterate(
 
 // Del removes all AbortSpan entries for the given transaction.
 func (sc *AbortSpan) Del(
-	ctx context.Context, reader engine.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
+	ctx context.Context, reader storage.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return engine.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, nil /* txn */)
+	return storage.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, nil /* txn */)
 }
 
 // Put writes an entry for the specified transaction ID.
 func (sc *AbortSpan) Put(
 	ctx context.Context,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	txnID uuid.UUID,
 	entry *roachpb.AbortSpanEntry,
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return engine.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
 }
 
 // CopyTo copies the abort span entries to the abort span for the range
@@ -147,8 +147,8 @@ func (sc *AbortSpan) Put(
 // impossible, which is pretty bad (see #25233).
 func (sc *AbortSpan) CopyTo(
 	ctx context.Context,
-	r engine.Reader,
-	w engine.ReadWriter,
+	r storage.Reader,
+	w storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	ts hlc.Timestamp,
 	newRangeID roachpb.RangeID,
@@ -177,7 +177,7 @@ func (sc *AbortSpan) CopyTo(
 		if err != nil {
 			return err
 		}
-		return engine.MVCCPutProto(ctx, w, ms,
+		return storage.MVCCPutProto(ctx, w, ms,
 			keys.AbortSpanKey(newRangeID, txnID),
 			hlc.Timestamp{}, nil, &entry,
 		)

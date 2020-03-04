@@ -13,10 +13,10 @@ package stateloader
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -40,7 +40,7 @@ const (
 // are returned.
 func WriteInitialReplicaState(
 	ctx context.Context,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
@@ -88,7 +88,7 @@ func WriteInitialReplicaState(
 // state itself, and the updated stats are returned.
 func WriteInitialState(
 	ctx context.Context,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,

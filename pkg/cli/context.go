@@ -18,11 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -94,8 +94,8 @@ func initCLIDefaults() {
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
 
-	debugCtx.startKey = engine.NilKey
-	debugCtx.endKey = engine.MVCCKeyMax
+	debugCtx.startKey = storage.NilKey
+	debugCtx.endKey = storage.MVCCKeyMax
 	debugCtx.values = false
 	debugCtx.sizes = false
 	debugCtx.replicated = false
@@ -276,7 +276,7 @@ var authCtx struct {
 // debugCtx captures the command-line parameters of the `debug` command.
 // Defaults set by InitCLIDefaults() above.
 var debugCtx struct {
-	startKey, endKey  engine.MVCCKey
+	startKey, endKey  storage.MVCCKey
 	values            bool
 	sizes             bool
 	replicated        bool

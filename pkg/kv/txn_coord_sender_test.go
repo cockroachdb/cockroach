@@ -20,12 +20,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -410,7 +410,7 @@ func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachp
 	return &br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn, nil
 }
 
-func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*TxnCoordSender) {
+func verifyCleanup(key roachpb.Key, eng storage.Engine, t *testing.T, coords ...*TxnCoordSender) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, coord := range coords {
 			if coord.IsTracking() {
@@ -419,7 +419,7 @@ func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*
 		}
 		meta := &enginepb.MVCCMetadata{}
 		//lint:ignore SA1019 historical usage of deprecated eng.GetProto is OK
-		ok, _, _, err := eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
+		ok, _, _, err := eng.GetProto(storage.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}

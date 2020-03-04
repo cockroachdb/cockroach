@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
@@ -87,7 +87,7 @@ func TestRunNewVsOld(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%v@%v,ttl=%v", tc.ds, tc.now, tc.ttl), func(t *testing.T) {
-			eng := engine.NewDefaultInMem()
+			eng := storage.NewDefaultInMem()
 			defer eng.Close()
 
 			tc.ds.dist(N, rng).setupTest(t, eng, *tc.ds.desc())
@@ -124,7 +124,7 @@ func TestRunNewVsOld(t *testing.T) {
 func BenchmarkRun(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	ctx := context.Background()
-	runGC := func(eng engine.Engine, old bool, spec randomRunGCTestSpec) (Info, error) {
+	runGC := func(eng storage.Engine, old bool, spec randomRunGCTestSpec) (Info, error) {
 		runGCFunc := Run
 		if old {
 			runGCFunc = runGCOld
@@ -144,7 +144,7 @@ func BenchmarkRun(b *testing.B) {
 	}
 	makeTest := func(old bool, spec randomRunGCTestSpec) func(b *testing.B) {
 		return func(b *testing.B) {
-			eng := engine.NewDefaultInMem()
+			eng := storage.NewDefaultInMem()
 			defer eng.Close()
 			ms := spec.ds.dist(b.N, rng).setupTest(b, eng, *spec.ds.desc())
 			b.SetBytes(int64(float64(ms.Total()) / float64(b.N)))

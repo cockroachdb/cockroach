@@ -13,8 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -25,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -90,7 +90,7 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 }
 
 // Engine returns the engine.
-func (rec *SpanSetReplicaEvalContext) Engine() engine.Engine {
+func (rec *SpanSetReplicaEvalContext) Engine() storage.Engine {
 	return rec.i.Engine()
 }
 

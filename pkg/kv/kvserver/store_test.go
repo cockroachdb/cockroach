@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -226,7 +226,7 @@ func createTestStoreWithoutStart(
 	// and merge queues separately to cover event-driven splits and merges.
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
@@ -297,7 +297,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 
 	seed := randutil.NewPseudoSeed()
@@ -331,7 +331,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
 			key := ops[opIdx](rangeID)
 			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
-			if err := engine.MVCCPut(
+			if err := storage.MVCCPut(
 				ctx,
 				eng,
 				nil, /* ms */
@@ -369,7 +369,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
 
 			t.Logf("writing tombstone at rangeID=%d", rangeID)
-			if err := engine.MVCCPutProto(
+			if err := storage.MVCCPutProto(
 				ctx, eng, nil /* ms */, keys.RangeTombstoneKey(rangeID), hlc.Timestamp{}, nil /* txn */, &tombstone,
 			); err != nil {
 				t.Fatal(err)
@@ -426,7 +426,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
@@ -499,11 +499,11 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 
 	// Put some random garbage into the engine.
-	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
+	if err := eng.Put(storage.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %+v", err)
 	}
 	cfg := TestStoreConfig(nil)
@@ -1553,8 +1553,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			}
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
-			if ok, err := engine.MVCCGetProto(
-				context.Background(), store.Engine(), txnKey, hlc.Timestamp{}, &txn, engine.MVCCGetOptions{},
+			if ok, err := storage.MVCCGetProto(
+				context.Background(), store.Engine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
 			} else if ok {
@@ -1856,8 +1856,8 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Read pushee's txn.
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(
-		context.Background(), store.Engine(), txnKey, hlc.Timestamp{}, &txn, engine.MVCCGetOptions{},
+	if ok, err := storage.MVCCGetProto(
+		context.Background(), store.Engine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); !ok || err != nil {
 		t.Fatalf("not found or err: %+v", err)
 	}
@@ -2905,7 +2905,7 @@ func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID r
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	e := engine.NewDefaultInMem()
+	e := storage.NewDefaultInMem()
 	defer e.Close()
 
 	ctx := context.Background()
@@ -3243,10 +3243,10 @@ func TestPreemptiveSnapshotsAreRemoved(t *testing.T) {
 			const colID = 1
 			prefix := tablePrefix[0:len(tablePrefix):len(tablePrefix)]
 			k := roachpb.Key(encoding.EncodeIntValue(prefix, colID, int64(i)))
-			require.NoError(t, engine.MVCCBlindPutProto(ctx, b, state.Stats,
+			require.NoError(t, storage.MVCCBlindPutProto(ctx, b, state.Stats,
 				k, s.Clock().Now(), desc, nil))
 		}
-		require.NoError(t, engine.MVCCBlindPutProto(ctx, b, state.Stats,
+		require.NoError(t, storage.MVCCBlindPutProto(ctx, b, state.Stats,
 			keys.RangeDescriptorKey(desc.StartKey), hlc.Timestamp{}, desc, nil))
 		_, err := stl.Save(ctx, b, state, stateloader.TruncatedStateUnreplicated)
 		require.NoError(t, err)
@@ -3271,7 +3271,7 @@ func TestPreemptiveSnapshotsAreRemoved(t *testing.T) {
 			break
 		}
 		// There should not be any data other than the tombstone key.
-		if k := it.UnsafeKey(); k.Equal(engine.MVCCKey{Key: tombstoneKey}) {
+		if k := it.UnsafeKey(); k.Equal(storage.MVCCKey{Key: tombstoneKey}) {
 			foundTombstoneKey = true
 		} else {
 			t.Fatalf("found data in the range which should have been removed: %v", k)

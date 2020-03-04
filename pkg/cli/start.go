@@ -31,8 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -40,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -335,7 +335,7 @@ func initTempStorageConfig(
 	// the temporary directory record file before creating any new
 	// temporary directories in case the disk is completely full.
 	if recordPath != "" {
-		if err = engine.CleanupTempDirs(recordPath); err != nil {
+		if err = storage.CleanupTempDirs(recordPath); err != nil {
 			return base.TempStorageConfig{}, errors.Wrap(err, "could not cleanup temporary directories from record file")
 		}
 	}
@@ -392,14 +392,14 @@ func initTempStorageConfig(
 		tempDir = firstStore.Path
 	}
 	// Create the temporary subdirectory for the temp engine.
-	if tempStorageConfig.Path, err = engine.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
+	if tempStorageConfig.Path, err = storage.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
 		return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 	}
 
 	// We record the new temporary directory in the record file (if it
 	// exists) for cleanup in case the node crashes.
 	if recordPath != "" {
-		if err = engine.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
+		if err = storage.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
 			return base.TempStorageConfig{}, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
@@ -1184,8 +1184,8 @@ func setupAndInitializeLoggingAndProfiling(
 		log.StartGCDaemon(ctx)
 
 		// We have a valid logging directory. Configure Pebble/RocksDB to log into it.
-		engine.InitPebbleLogger(ctx)
-		engine.InitRocksDBLogger(ctx)
+		storage.InitPebbleLogger(ctx)
+		storage.InitRocksDBLogger(ctx)
 	}
 
 	outputDirectory := "."

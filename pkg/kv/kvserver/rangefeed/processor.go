@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -167,7 +167,7 @@ func NewProcessor(cfg Config) *Processor {
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) {
+func (p *Processor) Start(stopper *stop.Stopper, rtsIter storage.SimpleIterator) {
 	ctx := p.AnnotateCtx(context.Background())
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(p.stoppedC)
@@ -357,7 +357,7 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIter engine.SimpleIterator,
+	catchupIter storage.SimpleIterator,
 	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,

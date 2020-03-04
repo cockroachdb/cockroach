@@ -12,7 +12,6 @@ import (
 	time "time"
 
 	build "github.com/cockroachdb/cockroach/pkg/build"
-	enginepb "github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	gossip "github.com/cockroachdb/cockroach/pkg/gossip"
 	jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	storagepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
@@ -20,6 +19,7 @@ import (
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	diagnosticspb "github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	statuspb "github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	util "github.com/cockroachdb/cockroach/pkg/util"
 	log "github.com/cockroachdb/cockroach/pkg/util/log"
 	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"

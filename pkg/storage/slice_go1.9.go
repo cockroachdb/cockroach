@@ -10,7 +10,7 @@
 
 // +build gc,go1.9
 
-package engine
+package storage
 
 import "unsafe"
 

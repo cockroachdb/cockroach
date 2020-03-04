@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/time/rate"
@@ -72,7 +72,7 @@ func writeFileSyncing(
 	ctx context.Context,
 	filename string,
 	data []byte,
-	eng engine.Engine,
+	eng storage.Engine,
 	perm os.FileMode,
 	settings *cluster.Settings,
 	limiter *rate.Limiter,

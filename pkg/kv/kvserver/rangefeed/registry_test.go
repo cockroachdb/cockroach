@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -96,7 +96,7 @@ type testRegistration struct {
 }
 
 func newTestRegistration(
-	span roachpb.Span, ts hlc.Timestamp, catchup engine.SimpleIterator, withDiff bool,
+	span roachpb.Span, ts hlc.Timestamp, catchup storage.SimpleIterator, withDiff bool,
 ) *testRegistration {
 	s := newTestStream()
 	errC := make(chan *roachpb.Error, 1)
@@ -149,7 +149,7 @@ func TestRegistrationBasic(t *testing.T) {
 	<-noCatchupReg.errC
 
 	// Registration with catchup scan.
-	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1}, newTestIterator([]engine.MVCCKeyValue{
+	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1}, newTestIterator([]storage.MVCCKeyValue{
 		makeKV("b", "val1", 10),
 		makeInline("ba", "val2"),
 		makeKV("bc", "val3", 11),
@@ -212,7 +212,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 	// Run a catch-up scan for a registration over a test
 	// iterator with the following keys.
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	iter := newTestIterator([]engine.MVCCKeyValue{
+	iter := newTestIterator([]storage.MVCCKeyValue{
 		makeKV("a", "valA1", 10),
 		makeInline("b", "valB1"),
 		makeIntent("c", txn1, "txnKeyC", 15),

@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -36,7 +36,7 @@ import (
 const testCompactionLatency = 1 * time.Millisecond
 
 type wrappedEngine struct {
-	engine.Engine
+	storage.Engine
 	mu struct {
 		syncutil.Mutex
 		compactions []roachpb.Span
@@ -45,15 +45,15 @@ type wrappedEngine struct {
 
 func newWrappedEngine() *wrappedEngine {
 	return &wrappedEngine{
-		Engine: engine.NewDefaultInMem(),
+		Engine: storage.NewDefaultInMem(),
 	}
 }
 
-func (we *wrappedEngine) GetSSTables() engine.SSTableInfos {
-	key := func(s string) engine.MVCCKey {
-		return engine.MakeMVCCMetadataKey([]byte(s))
+func (we *wrappedEngine) GetSSTables() storage.SSTableInfos {
+	key := func(s string) storage.MVCCKey {
+		return storage.MakeMVCCMetadataKey([]byte(s))
 	}
-	ssti := engine.SSTableInfos{
+	ssti := storage.SSTableInfos{
 		// Level 0.
 		{Level: 0, Size: 20, Start: key("a"), End: key("z")},
 		{Level: 0, Size: 15, Start: key("a"), End: key("k")},
@@ -113,7 +113,7 @@ func TestCompactorThresholds(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 
@@ -536,7 +536,7 @@ func TestCompactorThresholds(t *testing.T) {
 
 			// Add a key so we can test that suggestions that span live data are
 			// ignored.
-			if err := we.Put(engine.MakeMVCCMetadataKey(key("5")), nil); err != nil {
+			if err := we.Put(storage.MakeMVCCMetadataKey(key("5")), nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -581,7 +581,7 @@ func TestCompactorThresholds(t *testing.T) {
 				return we.Iterate(
 					keys.LocalStoreSuggestedCompactionsMin,
 					keys.LocalStoreSuggestedCompactionsMax,
-					func(kv engine.MVCCKeyValue) (bool, error) {
+					func(kv storage.MVCCKeyValue) (bool, error) {
 						start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 						if err != nil {
 							t.Fatalf("failed to decode suggested compaction key: %+v", err)

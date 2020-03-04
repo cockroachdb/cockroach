@@ -13,11 +13,11 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
@@ -35,7 +35,7 @@ func declareKeysLeaseInfo(
 
 // LeaseInfo returns information about the lease holder for the range.
 func LeaseInfo(
-	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	reply := resp.(*roachpb.LeaseInfoResponse)
 	lease, nextLease := cArgs.EvalCtx.GetLease()

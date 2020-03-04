@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -41,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -384,8 +384,8 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
-		if _, _, err := engine.MVCCGet(
-			context.Background(), store.Engine(), key, store.Clock().Now(), engine.MVCCGetOptions{},
+		if _, _, err := storage.MVCCGet(
+			context.Background(), store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Errorf("failed to read consistent range descriptor for key %s: %+v", key, err)
 		}
@@ -399,9 +399,9 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 		return keys.MakeRangeKey(rk, keys.LocalTransactionSuffix, nil)
 	}
 	// Verify the transaction record is gone.
-	start := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
-	end := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
-	iter := store.Engine().NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+	start := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
+	end := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
+	iter := store.Engine().NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
 
 	defer iter.Close()
 	for iter.SeekGE(start); ; iter.Next() {
@@ -604,8 +604,8 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
-		if _, _, err := engine.MVCCGet(
-			context.Background(), store.Engine(), key, store.Clock().Now(), engine.MVCCGetOptions{},
+		if _, _, err := storage.MVCCGet(
+			context.Background(), store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}

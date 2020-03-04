@@ -33,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -73,6 +71,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -418,7 +418,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
-	tempEngine, tempFS, err := engine.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create temp storage")
 	}
@@ -437,7 +437,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
-			err = engine.CleanupTempDirs(recordPath)
+			err = storage.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
@@ -927,12 +927,12 @@ type ListenError struct {
 // or to set it if no engines have a version in them already.
 func inspectEngines(
 	ctx context.Context,
-	engines []engine.Engine,
+	engines []storage.Engine,
 	binaryVersion, binaryMinSupportedVersion roachpb.Version,
 	clusterIDContainer *base.ClusterIDContainer,
 ) (
-	bootstrappedEngines []engine.Engine,
-	emptyEngines []engine.Engine,
+	bootstrappedEngines []storage.Engine,
+	emptyEngines []storage.Engine,
 	_ clusterversion.ClusterVersion,
 	_ error,
 ) {

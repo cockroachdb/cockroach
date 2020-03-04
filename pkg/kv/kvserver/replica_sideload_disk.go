@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 )
@@ -32,7 +32,7 @@ type diskSideloadStorage struct {
 	limiter    *rate.Limiter
 	dir        string
 	dirCreated bool
-	eng        engine.Engine
+	eng        storage.Engine
 }
 
 func deprecatedSideloadedPath(
@@ -78,7 +78,7 @@ func newDiskSideloadStorage(
 	replicaID roachpb.ReplicaID,
 	baseDir string,
 	limiter *rate.Limiter,
-	eng engine.Engine,
+	eng storage.Engine,
 ) (*diskSideloadStorage, error) {
 	path := deprecatedSideloadedPath(baseDir, rangeID, replicaID)
 	newPath := sideloadedPath(baseDir, rangeID)

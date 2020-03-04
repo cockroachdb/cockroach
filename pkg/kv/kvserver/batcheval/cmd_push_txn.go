@@ -14,12 +14,12 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -105,7 +105,7 @@ func declareKeysPushTransaction(
 // records for which the transaction coordinator must have found out via
 // its heartbeats that the transaction has failed.
 func PushTxn(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.PushTxnRequest)
 	h := cArgs.Header
@@ -138,7 +138,7 @@ func PushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	var existTxn roachpb.Transaction
-	ok, err := engine.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn, engine.MVCCGetOptions{})
+	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn, storage.MVCCGetOptions{})
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -306,7 +306,7 @@ func PushTxn(
 	// in the timestamp cache.
 	if ok {
 		txnRecord := reply.PusheeTxn.AsRecord()
-		if err := engine.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 			return result.Result{}, err
 		}
 	}

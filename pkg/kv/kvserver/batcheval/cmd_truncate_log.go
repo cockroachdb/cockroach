@@ -13,12 +13,12 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -43,7 +43,7 @@ func declareKeysTruncateLog(
 // has already been truncated has no effect. If this range is not the one
 // specified within the request body, the request will also be ignored.
 func TruncateLog(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.TruncateLogRequest)
 
@@ -58,9 +58,9 @@ func TruncateLog(
 	}
 
 	var legacyTruncatedState roachpb.RaftTruncatedState
-	legacyKeyFound, err := engine.MVCCGetProto(
+	legacyKeyFound, err := storage.MVCCGetProto(
 		ctx, readWriter, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
-		hlc.Timestamp{}, &legacyTruncatedState, engine.MVCCGetOptions{},
+		hlc.Timestamp{}, &legacyTruncatedState, storage.MVCCGetOptions{},
 	)
 	if err != nil {
 		return result.Result{}, err
@@ -113,7 +113,7 @@ func TruncateLog(
 	// bugs that let it diverge. It might be easier to compute the stats
 	// from scratch, stopping when 4mb (defaultRaftLogTruncationThreshold)
 	// is reached as at that point we'll truncate aggressively anyway.
-	iter := readWriter.NewIterator(engine.IterOptions{UpperBound: end})
+	iter := readWriter.NewIterator(storage.IterOptions{UpperBound: end})
 	defer iter.Close()
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
 	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
@@ -138,7 +138,7 @@ func TruncateLog(
 		// Time to migrate by deleting the legacy key. The downstream-of-Raft
 		// code will atomically rewrite the truncated state (supplied via the
 		// side effect) into the new unreplicated key.
-		if err := engine.MVCCDelete(
+		if err := storage.MVCCDelete(
 			ctx, readWriter, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
 			hlc.Timestamp{}, nil, /* txn */
 		); err != nil {

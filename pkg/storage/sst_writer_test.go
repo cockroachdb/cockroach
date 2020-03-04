@@ -8,24 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package engine_test
+package storage_test
 
 import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue {
+func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValue {
 	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
-	kvs := make([]engine.MVCCKeyValue, numKeys)
+	kvs := make([]storage.MVCCKeyValue, numKeys)
 	r, _ := randutil.NewPseudoRand()
 
 	var k int
@@ -49,8 +49,8 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue
 	return kvs
 }
 
-func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
-	w, err := engine.MakeRocksDBSstFileWriter()
+func makeRocksSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
+	w, err := storage.MakeRocksDBSstFileWriter()
 	require.NoError(t, err)
 	defer w.Close()
 
@@ -64,13 +64,13 @@ func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
 	return sst
 }
 
-func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue, ingestion bool) []byte {
-	f := &engine.MemFile{}
-	var w engine.SSTWriter
+func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue, ingestion bool) []byte {
+	f := &storage.MemFile{}
+	var w storage.SSTWriter
 	if ingestion {
-		w = engine.MakeIngestionSSTWriter(f)
+		w = storage.MakeIngestionSSTWriter(f)
 	} else {
-		w = engine.MakeBackupSSTWriter(f)
+		w = storage.MakeBackupSSTWriter(f)
 	}
 	defer w.Close()
 
@@ -111,13 +111,13 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 	sstRocks := makeRocksSST(t, kvs)
 	sstPebble := makePebbleSST(t, kvs, false /* ingestion */)
 
-	itRocks, err := engine.NewMemSSTIterator(sstRocks, false)
+	itRocks, err := storage.NewMemSSTIterator(sstRocks, false)
 	require.NoError(t, err)
-	itPebble, err := engine.NewMemSSTIterator(sstPebble, false)
+	itPebble, err := storage.NewMemSSTIterator(sstPebble, false)
 	require.NoError(t, err)
 
-	itPebble.SeekGE(engine.NilKey)
-	for itRocks.SeekGE(engine.NilKey); ; {
+	itPebble.SeekGE(storage.NilKey)
+	for itRocks.SeekGE(storage.NilKey); ; {
 		okRocks, err := itRocks.Valid()
 		if err != nil {
 			t.Fatal(err)

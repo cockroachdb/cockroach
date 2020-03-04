@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -59,12 +59,12 @@ func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
 		} else {
 			prettyTime = d.Timestamp.GoTime().UTC().String()
 		}
-		mvccKey := engine.MVCCKey{Key: d.Key, Timestamp: ts}
+		mvccKey := storage.MVCCKey{Key: d.Key, Timestamp: ts}
 		num, err := fmt.Fprintf(w, format,
 			prefix, ts.WallTime/1e9, ts.WallTime%1e9, ts.Logical, d.Key,
 			prefix, prettyTime,
-			prefix, SprintKeyValue(engine.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
-			prefix, engine.EncodeKey(mvccKey), d.Value)
+			prefix, SprintKeyValue(storage.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
+			prefix, storage.EncodeKey(mvccKey), d.Value)
 		if err != nil {
 			return 0, err
 		}

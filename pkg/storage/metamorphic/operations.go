@@ -18,10 +18,10 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -134,7 +134,7 @@ func generateMVCCScan(
 }
 
 // Prints the key where an iterator is positioned, or valid = false if invalid.
-func printIterState(iter engine.Iterator) string {
+func printIterState(iter storage.Iterator) string {
 	if ok, err := iter.Valid(); !ok || err != nil {
 		if err != nil {
 			return fmt.Sprintf("valid = %v, err = %s", ok, err.Error())
@@ -163,7 +163,7 @@ func (m mvccGetOp) run(ctx context.Context) string {
 	// TODO(itsbilal): Specify these bools as operands instead of having a
 	// separate operation for inconsistent cases. This increases visibility for
 	// anyone reading the output file.
-	val, intent, err := engine.MVCCGet(ctx, reader, m.key, m.ts, engine.MVCCGetOptions{
+	val, intent, err := storage.MVCCGet(ctx, reader, m.key, m.ts, storage.MVCCGetOptions{
 		Inconsistent: m.inconsistent,
 		Tombstones:   true,
 		Txn:          txn,
@@ -187,7 +187,7 @@ func (m mvccPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 	writer := m.m.getReadWriter(m.writer)
 
-	err := engine.MVCCPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, txn)
+	err := storage.MVCCPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -213,7 +213,7 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := engine.MVCCConditionalPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, &m.expVal, true, txn)
+	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, &m.expVal, true, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -238,7 +238,7 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := engine.MVCCInitPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, false, txn)
+	err := storage.MVCCInitPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, false, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -263,7 +263,7 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	keys, _, _, err := engine.MVCCDeleteRange(ctx, writer, nil, m.key, m.endKey, 0, txn.WriteTimestamp, txn, true)
+	keys, _, _, err := storage.MVCCDeleteRange(ctx, writer, nil, m.key, m.endKey, 0, txn.WriteTimestamp, txn, true)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -288,7 +288,7 @@ type mvccClearTimeRangeOp struct {
 
 func (m mvccClearTimeRangeOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
-	span, err := engine.MVCCClearTimeRange(ctx, writer, nil, m.key, m.endKey, m.startTime, m.endTime, math.MaxInt64)
+	span, err := storage.MVCCClearTimeRange(ctx, writer, nil, m.key, m.endKey, m.startTime, m.endTime, math.MaxInt64)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -307,7 +307,7 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := engine.MVCCDelete(ctx, writer, nil, m.key, txn.WriteTimestamp, txn)
+	err := storage.MVCCDelete(ctx, writer, nil, m.key, txn.WriteTimestamp, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -327,7 +327,7 @@ type mvccFindSplitKeyOp struct {
 }
 
 func (m mvccFindSplitKeyOp) run(ctx context.Context) string {
-	splitKey, err := engine.MVCCFindSplitKey(ctx, m.m.engine, m.key, m.endKey, m.splitSize)
+	splitKey, err := storage.MVCCFindSplitKey(ctx, m.m.engine, m.key, m.endKey, m.splitSize)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -356,7 +356,7 @@ func (m mvccScanOp) run(ctx context.Context) string {
 	// m.engine instead of a readWriterGenerator-generated engine.Reader, otherwise
 	// we will try MVCCScanning on batches and produce diffs between runs on
 	// different engines that don't point to an actual issue.
-	result, err := engine.MVCCScan(ctx, m.m.engine, m.key, m.endKey, m.ts, engine.MVCCScanOptions{
+	result, err := storage.MVCCScan(ctx, m.m.engine, m.key, m.endKey, m.ts, storage.MVCCScanOptions{
 		Inconsistent: m.inconsistent,
 		Tombstones:   true,
 		Reverse:      m.reverse,
@@ -407,7 +407,7 @@ func (t txnCommitOp) run(ctx context.Context) string {
 	for _, span := range txn.IntentSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.COMMITTED
-		_, err := engine.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)
+		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)
 		if err != nil {
 			panic(err)
 		}
@@ -453,7 +453,7 @@ type iterOpenOp struct {
 
 func (i iterOpenOp) run(ctx context.Context) string {
 	rw := i.m.getReadWriter(i.rw)
-	iter := rw.NewIterator(engine.IterOptions{
+	iter := rw.NewIterator(storage.IterOptions{
 		Prefix:     false,
 		LowerBound: i.key,
 		UpperBound: i.endKey.Next(),
@@ -466,12 +466,12 @@ func (i iterOpenOp) run(ctx context.Context) string {
 		isBatchIter: i.rw != "engine",
 	})
 
-	if _, ok := rw.(engine.Batch); ok {
+	if _, ok := rw.(storage.Batch); ok {
 		// When Next()-ing on a newly initialized batch iter without a key,
 		// pebble's iterator stays invalid while RocksDB's finds the key after
 		// the first key. This is a known difference. For now seek the iterator
 		// to standardize behavior for this test.
-		iter.SeekGE(engine.MakeMVCCMetadataKey(i.key))
+		iter.SeekGE(storage.MakeMVCCMetadataKey(i.key))
 	}
 
 	return string(i.id)
@@ -492,7 +492,7 @@ func (i iterCloseOp) run(ctx context.Context) string {
 type iterSeekOp struct {
 	m      *metaTestRunner
 	iter   iteratorID
-	key    engine.MVCCKey
+	key    storage.MVCCKey
 	seekLT bool
 }
 
@@ -578,7 +578,7 @@ type clearRangeOp struct {
 func (c clearRangeOp) run(ctx context.Context) string {
 	// All ClearRange calls in Cockroach usually happen with metadata keys, so
 	// mimic the same behavior here.
-	err := c.m.engine.ClearRange(engine.MakeMVCCMetadataKey(c.key), engine.MakeMVCCMetadataKey(c.endKey))
+	err := c.m.engine.ClearRange(storage.MakeMVCCMetadataKey(c.key), storage.MakeMVCCMetadataKey(c.endKey))
 	if err != nil {
 		return fmt.Sprintf("error: %s", err.Error())
 	}
@@ -601,7 +601,7 @@ func (c compactOp) run(ctx context.Context) string {
 
 type ingestOp struct {
 	m    *metaTestRunner
-	keys []engine.MVCCKey
+	keys []storage.MVCCKey
 }
 
 func (i ingestOp) run(ctx context.Context) string {
@@ -612,7 +612,7 @@ func (i ingestOp) run(ctx context.Context) string {
 	}
 	defer f.Close()
 
-	sstWriter := engine.MakeIngestionSSTWriter(f)
+	sstWriter := storage.MakeIngestionSSTWriter(f)
 	for _, key := range i.keys {
 		_ = sstWriter.Put(key, []byte("ingested"))
 	}
@@ -1185,7 +1185,7 @@ var opGenerators = []opGenerator{
 	{
 		name: "ingest",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
-			var keys []engine.MVCCKey
+			var keys []storage.MVCCKey
 			for _, arg := range args {
 				key := m.keyGenerator.parse(arg)
 				// Don't put anything at the 0 timestamp; the MVCC code expects

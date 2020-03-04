@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -123,7 +123,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		rangeID := roachpb.RangeID(i)
 		replicaID := roachpb.ReplicaID(1)
 
-		memEngine := engine.NewDefaultInMem()
+		memEngine := storage.NewDefaultInMem()
 		stopper.AddCloser(memEngine)
 
 		cfg := TestStoreConfig(clock)
@@ -218,7 +218,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	stores := []*Store{}
 	for i := 0; i < count; i++ {
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-		eng := engine.NewDefaultInMem()
+		eng := storage.NewDefaultInMem()
 		stopper.AddCloser(eng)
 		s := NewStore(context.TODO(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++

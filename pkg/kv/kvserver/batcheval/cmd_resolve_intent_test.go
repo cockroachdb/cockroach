@@ -16,11 +16,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -73,7 +73,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	engine := engine.NewDefaultInMem()
+	engine := storage.NewDefaultInMem()
 	defer engine.Close()
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		for _, test := range tests {
@@ -150,7 +150,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
-		db := engine.NewDefaultInMem()
+		db := storage.NewDefaultInMem()
 		defer db.Close()
 		batch := db.NewBatch()
 		defer batch.Close()
@@ -159,13 +159,13 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 0
-		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 1
-		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 		if err := batch.Commit(true); err != nil {
@@ -240,7 +240,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 
 		// The second write has been rolled back; verify that the remaining
 		// value is from the first write.
-		res, i, err := engine.MVCCGet(ctx, batch, k, ts2, engine.MVCCGetOptions{})
+		res, i, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

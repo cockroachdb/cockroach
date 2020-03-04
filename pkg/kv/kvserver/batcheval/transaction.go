@@ -15,9 +15,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -81,7 +81,7 @@ func WriteAbortSpanOnResolve(status roachpb.TransactionStatus, poison, removedIn
 func UpdateAbortSpan(
 	ctx context.Context,
 	rec EvalContext,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	txn enginepb.TxnMeta,
 	poison bool,

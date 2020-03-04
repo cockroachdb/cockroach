@@ -13,9 +13,9 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -27,7 +27,7 @@ func init() {
 // RefreshRange checks whether the key range specified has any values written in
 // the interval [args.RefreshFrom, header.Timestamp].
 func RefreshRange(
-	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RefreshRangeRequest)
 	h := cArgs.Header
@@ -58,9 +58,9 @@ func RefreshRange(
 	// committed version. Note also that we include tombstones, which must be
 	// considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	intents, err := engine.MVCCIterate(
+	intents, err := storage.MVCCIterate(
 		ctx, reader, args.Key, args.EndKey, refreshTo,
-		engine.MVCCScanOptions{
+		storage.MVCCScanOptions{
 			Inconsistent: true,
 			Tombstones:   true,
 		},

@@ -13,9 +13,9 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
@@ -30,7 +30,7 @@ func init() {
 // lease, all duties required of the range lease holder are commenced, including
 // releasing all latches and clearing the timestamp cache.
 func RequestLease(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	// When returning an error from this method, must always return a
 	// newFailedLeaseTrigger() to satisfy stats.

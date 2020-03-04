@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -67,7 +67,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.Insecure = false
 
 	// Configure test storage engine.
-	cfg.StorageEngine = engine.DefaultStorageEngine
+	cfg.StorageEngine = storage.DefaultStorageEngine
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
@@ -434,7 +434,7 @@ func (ts *TestServer) ClusterSettings() *cluster.Settings {
 }
 
 // Engines returns the TestServer's engines.
-func (ts *TestServer) Engines() []engine.Engine {
+func (ts *TestServer) Engines() []storage.Engine {
 	return ts.engines
 }
 

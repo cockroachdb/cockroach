@@ -22,8 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -31,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -502,14 +502,14 @@ type replicaHash struct {
 func (r *Replica) sha512(
 	ctx context.Context,
 	desc roachpb.RangeDescriptor,
-	snap engine.Reader,
+	snap storage.Reader,
 	snapshot *roachpb.RaftSnapshotData,
 	mode roachpb.ChecksumMode,
 ) (*replicaHash, error) {
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
-	iter := snap.NewIterator(engine.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
+	iter := snap.NewIterator(storage.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	var alloc bufalloc.ByteAllocator
@@ -518,7 +518,7 @@ func (r *Replica) sha512(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
-	visitor := func(unsafeKey engine.MVCCKey, unsafeValue []byte) error {
+	visitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
 		if snapshot != nil {
 			// Add (a copy of) the kv pair into the debug message.
 			kv := roachpb.RaftSnapshotData_KeyValue{
@@ -562,7 +562,7 @@ func (r *Replica) sha512(
 	// all of the replicated key space.
 	if !statsOnly {
 		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
-			spanMS, err := engine.ComputeStatsGo(
+			spanMS, err := storage.ComputeStatsGo(
 				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)
 			if err != nil {

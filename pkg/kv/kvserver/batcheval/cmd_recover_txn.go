@@ -15,11 +15,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -50,7 +50,7 @@ func declareKeysRecoverTransaction(
 // result of the recovery should be committing the abandoned transaction or
 // aborting it.
 func RecoverTxn(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RecoverTxnRequest)
 	h := cArgs.Header
@@ -69,8 +69,8 @@ func RecoverTxn(
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
-	if ok, err := engine.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &reply.RecoveredTxn, engine.MVCCGetOptions{},
+	if ok, err := storage.MVCCGetProto(
+		ctx, readWriter, key, hlc.Timestamp{}, &reply.RecoveredTxn, storage.MVCCGetOptions{},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -216,7 +216,7 @@ func RecoverTxn(
 		reply.RecoveredTxn.Status = roachpb.ABORTED
 	}
 	txnRecord := reply.RecoveredTxn.AsRecord()
-	if err := engine.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+	if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 		return result.Result{}, err
 	}
 

@@ -25,8 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -88,7 +88,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop(context.TODO())
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	engineStopper.AddCloser(eng)
 	var rangeID2 roachpb.RangeID
 
@@ -194,7 +194,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	// and trying to handle that complicates the test without providing any
 	// added benefit.
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
 	numIncrements := 0
@@ -294,8 +294,8 @@ func TestReplicateRange(t *testing.T) {
 	// Verify no intent remains on range descriptor key.
 	key := keys.RangeDescriptorKey(repl.Desc().StartKey)
 	desc := roachpb.RangeDescriptor{}
-	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key,
-		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{}); err != nil {
+	if ok, err := storage.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key,
+		mtc.stores[0].Clock().Now(), &desc, storage.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
 	} else if !ok {
 		t.Fatalf("range descriptor key %s was not found", key)
@@ -307,8 +307,8 @@ func TestReplicateRange(t *testing.T) {
 		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(),
-				mtc.stores[0].Clock().Now(), &metaDesc, engine.MVCCGetOptions{}); err != nil {
+			if ok, err := storage.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(),
+				mtc.stores[0].Clock().Now(), &metaDesc, storage.MVCCGetOptions{}); err != nil {
 				return err
 			} else if !ok {
 				return errors.Errorf("failed to resolve %s", key.AsRawKey())
@@ -1083,7 +1083,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 
@@ -1719,7 +1719,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 	mtc := &multiTestContext{
@@ -1744,8 +1744,8 @@ func TestProgressWithDownNode(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			values := []int64{}
 			for _, eng := range mtc.engines {
-				val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(),
-					engine.MVCCGetOptions{})
+				val, _, err := storage.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(),
+					storage.MVCCGetOptions{})
 				if err != nil {
 					return err
 				}
@@ -1891,7 +1891,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 	sc := kvserver.TestStoreConfig(nil)
@@ -1915,8 +1915,8 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 		return func() error {
 			values := make([]int64, len(mtc.engines))
 			for i, eng := range mtc.engines {
-				val, _, err := engine.MVCCGet(context.Background(), eng, key, mtc.clock.Now(),
-					engine.MVCCGetOptions{})
+				val, _, err := storage.MVCCGet(context.Background(), eng, key, mtc.clock.Now(),
+					storage.MVCCGetOptions{})
 				if err != nil {
 					return err
 				}
@@ -2703,9 +2703,9 @@ func TestRaftRemoveRace(t *testing.T) {
 		// Verify the tombstone key does not exist. See #12130.
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		var tombstone roachpb.RangeTombstone
-		if ok, err := engine.MVCCGetProto(
+		if ok, err := storage.MVCCGetProto(
 			context.Background(), mtc.stores[2].Engine(), tombstoneKey,
-			hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+			hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		} else if ok {
@@ -3003,7 +3003,7 @@ func TestDecommission(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 
@@ -4424,7 +4424,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 
@@ -4713,7 +4713,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 	sc := kvserver.TestStoreConfig(nil)
@@ -4759,8 +4759,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
 		var tombstone roachpb.RangeTombstone
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
-		ok, err := engine.MVCCGetProto(
-			ctx, store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+		ok, err := storage.MVCCGetProto(
+			ctx, store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		)
 		require.NoError(t, err)
 		require.False(t, ok)

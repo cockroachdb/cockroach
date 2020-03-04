@@ -26,8 +26,6 @@ import (
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -35,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -239,7 +239,7 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 	)
 }
 
-func (r *Replica) AssertState(ctx context.Context, reader engine.Reader) {
+func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -380,16 +380,16 @@ func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
 	return r.raftMu.sideloaded
 }
 
-func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {
-	sstFile := &engine.MemFile{}
-	sst := engine.MakeIngestionSSTWriter(sstFile)
+func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
+	sstFile := &storage.MemFile{}
+	sst := storage.MakeIngestionSSTWriter(sstFile)
 	defer sst.Close()
 
 	v := roachpb.MakeValueFromBytes([]byte(value))
 	v.InitChecksum([]byte(key))
 
-	kv := engine.MVCCKeyValue{
-		Key: engine.MVCCKey{
+	kv := storage.MVCCKeyValue{
+		Key: storage.MVCCKey{
 			Key:       []byte(key),
 			Timestamp: ts,
 		},
@@ -428,7 +428,7 @@ func SetMockAddSSTable() (undo func()) {
 	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
 	// subparts of the real evalAddSSTable to make this test less likely to rot.
 	evalAddSSTable := func(
-		ctx context.Context, _ engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+		ctx context.Context, _ storage.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
 	) (result.Result, error) {
 		log.Event(ctx, "evaluated testing-only AddSSTable mock")
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)

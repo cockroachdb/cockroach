@@ -17,9 +17,9 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
@@ -29,13 +29,13 @@ import (
 // directory of scratches created. A scratch manages the SSTs created during a
 // specific snapshot.
 type SSTSnapshotStorage struct {
-	engine  engine.Engine
+	engine  storage.Engine
 	limiter *rate.Limiter
 	dir     string
 }
 
 // NewSSTSnapshotStorage creates a new SST snapshot storage.
-func NewSSTSnapshotStorage(engine engine.Engine, limiter *rate.Limiter) SSTSnapshotStorage {
+func NewSSTSnapshotStorage(engine storage.Engine, limiter *rate.Limiter) SSTSnapshotStorage {
 	return SSTSnapshotStorage{
 		engine:  engine,
 		limiter: limiter,

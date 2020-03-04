@@ -14,10 +14,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -1435,7 +1435,7 @@ func (sm *StoreMetrics) subtractMVCCStats(delta enginepb.MVCCStats) {
 	sm.incMVCCGauges(neg)
 }
 
-func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {
+func (sm *StoreMetrics) updateRocksDBStats(stats storage.Stats) {
 	// We do not grab a lock here, because it's not possible to get a point-in-
 	// time snapshot of RocksDB stats. Retrieving RocksDB stats doesn't grab any
 	// locks, and there's no way to retrieve multiple stats in a single operation.
@@ -1451,7 +1451,7 @@ func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.RdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
 }
 
-func (sm *StoreMetrics) updateEnvStats(stats engine.EnvStats) {
+func (sm *StoreMetrics) updateEnvStats(stats storage.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }
 

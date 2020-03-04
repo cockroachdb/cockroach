@@ -20,9 +20,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
 )
@@ -36,31 +36,31 @@ func makeStorageConfig(path string) base.StorageConfig {
 	}
 }
 
-func createTestRocksDBEngine(path string) (engine.Engine, error) {
-	cache := engine.NewRocksDBCache(1 << 20)
+func createTestRocksDBEngine(path string) (storage.Engine, error) {
+	cache := storage.NewRocksDBCache(1 << 20)
 	defer cache.Release()
-	cfg := engine.RocksDBConfig{
+	cfg := storage.RocksDBConfig{
 		StorageConfig: makeStorageConfig(path),
 		ReadOnly:      false,
 	}
 
-	return engine.NewRocksDB(cfg, cache)
+	return storage.NewRocksDB(cfg, cache)
 }
 
-func createTestPebbleEngine(path string) (engine.Engine, error) {
-	pebbleConfig := engine.PebbleConfig{
+func createTestPebbleEngine(path string) (storage.Engine, error) {
+	pebbleConfig := storage.PebbleConfig{
 		StorageConfig: makeStorageConfig(path),
-		Opts:          engine.DefaultPebbleOptions(),
+		Opts:          storage.DefaultPebbleOptions(),
 	}
 	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
 	defer pebbleConfig.Opts.Cache.Unref()
 
-	return engine.NewPebble(context.Background(), pebbleConfig)
+	return storage.NewPebble(context.Background(), pebbleConfig)
 }
 
 type engineImpl struct {
 	name   string
-	create func(path string) (engine.Engine, error)
+	create func(path string) (storage.Engine, error)
 }
 
 var _ fmt.Stringer = &engineImpl{}
@@ -84,7 +84,7 @@ type metaTestRunner struct {
 	engineImpls     []engineImpl
 	curEngine       int
 	restarts        bool
-	engine          engine.Engine
+	engine          storage.Engine
 	tsGenerator     tsGenerator
 	opGenerators    map[operandType]operandGenerator
 	txnGenerator    *txnGenerator
@@ -95,7 +95,7 @@ type metaTestRunner struct {
 	pastTSGenerator *pastTSGenerator
 	nextTSGenerator *nextTSGenerator
 	openIters       map[iteratorID]iteratorInfo
-	openBatches     map[readWriterID]engine.ReadWriter
+	openBatches     map[readWriterID]storage.ReadWriter
 	openTxns        map[txnID]*roachpb.Transaction
 	nameToGenerator map[string]*opGenerator
 	ops             []opRun
@@ -127,7 +127,7 @@ func (m *metaTestRunner) init() {
 	m.rwGenerator = &readWriterGenerator{
 		rng:        m.rng,
 		m:          m,
-		batchIDMap: make(map[readWriterID]engine.Batch),
+		batchIDMap: make(map[readWriterID]storage.Batch),
 	}
 	m.iterGenerator = &iteratorGenerator{
 		rng:          m.rng,
@@ -168,7 +168,7 @@ func (m *metaTestRunner) init() {
 	}
 	m.ops = nil
 	m.openIters = make(map[iteratorID]iteratorInfo)
-	m.openBatches = make(map[readWriterID]engine.ReadWriter)
+	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
 }
 
@@ -199,7 +199,7 @@ func (m *metaTestRunner) closeAll() {
 	}
 	// TODO(itsbilal): Abort all txns.
 	m.openIters = make(map[iteratorID]iteratorInfo)
-	m.openBatches = make(map[readWriterID]engine.ReadWriter)
+	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
 	m.engine.Close()
 	m.engine = nil
@@ -218,7 +218,7 @@ func (m *metaTestRunner) setTxn(id txnID, txn *roachpb.Transaction) {
 	m.openTxns[id] = txn
 }
 
-func (m *metaTestRunner) getReadWriter(id readWriterID) engine.ReadWriter {
+func (m *metaTestRunner) getReadWriter(id readWriterID) storage.ReadWriter {
 	if id == "engine" {
 		return m.engine
 	}
@@ -230,7 +230,7 @@ func (m *metaTestRunner) getReadWriter(id readWriterID) engine.ReadWriter {
 	return batch
 }
 
-func (m *metaTestRunner) setReadWriter(id readWriterID, rw engine.ReadWriter) {
+func (m *metaTestRunner) setReadWriter(id readWriterID, rw storage.ReadWriter) {
 	if id == "engine" {
 		// no-op
 		return

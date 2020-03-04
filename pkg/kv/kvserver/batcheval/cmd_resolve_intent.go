@@ -13,11 +13,11 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -76,7 +76,7 @@ func resolveToMetricType(status roachpb.TransactionStatus, poison bool) *result.
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
 func ResolveIntent(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRequest)
 	h := cArgs.Header
@@ -87,7 +87,7 @@ func ResolveIntent(
 	}
 
 	update := args.AsLockUpdate()
-	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
+	ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
 	if err != nil {
 		return result.Result{}, err
 	}

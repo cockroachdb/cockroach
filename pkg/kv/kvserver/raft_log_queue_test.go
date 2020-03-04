@@ -20,10 +20,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -839,9 +839,9 @@ func TestTruncateLogRecompute(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	cache := engine.NewRocksDBCache(1 << 20)
+	cache := storage.NewRocksDBCache(1 << 20)
 	defer cache.Release()
-	eng, err := engine.NewRocksDB(engine.RocksDBConfig{StorageConfig: base.StorageConfig{Dir: dir}}, cache)
+	eng, err := storage.NewRocksDB(storage.RocksDBConfig{StorageConfig: base.StorageConfig{Dir: dir}}, cache)
 	if err != nil {
 		t.Fatal(err)
 	}

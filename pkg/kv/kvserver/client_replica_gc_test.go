@@ -20,10 +20,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
@@ -42,10 +42,10 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// would probably look at an empty sideloaded directory and fail.
 	tempDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	cache := engine.NewRocksDBCache(1 << 20)
+	cache := storage.NewRocksDBCache(1 << 20)
 	defer cache.Release()
 	for i := 0; i < 3; i++ {
-		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
+		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir: filepath.Join(tempDir, strconv.Itoa(i)),
 			},

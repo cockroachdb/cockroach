@@ -24,8 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -34,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -95,8 +95,8 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
-			val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), clocks[0].Now(),
-				engine.MVCCGetOptions{})
+			val, _, err := storage.MVCCGet(context.Background(), eng, roachpb.Key("a"), clocks[0].Now(),
+				storage.MVCCGetOptions{})
 			if err != nil {
 				return err
 			}
@@ -162,8 +162,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
 		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
 	}
-	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], key, ts3,
-		engine.MVCCGetOptions{})
+	val, _, err := storage.MVCCGet(context.Background(), mtc.engines[0], key, ts3,
+		storage.MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 			return nil
 		}
-	eng := engine.NewDefaultInMem()
+	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	store := createTestStoreWithOpts(t,
 		testStoreOpts{eng: eng, cfg: &cfg},
@@ -1700,7 +1700,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 
@@ -1824,7 +1824,7 @@ func TestClearRange(t *testing.T) {
 		t.Helper()
 		start := prefix
 		end := prefix.PrefixEnd()
-		kvs, err := engine.Scan(store.Engine(), start, end, 0 /* maxRows */)
+		kvs, err := storage.Scan(store.Engine(), start, end, 0 /* maxRows */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2174,7 +2174,7 @@ func TestReplicaTombstone(t *testing.T) {
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 
@@ -2558,8 +2558,8 @@ func TestReplicaTombstone(t *testing.T) {
 				return err
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
-			ok, err := engine.MVCCGetProto(
-				context.TODO(), store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+			ok, err := storage.MVCCGetProto(
+				context.TODO(), store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 			)
 			require.NoError(t, err)
 			if !ok {

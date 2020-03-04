@@ -15,11 +15,11 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -870,7 +870,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			db := engine.NewDefaultInMem()
+			db := storage.NewDefaultInMem()
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()
@@ -878,7 +878,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Write the existing transaction record, if necessary.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if c.existingTxn != nil {
-				if err := engine.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, c.existingTxn); err != nil {
+				if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, c.existingTxn); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -931,8 +931,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 				// Assert that the txn record is written as expected.
 				var resTxnRecord roachpb.TransactionRecord
-				if ok, err := engine.MVCCGetProto(
-					ctx, batch, txnKey, hlc.Timestamp{}, &resTxnRecord, engine.MVCCGetOptions{},
+				if ok, err := storage.MVCCGetProto(
+					ctx, batch, txnKey, hlc.Timestamp{}, &resTxnRecord, storage.MVCCGetOptions{},
 				); err != nil {
 					t.Fatal(err)
 				} else if c.expTxn == nil {
@@ -971,7 +971,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	defer TestingSetTxnAutoGC(false)()
 
 	testutils.RunTrueAndFalse(t, "withStoredTxnRecord", func(t *testing.T, storeTxnBeforeEndTxn bool) {
-		db := engine.NewDefaultInMem()
+		db := storage.NewDefaultInMem()
 		defer db.Close()
 		batch := db.NewBatch()
 		defer batch.Close()
@@ -981,13 +981,13 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 1
-		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 2
-		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1000,7 +1000,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		if storeTxnBeforeEndTxn {
 			txnRec := txn.AsRecord()
-			if err := engine.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, &txnRec); err != nil {
+			if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, &txnRec); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1031,7 +1031,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// The second write has been rolled back; verify that the remaining
 		// value is from the first write.
-		res, i, err := engine.MVCCGet(ctx, batch, k, ts2, engine.MVCCGetOptions{})
+		res, i, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1050,7 +1050,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// Also verify that the txn record contains the ignore list.
 		var txnRec roachpb.TransactionRecord
-		hasRec, err := engine.MVCCGetProto(ctx, batch, txnKey, hlc.Timestamp{}, &txnRec, engine.MVCCGetOptions{})
+		hasRec, err := storage.MVCCGetProto(ctx, batch, txnKey, hlc.Timestamp{}, &txnRec, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -35,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -50,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -100,7 +100,7 @@ type testStoreOpts struct {
 	dontCreateSystemRanges bool
 
 	cfg *kvserver.StoreConfig
-	eng engine.Engine
+	eng storage.Engine
 }
 
 // createTestStoreWithOpts creates a test store using the given engine and clock.
@@ -118,7 +118,7 @@ func createTestStoreWithOpts(
 	}
 	eng := opts.eng
 	if eng == nil {
-		eng = engine.NewDefaultInMem()
+		eng = storage.NewDefaultInMem()
 		stopper.AddCloser(eng)
 	}
 
@@ -277,7 +277,7 @@ type multiTestContext struct {
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
 	clocks      []*hlc.Clock
-	engines     []engine.Engine
+	engines     []storage.Engine
 	grpcServers []*grpc.Server
 	distSenders []*kv.DistSender
 	dbs         []*client.DB
@@ -793,7 +793,7 @@ func (m *multiTestContext) addStore(idx int) {
 		clock = m.clock
 		m.clocks = append(m.clocks, clock)
 	}
-	var eng engine.Engine
+	var eng storage.Engine
 	var needBootstrap bool
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
@@ -806,7 +806,7 @@ func (m *multiTestContext) addStore(idx int) {
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
-		eng = engine.NewDefaultInMem()
+		eng = storage.NewDefaultInMem()
 		engineStopper.AddCloser(eng)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
@@ -1275,8 +1275,8 @@ func (m *multiTestContext) waitForUnreplicated(rangeID roachpb.RangeID, dest int
 func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 	results := make([]int64, len(m.engines))
 	for i, eng := range m.engines {
-		val, _, err := engine.MVCCGet(context.Background(), eng, key, m.clocks[i].Now(),
-			engine.MVCCGetOptions{})
+		val, _, err := storage.MVCCGet(context.Background(), eng, key, m.clocks[i].Now(),
+			storage.MVCCGetOptions{})
 		if err != nil {
 			log.VEventf(context.TODO(), 1, "engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
@@ -1300,7 +1300,7 @@ func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expecte
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
-	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -1563,7 +1563,7 @@ func TestSortRangeDescByAge(t *testing.T) {
 }
 
 func verifyRangeStats(
-	reader engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
+	reader storage.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
 ) error {
 	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), reader)
 	if err != nil {
@@ -1578,7 +1578,7 @@ func verifyRangeStats(
 }
 
 func verifyRecomputedStats(
-	reader engine.Reader, d *roachpb.RangeDescriptor, expMS enginepb.MVCCStats, nowNanos int64,
+	reader storage.Reader, d *roachpb.RangeDescriptor, expMS enginepb.MVCCStats, nowNanos int64,
 ) error {
 	if ms, err := rditer.ComputeStatsForRange(d, reader, nowNanos); err != nil {
 		return err
@@ -1589,12 +1589,12 @@ func verifyRecomputedStats(
 }
 
 func waitForTombstone(
-	t *testing.T, reader engine.Reader, rangeID roachpb.RangeID,
+	t *testing.T, reader storage.Reader, rangeID roachpb.RangeID,
 ) (tombstone roachpb.RangeTombstone) {
 	testutils.SucceedsSoon(t, func() error {
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
-		ok, err := engine.MVCCGetProto(
-			context.TODO(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+		ok, err := storage.MVCCGetProto(
+			context.TODO(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		)
 		if err != nil {
 			t.Fatalf("failed to read tombstone: %v", err)

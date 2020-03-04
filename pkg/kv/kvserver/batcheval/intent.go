@@ -13,8 +13,8 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 // CollectIntentRows collects the key-value pairs for each intent provided. It
@@ -25,14 +25,14 @@ import (
 // RangeLookups and since this is how they currently collect intent values, this
 // is ok for now.
 func CollectIntentRows(
-	ctx context.Context, reader engine.Reader, cArgs CommandArgs, intents []roachpb.Intent,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, intents []roachpb.Intent,
 ) ([]roachpb.KeyValue, error) {
 	if len(intents) == 0 {
 		return nil, nil
 	}
 	res := make([]roachpb.KeyValue, 0, len(intents))
 	for _, intent := range intents {
-		val, _, err := engine.MVCCGetAsTxn(
+		val, _, err := storage.MVCCGetAsTxn(
 			ctx, reader, intent.Key, intent.Txn.WriteTimestamp, intent.Txn,
 		)
 		if err != nil {

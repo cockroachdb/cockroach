@@ -14,9 +14,9 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -25,7 +25,7 @@ func BenchmarkScanDecodeKeyValue(b *testing.B) {
 	ts := hlc.Timestamp{WallTime: int64(1000000)}
 	value := []byte("foo foo foo")
 	rep := make([]byte, 8)
-	keyBytes := engine.EncodeKey(engine.MVCCKey{Key: key, Timestamp: ts})
+	keyBytes := storage.EncodeKey(storage.MVCCKey{Key: key, Timestamp: ts})
 	binary.LittleEndian.PutUint64(rep, uint64(len(keyBytes)<<32)|uint64(len(value)))
 	rep = append(rep, keyBytes...)
 	rep = append(rep, value...)

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,7 +53,7 @@ type LocalTestCluster struct {
 	Manual            *hlc.ManualClock
 	Clock             *hlc.Clock
 	Gossip            *gossip.Gossip
-	Eng               engine.Engine
+	Eng               storage.Engine
 	Store             *kvserver.Store
 	StoreTestingKnobs *kvserver.StoreTestingKnobs
 	DBContext         *client.DBContext
@@ -118,8 +118,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	c := &cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
 	ltc.Gossip = gossip.New(ambient, c, nc, cfg.RPCContext, server, ltc.Stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
-	ltc.Eng = engine.NewInMem(ambient.AnnotateCtx(context.Background()),
-		engine.DefaultStorageEngine, roachpb.Attributes{}, 50<<20)
+	ltc.Eng = storage.NewInMem(ambient.AnnotateCtx(context.Background()),
+		storage.DefaultStorageEngine, roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock, clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion)
@@ -150,7 +150,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		cfg.AmbientCtx,
 		cfg.Clock,
 		cfg.DB,
-		[]engine.Engine{ltc.Eng},
+		[]storage.Engine{ltc.Eng},
 		cfg.Gossip,
 		active,
 		renewal,

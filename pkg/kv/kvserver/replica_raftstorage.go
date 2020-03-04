@@ -17,8 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -26,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -95,7 +95,7 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 func entries(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	reader engine.Reader,
+	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
@@ -218,17 +218,17 @@ func entries(
 
 func iterateEntries(
 	ctx context.Context,
-	reader engine.Reader,
+	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	lo, hi uint64,
 	scanFunc func(roachpb.KeyValue) (bool, error),
 ) error {
-	_, err := engine.MVCCIterate(
+	_, err := storage.MVCCIterate(
 		ctx, reader,
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
 		hlc.Timestamp{},
-		engine.MVCCScanOptions{},
+		storage.MVCCScanOptions{},
 		scanFunc,
 	)
 	return err
@@ -264,7 +264,7 @@ func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 func term(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	reader engine.Reader,
+	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	i uint64,
@@ -446,7 +446,7 @@ type OutgoingSnapshot struct {
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
 	RaftSnap raftpb.Snapshot
 	// The RocksDB snapshot that will be streamed from.
-	EngineSnap engine.Reader
+	EngineSnap storage.Reader
 	// The complete range iterator for the snapshot to stream.
 	Iter *rditer.ReplicaDataIterator
 	// The replica state within the snapshot.
@@ -506,7 +506,7 @@ func snapshot(
 	snapUUID uuid.UUID,
 	rsl stateloader.StateLoader,
 	snapType SnapshotRequest_Type,
-	snap engine.Reader,
+	snap storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	withSideloaded func(func(SideloadStorage) error) error,
@@ -516,8 +516,8 @@ func snapshot(
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
-	ok, err := engine.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
-		hlc.MaxTimestamp, &desc, engine.MVCCGetOptions{Inconsistent: true})
+	ok, err := storage.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
+		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Errorf("failed to get desc: %s", err)
 	}
@@ -583,7 +583,7 @@ func snapshot(
 // engine.ReadWriter must be passed in.
 func (r *Replica) append(
 	ctx context.Context,
-	writer engine.Writer,
+	writer storage.Writer,
 	prevLastIndex uint64,
 	prevLastTerm uint64,
 	prevRaftLogSize int64,
@@ -604,15 +604,15 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = engine.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = storage.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		} else {
 			// We type assert `writer` to also be an engine.ReadWriter only in
 			// the case where we're replacing existing entries.
-			eng, ok := writer.(engine.ReadWriter)
+			eng, ok := writer.(storage.ReadWriter)
 			if !ok {
 				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
 			}
-			err = engine.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = storage.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
 			return 0, 0, 0, err
@@ -625,14 +625,14 @@ func (r *Replica) append(
 	if prevLastIndex > 0 {
 		// We type assert `writer` to also be an engine.ReadWriter only in the
 		// case where we're deleting existing entries.
-		eng, ok := writer.(engine.ReadWriter)
+		eng, ok := writer.(storage.ReadWriter)
 		if !ok {
 			panic("expected writer to be a engine.ReadWriter when deleting log entries")
 		}
 		for i := lastIndex + 1; i <= prevLastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
-			err := engine.MVCCDelete(ctx, eng, &diff, r.raftMu.stateLoader.RaftLogKey(i),
+			err := storage.MVCCDelete(ctx, eng, &diff, r.raftMu.stateLoader.RaftLogKey(i),
 				hlc.Timestamp{}, nil /* txn */)
 			if err != nil {
 				return 0, 0, 0, err
@@ -683,8 +683,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // range.
 func clearRangeData(
 	desc *roachpb.RangeDescriptor,
-	reader engine.Reader,
-	writer engine.Writer,
+	reader storage.Reader,
+	writer storage.Writer,
 	rangeIDLocalOnly bool,
 	mustClearRange bool,
 ) error {
@@ -694,13 +694,13 @@ func clearRangeData(
 	} else {
 		keyRanges = rditer.MakeAllKeyRanges(desc)
 	}
-	var clearRangeFn func(engine.Reader, engine.Writer, roachpb.Key, roachpb.Key) error
+	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
-		clearRangeFn = func(reader engine.Reader, writer engine.Writer, start, end roachpb.Key) error {
-			return writer.ClearRange(engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end))
+		clearRangeFn = func(reader storage.Reader, writer storage.Writer, start, end roachpb.Key) error {
+			return writer.ClearRange(storage.MakeMVCCMetadataKey(start), storage.MakeMVCCMetadataKey(end))
 		}
 	} else {
-		clearRangeFn = engine.ClearRangeWithHeuristic
+		clearRangeFn = storage.ClearRangeWithHeuristic
 	}
 
 	for _, keyRange := range keyRanges {
@@ -803,14 +803,14 @@ func (r *Replica) applySnapshot(
 			inSnap.SnapUUID.Short(), snap.Metadata.Index)
 	}(timeutil.Now())
 
-	unreplicatedSSTFile := &engine.MemFile{}
-	unreplicatedSST := engine.MakeIngestionSSTWriter(unreplicatedSSTFile)
+	unreplicatedSSTFile := &storage.MemFile{}
+	unreplicatedSST := storage.MakeIngestionSSTWriter(unreplicatedSSTFile)
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
-	unreplicatedStart := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey)
-	unreplicatedEnd := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
+	unreplicatedStart := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey)
+	unreplicatedEnd := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
 	if err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd); err != nil {
 		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
@@ -1007,8 +1007,8 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
 	for _, sr := range subsumedRepls {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		subsumedReplSSTFile := &engine.MemFile{}
-		subsumedReplSST := engine.MakeIngestionSSTWriter(subsumedReplSSTFile)
+		subsumedReplSSTFile := &storage.MemFile{}
+		subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
@@ -1063,10 +1063,10 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// subsume both r1 and r2 in S1.
 	for i := range keyRanges {
 		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
-			subsumedReplSSTFile := &engine.MemFile{}
-			subsumedReplSST := engine.MakeIngestionSSTWriter(subsumedReplSSTFile)
+			subsumedReplSSTFile := &storage.MemFile{}
+			subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
-			if err := engine.ClearRangeWithHeuristic(
+			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
 				keyRanges[i].End.Key,
