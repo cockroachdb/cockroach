@@ -605,18 +605,18 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
 	}
 
-	if lResult.WrittenIntents != nil {
-		for i := range lResult.WrittenIntents {
-			r.concMgr.OnLockAcquired(ctx, &lResult.WrittenIntents[i])
+	if lResult.AcquiredLocks != nil {
+		for i := range lResult.AcquiredLocks {
+			r.concMgr.OnLockAcquired(ctx, &lResult.AcquiredLocks[i])
 		}
-		lResult.WrittenIntents = nil
+		lResult.AcquiredLocks = nil
 	}
 
-	if lResult.ResolvedIntents != nil {
-		for i := range lResult.ResolvedIntents {
-			r.concMgr.OnLockUpdated(ctx, &lResult.ResolvedIntents[i])
+	if lResult.ResolvedLocks != nil {
+		for i := range lResult.ResolvedLocks {
+			r.concMgr.OnLockUpdated(ctx, &lResult.ResolvedLocks[i])
 		}
-		lResult.ResolvedIntents = nil
+		lResult.ResolvedLocks = nil
 	}
 
 	if lResult.UpdatedTxns != nil {

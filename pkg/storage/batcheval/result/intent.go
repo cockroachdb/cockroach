@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 )
 
-// FromEncounteredIntents creates a Result communicating that the intents were encountered
-// by the given request and should be handled.
+// FromEncounteredIntents creates a Result communicating that the intents were
+// encountered and should be handled.
 func FromEncounteredIntents(intents []roachpb.Intent) Result {
 	var pd Result
 	if len(intents) == 0 {
@@ -26,16 +26,16 @@ func FromEncounteredIntents(intents []roachpb.Intent) Result {
 	return pd
 }
 
-// FromWrittenIntents creates a Result communicating that the intents were
-// written or re-written by the given request and should be handled.
-func FromWrittenIntents(txn *roachpb.Transaction, keys ...roachpb.Key) Result {
+// FromAcquiredLocks creates a Result communicating that the locks were
+// acquired or re-acquired by the given transaction and should be handled.
+func FromAcquiredLocks(txn *roachpb.Transaction, keys ...roachpb.Key) Result {
 	var pd Result
 	if txn == nil {
 		return pd
 	}
-	pd.Local.WrittenIntents = make([]roachpb.LockUpdate, len(keys))
-	for i := range pd.Local.WrittenIntents {
-		pd.Local.WrittenIntents[i] = roachpb.LockUpdate{
+	pd.Local.AcquiredLocks = make([]roachpb.LockUpdate, len(keys))
+	for i := range pd.Local.AcquiredLocks {
+		pd.Local.AcquiredLocks[i] = roachpb.LockUpdate{
 			Span:       roachpb.Span{Key: keys[i]},
 			Txn:        txn.TxnMeta,
 			Status:     roachpb.PENDING,
