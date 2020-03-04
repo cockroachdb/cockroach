@@ -53,10 +53,6 @@ type upsertRun struct {
 }
 
 func (n *upsertNode) startExec(params runParams) error {
-	if err := params.p.maybeSetSystemConfig(n.run.tw.tableDesc().GetID()); err != nil {
-		return err
-	}
-
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 

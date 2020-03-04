@@ -128,10 +128,6 @@ type updateRun struct {
 const maxUpdateBatchSize = 10000
 
 func (u *updateNode) startExec(params runParams) error {
-	if err := params.p.maybeSetSystemConfig(u.run.tu.tableDesc().GetID()); err != nil {
-		return err
-	}
-
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
