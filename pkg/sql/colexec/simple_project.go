@@ -23,7 +23,8 @@ type simpleProjectOp struct {
 	OneInputNode
 	NonExplainable
 
-	batch *projectingBatch
+	projection []uint32
+	batches    map[coldata.Batch]*projectingBatch
 }
 
 var _ Operator = &simpleProjectOp{}
@@ -91,7 +92,8 @@ func NewSimpleProjectOp(input Operator, numInputCols int, projection []uint32) O
 	}
 	return &simpleProjectOp{
 		OneInputNode: NewOneInputNode(input),
-		batch:        newProjectionBatch(projection),
+		projection:   projection,
+		batches:      make(map[coldata.Batch]*projectingBatch),
 	}
 }
 
@@ -101,9 +103,14 @@ func (d *simpleProjectOp) Init() {
 
 func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 	batch := d.input.Next(ctx)
-	d.batch.Batch = batch
-
-	return d.batch
+	projBatch, found := d.batches[batch]
+	if !found {
+		// We pass in a copy of d.projection just to be safe.
+		projBatch = newProjectionBatch(append([]uint32{}, d.projection...))
+		d.batches[batch] = projBatch
+	}
+	projBatch.Batch = batch
+	return projBatch
 }
 
 func (d *simpleProjectOp) Close() error {
