@@ -255,18 +255,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		// HACK(tbg): PR #45640 moves "all of the tests" and thus touches
-		// them, and unfortunately the code below does not handle that well;
-		// it gives a 45s timeout to each package which is too short.
-		//
-		// TODO(tbg): remove this hack when that PR has merged.
-		// TODO(tbg): rewrite the stress code below so that it does one
-		// invocation per test. It will stress longer, but better (we have
-		// noticed we're not very successful at catching tests). Also it
-		// probably makes sense to avoid stressrace if too many tests changed,
-		// which typically indicates large-scale refactors.
-		avoidViaHack := *currentPull.Number == 45640
-		if len(pkgs) > 0 && !avoidViaHack {
+		if len(pkgs) > 0 {
 			// 10 minutes total seems OK, but at least a minute per test.
 			duration := (10 * time.Minute) / time.Duration(len(pkgs))
 			if duration < time.Minute {
