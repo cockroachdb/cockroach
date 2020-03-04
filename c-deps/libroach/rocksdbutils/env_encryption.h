@@ -21,7 +21,7 @@
 #include <string>
 
 #include "../file_registry.h"
-#include "../protos/storage/engine/enginepb/file_registry.pb.h"
+#include "../protos/storage/enginepb/file_registry.pb.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 
