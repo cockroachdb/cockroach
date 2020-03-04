@@ -13,8 +13,8 @@ package cockroach.storage;
 option go_package = "storage";
 
 import "roachpb/internal_raft.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/engine/enginepb/mvcc3.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc3.proto";
 import "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
@@ -49,9 +49,9 @@ message CollectChecksumResponse {
   // See https://github.com/cockroachdb/cockroach/issues/21128.
   roachpb.RaftSnapshotData snapshot = 2;
   // delta carries the stats of the range minus the recomputed stats.
-  storage.engine.enginepb.MVCCStatsDelta delta = 3 [(gogoproto.nullable) = false];
+  storage.enginepb.MVCCStatsDelta delta = 3 [(gogoproto.nullable) = false];
   // persisted carries the persisted stats of the replica.
-  storage.engine.enginepb.MVCCStats persisted = 4 [(gogoproto.nullable) = false];
+  storage.enginepb.MVCCStats persisted = 4 [(gogoproto.nullable) = false];
 }
 
 // WaitForApplicationRequest blocks until the addressed replica has applied the

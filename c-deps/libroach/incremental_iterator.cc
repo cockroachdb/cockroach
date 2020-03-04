@@ -118,7 +118,7 @@ void DBIncrementalIterator::advanceKey() {
       return;
     }
 
-    cockroach::storage::engine::enginepb::MVCCMetadata meta;
+    cockroach::storage::enginepb::MVCCMetadata meta;
     if (wall_time != 0 || logical != 0) {
       meta.mutable_timestamp()->set_wall_time(wall_time);
       meta.mutable_timestamp()->set_logical(logical);

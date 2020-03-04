@@ -12,7 +12,7 @@ syntax = "proto3";
 package cockroach.storage.storagepb;
 option go_package = "storagepb";
 
-import "storage/engine/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc.proto";
 import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
 import "roachpb/data.proto";
@@ -58,7 +58,7 @@ message ReplicaState {
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
   util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
-  storage.engine.enginepb.MVCCStats stats = 7;
+  storage.enginepb.MVCCStats stats = 7;
   // using_applied_state_key specifies whether the Range has been upgraded
   // to begin using the RangeAppliedState key. This key holds a combination
   // of the Raft applied index, the lease applied index, and the MVCC stats.

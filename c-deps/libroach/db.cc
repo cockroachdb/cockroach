@@ -549,7 +549,7 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
 
     // Encountered an inline value or a write intent.
     if (existing_ts == kZeroTimestamp) {
-      cockroach::storage::engine::enginepb::MVCCMetadata meta;
+      cockroach::storage::enginepb::MVCCMetadata meta;
       if (!meta.ParseFromArray(existingIter->rep->value().data(),
                                existingIter->rep->value().size())) {
         state.status = FmtStatus("failed to parse meta");
@@ -781,12 +781,12 @@ void DBIterSetUpperBound(DBIterator* iter, DBKey key) { iter->SetUpperBound(key)
 DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool full_merge) {
   new_value->len = 0;
 
-  cockroach::storage::engine::enginepb::MVCCMetadata meta;
+  cockroach::storage::enginepb::MVCCMetadata meta;
   if (!meta.ParseFromArray(existing.data, existing.len)) {
     return ToDBString("corrupted existing value");
   }
 
-  cockroach::storage::engine::enginepb::MVCCMetadata update_meta;
+  cockroach::storage::enginepb::MVCCMetadata update_meta;
   if (!update_meta.ParseFromArray(update.data, update.len)) {
     return ToDBString("corrupted update value");
   }

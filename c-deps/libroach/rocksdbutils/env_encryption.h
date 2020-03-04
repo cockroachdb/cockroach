@@ -25,7 +25,7 @@
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 
-namespace enginepb = cockroach::storage::engine::enginepb;
+namespace enginepb = cockroach::storage::enginepb;
 
 namespace rocksdb_utils {
 

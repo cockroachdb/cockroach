@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage.engine.enginepb;
+package cockroach.storage.enginepb;
 option go_package = "enginepb";
 
 import "gogoproto/gogo.proto";
