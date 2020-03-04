@@ -253,6 +253,7 @@ const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
   moment.duration(1, "m"),
 );
 export const refreshStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.refresh;
+export const invalidateStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.invalidateData;
 
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,

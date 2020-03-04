@@ -17,13 +17,15 @@ import { Button, Text, TextTypes, Table, ColumnsConfig, Badge, Anchor } from "sr
 import { AdminUIState } from "src/redux/state";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import {
-  selectStatementByFingerprint,
+  selectDiagnosticsReportsByStatementFingerprint,
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
 import { requestStatementDiagnosticsReport } from "src/redux/statements";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import "./diagnosticsView.styl";
+import { cockroach } from "src/js/protos";
+import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -31,7 +33,9 @@ interface DiagnosticsViewOwnProps {
 
 type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispatchToProps;
 
-function mapDiagnosticsStatusToBadge(diagnosticsStatus: string) {
+type DiagnosticsStatuses = "READY" | "WAITING FOR QUERY" | "ERROR";
+
+function mapDiagnosticsStatusToBadge(diagnosticsStatus: DiagnosticsStatuses) {
   switch (diagnosticsStatus) {
     case "READY":
       return "success";
@@ -42,6 +46,14 @@ function mapDiagnosticsStatusToBadge(diagnosticsStatus: string) {
     default:
       return "info";
   }
+}
+
+function getDiagnosticsStatus(diagnosticsRequest: IStatementDiagnosticsReport): DiagnosticsStatuses {
+  if (diagnosticsRequest.completed) {
+    return "READY";
+  }
+
+  return "WAITING FOR QUERY";
 }
 
 export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
@@ -99,15 +111,14 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
   ];
 
   render() {
-    const { hasData, statement } = this.props;
-    const diagnostics: any[] = statement.diagnostics || [];
+    const { hasData, diagnosticsReports, activate, statementFingerprint } = this.props;
 
-    const canRequestDiagnostics = diagnostics.every(diagnostic => diagnostic.status !== "WAITING FOR QUERY");
+    const canRequestDiagnostics = diagnosticsReports.every(diagnostic => diagnostic.completed);
 
-    const dataSource = diagnostics.map((diagnostic: any, idx: number) => ({
+    const dataSource = diagnosticsReports.map((diagnostic, idx) => ({
       key: idx,
-      activatedOn: diagnostic.initiated_at,
-      status: diagnostic.status,
+      activatedOn: diagnostic.requested_at.seconds.toNumber() * 1000,
+      status: getDiagnosticsStatus(diagnostic),
     }));
 
     if (!hasData) {
@@ -128,6 +139,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
             Statement diagnostics
           </Text>
           <Button
+            onClick={() => activate(statementFingerprint)}
             disabled={!canRequestDiagnostics}
             type="secondary"
           >
@@ -190,7 +202,7 @@ export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> 
 
 interface MapStateToProps {
   hasData: boolean;
-  statement: any;
+  diagnosticsReports: IStatementDiagnosticsReport[];
 }
 
 interface MapDispatchToProps {
@@ -199,11 +211,11 @@ interface MapDispatchToProps {
 
 const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapStateToProps => {
   const { statementFingerprint } = props;
-  const statement = selectStatementByFingerprint(state, statementFingerprint);
   const hasData = selectDiagnosticsReportsCountByStatementFingerprint(state, statementFingerprint) > 0;
+  const diagnosticsReports = selectDiagnosticsReportsByStatementFingerprint(state, statementFingerprint);
   return {
     hasData,
-    statement,
+    diagnosticsReports,
   };
 };
 

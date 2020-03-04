@@ -20,7 +20,7 @@ import {
 } from "./statementsActions";
 import { cockroach } from "src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-import { refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
+import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 
 export function* requestDiagnosticsReport(action: PayloadAction<DiagnosticsPayload>) {
   const { statementFingerprint } = action.payload;
@@ -30,7 +30,9 @@ export function* requestDiagnosticsReport(action: PayloadAction<DiagnosticsPaylo
   try {
     yield call(createStatementDiagnosticsReport, diagnosticsReportRequest);
     yield put(completeStatementDiagnosticsReportRequest());
-    yield call(refreshStatementDiagnosticsRequests);
+    yield put(invalidateStatementDiagnosticsRequests());
+    // PUT expects action wih `type` field which isn't defined in `refresh` ThunkAction interface
+    yield put(refreshStatementDiagnosticsRequests() as any);
   } catch (e) {
     yield put(failedStatementDiagnosticsReportRequest());
   }

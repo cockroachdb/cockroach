@@ -18,7 +18,7 @@ export const selectStatementByFingerprint = createSelector(
     (statements || []).find(statement => statement.key.key_data.query === statementFingerprint),
 );
 
-export const selectDiagnosticsReportByStatementFingerprint = createSelector(
+export const selectDiagnosticsReportsByStatementFingerprint = createSelector(
   (state: AdminUIState) => state.cachedData.statementDiagnosticsReports.data?.reports || [],
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
   (requests, statementFingerprint) =>
@@ -26,6 +26,6 @@ export const selectDiagnosticsReportByStatementFingerprint = createSelector(
 );
 
 export const selectDiagnosticsReportsCountByStatementFingerprint = createSelector(
-  selectDiagnosticsReportByStatementFingerprint,
+  selectDiagnosticsReportsByStatementFingerprint,
   (requests) => requests.length,
 );
