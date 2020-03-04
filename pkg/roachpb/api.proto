@@ -15,6 +15,7 @@ option go_package = "roachpb";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
+import "storage/concurrency/lock/locking.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -349,6 +350,18 @@ message ScanRequest {
   // will set the batch_responses field in the ScanResponse instead of the rows
   // field.
   ScanFormat scan_format = 4;
+
+  // The desired key-level locking mode used during this scan. When set to None
+  // (the default), no key-level locking mode is used - meaning that the scan
+  // does not acquire any locks. When set to any other strength, a lock of that
+  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
+  // each of the keys scanned by the request, subject to any key limit applied
+  // to the batch which limits the number of keys returned.
+  //
+  // NOTE: the locks acquire with this strength are point locks on each of the
+  // keys returned by the request, not a single range lock over the entire span
+  // scanned by the request.
+  storage.concurrency.lock.Strength key_locking = 5;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -384,6 +397,18 @@ message ReverseScanRequest {
   // will set the batch_responses field in the ScanResponse instead of the rows
   // field.
   ScanFormat scan_format = 4;
+
+  // The desired key-level locking mode used during this scan. When set to None
+  // (the default), no key-level locking mode is used - meaning that the scan
+  // does not acquire any locks. When set to any other strength, a lock of that
+  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
+  // each of the keys scanned by the request, subject to any key limit applied
+  // to the batch which limits the number of keys returned.
+  //
+  // NOTE: the locks acquire with this strength are point locks on each of the
+  // keys returned by the request, not a single range lock over the entire span
+  // scanned by the request.
+  storage.concurrency.lock.Strength key_locking = 5;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.

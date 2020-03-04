@@ -359,7 +359,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		if _, err := client.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
-		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
+		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
 		reply, err := client.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
@@ -398,7 +398,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, now, 0)
 	txn := client.NewTxnFromProto(ctx, db, s.NodeID(), now, client.RootTxn, &txnProto)
 
-	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
+	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
 	ba := roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: &txnProto}
 	ba.Add(scan)
@@ -458,7 +458,8 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			// happens above this.
 			var maxTargetBytes int64
 			{
-				resp, pErr := client.SendWrapped(ctx, tds, roachpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next()))
+				scan := roachpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next(), false)
+				resp, pErr := client.SendWrapped(ctx, tds, scan)
 				require.Nil(t, pErr)
 				maxTargetBytes = resp.Header().NumBytes
 			}
@@ -478,9 +479,9 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 					t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
 						req := func(span roachpb.Span) roachpb.Request {
 							if reverse {
-								return roachpb.NewReverseScan(span.Key, span.EndKey)
+								return roachpb.NewReverseScan(span.Key, span.EndKey, false)
 							}
-							return roachpb.NewScan(span.Key, span.EndKey)
+							return roachpb.NewScan(span.Key, span.EndKey, false)
 						}
 						// Paginate.
 						resumeSpan := &roachpb.Span{Key: tc.keys[0], EndKey: tc.keys[len(tc.keys)-1].Next()}

@@ -121,7 +121,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 	// Disable txn pipelining so that all write spans are immediately
-	// added to the transaction's write footprint.
+	// added to the transaction's lock footprint.
 	if err := txn.DisablePipelining(); err != nil {
 		t.Fatal(err)
 	}
@@ -164,21 +164,21 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 	g0Tog1 := roachpb.Span{Key: roachpb.Key("g0"), EndKey: roachpb.Key("g1")}
 	fTog1Closed := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("g1")}
 	testCases := []struct {
-		span           roachpb.Span
-		expIntents     []roachpb.Span
-		expIntentsSize int64
+		span         roachpb.Span
+		expLocks     []roachpb.Span
+		expLocksSize int64
 	}{
-		{span: a, expIntents: []roachpb.Span{a}, expIntentsSize: 1},
-		{span: b, expIntents: []roachpb.Span{a, b}, expIntentsSize: 2},
-		{span: c, expIntents: []roachpb.Span{a, b, c}, expIntentsSize: 3},
-		{span: d, expIntents: []roachpb.Span{a, b, c, d}, expIntentsSize: 9},
+		{span: a, expLocks: []roachpb.Span{a}, expLocksSize: 1},
+		{span: b, expLocks: []roachpb.Span{a, b}, expLocksSize: 2},
+		{span: c, expLocks: []roachpb.Span{a, b, c}, expLocksSize: 3},
+		{span: d, expLocks: []roachpb.Span{a, b, c, d}, expLocksSize: 9},
 		// Note that c-e condenses and then lists first.
-		{span: e, expIntents: []roachpb.Span{cToEClosed, a, b}, expIntentsSize: 5},
-		{span: fTof0, expIntents: []roachpb.Span{cToEClosed, a, b, fTof0}, expIntentsSize: 8},
-		{span: g, expIntents: []roachpb.Span{cToEClosed, a, b, fTof0, g}, expIntentsSize: 9},
-		{span: g0Tog1, expIntents: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed}, expIntentsSize: 9},
+		{span: e, expLocks: []roachpb.Span{cToEClosed, a, b}, expLocksSize: 5},
+		{span: fTof0, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0}, expLocksSize: 8},
+		{span: g, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0, g}, expLocksSize: 9},
+		{span: g0Tog1, expLocks: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed}, expLocksSize: 9},
 		// Add a key in the middle of a span, which will get merged on commit.
-		{span: c, expIntents: []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}, expIntentsSize: 9},
+		{span: c, expLocks: []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}, expLocksSize: 9},
 	}
 	splits := []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
@@ -200,9 +200,9 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 	trackedWritesMaxSize.Override(&st.SV, 10) /* 10 bytes and it will condense */
 	defer s.Stop()
 
-	// Check end transaction intents, which should be condensed and split
+	// Check end transaction locks, which should be condensed and split
 	// at range boundaries.
-	expIntents := []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}
+	expLocks := []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}
 	var sendFn simpleSendFn = func(
 		_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
@@ -213,8 +213,8 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 				t.Errorf("expected commit to be true")
 			}
 			et := req.(*roachpb.EndTxnRequest)
-			if a, e := et.LockSpans, expIntents; !reflect.DeepEqual(a, e) {
-				t.Errorf("expected end transaction to have intents %+v; got %+v", e, a)
+			if a, e := et.LockSpans, expLocks; !reflect.DeepEqual(a, e) {
+				t.Errorf("expected end transaction to have locks %+v; got %+v", e, a)
 			}
 			resp.Txn.Status = roachpb.COMMITTED
 		}
@@ -248,7 +248,7 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 
 	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	// Disable txn pipelining so that all write spans are immediately
-	// added to the transaction's write footprint.
+	// added to the transaction's lock footprint.
 	if err := txn.DisablePipelining(); err != nil {
 		t.Fatal(err)
 	}
@@ -263,15 +263,15 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 			}
 		}
 		tcs := txn.Sender().(*TxnCoordSender)
-		intents := tcs.interceptorAlloc.txnPipeliner.footprint.asSlice()
-		if a, e := intents, tc.expIntents; !reflect.DeepEqual(a, e) {
+		locks := tcs.interceptorAlloc.txnPipeliner.footprint.asSlice()
+		if a, e := locks, tc.expLocks; !reflect.DeepEqual(a, e) {
 			t.Errorf("%d: expected keys %+v; got %+v", i, e, a)
 		}
-		intentsSize := int64(0)
-		for _, i := range intents {
-			intentsSize += int64(len(i.Key) + len(i.EndKey))
+		locksSize := int64(0)
+		for _, i := range locks {
+			locksSize += int64(len(i.Key) + len(i.EndKey))
 		}
-		if a, e := intentsSize, tc.expIntentsSize; a != e {
+		if a, e := locksSize, tc.expLocksSize; a != e {
 			t.Errorf("%d: keys size expected %d; got %d", i, e, a)
 		}
 	}
@@ -430,8 +430,7 @@ func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*
 }
 
 // TestTxnCoordSenderEndTxn verifies that ending a transaction
-// sends resolve write intent requests and removes the transaction
-// from the txns map.
+// sends resolve write intent requests.
 func TestTxnCoordSenderEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
@@ -516,9 +515,9 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderAddIntentOnError verifies that intents are tracked if
-// the transaction is, even on error.
-func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
+// TestTxnCoordSenderAddLockOnError verifies that locks are tracked if the
+// transaction is, even on error.
+func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
@@ -548,7 +547,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !equal {
-		t.Fatalf("expected stored intents %v, got %v", expSpans, lockSpans)
+		t.Fatalf("expected stored locks %v, got %v", expSpans, lockSpans)
 	}
 }
 
@@ -610,7 +609,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 }
 
 // TestTxnCoordSenderCleanupOnCommitAfterRestart verifies that if a txn restarts
-// at a higher epoch and then commits before it has written anything in the new
+// at a higher epoch and then commits before it has acquired any locks in the new
 // epoch, the coordinator still cleans up the transaction. In #40466, we saw that
 // this case could be detected as a 1PC transaction and the cleanup during the
 // commit could be omitted.
@@ -638,7 +637,7 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 }
 
 // TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
-// cleans up extant transactions and intents after an ambiguous result error is
+// cleans up extant transactions and locks after an ambiguous result error is
 // observed, even if the error is on the first request.
 func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -906,7 +905,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify presence of both intents.
+	// Verify presence of both locks.
 	tcs := txn.Sender().(*TxnCoordSender)
 	refreshSpans := tcs.interceptorAlloc.txnSpanRefresher.refreshSpans
 	require.Equal(t, []roachpb.Span{{Key: key}, {Key: key2}}, refreshSpans)
@@ -918,16 +917,17 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderNoDuplicateIntents verifies that TxnCoordSender does not
-// generate duplicate intents and that it merges intents for overlapping ranges.
-func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
+// TestTxnCoordSenderNoDuplicateLockSpans verifies that TxnCoordSender does not
+// generate duplicate lock spans and that it merges lock spans that have
+// overlapping ranges.
+func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
-	var expectedIntents []roachpb.Span
+	var expectedLockSpans []roachpb.Span
 
 	var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error) {
@@ -935,8 +935,8 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		br.Txn = ba.Txn.Clone()
 		if rArgs, ok := ba.GetArg(roachpb.EndTxn); ok {
 			et := rArgs.(*roachpb.EndTxnRequest)
-			if !reflect.DeepEqual(et.LockSpans, expectedIntents) {
-				t.Errorf("Invalid intents: %+v; expected %+v", et.LockSpans, expectedIntents)
+			if !reflect.DeepEqual(et.LockSpans, expectedLockSpans) {
+				t.Errorf("Invalid lock spans: %+v; expected %+v", et.LockSpans, expectedLockSpans)
 			}
 			br.Txn.Status = roachpb.COMMITTED
 		}
@@ -958,13 +958,12 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	db := client.NewDB(ambient, factory, clock)
 	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-	// Write to a, b, u-w before the final batch.
-
-	pErr := txn.Put(ctx, roachpb.Key("a"), []byte("value"))
+	// Acquire locks on a-b, c, u-w before the final batch.
+	_, pErr := txn.ReverseScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("b"), 0)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pErr = txn.Put(ctx, roachpb.Key("b"), []byte("value"))
+	pErr = txn.Put(ctx, roachpb.Key("c"), []byte("value"))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -973,17 +972,18 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// The final batch overwrites key a and overlaps part of the u-w range.
+	// The final batch overwrites key c and overlaps part of the a-b and u-w ranges.
 	b := txn.NewBatch()
 	b.Put(roachpb.Key("b"), []byte("value"))
 	b.Put(roachpb.Key("c"), []byte("value"))
-	b.DelRange(roachpb.Key("v"), roachpb.Key("z"), false)
+	b.Put(roachpb.Key("d"), []byte("value"))
+	b.ReverseScanForUpdate(roachpb.Key("v"), roachpb.Key("z"))
 
-	// The expected intents are a, b, c, and u-z.
-	expectedIntents = []roachpb.Span{
-		{Key: roachpb.Key("a"), EndKey: nil},
-		{Key: roachpb.Key("b"), EndKey: nil},
+	// The expected locks are a-b, c, and u-z.
+	expectedLockSpans = []roachpb.Span{
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()},
 		{Key: roachpb.Key("c"), EndKey: nil},
+		{Key: roachpb.Key("d"), EndKey: nil},
 		{Key: roachpb.Key("u"), EndKey: roachpb.Key("z")},
 	}
 
@@ -1445,12 +1445,12 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	})
 }
 
-// Test that intent tracking behaves correctly for transactions that attempt to
+// Test that lock tracking behaves correctly for transactions that attempt to
 // run a batch containing an EndTxn. Since in case of an error it's not easy to
-// determine whether any intents have been laid down (i.e. in case the batch was
+// determine whether any locks have been laid down (i.e. in case the batch was
 // split by the DistSender and then there was mixed success for the sub-batches,
 // or in case a retriable error is returned), the test verifies that all
-// possible intents are properly tracked and attached to a subsequent EndTxn.
+// possible locks are properly tracked and attached to a subsequent EndTxn.
 func TestOnePCErrorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1470,7 +1470,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 		sender,
 	)
 	db := client.NewDB(ambient, factory, clock)
-	var key = roachpb.Key("a")
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	// Register a matcher catching the commit attempt.
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -1491,10 +1491,10 @@ func TestOnePCErrorTracking(t *testing.T) {
 		if etReq.Commit {
 			return nil, nil
 		}
-		expIntents := []roachpb.Span{{Key: key}}
-		intents := etReq.LockSpans
-		if !reflect.DeepEqual(intents, expIntents) {
-			return nil, roachpb.NewErrorf("expected intents %s, got: %s", expIntents, intents)
+		expLocks := []roachpb.Span{{Key: keyA}, {Key: keyB, EndKey: keyC}}
+		locks := etReq.LockSpans
+		if !reflect.DeepEqual(locks, expLocks) {
+			return nil, roachpb.NewErrorf("expected locks %s, got: %s", expLocks, locks)
 		}
 		resp := ba.CreateReply()
 		// Set the response's txn to the Aborted status (as the server would). This
@@ -1509,12 +1509,13 @@ func TestOnePCErrorTracking(t *testing.T) {
 		Txn: txn.TestingCloneTxn(),
 	}
 	b := txn.NewBatch()
-	b.Put(key, "test value")
+	b.Put(keyA, "test value")
+	b.ScanForUpdate(keyB, keyC)
 	if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err, "injected err") {
 		t.Fatal(err)
 	}
 
-	// Now send a rollback and verify that the TxnCoordSender attaches the intent
+	// Now send a rollback and verify that the TxnCoordSender attaches the locks
 	// to it.
 	if _, pErr := client.SendWrappedWith(
 		ctx, txn, txnHeader,
@@ -1739,12 +1740,12 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		br.Txn = ba.Txn.Clone()
 
 		calls = append(calls, ba.Methods()...)
-		if _, ok := ba.GetArg(roachpb.Put); ok {
+		switch ba.Requests[0].GetInner().Method() {
+		case roachpb.Put, roachpb.Scan:
 			return nil, roachpb.NewErrorWithTxn(
 				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
 				ba.Txn)
-		}
-		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+		case roachpb.EndTxn:
 			br.Txn.Status = roachpb.COMMITTED
 		}
 		return br, nil
@@ -1765,28 +1766,42 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		sender,
 	)
 	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-	expCalls := []roachpb.Method{roachpb.Put, roachpb.EndTxn}
 
-	testutils.RunTrueAndFalse(t, "success", func(t *testing.T, success bool) {
-		calls = nil
-		firstIter := true
-		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			if firstIter {
-				firstIter = false
-				if err := txn.Put(ctx, "consider", "phlebas"); err == nil {
-					t.Fatal("missing injected retriable error")
+	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
+		testutils.RunTrueAndFalse(t, "success", func(t *testing.T, success bool) {
+			calls = nil
+			firstIter := true
+			if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				if firstIter {
+					firstIter = false
+					var err error
+					if write {
+						err = txn.Put(ctx, "consider", "phlebas")
+					} else /* locking read */ {
+						_, err = txn.ScanForUpdate(ctx, "a", "b", 0)
+					}
+					if err == nil {
+						t.Fatal("missing injected retriable error")
+					}
 				}
+				if !success {
+					return errors.New("aborting on purpose")
+				}
+				return nil
+			}); err == nil != success {
+				t.Fatalf("expected error: %t, got error: %v", !success, err)
 			}
-			if !success {
-				return errors.New("aborting on purpose")
+
+			var expCalls []roachpb.Method
+			if write {
+				expCalls = []roachpb.Method{roachpb.Put, roachpb.EndTxn}
+			} else {
+				expCalls = []roachpb.Method{roachpb.Scan, roachpb.EndTxn}
 			}
-			return nil
-		}); err == nil != success {
-			t.Fatalf("expected error: %t, got error: %v", !success, err)
-		}
-		if !reflect.DeepEqual(expCalls, calls) {
-			t.Fatalf("expected %v, got %v", expCalls, calls)
-		}
+			if !reflect.DeepEqual(expCalls, calls) {
+				t.Fatalf("expected %v, got %v", expCalls, calls)
+			}
+		})
 	})
 }
 

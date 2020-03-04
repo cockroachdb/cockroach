@@ -36,6 +36,7 @@
 #include "roachpb/data.pb.h"
 #include "roachpb/errors.pb.h"
 #include "roachpb/metadata.pb.h"
+#include "storage/concurrency/lock/locking.pb.h"
 #include "storage/engine/enginepb/mvcc.pb.h"
 #include "storage/engine/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
@@ -3245,12 +3246,19 @@ class ScanRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::ScanFormat scan_format() const;
   void set_scan_format(::cockroach::roachpb::ScanFormat value);
 
+  // .cockroach.storage.concurrency.lock.Strength key_locking = 5;
+  void clear_key_locking();
+  static const int kKeyLockingFieldNumber = 5;
+  ::cockroach::storage::concurrency::lock::Strength key_locking() const;
+  void set_key_locking(::cockroach::storage::concurrency::lock::Strength value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ScanRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
   int scan_format_;
+  int key_locking_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -3511,12 +3519,19 @@ class ReverseScanRequest : public ::google::protobuf::MessageLite /* @@protoc_in
   ::cockroach::roachpb::ScanFormat scan_format() const;
   void set_scan_format(::cockroach::roachpb::ScanFormat value);
 
+  // .cockroach.storage.concurrency.lock.Strength key_locking = 5;
+  void clear_key_locking();
+  static const int kKeyLockingFieldNumber = 5;
+  ::cockroach::storage::concurrency::lock::Strength key_locking() const;
+  void set_key_locking(::cockroach::storage::concurrency::lock::Strength value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReverseScanRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
   int scan_format_;
+  int key_locking_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -18818,6 +18833,20 @@ inline void ScanRequest::set_scan_format(::cockroach::roachpb::ScanFormat value)
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.scan_format)
 }
 
+// .cockroach.storage.concurrency.lock.Strength key_locking = 5;
+inline void ScanRequest::clear_key_locking() {
+  key_locking_ = 0;
+}
+inline ::cockroach::storage::concurrency::lock::Strength ScanRequest::key_locking() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanRequest.key_locking)
+  return static_cast< ::cockroach::storage::concurrency::lock::Strength >(key_locking_);
+}
+inline void ScanRequest::set_key_locking(::cockroach::storage::concurrency::lock::Strength value) {
+  
+  key_locking_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.key_locking)
+}
+
 // -------------------------------------------------------------------
 
 // ScanResponse
@@ -19065,6 +19094,20 @@ inline void ReverseScanRequest::set_scan_format(::cockroach::roachpb::ScanFormat
   
   scan_format_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ReverseScanRequest.scan_format)
+}
+
+// .cockroach.storage.concurrency.lock.Strength key_locking = 5;
+inline void ReverseScanRequest::clear_key_locking() {
+  key_locking_ = 0;
+}
+inline ::cockroach::storage::concurrency::lock::Strength ReverseScanRequest::key_locking() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanRequest.key_locking)
+  return static_cast< ::cockroach::storage::concurrency::lock::Strength >(key_locking_);
+}
+inline void ReverseScanRequest::set_key_locking(::cockroach::storage::concurrency::lock::Strength value) {
+  
+  key_locking_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReverseScanRequest.key_locking)
 }
 
 // -------------------------------------------------------------------

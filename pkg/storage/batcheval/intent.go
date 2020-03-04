@@ -14,6 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
@@ -48,4 +50,42 @@ func CollectIntentRows(
 		})
 	}
 	return res, nil
+}
+
+// acquireUnreplicatedLocksOnKeys adds an unreplicated lock acquisition by the
+// transaction to the provided result.Result for each key in the scan result.
+func acquireUnreplicatedLocksOnKeys(
+	res *result.Result,
+	txn *roachpb.Transaction,
+	scanFmt roachpb.ScanFormat,
+	scanRes *engine.MVCCScanResult,
+) error {
+	switch scanFmt {
+	case roachpb.BATCH_RESPONSE:
+		res.Local.AcquiredLocks = make([]roachpb.LockUpdate, scanRes.NumKeys)
+		var i int
+		return engine.MVCCScanDecodeKeyValues(scanRes.KVData, func(key engine.MVCCKey, _ []byte) error {
+			res.Local.AcquiredLocks[i] = roachpb.LockUpdate{
+				Span:       roachpb.Span{Key: key.Key},
+				Txn:        txn.TxnMeta,
+				Status:     roachpb.PENDING,
+				Durability: lock.Unreplicated,
+			}
+			i++
+			return nil
+		})
+	case roachpb.KEY_VALUES:
+		res.Local.AcquiredLocks = make([]roachpb.LockUpdate, scanRes.NumKeys)
+		for i, row := range scanRes.KVs {
+			res.Local.AcquiredLocks[i] = roachpb.LockUpdate{
+				Span:       roachpb.Span{Key: row.Key},
+				Txn:        txn.TxnMeta,
+				Status:     roachpb.PENDING,
+				Durability: lock.Unreplicated,
+			}
+		}
+		return nil
+	default:
+		panic("unexpected scanFormat")
+	}
 }

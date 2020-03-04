@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -545,10 +544,9 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	defer batch.Close()
 
 	intent := roachpb.LockUpdate{
-		Span:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")},
-		Txn:        enginepb.TxnMeta{}, // unused
-		Status:     roachpb.PENDING,
-		Durability: lock.Replicated,
+		Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")},
+		Txn:    enginepb.TxnMeta{}, // unused
+		Status: roachpb.PENDING,
 	}
 
 	iterAndBuf := engine.GetIterAndBuf(batch, engine.IterOptions{UpperBound: intent.Span.EndKey})
