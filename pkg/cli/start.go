@@ -1124,7 +1124,7 @@ func logOutputDirectory() string {
 // occurs here and not in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(
 	ctx context.Context, cmd *cobra.Command,
-) (*stop.Stopper, error) {
+) (stopper *stop.Stopper, err error) {
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.
@@ -1183,9 +1183,15 @@ func setupAndInitializeLoggingAndProfiling(
 		// directory too large.
 		log.StartGCDaemon(ctx)
 
-		// We have a valid logging directory. Configure Pebble/RocksDB to log into it.
-		engine.InitPebbleLogger(ctx)
-		engine.InitRocksDBLogger(ctx)
+		defer func() {
+			if stopper != nil {
+				// When the function complete successfully, start the loggers
+				// for the storage engines. We need to do this at the end
+				// because we need to register the loggers.
+				stopper.AddCloser(engine.InitPebbleLogger(ctx))
+				stopper.AddCloser(engine.InitRocksDBLogger(ctx))
+			}
+		}()
 	}
 
 	outputDirectory := "."
@@ -1241,7 +1247,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
-	stopper := initBacktrace(outputDirectory)
+	stopper = initBacktrace(outputDirectory)
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil

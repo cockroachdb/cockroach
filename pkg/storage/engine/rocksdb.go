@@ -84,10 +84,12 @@ var rocksdbLogger *log.SecondaryLogger
 
 // InitRocksDBLogger initializes the logger to use for RocksDB log messages. If
 // not called, WARNING, ERROR, and FATAL logs will be output to the normal
-// CockroachDB log.
-func InitRocksDBLogger(ctx context.Context) {
+// CockroachDB log. The caller is responsible for ensuring the
+// Close() method is eventually called on the new logger.
+func InitRocksDBLogger(ctx context.Context) *log.SecondaryLogger {
 	rocksdbLogger = log.NewSecondaryLogger(ctx, nil, "rocksdb",
 		true /* enableGC */, false /* forceSyncWrites */, false /* enableMsgCount */)
+	return rocksdbLogger
 }
 
 //export rocksDBLog
