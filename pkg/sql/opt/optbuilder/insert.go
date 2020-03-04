@@ -353,6 +353,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 //      values specified for them.
 //   3. Each update value is the same as the corresponding insert value.
 //
+// TODO(radu): once FKs no longer require indexes, this function will have to
+// take FKs into account explicitly.
+//
 // TODO(andyk): The fast path is currently only enabled when the UPSERT alias
 // is explicitly selected by the user. It's possible to fast path some queries
 // of the form INSERT ... ON CONFLICT, but the utility is low and there are lots

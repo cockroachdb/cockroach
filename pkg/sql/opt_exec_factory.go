@@ -1383,10 +1383,7 @@ func (ef *execFactory) ConstructUpdate(
 		}
 	}
 
-	// Create the table updater, which does the bulk of the work. In the HP,
-	// the updater derives the columns that need to be fetched. By contrast, the
-	// CBO will have already determined the set of fetch and update columns, and
-	// passes those sets into the updater (which will basically be a no-op).
+	// Create the table updater, which does the bulk of the work.
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
@@ -1506,6 +1503,7 @@ func (ef *execFactory) ConstructUpsert(
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1516,25 +1514,28 @@ func (ef *execFactory) ConstructUpsert(
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
 	updateColDescs := makeColDescList(table, updateColOrdSet)
 
-	// Determine the foreign key tables involved in the upsert.
-	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckUpdates)
-	if err != nil {
-		return nil, err
+	var fkTables row.FkTableMetadata
+	checkFKs := row.SkipFKs
+	if !skipFKChecks {
+		checkFKs = row.CheckFKs
+
+		// Determine the foreign key tables involved in the upsert.
+		var err error
+		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckUpdates)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, tabDesc, insertColDescs, row.CheckFKs, fkTables, &ef.planner.alloc,
+		ctx, ef.planner.txn, tabDesc, insertColDescs, checkFKs, fkTables, &ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create the table updater, which does the bulk of the update-related work.
-	// In the HP, the updater derives the columns that need to be fetched. By
-	// contrast, the CBO will have already determined the set of fetch and update
-	// columns, and passes those sets into the updater (which will basically be a
-	// no-op).
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
@@ -1543,7 +1544,7 @@ func (ef *execFactory) ConstructUpsert(
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
-		row.CheckFKs,
+		checkFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
 	)
