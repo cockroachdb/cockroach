@@ -165,7 +165,8 @@ func tokenize(input string) (res scannedInput, err error) {
 	inputLines := strings.Split(input, "\n")
 
 	for lineIdx, lineS := range inputLines {
-		var currentLine [][]String
+		var currentLine hbaLine
+		currentLine.input = strings.TrimSpace(lineS)
 		for remaining := lineS; remaining != ""; {
 			var currentField []String
 			remaining, currentField, err = nextFieldExpand(remaining)
@@ -173,10 +174,10 @@ func tokenize(input string) (res scannedInput, err error) {
 				return res, errors.Wrapf(err, "line %d", lineIdx+1)
 			}
 			if len(currentField) > 0 {
-				currentLine = append(currentLine, currentField)
+				currentLine.tokens = append(currentLine.tokens, currentField)
 			}
 		}
-		if len(currentLine) > 0 {
+		if len(currentLine.tokens) > 0 {
 			res.lines = append(res.lines, currentLine)
 			res.linenos = append(res.linenos, lineIdx+1)
 		}

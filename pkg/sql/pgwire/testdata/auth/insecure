@@ -19,6 +19,11 @@ set_hba
 host all root 0.0.0.0/0 cert
 ----
 # Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all root 0.0.0.0/0 cert
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
 host   all      root all       cert-password
 host   all      root 0.0.0.0/0 cert
