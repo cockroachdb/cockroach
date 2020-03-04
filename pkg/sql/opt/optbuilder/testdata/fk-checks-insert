@@ -32,6 +32,44 @@ insert child
                 └── filters
                      └── column2:5 = parent.p:6
 
+build
+INSERT INTO child VALUES (100, 1), (200, 1) ON CONFLICT DO NOTHING
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:3 => c:1
+ │    └── column2:4 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: column1:3!null column2:4!null
+ │    └── select
+ │         ├── columns: column1:3!null column2:4!null c:5 child.p:6
+ │         ├── left-join (hash)
+ │         │    ├── columns: column1:3!null column2:4!null c:5 child.p:6
+ │         │    ├── values
+ │         │    │    ├── columns: column1:3!null column2:4!null
+ │         │    │    ├── (100, 1)
+ │         │    │    └── (200, 1)
+ │         │    ├── scan child
+ │         │    │    └── columns: c:5!null child.p:6!null
+ │         │    └── filters
+ │         │         └── column1:3 = c:5
+ │         └── filters
+ │              └── c:5 IS NULL
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: column2:7!null
+                ├── with-scan &1
+                │    ├── columns: column2:7!null
+                │    └── mapping:
+                │         └──  column2:4 => column2:7
+                ├── scan parent
+                │    └── columns: parent.p:8!null
+                └── filters
+                     └── column2:7 = parent.p:8
+
 # Use a non-constant input.
 exec-ddl
 CREATE TABLE xy (x INT, y INT)
