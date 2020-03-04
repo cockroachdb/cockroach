@@ -3,35 +3,32 @@
 
 package serverpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import build "github.com/cockroachdb/cockroach/pkg/build"
-import raftpb "go.etcd.io/etcd/raft/raftpb"
-import gossip "github.com/cockroachdb/cockroach/pkg/gossip"
-import jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import diagnosticspb "github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
-import statuspb "github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-import enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import storagepb "github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-import util "github.com/cockroachdb/cockroach/pkg/util"
-import log "github.com/cockroachdb/cockroach/pkg/util/log"
-
-import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import time "time"
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-
 import (
 	context "context"
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	io "io"
+	math "math"
+	time "time"
+
+	build "github.com/cockroachdb/cockroach/pkg/build"
+	gossip "github.com/cockroachdb/cockroach/pkg/gossip"
+	jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
+	storagepb "github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	diagnosticspb "github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	statuspb "github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	util "github.com/cockroachdb/cockroach/pkg/util"
+	log "github.com/cockroachdb/cockroach/pkg/util/log"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+	raftpb "go.etcd.io/etcd/raft/raftpb"
 	grpc "google.golang.org/grpc"
 )
-
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import encoding_binary "encoding/binary"
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-
-import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -2293,7 +2290,9 @@ func (*ProblemRangesResponse_NodeProblems) Descriptor() ([]byte, []int) {
 func (m *ProblemRangesResponse_NodeProblems) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ProblemRangesResponse_NodeProblems) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ProblemRangesResponse_NodeProblems) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -2430,7 +2429,9 @@ func (*HotRangesResponse_StoreResponse) Descriptor() ([]byte, []int) {
 func (m *HotRangesResponse_StoreResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HotRangesResponse_StoreResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *HotRangesResponse_StoreResponse) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -2824,7 +2825,9 @@ func (*StatementsResponse_ExtendedStatementStatisticsKey) Descriptor() ([]byte, 
 func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -2862,7 +2865,9 @@ func (*StatementsResponse_CollectedStatementStatistics) Descriptor() ([]byte, []
 func (m *StatementsResponse_CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *StatementsResponse_CollectedStatementStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *StatementsResponse_CollectedStatementStatistics) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -3225,7 +3230,9 @@ func NewStatusClient(cc *grpc.ClientConn) StatusClient {
 	return &statusClient{cc}
 }
 
-func (c *statusClient) Certificates(ctx context.Context, in *CertificatesRequest, opts ...grpc.CallOption) (*CertificatesResponse, error) {
+func (c *statusClient) Certificates(
+	ctx context.Context, in *CertificatesRequest, opts ...grpc.CallOption,
+) (*CertificatesResponse, error) {
 	out := new(CertificatesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Certificates", in, out, opts...)
 	if err != nil {
@@ -3234,7 +3241,9 @@ func (c *statusClient) Certificates(ctx context.Context, in *CertificatesRequest
 	return out, nil
 }
 
-func (c *statusClient) Details(ctx context.Context, in *DetailsRequest, opts ...grpc.CallOption) (*DetailsResponse, error) {
+func (c *statusClient) Details(
+	ctx context.Context, in *DetailsRequest, opts ...grpc.CallOption,
+) (*DetailsResponse, error) {
 	out := new(DetailsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Details", in, out, opts...)
 	if err != nil {
@@ -3243,7 +3252,9 @@ func (c *statusClient) Details(ctx context.Context, in *DetailsRequest, opts ...
 	return out, nil
 }
 
-func (c *statusClient) Nodes(ctx context.Context, in *NodesRequest, opts ...grpc.CallOption) (*NodesResponse, error) {
+func (c *statusClient) Nodes(
+	ctx context.Context, in *NodesRequest, opts ...grpc.CallOption,
+) (*NodesResponse, error) {
 	out := new(NodesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Nodes", in, out, opts...)
 	if err != nil {
@@ -3252,7 +3263,9 @@ func (c *statusClient) Nodes(ctx context.Context, in *NodesRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *statusClient) Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*statuspb.NodeStatus, error) {
+func (c *statusClient) Node(
+	ctx context.Context, in *NodeRequest, opts ...grpc.CallOption,
+) (*statuspb.NodeStatus, error) {
 	out := new(statuspb.NodeStatus)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Node", in, out, opts...)
 	if err != nil {
@@ -3261,7 +3274,9 @@ func (c *statusClient) Node(ctx context.Context, in *NodeRequest, opts ...grpc.C
 	return out, nil
 }
 
-func (c *statusClient) RaftDebug(ctx context.Context, in *RaftDebugRequest, opts ...grpc.CallOption) (*RaftDebugResponse, error) {
+func (c *statusClient) RaftDebug(
+	ctx context.Context, in *RaftDebugRequest, opts ...grpc.CallOption,
+) (*RaftDebugResponse, error) {
 	out := new(RaftDebugResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/RaftDebug", in, out, opts...)
 	if err != nil {
@@ -3270,7 +3285,9 @@ func (c *statusClient) RaftDebug(ctx context.Context, in *RaftDebugRequest, opts
 	return out, nil
 }
 
-func (c *statusClient) Ranges(ctx context.Context, in *RangesRequest, opts ...grpc.CallOption) (*RangesResponse, error) {
+func (c *statusClient) Ranges(
+	ctx context.Context, in *RangesRequest, opts ...grpc.CallOption,
+) (*RangesResponse, error) {
 	out := new(RangesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Ranges", in, out, opts...)
 	if err != nil {
@@ -3279,7 +3296,9 @@ func (c *statusClient) Ranges(ctx context.Context, in *RangesRequest, opts ...gr
 	return out, nil
 }
 
-func (c *statusClient) Gossip(ctx context.Context, in *GossipRequest, opts ...grpc.CallOption) (*gossip.InfoStatus, error) {
+func (c *statusClient) Gossip(
+	ctx context.Context, in *GossipRequest, opts ...grpc.CallOption,
+) (*gossip.InfoStatus, error) {
 	out := new(gossip.InfoStatus)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Gossip", in, out, opts...)
 	if err != nil {
@@ -3288,7 +3307,9 @@ func (c *statusClient) Gossip(ctx context.Context, in *GossipRequest, opts ...gr
 	return out, nil
 }
 
-func (c *statusClient) EngineStats(ctx context.Context, in *EngineStatsRequest, opts ...grpc.CallOption) (*EngineStatsResponse, error) {
+func (c *statusClient) EngineStats(
+	ctx context.Context, in *EngineStatsRequest, opts ...grpc.CallOption,
+) (*EngineStatsResponse, error) {
 	out := new(EngineStatsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/EngineStats", in, out, opts...)
 	if err != nil {
@@ -3297,7 +3318,9 @@ func (c *statusClient) EngineStats(ctx context.Context, in *EngineStatsRequest, 
 	return out, nil
 }
 
-func (c *statusClient) Allocator(ctx context.Context, in *AllocatorRequest, opts ...grpc.CallOption) (*AllocatorResponse, error) {
+func (c *statusClient) Allocator(
+	ctx context.Context, in *AllocatorRequest, opts ...grpc.CallOption,
+) (*AllocatorResponse, error) {
 	out := new(AllocatorResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Allocator", in, out, opts...)
 	if err != nil {
@@ -3306,7 +3329,9 @@ func (c *statusClient) Allocator(ctx context.Context, in *AllocatorRequest, opts
 	return out, nil
 }
 
-func (c *statusClient) AllocatorRange(ctx context.Context, in *AllocatorRangeRequest, opts ...grpc.CallOption) (*AllocatorRangeResponse, error) {
+func (c *statusClient) AllocatorRange(
+	ctx context.Context, in *AllocatorRangeRequest, opts ...grpc.CallOption,
+) (*AllocatorRangeResponse, error) {
 	out := new(AllocatorRangeResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/AllocatorRange", in, out, opts...)
 	if err != nil {
@@ -3315,7 +3340,9 @@ func (c *statusClient) AllocatorRange(ctx context.Context, in *AllocatorRangeReq
 	return out, nil
 }
 
-func (c *statusClient) ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
+func (c *statusClient) ListSessions(
+	ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption,
+) (*ListSessionsResponse, error) {
 	out := new(ListSessionsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/ListSessions", in, out, opts...)
 	if err != nil {
@@ -3324,7 +3351,9 @@ func (c *statusClient) ListSessions(ctx context.Context, in *ListSessionsRequest
 	return out, nil
 }
 
-func (c *statusClient) ListLocalSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
+func (c *statusClient) ListLocalSessions(
+	ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption,
+) (*ListSessionsResponse, error) {
 	out := new(ListSessionsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/ListLocalSessions", in, out, opts...)
 	if err != nil {
@@ -3333,7 +3362,9 @@ func (c *statusClient) ListLocalSessions(ctx context.Context, in *ListSessionsRe
 	return out, nil
 }
 
-func (c *statusClient) CancelQuery(ctx context.Context, in *CancelQueryRequest, opts ...grpc.CallOption) (*CancelQueryResponse, error) {
+func (c *statusClient) CancelQuery(
+	ctx context.Context, in *CancelQueryRequest, opts ...grpc.CallOption,
+) (*CancelQueryResponse, error) {
 	out := new(CancelQueryResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/CancelQuery", in, out, opts...)
 	if err != nil {
@@ -3342,7 +3373,9 @@ func (c *statusClient) CancelQuery(ctx context.Context, in *CancelQueryRequest, 
 	return out, nil
 }
 
-func (c *statusClient) CancelSession(ctx context.Context, in *CancelSessionRequest, opts ...grpc.CallOption) (*CancelSessionResponse, error) {
+func (c *statusClient) CancelSession(
+	ctx context.Context, in *CancelSessionRequest, opts ...grpc.CallOption,
+) (*CancelSessionResponse, error) {
 	out := new(CancelSessionResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/CancelSession", in, out, opts...)
 	if err != nil {
@@ -3351,7 +3384,9 @@ func (c *statusClient) CancelSession(ctx context.Context, in *CancelSessionReque
 	return out, nil
 }
 
-func (c *statusClient) SpanStats(ctx context.Context, in *SpanStatsRequest, opts ...grpc.CallOption) (*SpanStatsResponse, error) {
+func (c *statusClient) SpanStats(
+	ctx context.Context, in *SpanStatsRequest, opts ...grpc.CallOption,
+) (*SpanStatsResponse, error) {
 	out := new(SpanStatsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/SpanStats", in, out, opts...)
 	if err != nil {
@@ -3360,7 +3395,9 @@ func (c *statusClient) SpanStats(ctx context.Context, in *SpanStatsRequest, opts
 	return out, nil
 }
 
-func (c *statusClient) Stacks(ctx context.Context, in *StacksRequest, opts ...grpc.CallOption) (*JSONResponse, error) {
+func (c *statusClient) Stacks(
+	ctx context.Context, in *StacksRequest, opts ...grpc.CallOption,
+) (*JSONResponse, error) {
 	out := new(JSONResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Stacks", in, out, opts...)
 	if err != nil {
@@ -3369,7 +3406,9 @@ func (c *statusClient) Stacks(ctx context.Context, in *StacksRequest, opts ...gr
 	return out, nil
 }
 
-func (c *statusClient) Profile(ctx context.Context, in *ProfileRequest, opts ...grpc.CallOption) (*JSONResponse, error) {
+func (c *statusClient) Profile(
+	ctx context.Context, in *ProfileRequest, opts ...grpc.CallOption,
+) (*JSONResponse, error) {
 	out := new(JSONResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Profile", in, out, opts...)
 	if err != nil {
@@ -3378,7 +3417,9 @@ func (c *statusClient) Profile(ctx context.Context, in *ProfileRequest, opts ...
 	return out, nil
 }
 
-func (c *statusClient) Metrics(ctx context.Context, in *MetricsRequest, opts ...grpc.CallOption) (*JSONResponse, error) {
+func (c *statusClient) Metrics(
+	ctx context.Context, in *MetricsRequest, opts ...grpc.CallOption,
+) (*JSONResponse, error) {
 	out := new(JSONResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Metrics", in, out, opts...)
 	if err != nil {
@@ -3387,7 +3428,9 @@ func (c *statusClient) Metrics(ctx context.Context, in *MetricsRequest, opts ...
 	return out, nil
 }
 
-func (c *statusClient) GetFiles(ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption) (*GetFilesResponse, error) {
+func (c *statusClient) GetFiles(
+	ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption,
+) (*GetFilesResponse, error) {
 	out := new(GetFilesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/GetFiles", in, out, opts...)
 	if err != nil {
@@ -3396,7 +3439,9 @@ func (c *statusClient) GetFiles(ctx context.Context, in *GetFilesRequest, opts .
 	return out, nil
 }
 
-func (c *statusClient) LogFilesList(ctx context.Context, in *LogFilesListRequest, opts ...grpc.CallOption) (*LogFilesListResponse, error) {
+func (c *statusClient) LogFilesList(
+	ctx context.Context, in *LogFilesListRequest, opts ...grpc.CallOption,
+) (*LogFilesListResponse, error) {
 	out := new(LogFilesListResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/LogFilesList", in, out, opts...)
 	if err != nil {
@@ -3405,7 +3450,9 @@ func (c *statusClient) LogFilesList(ctx context.Context, in *LogFilesListRequest
 	return out, nil
 }
 
-func (c *statusClient) LogFile(ctx context.Context, in *LogFileRequest, opts ...grpc.CallOption) (*LogEntriesResponse, error) {
+func (c *statusClient) LogFile(
+	ctx context.Context, in *LogFileRequest, opts ...grpc.CallOption,
+) (*LogEntriesResponse, error) {
 	out := new(LogEntriesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/LogFile", in, out, opts...)
 	if err != nil {
@@ -3414,7 +3461,9 @@ func (c *statusClient) LogFile(ctx context.Context, in *LogFileRequest, opts ...
 	return out, nil
 }
 
-func (c *statusClient) Logs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogEntriesResponse, error) {
+func (c *statusClient) Logs(
+	ctx context.Context, in *LogsRequest, opts ...grpc.CallOption,
+) (*LogEntriesResponse, error) {
 	out := new(LogEntriesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Logs", in, out, opts...)
 	if err != nil {
@@ -3423,7 +3472,9 @@ func (c *statusClient) Logs(ctx context.Context, in *LogsRequest, opts ...grpc.C
 	return out, nil
 }
 
-func (c *statusClient) ProblemRanges(ctx context.Context, in *ProblemRangesRequest, opts ...grpc.CallOption) (*ProblemRangesResponse, error) {
+func (c *statusClient) ProblemRanges(
+	ctx context.Context, in *ProblemRangesRequest, opts ...grpc.CallOption,
+) (*ProblemRangesResponse, error) {
 	out := new(ProblemRangesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/ProblemRanges", in, out, opts...)
 	if err != nil {
@@ -3432,7 +3483,9 @@ func (c *statusClient) ProblemRanges(ctx context.Context, in *ProblemRangesReque
 	return out, nil
 }
 
-func (c *statusClient) HotRanges(ctx context.Context, in *HotRangesRequest, opts ...grpc.CallOption) (*HotRangesResponse, error) {
+func (c *statusClient) HotRanges(
+	ctx context.Context, in *HotRangesRequest, opts ...grpc.CallOption,
+) (*HotRangesResponse, error) {
 	out := new(HotRangesResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/HotRanges", in, out, opts...)
 	if err != nil {
@@ -3441,7 +3494,9 @@ func (c *statusClient) HotRanges(ctx context.Context, in *HotRangesRequest, opts
 	return out, nil
 }
 
-func (c *statusClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.CallOption) (*RangeResponse, error) {
+func (c *statusClient) Range(
+	ctx context.Context, in *RangeRequest, opts ...grpc.CallOption,
+) (*RangeResponse, error) {
 	out := new(RangeResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Range", in, out, opts...)
 	if err != nil {
@@ -3450,7 +3505,9 @@ func (c *statusClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *statusClient) Diagnostics(ctx context.Context, in *DiagnosticsRequest, opts ...grpc.CallOption) (*diagnosticspb.DiagnosticReport, error) {
+func (c *statusClient) Diagnostics(
+	ctx context.Context, in *DiagnosticsRequest, opts ...grpc.CallOption,
+) (*diagnosticspb.DiagnosticReport, error) {
 	out := new(diagnosticspb.DiagnosticReport)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Diagnostics", in, out, opts...)
 	if err != nil {
@@ -3459,7 +3516,9 @@ func (c *statusClient) Diagnostics(ctx context.Context, in *DiagnosticsRequest, 
 	return out, nil
 }
 
-func (c *statusClient) Stores(ctx context.Context, in *StoresRequest, opts ...grpc.CallOption) (*StoresResponse, error) {
+func (c *statusClient) Stores(
+	ctx context.Context, in *StoresRequest, opts ...grpc.CallOption,
+) (*StoresResponse, error) {
 	out := new(StoresResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Stores", in, out, opts...)
 	if err != nil {
@@ -3468,7 +3527,9 @@ func (c *statusClient) Stores(ctx context.Context, in *StoresRequest, opts ...gr
 	return out, nil
 }
 
-func (c *statusClient) Statements(ctx context.Context, in *StatementsRequest, opts ...grpc.CallOption) (*StatementsResponse, error) {
+func (c *statusClient) Statements(
+	ctx context.Context, in *StatementsRequest, opts ...grpc.CallOption,
+) (*StatementsResponse, error) {
 	out := new(StatementsResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Statements", in, out, opts...)
 	if err != nil {
@@ -3477,7 +3538,9 @@ func (c *statusClient) Statements(ctx context.Context, in *StatementsRequest, op
 	return out, nil
 }
 
-func (c *statusClient) JobRegistryStatus(ctx context.Context, in *JobRegistryStatusRequest, opts ...grpc.CallOption) (*JobRegistryStatusResponse, error) {
+func (c *statusClient) JobRegistryStatus(
+	ctx context.Context, in *JobRegistryStatusRequest, opts ...grpc.CallOption,
+) (*JobRegistryStatusResponse, error) {
 	out := new(JobRegistryStatusResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/JobRegistryStatus", in, out, opts...)
 	if err != nil {
@@ -3486,7 +3549,9 @@ func (c *statusClient) JobRegistryStatus(ctx context.Context, in *JobRegistrySta
 	return out, nil
 }
 
-func (c *statusClient) JobStatus(ctx context.Context, in *JobStatusRequest, opts ...grpc.CallOption) (*JobStatusResponse, error) {
+func (c *statusClient) JobStatus(
+	ctx context.Context, in *JobStatusRequest, opts ...grpc.CallOption,
+) (*JobStatusResponse, error) {
 	out := new(JobStatusResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/JobStatus", in, out, opts...)
 	if err != nil {
@@ -3538,7 +3603,12 @@ func RegisterStatusServer(s *grpc.Server, srv StatusServer) {
 	s.RegisterService(&_Status_serviceDesc, srv)
 }
 
-func _Status_Certificates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Certificates_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(CertificatesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3556,7 +3626,12 @@ func _Status_Certificates_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Details_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Details_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(DetailsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3574,7 +3649,12 @@ func _Status_Details_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Nodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Nodes_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(NodesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3592,7 +3672,12 @@ func _Status_Nodes_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Node_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Node_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(NodeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3610,7 +3695,12 @@ func _Status_Node_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_RaftDebug_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_RaftDebug_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(RaftDebugRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3628,7 +3718,12 @@ func _Status_RaftDebug_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Ranges_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Ranges_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(RangesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3646,7 +3741,12 @@ func _Status_Ranges_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Gossip_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Gossip_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(GossipRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3664,7 +3764,12 @@ func _Status_Gossip_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_EngineStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_EngineStats_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(EngineStatsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3682,7 +3787,12 @@ func _Status_EngineStats_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Allocator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Allocator_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(AllocatorRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3700,7 +3810,12 @@ func _Status_Allocator_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_AllocatorRange_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_AllocatorRange_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(AllocatorRangeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3718,7 +3833,12 @@ func _Status_AllocatorRange_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_ListSessions_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(ListSessionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3736,7 +3856,12 @@ func _Status_ListSessions_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_ListLocalSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_ListLocalSessions_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(ListSessionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3754,7 +3879,12 @@ func _Status_ListLocalSessions_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_CancelQuery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_CancelQuery_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(CancelQueryRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3772,7 +3902,12 @@ func _Status_CancelQuery_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_CancelSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_CancelSession_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(CancelSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3790,7 +3925,12 @@ func _Status_CancelSession_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_SpanStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_SpanStats_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(SpanStatsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3808,7 +3948,12 @@ func _Status_SpanStats_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Stacks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Stacks_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(StacksRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3826,7 +3971,12 @@ func _Status_Stacks_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Profile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Profile_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(ProfileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3844,7 +3994,12 @@ func _Status_Profile_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Metrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Metrics_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(MetricsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3862,7 +4017,12 @@ func _Status_Metrics_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_GetFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_GetFiles_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(GetFilesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3880,7 +4040,12 @@ func _Status_GetFiles_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_LogFilesList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_LogFilesList_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(LogFilesListRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3898,7 +4063,12 @@ func _Status_LogFilesList_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_LogFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_LogFile_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(LogFileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3916,7 +4086,12 @@ func _Status_LogFile_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Logs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Logs_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(LogsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3934,7 +4109,12 @@ func _Status_Logs_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_ProblemRanges_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_ProblemRanges_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(ProblemRangesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3952,7 +4132,12 @@ func _Status_ProblemRanges_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_HotRanges_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_HotRanges_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(HotRangesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3970,7 +4155,12 @@ func _Status_HotRanges_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Range_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Range_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(RangeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -3988,7 +4178,12 @@ func _Status_Range_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Diagnostics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Diagnostics_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(DiagnosticsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -4006,7 +4201,12 @@ func _Status_Diagnostics_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Stores_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Stores_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(StoresRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -4024,7 +4224,12 @@ func _Status_Stores_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_Statements_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_Statements_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(StatementsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -4042,7 +4247,12 @@ func _Status_Statements_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_JobRegistryStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_JobRegistryStatus_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(JobRegistryStatusRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -4060,7 +4270,12 @@ func _Status_JobRegistryStatus_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Status_JobStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Status_JobStatus_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(JobStatusRequest)
 	if err := dec(in); err != nil {
 		return nil, err

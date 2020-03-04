@@ -10,7 +10,7 @@
 
 package server
 
-import "github.com/cockroachdb/cockroach/pkg/storage/engine"
+import "github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
 
 func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	return engine.RecommendedMaxOpenFiles, nil

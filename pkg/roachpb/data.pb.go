@@ -3,19 +3,18 @@
 
 package roachpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import lock "github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
-import enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	bytes "bytes"
+	fmt "fmt"
+	io "io"
+	math "math"
 
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-import github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-
-import bytes "bytes"
-
-import io "io"
+	lock "github.com/cockroachdb/cockroach/pkg/kv/storage/concurrency/lock"
+	github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	proto "github.com/gogo/protobuf/proto"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -383,9 +382,9 @@ var xxx_messageInfo_SplitTrigger proto.InternalMessageInfo
 // (right_desc). This information allows the final bookkeeping for the
 // merge to be completed and put into operation.
 type MergeTrigger struct {
-	LeftDesc       RangeDescriptor    `protobuf:"bytes,1,opt,name=left_desc,json=leftDesc,proto3" json:"left_desc"`
-	RightDesc      RangeDescriptor    `protobuf:"bytes,2,opt,name=right_desc,json=rightDesc,proto3" json:"right_desc"`
-	RightMVCCStats enginepb.MVCCStats `protobuf:"bytes,4,opt,name=right_mvcc_stats,json=rightMvccStats,proto3" json:"right_mvcc_stats"`
+	LeftDesc       RangeDescriptor                                                        `protobuf:"bytes,1,opt,name=left_desc,json=leftDesc,proto3" json:"left_desc"`
+	RightDesc      RangeDescriptor                                                        `protobuf:"bytes,2,opt,name=right_desc,json=rightDesc,proto3" json:"right_desc"`
+	RightMVCCStats github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.MVCCStats `protobuf:"bytes,4,opt,name=right_mvcc_stats,json=rightMvccStats,proto3" json:"right_mvcc_stats"`
 	// FreezeStart is a timestamp that is guaranteed to be greater than the
 	// timestamps at which any requests were serviced by the responding replica
 	// before it stopped responding to requests altogether (in anticipation of
@@ -700,7 +699,7 @@ var xxx_messageInfo_ObservedTimestamp proto.InternalMessageInfo
 type Transaction struct {
 	// The transaction metadata. This field includes the subset of information
 	// that is persisted with every write intent.
-	enginepb.TxnMeta `protobuf:"bytes,1,opt,name=meta,proto3,embedded=meta" json:"meta"`
+	github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,1,opt,name=meta,proto3,embedded=meta" json:"meta"`
 	// A free-text identifier for debug purposes.
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// The status of the transaction.
@@ -893,7 +892,7 @@ type Transaction struct {
 	// non-contiguous (i.e. it must coalesce ranges to avoid situations
 	// where a range's end seqnum is equal to the next range's start
 	// seqnum), and sorted in seqnum order.
-	IgnoredSeqNums []enginepb.IgnoredSeqNumRange `protobuf:"bytes,18,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
+	IgnoredSeqNums []github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange `protobuf:"bytes,18,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -938,12 +937,12 @@ var xxx_messageInfo_Transaction proto.InternalMessageInfo
 // AsTransaction methods.
 type TransactionRecord struct {
 	// See comments on Transaction proto.
-	enginepb.TxnMeta `protobuf:"bytes,1,opt,name=meta,proto3,embedded=meta" json:"meta"`
-	Status           TransactionStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
-	LastHeartbeat    hlc.Timestamp                 `protobuf:"bytes,5,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat"`
-	IntentSpans      []Span                        `protobuf:"bytes,11,rep,name=intent_spans,json=intentSpans,proto3" json:"intent_spans"`
-	InFlightWrites   []SequencedWrite              `protobuf:"bytes,17,rep,name=in_flight_writes,json=inFlightWrites,proto3" json:"in_flight_writes"`
-	IgnoredSeqNums   []enginepb.IgnoredSeqNumRange `protobuf:"bytes,18,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
+	github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,1,opt,name=meta,proto3,embedded=meta" json:"meta"`
+	Status                                                               TransactionStatus                                                                 `protobuf:"varint,4,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
+	LastHeartbeat                                                        hlc.Timestamp                                                                     `protobuf:"bytes,5,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat"`
+	IntentSpans                                                          []Span                                                                            `protobuf:"bytes,11,rep,name=intent_spans,json=intentSpans,proto3" json:"intent_spans"`
+	InFlightWrites                                                       []SequencedWrite                                                                  `protobuf:"bytes,17,rep,name=in_flight_writes,json=inFlightWrites,proto3" json:"in_flight_writes"`
+	IgnoredSeqNums                                                       []github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange `protobuf:"bytes,18,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
 }
 
 func (m *TransactionRecord) Reset()         { *m = TransactionRecord{} }
@@ -983,7 +982,7 @@ var xxx_messageInfo_TransactionRecord proto.InternalMessageInfo
 // Note: avoid constructing Intent directly; consider using MakeIntent() instead.
 type Intent struct {
 	Intent_SingleKeySpan `protobuf:"bytes,1,opt,name=single_key_span,json=singleKeySpan,proto3,embedded=single_key_span" json:"single_key_span"`
-	Txn                  enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
+	Txn                  github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
 }
 
 func (m *Intent) Reset()         { *m = Intent{} }
@@ -1059,10 +1058,10 @@ var xxx_messageInfo_Intent_SingleKeySpan proto.InternalMessageInfo
 // ignored seqnum ranges to the resolution algorithm.
 type LockUpdate struct {
 	Span           `protobuf:"bytes,1,opt,name=span,proto3,embedded=span" json:"span"`
-	Txn            enginepb.TxnMeta              `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
-	Status         TransactionStatus             `protobuf:"varint,3,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
-	IgnoredSeqNums []enginepb.IgnoredSeqNumRange `protobuf:"bytes,4,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
-	Durability     lock.Durability               `protobuf:"varint,5,opt,name=durability,proto3,enum=cockroach.storage.concurrency.lock.Durability" json:"durability,omitempty"`
+	Txn            github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta              `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
+	Status         TransactionStatus                                                                 `protobuf:"varint,3,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
+	IgnoredSeqNums []github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange `protobuf:"bytes,4,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
+	Durability     lock.Durability                                                                   `protobuf:"varint,5,opt,name=durability,proto3,enum=cockroach.storage.concurrency.lock.Durability" json:"durability,omitempty"`
 }
 
 func (m *LockUpdate) Reset()         { *m = LockUpdate{} }
@@ -3036,7 +3035,7 @@ func NewPopulatedObservedTimestamp(r randyData, easy bool) *ObservedTimestamp {
 
 func NewPopulatedTransaction(r randyData, easy bool) *Transaction {
 	this := &Transaction{}
-	v4 := enginepb.NewPopulatedTxnMeta(r, easy)
+	v4 := github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.NewPopulatedTxnMeta(r, easy)
 	this.TxnMeta = *v4
 	this.Name = string(randStringData(r))
 	this.Status = TransactionStatus([]int32{0, 3, 1, 2}[r.Intn(4)])
@@ -3076,9 +3075,9 @@ func NewPopulatedTransaction(r randyData, easy bool) *Transaction {
 	}
 	if r.Intn(10) != 0 {
 		v15 := r.Intn(5)
-		this.IgnoredSeqNums = make([]enginepb.IgnoredSeqNumRange, v15)
+		this.IgnoredSeqNums = make([]github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange, v15)
 		for i := 0; i < v15; i++ {
-			v16 := enginepb.NewPopulatedIgnoredSeqNumRange(r, easy)
+			v16 := github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.NewPopulatedIgnoredSeqNumRange(r, easy)
 			this.IgnoredSeqNums[i] = *v16
 		}
 	}
@@ -3089,7 +3088,7 @@ func NewPopulatedTransaction(r randyData, easy bool) *Transaction {
 
 func NewPopulatedTransactionRecord(r randyData, easy bool) *TransactionRecord {
 	this := &TransactionRecord{}
-	v17 := enginepb.NewPopulatedTxnMeta(r, easy)
+	v17 := github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.NewPopulatedTxnMeta(r, easy)
 	this.TxnMeta = *v17
 	this.Status = TransactionStatus([]int32{0, 3, 1, 2}[r.Intn(4)])
 	v18 := hlc.NewPopulatedTimestamp(r, easy)
@@ -3112,9 +3111,9 @@ func NewPopulatedTransactionRecord(r randyData, easy bool) *TransactionRecord {
 	}
 	if r.Intn(10) != 0 {
 		v23 := r.Intn(5)
-		this.IgnoredSeqNums = make([]enginepb.IgnoredSeqNumRange, v23)
+		this.IgnoredSeqNums = make([]github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange, v23)
 		for i := 0; i < v23; i++ {
-			v24 := enginepb.NewPopulatedIgnoredSeqNumRange(r, easy)
+			v24 := github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.NewPopulatedIgnoredSeqNumRange(r, easy)
 			this.IgnoredSeqNums[i] = *v24
 		}
 	}
@@ -5587,7 +5586,7 @@ func (m *Transaction) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IgnoredSeqNums = append(m.IgnoredSeqNums, enginepb.IgnoredSeqNumRange{})
+			m.IgnoredSeqNums = append(m.IgnoredSeqNums, github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange{})
 			if err := m.IgnoredSeqNums[len(m.IgnoredSeqNums)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -5809,7 +5808,7 @@ func (m *TransactionRecord) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IgnoredSeqNums = append(m.IgnoredSeqNums, enginepb.IgnoredSeqNumRange{})
+			m.IgnoredSeqNums = append(m.IgnoredSeqNums, github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange{})
 			if err := m.IgnoredSeqNums[len(m.IgnoredSeqNums)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -6160,7 +6159,7 @@ func (m *LockUpdate) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IgnoredSeqNums = append(m.IgnoredSeqNums, enginepb.IgnoredSeqNumRange{})
+			m.IgnoredSeqNums = append(m.IgnoredSeqNums, github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange{})
 			if err := m.IgnoredSeqNums[len(m.IgnoredSeqNums)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
