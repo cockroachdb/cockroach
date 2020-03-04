@@ -180,6 +180,7 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 		window := p.bufferedTuples.ColVec(i).Window(t, startIdx, endIdx)
 		p.windowedBatch.ReplaceCol(window, i)
 	}
+	p.windowedBatch.SetSelection(false)
 	p.windowedBatch.SetLength(endIdx - startIdx)
 	return p.windowedBatch
 }

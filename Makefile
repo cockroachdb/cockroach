@@ -833,7 +833,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/sum_agg.eg.go \
-  pkg/sql/colexec/tuples_differ.eg.go \
+  pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go
 
@@ -1531,7 +1531,7 @@ pkg/sql/colexec/selection_ops.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
 pkg/sql/colexec/sort.eg.go: pkg/sql/colexec/sort_tmpl.go
 pkg/sql/colexec/substring.eg.go: pkg/sql/colexec/substring_tmpl.go
 pkg/sql/colexec/sum_agg.eg.go: pkg/sql/colexec/sum_agg_tmpl.go
-pkg/sql/colexec/tuples_differ.eg.go: pkg/sql/colexec/tuples_differ_tmpl.go
+pkg/sql/colexec/values_differ.eg.go: pkg/sql/colexec/values_differ_tmpl.go
 pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
 pkg/sql/colexec/window_peer_grouper.eg.go: pkg/sql/colexec/window_peer_grouper_tmpl.go
 

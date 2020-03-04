@@ -354,8 +354,8 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	seed := rand.Int()
 	rng := rand.New(rand.NewSource(int64(seed)))
 	nRuns := 5
-	nRows := 100
-	maxCols := 5
+	nRows := 5 * coldata.BatchSize() / 4
+	maxCols := 3
 	maxNum := 10
 	intTyps := make([]types.T, maxCols)
 	for i := range intTyps {
@@ -409,8 +409,8 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 						forceDiskSpill: spillForced,
 					}
 					if err := verifyColOperator(args); err != nil {
-						fmt.Printf("--- seed = %d spillForced = %t nCols = %d matchLen = %d ---\n",
-							seed, spillForced, nCols, matchLen)
+						fmt.Printf("--- seed = %d spillForced = %t orderingCols = %v matchLen = %d run = %d ---\n",
+							seed, spillForced, orderingCols, matchLen, run)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 						t.Fatal(err)
