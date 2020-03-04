@@ -161,6 +161,7 @@ SET DATABASE = ''
 query TTTTT colnames,rowsort
 SELECT * FROM [SHOW GRANTS]
  WHERE schema_name NOT IN ('crdb_internal', 'pg_catalog', 'information_schema')
+ORDER BY 1,2,3
 ----
 database_name  schema_name  table_name                       grantee    privilege_type
 system         public       namespace_deprecated             admin      GRANT
@@ -296,11 +297,7 @@ system         public       comments                         admin      GRANT
 system         public       comments                         admin      INSERT
 system         public       comments                         admin      SELECT
 system         public       comments                         admin      UPDATE
-system         public       comments                         public     DELETE
-system         public       comments                         public     GRANT
-system         public       comments                         public     INSERT
 system         public       comments                         public     SELECT
-system         public       comments                         public     UPDATE
 system         public       comments                         root       DELETE
 system         public       comments                         root       GRANT
 system         public       comments                         root       INSERT
@@ -358,6 +355,16 @@ system         public       protected_ts_records             admin      GRANT
 system         public       protected_ts_records             admin      SELECT
 system         public       protected_ts_records             root       GRANT
 system         public       protected_ts_records             root       SELECT
+system         public       role_options                     admin      DELETE
+system         public       role_options                     admin      GRANT
+system         public       role_options                     admin      INSERT
+system         public       role_options                     admin      SELECT
+system         public       role_options                     admin      UPDATE
+system         public       role_options                     root       DELETE
+system         public       role_options                     root       GRANT
+system         public       role_options                     root       INSERT
+system         public       role_options                     root       SELECT
+system         public       role_options                     root       UPDATE
 system         public       statement_bundle_chunks          admin      DELETE
 system         public       statement_bundle_chunks          admin      GRANT
 system         public       statement_bundle_chunks          admin      INSERT
@@ -388,16 +395,6 @@ system         public       statement_diagnostics            root       GRANT
 system         public       statement_diagnostics            root       INSERT
 system         public       statement_diagnostics            root       SELECT
 system         public       statement_diagnostics            root       UPDATE
-system         public       role_options                     admin      DELETE
-system         public       role_options                     admin      GRANT
-system         public       role_options                     admin      INSERT
-system         public       role_options                     admin      SELECT
-system         public       role_options                     admin      UPDATE
-system         public       role_options                     root       DELETE
-system         public       role_options                     root       GRANT
-system         public       role_options                     root       INSERT
-system         public       role_options                     root       SELECT
-system         public       role_options                     root       UPDATE
 a              public       NULL                             admin      ALL
 a              public       NULL                             readwrite  ALL
 a              public       NULL                             root       ALL
