@@ -408,8 +408,16 @@ func Example_demo() {
 		{`demo`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
 		{`demo`, `startrek`, `-e`, `show databases`},
 		{`demo`, `startrek`, `-e`, `show databases`, `--format=table`},
+		// Test that if we start with --insecure=false we can perform
+		// commands that require a secure cluster.
+		{`demo`, `--insecure=false`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
+		{`demo`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
 	}
 	setCLIDefaultsForTests()
+	// We must reset the security asset loader here, otherwise the dummy
+	// asset loader that is set by default in tests will not be able to
+	// find the certs that demo sets up.
+	security.ResetAssetLoader()
 	for _, cmd := range testData {
 		c.RunWithArgs(cmd)
 	}
@@ -457,6 +465,11 @@ func Example_demo() {
 	//   startrek
 	//   system
 	// (4 rows)
+	// demo --insecure=false -e CREATE USER test WITH PASSWORD 'testpass'
+	// CREATE USER 1
+	// demo -e CREATE USER test WITH PASSWORD 'testpass'
+	// ERROR: setting or updating a password is not supported in insecure mode
+	// SQLSTATE: 28P01
 }
 
 func Example_sql() {
