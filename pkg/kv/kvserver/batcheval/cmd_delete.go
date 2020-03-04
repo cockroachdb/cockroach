@@ -36,5 +36,5 @@ func Delete(
 	// desirable, but while it remains, we need to assume that an intent could
 	// have been written even when an error is returned. This is harmless if the
 	// error is not consumed by the caller because the result will be discarded.
-	return result.FromWrittenIntents(h.Txn, args.Key), err
+	return result.FromAcquiredLocks(h.Txn, args.Key), err
 }
