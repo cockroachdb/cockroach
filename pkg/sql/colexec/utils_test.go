@@ -195,16 +195,7 @@ func runTestsWithoutAllNullsInjection(
 	verifier verifier,
 	constructor func(inputs []Operator) (Operator, error),
 ) {
-	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []Operator) {
-		op, err := constructor(inputs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := newOpTestOutput(op, expected)
-		if err := verifier(out); err != nil {
-			t.Fatal(err)
-		}
-	})
+	runTestsWithoutAllNullsInjectionAndVerifySelResets(t, tups, typs, expected, verifier, constructor)
 
 	t.Run("verifySelAndNullResets", func(t *testing.T) {
 		// This test ensures that operators that "own their own batches", such as
@@ -267,6 +258,33 @@ func runTestsWithoutAllNullsInjection(
 			}
 		}
 	})
+}
+
+// runTestsWithoutAllNullsInjectionAndVerifySelResets is the same as runTests,
+// but it skips the all nulls injection and verify sel and nulls reset tests.
+// Use this only when the all nulls injection should not change the output of
+// the operator under testing or an operator can block when it is not fully
+// exhausted.
+// NOTE: please leave a justification why you're using this variant of
+// runTests.
+func runTestsWithoutAllNullsInjectionAndVerifySelResets(
+	t *testing.T,
+	tups []tuples,
+	typs []coltypes.T,
+	expected tuples,
+	verifier verifier,
+	constructor func(inputs []Operator) (Operator, error),
+) {
+	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []Operator) {
+		op, err := constructor(inputs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := newOpTestOutput(op, expected)
+		if err := verifier(out); err != nil {
+			t.Fatal(err)
+		}
+	})
 
 	t.Run("randomNullsInjection", func(t *testing.T) {
 		// This test randomly injects nulls in the input tuples and ensures that
@@ -304,14 +322,13 @@ func runTestsWithoutAllNullsInjection(
 func runTestsWithFn(
 	t *testing.T, tups []tuples, typs []coltypes.T, test func(t *testing.T, inputs []Operator),
 ) {
-	rng, _ := randutil.NewPseudoRand()
-
 	for _, batchSize := range []uint16{1, uint16(math.Trunc(.002 * float64(coldata.BatchSize()))), uint16(math.Trunc(.003 * float64(coldata.BatchSize()))), uint16(math.Trunc(.016 * float64(coldata.BatchSize()))), coldata.BatchSize()} {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
 				inputSources := make([]Operator, len(tups))
 				if useSel {
 					for i, tup := range tups {
+						rng, _ := randutil.NewPseudoRand()
 						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, typs)
 					}
 				} else {

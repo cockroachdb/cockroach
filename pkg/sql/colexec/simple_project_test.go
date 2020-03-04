@@ -11,6 +11,7 @@
 package colexec
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -79,4 +80,43 @@ func TestSimpleProjectOp(t *testing.T) {
 		projectOp := NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
 		require.IsType(t, input, projectOp)
 	})
+}
+
+// TestSimpleProjectOpWithUnorderedSynchronizer sets up the following
+// structure:
+//
+//  input 1 --
+//            | --> unordered synchronizer --> simpleProjectOp --> constInt64Op
+//  input 2 --
+//
+// and makes sure that the output is as expected. The idea is to test
+// simpleProjectOp in case when it receives multiple "different internally"
+// batches. See #45686 for detailed discussion.
+func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	inputTypes := []coltypes.T{coltypes.Bytes, coltypes.Float64}
+	constVal := int64(42)
+	var wg sync.WaitGroup
+	inputTuples := []tuples{
+		{{"a", 1.0}, {"aa", 10.0}},
+		{{"b", 2.0}, {"bb", 20.0}},
+	}
+	expected := tuples{
+		{"a", constVal},
+		{"aa", constVal},
+		{"b", constVal},
+		{"bb", constVal},
+	}
+	// We're omitting "verify sel and nulls resets" test because it doesn't fully
+	// exhaust the output, and the unordered synchronizer will get blocked
+	// forever. We're also skipping "all nulls injection" just because we don't
+	// need it in this unit test.
+	runTestsWithoutAllNullsInjectionAndVerifySelResets(t, inputTuples, inputTypes, expected,
+		unorderedVerifier, func(inputs []Operator) (Operator, error) {
+			var input Operator
+			input = NewParallelUnorderedSynchronizer(inputs, inputTypes, &wg)
+			input = NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
+			return NewConstOp(input, coltypes.Int64, constVal, 1)
+		})
+	wg.Wait()
 }
