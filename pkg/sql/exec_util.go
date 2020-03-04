@@ -1816,6 +1816,19 @@ var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
 
 func (noopParamStatusUpdater) AppendParamStatusUpdate(string, string) {}
 
+// noticeSender is a subset of RestrictedCommandResult which allows sending
+// notices.
+type noticeSender interface {
+	AppendNotice(error)
+}
+
+// noopNoticeSender implements noticeSender by performing a no-op.
+type noopNoticeSenderImpl struct{}
+
+var noopNoticeSender noticeSender = &noopNoticeSenderImpl{}
+
+func (noopNoticeSenderImpl) AppendNotice(error) {}
+
 // sessionDataMutator is the interface used by sessionVars to change the session
 // state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
 // see curTxnReadOnly).

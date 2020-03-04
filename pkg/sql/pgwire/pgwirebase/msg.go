@@ -44,6 +44,7 @@ const (
 	ServerMsgDataRow              ServerMessageType = 'D'
 	ServerMsgEmptyQuery           ServerMessageType = 'I'
 	ServerMsgErrorResponse        ServerMessageType = 'E'
+	ServerMsgNoticeResponse       ServerMessageType = 'N'
 	ServerMsgNoData               ServerMessageType = 'n'
 	ServerMsgParameterDescription ServerMessageType = 't'
 	ServerMsgParameterStatus      ServerMessageType = 'S'

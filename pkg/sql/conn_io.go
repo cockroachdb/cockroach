@@ -685,6 +685,10 @@ type RestrictedCommandResult interface {
 	// This gets flushed only when the CommandResult is closed.
 	AppendParamStatusUpdate(string, string)
 
+	// AppendNotice appends a notice to the result.
+	// This gets flushed only when the CommandResult is closed.
+	AppendNotice(noticeErr error)
+
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
 	//
@@ -869,6 +873,11 @@ func (r *bufferedCommandResult) SetColumns(_ context.Context, cols sqlbase.Resul
 
 // AppendParamStatusUpdate is part of the RestrictedCommandResult interface.
 func (r *bufferedCommandResult) AppendParamStatusUpdate(key string, val string) {
+	panic("unimplemented")
+}
+
+// AppendNotice is part of the RestrictedCommandResult interface.
+func (r *bufferedCommandResult) AppendNotice(noticeErr error) {
 	panic("unimplemented")
 }
 
