@@ -453,8 +453,6 @@ func runTestsWithoutAllNullsInjection(
 func runTestsWithFn(
 	t *testing.T, tups []tuples, typs [][]coltypes.T, test func(t *testing.T, inputs []Operator),
 ) {
-	rng, _ := randutil.NewPseudoRand()
-
 	// Run tests over batchSizes of 1, (sometimes) a batch size that is small but
 	// greater than 1, and a full coldata.BatchSize().
 	batchSizes := make([]int, 0, 3)
@@ -475,6 +473,7 @@ func runTestsWithFn(
 						if typs != nil {
 							inputTypes = typs[i]
 						}
+						rng, _ := randutil.NewPseudoRand()
 						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, inputTypes)
 					}
 				} else {
