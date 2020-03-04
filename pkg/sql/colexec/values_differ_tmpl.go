@@ -11,7 +11,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for tuples_differ.eg.go. It's formatted
+// This file is the execgen template for values_differ.eg.go. It's formatted
 // in a special way, so it's both valid Go and a valid text/template input.
 // This permits editing this file with editor support.
 //
@@ -21,16 +21,16 @@ package colexec
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/pkg/errors"
 )
 
 // {{/*
@@ -63,29 +63,35 @@ func _ASSIGN_NE(_, _, _ string) bool {
 
 // */}}
 
-// tuplesDiffer takes in two ColVecs as well as tuple indices to check whether
-// the tuples differ.
-func tuplesDiffer(
-	t coltypes.T,
-	aColVec coldata.Vec,
-	aTupleIdx int,
-	bColVec coldata.Vec,
-	bTupleIdx int,
-	differ *bool,
-) error {
+// valuesDiffer takes in two ColVecs as well as values indices to check whether
+// the values differ. This function pays attention to NULLs, and two NULL
+// values do *not* differ.
+func valuesDiffer(
+	t coltypes.T, aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int,
+) bool {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
 		aCol := aColVec._TemplateType()
 		bCol := bColVec._TemplateType()
+		aNulls := aColVec.Nulls()
+		bNulls := bColVec.Nulls()
+		aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
+		bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
+		if aNull && bNull {
+			return false
+		} else if aNull || bNull {
+			return true
+		}
+		arg1 := execgen.UNSAFEGET(aCol, aValueIdx)
+		arg2 := execgen.UNSAFEGET(bCol, bValueIdx)
 		var unique bool
-		arg1 := execgen.UNSAFEGET(aCol, aTupleIdx)
-		arg2 := execgen.UNSAFEGET(bCol, bTupleIdx)
 		_ASSIGN_NE(unique, arg1, arg2)
-		*differ = *differ || unique
-		return nil
+		return unique
 	// {{end}}
 	default:
-		return errors.Errorf("unsupported tuplesDiffer type %s", t)
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported valuesDiffer type %s", t))
+		// This code is unreachable, but the compiler cannot infer that.
+		return false
 	}
 }

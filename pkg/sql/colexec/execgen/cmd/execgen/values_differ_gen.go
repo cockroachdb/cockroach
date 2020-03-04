@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func genTuplesDiffer(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/tuples_differ_tmpl.go")
+func genValuesDiffer(wr io.Writer) error {
+	d, err := ioutil.ReadFile("pkg/sql/colexec/values_differ_tmpl.go")
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func genTuplesDiffer(wr io.Writer) error {
 	s = replaceManipulationFuncs(".LTyp", s)
 
 	// Now, generate the op, from the template.
-	tmpl, err := template.New("tuples_differ").Parse(s)
+	tmpl, err := template.New("values_differ").Parse(s)
 	if err != nil {
 		return err
 	}
@@ -47,5 +47,5 @@ func genTuplesDiffer(wr io.Writer) error {
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genTuplesDiffer, "tuples_differ.eg.go")
+	registerGenerator(genValuesDiffer, "values_differ.eg.go")
 }
