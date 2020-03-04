@@ -147,6 +147,7 @@ func buildStringSet(ss ...string) map[string]struct{} {
 }
 
 var (
+	emptyString = tree.NewDString("")
 	// information_schema was defined before the BOOLEAN data type was added to
 	// the SQL specification. Because of this, boolean values are represented as
 	// STRINGs. The BOOLEAN data type should NEVER be used in information_schema
