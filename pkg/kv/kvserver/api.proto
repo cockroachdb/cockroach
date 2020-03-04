@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage;
-option go_package = "storage";
+package cockroach.kv.kvserver;
+option go_package = "kvserver";
 
 import "roachpb/internal_raft.proto";
 import "storage/enginepb/mvcc.proto";

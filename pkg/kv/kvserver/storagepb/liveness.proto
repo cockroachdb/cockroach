@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage;
+package cockroach.kv.kvserver.storagepb;
 option go_package = "storagepb";
 
 import "util/hlc/legacy_timestamp.proto";

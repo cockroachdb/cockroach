@@ -438,8 +438,8 @@ message LivenessRequest {
 
 // LivenessResponse contains the liveness status of each node on the cluster.
 message LivenessResponse {
-  repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
-  map<int32, cockroach.storage.NodeLivenessStatus> statuses = 2 [
+  repeated cockroach.kv.kvserver.storagepb.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+  map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> statuses = 2 [
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
@@ -526,7 +526,7 @@ message RangeLogResponse {
     string details = 6;
   }
   message Event {
-    storage.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
+    cockroach.kv.kvserver.storagepb.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
     PrettyInfo pretty_info = 2 [(gogoproto.nullable) = false];
   }
   reserved 1; // Previously used.
