@@ -387,6 +387,8 @@ var DefaultCancelInterval = base.DefaultTxnHeartbeatInterval
 // Registry.Start has been called will not have any effect.
 var DefaultAdoptInterval = 30 * time.Second
 
+var maxAdoptionsPerLoop = 10
+
 // gcInterval is how often we check for and delete job records older than the
 // retention limit.
 const gcInterval = 1 * time.Hour
@@ -932,6 +934,8 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 	if log.V(3) {
 		log.Infof(ctx, "evaluating %d jobs for adoption", len(rows))
 	}
+
+	var adopted int
 	for _, row := range rows {
 		id := (*int64)(row[0].(*tree.DInt))
 
@@ -1081,8 +1085,11 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			close(resultsCh)
 		}()
 
-		// Only adopt one job per turn to allow other nodes their fair share.
-		break
+		adopted++
+		if adopted >= maxAdoptionsPerLoop {
+			// Leave excess jobs for other nodes to get their fair share.
+			break
+		}
 	}
 
 	return nil
