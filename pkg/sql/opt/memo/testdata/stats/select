@@ -1514,7 +1514,7 @@ SELECT * FROM nation WHERE n_name = 'FRANCE' OR n_name = 'GERMANY'
 ----
 select
  ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
- ├── stats: [rows=333333.333, distinct(2)=2, null(2)=0]
+ ├── stats: [rows=1000000, distinct(2)=2, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan nation
@@ -1523,7 +1523,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
-      └── (n_name:2 = 'FRANCE') OR (n_name:2 = 'GERMANY') [type=bool, outer=(2), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+      └── (n_name:2 = 'FRANCE') OR (n_name:2 = 'GERMANY') [type=bool, outer=(2), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]
 
 opt
 SELECT * FROM nation WHERE (n_name = 'FRANCE' AND neighbor = 'GERMANY') OR (n_name = 'GERMANY' AND neighbor = 'FRANCE')

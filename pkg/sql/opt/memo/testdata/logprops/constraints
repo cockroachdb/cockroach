@@ -1219,3 +1219,82 @@ select
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'' - ])]
            ├── variable: v:3 [type=string]
            └── const: '.*' [type=string]
+
+# We can determine that the constraint set is tight when there is a single
+# variable and tight constraints are combined with OR.
+opt
+SELECT * FROM a WHERE x <= 5 OR x = 10 OR x = 15
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── prune: (2)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── or [type=bool, outer=(1), constraints=(/1: (/NULL - /5] [/10 - /10] [/15 - /15]; tight)]
+           ├── or [type=bool]
+           │    ├── le [type=bool]
+           │    │    ├── variable: x:1 [type=int]
+           │    │    └── const: 5 [type=int]
+           │    └── eq [type=bool]
+           │         ├── variable: x:1 [type=int]
+           │         └── const: 10 [type=int]
+           └── eq [type=bool]
+                ├── variable: x:1 [type=int]
+                └── const: 15 [type=int]
+
+# The constraint set is also tight when each side has a single constraint with
+# matching columns.
+opt
+SELECT * FROM a WHERE (x, y) < (1, 2) OR (x, y) > (3, 4)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── or [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1] [/3/5 - ]; tight)]
+           ├── lt [type=bool]
+           │    ├── tuple [type=tuple{int, int}]
+           │    │    ├── variable: x:1 [type=int]
+           │    │    └── variable: y:2 [type=int]
+           │    └── tuple [type=tuple{int, int}]
+           │         ├── const: 1 [type=int]
+           │         └── const: 2 [type=int]
+           └── gt [type=bool]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── variable: x:1 [type=int]
+                │    └── variable: y:2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 3 [type=int]
+                     └── const: 4 [type=int]
+
+
+# The constraint set is not tight if there are multiple constraints with
+# different variables.
+opt
+SELECT * FROM a WHERE (x > 1 AND y > 10) OR (x < 5 AND y < 50)
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── or [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── and [type=bool]
+           │    ├── gt [type=bool]
+           │    │    ├── variable: x:1 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    └── gt [type=bool]
+           │         ├── variable: y:2 [type=int]
+           │         └── const: 10 [type=int]
+           └── and [type=bool]
+                ├── lt [type=bool]
+                │    ├── variable: x:1 [type=int]
+                │    └── const: 5 [type=int]
+                └── lt [type=bool]
+                     ├── variable: y:2 [type=int]
+                     └── const: 50 [type=int]
