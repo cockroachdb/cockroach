@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage.storagepb;
+package cockroach.kv.kvserver.storagepb;
 option go_package = "storagepb";
 
 import "roachpb/api.proto";
@@ -17,7 +17,7 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
-import "storage/storagepb/state.proto";
+import "kv/kvserver/storagepb/state.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
@@ -123,7 +123,7 @@ message ReplicatedEvalResult {
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
   // with additional side effects (for instance on a descriptor update).
-  storage.storagepb.ReplicaState state = 2;
+  kv.kvserver.storagepb.ReplicaState state = 2;
   Split split = 3;
   Merge merge = 4;
   ComputeChecksum compute_checksum = 21;

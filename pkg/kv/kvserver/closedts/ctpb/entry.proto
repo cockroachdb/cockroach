@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage.ctupdate;
+package cockroach.kv.kvserver.ctupdate;
 option go_package = "ctpb";
 
 import "gogoproto/gogo.proto";

@@ -13,7 +13,7 @@ package cockroach.storage;
 option go_package = "storagepb";
 
 import "roachpb/data.proto";
-import "storage/storagepb/liveness.proto";
+import "kv/kvserver/storagepb/liveness.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";

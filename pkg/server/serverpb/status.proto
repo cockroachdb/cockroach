@@ -23,9 +23,9 @@ import "server/status/statuspb/status.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
-import "storage/storagepb/lease_status.proto";
-import "storage/storagepb/state.proto";
-import "storage/storagepb/liveness.proto";
+import "kv/kvserver/storagepb/lease_status.proto";
+import "kv/kvserver/storagepb/state.proto";
+import "kv/kvserver/storagepb/liveness.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
@@ -185,7 +185,7 @@ message PrettySpan {
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
-  storage.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
+  kv.kvserver.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
   int32 source_node_id = 5 [
     (gogoproto.customname) = "SourceNodeID",
     (gogoproto.casttype) =
@@ -200,8 +200,8 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
-  storage.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
-  storage.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
+  kv.kvserver.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
+  kv.kvserver.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
   storage.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
