@@ -520,7 +520,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 	b.initResult(1, 1, notRaw, nil)
 }
 
-func (b *Batch) scan(s, e interface{}, isReverse bool) {
+func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -532,9 +532,9 @@ func (b *Batch) scan(s, e interface{}, isReverse bool) {
 		return
 	}
 	if !isReverse {
-		b.appendReqs(roachpb.NewScan(begin, end))
+		b.appendReqs(roachpb.NewScan(begin, end, forUpdate))
 	} else {
-		b.appendReqs(roachpb.NewReverseScan(begin, end))
+		b.appendReqs(roachpb.NewReverseScan(begin, end, forUpdate))
 	}
 	b.initResult(1, 0, notRaw, nil)
 }
@@ -542,12 +542,24 @@ func (b *Batch) scan(s, e interface{}, isReverse bool) {
 // Scan retrieves the key/values between begin (inclusive) and end (exclusive) in
 // ascending order.
 //
-// A new result will be appended to the batch which will contain  "rows" (each
+// A new result will be appended to the batch which will contain "rows" (each
 // row is a key/value pair) and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Scan(s, e interface{}) {
-	b.scan(s, e, false)
+	b.scan(s, e, false /* isReverse */, false /* forUpdate */)
+}
+
+// ScanForUpdate retrieves the key/values between begin (inclusive) and end
+// (exclusive) in ascending order. Unreplicated, exclusive locks are acquired on
+// each of the returned keys.
+//
+// A new result will be appended to the batch which will contain "rows" (each
+// row is a key/value pair) and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string.
+func (b *Batch) ScanForUpdate(s, e interface{}) {
+	b.scan(s, e, false /* isReverse */, true /* forUpdate */)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -558,7 +570,19 @@ func (b *Batch) Scan(s, e interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) ReverseScan(s, e interface{}) {
-	b.scan(s, e, true)
+	b.scan(s, e, true /* isReverse */, false /* forUpdate */)
+}
+
+// ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
+// (exclusive) in descending order. Unreplicated, exclusive locks are acquired
+// on each of the returned keys.
+//
+// A new result will be appended to the batch which will contain "rows" (each
+// "row" is a key/value pair) and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string.
+func (b *Batch) ReverseScanForUpdate(s, e interface{}) {
+	b.scan(s, e, true /* isReverse */, true /* forUpdate */)
 }
 
 // Del deletes one or more keys.

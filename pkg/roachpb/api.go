@@ -996,26 +996,37 @@ func NewDeleteRange(startKey, endKey Key, returnKeys bool) Request {
 	}
 }
 
-// NewScan returns a Request initialized to scan from start to end keys
-// with max results.
-func NewScan(key, endKey Key) Request {
+// NewScan returns a Request initialized to scan from start to end keys.
+// If forUpdate is true, unreplicated, exclusive locks are acquired on
+// each of the resulting keys.
+func NewScan(key, endKey Key, forUpdate bool) Request {
 	return &ScanRequest{
 		RequestHeader: RequestHeader{
 			Key:    key,
 			EndKey: endKey,
 		},
+		KeyLocking: scanLockStrength(forUpdate),
 	}
 }
 
-// NewReverseScan returns a Request initialized to reverse scan from end to
-// start keys with max results.
-func NewReverseScan(key, endKey Key) Request {
+// NewReverseScan returns a Request initialized to reverse scan from end.
+// If forUpdate is true, unreplicated, exclusive locks are acquired on
+// each of the resulting keys.
+func NewReverseScan(key, endKey Key, forUpdate bool) Request {
 	return &ReverseScanRequest{
 		RequestHeader: RequestHeader{
 			Key:    key,
 			EndKey: endKey,
 		},
+		KeyLocking: scanLockStrength(forUpdate),
 	}
+}
+
+func scanLockStrength(forUpdate bool) lock.Strength {
+	if forUpdate {
+		return lock.Exclusive
+	}
+	return lock.None
 }
 
 func (*GetRequest) flags() int {
@@ -1091,9 +1102,20 @@ func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
 // they clear all MVCC versions above their target time.
 func (*RevertRangeRequest) flags() int { return isWrite | isRange }
 
-func (*ScanRequest) flags() int { return isRead | isRange | isTxn | updatesTSCache | needsRefresh }
-func (*ReverseScanRequest) flags() int {
-	return isRead | isRange | isReverse | isTxn | updatesTSCache | needsRefresh
+func (sr *ScanRequest) flags() int {
+	maybeLocking := 0
+	if sr.KeyLocking != lock.None {
+		maybeLocking = isLocking
+	}
+	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh
+}
+
+func (rsr *ReverseScanRequest) flags() int {
+	maybeLocking := 0
+	if rsr.KeyLocking != lock.None {
+		maybeLocking = isLocking
+	}
+	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh
 }
 
 // EndTxn updates the timestamp cache to prevent replays.
@@ -1320,7 +1342,6 @@ func (rir *ResolveIntentRequest) AsLockUpdate() LockUpdate {
 		Txn:            rir.IntentTxn,
 		Status:         rir.Status,
 		IgnoredSeqNums: rir.IgnoredSeqNums,
-		Durability:     lock.Replicated,
 	}
 }
 
@@ -1332,6 +1353,5 @@ func (rirr *ResolveIntentRangeRequest) AsLockUpdate() LockUpdate {
 		Txn:            rirr.IntentTxn,
 		Status:         rirr.Status,
 		IgnoredSeqNums: rirr.IgnoredSeqNums,
-		Durability:     lock.Replicated,
 	}
 }
