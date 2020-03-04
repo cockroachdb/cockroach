@@ -419,6 +419,15 @@ func TestEnginePutGetDelete(t *testing.T) {
 	}
 }
 
+func addMergeTimestamp(t *testing.T, data []byte, ts int64) []byte {
+	var v enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(data, &v); err != nil {
+		t.Fatal(err)
+	}
+	v.MergeTimestamp = &hlc.LegacyTimestamp{WallTime: ts}
+	return mustMarshal(&v)
+}
+
 // TestEngineMerge tests that the passing through of engine merge operations
 // to the goMerge function works as expected. The semantics are tested more
 // exhaustively in the merge tests themselves.
@@ -447,28 +456,28 @@ func TestEngineMerge(t *testing.T) {
 				{
 					mvccKey("timeseriesmerged"),
 					[][]byte{
-						timeSeriesRow(testtime, 1000, []tsSample{
+						addMergeTimestamp(t, timeSeriesRow(testtime, 1000, []tsSample{
 							{1, 1, 5, 5, 5},
-						}...),
+						}...), 27),
 						timeSeriesRow(testtime, 1000, []tsSample{
 							{2, 1, 5, 5, 5},
 							{1, 2, 10, 7, 3},
 						}...),
-						timeSeriesRow(testtime, 1000, []tsSample{
+						addMergeTimestamp(t, timeSeriesRow(testtime, 1000, []tsSample{
 							{10, 1, 5, 5, 5},
-						}...),
+						}...), 53),
 						timeSeriesRow(testtime, 1000, []tsSample{
 							{5, 1, 5, 5, 5},
 							{3, 1, 5, 5, 5},
 						}...),
 					},
-					timeSeriesRow(testtime, 1000, []tsSample{
+					addMergeTimestamp(t, timeSeriesRow(testtime, 1000, []tsSample{
 						{1, 2, 10, 7, 3},
 						{2, 1, 5, 5, 5},
 						{3, 1, 5, 5, 5},
 						{5, 1, 5, 5, 5},
 						{10, 1, 5, 5, 5},
-					}...),
+					}...), 27),
 				},
 			}
 			for _, tc := range testcases {
