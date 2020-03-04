@@ -42,7 +42,7 @@ ifneq "$(TYPE)" ""
 $(error Make no longer understands TYPE. Use 'build/builder.sh mkrelease $(subst release-,,$(TYPE))' instead)
 endif
 
-## Which package to run tests against, e.g. "./pkg/storage".
+## Which package to run tests against, e.g. "./pkg/foo".
 PKG := ./pkg/...
 
 ## Tests to run for use with `make test` or `make check-libroach`.
@@ -509,7 +509,7 @@ native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)$(if
 CGO_PKGS := \
 	pkg/cli \
 	pkg/server/status \
-	pkg/storage/engine \
+	pkg/storage \
 	pkg/ccl/storageccl/engineccl \
 	pkg/ccl/gssapiccl \
 	vendor/github.com/knz/go-libedit/unix
