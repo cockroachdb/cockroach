@@ -249,16 +249,20 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 
 // IsDefaultFrame returns whether a frame equivalent to the default frame
 // is being used (default is RANGE UNBOUNDED PRECEDING).
-func (wfr *WindowFrameRun) IsDefaultFrame() bool {
-	if wfr.Frame == nil {
+func (f *WindowFrame) IsDefaultFrame() bool {
+	if f == nil {
 		return true
 	}
-	if wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding {
-		return wfr.DefaultFrameExclusion() &&
-			wfr.Frame.Mode == RANGE &&
-			(wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow)
+	if f.Bounds.StartBound.BoundType == UnboundedPreceding {
+		return f.DefaultFrameExclusion() && f.Mode == RANGE &&
+			(f.Bounds.EndBound == nil || f.Bounds.EndBound.BoundType == CurrentRow)
 	}
 	return false
+}
+
+// DefaultFrameExclusion returns true if optional frame exclusion is omitted.
+func (f *WindowFrame) DefaultFrameExclusion() bool {
+	return f == nil || f.Exclusion == NoExclusion
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
@@ -436,7 +440,7 @@ func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *EvalContext) 
 		return 0, err
 	}
 	size := frameEndIdx - frameStartIdx
-	if !wfr.noFilter() || !wfr.DefaultFrameExclusion() {
+	if !wfr.noFilter() || !wfr.Frame.DefaultFrameExclusion() {
 		size = 0
 		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
 			if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
@@ -527,7 +531,7 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 	// Note that we do not need to check whether a filter is present because
 	// application of the filter to a row does not depend on the position of the
 	// row or whether it is inside of the window frame.
-	if wfr.Frame == nil || !wfr.DefaultFrameExclusion() {
+	if wfr.Frame == nil || !wfr.Frame.DefaultFrameExclusion() {
 		return false
 	}
 	if wfr.Frame.Bounds.EndBound == nil {
@@ -576,15 +580,10 @@ func (wfr *WindowFrameRun) noFilter() bool {
 	return wfr.FilterColIdx == noFilterIdx
 }
 
-// DefaultFrameExclusion returns true if optional frame exclusion is omitted.
-func (wfr *WindowFrameRun) DefaultFrameExclusion() bool {
-	return wfr.Frame == nil || wfr.Frame.Exclusion == NoExclusion
-}
-
 // isRowExcluded returns whether the row at index idx should be excluded from
 // the window frame of the current row.
 func (wfr *WindowFrameRun) isRowExcluded(idx int) (bool, error) {
-	if wfr.DefaultFrameExclusion() {
+	if wfr.Frame.DefaultFrameExclusion() {
 		// By default, no rows are excluded.
 		return false, nil
 	}
