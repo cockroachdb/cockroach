@@ -30,8 +30,8 @@
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
-#include "roachpb/metadata.pb.h"
 #include "kv/kvserver/concurrency/lock/locking.pb.h"
+#include "roachpb/metadata.pb.h"
 #include "storage/enginepb/mvcc.pb.h"
 #include "storage/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"

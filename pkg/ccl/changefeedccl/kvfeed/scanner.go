@@ -107,7 +107,7 @@ func (p *scanRequestScanner) exportSpan(
 	for remaining := span; ; {
 		start := timeutil.Now()
 		b := txn.NewBatch()
-		r := roachpb.NewScan(remaining.Key, remaining.EndKey).(*roachpb.ScanRequest)
+		r := roachpb.NewScan(remaining.Key, remaining.EndKey, false /* forUpdate */).(*roachpb.ScanRequest)
 		r.ScanFormat = roachpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
 		// NB: We use a raw request rather than the Scan() method because we want

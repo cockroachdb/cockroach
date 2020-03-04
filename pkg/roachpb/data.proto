@@ -12,8 +12,8 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "roachpb/metadata.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
+import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";

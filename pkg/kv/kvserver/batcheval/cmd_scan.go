@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
@@ -34,46 +35,59 @@ func Scan(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ScanResponse)
 
-	var res storage.MVCCScanResult
+	var res result.Result
+	var scanRes storage.MVCCScanResult
 	var err error
 
 	opts := storage.MVCCScanOptions{
-		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:          h.Txn,
-		MaxKeys:      h.MaxSpanRequestKeys,
-		TargetBytes:  h.TargetBytes,
-		Reverse:      false,
+		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:              h.Txn,
+		MaxKeys:          h.MaxSpanRequestKeys,
+		TargetBytes:      h.TargetBytes,
+		FailOnMoreRecent: args.KeyLocking != lock.None,
+		Reverse:          false,
 	}
 
 	switch args.ScanFormat {
 	case roachpb.BATCH_RESPONSE:
-		res, err = storage.MVCCScanToBytes(
+		scanRes, err = storage.MVCCScanToBytes(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
-		reply.BatchResponses = res.KVData
+		reply.BatchResponses = scanRes.KVData
 	case roachpb.KEY_VALUES:
-		res, err = storage.MVCCScan(
+		scanRes, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
-		reply.Rows = res.KVs
+		reply.Rows = scanRes.KVs
 	default:
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}
 
-	reply.NumKeys = res.NumKeys
-	reply.NumBytes = res.NumBytes
+	reply.NumKeys = scanRes.NumKeys
+	reply.NumBytes = scanRes.NumBytes
 
-	if res.ResumeSpan != nil {
-		reply.ResumeSpan = res.ResumeSpan
+	if scanRes.ResumeSpan != nil {
+		reply.ResumeSpan = scanRes.ResumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
-		reply.IntentRows, err = CollectIntentRows(ctx, reader, cArgs, res.Intents)
+		reply.IntentRows, err = CollectIntentRows(ctx, reader, cArgs, scanRes.Intents)
+		if err != nil {
+			return result.Result{}, err
+		}
 	}
-	return result.FromEncounteredIntents(res.Intents), err
+
+	if args.KeyLocking != lock.None && h.Txn != nil {
+		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.ScanFormat, &scanRes)
+		if err != nil {
+			return result.Result{}, err
+		}
+	}
+	res.Local.EncounteredIntents = scanRes.Intents
+	return res, nil
 }
