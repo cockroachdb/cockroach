@@ -24,7 +24,7 @@ import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
 import InstructionsBox, { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 
-type Liveness = cockroach.storage.ILiveness;
+type Liveness = cockroach.kv.kvserver.storagepb.ILiveness;
 
 const BACK_BUTTON_OFFSET = 26;
 
