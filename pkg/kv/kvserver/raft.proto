@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto2";
-package cockroach.storage;
+package cockroach.kv.kvserver;
 option go_package = "storage";
 
 import "roachpb/errors.proto";
