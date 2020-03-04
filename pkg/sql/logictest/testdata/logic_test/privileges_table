@@ -169,10 +169,16 @@ REVOKE SELECT ON t FROM testuser
 user testuser
 
 statement ok
-GRANT ALL ON t TO bar
+GRANT INSERT ON t TO bar
 
 statement ok
-REVOKE ALL ON t FROM bar
+REVOKE INSERT ON t FROM bar
+
+statement error user testuser does not have ALL privilege on relation t
+GRANT ALL ON t TO bar
+
+statement error user testuser does not have SELECT privilege on relation t
+GRANT SELECT ON t TO bar
 
 statement ok
 INSERT INTO t VALUES (1, 1), (2, 2)

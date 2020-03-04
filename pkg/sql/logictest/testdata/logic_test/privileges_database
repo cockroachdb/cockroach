@@ -142,3 +142,19 @@ user testuser
 
 statement ok
 DROP DATABASE a CASCADE
+
+user root
+
+statement ok
+CREATE DATABASE d45697
+
+statement ok
+GRANT CREATE,GRANT ON DATABASE d45697 TO testuser
+
+user testuser
+
+statement ok
+GRANT CREATE ON DATABASE d45697 TO bar
+
+statement error user testuser does not have DROP privilege on database d45697
+GRANT DROP ON DATABASE d45697 TO bar
