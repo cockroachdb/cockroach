@@ -50,6 +50,8 @@ type SchemaResolver interface {
 
 var _ SchemaResolver = &planner{}
 
+var errNoPrimaryKey = errors.New("requested table does not have a primary key")
+
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
@@ -156,6 +158,14 @@ func resolveExistingObjectImpl(
 	}
 	if !goodType {
 		return nil, sqlbase.NewWrongObjectTypeError(tn, requiredTypeNames[requiredType])
+	}
+
+	// If the table does not have a primary key, return an error
+	// that the requested descriptor is invalid for use.
+	if !lookupFlags.AllowWithoutPrimaryKey &&
+		obj.TableDesc().IsTable() &&
+		!obj.TableDesc().HasPrimaryKey() {
+		return nil, errNoPrimaryKey
 	}
 
 	if lookupFlags.RequireMutable {
@@ -715,6 +725,29 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	}
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
 	return table, nil
+}
+
+// ResolveMutableTableDescriptorExAllowNoPrimaryKey performs the
+// same logic as ResolveMutableTableDescriptorEx but allows for
+// the resolved table to not have a primary key.
+func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
+	ctx context.Context,
+	name *tree.UnresolvedObjectName,
+	required bool,
+	requiredType ResolveRequiredType,
+) (*MutableTableDescriptor, error) {
+	tn := name.ToTableName()
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags:      tree.CommonLookupFlags{Required: required},
+		RequireMutable:         true,
+		AllowWithoutPrimaryKey: true,
+	}
+	desc, err := resolveExistingObjectImpl(ctx, p, &tn, lookupFlags, requiredType)
+	if err != nil || desc == nil {
+		return nil, err
+	}
+	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
+	return desc.(*MutableTableDescriptor), nil
 }
 
 // See ResolveUncachedTableDescriptor.

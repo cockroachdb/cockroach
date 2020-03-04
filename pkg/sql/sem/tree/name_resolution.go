@@ -544,8 +544,9 @@ type DatabaseListFlags struct {
 type ObjectLookupFlags struct {
 	CommonLookupFlags
 	// return a MutableTableDescriptor
-	RequireMutable bool
-	IncludeOffline bool
+	RequireMutable         bool
+	IncludeOffline         bool
+	AllowWithoutPrimaryKey bool
 }
 
 // ObjectLookupFlagsWithRequired returns a default ObjectLookupFlags object

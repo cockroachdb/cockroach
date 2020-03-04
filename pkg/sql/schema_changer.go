@@ -1953,6 +1953,21 @@ func (sc *SchemaChanger) reverseMutation(
 	return mutation, columns
 }
 
+// validateTablePrimaryKeys ensures that the table this schema changer
+// references has a primary key. This is to avoid usage of the DROP PRIMARY KEY
+// command without an ADD PRIMARY KEY command before the end of the transaction.
+func (sc *SchemaChanger) validateTablePrimaryKeys(ctx context.Context, txn *client.Txn) error {
+	table, err := sqlbase.GetMutableTableDescFromID(ctx, txn, sc.tableID)
+	if err != nil {
+		return err
+	}
+	if !table.HasPrimaryKey() {
+		return errors.Errorf(
+			"primary key of table %s dropped without subsequent addition of new primary key", table.Name)
+	}
+	return nil
+}
+
 // TestingSchemaChangerCollection is an exported (for testing) version of
 // schemaChangerCollection.
 // TODO(andrei): get rid of this type once we can have tests internal to the sql

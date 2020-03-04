@@ -428,7 +428,11 @@ message IndexDescriptor {
     [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexDescriptorEncodingType"];
 
   // Sharded, if it's not the zero value, describes how this index is sharded.
-  optional ShardedDescriptor sharded = 20 [(gogoproto.nullable) = false]; 
+  optional ShardedDescriptor sharded = 20 [(gogoproto.nullable) = false];
+
+  // Disabled is used by the DROP PRIMARY KEY command to mark
+  // that this index is disabled for further use.
+  optional bool disabled = 21 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
