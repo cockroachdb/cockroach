@@ -28,6 +28,12 @@ type windowFnTestCase struct {
 	windowerSpec execinfrapb.WindowerSpec
 }
 
+func (tc *windowFnTestCase) init() {
+	for i := range tc.windowerSpec.WindowFns {
+		tc.windowerSpec.WindowFns[i].FilterColIdx = noFilterIdx
+	}
+}
+
 func TestWindowFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -244,6 +250,7 @@ func TestWindowFunctions(t *testing.T) {
 		},
 	} {
 		runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []Operator) (Operator, error) {
+			tc.init()
 			ct := make([]types.T, len(tc.tuples[0]))
 			for i := range ct {
 				ct[i] = *types.Int

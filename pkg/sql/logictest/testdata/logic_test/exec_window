@@ -13,7 +13,8 @@ INSERT INTO t VALUES
 statement ok
 SET vectorize=experimental_always
 
-# We sort the output on all queries to get deterministic results.
+# We sort the output on all queries with row_number window function to get
+# deterministic results.
 query III
 SELECT a, b, row_number() OVER (ORDER BY a, b) FROM t ORDER BY a, b
 ----
@@ -38,50 +39,83 @@ SELECT a, b, row_number() OVER (PARTITION BY a, b) FROM t ORDER BY a, b
 1 1 1
 1 2 1
 
-query III
-SELECT a, b, rank() OVER () FROM t ORDER BY a, b
+query III rowsort
+SELECT a, b, rank() OVER () FROM t
 ----
 0 1 1
 0 2 1
 1 1 1
 1 2 1
 
-query III
-SELECT a, b, rank() OVER (ORDER BY a) FROM t ORDER BY a, b
+query III rowsort
+SELECT a, b, rank() OVER (ORDER BY a) FROM t
 ----
 0 1 1
 0 2 1
 1 1 3
 1 2 3
 
-query IIII
-SELECT a, b, c, rank() OVER (PARTITION BY a ORDER BY c) FROM t ORDER BY a, b
+query IIII rowsort
+SELECT a, b, c, rank() OVER (PARTITION BY a ORDER BY c) FROM t
 ----
 0 1 0 1
 0 2 2 2
 1 1 1 1
 1 2 3 2
 
-query III
-SELECT a, b, dense_rank() OVER () FROM t ORDER BY a, b
+query III rowsort
+SELECT a, b, dense_rank() OVER () FROM t
 ----
 0 1 1
 0 2 1
 1 1 1
 1 2 1
 
-query III
-SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t ORDER BY a, b
+query III rowsort
+SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t
 ----
 0 1 1
 0 2 1
 1 1 2
 1 2 2
 
-query IIII
-SELECT a, b, c, dense_rank() OVER (PARTITION BY a ORDER BY c) FROM t ORDER BY a, b
+query IIII rowsort
+SELECT a, b, c, dense_rank() OVER (PARTITION BY a ORDER BY c) FROM t
 ----
 0 1 0 1
 0 2 2 2
 1 1 1 1
 1 2 3 2
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS ()
+----
+0  1  1  1  0  1
+1  1  1  1  0  1
+0  2  1  1  0  1
+1  2  1  1  0  1
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a)
+----
+0  1  1  1  0  1
+0  2  1  1  0  1
+1  1  1  1  0  1
+1  2  1  1  0  1
+
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (ORDER BY a)
+----
+0  1  1  1  0                  0.5
+0  2  1  1  0                  0.5
+1  1  3  2  0.666666666666667  1
+1  2  3  2  0.666666666666667  1
+
+query IIIIRR rowsort
+SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a ORDER BY b)
+----
+0  1  1  1  0  0.5
+0  2  2  2  1  1
+1  1  1  1  0  0.5
+1  2  2  2  1  1
