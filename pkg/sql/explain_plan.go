@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -125,8 +127,11 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	return params.p.populateExplain(params, &e.explainer, e.run.results, e.plan, e.subqueryPlans, e.postqueryPlans,
-		e.stmtType)
+	return populateExplain(
+		params, &e.explainer, e.run.results,
+		e.plan, e.subqueryPlans, e.postqueryPlans,
+		e.stmtType,
+	)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
@@ -191,12 +196,10 @@ type explainer struct {
 	entries []explainEntry
 }
 
-var emptyString = tree.NewDString("")
-
 // populateExplain walks the plan and generates rows in a valuesNode.
 // The subquery plans, if any are known to the planner, are printed
 // at the bottom.
-func (p *planner) populateExplain(
+func populateExplain(
 	params runParams,
 	e *explainer,
 	v *valuesNode,
@@ -205,9 +208,8 @@ func (p *planner) populateExplain(
 	postqueryPlans []postquery,
 	stmtType tree.StatementType,
 ) error {
-	ctx := params.ctx
-	e.populateEntries(ctx, plan, subqueryPlans, postqueryPlans, explainSubqueryFmtFlags)
-
+	// Determine the "distributed" and "vectorized" values, which we will emit as
+	// special rows.
 	var isDistSQL, isVec bool
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	isDistSQL, _ = willDistributePlan(distSQLPlanner, plan, params)
@@ -245,104 +247,41 @@ func (p *planner) populateExplain(
 		}
 	}
 
-	if err := appendExecutionDetails(ctx, v, e.showMetadata, isDistSQL, isVec); err != nil {
-		return err
-	}
-
-	tp := treeprinter.New()
-	// n keeps track of the current node on each level.
-	n := []treeprinter.Node{tp}
-
-	for _, entry := range e.entries {
-		if entry.plan != nil {
-			n = append(n[:entry.level+1], n[entry.level].Child(entry.node))
-		} else {
-			tp.AddEmptyLine()
-		}
-	}
-
-	treeRows := tp.FormattedRows()
-
-	for i, entry := range e.entries {
+	emitRow := func(
+		treeStr string, level int, node, field, fieldVal, columns, ordering string,
+	) error {
 		var row tree.Datums
 		if !e.showMetadata {
 			row = tree.Datums{
-				tree.NewDString(treeRows[i]),    // Tree
-				tree.NewDString(entry.field),    // Field
-				tree.NewDString(entry.fieldVal), // Description
+				tree.NewDString(treeStr),  // Tree
+				tree.NewDString(field),    // Field
+				tree.NewDString(fieldVal), // Description
 			}
 		} else {
 			row = tree.Datums{
-				tree.NewDString(treeRows[i]),         // Tree
-				tree.NewDInt(tree.DInt(entry.level)), // Level
-				tree.NewDString(entry.node),          // Type
-				tree.NewDString(entry.field),         // Field
-				tree.NewDString(entry.fieldVal),      // Description
-				emptyString,                          // Columns
-				emptyString,                          // Ordering
-			}
-			if entry.plan != nil {
-				cols := planColumns(entry.plan)
-				// Columns metadata.
-				row[5] = tree.NewDString(formatColumns(cols, e.showTypes))
-				// Ordering metadata.
-				row[6] = tree.NewDString(formatOrdering(planReqOrdering(entry.plan), cols))
+				tree.NewDString(treeStr),       // Tree
+				tree.NewDInt(tree.DInt(level)), // Level
+				tree.NewDString(node),          // Type
+				tree.NewDString(field),         // Field
+				tree.NewDString(fieldVal),      // Description
+				tree.NewDString(columns),       // Columns
+				tree.NewDString(ordering),      // Ordering
 			}
 		}
-		if _, err := v.rows.AddRow(ctx, row); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func appendExecutionDetails(
-	ctx context.Context, v *valuesNode, showMetadata, isDistSQL, isVec bool,
-) error {
-	var distSQLRow, vecRow tree.Datums
-	distSQLFieldName := tree.NewDString("distributed")
-	distSQLValue := tree.NewDString(fmt.Sprintf("%t", isDistSQL))
-	vecFieldName := tree.NewDString("vectorized")
-	vecValue := tree.NewDString(fmt.Sprintf("%t", isVec))
-	if !showMetadata {
-		distSQLRow = tree.Datums{
-			emptyString,      // Tree
-			distSQLFieldName, // Field
-			distSQLValue,     // Description
-		}
-		vecRow = tree.Datums{
-			emptyString,  // Tree
-			vecFieldName, // Field
-			vecValue,     // Description
-		}
-	} else {
-		distSQLRow = tree.Datums{
-			emptyString,      // Tree
-			tree.NewDInt(0),  // Level
-			emptyString,      // Type
-			distSQLFieldName, // Field
-			distSQLValue,     // Description
-			emptyString,      // Columns
-			emptyString,      // Ordering
-		}
-		vecRow = tree.Datums{
-			emptyString,     // Tree
-			tree.NewDInt(0), // Level
-			emptyString,     // Type
-			vecFieldName,    // Field
-			vecValue,        // Description
-			emptyString,     // Columns
-			emptyString,     // Ordering
-		}
-	}
-	if _, err := v.rows.AddRow(ctx, distSQLRow); err != nil {
+		_, err := v.rows.AddRow(params.ctx, row)
 		return err
 	}
-	if _, err := v.rows.AddRow(ctx, vecRow); err != nil {
+
+	// First, emit the "distributed" and "vectorized" information rows.
+	if err := emitRow("", 0, "", "distributed", fmt.Sprintf("%t", isDistSQL), "", ""); err != nil {
 		return err
 	}
-	return nil
+	if err := emitRow("", 0, "", "vectorized", fmt.Sprintf("%t", isVec), "", ""); err != nil {
+		return err
+	}
+
+	e.populateEntries(params.ctx, plan, subqueryPlans, postqueryPlans, explainSubqueryFmtFlags)
+	return e.emitRows(emitRow)
 }
 
 func (e *explainer) populateEntries(
@@ -353,11 +292,22 @@ func (e *explainer) populateEntries(
 	subqueryFmtFlags tree.FmtFlags,
 ) {
 	e.entries = nil
-	observer := e.observer()
-	_ = populateEntriesForObserver(ctx, plan, subqueryPlans, postqueryPlans, observer, false /* returnError */, subqueryFmtFlags)
+	observer := planObserver{
+		enterNode: e.enterNode,
+		expr:      e.expr,
+		attr:      e.attr,
+		spans:     e.spans,
+		leaveNode: e.leaveNode,
+	}
+	// observePlan never returns an error when returnError is false.
+	_ = observePlan(
+		ctx, plan, subqueryPlans, postqueryPlans, observer, false /* returnError */, subqueryFmtFlags,
+	)
 }
 
-func populateEntriesForObserver(
+// observePlan walks the plan tree, executing the appropriate functions in the
+// planObserver.
+func observePlan(
 	ctx context.Context,
 	plan planNode,
 	subqueryPlans []subquery,
@@ -431,6 +381,41 @@ func populateEntriesForObserver(
 	return nil
 }
 
+// emitExplainRowFn is used to emit an EXPLAIN row.
+type emitExplainRowFn func(treeStr string, level int, node, field, fieldVal, columns, ordering string) error
+
+// emitRows calls the given function for each populated entry.
+func (e *explainer) emitRows(emitRow emitExplainRowFn) error {
+	tp := treeprinter.New()
+	// n keeps track of the current node on each level.
+	n := []treeprinter.Node{tp}
+
+	for _, entry := range e.entries {
+		if entry.plan != nil {
+			n = append(n[:entry.level+1], n[entry.level].Child(entry.node))
+		} else {
+			tp.AddEmptyLine()
+		}
+	}
+
+	treeRows := tp.FormattedRows()
+
+	for i, entry := range e.entries {
+		var columns, ordering string
+		if e.showMetadata && entry.plan != nil {
+			cols := planColumns(entry.plan)
+			columns = formatColumns(cols, e.showTypes)
+			ordering = formatOrdering(planReqOrdering(entry.plan), cols)
+		}
+		if err := emitRow(
+			treeRows[i], entry.level, entry.node, entry.field, entry.fieldVal, columns, ordering,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // planToString uses explain() to build a string representation of the planNode.
 func planToString(
 	ctx context.Context, plan planNode, subqueryPlans []subquery, postqueryPlans []postquery,
@@ -442,35 +427,29 @@ func planToString(
 		},
 		fmtFlags: tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true),
 	}
-	e.populateEntries(ctx, plan, subqueryPlans, postqueryPlans, explainSubqueryFmtFlags)
+
 	var buf bytes.Buffer
-	for _, e := range e.entries {
-		field := e.field
-		if field != "" {
-			field = "." + field
-		}
-		if plan == nil {
-			fmt.Fprintf(&buf, "%d %s%s %s\n", e.level, e.node, field, e.fieldVal)
-		} else {
-			cols := planColumns(plan)
-			fmt.Fprintf(
-				&buf, "%d %s%s %s %s %s\n", e.level, e.node, field, e.fieldVal,
-				formatColumns(cols, true),
-				formatOrdering(planReqOrdering(plan), cols),
-			)
-		}
+	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+
+	emitRow := func(
+		treeStr string, level int, node, field, fieldVal, columns, ordering string,
+	) error {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", treeStr, field, fieldVal, columns, ordering)
+		return nil
+	}
+
+	e.populateEntries(ctx, plan, subqueryPlans, postqueryPlans, explainSubqueryFmtFlags)
+	// Our emitRow function never returns errors, so neither will emitRows().
+	_ = e.emitRows(emitRow)
+	_ = tw.Flush()
+
+	// Remove trailing whitespace from each line.
+	result := strings.TrimRight(buf.String(), "\n")
+	buf.Reset()
+	for _, line := range strings.Split(result, "\n") {
+		fmt.Fprintf(&buf, "%s\n", strings.TrimRight(line, " "))
 	}
 	return buf.String()
-}
-
-func (e *explainer) observer() planObserver {
-	return planObserver{
-		enterNode: e.enterNode,
-		expr:      e.expr,
-		attr:      e.attr,
-		spans:     e.spans,
-		leaveNode: e.leaveNode,
-	}
 }
 
 // spans implements the planObserver interface.
