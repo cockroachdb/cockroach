@@ -447,7 +447,7 @@ count                ·                 ·
 ·                    locking strength  for update
 
 query TTT
-EXPLAIN UPDATE kv SET v=k WHERE k > 1 AND k < 10;
+EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
 ·                    distributed       false
 ·                    vectorized        false
@@ -482,6 +482,55 @@ count                ·                 ·
 ·                    locking strength  for update
 
 statement ok
+CREATE TABLE kv3 (
+  k    INT PRIMARY KEY,
+  v    INT,
+  meta INT,
+  INDEX (v),
+  FAMILY (k, v, meta)
+)
+
+query TTT
+EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
+----
+·                          distributed       false
+·                          vectorized        false
+count                      ·                 ·
+ └── update                ·                 ·
+      │                    table             kv3
+      │                    set               k
+      │                    strategy          updater
+      │                    auto commit       ·
+      └── render           ·                 ·
+           └── index-join  ·                 ·
+                │          table             kv3@primary
+                │          key columns       k
+                └── scan   ·                 ·
+·                          table             kv3@kv3_v_idx
+·                          spans             /10-/11
+·                          locking strength  for update
+
+query TTT
+EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
+----
+·                          distributed       false
+·                          vectorized        false
+count                      ·                 ·
+ └── update                ·                 ·
+      │                    table             kv3
+      │                    set               k
+      │                    strategy          updater
+      │                    auto commit       ·
+      └── render           ·                 ·
+           └── index-join  ·                 ·
+                │          table             kv3@primary
+                │          key columns       k
+                └── scan   ·                 ·
+·                          table             kv3@kv3_v_idx
+·                          spans             /2-/10
+·                          locking strength  for update
+
+statement ok
 SET enable_implicit_select_for_update = false
 
 query TTT
@@ -501,7 +550,7 @@ count                ·            ·
 ·                    spans        /3-/3/#
 
 query TTT
-EXPLAIN UPDATE kv SET v=k WHERE k > 1 AND k < 10;
+EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
 ·                    distributed  false
 ·                    vectorized   false
@@ -570,6 +619,44 @@ count                ·            ·
 ·                    table        kv@primary
 ·                    spans        -/2/#
 ·                    limit        1
+
+query TTT
+EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
+----
+·                          distributed  false
+·                          vectorized   false
+count                      ·            ·
+ └── update                ·            ·
+      │                    table        kv3
+      │                    set          k
+      │                    strategy     updater
+      │                    auto commit  ·
+      └── render           ·            ·
+           └── index-join  ·            ·
+                │          table        kv3@primary
+                │          key columns  k
+                └── scan   ·            ·
+·                          table        kv3@kv3_v_idx
+·                          spans        /10-/11
+
+query TTT
+EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
+----
+·                          distributed  false
+·                          vectorized   false
+count                      ·            ·
+ └── update                ·            ·
+      │                    table        kv3
+      │                    set          k
+      │                    strategy     updater
+      │                    auto commit  ·
+      └── render           ·            ·
+           └── index-join  ·            ·
+                │          table        kv3@primary
+                │          key columns  k
+                └── scan   ·            ·
+·                          table        kv3@kv3_v_idx
+·                          spans        /2-/10
 
 # Update single column family.
 query TTT
