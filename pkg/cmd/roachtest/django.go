@@ -117,7 +117,7 @@ func registerDjango(r *testRegistry) {
 		}
 
 		djangoCockroachDBLatestTag, err := repeatGetLatestTag(
-			ctx, c, "django", "django", djangoCockroachDBReleaseTagRegex,
+			ctx, c, "cockroachdb", "django-cockroachdb", djangoCockroachDBReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -206,7 +206,7 @@ func registerDjango(r *testRegistry) {
 		MinVersion: "v19.2.0",
 		Name:       "django",
 		Owner:      OwnerAppDev,
-		Cluster:    makeClusterSpec(1, cpu(8)),
+		Cluster:    makeClusterSpec(1, cpu(16)),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runDjango(ctx, t, c)
