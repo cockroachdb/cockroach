@@ -91,7 +91,7 @@ func TestQuotaPoolContextCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	go func() {
 		_, canceledErr := qp.Acquire(ctx, 1)
 		errCh <- canceledErr
