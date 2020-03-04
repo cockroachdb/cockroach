@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -745,11 +746,12 @@ func (r *Registry) stepThroughStateMachine(
 			errorMsg := fmt.Sprintf("job %d: resuming with non-nil error: %v", *job.ID(), jobErr)
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
-		err := resumer.Resume(ctx, phs, resultsCh)
+		resumeCtx := logtags.AddTag(ctx, "job", *job.ID())
+		err := resumer.Resume(resumeCtx, phs, resultsCh)
 		if err == nil {
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusSucceeded, nil)
 		}
-		if ctx.Err() != nil {
+		if resumeCtx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
@@ -802,7 +804,8 @@ func (r *Registry) stepThroughStateMachine(
 			// restarted during the next adopt loop and it will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
 		}
-		err := resumer.OnFailOrCancel(ctx, phs)
+		onFailOrCancelCtx := logtags.AddTag(ctx, "job", *job.ID())
+		err := resumer.OnFailOrCancel(onFailOrCancelCtx, phs)
 		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
 			// If the job has failed with any error different than canceled we
 			// mark it as Failed.
@@ -812,7 +815,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, nextStatus, jobErr)
 		}
-		if ctx.Err() != nil {
+		if onFailOrCancelCtx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
