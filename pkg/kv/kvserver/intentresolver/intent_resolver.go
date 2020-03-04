@@ -129,8 +129,8 @@ type IntentResolver struct {
 		// Map from txn ID being pushed to a refcount of requests waiting on the
 		// push.
 		inFlightPushes map[uuid.UUID]int
-		// Set of txn IDs whose list of intent spans are being resolved. Note
-		// that this pertains only to EndTxn-style intent cleanups, whether
+		// Set of txn IDs whose list of lock spans are being resolved. Note
+		// that this pertains only to EndTxn-style lock cleanups, whether
 		// called directly after EndTxn evaluation or during GC of txn spans.
 		inFlightTxnCleanups map[uuid.UUID]struct{}
 	}
@@ -521,7 +521,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.IntentSpans, lock.Replicated)
+			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.LockSpans, lock.Replicated)
 			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, et.Txn, intents, now, et.Poison, nil); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)

@@ -89,7 +89,7 @@ func declareKeysEndTxn(
 		// The spans may extend beyond this Range, but it's ok for the
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
-		for _, span := range et.IntentSpans {
+		for _, span := range et.LockSpans {
 			latchSpans.AddMVCC(spanset.SpanReadWrite, span, minTxnTS)
 		}
 
@@ -254,7 +254,7 @@ func EndTxn(
 			// Similarly to above, use alwaysReturn==true. The caller isn't trying
 			// to abort, but the transaction is definitely aborted and its intents
 			// can go.
-			reply.Txn.IntentSpans = args.IntentSpans
+			reply.Txn.LockSpans = args.LockSpans
 			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
 				roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
@@ -447,7 +447,7 @@ func CanForwardCommitTimestampWithoutRefresh(
 const intentResolutionBatchSize = 500
 
 // resolveLocalIntents synchronously resolves any intents that are local to this
-// range in the same batch and returns those intent spans. The remainder are
+// range in the same batch and returns those lock spans. The remainder are
 // collected and returned so that they can be handed off to asynchronous
 // processing. Note that there is a maximum intent resolution allowance of
 // intentResolutionBatchSize meant to avoid creating a batch which is too large
@@ -481,7 +481,7 @@ func resolveLocalIntents(
 		// These transactions rely on having their intents resolved synchronously.
 		resolveAllowance = math.MaxInt64
 	}
-	for _, span := range args.IntentSpans {
+	for _, span := range args.LockSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
 				externalIntents = append(externalIntents, span)
@@ -558,7 +558,7 @@ func updateStagingTxn(
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) error {
-	txn.IntentSpans = args.IntentSpans
+	txn.LockSpans = args.LockSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
@@ -579,11 +579,11 @@ func updateFinalizedTxn(
 ) error {
 	if txnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
-			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
+			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.LockSpans))
 		}
 		return storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
-	txn.IntentSpans = externalIntents
+	txn.LockSpans = externalIntents
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)

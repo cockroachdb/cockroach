@@ -130,7 +130,7 @@ func (tc *txnCommitter) SendLocked(
 	// Determine whether we can elide the EndTxn entirely. We can do so if the
 	// transaction is read-only, which we determine based on whether the EndTxn
 	// request contains any writes.
-	if len(et.IntentSpans) == 0 && len(et.InFlightWrites) == 0 {
+	if len(et.LockSpans) == 0 && len(et.InFlightWrites) == 0 {
 		return tc.sendLockedWithElidedEndTxn(ctx, ba, et)
 	}
 
@@ -144,7 +144,7 @@ func (tc *txnCommitter) SendLocked(
 
 	// Determine whether the commit request can be run in parallel with the rest
 	// of the requests in the batch. If not, move the in-flight writes currently
-	// attached to the EndTxn request to the IntentSpans and clear the in-flight
+	// attached to the EndTxn request to the LockSpans and clear the in-flight
 	// write set; no writes will be in-flight concurrently with the EndTxn
 	// request.
 	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallel(ctx, ba, et) {
@@ -152,9 +152,9 @@ func (tc *txnCommitter) SendLocked(
 		// detect whether the batch has only distinct spans. We can set this
 		// flag based on whether any of previously declared in-flight writes
 		// in this batch overlap with each other. This will have (rare) false
-		// negatives when the in-flight writes overlap with existing intent
+		// negatives when the in-flight writes overlap with existing lock
 		// spans, but never false positives.
-		et.IntentSpans, ba.Header.DistinctSpans = mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
+		et.LockSpans, ba.Header.DistinctSpans = mergeIntoSpans(et.LockSpans, et.InFlightWrites)
 		// Disable parallel commits.
 		et.InFlightWrites = nil
 	}
@@ -217,8 +217,8 @@ func (tc *txnCommitter) SendLocked(
 	// determination about the status of our STAGING transaction. To avoid this,
 	// we transition to an explicitly committed transaction as soon as possible.
 	// This also has the side-effect of kicking off intent resolution.
-	mergedIntentSpans, _ := mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
-	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedIntentSpans, et.CanCommitAtHigherTimestamp)
+	mergedLockSpans, _ := mergeIntoSpans(et.LockSpans, et.InFlightWrites)
+	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedLockSpans, et.CanCommitAtHigherTimestamp)
 
 	// Switch the status on the batch response's transaction to COMMITTED. No
 	// interceptor above this one in the stack should ever need to deal with
@@ -389,7 +389,7 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 // written) to explicitly committed (COMMITTED status). It does so by sending a
 // second EndTxnRequest, this time with no InFlightWrites attached.
 func (tc *txnCommitter) makeTxnCommitExplicitAsync(
-	ctx context.Context, txn *roachpb.Transaction, intentSpans []roachpb.Span, noRefreshSpans bool,
+	ctx context.Context, txn *roachpb.Transaction, lockSpans []roachpb.Span, noRefreshSpans bool,
 ) {
 	// TODO(nvanbenschoten): consider adding tracing for this request.
 	// TODO(nvanbenschoten): add a timeout to this request.
@@ -401,7 +401,7 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 		context.Background(), "txnCommitter: making txn commit explicit", func(ctx context.Context) {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
-			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, intentSpans, noRefreshSpans); err != nil {
+			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans, noRefreshSpans); err != nil {
 				log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
 			}
 		},
@@ -414,7 +414,7 @@ func makeTxnCommitExplicitLocked(
 	ctx context.Context,
 	s lockedSender,
 	txn *roachpb.Transaction,
-	intentSpans []roachpb.Span,
+	lockSpans []roachpb.Span,
 	noRefreshSpans bool,
 ) error {
 	// Clone the txn to prevent data races.
@@ -425,7 +425,7 @@ func makeTxnCommitExplicitLocked(
 	ba.Header = roachpb.Header{Txn: txn}
 	et := roachpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key
-	et.IntentSpans = intentSpans
+	et.LockSpans = lockSpans
 	et.CanCommitAtHigherTimestamp = noRefreshSpans
 	ba.Add(&et)
 
