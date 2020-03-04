@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -569,10 +570,11 @@ func removeMatchingReferences(
 func (p *planner) removeTableComment(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
 ) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecWithUser(
 		ctx,
 		"delete-table-comment",
 		p.txn,
+		security.RootUser,
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.TableCommentType,
 		tableDesc.ID)
@@ -580,10 +582,11 @@ func (p *planner) removeTableComment(
 		return err
 	}
 
-	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecWithUser(
 		ctx,
 		"delete-comment",
 		p.txn,
+		security.RootUser,
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2",
 		keys.ColumnCommentType,
 		tableDesc.ID)

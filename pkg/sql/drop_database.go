@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -251,10 +252,11 @@ func (p *planner) accumulateDependentTables(
 }
 
 func (p *planner) removeDbComment(ctx context.Context, dbID sqlbase.ID) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecWithUser(
 		ctx,
 		"delete-db-comment",
 		p.txn,
+		security.RootUser,
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.DatabaseCommentType,
 		dbID)

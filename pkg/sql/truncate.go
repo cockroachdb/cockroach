@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -386,10 +387,11 @@ func reassignReferencedTables(
 func reassignComments(
 	ctx context.Context, p *planner, oldTableDesc, newTableDesc *sqlbase.MutableTableDescriptor,
 ) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecWithUser(
 		ctx,
 		"update-table-comments",
 		p.txn,
+		security.RootUser,
 		`UPDATE system.comments SET object_id=$1 WHERE object_id=$2`,
 		newTableDesc.ID,
 		oldTableDesc.ID,
