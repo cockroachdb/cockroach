@@ -3,27 +3,22 @@
 
 package roachpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
-import tracing "github.com/cockroachdb/cockroach/pkg/util/tracing"
-
-import github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-
-import bytes "bytes"
-
 import (
+	bytes "bytes"
 	context "context"
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	io "io"
+	math "math"
+
+	github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	tracing "github.com/cockroachdb/cockroach/pkg/util/tracing"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	grpc "google.golang.org/grpc"
 )
-
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import encoding_binary "encoding/binary"
-
-import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -1451,7 +1446,9 @@ func (*CheckConsistencyResponse_Result) Descriptor() ([]byte, []int) {
 func (m *CheckConsistencyResponse_Result) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *CheckConsistencyResponse_Result) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *CheckConsistencyResponse_Result) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -1523,7 +1520,7 @@ var xxx_messageInfo_RecomputeStatsRequest proto.InternalMessageInfo
 type RecomputeStatsResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
 	// added_delta is the adjustment made to the range's stats, i.e. `new_stats = old_stats + added_delta`.
-	AddedDelta enginepb.MVCCStatsDelta `protobuf:"bytes,2,opt,name=added_delta,json=addedDelta,proto3" json:"added_delta"`
+	AddedDelta github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.MVCCStatsDelta `protobuf:"bytes,2,opt,name=added_delta,json=addedDelta,proto3" json:"added_delta"`
 }
 
 func (m *RecomputeStatsResponse) Reset()         { *m = RecomputeStatsResponse{} }
@@ -2419,7 +2416,7 @@ type PushTxnRequest struct {
 	// the push transaction request. Note that this may not be the most
 	// up-to-date value of the transaction record, but will be set or
 	// merged as appropriate.
-	PusheeTxn enginepb.TxnMeta `protobuf:"bytes,3,opt,name=pushee_txn,json=pusheeTxn,proto3" json:"pushee_txn"`
+	PusheeTxn github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,3,opt,name=pushee_txn,json=pusheeTxn,proto3" json:"pushee_txn"`
 	// PushTo is the timestamp which PusheeTxn should be pushed to. During
 	// conflict resolution, it should be set just after the timestamp of the
 	// conflicting read or write.
@@ -2516,7 +2513,7 @@ var xxx_messageInfo_PushTxnResponse proto.InternalMessageInfo
 type RecoverTxnRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
 	// Transaction record to recover.
-	Txn enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
+	Txn github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
 	// Did all of the STAGING transaction's writes succeed? If so, the transaction
 	// is implicitly committed and the commit can be made explicit by giving its
 	// record a COMMITTED status. If not, the transaction can be aborted as long
@@ -2597,7 +2594,7 @@ var xxx_messageInfo_RecoverTxnResponse proto.InternalMessageInfo
 type QueryTxnRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
 	// Transaction record to query.
-	Txn enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
+	Txn github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
 	// If true, the query will not return until there are changes to either the
 	// transaction status or priority -OR- to the set of dependent transactions.
 	WaitForUpdate bool `protobuf:"varint,3,opt,name=wait_for_update,json=waitForUpdate,proto3" json:"wait_for_update,omitempty"`
@@ -2697,7 +2694,7 @@ type QueryIntentRequest struct {
 	// successfully written an intent at a larger sequence number then it must
 	// have succeeeded in writing an intent at the smaller sequence number as
 	// well.
-	Txn enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
+	Txn github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=txn,proto3" json:"txn"`
 	// If true, return an IntentMissingError if a matching intent is not found.
 	// Special-cased to return a SERIALIZABLE retry error if a SERIALIZABLE
 	// transaction queries its own intent and finds it has been pushed.
@@ -2776,14 +2773,14 @@ var xxx_messageInfo_QueryIntentResponse proto.InternalMessageInfo
 type ResolveIntentRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
 	// The transaction whose intent is being resolved.
-	IntentTxn enginepb.TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn,proto3" json:"intent_txn"`
+	IntentTxn github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn,proto3" json:"intent_txn"`
 	// The status of the transaction.
 	Status TransactionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
 	// Optionally poison the abort span for the transaction the intent's
 	// range.
 	Poison bool `protobuf:"varint,4,opt,name=poison,proto3" json:"poison,omitempty"`
 	// The list of ignored seqnum ranges as per the Transaction record.
-	IgnoredSeqNums []enginepb.IgnoredSeqNumRange `protobuf:"bytes,5,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
+	IgnoredSeqNums []github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange `protobuf:"bytes,5,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
 }
 
 func (m *ResolveIntentRequest) Reset()         { *m = ResolveIntentRequest{} }
@@ -2857,7 +2854,7 @@ var xxx_messageInfo_ResolveIntentResponse proto.InternalMessageInfo
 type ResolveIntentRangeRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
 	// The transaction whose intents are being resolved.
-	IntentTxn enginepb.TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn,proto3" json:"intent_txn"`
+	IntentTxn github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn,proto3" json:"intent_txn"`
 	// The status of the transaction.
 	Status TransactionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
 	// Optionally poison the abort span for the transaction on all ranges
@@ -2868,7 +2865,7 @@ type ResolveIntentRangeRequest struct {
 	// iteration over the span to find intents to resolve.
 	MinTimestamp hlc.Timestamp `protobuf:"bytes,5,opt,name=min_timestamp,json=minTimestamp,proto3" json:"min_timestamp"`
 	// The list of ignored seqnum ranges as per the Transaction record.
-	IgnoredSeqNums []enginepb.IgnoredSeqNumRange `protobuf:"bytes,6,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
+	IgnoredSeqNums []github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange `protobuf:"bytes,6,rep,name=ignored_seqnums,json=ignoredSeqnums,proto3" json:"ignored_seqnums"`
 }
 
 func (m *ResolveIntentRangeRequest) Reset()         { *m = ResolveIntentRangeRequest{} }
@@ -4233,7 +4230,9 @@ func (*AdminVerifyProtectedTimestampRequest) Descriptor() ([]byte, []int) {
 func (m *AdminVerifyProtectedTimestampRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AdminVerifyProtectedTimestampRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AdminVerifyProtectedTimestampRequest) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -4271,7 +4270,9 @@ func (*AdminVerifyProtectedTimestampResponse) Descriptor() ([]byte, []int) {
 func (m *AdminVerifyProtectedTimestampResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AdminVerifyProtectedTimestampResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AdminVerifyProtectedTimestampResponse) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -4304,7 +4305,7 @@ type AddSSTableRequest struct {
 	// used as-is during evaluation of the AddSSTable command to update the range
 	// MVCCStats, instead of computing the stats for the SSTable by iterating it.
 	// Including these stats can make the evaluation of AddSSTable much cheaper.
-	MVCCStats *enginepb.MVCCStats `protobuf:"bytes,4,opt,name=mvcc_stats,json=mvccStats,proto3" json:"mvcc_stats,omitempty"`
+	MVCCStats *github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.MVCCStats `protobuf:"bytes,4,opt,name=mvcc_stats,json=mvccStats,proto3" json:"mvcc_stats,omitempty"`
 	// IngestAsWrites causes the content of the provided SSTable to be ingested in
 	// a regular WriteBatch, instead of directly adding the provided SST to the
 	// storage engine. This is useful if the data size is so small that the fixed
@@ -4582,7 +4583,7 @@ var xxx_messageInfo_SubsumeRequest proto.InternalMessageInfo
 type SubsumeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
 	// MVCCStats are the MVCC statistics for the range.
-	MVCCStats enginepb.MVCCStats `protobuf:"bytes,3,opt,name=mvcc_stats,json=mvccStats,proto3" json:"mvcc_stats"`
+	MVCCStats github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.MVCCStats `protobuf:"bytes,3,opt,name=mvcc_stats,json=mvccStats,proto3" json:"mvcc_stats"`
 	// LeaseAppliedIndex is the lease applied index of the last applied command
 	// at the time that the Subsume request executed. This is NOT intended to be
 	// the lease index of the SubsumeRequest itself. Instead, it is intended to
@@ -4667,7 +4668,7 @@ type RangeStatsResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
 	// MVCCStats are the MVCC statistics for the range that processed the
 	// request.
-	MVCCStats enginepb.MVCCStats `protobuf:"bytes,2,opt,name=mvcc_stats,json=mvccStats,proto3" json:"mvcc_stats"`
+	MVCCStats github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.MVCCStats `protobuf:"bytes,2,opt,name=mvcc_stats,json=mvccStats,proto3" json:"mvcc_stats"`
 	// QueriesPerSecond is the rate of request/s or QPS for the range.
 	QueriesPerSecond float64 `protobuf:"fixed64,3,opt,name=queries_per_second,json=queriesPerSecond,proto3" json:"queries_per_second,omitempty"`
 }
@@ -5284,7 +5285,12 @@ func (m *RequestUnion) GetAdminVerifyProtectedTimestamp() *AdminVerifyProtectedT
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*RequestUnion) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*RequestUnion) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _RequestUnion_OneofMarshaler, _RequestUnion_OneofUnmarshaler, _RequestUnion_OneofSizer, []interface{}{
 		(*RequestUnion_Get)(nil),
 		(*RequestUnion_Put)(nil),
@@ -5564,7 +5570,9 @@ func _RequestUnion_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	return nil
 }
 
-func _RequestUnion_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+func _RequestUnion_OneofUnmarshaler(
+	msg proto.Message, tag, wire int, b *proto.Buffer,
+) (bool, error) {
 	m := msg.(*RequestUnion)
 	switch tag {
 	case 1: // value.get
@@ -6723,7 +6731,12 @@ func (m *ResponseUnion) GetAdminVerifyProtectedTimestamp() *AdminVerifyProtected
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*ResponseUnion) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*ResponseUnion) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _ResponseUnion_OneofMarshaler, _ResponseUnion_OneofUnmarshaler, _ResponseUnion_OneofSizer, []interface{}{
 		(*ResponseUnion_Get)(nil),
 		(*ResponseUnion_Put)(nil),
@@ -6997,7 +7010,9 @@ func _ResponseUnion_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	return nil
 }
 
-func _ResponseUnion_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+func _ResponseUnion_OneofUnmarshaler(
+	msg proto.Message, tag, wire int, b *proto.Buffer,
+) (bool, error) {
 	m := msg.(*ResponseUnion)
 	switch tag {
 	case 1: // value.get
@@ -10011,7 +10026,9 @@ func NewInternalClient(cc *grpc.ClientConn) InternalClient {
 	return &internalClient{cc}
 }
 
-func (c *internalClient) Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error) {
+func (c *internalClient) Batch(
+	ctx context.Context, in *BatchRequest, opts ...grpc.CallOption,
+) (*BatchResponse, error) {
 	out := new(BatchResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.roachpb.Internal/Batch", in, out, opts...)
 	if err != nil {
@@ -10020,7 +10037,9 @@ func (c *internalClient) Batch(ctx context.Context, in *BatchRequest, opts ...gr
 	return out, nil
 }
 
-func (c *internalClient) RangeFeed(ctx context.Context, in *RangeFeedRequest, opts ...grpc.CallOption) (Internal_RangeFeedClient, error) {
+func (c *internalClient) RangeFeed(
+	ctx context.Context, in *RangeFeedRequest, opts ...grpc.CallOption,
+) (Internal_RangeFeedClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Internal_serviceDesc.Streams[0], "/cockroach.roachpb.Internal/RangeFeed", opts...)
 	if err != nil {
 		return nil, err
@@ -10062,7 +10081,12 @@ func RegisterInternalServer(s *grpc.Server, srv InternalServer) {
 	s.RegisterService(&_Internal_serviceDesc, srv)
 }
 
-func _Internal_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Internal_Batch_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(BatchRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -26392,7 +26416,7 @@ func (m *ResolveIntentRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IgnoredSeqNums = append(m.IgnoredSeqNums, enginepb.IgnoredSeqNumRange{})
+			m.IgnoredSeqNums = append(m.IgnoredSeqNums, github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange{})
 			if err := m.IgnoredSeqNums[len(m.IgnoredSeqNums)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -26682,7 +26706,7 @@ func (m *ResolveIntentRangeRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IgnoredSeqNums = append(m.IgnoredSeqNums, enginepb.IgnoredSeqNumRange{})
+			m.IgnoredSeqNums = append(m.IgnoredSeqNums, github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.IgnoredSeqNumRange{})
 			if err := m.IgnoredSeqNums[len(m.IgnoredSeqNums)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -31956,7 +31980,7 @@ func (m *AddSSTableRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.MVCCStats == nil {
-				m.MVCCStats = &enginepb.MVCCStats{}
+				m.MVCCStats = &github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb.MVCCStats{}
 			}
 			if err := m.MVCCStats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
