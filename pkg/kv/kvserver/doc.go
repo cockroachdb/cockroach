@@ -22,4 +22,4 @@ to only a range-limited keyspace within it. Ranges access the
 underlying engine via the MVCC interface, which provides historical
 versioned values.
 */
-package storage
+package kvserver

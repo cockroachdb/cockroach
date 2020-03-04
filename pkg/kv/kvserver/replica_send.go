@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage
+package kvserver
 
 import (
 	"context"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

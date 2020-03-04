@@ -15,7 +15,7 @@ import (
 	"context"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"

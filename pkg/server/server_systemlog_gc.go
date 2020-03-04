@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -166,7 +166,7 @@ func (s *Server) startSystemLogsGC(ctx context.Context) {
 
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		period := systemLogGCPeriod
-		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCPeriod != 0 {
+		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCPeriod != 0 {
 			period = storeKnobs.SystemLogsGCPeriod
 		}
 
@@ -202,7 +202,7 @@ func (s *Server) startSystemLogsGC(ctx context.Context) {
 					}
 				}
 
-				if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCGCDone != nil {
+				if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCGCDone != nil {
 					select {
 					case storeKnobs.SystemLogsGCGCDone <- struct{}{}:
 					case <-s.stopper.ShouldStop():

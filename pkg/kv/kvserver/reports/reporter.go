@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -51,18 +51,18 @@ var ReporterInterval = settings.RegisterPublicNonNegativeDurationSetting(
 // replication_stats_report and replication_critical_localities.
 type Reporter struct {
 	// Contains the list of the stores of the current node
-	localStores *storage.Stores
+	localStores *kvserver.Stores
 	// Constraints constructed from the locality information
 	localityConstraints []zonepb.Constraints
 	// The store that is the current meta 1 leaseholder
-	meta1LeaseHolder *storage.Store
+	meta1LeaseHolder *kvserver.Store
 	// Latest zone config
 	latestConfig *config.SystemConfig
 
 	db        *client.DB
-	liveness  *storage.NodeLiveness
+	liveness  *kvserver.NodeLiveness
 	settings  *cluster.Settings
-	storePool *storage.StorePool
+	storePool *kvserver.StorePool
 	executor  sqlutil.InternalExecutor
 
 	frequencyMu struct {
@@ -75,10 +75,10 @@ type Reporter struct {
 // NewReporter creates a Reporter.
 func NewReporter(
 	db *client.DB,
-	localStores *storage.Stores,
-	storePool *storage.StorePool,
+	localStores *kvserver.Stores,
+	storePool *kvserver.StorePool,
 	st *cluster.Settings,
-	liveness *storage.NodeLiveness,
+	liveness *kvserver.NodeLiveness,
 	executor sqlutil.InternalExecutor,
 ) *Reporter {
 	r := Reporter{
@@ -250,7 +250,7 @@ func (stats *Reporter) update(
 
 // meta1LeaseHolderStore returns the node store that is the leaseholder of Meta1
 // range or nil if none of the node's stores are holding the Meta1 lease.
-func (stats *Reporter) meta1LeaseHolderStore() *storage.Store {
+func (stats *Reporter) meta1LeaseHolderStore() *kvserver.Store {
 	const meta1RangeID = roachpb.RangeID(1)
 	repl, store, err := stats.localStores.GetReplicaForRangeID(meta1RangeID)
 	if roachpb.IsRangeNotFoundError(err) {

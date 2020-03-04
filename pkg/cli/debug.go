@@ -32,14 +32,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -198,7 +198,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	printer := printKey
 	if debugCtx.values {
 		printer = func(kv engine.MVCCKeyValue) (bool, error) {
-			storage.PrintKeyValue(kv)
+			kvserver.PrintKeyValue(kv)
 			return false, nil
 		}
 	}
@@ -299,7 +299,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		} else if !ok {
 			break
 		}
-		storage.PrintKeyValue(engine.MVCCKeyValue{
+		kvserver.PrintKeyValue(engine.MVCCKeyValue{
 			Key:   iter.Key(),
 			Value: iter.Value(),
 		})
@@ -326,7 +326,7 @@ func loadRangeDescriptor(
 			// We only want values, not MVCCMetadata.
 			return false, nil
 		}
-		if err := storage.IsRangeDescriptorKey(kv.Key); err != nil {
+		if err := kvserver.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
 			return false, nil //nolint:returnerrcheck
@@ -369,10 +369,10 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := keys.LocalRangeMax
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
-		if storage.IsRangeDescriptorKey(kv.Key) != nil {
+		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 			return false, nil
 		}
-		storage.PrintKeyValue(kv)
+		kvserver.PrintKeyValue(kv)
 		return false, nil
 	})
 }
@@ -438,7 +438,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 		}
 
-		storage.PrintKeyValue(engine.MVCCKeyValue{
+		kvserver.PrintKeyValue(engine.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
 		})
@@ -478,7 +478,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		string(engine.EncodeKey(engine.MakeMVCCMetadataKey(end))))
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
-		storage.PrintKeyValue(kv)
+		kvserver.PrintKeyValue(kv)
 		return false, nil
 	})
 }
@@ -993,7 +993,7 @@ func removeDeadReplicas(
 
 	ctx := context.Background()
 
-	storeIdent, err := storage.ReadStoreIdent(ctx, db)
+	storeIdent, err := kvserver.ReadStoreIdent(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -1006,7 +1006,7 @@ func removeDeadReplicas(
 
 	var newDescs []roachpb.RangeDescriptor
 
-	err = storage.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
+	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
 		hasSelf := false
 		numDeadPeers := 0
 		allReplicas := desc.Replicas().All()

@@ -8,9 +8,9 @@ import (
 	io "io"
 	math "math"
 
-	enginepb "github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
 	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	proto "github.com/gogo/protobuf/proto"
 )

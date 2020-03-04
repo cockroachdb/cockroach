@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -108,7 +108,7 @@ func TestNodeLiveness(t *testing.T) {
 			if err == nil {
 				break
 			}
-			if err == storage.ErrEpochIncremented {
+			if err == kvserver.ErrEpochIncremented {
 				log.Warningf(context.Background(), "retrying after %s", err)
 				continue
 			}
@@ -316,7 +316,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	}
 
 	// Verify error on incrementing an already-incremented epoch.
-	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != storage.ErrEpochAlreadyIncremented {
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != kvserver.ErrEpochAlreadyIncremented {
 		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
 
@@ -460,7 +460,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	verifyLiveness(t, mtc)
 	pauseNodeLivenessHeartbeats(mtc, true)
 	lMap := mtc.nodeLivenesses[0].GetIsLiveMap()
-	expectedLMap := storage.IsLiveMap{
+	expectedLMap := kvserver.IsLiveMap{
 		1: {IsLive: true, Epoch: 1},
 		2: {IsLive: true, Epoch: 1},
 		3: {IsLive: true, Epoch: 1},
@@ -475,7 +475,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
-			if err == storage.ErrEpochIncremented {
+			if err == kvserver.ErrEpochIncremented {
 				return err
 			}
 			t.Fatal(err)
@@ -485,7 +485,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Now verify only node 0 is live.
 	lMap = mtc.nodeLivenesses[0].GetIsLiveMap()
-	expectedLMap = storage.IsLiveMap{
+	expectedLMap = kvserver.IsLiveMap{
 		1: {IsLive: true, Epoch: 1},
 		2: {IsLive: false, Epoch: 1},
 		3: {IsLive: false, Epoch: 1},
@@ -609,7 +609,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 		}()
 	}
 	for i := 0; i < concurrency; i++ {
-		if err := <-errCh; err != nil && err != storage.ErrEpochAlreadyIncremented {
+		if err := <-errCh; err != nil && err != kvserver.ErrEpochAlreadyIncremented {
 			t.Fatalf("concurrent increment epoch %d failed: %+v", i, err)
 		}
 	}
@@ -631,7 +631,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	drainingNodeIdx := 0
 	drainingNodeID := mtc.gossips[drainingNodeIdx].NodeID.Get()
 
-	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl storage.StoreList) bool {
+	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl kvserver.StoreList) bool {
 		for _, store := range sl.Stores() {
 			if store.Node.NodeID == id {
 				return true
@@ -720,7 +720,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	var injectedErrorCount int32
 
 	injectError.Store(true)
-	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
 		if _, ok := args.Req.(*roachpb.ConditionalPutRequest); !ok {
 			return nil
@@ -779,7 +779,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	serverArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
 				// Disable replica rebalancing to ensure that the liveness range
 				// does not get out of the first node (we'll be shutting down nodes).
 				DisableReplicaRebalancing: true,
@@ -887,8 +887,8 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				// doesn't allow durations below 1m15s, which is much too long
 				// for a test.
 				// We do this in every SucceedsSoon attempt, so we'll be good.
-				storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
-					storage.TestTimeUntilStoreDead)
+				kvserver.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
+					kvserver.TestTimeUntilStoreDead)
 
 				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
 				resp, err := admin.Liveness(ctx, &serverpb.LivenessRequest{})
@@ -977,7 +977,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetDecommissioning(
 		ctx, goneNodeID, true,
-	); errors.Cause(err) != storage.ErrNoLivenessRecord {
+	); errors.Cause(err) != kvserver.ErrNoLivenessRecord {
 		t.Fatal(err)
 	}
 

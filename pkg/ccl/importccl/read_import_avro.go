@@ -16,7 +16,7 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"

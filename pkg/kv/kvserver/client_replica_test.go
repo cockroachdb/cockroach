@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"bytes"
@@ -26,12 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -214,7 +214,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	manual := hlc.NewManualClock(123)
-	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	// Splits can cause our chosen key to end up on a range other than range 1,
 	// and trying to handle that complicates the test without providing any
 	// added benefit.
@@ -370,7 +370,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	stopper := stop.NewStopper()
@@ -510,7 +510,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 type leaseTransferTest struct {
 	mtc *multiTestContext
 	// replicas of range covering key "a" on the first and the second stores.
-	replica0, replica1         *storage.Replica
+	replica0, replica1         *kvserver.Replica
 	replica0Desc, replica1Desc roachpb.ReplicaDescriptor
 	leftKey                    roachpb.Key
 	filterMu                   syncutil.Mutex
@@ -524,7 +524,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 		leftKey: roachpb.Key("a"),
 	}
 
-	cfg := storage.TestStoreConfig(nil)
+	cfg := kvserver.TestStoreConfig(nil)
 	// Ensure the node liveness duration isn't too short. By default it is 900ms
 	// for TestStoreConfig().
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
@@ -674,7 +674,7 @@ func (l *leaseTransferTest) forceLeaseExtension(storeIdx int, lease roachpb.Leas
 // ensureLeaderAndRaftState is a helper function that blocks until leader is
 // the raft leader and follower is up to date.
 func (l *leaseTransferTest) ensureLeaderAndRaftState(
-	t *testing.T, leader *storage.Replica, follower roachpb.ReplicaDescriptor,
+	t *testing.T, leader *kvserver.Replica, follower roachpb.ReplicaDescriptor,
 ) {
 	t.Helper()
 	leaderDesc, err := leader.GetReplicaDescriptor()
@@ -909,7 +909,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 // clock time.
 func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := storage.TestStoreConfig(nil)
+	cfg := kvserver.TestStoreConfig(nil)
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
 		float64((9 * time.Second) / cfg.RaftElectionTimeout())
 	mtc := &multiTestContext{}
@@ -980,7 +980,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var injectLeaseTransferError atomic.Value
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableSplitQueue = true
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter =
@@ -1090,7 +1090,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	ctx := context.Background()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	var leaseAcquisitionTrap atomic.Value
 	// Disable the split queue so that no ranges are split. This makes it easy
 	// below to trap any lease request and infer that it refers to the range we're
@@ -1177,7 +1177,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
 					EvalKnobs: storagebase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
@@ -1187,7 +1187,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(context.TODO())
 
-	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1414,7 +1414,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
 					EvalKnobs: storagebase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
@@ -1444,7 +1444,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 
 func TestRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
@@ -1470,7 +1470,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Get the replicas for each side of the split. This is done within
 	// a SucceedsSoon loop to ensure the split completes.
-	var lhsReplica0, lhsReplica1, rhsReplica0, rhsReplica1 *storage.Replica
+	var lhsReplica0, lhsReplica1, rhsReplica0, rhsReplica1 *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
 		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin)
@@ -1591,7 +1591,7 @@ func TestRangeInfo(t *testing.T) {
 	}
 
 	// Change lease holders for both ranges and re-scan.
-	for _, r := range []*storage.Replica{lhsReplica1, rhsReplica1} {
+	for _, r := range []*kvserver.Replica{lhsReplica1, rhsReplica1} {
 		replDesc, err := r.GetReplicaDescriptor()
 		if err != nil {
 			t.Fatal(err)
@@ -1645,7 +1645,7 @@ func TestDrainRangeRejection(t *testing.T) {
 			NodeID:  mtc.idents[drainingIdx].NodeID,
 			StoreID: mtc.idents[drainingIdx].StoreID,
 		})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -1666,7 +1666,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 		NodeID:  mtc.idents[1].NodeID,
 		StoreID: mtc.idents[1].StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+2)
@@ -1674,7 +1674,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().GetGeneration()
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1708,7 +1708,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
 					// Disable LBS because when the scan is happening at the rate it's happening
 					// below, it's possible that one of the system ranges trigger a split.
 					DisableLoadBasedSplitting: true,
@@ -1739,7 +1739,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	waitForReplicas := func() error {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
-			if err := storage.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
+			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
 				if len(desc.Replicas().Learners()) > 0 {
 					return false, fmt.Errorf("descriptor contains learners: %v", desc)
 				}
@@ -1806,7 +1806,7 @@ func TestClearRange(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storage.TestStoreConfig(nil))
+	store := createTestStoreWithConfig(t, stopper, kvserver.TestStoreConfig(nil))
 
 	clearRange := func(start, end roachpb.Key) {
 		t.Helper()
@@ -1883,7 +1883,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// We'll control replication by hand.
 	sc.TestingKnobs.DisableReplicateQueue = true
 	// Avoid fighting with the merge queue while trying to reproduce this race.
@@ -2183,7 +2183,7 @@ func TestReplicaTombstone(t *testing.T) {
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
 				}},
 			},
@@ -2202,7 +2202,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// it rather than receiving a ReplicaTooOldError.
 		store, _ := getFirstStoreReplica(t, tc.Server(1), key)
 		funcs := noopRaftHandlerFuncs()
-		funcs.dropResp = func(*storage.RaftMessageResponse) bool {
+		funcs.dropResp = func(*kvserver.RaftMessageResponse) bool {
 			return true
 		}
 		tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2226,7 +2226,7 @@ func TestReplicaTombstone(t *testing.T) {
 					RaftTickInterval:                        time.Millisecond,
 					RangeLeaseRaftElectionTimeoutMultiplier: 10000,
 				},
-				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
 				}},
 			},
@@ -2248,7 +2248,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// ReplicaTooOldError.
 		sawTooOld := make(chan struct{}, 1)
 		raftFuncs := noopRaftHandlerFuncs()
-		raftFuncs.dropResp = func(resp *storage.RaftMessageResponse) bool {
+		raftFuncs.dropResp = func(resp *kvserver.RaftMessageResponse) bool {
 			if pErr, ok := resp.Union.GetValue().(*roachpb.Error); ok {
 				if _, isTooOld := pErr.GetDetail().(*roachpb.ReplicaTooOldError); isTooOld {
 					select {
@@ -2259,7 +2259,7 @@ func TestReplicaTombstone(t *testing.T) {
 			}
 			return false
 		}
-		raftFuncs.dropReq = func(req *storage.RaftMessageRequest) bool {
+		raftFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
 			return req.ToReplica.StoreID == store.StoreID()
 		}
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2287,7 +2287,7 @@ func TestReplicaTombstone(t *testing.T) {
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
 				}},
 			},
@@ -2323,7 +2323,7 @@ func TestReplicaTombstone(t *testing.T) {
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
 				}},
 			},
@@ -2378,7 +2378,7 @@ func TestReplicaTombstone(t *testing.T) {
 					RaftTickInterval:                        time.Millisecond,
 					RangeLeaseRaftElectionTimeoutMultiplier: 10000,
 				},
-				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
 				}},
 			},
@@ -2429,17 +2429,17 @@ func TestReplicaTombstone(t *testing.T) {
 			rangeID:            desc.RangeID,
 			RaftMessageHandler: store,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropResp: func(*storage.RaftMessageResponse) bool {
+				dropResp: func(*kvserver.RaftMessageResponse) bool {
 					return true
 				},
-				dropReq: func(*storage.RaftMessageRequest) bool {
+				dropReq: func(*kvserver.RaftMessageRequest) bool {
 					return true
 				},
-				dropHB: func(hb *storage.RaftHeartbeat) bool {
+				dropHB: func(hb *kvserver.RaftHeartbeat) bool {
 					recordHeartbeat(hb.ToReplicaID)
 					return false
 				},
-				snapErr: func(*storage.SnapshotRequest_Header) error {
+				snapErr: func(*kvserver.SnapshotRequest_Header) error {
 					waitForSnapshot()
 					return errors.New("boom")
 				},
@@ -2490,7 +2490,7 @@ func TestReplicaTombstone(t *testing.T) {
 		proposalFilter.Store(noopProposalFilter)
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
 					TestingProposalFilter: storagebase.ReplicaProposalFilter(
 						func(args storagebase.ProposalFilterArgs) *roachpb.Error {
@@ -2523,7 +2523,7 @@ func TestReplicaTombstone(t *testing.T) {
 		var partActive atomic.Value
 		partActive.Store(false)
 		raftFuncs := noopRaftHandlerFuncs()
-		raftFuncs.dropReq = func(req *storage.RaftMessageRequest) bool {
+		raftFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
 			return partActive.Load().(bool) && req.Message.Type == raftpb.MsgApp
 		}
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2601,7 +2601,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
 					TestingResponseFilter: responseFilter,
 				},
 			},
@@ -2649,7 +2649,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	change := func() {
 		<-seenAdd
 		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, makeReplicationTargets(2)...)
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, storage.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserver.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 4))
@@ -2724,7 +2724,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter: blockOnChangeReplicasRead,
 						ReplicaAddStopAfterJointConfig: func() bool {
 							return stopAfterJointConfig.Load().(bool)
@@ -2877,7 +2877,7 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 	blockInc := make(chan chan struct{})
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 				TestingProposalFilter: storagebase.ReplicaProposalFilter(
 					func(args storagebase.ProposalFilterArgs) *roachpb.Error {
 						if args.Req.RangeID != scratchRangeID.Load().(roachpb.RangeID) {

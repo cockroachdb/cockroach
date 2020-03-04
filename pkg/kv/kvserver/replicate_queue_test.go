@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -68,10 +68,10 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		storage.LoadBasedRebalancingMode.Override(&st.SV, int64(storage.LBRebalancingOff))
+		kvserver.LoadBasedRebalancingMode.Override(&st.SV, int64(kvserver.LBRebalancingOff))
 		// NB: usually it's preferred to set the cluster settings, but this is less
 		// boilerplate than setting it and then waiting for all nodes to have it.
-		storage.UseAtomicReplicationChanges.Override(&st.SV, atomic)
+		kvserver.UseAtomicReplicationChanges.Override(&st.SV, atomic)
 	}
 
 	const newRanges = 10
@@ -106,7 +106,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 	countReplicas := func() []int {
 		counts := make([]int, len(tc.Servers))
 		for _, s := range tc.Servers {
-			err := s.Stores().VisitStores(func(s *storage.Store) error {
+			err := s.Stores().VisitStores(func(s *kvserver.Store) error {
 				counts[s.StoreID()-1] += s.ReplicaCount()
 				return nil
 			})
@@ -183,7 +183,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 
 	tc.AddServer(t, base.TestServerArgs{})
 
-	if err := tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+	if err := tc.Servers[0].Stores().VisitStores(func(s *kvserver.Store) error {
 		return s.ForceReplicationScanAndProcess()
 	}); err != nil {
 		t.Fatal(err)
@@ -196,8 +196,8 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var store *storage.Store
-	_ = tc.Servers[0].Stores().VisitStores(func(s *storage.Store) error {
+	var store *kvserver.Store
+	_ = tc.Servers[0].Stores().VisitStores(func(s *kvserver.Store) error {
 		store = s
 		return nil
 	})
@@ -265,7 +265,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		// If a replica for this range was previously present on this store and
 		// it has already been removed but has not yet been GCed, this error
 		// is expected.
-		storage.IntersectingSnapshotMsg,
+		kvserver.IntersectingSnapshotMsg,
 	}, "|")
 
 	// Up-replicate the new range to all nodes to create redundant replicas.
@@ -354,7 +354,7 @@ func filterRangeLog(
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 	for _, s := range tc.Servers {
-		_ = s.Stores().VisitStores(func(store *storage.Store) error {
+		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(active)
 			return nil
 		})
@@ -363,7 +363,7 @@ func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 
 func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
 	for _, s := range tc.Servers {
-		_ = s.Stores().VisitStores(func(store *storage.Store) error {
+		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
 			store.SetSplitQueueActive(active)
 			return nil
 		})
@@ -443,7 +443,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	forceProcess := func() {
 		// Speed up the queue processing.
 		for _, s := range tc.Servers {
-			err := s.Stores().VisitStores(func(store *storage.Store) error {
+			err := s.Stores().VisitStores(func(store *kvserver.Store) error {
 				return store.ForceReplicationScanAndProcess()
 			})
 			require.NoError(t, err)
@@ -482,7 +482,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 }
 
 type delayingRaftMessageHandler struct {
-	storage.RaftMessageHandler
+	kvserver.RaftMessageHandler
 	leaseHolderNodeID uint64
 	rangeID           roachpb.RangeID
 }
@@ -494,8 +494,8 @@ const (
 
 func (h delayingRaftMessageHandler) HandleRaftRequest(
 	ctx context.Context,
-	req *storage.RaftMessageRequest,
-	respStream storage.RaftMessageResponseStream,
+	req *kvserver.RaftMessageRequest,
+	respStream kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	if h.rangeID != req.RangeID {
 		return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
@@ -605,7 +605,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var remoteRepl *storage.Replica
+	var remoteRepl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
 		remoteRepl, err = remoteStore.GetReplica(rangeID)
 		return err

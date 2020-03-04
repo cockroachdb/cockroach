@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,7 +38,7 @@ func checkGauge(t *testing.T, id string, g *metric.Gauge, e int64) {
 
 func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	t.Helper()
-	var stores []*storage.Store
+	var stores []*kvserver.Store
 	var wg sync.WaitGroup
 
 	mtc.mu.RLock()
@@ -123,7 +123,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	}
 }
 
-func verifyRocksDBStats(t *testing.T, s *storage.Store) {
+func verifyRocksDBStats(t *testing.T, s *kvserver.Store) {
 	if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,

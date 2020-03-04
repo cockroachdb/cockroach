@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -103,7 +103,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	model := &modelTimeSeriesDataStore{t: t}
 
 	manual := hlc.NewManualClock(1)
-	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.TimeSeriesDataStore = model
 	cfg.TestingKnobs.DisableScanner = true
 	cfg.TestingKnobs.DisableSplitQueue = true
@@ -192,7 +192,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	model.Unlock()
 
 	// Move clock forward and force to scan again.
-	manual.Increment(storage.TimeSeriesMaintenanceInterval.Nanoseconds())
+	manual.Increment(kvserver.TimeSeriesMaintenanceInterval.Nanoseconds())
 	if err := store.ForceTimeSeriesMaintenanceQueueProcess(); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
 				DisableScanner: true,
 			},
 		},

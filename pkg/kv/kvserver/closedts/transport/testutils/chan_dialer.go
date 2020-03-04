@@ -14,7 +14,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"

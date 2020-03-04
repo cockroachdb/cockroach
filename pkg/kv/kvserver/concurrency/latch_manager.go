@@ -13,8 +13,8 @@ package concurrency
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/spanlatch"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 

@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -353,7 +353,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				}
 
 				for i := 0; i < len(tc.Servers); i++ {
-					err = tc.Servers[i].Stores().VisitStores(func(store *storage.Store) error {
+					err = tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
 						store.SetReplicateQueueActive(true)
 						return nil
 					})
@@ -366,7 +366,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				}
 
 				for i := 0; i < len(tc.Servers); i++ {
-					err = tc.Servers[i].Stores().VisitStores(func(store *storage.Store) error {
+					err = tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
 						return store.ForceConsistencyQueueProcess()
 					})
 					if err != nil {

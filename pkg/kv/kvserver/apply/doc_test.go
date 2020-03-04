@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 )
 
 func ExampleTask() {

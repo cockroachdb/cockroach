@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
@@ -180,10 +180,10 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// Manually create the local test cluster so that the split queue
 	// is not disabled (LocalTestCluster disables it by default).
 	s := &localtestcluster.LocalTestCluster{
-		Cfg: storage.StoreConfig{
+		Cfg: kvserver.StoreConfig{
 			DefaultZoneConfig: cfg,
 		},
-		StoreTestingKnobs: &storage.StoreTestingKnobs{
+		StoreTestingKnobs: &kvserver.StoreTestingKnobs{
 			DisableScanner: true,
 		},
 	}
@@ -236,7 +236,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // on the same splitKey succeeds.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -263,7 +263,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 //    the sticky bit of that range, but no range is split.
 func TestRangeSplitsStickyBit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,

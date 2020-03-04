@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptverifier"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -51,7 +51,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	}
 
 	args := base.TestClusterArgs{}
-	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{DisableGCQueue: true}
+	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{DisableGCQueue: true}
 	tc := testcluster.StartTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(ctx)
 	s0 := tc.Server(0)
@@ -96,7 +96,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		return startKey
 	}
 
-	getStoreAndReplica := func() (*storage.Store, *storage.Replica) {
+	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
 		startKey := getTableStartKey("foo")
 		// Okay great now we have a key and can go find replicas and stores and what not.
 		r := tc.LookupRangeOrFatal(t, startKey)

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"bytes"
@@ -23,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -43,7 +43,7 @@ import (
 // process ranges whose replicas are not all live.
 func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -122,7 +122,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 	var mtc *multiTestContext
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 
 	// Arrange to count the number of times each checksum command applies to each
 	// store.
@@ -175,7 +175,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -212,7 +212,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	var diffTimestamp hlc.Timestamp
 	notifyReportDiff := make(chan struct{}, 1)
 	sc.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff =
-		func(s roachpb.StoreIdent, diff storage.ReplicaSnapshotDiffSlice) {
+		func(s roachpb.StoreIdent, diff kvserver.ReplicaSnapshotDiffSlice) {
 			if s != *mtc.Store(0).Ident {
 				t.Errorf("BadChecksumReportDiff called from follower (StoreIdent = %v)", s)
 				return
@@ -396,7 +396,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	}
 
 	ccCh := make(chan roachpb.CheckConsistencyResponse, 1)
-	knobs := &storage.StoreTestingKnobs{}
+	knobs := &kvserver.StoreTestingKnobs{}
 	knobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook = func(resp roachpb.CheckConsistencyResponse) {
 		if len(resp.Result) == 0 || resp.Result[0].Status != roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT {
 			// Ignore recomputations triggered by the time series ranges.

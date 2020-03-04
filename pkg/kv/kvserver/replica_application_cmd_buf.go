@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage
+package kvserver
 
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 )
 
 // replica_application_*.go files provide concrete implementations of

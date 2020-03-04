@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage
+package kvserver
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/ctpb"
-	ctstorage "github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	ctstorage "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"

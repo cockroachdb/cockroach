@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -524,7 +524,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				0: {
 					Knobs: base.TestingKnobs{
-						Store: &storage.StoreTestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
 							TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 								if atomic.LoadInt64(&trapRead) == 0 {
 									return nil

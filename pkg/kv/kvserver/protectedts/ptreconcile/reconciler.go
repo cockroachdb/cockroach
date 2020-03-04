@@ -19,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -52,7 +52,7 @@ type StatusFuncs map[string]StatusFunc
 type Config struct {
 	Settings *cluster.Settings
 	// Stores is used to ensure that we only run the reconciliation loop on
-	Stores  *storage.Stores
+	Stores  *kvserver.Stores
 	DB      *client.DB
 	Storage protectedts.Storage
 	Cache   protectedts.Cache
@@ -67,7 +67,7 @@ type Config struct {
 // meta in conjunction with the configured StatusFunc.
 type Reconciler struct {
 	settings    *cluster.Settings
-	localStores *storage.Stores
+	localStores *kvserver.Stores
 	db          *client.DB
 	cache       protectedts.Cache
 	pts         protectedts.Storage

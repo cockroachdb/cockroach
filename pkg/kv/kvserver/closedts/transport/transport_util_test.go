@@ -13,9 +13,9 @@ package transport_test
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/transport"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/transport/testutils"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/transport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/transport/testutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
@@ -98,7 +98,7 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		// Kick the replication queues, given that our rebalancing is finicky.
 		for i := 0; i < tc.NumServers(); i++ {
-			if err := tc.Server(i).GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+			if err := tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				return s.ForceReplicationScanAndProcess()
 			}); err != nil {
 				t.Fatal(err)
