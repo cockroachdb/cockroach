@@ -42,7 +42,7 @@ import (
 Test needs to handle caller constraints wrt latches being held. The datadriven
 test uses the following format:
 
-new-locktable maxlocks=<int>
+new-lock-table maxlocks=<int>
 ----
 
   Creates a lockTable.
