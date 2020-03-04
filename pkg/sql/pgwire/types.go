@@ -161,6 +161,16 @@ func (b *writeBuffer) writeTextDatum(
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
+	case *tree.DGeometry:
+		s := v.Geometry.String()
+		b.putInt32(int32(len(s)))
+		b.write([]byte(s))
+
+	case *tree.DGeography:
+		s := v.Geometry.String()
+		b.putInt32(int32(len(s)))
+		b.write([]byte(s))
+
 	case *tree.DTimestamp:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(v.Time, nil, b.putbuf[4:4])

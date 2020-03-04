@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -281,6 +282,25 @@ var (
 		Locale:             &emptyLocale,
 	}}
 
+	// Geometry ...
+	Geometry = &T{
+		InternalType: InternalType{
+			Family:   GeometryFamily,
+			Oid:      T_geometry,
+			GeoField: nil, // default to no type to distinguish types explicitly set.
+		},
+	}
+
+	// Geography ...
+	Geography = &T{
+		InternalType: InternalType{
+			Family:   GeographyFamily,
+			Oid:      T_geography,
+			GeoField: nil, // default to no type to distinguish types explicitly set.
+			// TODO(#geo): types_test.go changes
+		},
+	}
+
 	// TimestampTZ is the type of a value specifying year, month, day, hour,
 	// minute, and second, as well as an associated timezone. By default, it has
 	// microsecond precision. For example:
@@ -337,6 +357,8 @@ var (
 		Float,
 		Decimal,
 		Date,
+		Geometry,
+		Geography,
 		Timestamp,
 		Interval,
 		String,
@@ -487,12 +509,39 @@ var (
 	emptyLocale = ""
 )
 
+// MakeGeometry constructs a new instance of a geometry-related type.
+func MakeGeometry(dt geo.SpatialDataType, srid geo.SRID) *T {
+	// TODO(#geo): srid validation
+	return &T{InternalType: InternalType{
+		Family: GeometryFamily,
+		Oid:    T_geometry,
+		GeoField: &GeoField{
+			SpatialDataType: dt,
+			SRID:            srid,
+		},
+	}}
+}
+
+// MakeGeography constructs a new instance of a geography-related type.
+func MakeGeography(dt geo.SpatialDataType, srid geo.SRID) *T {
+	// TODO(#geo): srid validation
+	return &T{InternalType: InternalType{
+		Family: GeographyFamily,
+		Oid:    T_geography,
+		GeoField: &GeoField{
+			SpatialDataType: dt,
+			SRID:            srid,
+		},
+	}}
+}
+
 // MakeScalar constructs a new instance of a scalar type (i.e. not array or
 // tuple types) using the provided fields.
 func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string) *T {
 	t := OidToType[o]
 	if family != t.Family() {
 		if family != CollatedStringFamily || StringFamily != t.Family() {
+			// TODO(#geo): fix
 			panic(errors.AssertionFailedf(
 				"oid %s does not match %s", oid.TypeName[o], family))
 		}
@@ -1049,9 +1098,32 @@ func (t *T) Name() string {
 		return "unknown"
 	case UuidFamily:
 		return "uuid"
+	case GeometryFamily:
+		return "geometry"
+	case GeographyFamily:
+		return "geography"
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %s", t.Family()))
 	}
+}
+
+func (t *T) typeNameFromOID() (string, bool) {
+	// TODO(#geo): bring to const
+	for _, mapping := range []map[oid.Oid]string{
+		oid.TypeName,
+		map[oid.Oid]string{
+			T_geometry:   "geometry",
+			T_geography:  "geography",
+			T__geometry:  "_geometry",
+			T__geography: "_geography",
+		},
+	} {
+		name, ok := mapping[t.Oid()]
+		if ok {
+			return strings.ToLower(name), true
+		}
+	}
+	return "", false
 }
 
 // PGName returns the Postgres name for the type. This is sometimes different
@@ -1066,9 +1138,8 @@ func (t *T) Name() string {
 //   int4[]       _int4
 //
 func (t *T) PGName() string {
-	name, ok := oid.TypeName[t.Oid()]
-	if ok {
-		return strings.ToLower(name)
+	if name, ok := t.typeNameFromOID(); ok {
+		return name
 	}
 
 	// Postgres does not have an UNKNOWN[] type. However, CRDB does, so
@@ -1264,6 +1335,12 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "unknown"
 	case UuidFamily:
 		return "uuid"
+	case GeometryFamily:
+		// TODO(#geo): typmods
+		return "geometry"
+	case GeographyFamily:
+		// TODO(#geo): typmods
+		return "geography"
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}
@@ -1359,7 +1436,7 @@ func (t *T) SQLString() string {
 			)
 		}
 	case OidFamily:
-		if name, ok := oid.TypeName[t.Oid()]; ok {
+		if name, ok := t.typeNameFromOID(); ok {
 			return name
 		}
 	case ArrayFamily:
@@ -1373,6 +1450,13 @@ func (t *T) SQLString() string {
 			return t.ArrayContents().collatedStringTypeSQL(true /* isArray */)
 		}
 		return t.ArrayContents().SQLString() + "[]"
+	case GeometryFamily, GeographyFamily:
+		str := t.Name()
+		geoField := t.InternalType.GeoField
+		if geoField != nil {
+			str += fmt.Sprintf("(%s, %d)", geoField.SpatialDataType, geoField.SRID)
+		}
+		return str
 	}
 	return strings.ToUpper(t.Name())
 }
@@ -2048,8 +2132,12 @@ var typNameLiterals map[string]*T
 
 func init() {
 	typNameLiterals = make(map[string]*T)
-	for o, t := range OidToType {
-		name := strings.ToLower(oid.TypeName[o])
+	for _, t := range OidToType {
+		name, ok := t.typeNameFromOID()
+		if !ok {
+			panic(fmt.Sprintf("cannot find type name for oid %d", t.Oid()))
+		}
+		name = strings.ToLower(name)
 		if _, ok := typNameLiterals[name]; !ok {
 			typNameLiterals[name] = t
 		}

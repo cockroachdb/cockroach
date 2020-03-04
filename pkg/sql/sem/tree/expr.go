@@ -1510,10 +1510,13 @@ var (
 	stringCastTypes = annotateCast(types.String, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
 		types.VarBit,
 		types.AnyArray, types.AnyTuple,
+		types.Geometry, types.Geography,
 		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb})
-	bytesCastTypes = annotateCast(types.Bytes, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
-	dateCastTypes  = annotateCast(types.Date, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	timeCastTypes  = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ,
+	geographyCastTypes = annotateCast(types.Geography, []*types.T{types.String, types.Geography})
+	geometryCastTypes  = annotateCast(types.Geometry, []*types.T{types.String, types.Geometry})
+	bytesCastTypes     = annotateCast(types.Bytes, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
+	dateCastTypes      = annotateCast(types.Date, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
+	timeCastTypes      = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ,
 		types.Timestamp, types.TimestampTZ, types.Interval})
 	timeTZCastTypes    = annotateCast(types.TimeTZ, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ, types.TimestampTZ})
 	timestampCastTypes = annotateCast(types.Timestamp, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
@@ -1540,6 +1543,10 @@ func validCastTypes(t *types.T) []castInfo {
 		return decimalCastTypes
 	case types.StringFamily, types.CollatedStringFamily:
 		return stringCastTypes
+	case types.GeometryFamily:
+		return geometryCastTypes
+	case types.GeographyFamily:
+		return geographyCastTypes
 	case types.BytesFamily:
 		return bytesCastTypes
 	case types.DateFamily:

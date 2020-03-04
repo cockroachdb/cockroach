@@ -29,6 +29,7 @@ import (
 
     "go/constant"
 
+    "github.com/cockroachdb/cockroach/pkg/geo"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -451,6 +452,9 @@ func (u *sqlSymUnion) cmpOp() tree.ComparisonOperator {
 func (u *sqlSymUnion) intervalTypeMetadata() types.IntervalTypeMetadata {
     return u.val.(types.IntervalTypeMetadata)
 }
+func (u *sqlSymUnion) spatialDataType() geo.SpatialDataType {
+    return u.val.(geo.SpatialDataType)
+}
 func (u *sqlSymUnion) kvOption() tree.KVOption {
     return u.val.(tree.KVOption)
 }
@@ -607,6 +611,10 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> YEAR
 
 %token <str> ZONE
+
+%token <str> GEOGRAPHY GEOMETRY
+%token <str> POINT CURVE LINESTRING SURFACE POLYGON GEOMETRYCOLLECTION MULTISURFACE MULTIPOLYGON MULTICURVE MULTILINESTRING MULTIPOINT
+%type <geo.SpatialDataType> spatial_data_type
 
 // The grammar thinks these are keywords, but they are not in any category
 // and so can never be entered directly. The filter in scan.go creates these
@@ -977,6 +985,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*types.T> character_base
 %type <*types.T> postgres_oid
 %type <*types.T> cast_target
+%type <*types.T> const_geo
 %type <str> extract_arg
 %type <bool> opt_varying
 
@@ -7163,6 +7172,40 @@ simple_typename:
 | interval_type
 | postgres_oid
 
+spatial_data_type:
+  POINT { $$.val = geo.SpatialDataType_Point }
+| CURVE { $$.val = geo.SpatialDataType_Curve }
+| LINESTRING { $$.val = geo.SpatialDataType_LineString }
+| SURFACE { $$.val = geo.SpatialDataType_Surface }
+| POLYGON { $$.val = geo.SpatialDataType_Polygon }
+| GEOMETRYCOLLECTION { $$.val = geo.SpatialDataType_GeometryCollection }
+| MULTISURFACE { $$.val = geo.SpatialDataType_MultiSurface }
+| MULTIPOLYGON { $$.val = geo.SpatialDataType_MultiPolygon }
+| MULTICURVE { $$.val = geo.SpatialDataType_MultiCurve }
+| MULTILINESTRING { $$.val = geo.SpatialDataType_MultiLineString }
+| MULTIPOINT { $$.val = geo.SpatialDataType_MultiPoint }
+| GEOMETRY { $$.val = geo.SpatialDataType_Geometry }
+
+const_geo:
+  GEOGRAPHY { $$.val = types.Geography }
+| GEOMETRY  { $$.val = types.Geometry }
+| GEOMETRY '(' spatial_data_type ')'
+  {
+    $$.val = types.MakeGeometry($3.spatialDataType(), geo.DefaultGeometrySRID)
+  }
+| GEOGRAPHY '(' spatial_data_type ')'
+  {
+    $$.val = types.MakeGeography($3.spatialDataType(), geo.DefaultGeographySRID)
+  }
+| GEOMETRY '(' spatial_data_type ',' iconst32 ')'
+  {
+    $$.val = types.MakeGeometry($3.spatialDataType(), geo.SRID($5.int32()))
+  }
+| GEOGRAPHY '(' spatial_data_type ',' iconst32 ')'
+  {
+    $$.val = types.MakeGeography($3.spatialDataType(), geo.SRID($5.int32()))
+  }
+
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
 // default to a length of one, but this makes no sense for constructs like CHAR
@@ -7177,6 +7220,7 @@ const_typename:
 | bit_without_length
 | character_without_length
 | const_datetime
+| const_geo
 | const_json
   {
     $$.val = types.Jsonb
@@ -9997,6 +10041,18 @@ unreserved_keyword:
 | WRITE
 | YEAR
 | ZONE
+// -- geo
+| POINT
+| CURVE
+| LINESTRING
+| SURFACE
+| POLYGON
+| GEOMETRYCOLLECTION
+| MULTISURFACE
+| MULTIPOLYGON
+| MULTICURVE
+| MULTILINESTRING
+| MULTIPOINT
 
 // Column identifier --- keywords that can be column, table, etc names.
 //
@@ -10023,6 +10079,8 @@ col_name_keyword:
 | EXTRACT
 | EXTRACT_DURATION
 | FLOAT
+| GEOGRAPHY
+| GEOMETRY
 | GREATEST
 | GROUPING
 | IF

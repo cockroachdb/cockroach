@@ -160,6 +160,10 @@ ignored = [
     unused-packages = false
 
   [[prune.project]]
+    name = "github.com/twpayne/go-geom"
+    unused-packages = false
+
+  [[prune.project]]
     name = "github.com/grpc-ecosystem/grpc-gateway"
     unused-packages = false
 
@@ -175,3 +179,23 @@ ignored = [
 [[constraint]]
   name = "github.com/Azure/azure-sdk-for-go"
   version = "33.0.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/otan-cockroach/gogeos"
+
+[[constraint]]
+  name = "github.com/twpayne/go-geom"
+  version = "1.0.5"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/golang/geo"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/xeonx/geodesic"
+
+[[constraint]]
+  name = "github.com/go-spatial/proj"
+  version = "0.2.0"

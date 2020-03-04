@@ -890,6 +890,17 @@ unreserved_keyword ::=
 	| 'WRITE'
 	| 'YEAR'
 	| 'ZONE'
+	| 'POINT'
+	| 'CURVE'
+	| 'LINESTRING'
+	| 'SURFACE'
+	| 'POLYGON'
+	| 'GEOMETRYCOLLECTION'
+	| 'MULTISURFACE'
+	| 'MULTIPOLYGON'
+	| 'MULTICURVE'
+	| 'MULTILINESTRING'
+	| 'MULTIPOINT'
 
 col_name_keyword ::=
 	'ANNOTATE_TYPE'
@@ -907,6 +918,8 @@ col_name_keyword ::=
 	| 'EXTRACT'
 	| 'EXTRACT_DURATION'
 	| 'FLOAT'
+	| 'GEOGRAPHY'
+	| 'GEOMETRY'
 	| 'GREATEST'
 	| 'GROUPING'
 	| 'IF'
@@ -1849,6 +1862,7 @@ const_typename ::=
 	| bit_without_length
 	| character_without_length
 	| const_datetime
+	| const_geo
 	| const_json
 	| 'BLOB'
 	| 'BYTES'
@@ -2151,6 +2165,14 @@ const_datetime ::=
 	| 'TIMESTAMPTZ'
 	| 'TIMESTAMPTZ' '(' iconst32 ')'
 
+const_geo ::=
+	'GEOGRAPHY'
+	| 'GEOMETRY'
+	| 'GEOMETRY' '(' spatial_data_type ')'
+	| 'GEOGRAPHY' '(' spatial_data_type ')'
+	| 'GEOMETRY' '(' spatial_data_type ',' iconst32 ')'
+	| 'GEOGRAPHY' '(' spatial_data_type ',' iconst32 ')'
+
 const_json ::=
 	'JSON'
 	| 'JSONB'
@@ -2362,6 +2384,20 @@ opt_timezone ::=
 	'WITH' 'TIME' 'ZONE'
 	| 'WITHOUT' 'TIME' 'ZONE'
 	| 
+
+spatial_data_type ::=
+	'POINT'
+	| 'CURVE'
+	| 'LINESTRING'
+	| 'SURFACE'
+	| 'POLYGON'
+	| 'GEOMETRYCOLLECTION'
+	| 'MULTISURFACE'
+	| 'MULTIPOLYGON'
+	| 'MULTICURVE'
+	| 'MULTILINESTRING'
+	| 'MULTIPOINT'
+	| 'GEOMETRY'
 
 func_name ::=
 	type_function_name

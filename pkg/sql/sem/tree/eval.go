@@ -1842,6 +1842,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.TimestampTZ, types.TimestampTZ),
 		makeEqFn(types.Uuid, types.Uuid),
 		makeEqFn(types.VarBit, types.VarBit),
+		makeEqFn(types.Geometry, types.Geometry),
+		makeEqFn(types.Geography, types.Geography),
 
 		// Mixed-type comparisons.
 		makeEqFn(types.Date, types.Timestamp),
@@ -1888,6 +1890,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.TimestampTZ, types.TimestampTZ),
 		makeLtFn(types.Uuid, types.Uuid),
 		makeLtFn(types.VarBit, types.VarBit),
+		makeLtFn(types.Geometry, types.Geometry),
+		makeLtFn(types.Geography, types.Geography),
 
 		// Mixed-type comparisons.
 		makeLtFn(types.Date, types.Timestamp),
@@ -1934,6 +1938,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.TimestampTZ, types.TimestampTZ),
 		makeLeFn(types.Uuid, types.Uuid),
 		makeLeFn(types.VarBit, types.VarBit),
+		makeLeFn(types.Geometry, types.Geometry),
+		makeLeFn(types.Geography, types.Geography),
 
 		// Mixed-type comparisons.
 		makeLeFn(types.Date, types.Timestamp),
@@ -1989,6 +1995,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.TimestampTZ, types.TimestampTZ),
 		makeIsFn(types.Uuid, types.Uuid),
 		makeIsFn(types.VarBit, types.VarBit),
+		makeIsFn(types.Geometry, types.Geometry),
+		makeIsFn(types.Geography, types.Geography),
 
 		// Mixed-type comparisons.
 		makeIsFn(types.Date, types.Timestamp),
@@ -2036,6 +2044,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.String),
 		makeEvalTupleIn(types.Time),
 		makeEvalTupleIn(types.TimeTZ),
+		makeEvalTupleIn(types.Geometry),
+		makeEvalTupleIn(types.Geography),
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
 		makeEvalTupleIn(types.Uuid),
@@ -3454,7 +3464,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
 		case *DBool, *DInt, *DDecimal:
 			s = d.String()
-		case *DTimestamp, *DDate, *DTime, *DTimeTZ:
+		case *DTimestamp, *DDate, *DTime, *DTimeTZ, *DGeometry, *DGeography:
 			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DTimestampTZ:
 			// Convert to context timezone for correct display.
@@ -3506,6 +3516,28 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				s = s[:t.Width()]
 			}
 			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv)
+		}
+
+	case types.GeometryFamily:
+		switch d := d.(type) {
+		case *DString:
+			return ParseDGeometry(string(*d))
+		case *DCollatedString:
+			return ParseDGeometry(d.Contents)
+			// TODO(#geo): expand for other valid types.
+		case *DGeometry:
+			return d, nil // TODO(#geo): error if SRIDs !=
+		}
+
+	case types.GeographyFamily:
+		switch d := d.(type) {
+		case *DString:
+			return ParseDGeography(string(*d))
+		case *DCollatedString:
+			return ParseDGeography(d.Contents)
+			// TODO(#geo): expand for other valid types.
+		case *DGeography:
+			return d, nil // TODO(#geo): error if SRIDs !=
 		}
 
 	case types.BytesFamily:
@@ -4330,6 +4362,16 @@ func (t *DDate) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DTime) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DGeometry) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DGeography) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

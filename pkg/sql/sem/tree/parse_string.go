@@ -50,6 +50,10 @@ func ParseAndRequireString(t *types.T, s string, ctx ParseTimeContext) (Datum, e
 		return NewDOid(*i), err
 	case types.StringFamily:
 		return NewDString(s), nil
+	case types.GeometryFamily:
+		return ParseDGeometry(s)
+	case types.GeographyFamily:
+		return ParseDGeography(s)
 	case types.TimeFamily:
 		return ParseDTime(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
 	case types.TimeTZFamily:

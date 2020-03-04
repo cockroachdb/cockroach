@@ -59,6 +59,8 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx int, t *types.T, buf []byte) 
 		// "Untagged" version of this function.
 		buf, b, err = encoding.DecodeBoolValue(buf)
 		vec.Bool()[idx] = b
+	case types.GeometryFamily, types.GeographyFamily:
+
 	case types.BytesFamily, types.StringFamily:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)

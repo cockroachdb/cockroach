@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -231,6 +232,30 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.ParseDTimeTZ(nil, x.(string), time.Microsecond)
+		}
+	case types.GeographyFamily:
+		avroType = avroSchemaBytes
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DGeography).Encode(), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			g, err := geo.DecodeGeometry(x.([]byte))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DGeography{g}, nil
+		}
+	case types.GeometryFamily:
+		avroType = avroSchemaBytes
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DGeometry).Encode(), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			g, err := geo.DecodeGeometry(x.([]byte))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DGeometry{g}, nil
 		}
 	case types.TimestampFamily:
 		avroType = avroLogicalType{

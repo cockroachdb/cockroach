@@ -445,6 +445,10 @@ func EncodeTableValue(
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTimeTZ:
 		return encoding.EncodeTimeTZValue(appendTo, uint32(colID), t.TimeTZ), nil
+	case *tree.DGeometry:
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.Geometry), nil
+	case *tree.DGeography:
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.Geometry), nil
 	case *tree.DTimestamp:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *tree.DTimestampTZ:
@@ -571,6 +575,18 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 			return nil, b, err
 		}
 		return a.NewDTimeTZ(tree.DTimeTZ{TimeTZ: data}), b, nil
+	case types.GeometryFamily:
+		b, data, err := encoding.DecodeUntaggedGeoValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDGeometry(tree.DGeometry{Geometry: data}), b, nil
+	case types.GeographyFamily:
+		b, data, err := encoding.DecodeUntaggedGeoValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDGeography(tree.DGeography{Geometry: data}), b, nil
 	case types.TimestampFamily:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
@@ -704,6 +720,16 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 	case types.TimeTZFamily:
 		if v, ok := val.(*tree.DTimeTZ); ok {
 			r.SetTimeTZ(v.TimeTZ)
+			return r, nil
+		}
+	case types.GeometryFamily:
+		if v, ok := val.(*tree.DGeometry); ok {
+			r.SetGeo(v.Geometry)
+			return r, nil
+		}
+	case types.GeographyFamily:
+		if v, ok := val.(*tree.DGeography); ok {
+			r.SetGeo(v.Geometry)
 			return r, nil
 		}
 	case types.TimestampFamily:
@@ -853,6 +879,18 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDTimeTZ(tree.DTimeTZ{TimeTZ: v}), nil
+	case types.GeometryFamily:
+		v, err := value.GetGeo()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDGeometry(tree.DGeometry{Geometry: v}), nil
+	case types.GeographyFamily:
+		v, err := value.GetGeo()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDGeography(tree.DGeography{Geometry: v}), nil
 	case types.TimestampFamily:
 		v, err := value.GetTime()
 		if err != nil {
@@ -1167,6 +1205,10 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.Int, nil
 	case types.TimeTZFamily:
 		return encoding.TimeTZ, nil
+	case types.GeometryFamily:
+		return encoding.Geo, nil
+	case types.GeographyFamily:
+		return encoding.Geo, nil
 	case types.IntervalFamily:
 		return encoding.Duration, nil
 	case types.BoolFamily:
@@ -1224,6 +1266,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DTimeTZ:
 		return encoding.EncodeUntaggedTimeTZValue(b, t.TimeTZ), nil
+	case *tree.DGeometry:
+		return encoding.EncodeUntaggedGeoValue(b, t.Geometry), nil
 	case *tree.DTimestamp:
 		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
 	case *tree.DTimestampTZ:

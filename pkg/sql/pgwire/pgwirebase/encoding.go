@@ -372,6 +372,12 @@ func DecodeOidDatum(
 				return nil, err
 			}
 			return tree.ParseDJSON(string(b))
+		case types.T_geometry:
+			d, err := tree.ParseDGeometry(string(b))
+			if err != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geometry", b)
+			}
+			return d, nil
 		}
 		if _, ok := types.ArrayOids[id]; ok {
 			// Arrays come in in their string form, so we parse them as such and later

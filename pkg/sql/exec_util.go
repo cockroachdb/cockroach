@@ -867,6 +867,8 @@ func checkResultType(typ *types.T) error {
 	case types.INetFamily:
 	case types.OidFamily:
 	case types.TupleFamily:
+	case types.GeometryFamily:
+	case types.GeographyFamily:
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.ArrayFamily {
 			// Technically we could probably return arrays of arrays to a

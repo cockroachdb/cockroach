@@ -82,6 +82,7 @@ const (
 	categoryComparison    = "Comparison"
 	categoryCompatibility = "Compatibility"
 	categoryDateAndTime   = "Date and time"
+	categoryGeospatial    = "Geospatial"
 	categoryIDGeneration  = "ID generation"
 	categorySequences     = "Sequence"
 	categoryMath          = "Math and numeric"

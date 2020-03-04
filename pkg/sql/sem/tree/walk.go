@@ -623,6 +623,12 @@ func (expr *DTime) Walk(_ Visitor) Expr { return expr }
 func (expr *DTimeTZ) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DGeometry) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *DGeography) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DFloat) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.

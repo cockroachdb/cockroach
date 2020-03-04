@@ -225,6 +225,18 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.TimestampTZFamily:
 		return tree.MakeDTimestampTZ(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
 			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+	case types.GeographyFamily:
+		ret, err := tree.ParseDGeography("SRID=4326;POINT(1 2)")
+		if err != nil {
+			panic(err)
+		}
+		return ret
+	case types.GeometryFamily:
+		ret, err := tree.ParseDGeometry("SRID=4326;POINT(1 2)")
+		if err != nil {
+			panic(err)
+		}
+		return ret
 	case types.CollatedStringFamily:
 		// Generate a random Unicode string.
 		var buf bytes.Buffer

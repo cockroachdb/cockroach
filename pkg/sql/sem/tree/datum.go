@@ -25,6 +25,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1964,6 +1965,182 @@ func (d *DTime) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// DGeometry is the geometry Datum.
+type DGeometry struct {
+	geo.Geometry
+}
+
+func ParseDGeometry(str string) (*DGeometry, error) {
+	g, err := geo.ParseGeometry(str)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not parse geometry")
+	}
+	return &DGeometry{Geometry: g}, nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DGeometry) ResolvedType() *types.T {
+	return types.Geometry
+}
+
+// Compare implements the Datum interface.
+func (d *DGeometry) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	// TODO(#geo): what this
+	curr := d.Encode()
+	cmpTo := other.(*DGeometry).Encode()
+	return bytes.Compare(curr, cmpTo)
+}
+
+// Prev implements the Datum interface.
+func (d *DGeometry) Prev(ctx *EvalContext) (Datum, bool) {
+	if d.IsMin(ctx) {
+		return nil, false
+	}
+	// TODO(#geo): what this
+	return d, false
+}
+
+// Next implements the Datum interface.
+func (d *DGeometry) Next(ctx *EvalContext) (Datum, bool) {
+	if d.IsMax(ctx) {
+		return nil, false
+	}
+	return d, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DGeometry) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DGeometry) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DGeometry) Max(_ *EvalContext) (Datum, bool) {
+	return d, false
+}
+
+// Min implements the Datum interface.
+func (d *DGeometry) Min(_ *EvalContext) (Datum, bool) {
+	return d, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DGeometry) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DGeometry) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.Geometry.String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DGeometry) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
+// DGeography is the geometry Datum.
+type DGeography struct {
+	geo.Geometry
+}
+
+func ParseDGeography(str string) (*DGeography, error) {
+	g, err := geo.ParseGeometry(str)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not parse geometry")
+	}
+	return &DGeography{Geometry: g}, nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DGeography) ResolvedType() *types.T {
+	return types.Geography
+}
+
+// Compare implements the Datum interface.
+func (d *DGeography) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	// TODO(#geo): what this
+	curr := d.Encode()
+	cmpTo := other.(*DGeography).Encode()
+	return bytes.Compare(curr, cmpTo)
+}
+
+// Prev implements the Datum interface.
+func (d *DGeography) Prev(ctx *EvalContext) (Datum, bool) {
+	if d.IsMin(ctx) {
+		return nil, false
+	}
+	// TODO(#geo): what this
+	return d, false
+}
+
+// Next implements the Datum interface.
+func (d *DGeography) Next(ctx *EvalContext) (Datum, bool) {
+	if d.IsMax(ctx) {
+		return nil, false
+	}
+	return d, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DGeography) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DGeography) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DGeography) Max(_ *EvalContext) (Datum, bool) {
+	return d, false
+}
+
+// Min implements the Datum interface.
+func (d *DGeography) Min(_ *EvalContext) (Datum, bool) {
+	return d, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DGeography) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DGeography) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.Geometry.String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DGeography) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DTimeTZ is the time with time zone Datum.
 type DTimeTZ struct {
 	timetz.TimeTZ
@@ -3887,6 +4064,8 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
+	types.GeometryFamily:       {unsafe.Sizeof(DGeometry{}), fixedSize},
+	types.GeographyFamily:      {unsafe.Sizeof(DGeography{}), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
 	types.TimestampTZFamily:    {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},

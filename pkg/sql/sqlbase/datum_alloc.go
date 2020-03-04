@@ -25,6 +25,8 @@ type DatumAlloc struct {
 	ddateAlloc        []tree.DDate
 	dtimeAlloc        []tree.DTime
 	dtimetzAlloc      []tree.DTimeTZ
+	dgeometryAlloc    []tree.DGeometry
+	dgeographyAlloc   []tree.DGeography
 	dtimestampAlloc   []tree.DTimestamp
 	dtimestampTzAlloc []tree.DTimestampTZ
 	dintervalAlloc    []tree.DInterval
@@ -161,6 +163,30 @@ func (a *DatumAlloc) NewDTimeTZ(v tree.DTimeTZ) *tree.DTimeTZ {
 	buf := &a.dtimetzAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DTimeTZ, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDGeometry allocates a DGeometry.
+func (a *DatumAlloc) NewDGeometry(v tree.DGeometry) *tree.DGeometry {
+	buf := &a.dgeometryAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DGeometry, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDGeography allocates a DGeography.
+func (a *DatumAlloc) NewDGeography(v tree.DGeography) *tree.DGeography {
+	buf := &a.dgeographyAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DGeography, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

@@ -25,6 +25,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -80,6 +81,7 @@ const (
 	bitArrayDataDescTerminator = 0xff
 
 	timeTZMarker = bitArrayDescMarker + 1
+	geoMarker    = timeTZMarker + 1
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
@@ -1274,6 +1276,7 @@ const (
 	BitArray     Type = 17
 	BitArrayDesc Type = 18 // BitArray encoded descendingly
 	TimeTZ       Type = 19
+	Geo          Type = 20
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1318,6 +1321,8 @@ func slowPeekType(b []byte) Type {
 			return Time
 		case m == timeTZMarker:
 			return TimeTZ
+		case m == geoMarker:
+			return Geo
 		case m == byte(Array):
 			return Array
 		case m == byte(True):
@@ -1920,6 +1925,19 @@ func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
 	return EncodeNonsortingStdlibVarint(appendTo, int64(t.OffsetSecs))
 }
 
+// EncodeGeoValue encodes a geo.Geometry value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeGeoValue(appendTo []byte, colID uint32, t geo.Geometry) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, Geo)
+	return EncodeUntaggedGeoValue(appendTo, t)
+}
+
+// EncodeUntaggedGeoValue encodes a geo.Geometry value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeUntaggedGeoValue(appendTo []byte, t geo.Geometry) []byte {
+	return EncodeUntaggedBytesValue(appendTo, t.Encode())
+}
+
 // EncodeDecimalValue encodes an apd.Decimal value with its value tag, appends
 // it to the supplied buffer, and returns the final buffer.
 func EncodeDecimalValue(appendTo []byte, colID uint32, d *apd.Decimal) []byte {
@@ -2178,6 +2196,26 @@ func DecodeUntaggedTimeTZValue(b []byte) (remaining []byte, t timetz.TimeTZ, err
 	return b, timetz.MakeTimeTZ(timeofday.TimeOfDay(timeOfDayMicros), int32(offsetSecs)), nil
 }
 
+// DecodeGeometryValue decodes a value encoded by EncodeGeometryValue.
+func DecodeGeoValue(b []byte) (remaining []byte, t geo.Geometry, err error) {
+	b, err = decodeValueTypeAssert(b, Geo)
+	if err != nil {
+		return b, geo.Geometry{}, err
+	}
+	return DecodeUntaggedGeoValue(b)
+}
+
+// DecodeUntaggedGeoValue decodes a value encoded by EncodeUntaggedGeoValue.
+func DecodeUntaggedGeoValue(b []byte) (remaining []byte, t geo.Geometry, err error) {
+	var data []byte
+	remaining, data, err = DecodeUntaggedBytesValue(b)
+	if err != nil {
+		return b, geo.Geometry{}, err
+	}
+	g, err := geo.DecodeGeometry(data)
+	return remaining, g, err
+}
+
 // DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.
 func DecodeDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 	b, err = decodeValueTypeAssert(b, Decimal)
@@ -2356,7 +2394,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON:
+	case Bytes, Array, JSON, Geo:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case BitArray:
@@ -2477,6 +2515,13 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 	case TimeTZ:
 		var t timetz.TimeTZ
 		b, t, err = DecodeTimeTZValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.String(), nil
+	case Geo:
+		var t geo.Geometry
+		b, t, err = DecodeGeoValue(b)
 		if err != nil {
 			return b, "", err
 		}

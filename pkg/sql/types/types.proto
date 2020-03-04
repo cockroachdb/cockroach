@@ -14,6 +14,7 @@ package cockroach.sql.sem.types;
 option go_package = "types";
 
 import "gogoproto/gogo.proto";
+import "geo/geo.proto";
 
 // See the comment header for the T.Family method for more details.
 enum Family {
@@ -340,6 +341,11 @@ enum Family {
 
     // OidVectorFamily deprecated in 19.1, since it now uses Oid.
     reserved 201;
+
+    // GeometryFamily ...
+    GeometryFamily = 90000;
+    // GeographyFamily...
+    GeographyFamily = 90001;
 }
 
 // IntervalDurationType represents a duration that can be used
@@ -378,6 +384,13 @@ message IntervalDurationField {
   // i.e. in the `DurationType_1 TO DurationType_2` syntax, this represents `DurationType_1`.
   // Note this is ignored, see https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net.
   optional IntervalDurationType from_duration_type = 2 [(gogoproto.nullable) = false];
+}
+
+// GeoField represents geography-specific data.
+message GeoField {
+  optional geo.SpatialDataType spatial_data_type = 1 [(gogoproto.nullable) = false];
+  optional int32 srid = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SRID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/geo.SRID"];
+  // TODO(#geo): dimension [just more parsing]
 }
 
 // InternalType is the protobuf encoding for SQL types. It is always wrapped by
@@ -451,4 +464,7 @@ message InternalType {
     // IntervalDurationField is populated for intervals, representing extra
     // typmod or precision data that may be required.
     optional IntervalDurationField interval_duration_field = 13;
+
+    // GeoField ...
+    optional GeoField geo_field = 14;
 }

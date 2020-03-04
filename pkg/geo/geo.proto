@@ -1,0 +1,35 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.geo;
+option go_package = "geo";
+
+import "gogoproto/gogo.proto";
+
+// TODO(#geo): this turned out to be a bad idea, as now everything depends on geo
+// (for protobuf gen) and geo may be yuuuuuge
+enum SpatialDataType {
+  Unset = 0;
+
+  Point = 1;
+  Curve = 2;
+  LineString = 3;
+  Surface = 4;
+  Polygon = 5;
+  GeometryCollection = 6;
+  MultiSurface = 7;
+  MultiPolygon = 8;
+  MultiCurve = 9;
+  MultiLineString = 10;
+  MultiPoint = 11;
+
+  Geometry = 100;
+}

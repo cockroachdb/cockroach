@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -448,6 +449,14 @@ func (v *Value) SetTimeTZ(t timetz.TimeTZ) {
 	v.setTag(ValueType_TIMETZ)
 }
 
+// SetGeo encodes the specified time value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetGeo(t geo.Geometry) {
+	v.ensureRawBytes(headerSize + 1000 /* TODO(#gen) */)
+	v.RawBytes = encoding.EncodeUntaggedGeoValue(v.RawBytes[:headerSize], t)
+	v.setTag(ValueType_GEOMETRY)
+}
+
 // SetDuration encodes the specified duration value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetDuration(t duration.Duration) error {
@@ -579,6 +588,16 @@ func (v Value) GetTimeTZ() (timetz.TimeTZ, error) {
 		return timetz.TimeTZ{}, fmt.Errorf("value type is not %s: %s", ValueType_TIMETZ, tag)
 	}
 	_, t, err := encoding.DecodeTimeTZAscending(v.dataBytes())
+	return t, err
+}
+
+// GetGeo decodes a time value from the bytes field of the receiver. If the
+// tag is not GEOMETRY an error will be returned.
+func (v Value) GetGeo() (geo.Geometry, error) {
+	if tag := v.GetTag(); tag != ValueType_GEOMETRY {
+		return geo.Geometry{}, fmt.Errorf("value type is not %s: %s", ValueType_GEOMETRY, tag)
+	}
+	_, t, err := encoding.DecodeGeoValue(v.dataBytes())
 	return t, err
 }
 

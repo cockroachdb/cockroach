@@ -1376,6 +1376,14 @@ func (d *DTimeTZ) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { ret
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DGeometry) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DGeography) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DTimestamp) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent

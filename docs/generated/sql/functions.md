@@ -29,6 +29,10 @@
 </span></td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
+<tr><td><a name="array_append"></a><code>array_append(array: geography[], elem: geography) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
+<tr><td><a name="array_append"></a><code>array_append(array: geometry[], elem: geometry) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -60,6 +64,10 @@
 <tr><td><a name="array_cat"></a><code>array_cat(left: <a href="timestamp.html">timestamptz</a>[], right: <a href="timestamp.html">timestamptz</a>[]) &rarr; <a href="timestamp.html">timestamptz</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: <a href="uuid.html">uuid</a>[], right: <a href="uuid.html">uuid</a>[]) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td></tr>
+<tr><td><a name="array_cat"></a><code>array_cat(left: geography[], right: geography[]) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td></tr>
+<tr><td><a name="array_cat"></a><code>array_cat(left: geometry[], right: geometry[]) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: oid[], right: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
@@ -97,6 +105,10 @@
 </span></td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: geography[], elem: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: geometry[], elem: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
@@ -128,6 +140,10 @@
 <tr><td><a name="array_positions"></a><code>array_positions(array: <a href="timestamp.html">timestamptz</a>[], elem: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_positions"></a><code>array_positions(array: geography[], elem: geography) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_positions"></a><code>array_positions(array: geometry[], elem: geometry) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: oid[], elem: oid) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
@@ -161,6 +177,10 @@
 </span></td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: <a href="uuid.html">uuid</a>, array: <a href="uuid.html">uuid</a>[]) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
+<tr><td><a name="array_prepend"></a><code>array_prepend(elem: geography, array: geography[]) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
+<tr><td><a name="array_prepend"></a><code>array_prepend(elem: geometry, array: geometry[]) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: oid, array: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: timetz, array: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -193,6 +213,10 @@
 </span></td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: <a href="uuid.html">uuid</a>[], elem: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
+<tr><td><a name="array_remove"></a><code>array_remove(array: geography[], elem: geography) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_remove"></a><code>array_remove(array: geometry[], elem: geometry) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
@@ -224,6 +248,10 @@
 <tr><td><a name="array_replace"></a><code>array_replace(array: <a href="timestamp.html">timestamptz</a>[], toreplace: <a href="timestamp.html">timestamptz</a>, replacewith: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: <a href="uuid.html">uuid</a>[], toreplace: <a href="uuid.html">uuid</a>, replacewith: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_replace"></a><code>array_replace(array: geography[], toreplace: geography, replacewith: geography) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td></tr>
+<tr><td><a name="array_replace"></a><code>array_replace(array: geometry[], toreplace: geometry, replacewith: geometry) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: oid[], toreplace: oid, replacewith: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
@@ -1333,6 +1361,56 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td></tr>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
+</span></td></tr>
+<tr><td><a name="st_area"></a><code>st_area(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between two geometries on the Earth’s sphere.</p>
+</span></td></tr>
+<tr><td><a name="st_area"></a><code>st_area(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between two geometries.</p>
+</span></td></tr>
+<tr><td><a name="st_astext"></a><code>st_astext(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT of the geography.</p>
+</span></td></tr>
+<tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT of the geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_contains"></a><code>st_contains(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_crosses"></a><code>st_crosses(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_disjoint"></a><code>st_disjoint(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_distance"></a><code>st_distance(from_geography: geography, to_geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between two geometries on the Earth’s sphere.</p>
+</span></td></tr>
+<tr><td><a name="st_distance"></a><code>st_distance(from_geography: geography, to_geography: geography, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between two geometries on the Earth’s sphere.</p>
+</span></td></tr>
+<tr><td><a name="st_distance"></a><code>st_distance(from_geometry: geometry, to_geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between two geometries.</p>
+</span></td></tr>
+<tr><td><a name="st_equals"></a><code>st_equals(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_geographyfromtext"></a><code>st_geographyfromtext(ewkt: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Forms a Geography from EWKT.</p>
+</span></td></tr>
+<tr><td><a name="st_geometryfromtext"></a><code>st_geometryfromtext(wkt: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Forms a Geometry from WKT.</p>
+</span></td></tr>
+<tr><td><a name="st_geometryfromtext"></a><code>st_geometryfromtext(wkt: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Forms a Geometry from WKT and SRID.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromtext"></a><code>st_geomfromtext(wkt: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Forms a Geometry from WKT.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromtext"></a><code>st_geomfromtext(wkt: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Forms a Geometry from WKT and SRID.</p>
+</span></td></tr>
+<tr><td><a name="st_intersects"></a><code>st_intersects(A: geography, B: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_intersects"></a><code>st_intersects(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_overlaps"></a><code>st_overlaps(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_srid"></a><code>st_srid(geometry: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_srid"></a><code>st_srid(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_touches"></a><code>st_touches(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_within"></a><code>st_within(A: geometry, B: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>TODO</p>
+</span></td></tr>
+<tr><td><a name="st_x"></a><code>st_x(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the X coordinate of a geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_y"></a><code>st_y(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Y coordinate of a geometry.</p>
 </span></td></tr></tbody>
 </table>
 

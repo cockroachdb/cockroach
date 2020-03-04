@@ -300,6 +300,8 @@ func TestAvroSchema(t *testing.T) {
 			`TIMETZ`:       `["null","string"]`,
 			`TIMESTAMP`:    `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`TIMESTAMPTZ`:  `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`GEOGRAPHY`:    `["null","bytes"]`,
+			`GEOMETRY`:     `["null","bytes"]`,
 			`UUID`:         `["null","string"]`,
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
@@ -360,6 +362,15 @@ func TestAvroSchema(t *testing.T) {
 
 			{sqlType: `BYTES`, sql: `NULL`, avro: `null`},
 			{sqlType: `BYTES`,
+				sql:  `'\x0101000000000000000000f03f0000000000000040'`,
+				avro: `{"bytes":"\x0101000000000000000000f03f0000000000000040"}`},
+
+			{sqlType: `GEOGRAPHY`, sql: `NULL`, avro: `null`},
+			{sqlType: `GEOGRAPHY`,
+				sql:  `'\x0101000000000000000000f03f0000000000000040'`,
+				avro: `{"bytes":"\x0101000000000000000000f03f0000000000000040"}`},
+			{sqlType: `GEOMETRY`, sql: `NULL`, avro: `null`},
+			{sqlType: `GEOMETRY`,
 				sql:  `'foo'`,
 				avro: `{"bytes":"foo"}`},
 
