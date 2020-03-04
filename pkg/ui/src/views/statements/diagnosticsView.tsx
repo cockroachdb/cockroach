@@ -16,9 +16,11 @@ import { AdminUIState } from "src/redux/state";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 
 import "./diagnosticsView.styl";
+import { requestStatementDiagnostics } from "oss/src/redux/statements";
+import { selectDiagnosticRequestsCountByStatementFingerprint } from "oss/src/redux/statements/statementsSelectors";
 
 interface DiagnosticsViewOwnProps {
-  statementId?: string;
+  statementFingerprint?: string;
 }
 
 type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispatchToProps;
@@ -26,12 +28,12 @@ type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispa
 class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
 
   render() {
-    const { hasData, activate } = this.props;
+    const { hasData } = this.props;
 
     if (!hasData) {
       return (
         <SummaryCard className="summary--card__empty-sate">
-          <EmptyDiagnosticsView activate={activate} />
+          <EmptyDiagnosticsView {...this.props} />
         </SummaryCard>
       );
     }
@@ -45,11 +47,14 @@ class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
   }
 }
 
-export type EmptyDiagnosticsViewProps = Pick<DiagnosticsViewProps, "activate">;
+export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> {
 
-export class EmptyDiagnosticsView extends React.Component<EmptyDiagnosticsViewProps> {
+  onActivateButtonClick = () => {
+    const { activate, statementFingerprint } = this.props;
+    activate(statementFingerprint);
+  }
+
   render() {
-    const { activate } = this.props;
     return (
       <div className="crl-statements-diagnostics-view">
         <Text
@@ -73,7 +78,7 @@ export class EmptyDiagnosticsView extends React.Component<EmptyDiagnosticsViewPr
           <footer className="crl-statements-diagnostics-view__footer">
             <Button
               type="primary"
-              onClick={activate}
+              onClick={this.onActivateButtonClick}
             >
               Activate
             </Button>
@@ -89,15 +94,19 @@ interface MapStateToProps {
 }
 
 interface MapDispatchToProps {
-  activate: () => void;
+  activate: (statementFingerprint: string) => void;
 }
 
-const mapStateToProps = (_state: AdminUIState): MapStateToProps => ({
-  hasData: false,
+const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapStateToProps => ({
+  hasData: selectDiagnosticRequestsCountByStatementFingerprint(state, props.statementFingerprint) > 0,
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
-  activate: () => {},
+  activate: requestStatementDiagnostics,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(DiagnosticsView);
+export default connect<
+  MapStateToProps,
+  MapDispatchToProps,
+  DiagnosticsViewOwnProps
+  >(mapStateToProps, mapDispatchToProps)(DiagnosticsView);

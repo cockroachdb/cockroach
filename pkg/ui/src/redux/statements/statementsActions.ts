@@ -13,12 +13,13 @@ import { PayloadAction } from "src/interfaces/action";
 
 export const REQUEST_STATEMENT_DIAGNOSTICS = "cockroachui/statements/REQUEST_STATEMENT_DIAGNOSTICS";
 export const STATEMENT_DIAGNOSTICS_REQUEST_COMPLETE = "cockroachui/statements/STATEMENT_DIAGNOSTICS_REQUEST_COMPLETE";
+export const STATEMENT_DIAGNOSTICS_REQUEST_FAILED = "cockroachui/statements/STATEMENT_DIAGNOSTICS_REQUEST_FAILED";
 
-export type EnqueueDiagnosticsPayload = {
+export type DiagnosticsPayload = {
   statementFingerprint: string;
 };
 
-export function requestStatementDiagnostics(statementFingerprint: string): PayloadAction<EnqueueDiagnosticsPayload> {
+export function requestStatementDiagnostics(statementFingerprint: string): PayloadAction<DiagnosticsPayload> {
   return {
     type: REQUEST_STATEMENT_DIAGNOSTICS,
     payload: {
@@ -30,5 +31,11 @@ export function requestStatementDiagnostics(statementFingerprint: string): Paylo
 export function completeStatementDiagnosticsRequest(): Action {
   return {
     type: STATEMENT_DIAGNOSTICS_REQUEST_COMPLETE,
+  };
+}
+
+export function failedStatementDiagnosticsRequest(): Action {
+  return {
+    type: STATEMENT_DIAGNOSTICS_REQUEST_FAILED,
   };
 }
