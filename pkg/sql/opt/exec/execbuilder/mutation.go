@@ -802,38 +802,65 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 		return false
 	}
 
-	// Try to match the pattern:
-	//
-	//  (Update
-	//  	$input:(Scan $scanPrivate:*)
-	//  	$checks:*
-	//  	$mutationPrivate:*
-	//  )
-	//
-	// Or
-	//
-	//  (Update
-	//  	$input:(Project
-	//  		(Scan $scanPrivate:*)
-	//  		$projections:*
-	//  		$passthrough:*
-	//  	)
-	//  	$checks:*
-	//  	$mutationPrivate:*
-	//  )
-	//
-	_, ok := upd.Input.(*memo.ScanExpr)
-	if !ok {
-		proj, ok := upd.Input.(*memo.ProjectExpr)
-		if !ok {
-			return false
+	// Try to match any of the following patterns:
+	switch t := upd.Input.(type) {
+	case *memo.ScanExpr:
+		// (Update
+		//     $input:(Scan $scanPrivate:*)
+		//     $checks:*
+		//     $mutationPrivate:*
+		// )
+		return true
+
+	case *memo.ProjectExpr:
+		switch t2 := t.Input.(type) {
+		case *memo.ScanExpr:
+			// (Update
+			//     $input:(Project
+			//         $input:(Scan $scanPrivate:*)
+			//         $projections:*
+			//         $passthrough:*
+			//     )
+			//     $checks:*
+			//     $mutationPrivate:*
+			// )
+			return true
+
+		case *memo.IndexJoinExpr:
+			switch t2.Input.(type) {
+			case *memo.ScanExpr:
+				// (Update
+				//     $input:(Project
+				//         $input:(IndexJoin
+				//             $input:(Scan $scanPrivate:*)
+				//             $indexJoinPrivate:*
+				//         )
+				//         $projections:*
+				//         $passthrough:*
+				//     )
+				//     $checks:*
+				//     $mutationPrivate:*
+				// )
+				return true
+			}
 		}
-		_, ok = proj.Input.(*memo.ScanExpr)
-		if !ok {
-			return false
+
+	case *memo.IndexJoinExpr:
+		switch t.Input.(type) {
+		case *memo.ScanExpr:
+			// (Update
+			//     $input:(IndexJoin
+			//         $input:(Scan $scanPrivate:*)
+			//         $indexJoinPrivate:*
+			//     )
+			//     $checks:*
+			//     $mutationPrivate:*
+			// )
+			return true
 		}
 	}
-	return true
+
+	return false
 }
 
 // tryApplyImplicitLockingToUpsertInput determines whether or not the builder
