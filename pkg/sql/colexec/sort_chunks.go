@@ -336,17 +336,16 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 				// There are some buffered tuples, so we need to check whether the
 				// first tuple of s.batch belongs to the chunk that is being buffered.
 				differ := false
-				for _, col := range s.alreadySortedCols {
-					if err := tuplesDiffer(
-						s.inputTypes[col.ColIdx],
-						s.bufferedTuples.ColVec(int(col.ColIdx)),
-						0, /*aTupleIdx */
-						s.batch.ColVec(int(col.ColIdx)),
-						0, /* bTupleIdx */
-						&differ,
-					); err != nil {
-						execerror.VectorizedInternalPanic(err)
-					}
+				i := 0
+				for !differ && i < len(s.alreadySortedCols) {
+					differ = valuesDiffer(
+						s.inputTypes[s.alreadySortedCols[i].ColIdx],
+						s.bufferedTuples.ColVec(int(s.alreadySortedCols[i].ColIdx)),
+						0, /*aValueIdx */
+						s.batch.ColVec(int(s.alreadySortedCols[i].ColIdx)),
+						0, /* bValueIdx */
+					)
+					i++
 				}
 				if differ {
 					// Buffered tuples comprise a full chunk, so we proceed to emitting
