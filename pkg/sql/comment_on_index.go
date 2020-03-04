@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -77,10 +78,11 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 func (p *planner) upsertIndexComment(
 	ctx context.Context, tableID sqlbase.ID, indexID sqlbase.IndexID, comment string,
 ) error {
-	_, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+	_, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"set-index-comment",
 		p.Txn(),
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 		keys.IndexCommentType,
 		tableID,
@@ -93,10 +95,11 @@ func (p *planner) upsertIndexComment(
 func (p *planner) removeIndexComment(
 	ctx context.Context, tableID sqlbase.ID, indexID sqlbase.IndexID,
 ) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-index-comment",
 		p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.IndexCommentType,
 		tableID,
