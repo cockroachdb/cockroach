@@ -772,6 +772,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			internalExecutor,
 		),
 
+		// Note: don't forget to add the secondary loggers as closers
+		// on the Stopper, below.
+
 		ExecLogger: log.NewSecondaryLogger(
 			loggerCtx, nil /* dirName */, "sql-exec",
 			true /* enableGc */, false /*forceSyncWrites*/, true, /* enableMsgCount */
@@ -790,6 +793,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
 		ProtectedTimestampProvider: s.protectedtsProvider,
 	}
+
+	s.stopper.AddCloser(execCfg.ExecLogger)
+	s.stopper.AddCloser(execCfg.AuditLogger)
+	s.stopper.AddCloser(execCfg.SlowQueryLogger)
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
