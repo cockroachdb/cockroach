@@ -16,8 +16,8 @@ import { AdminUIState } from "src/redux/state";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 
 import "./diagnosticsView.styl";
-import { requestStatementDiagnosticsReport } from "oss/src/redux/statements";
-import { selectDiagnosticsReportsCountByStatementFingerprint } from "oss/src/redux/statements/statementsSelectors";
+import { requestStatementDiagnosticsReport } from "src/redux/statements";
+import { selectDiagnosticsReportsCountByStatementFingerprint } from "src/redux/statements/statementsSelectors";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
