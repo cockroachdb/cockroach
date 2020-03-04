@@ -24,15 +24,15 @@ update child
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column5:9!null
+                ├── columns: column5:6!null
                 ├── with-scan &1
-                │    ├── columns: column5:9!null
+                │    ├── columns: column5:6!null
                 │    └── mapping:
-                │         └──  column5:5 => column5:9
+                │         └──  column5:5 => column5:6
                 ├── scan parent
-                │    └── columns: parent.p:7!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── column5:9 = parent.p:7
+                     └── column5:6 = parent.p:8
 
 build
 UPDATE parent SET p = p+1
@@ -52,27 +52,23 @@ update parent
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── semi-join (hash)
-                ├── columns: p:10!null
-                ├── project
-                │    ├── columns: p:10!null
-                │    ├── except
+                ├── columns: p:8!null
+                ├── except
+                │    ├── columns: p:8!null
+                │    ├── left columns: p:8!null
+                │    ├── right columns: column7:9
+                │    ├── with-scan &1
                 │    │    ├── columns: p:8!null
-                │    │    ├── left columns: p:8!null
-                │    │    ├── right columns: column7:9
-                │    │    ├── with-scan &1
-                │    │    │    ├── columns: p:8!null
-                │    │    │    └── mapping:
-                │    │    │         └──  parent.p:5 => p:8
-                │    │    └── with-scan &1
-                │    │         ├── columns: column7:9!null
-                │    │         └── mapping:
-                │    │              └──  column7:7 => column7:9
-                │    └── projections
-                │         └── p:8 [as=p:10]
+                │    │    └── mapping:
+                │    │         └──  parent.p:5 => p:8
+                │    └── with-scan &1
+                │         ├── columns: column7:9!null
+                │         └── mapping:
+                │              └──  column7:7 => column7:9
                 ├── scan child
-                │    └── columns: child.p:12!null
+                │    └── columns: child.p:11!null
                 └── filters
-                     └── p:10 = child.p:12
+                     └── p:8 = child.p:11
 
 exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
@@ -96,27 +92,23 @@ update child
  └── f-k-checks
       └── f-k-checks-item: grandchild(c) -> child(c)
            └── semi-join (hash)
-                ├── columns: c:8!null
-                ├── project
-                │    ├── columns: c:8!null
-                │    ├── except
+                ├── columns: c:6!null
+                ├── except
+                │    ├── columns: c:6!null
+                │    ├── left columns: c:6!null
+                │    ├── right columns: column5:7
+                │    ├── with-scan &1
                 │    │    ├── columns: c:6!null
-                │    │    ├── left columns: c:6!null
-                │    │    ├── right columns: column5:7
-                │    │    ├── with-scan &1
-                │    │    │    ├── columns: c:6!null
-                │    │    │    └── mapping:
-                │    │    │         └──  child.c:3 => c:6
-                │    │    └── with-scan &1
-                │    │         ├── columns: column5:7!null
-                │    │         └── mapping:
-                │    │              └──  column5:5 => column5:7
-                │    └── projections
-                │         └── c:6 [as=c:8]
+                │    │    └── mapping:
+                │    │         └──  child.c:3 => c:6
+                │    └── with-scan &1
+                │         ├── columns: column5:7!null
+                │         └── mapping:
+                │              └──  column5:5 => column5:7
                 ├── scan grandchild
-                │    └── columns: grandchild.c:10!null
+                │    └── columns: grandchild.c:9!null
                 └── filters
-                     └── c:8 = grandchild.c:10
+                     └── c:6 = grandchild.c:9
 
 # This update shouldn't emit checks for c, since it's unchanged.
 build
@@ -137,15 +129,15 @@ update child
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column5:9!null
+                ├── columns: column5:6!null
                 ├── with-scan &1
-                │    ├── columns: column5:9!null
+                │    ├── columns: column5:6!null
                 │    └── mapping:
-                │         └──  column5:5 => column5:9
+                │         └──  column5:5 => column5:6
                 ├── scan parent
-                │    └── columns: parent.p:7!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── column5:9 = parent.p:7
+                     └── column5:6 = parent.p:8
 
 build
 UPDATE child SET p = p
@@ -161,15 +153,15 @@ update child
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:8!null
+                ├── columns: p:5!null
                 ├── with-scan &1
-                │    ├── columns: p:8!null
+                │    ├── columns: p:5!null
                 │    └── mapping:
-                │         └──  child.p:4 => p:8
+                │         └──  child.p:4 => p:5
                 ├── scan parent
-                │    └── columns: parent.p:6!null
+                │    └── columns: parent.p:7!null
                 └── filters
-                     └── p:8 = parent.p:6
+                     └── p:5 = parent.p:7
 
 build
 UPDATE child SET p = p+1, c = c+1
@@ -191,38 +183,34 @@ update child
  └── f-k-checks
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── anti-join (hash)
-      │         ├── columns: column5:10!null
+      │         ├── columns: column5:7!null
       │         ├── with-scan &1
-      │         │    ├── columns: column5:10!null
+      │         │    ├── columns: column5:7!null
       │         │    └── mapping:
-      │         │         └──  column5:5 => column5:10
+      │         │         └──  column5:5 => column5:7
       │         ├── scan parent
-      │         │    └── columns: parent.p:8!null
+      │         │    └── columns: parent.p:9!null
       │         └── filters
-      │              └── column5:10 = parent.p:8
+      │              └── column5:7 = parent.p:9
       └── f-k-checks-item: grandchild(c) -> child(c)
            └── semi-join (hash)
-                ├── columns: c:13!null
-                ├── project
-                │    ├── columns: c:13!null
-                │    ├── except
+                ├── columns: c:11!null
+                ├── except
+                │    ├── columns: c:11!null
+                │    ├── left columns: c:11!null
+                │    ├── right columns: column6:12
+                │    ├── with-scan &1
                 │    │    ├── columns: c:11!null
-                │    │    ├── left columns: c:11!null
-                │    │    ├── right columns: column6:12
-                │    │    ├── with-scan &1
-                │    │    │    ├── columns: c:11!null
-                │    │    │    └── mapping:
-                │    │    │         └──  child.c:3 => c:11
-                │    │    └── with-scan &1
-                │    │         ├── columns: column6:12!null
-                │    │         └── mapping:
-                │    │              └──  column6:6 => column6:12
-                │    └── projections
-                │         └── c:11 [as=c:13]
+                │    │    └── mapping:
+                │    │         └──  child.c:3 => c:11
+                │    └── with-scan &1
+                │         ├── columns: column6:12!null
+                │         └── mapping:
+                │              └──  column6:6 => column6:12
                 ├── scan grandchild
-                │    └── columns: grandchild.c:15!null
+                │    └── columns: grandchild.c:14!null
                 └── filters
-                     └── c:13 = grandchild.c:15
+                     └── c:11 = grandchild.c:14
 
 # Multiple grandchild tables
 exec-ddl
@@ -247,15 +235,15 @@ update child
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column5:9!null
+                ├── columns: column5:6!null
                 ├── with-scan &1
-                │    ├── columns: column5:9!null
+                │    ├── columns: column5:6!null
                 │    └── mapping:
-                │         └──  column5:5 => column5:9
+                │         └──  column5:5 => column5:6
                 ├── scan parent
-                │    └── columns: parent.p:7!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── column5:9 = parent.p:7
+                     └── column5:6 = parent.p:8
 
 exec-ddl
 CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
@@ -279,15 +267,15 @@ update self
  └── f-k-checks
       └── f-k-checks-item: self(y) -> self(x)
            └── anti-join (hash)
-                ├── columns: column5:8!null
+                ├── columns: column5:6!null
                 ├── with-scan &1
-                │    ├── columns: column5:8!null
+                │    ├── columns: column5:6!null
                 │    └── mapping:
-                │         └──  column5:5 => column5:8
+                │         └──  column5:5 => column5:6
                 ├── scan self
-                │    └── columns: x:6!null
+                │    └── columns: x:7!null
                 └── filters
-                     └── column5:8 = x:6
+                     └── column5:6 = x:7
 
 build
 UPDATE self SET x = 3
@@ -307,27 +295,23 @@ update self
  └── f-k-checks
       └── f-k-checks-item: self(y) -> self(x)
            └── semi-join (hash)
-                ├── columns: x:8!null
-                ├── project
-                │    ├── columns: x:8!null
-                │    ├── except
+                ├── columns: x:6!null
+                ├── except
+                │    ├── columns: x:6!null
+                │    ├── left columns: x:6!null
+                │    ├── right columns: column5:7
+                │    ├── with-scan &1
                 │    │    ├── columns: x:6!null
-                │    │    ├── left columns: x:6!null
-                │    │    ├── right columns: column5:7
-                │    │    ├── with-scan &1
-                │    │    │    ├── columns: x:6!null
-                │    │    │    └── mapping:
-                │    │    │         └──  self.x:3 => x:6
-                │    │    └── with-scan &1
-                │    │         ├── columns: column5:7!null
-                │    │         └── mapping:
-                │    │              └──  column5:5 => column5:7
-                │    └── projections
-                │         └── x:6 [as=x:8]
+                │    │    └── mapping:
+                │    │         └──  self.x:3 => x:6
+                │    └── with-scan &1
+                │         ├── columns: column5:7!null
+                │         └── mapping:
+                │              └──  column5:5 => column5:7
                 ├── scan self
-                │    └── columns: y:10!null
+                │    └── columns: y:9!null
                 └── filters
-                     └── x:8 = y:10
+                     └── x:6 = y:9
 
 exec-ddl
 CREATE TABLE two (a int, b int, primary key (a, b))
@@ -368,21 +352,21 @@ update fam
  └── f-k-checks
       └── f-k-checks-item: fam(c,d) -> two(a,b)
            └── anti-join (hash)
-                ├── columns: column13:16!null d:17!null
+                ├── columns: column13:14!null d:15!null
                 ├── select
-                │    ├── columns: column13:16!null d:17!null
+                │    ├── columns: column13:14!null d:15!null
                 │    ├── with-scan &1
-                │    │    ├── columns: column13:16!null d:17
+                │    │    ├── columns: column13:14!null d:15
                 │    │    └── mapping:
-                │    │         ├──  column13:13 => column13:16
-                │    │         └──  fam.d:10 => d:17
+                │    │         ├──  column13:13 => column13:14
+                │    │         └──  fam.d:10 => d:15
                 │    └── filters
-                │         └── d:17 IS NOT NULL
+                │         └── d:15 IS NOT NULL
                 ├── scan two
-                │    └── columns: two.a:14!null two.b:15!null
+                │    └── columns: two.a:16!null two.b:17!null
                 └── filters
-                     ├── column13:16 = two.a:14
-                     └── d:17 = two.b:15
+                     ├── column13:14 = two.a:16
+                     └── d:15 = two.b:17
 
 norm
 UPDATE fam SET d = 3
@@ -402,21 +386,21 @@ update fam
  └── f-k-checks
       └── f-k-checks-item: fam(c,d) -> two(a,b)
            └── anti-join (hash)
-                ├── columns: c:16!null column13:17!null
+                ├── columns: c:14!null column13:15!null
                 ├── select
-                │    ├── columns: c:16!null column13:17!null
+                │    ├── columns: c:14!null column13:15!null
                 │    ├── with-scan &1
-                │    │    ├── columns: c:16 column13:17!null
+                │    │    ├── columns: c:14 column13:15!null
                 │    │    └── mapping:
-                │    │         ├──  fam.c:9 => c:16
-                │    │         └──  column13:13 => column13:17
+                │    │         ├──  fam.c:9 => c:14
+                │    │         └──  column13:13 => column13:15
                 │    └── filters
-                │         └── c:16 IS NOT NULL
+                │         └── c:14 IS NOT NULL
                 ├── scan two
-                │    └── columns: two.a:14!null two.b:15!null
+                │    └── columns: two.a:16!null two.b:17!null
                 └── filters
-                     ├── c:16 = two.a:14
-                     └── column13:17 = two.b:15
+                     ├── c:14 = two.a:16
+                     └── column13:15 = two.b:17
 
 exec-ddl
 CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON UPDATE CASCADE)
