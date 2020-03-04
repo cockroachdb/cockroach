@@ -212,7 +212,3 @@ message ConfChangeContext {
   optional bytes payload = 2;
 }
 
-service MultiRaft {
-  rpc RaftMessageBatch (stream RaftMessageRequestBatch) returns (stream RaftMessageResponse) {}
-  rpc RaftSnapshot (stream SnapshotRequest) returns (stream SnapshotResponse) {}
-}

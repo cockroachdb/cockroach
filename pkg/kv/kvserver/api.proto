@@ -75,8 +75,3 @@ message WaitForReplicaInitRequest {
 message WaitForReplicaInitResponse {
 }
 
-service PerReplica {
-  rpc CollectChecksum(CollectChecksumRequest) returns (CollectChecksumResponse) {}
-  rpc WaitForApplication(WaitForApplicationRequest) returns (WaitForApplicationResponse) {}
-  rpc WaitForReplicaInit(WaitForReplicaInitRequest) returns (WaitForReplicaInitResponse) {}
-}

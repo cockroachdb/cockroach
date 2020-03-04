@@ -59,6 +59,3 @@ message Reaction {
   repeated int32 Requested = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 }
 
-service ClosedTimestamp {
-  rpc Get(stream Reaction) returns (stream Entry) { }
-}
