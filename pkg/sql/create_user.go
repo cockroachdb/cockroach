@@ -196,10 +196,10 @@ func (*CreateUserNode) Close(context.Context) {}
 // FastPathResults implements the planNodeFastPath interface.
 func (n *CreateUserNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
 
-const usernameHelp = "usernames are case insensitive, must start with a letter, " +
-	"digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters"
+const usernameHelp = "Usernames are case insensitive, must start with a letter, " +
+	"digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters."
 
-var usernameRE = regexp.MustCompile(`^[\p{Ll}0-9_][\p{Ll}0-9_-]{0,62}$`)
+var usernameRE = regexp.MustCompile(`^[\p{Ll}0-9_][---\p{Ll}0-9_.]+$`)
 
 var blacklistedUsernames = map[string]struct{}{
 	security.NodeUser: {},
@@ -214,7 +214,7 @@ func NormalizeAndValidateUsername(username string) (string, error) {
 		return "", err
 	}
 	if _, ok := blacklistedUsernames[username]; ok {
-		return "", errors.Errorf("username %q reserved", username)
+		return "", pgerror.Newf(pgcode.ReservedName, "username %q reserved", username)
 	}
 	return username, nil
 }
@@ -224,7 +224,10 @@ func NormalizeAndValidateUsername(username string) (string, error) {
 func NormalizeAndValidateUsernameNoBlacklist(username string) (string, error) {
 	username = tree.Name(username).Normalize()
 	if !usernameRE.MatchString(username) {
-		return "", errors.Errorf("username %q invalid; %s", username, usernameHelp)
+		return "", errors.WithHint(pgerror.Newf(pgcode.InvalidName, "username %q invalid", username), usernameHelp)
+	}
+	if len(username) > 63 {
+		return "", errors.WithHint(pgerror.Newf(pgcode.NameTooLong, "username %q is too long", username), usernameHelp)
 	}
 	return username, nil
 }
