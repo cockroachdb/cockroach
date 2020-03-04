@@ -190,8 +190,11 @@ a
 hba.scannedInput{
     lines: {
         {
-            {
-                {Value:"a", Quoted:false},
+            input:  "a",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
             },
         },
     },
@@ -208,8 +211,11 @@ file
 hba.scannedInput{
     lines: {
         {
-            {
-                {Value:"a", Quoted:false},
+            input:  "a",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
             },
         },
     },
@@ -226,8 +232,11 @@ file
 hba.scannedInput{
     lines: {
         {
-            {
-                {Value:"a", Quoted:false},
+            input:  "a",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
             },
         },
     },
@@ -244,14 +253,17 @@ a b c
 hba.scannedInput{
     lines: {
         {
-            {
-                {Value:"a", Quoted:false},
-            },
-            {
-                {Value:"b", Quoted:false},
-            },
-            {
-                {Value:"c", Quoted:false},
+            input:  "a b c",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"b", Quoted:false},
+                },
+                {
+                    {Value:"c", Quoted:false},
+                },
             },
         },
     },
@@ -265,22 +277,28 @@ d e
 hba.scannedInput{
     lines: {
         {
-            {
-                {Value:"a", Quoted:false},
-            },
-            {
-                {Value:"b", Quoted:false},
-            },
-            {
-                {Value:"c", Quoted:false},
+            input:  "a b c",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"b", Quoted:false},
+                },
+                {
+                    {Value:"c", Quoted:false},
+                },
             },
         },
         {
-            {
-                {Value:"d", Quoted:false},
-            },
-            {
-                {Value:"e", Quoted:false},
+            input:  "d e",
+            tokens: {
+                {
+                    {Value:"d", Quoted:false},
+                },
+                {
+                    {Value:"e", Quoted:false},
+                },
             },
         },
     },
@@ -299,19 +317,25 @@ file
 hba.scannedInput{
     lines: {
         {
-            {
-                {Value:"a", Quoted:false},
-            },
-            {
-                {Value:"b", Quoted:false},
+            input:  "a  b # c d e",
+            tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"b", Quoted:false},
+                },
             },
         },
         {
-            {
-                {Value:"d", Quoted:false},
-            },
-            {
-                {Value:"e", Quoted:false},
+            input:  "d  e # b c",
+            tokens: {
+                {
+                    {Value:"d", Quoted:false},
+                },
+                {
+                    {Value:"e", Quoted:false},
+                },
             },
         },
     },
