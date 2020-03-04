@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage.copysets;
+package cockroach.kv.kvserver.copysets;
 option go_package = "copysets";
 
 import "gogoproto/gogo.proto";

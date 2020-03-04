@@ -14,7 +14,7 @@ option go_package = "storage";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
-import "storage/storagepb/state.proto";
+import "kv/kvserver/storagepb/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 

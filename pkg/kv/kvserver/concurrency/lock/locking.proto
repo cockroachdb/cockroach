@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage.concurrency.lock;
+package cockroach.kv.kvserver.concurrency.lock;
 option go_package = "lock";
 
 import "gogoproto/gogo.proto";

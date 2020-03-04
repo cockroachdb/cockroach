@@ -13,7 +13,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "roachpb/metadata.proto";
-import "storage/concurrency/lock/locking.proto";
+import "kv/kvserver/concurrency/lock/locking.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -575,7 +575,7 @@ message LockUpdate {
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
-  storage.concurrency.lock.Durability durability = 5;
+  kv.kvserver.concurrency.lock.Durability durability = 5;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
