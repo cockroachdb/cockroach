@@ -104,8 +104,8 @@ const rangeTableQuiescent: RangeTableCellContent = {
   className: ["range-table__cell--quiescent"],
 };
 
-function convertLeaseState(leaseState: protos.cockroach.storage.LeaseState) {
-  return protos.cockroach.storage.LeaseState[leaseState].toLowerCase();
+function convertLeaseState(leaseState: protos.cockroach.kv.kvserver.storagepb.LeaseState) {
+  return protos.cockroach.kv.kvserver.storagepb.LeaseState[leaseState].toLowerCase();
 }
 
 export default class RangeTable extends React.Component<RangeTableProps, {}> {
@@ -161,7 +161,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     };
   }
 
-  contentGCAvgAge(mvcc: cockroach.storage.engine.enginepb.IMVCCStats): RangeTableCellContent {
+  contentGCAvgAge(mvcc: cockroach.storage.enginepb.IMVCCStats): RangeTableCellContent {
     if (mvcc === null) {
       return this.contentDuration(Long.fromNumber(0));
     }
@@ -174,7 +174,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     }
   }
 
-  createContentIntentAvgAge(mvcc: cockroach.storage.engine.enginepb.IMVCCStats): RangeTableCellContent {
+  createContentIntentAvgAge(mvcc: cockroach.storage.enginepb.IMVCCStats): RangeTableCellContent {
     if (mvcc === null) {
       return this.contentDuration(Long.fromNumber(0));
     }
@@ -456,7 +456,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       } else {
         leaseState = this.createContent(
           convertLeaseState(info.lease_status.state),
-          info.lease_status.state === protos.cockroach.storage.LeaseState.VALID ? "" :
+          info.lease_status.state === protos.cockroach.kv.kvserver.storagepb.LeaseState.VALID ? "" :
             "range-table__cell--warning",
         );
       }

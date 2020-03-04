@@ -22,7 +22,7 @@ import { nullOfReturnType } from "src/util/types";
  * enumeration. As an enum, it needs to be imported rather than using the 'type'
  * keyword.
  */
-export import LivenessStatus = protos.cockroach.storage.NodeLivenessStatus;
+export import LivenessStatus = protos.cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
 
 /**
  * livenessNomenclature resolves a mismatch between the terms used for liveness

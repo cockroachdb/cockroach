@@ -23,8 +23,8 @@ import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/spark
 import { LongToMoment } from "src/util/convert";
 import { cockroach } from "src/js/protos";
 
-import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
-type ILiveness = cockroach.storage.ILiveness;
+import NodeLivenessStatus = cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
+type ILiveness = cockroach.kv.kvserver.storagepb.ILiveness;
 
 interface NodeViewProps {
   node: INodeStatus;
