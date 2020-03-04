@@ -194,14 +194,14 @@ func RecoverTxn(
 		}
 	}
 
-	// Merge all of the transaction's in-flight writes into its intent
+	// Merge all of the transaction's in-flight writes into its lock
 	// spans set and clear the in-flight write set. Make sure to re-sort
-	// and merge the intent spans to eliminate duplicates.
+	// and merge the lock spans to eliminate duplicates.
 	for _, w := range reply.RecoveredTxn.InFlightWrites {
 		sp := roachpb.Span{Key: w.Key}
-		reply.RecoveredTxn.IntentSpans = append(reply.RecoveredTxn.IntentSpans, sp)
+		reply.RecoveredTxn.LockSpans = append(reply.RecoveredTxn.LockSpans, sp)
 	}
-	reply.RecoveredTxn.IntentSpans, _ = roachpb.MergeSpans(reply.RecoveredTxn.IntentSpans)
+	reply.RecoveredTxn.LockSpans, _ = roachpb.MergeSpans(reply.RecoveredTxn.LockSpans)
 	reply.RecoveredTxn.InFlightWrites = nil
 
 	// Recover the transaction based on whether or not all of its writes

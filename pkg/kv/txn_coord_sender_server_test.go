@@ -58,7 +58,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 					if args.Req.IsSingleEndTxnRequest() {
 						et := args.Req.Requests[0].GetInner().(*roachpb.EndTxnRequest)
 						if !et.Commit && et.Key.Equal(key) &&
-							reflect.DeepEqual(et.IntentSpans, []roachpb.Span{{Key: key}, {Key: key2}}) {
+							reflect.DeepEqual(et.LockSpans, []roachpb.Span{{Key: key}, {Key: key2}}) {
 							atomic.StoreInt64(&cleanupSeen, 1)
 						}
 					}

@@ -192,8 +192,8 @@ func (m mvccPutOp) run(ctx context.Context) string {
 		return fmt.Sprintf("error: %s", err)
 	}
 
-	// Update the txn's intent spans to account for this intent being written.
-	txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+	// Update the txn's lock spans to account for this intent being written.
+	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
 		Key: m.key,
 	})
 	return "ok"
@@ -218,8 +218,8 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 		return fmt.Sprintf("error: %s", err)
 	}
 
-	// Update the txn's intent spans to account for this intent being written.
-	txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+	// Update the txn's lock spans to account for this intent being written.
+	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
 		Key: m.key,
 	})
 	return "ok"
@@ -243,8 +243,8 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 		return fmt.Sprintf("error: %s", err)
 	}
 
-	// Update the txn's intent spans to account for this intent being written.
-	txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+	// Update the txn's lock spans to account for this intent being written.
+	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
 		Key: m.key,
 	})
 	return "ok"
@@ -268,9 +268,9 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 		return fmt.Sprintf("error: %s", err)
 	}
 
-	// Update the txn's intent spans to account for this intent being written.
+	// Update the txn's lock spans to account for this intent being written.
 	for _, key := range keys {
-		txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+		txn.LockSpans = append(txn.LockSpans, roachpb.Span{
 			Key: key,
 		})
 	}
@@ -312,8 +312,8 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 		return fmt.Sprintf("error: %s", err)
 	}
 
-	// Update the txn's intent spans to account for this intent being written.
-	txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+	// Update the txn's lock spans to account for this intent being written.
+	txn.LockSpans = append(txn.LockSpans, roachpb.Span{
 		Key: m.key,
 	})
 	return "ok"
@@ -404,7 +404,7 @@ func (t txnCommitOp) run(ctx context.Context) string {
 	txn := t.m.getTxn(t.id)
 	txn.Status = roachpb.COMMITTED
 
-	for _, span := range txn.IntentSpans {
+	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.COMMITTED
 		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)

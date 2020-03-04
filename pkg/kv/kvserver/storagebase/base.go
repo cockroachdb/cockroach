@@ -127,14 +127,16 @@ func ContainsKeyRange(desc *roachpb.RangeDescriptor, start, end roachpb.Key) boo
 	return desc.ContainsKeyRange(startKeyAddr, endKeyAddr)
 }
 
-// IntersectSpan takes an intent and a descriptor. It then splits the
-// intent's range into up to three pieces: A first piece which is contained in
-// the Range, and a slice of up to two further intents which are outside of the
-// key range. An intent for which [Key, EndKey) is empty does not result in any
-// intents; thus intersectIntent only applies to intent ranges.
-// A range-local intent range is never split: It's returned as either
-// belonging to or outside of the descriptor's key range, and passing an intent
-// which begins range-local but ends non-local results in a panic.
+// IntersectSpan takes an span and a descriptor. It then splits the span
+// into up to three pieces: A first piece which is contained in the Range,
+// and a slice of up to two further spans which are outside of the key
+// range. An span for which [Key, EndKey) is empty does not result in any
+// spans; thus intersectIntent only applies to span ranges.
+//
+// A range-local span range is never split: It's returned as either
+// belonging to or outside of the descriptor's key range, and passing an
+// span which begins range-local but ends non-local results in a panic.
+//
 // TODO(tschottdorf): move to proto, make more gen-purpose - kv.truncate does
 // some similar things.
 func IntersectSpan(
@@ -157,7 +159,7 @@ func IntersectSpan(
 	// From now on, we're dealing with plain old key ranges - no more local
 	// addressing.
 	if bytes.Compare(span.Key, start) < 0 {
-		// Intent spans a part to the left of [start, end).
+		// Span spans a part to the left of [start, end).
 		iCopy := span
 		if bytes.Compare(start, span.EndKey) < 0 {
 			iCopy.EndKey = start
@@ -166,7 +168,7 @@ func IntersectSpan(
 		outside = append(outside, iCopy)
 	}
 	if bytes.Compare(span.Key, span.EndKey) < 0 && bytes.Compare(end, span.EndKey) < 0 {
-		// Intent spans a part to the right of [start, end).
+		// Span spans a part to the right of [start, end).
 		iCopy := span
 		if bytes.Compare(iCopy.Key, end) < 0 {
 			iCopy.Key = end

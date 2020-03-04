@@ -88,7 +88,7 @@ func makeTxnProto() roachpb.Transaction {
 
 // TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC
 // transactions are not pipelined by the txnPipeliner and that the interceptor
-// attaches the writes as intent spans to the EndTxn request.
+// attaches the writes as lock spans to the EndTxn request.
 func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -111,7 +111,7 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
 		etReq := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
-		require.Len(t, etReq.IntentSpans, 0)
+		require.Len(t, etReq.LockSpans, 0)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
 		br := ba.CreateReply()
@@ -254,7 +254,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
 
 		etReq := ba.Requests[4].GetInner().(*roachpb.EndTxnRequest)
-		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
 			{Key: keyA, Sequence: 2},
 			{Key: keyB, Sequence: 3},
@@ -626,8 +626,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 
 // TestTxnPipelinerTransactionAbort tests that a txnPipeliner allows an aborting
 // EndTxnRequest to proceed without attempting to prove all in-flight writes. It
-// also tests that the interceptor attaches intent spans to these
-// EndTxnRequests.
+// also tests that the interceptor attaches lock spans to these EndTxnRequests.
 func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -674,7 +673,7 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 		etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
-		require.Len(t, etReq.IntentSpans, 0)
+		require.Len(t, etReq.LockSpans, 0)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
@@ -702,7 +701,7 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 		etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
-		require.Len(t, etReq.IntentSpans, 0)
+		require.Len(t, etReq.LockSpans, 0)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
@@ -903,7 +902,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(3), qiReq.Txn.Sequence)
 
 		etReq := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
-		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyC, Sequence: 3}}, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
