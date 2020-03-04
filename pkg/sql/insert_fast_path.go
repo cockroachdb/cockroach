@@ -224,10 +224,6 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 }
 
 func (n *insertFastPathNode) startExec(params runParams) error {
-	if err := params.p.maybeSetSystemConfig(n.run.ti.tableDesc().GetID()); err != nil {
-		return err
-	}
-
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
