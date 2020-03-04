@@ -471,7 +471,7 @@ var nonZeroTxn = Transaction{
 	MaxTimestamp:            makeTS(40, 41),
 	ObservedTimestamps:      []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	WriteTooOld:             true,
-	IntentSpans:             []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	LockSpans:               []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:          []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
 	CommitTimestampFixed:    true,
 	IgnoredSeqNums:          []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
@@ -557,7 +557,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.Epoch = txn.Epoch + 1
 	expTxn5.Status = PENDING
 	expTxn5.Sequence = txn.Sequence - 10
-	expTxn5.IntentSpans = nil
+	expTxn5.LockSpans = nil
 	expTxn5.InFlightWrites = nil
 	expTxn5.IgnoredSeqNums = nil
 	expTxn5.WriteTooOld = false
@@ -668,9 +668,9 @@ func TestTransactionClone(t *testing.T) {
 		"IgnoredSeqNums",
 		"InFlightWrites",
 		"InFlightWrites.Key",
-		"IntentSpans",
-		"IntentSpans.EndKey",
-		"IntentSpans.Key",
+		"LockSpans",
+		"LockSpans.EndKey",
+		"LockSpans.Key",
 		"ObservedTimestamps",
 		"TxnMeta.Key",
 	}
@@ -694,7 +694,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.DeprecatedOrigTimestamp = expTxn.ReadTimestamp
 	expTxn.WriteTooOld = false
 	expTxn.CommitTimestampFixed = false
-	expTxn.IntentSpans = nil
+	expTxn.LockSpans = nil
 	expTxn.InFlightWrites = nil
 	expTxn.IgnoredSeqNums = nil
 	require.Equal(t, expTxn, txn)
@@ -730,8 +730,8 @@ func TestTransactionRecordRoundtrips(t *testing.T) {
 	if !reflect.DeepEqual(txnRecord.LastHeartbeat, txn.LastHeartbeat) {
 		t.Errorf("txnRecord.LastHeartbeat = %v, txn.LastHeartbeat = %v", txnRecord.LastHeartbeat, txn.LastHeartbeat)
 	}
-	if !reflect.DeepEqual(txnRecord.IntentSpans, txn.IntentSpans) {
-		t.Errorf("txnRecord.IntentSpans = %v, txn.IntentSpans = %v", txnRecord.IntentSpans, txn.IntentSpans)
+	if !reflect.DeepEqual(txnRecord.LockSpans, txn.LockSpans) {
+		t.Errorf("txnRecord.LockSpans = %v, txn.LockSpans = %v", txnRecord.LockSpans, txn.LockSpans)
 	}
 	if !reflect.DeepEqual(txnRecord.InFlightWrites, txn.InFlightWrites) {
 		t.Errorf("txnRecord.InFlightWrites = %v, txn.InFlightWrites = %v", txnRecord.InFlightWrites, txn.InFlightWrites)

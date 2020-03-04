@@ -59,7 +59,7 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 		ba.Header = roachpb.Header{Txn: &txn}
 		ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-		ba.Add(&roachpb.EndTxnRequest{Commit: commit, IntentSpans: nil})
+		ba.Add(&roachpb.EndTxnRequest{Commit: commit, LockSpans: nil})
 
 		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.Len(t, ba.Requests, 2)
@@ -82,7 +82,7 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 
 		// Test the case where the EndTxn request is alone.
 		ba.Requests = nil
-		ba.Add(&roachpb.EndTxnRequest{Commit: commit, IntentSpans: nil})
+		ba.Add(&roachpb.EndTxnRequest{Commit: commit, LockSpans: nil})
 
 		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.Fail(t, "should not have issued batch request", ba)
@@ -108,7 +108,7 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 	txn := makeTxnProto()
 	keyA := roachpb.Key("a")
 
-	// Attach IntentSpans to each EndTxn request to avoid the elided EndTxn
+	// Attach LockSpans to each EndTxn request to avoid the elided EndTxn
 	// optimization.
 	intents := []roachpb.Span{{Key: keyA}}
 
@@ -116,7 +116,7 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.EndTxnRequest{Commit: true, IntentSpans: intents})
+	ba.Add(&roachpb.EndTxnRequest{Commit: true, LockSpans: intents})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 2)
@@ -135,7 +135,7 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 
 	// Verify that the txn key is attached to aborting EndTxn requests.
 	ba.Requests = nil
-	ba.Add(&roachpb.EndTxnRequest{Commit: false, IntentSpans: intents})
+	ba.Add(&roachpb.EndTxnRequest{Commit: false, LockSpans: intents})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
@@ -170,7 +170,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	txn := makeTxnProto()
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
-	// Verify that the QueryIntent and the Put are both attached as intent spans
+	// Verify that the QueryIntent and the Put are both attached as lock spans
 	// to the committing EndTxn request when expected.
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
@@ -192,8 +192,8 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 
 		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
 		require.True(t, et.Commit)
-		require.Len(t, et.IntentSpans, 2)
-		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.IntentSpans)
+		require.Len(t, et.LockSpans, 2)
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.LockSpans)
 		require.Len(t, et.InFlightWrites, 0)
 
 		br := ba.CreateReply()
@@ -251,8 +251,8 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 
 		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
 		require.True(t, et.Commit)
-		require.Len(t, et.IntentSpans, 2)
-		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.IntentSpans)
+		require.Len(t, et.LockSpans, 2)
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.LockSpans)
 		require.Len(t, et.InFlightWrites, 0)
 
 		br = ba.CreateReply()
@@ -272,7 +272,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	delRngArgs := roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	delRngArgs.Sequence = 2
 	etArgsWithRangedIntentSpan := etArgs
-	etArgsWithRangedIntentSpan.IntentSpans = []roachpb.Span{{Key: keyA, EndKey: keyB}}
+	etArgsWithRangedIntentSpan.LockSpans = []roachpb.Span{{Key: keyA, EndKey: keyB}}
 	etArgsWithRangedIntentSpan.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
 	ba.Add(&delRngArgs, &qiArgs, &etArgsWithRangedIntentSpan)
 
@@ -282,8 +282,8 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 
 		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
 		require.True(t, et.Commit)
-		require.Len(t, et.IntentSpans, 1)
-		require.Equal(t, []roachpb.Span{{Key: keyA, EndKey: keyB}}, et.IntentSpans)
+		require.Len(t, et.LockSpans, 1)
+		require.Equal(t, []roachpb.Span{{Key: keyA, EndKey: keyB}}, et.LockSpans)
 		require.Len(t, et.InFlightWrites, 0)
 
 		br = ba.CreateReply()
@@ -311,8 +311,8 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 
 		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
 		require.True(t, et.Commit)
-		require.Len(t, et.IntentSpans, 2)
-		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.IntentSpans)
+		require.Len(t, et.LockSpans, 2)
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.LockSpans)
 		require.Len(t, et.InFlightWrites, 0)
 
 		br = ba.CreateReply()

@@ -504,8 +504,8 @@ func (r *Replica) collectSpans(
 	if ba.IsLocking() {
 		guess := len(ba.Requests)
 		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
-			// EndTxn declares a global write for each of its intent spans.
-			guess += len(et.(*roachpb.EndTxnRequest).IntentSpans) - 1
+			// EndTxn declares a global write for each of its lock spans.
+			guess += len(et.(*roachpb.EndTxnRequest).LockSpans) - 1
 		}
 		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	} else {
