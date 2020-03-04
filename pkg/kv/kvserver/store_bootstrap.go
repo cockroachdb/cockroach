@@ -14,12 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -33,7 +33,7 @@ import (
 // non-empty engine.
 func InitEngine(
 	ctx context.Context,
-	eng engine.Engine,
+	eng storage.Engine,
 	ident roachpb.StoreIdent,
 	cv clusterversion.ClusterVersion,
 ) error {
@@ -50,7 +50,7 @@ func InitEngine(
 	}
 
 	batch := eng.NewBatch()
-	if err := engine.MVCCPutProto(
+	if err := storage.MVCCPutProto(
 		ctx,
 		batch,
 		nil,
@@ -87,7 +87,7 @@ func InitEngine(
 // nowNanos: the timestamp at which to write the initial engine data.
 func WriteInitialClusterData(
 	ctx context.Context,
-	eng engine.Engine,
+	eng storage.Engine,
 	initialValues []roachpb.KeyValue,
 	bootstrapVersion roachpb.Version,
 	numStores int,
@@ -181,7 +181,7 @@ func WriteInitialClusterData(
 		// we write everything and then compute the stats over the whole range.
 
 		// Range descriptor.
-		if err := engine.MVCCPutProto(
+		if err := storage.MVCCPutProto(
 			ctx, batch, nil /* ms */, keys.RangeDescriptorKey(desc.StartKey),
 			now, nil /* txn */, desc,
 		); err != nil {
@@ -189,7 +189,7 @@ func WriteInitialClusterData(
 		}
 
 		// Replica GC timestamp.
-		if err := engine.MVCCPutProto(
+		if err := storage.MVCCPutProto(
 			ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
 			hlc.Timestamp{}, nil /* txn */, &now,
 		); err != nil {
@@ -197,7 +197,7 @@ func WriteInitialClusterData(
 		}
 		// Range addressing for meta2.
 		meta2Key := keys.RangeMetaKey(endKey)
-		if err := engine.MVCCPutProto(ctx, batch, firstRangeMS, meta2Key.AsRawKey(),
+		if err := storage.MVCCPutProto(ctx, batch, firstRangeMS, meta2Key.AsRawKey(),
 			now, nil /* txn */, desc,
 		); err != nil {
 			return err
@@ -207,7 +207,7 @@ func WriteInitialClusterData(
 		if startKey.Equal(roachpb.RKeyMin) {
 			// Range addressing for meta1.
 			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
-			if err := engine.MVCCPutProto(
+			if err := storage.MVCCPutProto(
 				ctx, batch, nil /* ms */, meta1Key.AsRawKey(), now, nil /* txn */, desc,
 			); err != nil {
 				return err
@@ -218,7 +218,7 @@ func WriteInitialClusterData(
 		for _, kv := range rangeInitialValues {
 			// Initialize the checksums.
 			kv.Value.InitChecksum(kv.Key)
-			if err := engine.MVCCPut(
+			if err := storage.MVCCPut(
 				ctx, batch, nil /* ms */, kv.Key, now, kv.Value, nil, /* txn */
 			); err != nil {
 				return err

@@ -22,13 +22,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -188,13 +188,13 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	cache := engine.NewRocksDBCache(1 << 20)
+	cache := storage.NewRocksDBCache(1 << 20)
 	defer cache.Release()
 
 	// Use on-disk stores because we want to take a RocksDB checkpoint and be
 	// able to find it.
 	for i := 0; i < numStores; i++ {
-		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
+		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir: filepath.Join(dir, fmt.Sprintf("%d", i)),
 			},
@@ -313,7 +313,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	var val roachpb.Value
 	val.SetInt(42)
 	diffTimestamp = mtc.stores[1].Clock().Now()
-	if err := engine.MVCCPut(
+	if err := storage.MVCCPut(
 		context.Background(), mtc.stores[1].Engine(), nil, diffKey, diffTimestamp, val, nil,
 	); err != nil {
 		t.Fatal(err)
@@ -337,7 +337,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	for i := 0; i < numStores; i++ {
 		cps := checkpoints(i)
 		assert.Len(t, cps, 1)
-		cpEng, err := engine.NewRocksDB(engine.RocksDBConfig{
+		cpEng, err := storage.NewRocksDB(storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir: cps[0],
 			},
@@ -345,10 +345,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		assert.NoError(t, err)
 		defer cpEng.Close()
 
-		iter := cpEng.NewIterator(engine.IterOptions{UpperBound: []byte("\xff")})
+		iter := cpEng.NewIterator(storage.IterOptions{UpperBound: []byte("\xff")})
 		defer iter.Close()
 
-		ms, err := engine.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
+		ms, err := storage.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
 		assert.NoError(t, err)
 
 		assert.NotZero(t, ms.KeyBytes)
@@ -468,9 +468,9 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	const sysCountGarbage = 123000
 
 	func() {
-		cache := engine.NewRocksDBCache(1 << 20)
+		cache := storage.NewRocksDBCache(1 << 20)
 		defer cache.Release()
-		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
+		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:       path,
 				MustExist: true,

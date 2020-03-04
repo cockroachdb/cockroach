@@ -14,13 +14,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
@@ -56,7 +56,7 @@ func declareKeysClearRange(
 // or queried any more, such as after a DROP or TRUNCATE table, or
 // DROP index.
 func ClearRange(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
 		return result.Result{}, errors.New("cannot execute ClearRange within a transaction")
@@ -82,7 +82,7 @@ func ClearRange(
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
 		if err := readWriter.Iterate(from, to,
-			func(kv engine.MVCCKeyValue) (bool, error) {
+			func(kv storage.MVCCKeyValue) (bool, error) {
 				return false, readWriter.Clear(kv.Key)
 			},
 		); err != nil {
@@ -103,8 +103,8 @@ func ClearRange(
 			},
 		},
 	}
-	if err := readWriter.ClearRange(engine.MakeMVCCMetadataKey(from),
-		engine.MakeMVCCMetadataKey(to)); err != nil {
+	if err := readWriter.ClearRange(storage.MakeMVCCMetadataKey(from),
+		storage.MakeMVCCMetadataKey(to)); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil
@@ -119,7 +119,7 @@ func ClearRange(
 // path of simply subtracting the non-system values is accurate.
 // Returns the delta stats.
 func computeStatsDelta(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, from, to roachpb.Key,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, from, to roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	desc := cArgs.EvalCtx.Desc()
 	var delta enginepb.MVCCStats
@@ -140,7 +140,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled,
 	// compute stats across the key span to be cleared.
 	if !fast || util.RaceEnabled {
-		iter := readWriter.NewIterator(engine.IterOptions{UpperBound: to})
+		iter := readWriter.NewIterator(storage.IterOptions{UpperBound: to})
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {

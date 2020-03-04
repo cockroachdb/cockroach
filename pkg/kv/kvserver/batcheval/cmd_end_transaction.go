@@ -18,8 +18,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -30,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -168,7 +168,7 @@ func declareKeysEndTxn(
 // TODO(nvanbenschoten): rename this file to cmd_end_txn.go once some of andrei's
 // recent PRs have landed.
 func EndTxn(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.EndTxnRequest)
 	h := cArgs.Header
@@ -193,8 +193,8 @@ func EndTxn(
 
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, engine.MVCCGetOptions{},
+	if ok, err := storage.MVCCGetProto(
+		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -320,7 +320,7 @@ func EndTxn(
 		// during startup, to infer that any lingering intents belong to in-progress
 		// transactions and thus the pre-intent value can safely be used.
 		if mt := args.InternalCommitTrigger.GetMergeTrigger(); mt != nil {
-			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, readWriter.(engine.Batch),
+			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, readWriter.(storage.Batch),
 				ms, mt, reply.Txn.WriteTimestamp)
 			if err != nil {
 				return result.Result{}, err
@@ -349,7 +349,7 @@ func EndTxn(
 
 	// Run the rest of the commit triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
-		triggerResult, err := RunCommitTrigger(ctx, cArgs.EvalCtx, readWriter.(engine.Batch),
+		triggerResult, err := RunCommitTrigger(ctx, cArgs.EvalCtx, readWriter.(storage.Batch),
 			ms, args, reply.Txn)
 		if err != nil {
 			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
@@ -456,7 +456,7 @@ const intentResolutionBatchSize = 500
 func resolveLocalIntents(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
@@ -469,10 +469,10 @@ func resolveLocalIntents(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iter := readWriter.NewIterator(engine.IterOptions{
+	iter := readWriter.NewIterator(storage.IterOptions{
 		UpperBound: desc.EndKey.AsRawKey(),
 	})
-	iterAndBuf := engine.GetBufUsingIter(iter)
+	iterAndBuf := storage.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
 	var resolveAllowance int64 = intentResolutionBatchSize
@@ -496,7 +496,7 @@ func resolveLocalIntents(
 					return nil
 				}
 				resolveMS := ms
-				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
+				ok, err := storage.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
 				if err != nil {
 					return err
 				}
@@ -513,7 +513,7 @@ func resolveLocalIntents(
 			externalIntents = append(externalIntents, outSpans...)
 			if inSpan != nil {
 				intent.Span = *inSpan
-				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance)
+				num, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance)
 				if err != nil {
 					return err
 				}
@@ -552,7 +552,7 @@ func resolveLocalIntents(
 // remote) intents.
 func updateStagingTxn(
 	ctx context.Context,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
 	args *roachpb.EndTxnRequest,
@@ -561,7 +561,7 @@ func updateStagingTxn(
 	txn.IntentSpans = args.IntentSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
-	return engine.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
 }
 
 // updateFinalizedTxn persists the COMMITTED or ABORTED transaction record with
@@ -570,7 +570,7 @@ func updateStagingTxn(
 // it around.
 func updateFinalizedTxn(
 	ctx context.Context,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
 	args *roachpb.EndTxnRequest,
@@ -581,19 +581,19 @@ func updateFinalizedTxn(
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
 		}
-		return engine.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
+		return storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
 	txn.IntentSpans = externalIntents
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
-	return engine.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
 }
 
 // RunCommitTrigger runs the commit trigger from an end transaction request.
 func RunCommitTrigger(
 	ctx context.Context,
 	rec EvalContext,
-	batch engine.Batch,
+	batch storage.Batch,
 	ms *enginepb.MVCCStats,
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
@@ -834,7 +834,7 @@ func RunCommitTrigger(
 func splitTrigger(
 	ctx context.Context,
 	rec EvalContext,
-	batch engine.Batch,
+	batch storage.Batch,
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
@@ -884,7 +884,7 @@ func splitTrigger(
 func splitTriggerHelper(
 	ctx context.Context,
 	rec EvalContext,
-	batch engine.Batch,
+	batch storage.Batch,
 	statsInput splitStatsHelperInput,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
@@ -903,7 +903,7 @@ func splitTriggerHelper(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, nil, &replicaGCTS); err != nil {
+	if err := storage.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, nil, &replicaGCTS); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
@@ -984,13 +984,13 @@ func splitTriggerHelper(
 		//
 		// See VersionUnreplicatedRaftTruncatedState.
 		truncStateType := stateloader.TruncatedStateUnreplicated
-		if found, err := engine.MVCCGetProto(
+		if found, err := storage.MVCCGetProto(
 			ctx,
 			batch,
 			keys.RaftTruncatedStateLegacyKey(rec.GetRangeID()),
 			hlc.Timestamp{},
 			nil,
-			engine.MVCCGetOptions{},
+			storage.MVCCGetOptions{},
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load legacy truncated state")
 		} else if found {
@@ -1057,7 +1057,7 @@ func splitTriggerHelper(
 func mergeTrigger(
 	ctx context.Context,
 	rec EvalContext,
-	batch engine.Batch,
+	batch storage.Batch,
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
@@ -1085,7 +1085,7 @@ func mergeTrigger(
 	ms.Add(merge.RightMVCCStats)
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		iter := batch.NewIterator(engine.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
+		iter := batch.NewIterator(storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
 		defer iter.Close()
 		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
@@ -1102,7 +1102,7 @@ func mergeTrigger(
 }
 
 func changeReplicasTrigger(
-	_ context.Context, rec EvalContext, _ engine.Batch, change *roachpb.ChangeReplicasTrigger,
+	_ context.Context, rec EvalContext, _ storage.Batch, change *roachpb.ChangeReplicasTrigger,
 ) result.Result {
 	var pd result.Result
 	// After a successful replica addition or removal check to see if the

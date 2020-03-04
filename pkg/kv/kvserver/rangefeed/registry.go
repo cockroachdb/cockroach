@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -55,7 +55,7 @@ type registration struct {
 	// Input.
 	span             roachpb.Span
 	catchupTimestamp hlc.Timestamp
-	catchupIter      engine.SimpleIterator
+	catchupIter      storage.SimpleIterator
 	withDiff         bool
 	metrics          *Metrics
 
@@ -86,7 +86,7 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchupIter engine.SimpleIterator,
+	catchupIter storage.SimpleIterator,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -290,8 +290,8 @@ func (r *registration) runCatchupScan() error {
 	}()
 
 	var a bufalloc.ByteAllocator
-	startKey := engine.MakeMVCCMetadataKey(r.span.Key)
-	endKey := engine.MakeMVCCMetadataKey(r.span.EndKey)
+	startKey := storage.MakeMVCCMetadataKey(r.span.Key)
+	endKey := storage.MakeMVCCMetadataKey(r.span.EndKey)
 
 	// Iterator will encounter historical values for each key in
 	// reverse-chronological order. To output in chronological order, store
@@ -344,7 +344,7 @@ func (r *registration) runCatchupScan() error {
 				// past the corresponding provisional key-value. To do this,
 				// scan to the timestamp immediately before (i.e. the key
 				// immediately after) the provisional key.
-				r.catchupIter.SeekGE(engine.MVCCKey{
+				r.catchupIter.SeekGE(storage.MVCCKey{
 					Key:       unsafeKey.Key,
 					Timestamp: hlc.Timestamp(meta.Timestamp).Prev(),
 				})

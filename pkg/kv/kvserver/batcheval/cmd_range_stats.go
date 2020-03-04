@@ -13,9 +13,9 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
@@ -24,7 +24,7 @@ func init() {
 
 // RangeStats returns the MVCC statistics for a range.
 func RangeStats(
-	_ context.Context, _ engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	_ context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()

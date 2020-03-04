@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -151,7 +151,7 @@ type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
 	clock             *hlc.Clock
 	db                *client.DB
-	engines           []engine.Engine
+	engines           []storage.Engine
 	gossip            *gossip.Gossip
 	livenessThreshold time.Duration
 	heartbeatInterval time.Duration
@@ -179,7 +179,7 @@ func NewNodeLiveness(
 	ambient log.AmbientContext,
 	clock *hlc.Clock,
 	db *client.DB,
-	engines []engine.Engine,
+	engines []storage.Engine,
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
 	renewalDuration time.Duration,
@@ -794,7 +794,7 @@ func (nl *NodeLiveness) updateLiveness(
 			// don't want any excessively slow disks to prevent leases from being
 			// shifted to other nodes. A slow/stalled disk would block here and cause
 			// the node to lose its leases.
-			if err := engine.WriteSyncNoop(ctx, eng); err != nil {
+			if err := storage.WriteSyncNoop(ctx, eng); err != nil {
 				return errors.Wrapf(err, "couldn't update node liveness because disk write failed")
 			}
 		}

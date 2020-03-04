@@ -16,11 +16,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,7 +41,7 @@ import (
 func runGCOld(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	snap engine.Reader,
+	snap storage.Reader,
 	now hlc.Timestamp,
 	_ hlc.Timestamp, // exists to make signature match RunGC
 	policy zonepb.GCPolicy,
@@ -70,7 +70,7 @@ func runGCOld(
 	var batchGCKeys []roachpb.GCRequest_GCKey
 	var batchGCKeysBytes int64
 	var expBaseKey roachpb.Key
-	var keys []engine.MVCCKey
+	var keys []storage.MVCCKey
 	var vals [][]byte
 	var keyBytes int64
 	var valBytes int64
@@ -191,12 +191,12 @@ func runGCOld(
 			processKeysAndValues()
 			expBaseKey = iterKey.Key
 			if !iterKey.IsValue() {
-				keys = []engine.MVCCKey{iter.Key()}
+				keys = []storage.MVCCKey{iter.Key()}
 				vals = [][]byte{iter.Value()}
 				continue
 			}
 			// An implicit metadata.
-			keys = []engine.MVCCKey{engine.MakeMVCCMetadataKey(iterKey.Key)}
+			keys = []storage.MVCCKey{storage.MakeMVCCMetadataKey(iterKey.Key)}
 			// A nil value for the encoded MVCCMetadata. This will unmarshal to an
 			// empty MVCCMetadata which is sufficient for processKeysAndValues to
 			// determine that there is no intent.
@@ -274,7 +274,7 @@ func MakeGarbageCollector(now hlc.Timestamp, policy zonepb.GCPolicy) GarbageColl
 // deleted value is the most recent before expiration, it can be deleted. This
 // would still allow for the tombstone bugs in #6227, so in the future we will
 // add checks that disallow writes before the last GC expiration time.
-func (gc GarbageCollector) Filter(keys []engine.MVCCKey, values [][]byte) (int, hlc.Timestamp) {
+func (gc GarbageCollector) Filter(keys []storage.MVCCKey, values [][]byte) (int, hlc.Timestamp) {
 	if gc.policy.TTLSeconds <= 0 {
 		return -1, hlc.Timestamp{}
 	}
@@ -306,19 +306,19 @@ func (gc GarbageCollector) Filter(keys []engine.MVCCKey, values [][]byte) (int, 
 	return -1, hlc.Timestamp{}
 }
 
-func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) engine.MVCCKey {
-	return engine.MVCCKey{Key: key, Timestamp: ts}
+func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) storage.MVCCKey {
+	return storage.MVCCKey{Key: key, Timestamp: ts}
 }
 
 var (
 	aKey  = roachpb.Key("a")
 	bKey  = roachpb.Key("b")
-	aKeys = []engine.MVCCKey{
+	aKeys = []storage.MVCCKey{
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 2e9, Logical: 0}),
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1e9, Logical: 1}),
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1e9, Logical: 0}),
 	}
-	bKeys = []engine.MVCCKey{
+	bKeys = []storage.MVCCKey{
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 2e9, Logical: 0}),
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 1e9, Logical: 0}),
 	}
@@ -335,7 +335,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	testData := []struct {
 		gc       GarbageCollector
 		time     hlc.Timestamp
-		keys     []engine.MVCCKey
+		keys     []storage.MVCCKey
 		values   [][]byte
 		expIdx   int
 		expDelTS hlc.Timestamp

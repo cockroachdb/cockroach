@@ -15,11 +15,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/pkg/errors"
 )
 
@@ -87,7 +87,7 @@ func declareKeysSubsume(
 // The period of time after intents have been placed but before the merge
 // transaction is complete is called the merge's "critical phase".
 func Subsume(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.SubsumeRequest)
 	reply := resp.(*roachpb.SubsumeResponse)
@@ -112,14 +112,14 @@ func Subsume(
 	// Sanity check the caller has initiated a merge transaction by checking for
 	// a deletion intent on the local range descriptor.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := engine.MVCCGet(ctx, readWriter, descKey, cArgs.Header.Timestamp,
-		engine.MVCCGetOptions{Inconsistent: true})
+	_, intent, err := storage.MVCCGet(ctx, readWriter, descKey, cArgs.Header.Timestamp,
+		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return result.Result{}, fmt.Errorf("fetching local range descriptor: %s", err)
 	} else if intent == nil {
 		return result.Result{}, errors.New("range missing intent on its local descriptor")
 	}
-	val, _, err := engine.MVCCGetAsTxn(ctx, readWriter, descKey, cArgs.Header.Timestamp, intent.Txn)
+	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, cArgs.Header.Timestamp, intent.Txn)
 	if err != nil {
 		return result.Result{}, fmt.Errorf("fetching local range descriptor as txn: %s", err)
 	} else if val != nil {

@@ -14,9 +14,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +69,7 @@ func TestStickyEngines(t *testing.T) {
 	// Cleaning up everything asserts everything is closed.
 	CloseAllStickyInMemEngines()
 	require.Len(t, stickyInMemEnginesRegistry.entries, 0)
-	for _, engine := range []engine.Engine{engine1, newEngine1, engine2} {
+	for _, engine := range []storage.Engine{engine1, newEngine1, engine2} {
 		require.True(t, engine.Closed())
 		require.True(t, engine.(*stickyInMemEngine).Engine.Closed())
 	}

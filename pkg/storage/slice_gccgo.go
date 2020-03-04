@@ -10,7 +10,7 @@
 
 // +build gccgo
 
-package engine
+package storage
 
 import "unsafe"
 

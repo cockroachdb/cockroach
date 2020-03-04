@@ -11,18 +11,18 @@
 package rditer
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
 // ComputeStatsForRange computes the stats for a given range by
 // iterating over all key ranges for the given range that should
 // be accounted for in its stats.
 func ComputeStatsForRange(
-	d *roachpb.RangeDescriptor, reader engine.Reader, nowNanos int64,
+	d *roachpb.RangeDescriptor, reader storage.Reader, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	iter := reader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	iter := reader.NewIterator(storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	ms := enginepb.MVCCStats{}

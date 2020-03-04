@@ -14,9 +14,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,13 +40,13 @@ func TestRecoverTxn(t *testing.T) {
 	txn.InFlightWrites = []roachpb.SequencedWrite{{Key: k2, Sequence: 0}}
 
 	testutils.RunTrueAndFalse(t, "missing write", func(t *testing.T, missingWrite bool) {
-		db := engine.NewDefaultInMem()
+		db := storage.NewDefaultInMem()
 		defer db.Close()
 
 		// Write the transaction record.
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		txnRecord := txn.AsRecord()
-		if err := engine.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+		if err := storage.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 			t.Fatal(err)
 		}
 
@@ -81,8 +81,8 @@ func TestRecoverTxn(t *testing.T) {
 
 		// Assert that the updated txn record was persisted correctly.
 		var resTxnRecord roachpb.Transaction
-		if _, err := engine.MVCCGetProto(
-			ctx, db, txnKey, hlc.Timestamp{}, &resTxnRecord, engine.MVCCGetOptions{},
+		if _, err := storage.MVCCGetProto(
+			ctx, db, txnKey, hlc.Timestamp{}, &resTxnRecord, storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +191,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			db := engine.NewDefaultInMem()
+			db := storage.NewDefaultInMem()
 			defer db.Close()
 
 			// Write the modified transaction record, simulating a concurrent
@@ -199,7 +199,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			// request is evaluated.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			txnRecord := c.changedTxn.AsRecord()
-			if err := engine.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+			if err := storage.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 				t.Fatal(err)
 			}
 
@@ -232,8 +232,8 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 
 				// Assert that the txn record was not modified.
 				var resTxnRecord roachpb.Transaction
-				if _, err := engine.MVCCGetProto(
-					ctx, db, txnKey, hlc.Timestamp{}, &resTxnRecord, engine.MVCCGetOptions{},
+				if _, err := storage.MVCCGetProto(
+					ctx, db, txnKey, hlc.Timestamp{}, &resTxnRecord, storage.MVCCGetOptions{},
 				); err != nil {
 					t.Fatal(err)
 				}

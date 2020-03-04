@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -100,7 +100,7 @@ type kvBatchSnapshotStrategy struct {
 	// Limiter for sending KV batches. Only used on the sender side.
 	limiter *rate.Limiter
 	// Only used on the sender side.
-	newBatch func() engine.Batch
+	newBatch func() storage.Batch
 
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk. Only used on the receiver side.
@@ -114,7 +114,7 @@ type kvBatchSnapshotStrategy struct {
 // disk.
 type multiSSTWriter struct {
 	scratch   *SSTSnapshotStorageScratch
-	currSST   engine.SSTWriter
+	currSST   storage.SSTWriter
 	keyRanges []rditer.KeyRange
 	currRange int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
@@ -144,7 +144,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create new sst file")
 	}
-	newSST := engine.MakeIngestionSSTWriter(newSSTFile)
+	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
 		msstw.currSST.Close()
@@ -163,7 +163,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 	return nil
 }
 
-func (msstw *multiSSTWriter) Put(ctx context.Context, key engine.MVCCKey, value []byte) error {
+func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	for msstw.keyRanges[msstw.currRange].End.Key.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
@@ -238,14 +238,14 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 
 		if req.KVBatch != nil {
-			batchReader, err := engine.NewRocksDBBatchReader(req.KVBatch)
+			batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
 			}
 			// All operations in the batch are guaranteed to be puts.
 			for batchReader.Next() {
-				if batchReader.BatchType() != engine.BatchTypeValue {
-					return noSnap, crdberrors.AssertionFailedf("expected type %d, found type %d", engine.BatchTypeValue, batchReader.BatchType())
+				if batchReader.BatchType() != storage.BatchTypeValue {
+					return noSnap, crdberrors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
 				}
 				key, err := batchReader.MVCCKey()
 				if err != nil {
@@ -317,7 +317,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// Iterate over all keys using the provided iterator and stream out batches
 	// of key-values.
 	n := 0
-	var b engine.Batch
+	var b storage.Batch
 	for iter := snap.Iter; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return err
@@ -463,7 +463,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
-	ctx context.Context, stream outgoingSnapshotStream, batch engine.Batch,
+	ctx context.Context, stream outgoingSnapshotStream, batch storage.Batch,
 ) error {
 	if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
 		return err
@@ -887,7 +887,7 @@ func sendSnapshot(
 	storePool SnapshotStorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
-	newBatch func() engine.Batch,
+	newBatch func() storage.Batch,
 	sent func(),
 ) error {
 	start := timeutil.Now()

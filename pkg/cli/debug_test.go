@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,10 +42,10 @@ import (
 
 func createStore(t *testing.T, path string) {
 	t.Helper()
-	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
+	cache := storage.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
-	db, err := engine.NewRocksDB(
-		engine.RocksDBConfig{
+	db, err := storage.NewRocksDB(
+		storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:       path,
 				MustExist: false,
@@ -123,7 +123,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			key := engine.MakeMVCCMetadataKey(roachpb.Key("key"))
+			key := storage.MakeMVCCMetadataKey(roachpb.Key("key"))
 			val := []byte("value")
 			err = db.Put(key, val)
 			if !testutils.IsError(err, test.expErr) {

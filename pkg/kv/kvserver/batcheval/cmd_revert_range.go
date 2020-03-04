@@ -13,11 +13,11 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -42,18 +42,18 @@ func declareKeysRevertRange(
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
 func isEmptyKeyTimeRange(
-	readWriter engine.ReadWriter, from, to roachpb.Key, since, until hlc.Timestamp,
+	readWriter storage.ReadWriter, from, to roachpb.Key, since, until hlc.Timestamp,
 ) (bool, error) {
 	// Use a TBI to check if there is anything to delete -- the first key Seek hits
 	// may not be in the time range but the fact the TBI found any key indicates
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
-	iter := readWriter.NewIterator(engine.IterOptions{
+	iter := readWriter.NewIterator(storage.IterOptions{
 		LowerBound: from, UpperBound: to,
 		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
 	})
 	defer iter.Close()
-	iter.SeekGE(engine.MVCCKey{Key: from})
+	iter.SeekGE(storage.MVCCKey{Key: from})
 	ok, err := iter.Valid()
 	return !ok, err
 }
@@ -65,7 +65,7 @@ func isEmptyKeyTimeRange(
 // Note: this should only be used when there is no user traffic writing to the
 // target span at or above the target time.
 func RevertRange(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
 		return result.Result{}, errors.New("cannot execute RevertRange within a transaction")
@@ -91,7 +91,7 @@ func RevertRange(
 
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
-	resume, err := engine.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
+	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
 		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys)
 	if err != nil {
 		return result.Result{}, err

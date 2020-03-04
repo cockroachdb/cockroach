@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -26,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -307,7 +307,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 // retryable error.
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
-) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
+) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 
 	// If the transaction has been pushed but it can commit at the higher
 	// timestamp, let's evaluate the batch at the bumped timestamp. This will
@@ -365,7 +365,7 @@ type onePCResult struct {
 	stats enginepb.MVCCStats
 	br    *roachpb.BatchResponse
 	res   result.Result
-	batch engine.Batch
+	batch storage.Batch
 }
 
 // evaluate1PC attempts to evaluate the batch as a 1PC transaction - meaning it
@@ -379,7 +379,7 @@ func (r *Replica) evaluate1PC(
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
 
-	var batch engine.Batch
+	var batch storage.Batch
 	defer func() {
 		// Close the batch unless it's passed to the caller (when the evaluation
 		// succeeds).
@@ -501,7 +501,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
 	deadline *hlc.Timestamp,
-) (batch engine.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
 		if retries > 0 {
@@ -542,7 +542,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
-) (engine.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
+) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	batch, opLogger := r.newBatchedEngine(spans)
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 	if pErr == nil {
@@ -627,9 +627,9 @@ func canDoServersideRetry(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (engine.Batch, *engine.OpLoggerBatch) {
+func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.Engine().NewBatch()
-	var opLogger *engine.OpLoggerBatch
+	var opLogger *storage.OpLoggerBatch
 	if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
 		// cluster setting we'll need a way to turn this on when any
@@ -663,7 +663,7 @@ func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (engine.Batch, *engin
 		//
 		// Another alternative is to make the setting table/zone-scoped
 		// instead of a fine-grained per-replica state.
-		opLogger = engine.NewOpLoggerBatch(batch)
+		opLogger = storage.NewOpLoggerBatch(batch)
 		batch = opLogger
 	}
 	if util.RaceEnabled {

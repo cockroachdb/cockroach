@@ -16,14 +16,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -91,8 +91,8 @@ type SSTBatcher struct {
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
-	sstWriter       engine.SSTWriter
-	sstFile         *engine.MemFile
+	sstWriter       storage.SSTWriter
+	sstFile         *storage.MemFile
 	batchStartKey   []byte
 	batchEndKey     []byte
 	batchEndValue   []byte
@@ -101,7 +101,7 @@ type SSTBatcher struct {
 	// stores on-the-fly stats for the SST if disallowShadowing is true.
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
-	rowCounter engine.RowCounter
+	rowCounter storage.RowCounter
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
@@ -113,7 +113,7 @@ func MakeSSTBatcher(
 	return b, err
 }
 
-func (b *SSTBatcher) updateMVCCStats(key engine.MVCCKey, value []byte) {
+func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 	metaKeySize := int64(len(key.Key)) + 1
 	metaValSize := int64(0)
 	b.ms.LiveBytes += metaKeySize
@@ -122,9 +122,9 @@ func (b *SSTBatcher) updateMVCCStats(key engine.MVCCKey, value []byte) {
 	b.ms.ValBytes += metaValSize
 	b.ms.KeyCount++
 
-	totalBytes := int64(len(value)) + engine.MVCCVersionTimestampSize
+	totalBytes := int64(len(value)) + storage.MVCCVersionTimestampSize
 	b.ms.LiveBytes += totalBytes
-	b.ms.KeyBytes += engine.MVCCVersionTimestampSize
+	b.ms.KeyBytes += storage.MVCCVersionTimestampSize
 	b.ms.ValBytes += int64(len(value))
 	b.ms.ValCount++
 }
@@ -133,7 +133,7 @@ func (b *SSTBatcher) updateMVCCStats(key engine.MVCCKey, value []byte) {
 // This is only for callers that want to control the timestamp on individual
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
-func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value []byte) error {
+func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
 		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
@@ -177,14 +177,14 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.sstWriter.Close()
-	b.sstFile = &engine.MemFile{}
+	b.sstFile = &storage.MemFile{}
 	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
 	// in the cluster can support it. Until then, for backward compatibility,
 	// create SSTs in the leveldb format ("backup" ones).
 	if b.settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-		b.sstWriter = engine.MakeIngestionSSTWriter(b.sstFile)
+		b.sstWriter = storage.MakeIngestionSSTWriter(b.sstFile)
 	} else {
-		b.sstWriter = engine.MakeBackupSSTWriter(b.sstFile)
+		b.sstWriter = storage.MakeBackupSSTWriter(b.sstFile)
 	}
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
@@ -381,7 +381,7 @@ func AddSSTable(
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
-	iter, err := engine.NewMemSSTIterator(sstBytes, true)
+	iter, err := storage.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
 		return 0, err
 	}
@@ -389,7 +389,7 @@ func AddSSTable(
 
 	var stats enginepb.MVCCStats
 	if (ms == enginepb.MVCCStats{}) {
-		stats, err = engine.ComputeStatsGo(iter, start, end, now.UnixNano())
+		stats, err = storage.ComputeStatsGo(iter, start, end, now.UnixNano())
 		if err != nil {
 			return 0, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
@@ -437,7 +437,7 @@ func AddSSTable(
 						return err
 					}
 
-					right.stats, err = engine.ComputeStatsGo(
+					right.stats, err = storage.ComputeStatsGo(
 						iter, right.start, right.end, now.UnixNano(),
 					)
 					if err != nil {
@@ -476,15 +476,15 @@ func createSplitSSTable(
 	db SSTSender,
 	start, splitKey roachpb.Key,
 	disallowShadowing bool,
-	iter engine.SimpleIterator,
+	iter storage.SimpleIterator,
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
-	sstFile := &engine.MemFile{}
-	var w engine.SSTWriter
+	sstFile := &storage.MemFile{}
+	var w storage.SSTWriter
 	if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-		w = engine.MakeIngestionSSTWriter(sstFile)
+		w = storage.MakeIngestionSSTWriter(sstFile)
 	} else {
-		w = engine.MakeBackupSSTWriter(sstFile)
+		w = storage.MakeBackupSSTWriter(sstFile)
 	}
 	defer w.Close()
 
@@ -492,7 +492,7 @@ func createSplitSSTable(
 	var first, last roachpb.Key
 	var left, right *sstSpan
 
-	iter.SeekGE(engine.MVCCKey{Key: start})
+	iter.SeekGE(storage.MVCCKey{Key: start})
 	for {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, nil, err
@@ -514,11 +514,11 @@ func createSplitSSTable(
 				sstBytes:          sstFile.Data(),
 				disallowShadowing: disallowShadowing,
 			}
-			*sstFile = engine.MemFile{}
+			*sstFile = storage.MemFile{}
 			if settings.Version.IsActive(ctx, clusterversion.VersionStart20_1) {
-				w = engine.MakeIngestionSSTWriter(sstFile)
+				w = storage.MakeIngestionSSTWriter(sstFile)
 			} else {
-				w = engine.MakeBackupSSTWriter(sstFile)
+				w = storage.MakeBackupSSTWriter(sstFile)
 			}
 			split = true
 			first = nil

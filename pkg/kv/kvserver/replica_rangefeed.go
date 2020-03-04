@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -26,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -114,7 +114,7 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 }
 
 type iteratorWithCloser struct {
-	engine.SimpleIterator
+	storage.SimpleIterator
 	close func()
 }
 
@@ -200,9 +200,9 @@ func (r *Replica) RangeFeed(
 	}
 
 	// Register the stream with a catch-up iterator.
-	var catchUpIter engine.SimpleIterator
+	var catchUpIter storage.SimpleIterator
 	if usingCatchupIter {
-		innerIter := r.Engine().NewIterator(engine.IterOptions{
+		innerIter := r.Engine().NewIterator(storage.IterOptions{
 			UpperBound: args.Span.EndKey,
 			// RangeFeed originally intended to use the time-bound iterator
 			// performance optimization. However, they've had correctness issues in
@@ -302,7 +302,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIter engine.SimpleIterator,
+	catchupIter storage.SimpleIterator,
 	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
@@ -347,7 +347,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := r.Engine().NewIterator(engine.IterOptions{
+	rtsIter := r.Engine().NewIterator(storage.IterOptions{
 		UpperBound: desc.EndKey.AsRawKey(),
 		// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
 		// we should periodically persist the resolved timestamp so that we
@@ -440,7 +440,7 @@ func (r *Replica) numRangefeedRegistrations() int {
 // the state of the Replica before the operations in the logical op log are
 // applied. No-op if a rangefeed is not active. Requires raftMu to be locked.
 func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *storagepb.LogicalOpLog, prevReader engine.Reader,
+	ctx context.Context, ops *storagepb.LogicalOpLog, prevReader storage.Reader,
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
@@ -475,8 +475,8 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 
 		// Read the previous value from the prev Reader. Unlike the new value
 		// (see handleLogicalOpLogRaftMuLocked), this one may be missing.
-		prevVal, _, err := engine.MVCCGet(
-			ctx, prevReader, key, ts, engine.MVCCGetOptions{Tombstones: true, Inconsistent: true},
+		prevVal, _, err := storage.MVCCGet(
+			ctx, prevReader, key, ts, storage.MVCCGetOptions{Tombstones: true, Inconsistent: true},
 		)
 		if err != nil {
 			r.disconnectRangefeedWithErr(p, roachpb.NewErrorf(
@@ -498,7 +498,7 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 // them to the rangefeed processor. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
 func (r *Replica) handleLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *storagepb.LogicalOpLog, reader engine.Reader,
+	ctx context.Context, ops *storagepb.LogicalOpLog, reader storage.Reader,
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
@@ -556,7 +556,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// Read the value directly from the Reader. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		val, _, err := engine.MVCCGet(ctx, reader, key, ts, engine.MVCCGetOptions{Tombstones: true})
+		val, _, err := storage.MVCCGet(ctx, reader, key, ts, storage.MVCCGetOptions{Tombstones: true})
 		if val == nil && err == nil {
 			err = errors.New("value missing in reader")
 		}

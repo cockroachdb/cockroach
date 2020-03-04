@@ -13,10 +13,10 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -41,7 +41,7 @@ func declareKeysDeleteRange(
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
 func DeleteRange(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.DeleteRangeRequest)
 	h := cArgs.Header
@@ -55,7 +55,7 @@ func DeleteRange(
 	// written if we're evaluating the DeleteRange for a transaction so that we
 	// can update the Result's WrittenIntents field.
 	returnKeys := args.ReturnKeys || h.Txn != nil
-	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
+	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
 		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.MaxSpanRequestKeys, timestamp, h.Txn, returnKeys,
 	)
 	if err == nil && args.ReturnKeys {

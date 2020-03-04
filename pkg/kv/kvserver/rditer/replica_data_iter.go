@@ -11,15 +11,15 @@
 package rditer
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
 // KeyRange is a helper struct for the ReplicaDataIterator.
 type KeyRange struct {
-	Start, End engine.MVCCKey
+	Start, End storage.MVCCKey
 }
 
 // ReplicaDataIterator provides a complete iteration over all key / value
@@ -37,7 +37,7 @@ type KeyRange struct {
 type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
-	it       engine.Iterator
+	it       storage.Iterator
 	a        bufalloc.ByteAllocator
 }
 
@@ -79,8 +79,8 @@ func MakeRangeIDLocalKeyRange(rangeID roachpb.RangeID, replicatedOnly bool) KeyR
 	}
 	sysRangeIDKey := prefixFn(rangeID)
 	return KeyRange{
-		Start: engine.MakeMVCCMetadataKey(sysRangeIDKey),
-		End:   engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
+		Start: storage.MakeMVCCMetadataKey(sysRangeIDKey),
+		End:   storage.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
 	}
 }
 
@@ -90,8 +90,8 @@ func MakeRangeIDLocalKeyRange(rangeID roachpb.RangeID, replicatedOnly bool) KeyR
 // /System), but it actually belongs to [/Table/1, /Table/2).
 func MakeRangeLocalKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	return KeyRange{
-		Start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
-		End:   engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+		Start: storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
+		End:   storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
 	}
 }
 
@@ -105,16 +105,16 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 		dataStartKey = keys.LocalMax
 	}
 	return KeyRange{
-		Start: engine.MakeMVCCMetadataKey(dataStartKey),
-		End:   engine.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
+		Start: storage.MakeMVCCMetadataKey(dataStartKey),
+		End:   storage.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
 	}
 }
 
 // NewReplicaDataIterator creates a ReplicaDataIterator for the given replica.
 func NewReplicaDataIterator(
-	d *roachpb.RangeDescriptor, reader engine.Reader, replicatedOnly bool, seekEnd bool,
+	d *roachpb.RangeDescriptor, reader storage.Reader, replicatedOnly bool, seekEnd bool,
 ) *ReplicaDataIterator {
-	it := reader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	it := reader.NewIterator(storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
@@ -204,7 +204,7 @@ func (ri *ReplicaDataIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key.
-func (ri *ReplicaDataIterator) Key() engine.MVCCKey {
+func (ri *ReplicaDataIterator) Key() storage.MVCCKey {
 	key := ri.it.UnsafeKey()
 	ri.a, key.Key = ri.a.Copy(key.Key, 0)
 	return key
@@ -219,7 +219,7 @@ func (ri *ReplicaDataIterator) Value() []byte {
 
 // UnsafeKey returns the same value as Key, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
-func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
+func (ri *ReplicaDataIterator) UnsafeKey() storage.MVCCKey {
 	return ri.it.UnsafeKey()
 }
 

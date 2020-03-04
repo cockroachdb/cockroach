@@ -14,12 +14,12 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -35,7 +35,7 @@ import (
 // the input slice, or has been shallow-copied appropriately to avoid
 // mutating the original requests).
 func optimizePuts(
-	reader engine.Reader, origReqs []roachpb.RequestUnion, distinctSpans bool,
+	reader storage.Reader, origReqs []roachpb.RequestUnion, distinctSpans bool,
 ) []roachpb.RequestUnion {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
@@ -83,7 +83,7 @@ func optimizePuts(
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
 		return origReqs
 	}
-	iter := reader.NewIterator(engine.IterOptions{
+	iter := reader.NewIterator(storage.IterOptions{
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
 		UpperBound: maxKey.Next(),
@@ -94,7 +94,7 @@ func optimizePuts(
 	// we can determine whether any part of the range being written
 	// is "virgin" and set the puts to write blindly.
 	// Find the first non-empty key in the run.
-	iter.SeekGE(engine.MakeMVCCMetadataKey(minKey))
+	iter.SeekGE(storage.MakeMVCCMetadataKey(minKey))
 	var iterKey roachpb.Key
 	if ok, err := iter.Valid(); err != nil {
 		// TODO(bdarnell): return an error here instead of silently
@@ -137,7 +137,7 @@ func optimizePuts(
 func evaluateBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
@@ -396,7 +396,7 @@ func evaluateCommand(
 	ctx context.Context,
 	raftCmdID storagebase.CmdIDKey,
 	index int,
-	readWriter engine.ReadWriter,
+	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,

@@ -14,8 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
@@ -23,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -49,7 +49,7 @@ type EvalContext interface {
 	ClusterSettings() *cluster.Settings
 	EvalKnobs() storagebase.BatchEvalTestingKnobs
 
-	Engine() engine.Engine
+	Engine() storage.Engine
 	Clock() *hlc.Clock
 	DB() *client.DB
 	AbortSpan() *abortspan.AbortSpan
@@ -134,7 +134,7 @@ func (m *mockEvalCtxImpl) ClusterSettings() *cluster.Settings {
 func (m *mockEvalCtxImpl) EvalKnobs() storagebase.BatchEvalTestingKnobs {
 	return storagebase.BatchEvalTestingKnobs{}
 }
-func (m *mockEvalCtxImpl) Engine() engine.Engine {
+func (m *mockEvalCtxImpl) Engine() storage.Engine {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) Clock() *hlc.Clock {

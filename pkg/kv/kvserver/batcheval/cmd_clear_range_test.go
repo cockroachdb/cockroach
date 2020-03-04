@@ -18,25 +18,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 type wrappedBatch struct {
-	engine.Batch
+	storage.Batch
 	clearCount      int
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) Clear(key engine.MVCCKey) error {
+func (wb *wrappedBatch) Clear(key storage.MVCCKey) error {
 	wb.clearCount++
 	return wb.Batch.Clear(key)
 }
 
-func (wb *wrappedBatch) ClearRange(start, end engine.MVCCKey) error {
+func (wb *wrappedBatch) ClearRange(start, end storage.MVCCKey) error {
 	wb.clearRangeCount++
 	return wb.Batch.ClearRange(start, end)
 }
@@ -86,13 +86,13 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
-			eng := engine.NewDefaultInMem()
+			eng := storage.NewDefaultInMem()
 			defer eng.Close()
 
 			var stats enginepb.MVCCStats
 			for i := 0; i < test.keyCount; i++ {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
-				if err := engine.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{WallTime: int64(i % 2)}, value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{WallTime: int64(i % 2)}, value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -140,7 +140,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := eng.Iterate(startKey, endKey,
-				func(kv engine.MVCCKeyValue) (bool, error) {
+				func(kv storage.MVCCKeyValue) (bool, error) {
 					return true, errors.New("expected no data in underlying engine")
 				},
 			); err != nil {

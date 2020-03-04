@@ -13,12 +13,12 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -56,7 +56,7 @@ func declareKeysGC(
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
 func GC(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GCRequest)
 	h := cArgs.Header
@@ -74,7 +74,7 @@ func GC(
 	}
 
 	// Garbage collect the specified keys by expiration timestamps.
-	if err := engine.MVCCGarbageCollect(
+	if err := storage.MVCCGarbageCollect(
 		ctx, readWriter, cArgs.Stats, keys, h.Timestamp,
 	); err != nil {
 		return result.Result{}, err

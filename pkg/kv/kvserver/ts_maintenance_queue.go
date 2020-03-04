@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -42,7 +42,7 @@ type TimeSeriesDataStore interface {
 	ContainsTimeSeries(roachpb.RKey, roachpb.RKey) bool
 	MaintainTimeSeries(
 		context.Context,
-		engine.Reader,
+		storage.Reader,
 		roachpb.RKey,
 		roachpb.RKey,
 		*client.DB,

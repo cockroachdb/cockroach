@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 type slKey struct {
@@ -44,7 +44,7 @@ func newInMemSideloadStorage(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	baseDir string,
-	eng engine.Engine,
+	eng storage.Engine,
 ) (SideloadStorage, error) {
 	return &inMemSideloadStorage{
 		prefix: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),

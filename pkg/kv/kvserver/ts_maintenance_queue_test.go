@@ -20,12 +20,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -63,7 +63,7 @@ func (m *modelTimeSeriesDataStore) ContainsTimeSeries(start, end roachpb.RKey) b
 
 func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
 	ctx context.Context,
-	snapshot engine.Reader,
+	snapshot storage.Reader,
 	start, end roachpb.RKey,
 	db *client.DB,
 	_ *mon.BytesMonitor,

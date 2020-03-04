@@ -26,7 +26,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -89,7 +89,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 	})
 	t.Run("Disk", func(t *testing.T) {
 		maker := func(
-			s *cluster.Settings, rangeID roachpb.RangeID, rep roachpb.ReplicaID, name string, eng engine.Engine,
+			s *cluster.Settings, rangeID roachpb.RangeID, rep roachpb.ReplicaID, name string, eng storage.Engine,
 		) (SideloadStorage, error) {
 			return newDiskSideloadStorage(s, rangeID, rep, name, rate.NewLimiter(rate.Inf, math.MaxInt64), eng)
 		}
@@ -99,7 +99,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 
 func testSideloadingSideloadedStorage(
 	t *testing.T,
-	maker func(*cluster.Settings, roachpb.RangeID, roachpb.ReplicaID, string, engine.Engine) (SideloadStorage, error),
+	maker func(*cluster.Settings, roachpb.RangeID, roachpb.ReplicaID, string, storage.Engine) (SideloadStorage, error),
 ) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -612,16 +612,16 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 	stopper := stop.NewStopper()
 	tc := testContext{}
 	if !engineInMem {
-		cfg := engine.RocksDBConfig{
+		cfg := storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:      dir,
 				Settings: cluster.MakeTestingClusterSettings(),
 			},
 		}
 		var err error
-		cache := engine.NewRocksDBCache(1 << 20)
+		cache := storage.NewRocksDBCache(1 << 20)
 		defer cache.Release()
-		tc.engine, err = engine.NewRocksDB(cfg, cache)
+		tc.engine, err = storage.NewRocksDB(cfg, cache)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -752,9 +752,9 @@ func (mr *mockSender) Recv() (*SnapshotResponse, error) {
 	return &SnapshotResponse{Status: status}, nil
 }
 
-func newEngine(t *testing.T) (func(), engine.Engine) {
+func newEngine(t *testing.T) (func(), storage.Engine) {
 	dir, cleanup := testutils.TempDir(t)
-	eng, err := engine.NewDefaultEngine(
+	eng, err := storage.NewDefaultEngine(
 		1<<20,
 		base.StorageConfig{
 			Dir:       dir,

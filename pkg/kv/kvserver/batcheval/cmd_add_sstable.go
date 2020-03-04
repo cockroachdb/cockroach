@@ -14,13 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
@@ -33,12 +33,12 @@ func init() {
 
 // EvalAddSSTable evaluates an AddSSTable command.
 func EvalAddSSTable(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
-	mvccStartKey, mvccEndKey := engine.MVCCKey{Key: args.Key}, engine.MVCCKey{Key: args.EndKey}
+	mvccStartKey, mvccEndKey := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
 
 	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
 	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
@@ -58,14 +58,14 @@ func EvalAddSSTable(
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, and if the request did not include pre-computed stats,
 	// compute the expected MVCC stats delta of ingesting the SST.
-	dataIter, err := engine.NewMemSSTIterator(args.Data, true)
+	dataIter, err := storage.NewMemSSTIterator(args.Data, true)
 	if err != nil {
 		return result.Result{}, err
 	}
 	defer dataIter.Close()
 
 	// Check that the first key is in the expected range.
-	dataIter.SeekGE(engine.MVCCKey{Key: keys.MinKey})
+	dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 	ok, err := dataIter.Valid()
 	if err != nil {
 		return result.Result{}, err
@@ -89,7 +89,7 @@ func EvalAddSSTable(
 	if args.MVCCStats == nil || verifyFastPath {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
-		computed, err := engine.ComputeStatsGo(
+		computed, err := storage.ComputeStatsGo(
 			dataIter, mvccStartKey.Key, mvccEndKey.Key, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
@@ -181,7 +181,7 @@ func EvalAddSSTable(
 
 	if args.IngestAsWrites {
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
-		dataIter.SeekGE(engine.MVCCKey{Key: keys.MinKey})
+		dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 		for {
 			ok, err := dataIter.Valid()
 			if err != nil {
@@ -212,9 +212,9 @@ func EvalAddSSTable(
 
 func checkForKeyCollisions(
 	_ context.Context,
-	readWriter engine.ReadWriter,
-	mvccStartKey engine.MVCCKey,
-	mvccEndKey engine.MVCCKey,
+	readWriter storage.ReadWriter,
+	mvccStartKey storage.MVCCKey,
+	mvccEndKey storage.MVCCKey,
 	data []byte,
 ) (enginepb.MVCCStats, error) {
 	// We could get a spansetBatch so fetch the underlying db engine as
@@ -225,7 +225,7 @@ func checkForKeyCollisions(
 	emptyMVCCStats := enginepb.MVCCStats{}
 
 	// Create iterator over the existing data.
-	existingDataIter := dbEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := dbEngine.NewIterator(storage.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.SeekGE(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {

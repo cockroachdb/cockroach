@@ -10,7 +10,7 @@
 
 // +build !stdmalloc
 
-package engine
+package storage
 
 // #cgo LDFLAGS: -ljemalloc
 // #cgo dragonfly freebsd LDFLAGS: -lm

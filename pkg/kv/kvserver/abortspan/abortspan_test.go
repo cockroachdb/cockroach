@@ -15,9 +15,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -43,8 +43,8 @@ var (
 // returns a AbortSpan using the supplied Range ID.
 func createTestAbortSpan(
 	t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper,
-) (*AbortSpan, engine.Engine) {
-	eng := engine.NewDefaultInMem()
+) (*AbortSpan, storage.Engine) {
+	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	return New(rangeID), eng
 }

@@ -13,10 +13,10 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
@@ -35,7 +35,7 @@ func declareKeysResolveIntentRange(
 // ResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
 func ResolveIntentRange(
-	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRangeRequest)
 	h := cArgs.Header
@@ -47,10 +47,10 @@ func ResolveIntentRange(
 
 	update := args.AsLockUpdate()
 
-	iterAndBuf := engine.GetIterAndBuf(readWriter, engine.IterOptions{UpperBound: args.EndKey})
+	iterAndBuf := storage.GetIterAndBuf(readWriter, storage.IterOptions{UpperBound: args.EndKey})
 	defer iterAndBuf.Cleanup()
 
-	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(
+	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(
 		ctx, readWriter, iterAndBuf, ms, update, h.MaxSpanRequestKeys,
 	)
 	if err != nil {

@@ -18,11 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -33,12 +33,12 @@ import (
 // MVCCKeyValues. The stream may indicate that a value is an intent by returning
 // a non-nil transaction. If an intent is returned it must have a higher
 // timestamp than any other version written for the key.
-type dataDistribution func() (engine.MVCCKeyValue, *roachpb.Transaction, bool)
+type dataDistribution func() (storage.MVCCKeyValue, *roachpb.Transaction, bool)
 
 // setupTest writes the data from this distribution into eng. All data should
 // be a part of the range represented by desc.
 func (ds dataDistribution) setupTest(
-	t testing.TB, eng engine.Engine, desc roachpb.RangeDescriptor,
+	t testing.TB, eng storage.Engine, desc roachpb.RangeDescriptor,
 ) enginepb.MVCCStats {
 	ctx := context.TODO()
 	var maxTs hlc.Timestamp
@@ -59,7 +59,7 @@ func (ds dataDistribution) setupTest(
 			if txn.WriteTimestamp == (hlc.Timestamp{}) {
 				txn.WriteTimestamp = ts
 			}
-			err := engine.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,
+			err := storage.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,
 				roachpb.Value{RawBytes: kv.Value}, txn)
 			require.NoError(t, err)
 		}
@@ -96,9 +96,9 @@ func newDataDistribution(
 		timestamps []hlc.Timestamp
 		haveIntent bool
 	)
-	return func() (engine.MVCCKeyValue, *roachpb.Transaction, bool) {
+	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
 		if remaining == 0 {
-			return engine.MVCCKeyValue{}, nil, false
+			return storage.MVCCKeyValue{}, nil, false
 		}
 		defer func() { remaining-- }()
 		for len(timestamps) == 0 {
@@ -140,8 +140,8 @@ func newDataDistribution(
 			txn.WriteTimestamp = ts
 			txn.Key = keyDist()
 		}
-		return engine.MVCCKeyValue{
-			Key:   engine.MVCCKey{Key: key, Timestamp: ts},
+		return storage.MVCCKeyValue{
+			Key:   storage.MVCCKey{Key: key, Timestamp: ts},
 			Value: valueDist(),
 		}, txn, true
 	}

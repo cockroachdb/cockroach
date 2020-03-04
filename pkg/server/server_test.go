@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -38,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -667,9 +667,9 @@ func TestListenerFileCreation(t *testing.T) {
 func TestClusterIDMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	engines := make([]engine.Engine, 2)
+	engines := make([]storage.Engine, 2)
 	for i := range engines {
-		e := engine.NewDefaultInMem()
+		e := storage.NewDefaultInMem()
 		defer e.Close()
 
 		sIdent := roachpb.StoreIdent{
@@ -677,7 +677,7 @@ func TestClusterIDMismatch(t *testing.T) {
 			NodeID:    roachpb.NodeID(i),
 			StoreID:   roachpb.StoreID(i),
 		}
-		if err := engine.MVCCPutProto(
+		if err := storage.MVCCPutProto(
 			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
 
 			t.Fatal(err)

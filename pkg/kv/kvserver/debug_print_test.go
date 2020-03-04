@@ -14,9 +14,9 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -30,8 +30,8 @@ func TestStringifyWriteBatch(t *testing.T) {
 		t.Errorf("expected %q for stringified write batch; got %q", expStr, str)
 	}
 
-	builder := engine.RocksDBBatchBuilder{}
-	builder.Put(engine.MVCCKey{
+	builder := storage.RocksDBBatchBuilder{}
+	builder.Put(storage.MVCCKey{
 		Key:       roachpb.Key("/db1"),
 		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64},
 	}, []byte("test value"))

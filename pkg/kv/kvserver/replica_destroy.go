@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/engine"
-	"github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -126,8 +126,8 @@ const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
 func (r *Replica) preDestroyRaftMuLocked(
 	ctx context.Context,
-	reader engine.Reader,
-	writer engine.Writer,
+	reader storage.Reader,
+	writer storage.Writer,
 	nextReplicaID roachpb.ReplicaID,
 	clearRangeIDLocalOnly bool,
 	mustUseClearRange bool,
@@ -264,7 +264,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 // ID that it hasn't yet received a RangeDescriptor for if it receives raft
 // requests for that replica ID (as seen in #14231).
 func (r *Replica) setTombstoneKey(
-	ctx context.Context, writer engine.Writer, externalNextReplicaID roachpb.ReplicaID,
+	ctx context.Context, writer storage.Writer, externalNextReplicaID roachpb.ReplicaID,
 ) error {
 	r.mu.Lock()
 	nextReplicaID := r.mu.state.Desc.NextReplicaID
@@ -280,7 +280,7 @@ func (r *Replica) setTombstoneKey(
 
 func writeTombstoneKey(
 	ctx context.Context,
-	writer engine.Writer,
+	writer storage.Writer,
 	rangeID roachpb.RangeID,
 	nextReplicaID roachpb.ReplicaID,
 ) error {
@@ -289,6 +289,6 @@ func writeTombstoneKey(
 		NextReplicaID: nextReplicaID,
 	}
 	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
-	return engine.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
+	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
 		hlc.Timestamp{}, tombstone, nil)
 }
