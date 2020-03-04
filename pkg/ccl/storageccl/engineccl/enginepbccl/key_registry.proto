@@ -65,7 +65,7 @@ message SecretKey {
 
 // EncryptionSettings describes the encryption settings for a file.
 // This is stored as a protobuf.Any inside the FileEntry as described in:
-// pkg/storage/engine/enginepb/file_registry.proto
+// pkg/storage/enginepb/file_registry.proto
 message EncryptionSettings {
   EncryptionType encryption_type = 1;
 

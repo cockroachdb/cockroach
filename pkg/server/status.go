@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -48,8 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -135,10 +135,10 @@ type statusServer struct {
 	db                       *client.DB
 	gossip                   *gossip.Gossip
 	metricSource             metricMarshaler
-	nodeLiveness             *storage.NodeLiveness
-	storePool                *storage.StorePool
+	nodeLiveness             *kvserver.NodeLiveness
+	storePool                *kvserver.StorePool
 	rpcCtx                   *rpc.Context
-	stores                   *storage.Stores
+	stores                   *kvserver.Stores
 	stopper                  *stop.Stopper
 	sessionRegistry          *sql.SessionRegistry
 	si                       systemInfoOnce
@@ -154,10 +154,10 @@ func newStatusServer(
 	db *client.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
-	nodeLiveness *storage.NodeLiveness,
-	storePool *storage.StorePool,
+	nodeLiveness *kvserver.NodeLiveness,
+	storePool *kvserver.StorePool,
 	rpcCtx *rpc.Context,
-	stores *storage.Stores,
+	stores *kvserver.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
 ) *statusServer {
@@ -276,7 +276,7 @@ func (s *statusServer) EngineStats(
 	}
 
 	resp := new(serverpb.EngineStatsResponse)
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		engineStatsInfo := serverpb.EngineStatsInfo{
 			StoreID:              store.Ident.StoreID,
 			TickersAndHistograms: nil,
@@ -284,7 +284,7 @@ func (s *statusServer) EngineStats(
 		}
 
 		switch e := store.Engine().(type) {
-		case *engine.RocksDB:
+		case *storage.RocksDB:
 			tickersAndHistograms, err := e.GetTickersAndHistograms()
 			if err != nil {
 				return grpcstatus.Errorf(codes.Internal, err.Error())
@@ -331,12 +331,12 @@ func (s *statusServer) Allocator(
 	}
 
 	output := new(serverpb.AllocatorResponse)
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		// All ranges requested:
 		if len(req.RangeIDs) == 0 {
 			// Use IterateRangeDescriptors to read from the engine only
 			// because it's already exported.
-			err := storage.IterateRangeDescriptors(ctx, store.Engine(),
+			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
 				func(desc roachpb.RangeDescriptor) (bool, error) {
 					rep, err := store.GetReplica(desc.RangeID)
 					if err != nil {
@@ -1297,7 +1297,7 @@ func (s *statusServer) Ranges(
 	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
 
 	constructRangeInfo := func(
-		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, metrics storage.ReplicaMetrics,
+		desc roachpb.RangeDescriptor, rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
 		raftStatus := rep.RaftStatus()
 		raftState := convertRaftStatus(raftStatus)
@@ -1329,7 +1329,7 @@ func (s *statusServer) Ranges(
 			Problems: serverpb.RangeProblems{
 				Unavailable:            metrics.Unavailable,
 				LeaderNotLeaseHolder:   metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
-				NoRaftLeader:           !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
+				NoRaftLeader:           !kvserver.HasRaftLeader(raftStatus) && !metrics.Quiescent,
 				Underreplicated:        metrics.Underreplicated,
 				Overreplicated:         metrics.Overreplicated,
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
@@ -1347,14 +1347,14 @@ func (s *statusServer) Ranges(
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		timestamp := store.Clock().Now()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
 
 			// Use IterateRangeDescriptors to read from the engine only
 			// because it's already exported.
-			err := storage.IterateRangeDescriptors(ctx, store.Engine(),
+			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
 				func(desc roachpb.RangeDescriptor) (bool, error) {
 					rep, err := store.GetReplica(desc.RangeID)
 					if _, skip := err.(*roachpb.RangeNotFoundError); skip {
@@ -1465,7 +1465,7 @@ func (s *statusServer) HotRanges(
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
 	var resp serverpb.HotRangesResponse_NodeResponse
 	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
-	err := s.stores.VisitStores(func(store *storage.Store) error {
+	err := s.stores.VisitStores(func(store *kvserver.Store) error {
 		ranges := store.HottestReplicas()
 		storeResp := &serverpb.HotRangesResponse_StoreResponse{
 			StoreID:   store.StoreID(),
@@ -1822,7 +1822,7 @@ func (s *statusServer) SpanStats(
 	}
 
 	output := &serverpb.SpanStatsResponse{}
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		result, err := store.ComputeStatsForKeySpan(req.StartKey.Next(), req.EndKey)
 		if err != nil {
 			return err
@@ -1885,7 +1885,7 @@ func (s *statusServer) Stores(
 	}
 
 	resp := &serverpb.StoresResponse{}
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		storeDetails := serverpb.StoreDetails{
 			StoreID: store.Ident.StoreID,
 		}

@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -24,8 +24,8 @@ import (
 func TestEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	k := func(s string, ts hlc.Timestamp) engine.MVCCKey {
-		return engine.MVCCKey{Key: []byte(s), Timestamp: ts}
+	k := func(s string, ts hlc.Timestamp) storage.MVCCKey {
+		return storage.MVCCKey{Key: []byte(s), Timestamp: ts}
 	}
 	var missing roachpb.Value
 	v := func(s string, ts hlc.Timestamp) roachpb.Value {

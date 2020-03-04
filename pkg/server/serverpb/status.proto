@@ -20,12 +20,12 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "server/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
-import "storage/engine/enginepb/engine.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/engine/enginepb/rocksdb.proto";
-import "storage/storagepb/lease_status.proto";
-import "storage/storagepb/state.proto";
-import "storage/storagepb/liveness.proto";
+import "storage/enginepb/engine.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/rocksdb.proto";
+import "kv/kvserver/storagepb/lease_status.proto";
+import "kv/kvserver/storagepb/state.proto";
+import "kv/kvserver/storagepb/liveness.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
@@ -113,7 +113,7 @@ message NodesRequest {}
 
 message NodesResponse {
   repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
-  map<int32, cockroach.storage.NodeLivenessStatus> liveness_by_node_id = 2 [
+  map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> liveness_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "LivenessByNodeID"
@@ -185,7 +185,7 @@ message PrettySpan {
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
-  storage.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
+  kv.kvserver.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
   int32 source_node_id = 5 [
     (gogoproto.customname) = "SourceNodeID",
     (gogoproto.casttype) =
@@ -200,9 +200,9 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
-  storage.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
-  storage.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
-  storage.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
+  kv.kvserver.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
+  kv.kvserver.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
+  kv.kvserver.storagepb.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
 }
@@ -234,8 +234,8 @@ message EngineStatsInfo {
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
   ];
-  cockroach.storage.engine.enginepb.TickersAndHistograms tickers_and_histograms = 2;
-  cockroach.storage.engine.enginepb.EngineType engine_type = 3;
+  cockroach.storage.enginepb.TickersAndHistograms tickers_and_histograms = 2;
+  cockroach.storage.enginepb.EngineType engine_type = 3;
 }
 
 message EngineStatsRequest {
@@ -557,7 +557,7 @@ message SpanStatsRequest {
 message SpanStatsResponse {
   int32 range_count = 2;
   uint64 approximate_disk_bytes = 3;
-  cockroach.storage.engine.enginepb.MVCCStats total_stats = 1
+  cockroach.storage.enginepb.MVCCStats total_stats = 1
       [ (gogoproto.nullable) = false ];
 }
 

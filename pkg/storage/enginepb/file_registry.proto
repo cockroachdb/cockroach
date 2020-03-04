@@ -1,0 +1,55 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.storage.enginepb;
+option go_package = "enginepb";
+
+import "gogoproto/gogo.proto";
+
+enum RegistryVersion {
+  // The only version so far.
+  Base = 0;
+}
+
+// EnvType determines which rocksdb::Env is used and for what purpose.
+enum EnvType {
+  // The default Env when no encryption is used.
+  // File using Plaintext are not recorded in the file registry.
+  Plaintext = 0;
+  // The Env using store-level keys.
+  // Used only to read/write the data key registry.
+  Store = 1;
+  // The Env using data-level keys.
+  // Used as the default rocksdb Env when encryption is enabled.
+  Data = 2;
+}
+
+// Registry describes how a files are handled. This includes the
+// rockdb::Env responsible for each file as well as opaque env details.
+message FileRegistry {
+  // version is currently always Base.
+  RegistryVersion version = 1;
+  // Map of filename -> FileEntry.
+  // Filename is relative to the rocksdb dir if the file is inside it.
+  // Otherwise it is an absolute path.
+  // TODO(mberhault): figure out if we need anything special for Windows.
+  map<string, FileEntry> files = 2;
+}
+
+message FileEntry {
+  // Env type identifies which rocksdb::Env is responsible for this file.
+  EnvType env_type = 1;
+
+  // Env-specific fields for non-0 env. These are known by CCL code only.
+  // This is a serialized protobuf. We cannot use protobuf.Any since we use
+  // MessageLite in C++.
+  bytes encryption_settings = 2;
+}

@@ -13,9 +13,9 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "roachpb/metadata.proto";
-import "storage/concurrency/lock/locking.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/engine/enginepb/mvcc3.proto";
+import "kv/kvserver/concurrency/lock/locking.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -138,7 +138,7 @@ message MergeTrigger {
 
   reserved 3;
 
-  storage.engine.enginepb.MVCCStats right_mvcc_stats = 4 [
+  storage.enginepb.MVCCStats right_mvcc_stats = 4 [
     (gogoproto.customname) = "RightMVCCStats",
     (gogoproto.nullable) = false
   ];
@@ -312,7 +312,7 @@ message Transaction {
 
   // The transaction metadata. This field includes the subset of information
   // that is persisted with every write intent.
-  storage.engine.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // A free-text identifier for debug purposes.
   string name = 2;
   // The status of the transaction.
@@ -505,7 +505,7 @@ message Transaction {
   // non-contiguous (i.e. it must coalesce ranges to avoid situations
   // where a range's end seqnum is equal to the next range's start
   // seqnum), and sorted in seqnum order.
-  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
     [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 
   reserved 3, 9, 13, 14;
@@ -528,12 +528,12 @@ message TransactionRecord {
   option (gogoproto.populate) = true;
 
   // See comments on Transaction proto.
-  storage.engine.enginepb.TxnMeta meta     = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.enginepb.TxnMeta meta     = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   TransactionStatus status                 = 4;
   util.hlc.Timestamp last_heartbeat        = 5  [(gogoproto.nullable) = false];
   repeated Span intent_spans               = 11 [(gogoproto.nullable) = false];
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
-  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
     [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 
   // Fields on Transaction that are not present in a transaction record.
@@ -560,7 +560,7 @@ message Intent {
     bytes key = 3 [(gogoproto.casttype) = "Key"];
   }
   SingleKeySpan single_key_span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
 }
 
 // A LockUpdate is a Span together with Transaction state. LockUpdate messages
@@ -572,10 +572,10 @@ message LockUpdate {
   option (gogoproto.equal) = true;
 
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
-  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
-  storage.concurrency.lock.Durability durability = 5;
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+  kv.kvserver.concurrency.lock.Durability durability = 5;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
@@ -587,7 +587,7 @@ message SequencedWrite {
   bytes key = 1 [(gogoproto.casttype) = "Key"];
   // The sequence number of the request that created the write.
   int32 sequence = 2 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
 
 // Lease contains information about range leases including the
@@ -652,7 +652,7 @@ message AbortSpanEntry {
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // The priority of the transaction.
   int32 priority = 3 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnPriority"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnPriority"];
 }
 
 // LeafTxnInputState is the state from a transaction coordinator
@@ -682,7 +682,7 @@ message LeafTxnInputState {
   // regardless of the current seqnum generated for writes. This is
   // updated via the (client.TxnSender).Step() operation.
   int32 read_seq_num = 10 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
 
 // LeafTxnFinalState is the state from a leaf transaction coordinator

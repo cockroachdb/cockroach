@@ -18,12 +18,12 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
-	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -87,7 +87,7 @@ type replicaCheckInfo struct {
 }
 
 type checkInput struct {
-	eng  engine.Engine
+	eng  storage.Engine
 	desc *roachpb.RangeDescriptor
 	sl   stateloader.StateLoader
 }
@@ -168,7 +168,7 @@ func checkStoreRangeStats(
 	}
 
 	go func() {
-		if err := storage.IterateRangeDescriptors(ctx, eng,
+		if err := kvserver.IterateRangeDescriptors(ctx, eng,
 			func(desc roachpb.RangeDescriptor) (bool, error) {
 				inCh <- checkInput{eng: eng, desc: &desc, sl: stateloader.Make(desc.RangeID)}
 				return false, nil
@@ -240,8 +240,8 @@ func checkStoreRaftState(
 		return replicaInfo[rangeID]
 	}
 
-	if _, err := engine.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
-		engine.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
+	if _, err := storage.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
+		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
 			rangeID, _, suffix, detail, err := keys.DecodeRangeIDKey(kv.Key)
 			if err != nil {
 				return false, err

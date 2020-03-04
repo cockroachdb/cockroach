@@ -16,7 +16,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -29,15 +29,15 @@ type rlimit struct {
 }
 
 func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
-	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
-	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
-	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
+	minimumOpenFileLimit := uint64(physicalStoreCount*storage.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
+	networkConstrainedFileLimit := uint64(physicalStoreCount*storage.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
+	recommendedOpenFileLimit := uint64(physicalStoreCount*storage.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
 	var rLimit rlimit
 	if err := getRlimitNoFile(&rLimit); err != nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the recommended value %d - %s", engine.RecommendedMaxOpenFiles, err)
+			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the recommended value %d - %s", storage.RecommendedMaxOpenFiles, err)
 		}
-		return engine.RecommendedMaxOpenFiles, nil
+		return storage.RecommendedMaxOpenFiles, nil
 	}
 
 	// The max open file descriptor limit is too low.
@@ -131,7 +131,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	// for each store, than only constrain the network ones by giving the stores
 	// their full recommended number.
 	if rLimit.Cur >= networkConstrainedFileLimit {
-		return engine.RecommendedMaxOpenFiles, nil
+		return storage.RecommendedMaxOpenFiles, nil
 	}
 
 	// Always sacrifice all but the minimum needed network descriptors to be

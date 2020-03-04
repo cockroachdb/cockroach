@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -47,7 +47,7 @@ func (tsdb *DB) ContainsTimeSeries(start, end roachpb.RKey) bool {
 // snapshot to quickly obtain a set of keys to be pruned with no network calls.
 func (tsdb *DB) MaintainTimeSeries(
 	ctx context.Context,
-	snapshot engine.Reader,
+	snapshot storage.Reader,
 	start, end roachpb.RKey,
 	db *client.DB,
 	mem *mon.BytesMonitor,
@@ -70,4 +70,4 @@ func (tsdb *DB) MaintainTimeSeries(
 }
 
 // Assert that DB implements the necessary interface from the storage package.
-var _ storage.TimeSeriesDataStore = (*DB)(nil)
+var _ kvserver.TimeSeriesDataStore = (*DB)(nil)

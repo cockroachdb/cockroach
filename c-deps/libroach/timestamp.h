@@ -11,7 +11,7 @@
 #pragma once
 
 #include <libroach.h>
-#include "protos/storage/engine/enginepb/mvcc.pb.h"
+#include "protos/storage/enginepb/mvcc.pb.h"
 
 namespace cockroach {
 

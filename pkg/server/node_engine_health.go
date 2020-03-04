@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -34,7 +34,7 @@ var maxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_
 // startAssertEngineHealth starts a goroutine that periodically verifies that
 // syncing the engines is possible within maxSyncDuration. If not,
 // the process is terminated (with an attempt at a descriptive message).
-func (n *Node) startAssertEngineHealth(ctx context.Context, engines []engine.Engine) {
+func (n *Node) startAssertEngineHealth(ctx context.Context, engines []storage.Engine) {
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		t := timeutil.NewTimer()
 		t.Reset(0)
@@ -58,7 +58,7 @@ func guaranteedExitFatal(ctx context.Context, msg string, args ...interface{}) {
 }
 
 func (n *Node) assertEngineHealth(
-	ctx context.Context, engines []engine.Engine, maxDuration time.Duration,
+	ctx context.Context, engines []storage.Engine, maxDuration time.Duration,
 ) {
 	for _, eng := range engines {
 		func() {
@@ -75,7 +75,7 @@ func (n *Node) assertEngineHealth(
 				)
 			})
 			defer t.Stop()
-			if err := engine.WriteSyncNoop(ctx, eng); err != nil {
+			if err := storage.WriteSyncNoop(ctx, eng); err != nil {
 				log.Fatal(ctx, err)
 			}
 		}()

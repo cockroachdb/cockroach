@@ -1,0 +1,129 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storagepb;
+option go_package = "storagepb";
+
+import "storage/enginepb/mvcc.proto";
+import "roachpb/internal_raft.proto";
+import "roachpb/metadata.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+import "gogoproto/gogo.proto";
+
+// ReplicaState is the part of the Range Raft state machine which is cached in
+// memory and which is manipulated exclusively through consensus.
+//
+// The struct is also used to transfer state to Replicas in the context of
+// proposer-evaluated Raft, in which case it does not represent a complete
+// state but instead an update to be applied to an existing state, with each
+// field specified in the update overwriting its counterpart on the receiving
+// ReplicaState.
+//
+// For the ReplicaState persisted on the Replica, all optional fields are
+// populated (i.e. no nil pointers or enums with the default value).
+message ReplicaState {
+  option (gogoproto.equal) = true;
+
+  // The highest (and last) index applied to the state machine.
+  uint64 raft_applied_index = 1;
+  // The highest (and last) lease index applied to the state machine.
+  uint64 lease_applied_index = 2;
+  // The Range descriptor.
+  // The pointer may change, but the referenced RangeDescriptor struct itself
+  // must be treated as immutable; it is leaked out of the lock.
+  //
+  // Changes of the descriptor should always go through one of the
+  // (*Replica).setDesc* methods.
+  roachpb.RangeDescriptor desc = 3;
+  // The latest range lease.
+  //
+  // Note that this message is both sent over the network and used to model
+  // replica state in memory. In memory (storage.Replica.mu.state), the lease
+  // is never nil (and never zero-valued), but it may be nil when sent over
+  // the network as part of ReplicatedEvalResult.
+  roachpb.Lease lease = 4;
+  // The truncation state of the Raft log.
+  roachpb.RaftTruncatedState truncated_state = 5;
+  // gcThreshold is the GC threshold of the Range, typically updated when keys
+  // are garbage collected. Reads and writes at timestamps <= this time will
+  // not be served.
+  util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
+  storage.enginepb.MVCCStats stats = 7;
+  // using_applied_state_key specifies whether the Range has been upgraded
+  // to begin using the RangeAppliedState key. This key holds a combination
+  // of the Raft applied index, the lease applied index, and the MVCC stats.
+  //
+  // When set to true in a ReplicatedEvalResult, the flag indicates that the
+  // range should begin using the RangeAppliedState key. Handling of this flag
+  // is idempotent by Replica state machines, meaning that it is ok for multiple
+  // Raft commands to set it to true.
+  bool using_applied_state_key = 11;
+
+  reserved 8, 9, 10;
+}
+
+// RangeInfo is used for reporting status information about a range out through
+// the status server.
+message RangeInfo {
+  option (gogoproto.equal) = true;
+
+  ReplicaState state = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The highest (and last) index in the Raft log.
+  uint64 last_index = 2;
+  uint64 num_pending = 3;
+  reserved 4; // previously last verification timestamp for verify queue.
+  uint64 num_dropped = 5;
+  // raft_log_size may be inaccurate, see storage.Replica.mu.raftLogSizeTrusted.
+  int64 raft_log_size = 6;
+  bool raft_log_size_trusted = 10;
+  // Approximately the amount of quota available.
+  int64 approximate_proposal_quota = 7;
+  // Index for which quota has already been released.
+  int64 proposal_quota_base_index = 14;
+  // Quota amounts for commands which the leader has applied but for which we're
+  // still waiting for followers to ack the corresponding entries. First entry
+  // corresponds to base_index+1 above.
+  repeated int64 proposal_quota_release_queue = 15;
+  // The max size the range can grow to before it will be split.
+  int64 range_max_bytes = 8;
+  reserved 9;
+  message CTEntry {
+    option (gogoproto.equal) = true;
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
+    int64 mlai = 3 [(gogoproto.customname) = "MLAI"];
+  }
+  // The highest closed timestamp known to have data for this replica, taken
+  // across the data received from all nodes. This does not reflect whether
+  // the replica can use this closed timestamp (it may, for example, not have
+  // caught up sufficiently to do so).
+  CTEntry newest_closed_timestamp = 11 [(gogoproto.nullable) = false];
+  // The closed timestamp active on the replica when the info was generated.
+  // This is the actual timestamp at or below which requests can be served from
+  // this replica at this moment (assuming it is not the leaseholder). This takes
+  // into account the lease start time, the current lease applied index, and the
+  // closed timestamp information received from other nodes, among other things.
+  // In practice, this should not usually trail newest_closed_timestamp except
+  // for a short moment after newest_closed_timestamp gets updated.
+  util.hlc.Timestamp active_closed_timestamp = 12 [(gogoproto.nullable) = false];
+  // The number of Rangefeed registrations attached to the Replica.
+  int64 rangefeed_registrations = 13;
+}
+
+// LatchManagerInfo is used for reporting status information about a spanlatch
+// manager out through the status server.
+message LatchManagerInfo {
+  int64 read_count = 1;
+  int64 write_count = 2;
+}

@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -821,12 +821,12 @@ func fetchDescVersionModificationTime(
 		t.Fatal(pErr.GoError())
 	}
 	for _, file := range res.(*roachpb.ExportResponse).Files {
-		it, err := engine.NewMemSSTIterator(file.SST, false /* verify */)
+		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer it.Close()
-		for it.SeekGE(engine.NilKey); ; it.Next() {
+		for it.SeekGE(storage.NilKey); ; it.Next() {
 			if ok, err := it.Valid(); err != nil {
 				t.Fatal(err)
 			} else if !ok {

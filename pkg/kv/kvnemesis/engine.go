@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/google/btree"
 )
@@ -43,7 +43,7 @@ func MakeEngine() *Engine {
 func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	var value roachpb.Value
 	e.kvs.AscendGreaterOrEqual(
-		btreeItem{Key: engine.MVCCKey{Key: key, Timestamp: ts}},
+		btreeItem{Key: storage.MVCCKey{Key: key, Timestamp: ts}},
 		func(i btree.Item) bool {
 			if kv := i.(btreeItem); kv.Key.Key.Equal(key) {
 				value = roachpb.Value{
@@ -59,7 +59,7 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 
 // Put inserts a key/value/timestamp tuple. If an exact key/timestamp pair is
 // Put again, it overwrites the previous value.
-func (e *Engine) Put(key engine.MVCCKey, value []byte) {
+func (e *Engine) Put(key storage.MVCCKey, value []byte) {
 	e.kvs.ReplaceOrInsert(btreeItem{Key: key, Value: value})
 }
 
@@ -79,7 +79,7 @@ func (e *Engine) DebugPrint(indent string) string {
 	return buf.String()
 }
 
-type btreeItem engine.MVCCKeyValue
+type btreeItem storage.MVCCKeyValue
 
 func (i btreeItem) Less(o btree.Item) bool {
 	return i.Key.Less(o.(btreeItem).Key)

@@ -19,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -40,7 +40,7 @@ func TestSavepoints(t *testing.T) {
 		// TxnCoordSender, from storage.
 		params := base.TestServerArgs{}
 		var doAbort int64
-		params.Knobs.Store = &storage.StoreTestingKnobs{
+		params.Knobs.Store = &kvserver.StoreTestingKnobs{
 			EvalKnobs: storagebase.BatchEvalTestingKnobs{
 				TestingEvalFilter: func(args storagebase.FilterArgs) *roachpb.Error {
 					if atomic.LoadInt64(&doAbort) != 0 && args.Req.Header().Key.Equal(abortKey) {

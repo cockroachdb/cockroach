@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -32,7 +32,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func slurpUserDataKVs(t testing.TB, e engine.Engine) []roachpb.KeyValue {
+func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
 	t.Helper()
 
 	// Scan meta keys directly from engine. We put this in a retry loop
@@ -41,9 +41,9 @@ func slurpUserDataKVs(t testing.TB, e engine.Engine) []roachpb.KeyValue {
 	var kvs []roachpb.KeyValue
 	testutils.SucceedsSoon(t, func() error {
 		kvs = nil
-		it := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+		it := e.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
 		defer it.Close()
-		for it.SeekGE(engine.MVCCKey{Key: keys.UserTableDataMin}); ; it.NextKey() {
+		for it.SeekGE(storage.MVCCKey{Key: keys.UserTableDataMin}); ; it.NextKey() {
 			ok, err := it.Valid()
 			if err != nil {
 				t.Fatal(err)
@@ -70,7 +70,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	store, _ := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	store, _ := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)

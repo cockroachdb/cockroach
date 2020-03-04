@@ -24,9 +24,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -817,7 +817,7 @@ func (hv *historyVerifier) runCmd(
 func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T) {
 	verifier := newHistoryVerifier(name, txns, verify, t)
 	s := &localtestcluster.LocalTestCluster{
-		StoreTestingKnobs: &storage.StoreTestingKnobs{
+		StoreTestingKnobs: &kvserver.StoreTestingKnobs{
 			DontRetryPushTxnFailures: true,
 			// Immediately attempt to recover pushed transactions with STAGING
 			// statuses, even if the push would otherwise fail because the

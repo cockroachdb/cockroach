@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -91,16 +91,16 @@ func benchmarkWriteAndLink(b *testing.B, dir string, tables []tableSSTable) {
 	b.SetBytes(bytes)
 
 	ctx := context.Background()
-	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
+	cache := storage.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		cfg := engine.RocksDBConfig{
+		cfg := storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir: filepath.Join(dir, `rocksdb`, timeutil.Now().String())}}
-		db, err := engine.NewRocksDB(cfg, cache)
+		db, err := storage.NewRocksDB(cfg, cache)
 		if err != nil {
 			b.Fatal(err)
 		}

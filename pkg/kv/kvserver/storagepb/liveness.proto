@@ -1,0 +1,65 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storagepb;
+option go_package = "storagepb";
+
+import "util/hlc/legacy_timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// Liveness holds information about a node's latest heartbeat and epoch.
+//
+// NOTE: Care must be taken when changing the encoding of this proto
+// because it is used as part of conditional put operations. 
+message Liveness {
+  option (gogoproto.populate) = true;
+
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Epoch is a monotonically-increasing value for node liveness. It
+  // may be incremented if the liveness record expires (current time
+  // is later than the expiration timestamp).
+  int64 epoch = 2;
+  // The timestamp at which this liveness record expires. The logical part of
+  // this timestamp is zero.
+  //
+  // Note that the clock max offset is not accounted for in any way when this
+  // expiration is set. If a checker wants to be extra-optimistic about another
+  // node being alive, it can adjust for the max offset. liveness.IsLive()
+  // doesn't do that, however. The expectation is that the expiration duration
+  // is large in comparison to the max offset, and that nodes heartbeat their
+  // liveness records well in advance of this expiration, so the optimism or
+  // pessimism of a checker does not matter very much.
+  util.hlc.LegacyTimestamp expiration = 3 [(gogoproto.nullable) = false];
+  bool draining = 4;
+  bool decommissioning = 5;
+}
+
+// NodeLivenessStatus describes the status of a node from the perspective of the
+// liveness system.
+//
+// See comment on LivenessStatus() for a description of the states.
+enum NodeLivenessStatus {
+  UNKNOWN = 0;
+  // DEAD indicates the node is considered dead.
+  DEAD = 1;
+  // UNAVAILABLE indicates that the node is unavailable - it has not updated its
+  // liveness record recently enough to be considered live, but has not been
+  // unavailable long enough to be considered dead.
+  UNAVAILABLE = 2;
+  // LIVE indicates a live node.
+  LIVE = 3;
+  // DECOMMISSIONING indicates a node that is in the decommissioning process.
+  DECOMMISSIONING = 4;
+  // DECOMMISSIONED indicates a node that has finished the decommissioning
+  // process.
+  DECOMMISSIONED = 5;
+}

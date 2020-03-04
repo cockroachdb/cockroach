@@ -39,6 +39,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -63,16 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptprovider"
-	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptreconcile"
-	"github.com/cockroachdb/cockroach/pkg/storage/reports"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -174,8 +174,8 @@ type Server struct {
 	grpc             *grpcServer
 	gossip           *gossip.Gossip
 	nodeDialer       *nodedialer.Dialer
-	nodeLiveness     *storage.NodeLiveness
-	storePool        *storage.StorePool
+	nodeLiveness     *kvserver.NodeLiveness
+	storePool        *kvserver.StorePool
 	tcsFactory       *kv.TxnCoordSenderFactory
 	distSender       *kv.DistSender
 	db               *client.DB
@@ -191,7 +191,7 @@ type Server struct {
 	initServer       *initServer
 	tsDB             *ts.DB
 	tsServer         ts.Server
-	raftTransport    *storage.RaftTransport
+	raftTransport    *kvserver.RaftTransport
 	stopper          *stop.Stopper
 	execCfg          *sql.ExecutorConfig
 	internalExecutor *sql.InternalExecutor
@@ -362,7 +362,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
-	s.nodeLiveness = storage.NewNodeLiveness(
+	s.nodeLiveness = kvserver.NewNodeLiveness(
 		s.cfg.AmbientCtx,
 		s.clock,
 		s.db,
@@ -375,17 +375,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
-	s.storePool = storage.NewStorePool(
+	s.storePool = kvserver.NewStorePool(
 		s.cfg.AmbientCtx,
 		s.st,
 		s.gossip,
 		s.clock,
 		s.nodeLiveness.GetNodeCount,
-		storage.MakeStorePoolNodeLivenessFunc(s.nodeLiveness),
+		kvserver.MakeStorePoolNodeLivenessFunc(s.nodeLiveness),
 		/* deterministic */ false,
 	)
 
-	s.raftTransport = storage.NewRaftTransport(
+	s.raftTransport = kvserver.NewRaftTransport(
 		s.cfg.AmbientCtx, st, s.nodeDialer, s.grpc.Server, s.stopper,
 	)
 
@@ -418,7 +418,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
-	tempEngine, tempFS, err := engine.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create temp storage")
 	}
@@ -437,7 +437,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
-			err = engine.CleanupTempDirs(recordPath)
+			err = storage.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
@@ -496,7 +496,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	var execCfg sql.ExecutorConfig
 
 	// TODO(bdarnell): make StoreConfig configurable.
-	storeCfg := storage.StoreConfig{
+	storeCfg := kvserver.StoreConfig{
 		DefaultZoneConfig:       &s.cfg.DefaultZoneConfig,
 		Settings:                st,
 		AmbientCtx:              s.cfg.AmbientCtx,
@@ -546,7 +546,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ProtectedTimestampCache: s.protectedtsProvider,
 	}
 	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
-		storeCfg.TestingKnobs = *storeTestingKnobs.(*storage.StoreTestingKnobs)
+		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext, s.gossip, st)
@@ -559,7 +559,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg, s.recorder, s.registry, s.stopper,
 		txnMetrics, nil /* execCfg */, &s.rpcContext.ClusterID)
 	roachpb.RegisterInternalServer(s.grpc.Server, s.node)
-	storage.RegisterPerReplicaServer(s.grpc.Server, s.node.perReplicaServer)
+	kvserver.RegisterPerReplicaServer(s.grpc.Server, s.node.perReplicaServer)
 	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc.Server)
 	s.replicationReporter = reports.NewReporter(
 		s.db, s.node.stores, s.storePool,
@@ -772,6 +772,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			internalExecutor,
 		),
 
+		// Note: don't forget to add the secondary loggers as closers
+		// on the Stopper, below.
+
 		ExecLogger: log.NewSecondaryLogger(
 			loggerCtx, nil /* dirName */, "sql-exec",
 			true /* enableGc */, false /*forceSyncWrites*/, true, /* enableMsgCount */
@@ -790,6 +793,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
 		ProtectedTimestampProvider: s.protectedtsProvider,
 	}
+
+	s.stopper.AddCloser(execCfg.ExecLogger)
+	s.stopper.AddCloser(execCfg.AuditLogger)
+	s.stopper.AddCloser(execCfg.SlowQueryLogger)
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
@@ -927,18 +934,18 @@ type ListenError struct {
 // or to set it if no engines have a version in them already.
 func inspectEngines(
 	ctx context.Context,
-	engines []engine.Engine,
+	engines []storage.Engine,
 	binaryVersion, binaryMinSupportedVersion roachpb.Version,
 	clusterIDContainer *base.ClusterIDContainer,
 ) (
-	bootstrappedEngines []engine.Engine,
-	emptyEngines []engine.Engine,
+	bootstrappedEngines []storage.Engine,
+	emptyEngines []storage.Engine,
 	_ clusterversion.ClusterVersion,
 	_ error,
 ) {
 	for _, eng := range engines {
-		storeIdent, err := storage.ReadStoreIdent(ctx, eng)
-		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
+		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
+		if _, notBootstrapped := err.(*kvserver.NotBootstrappedError); notBootstrapped {
 			emptyEngines = append(emptyEngines, eng)
 			continue
 		} else if err != nil {
@@ -956,7 +963,7 @@ func inspectEngines(
 		bootstrappedEngines = append(bootstrappedEngines, eng)
 	}
 
-	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, binaryVersion, binaryMinSupportedVersion)
+	cv, err := kvserver.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, binaryVersion, binaryMinSupportedVersion)
 	if err != nil {
 		return nil, nil, clusterversion.ClusterVersion{}, err
 	}
@@ -1417,7 +1424,7 @@ func (s *Server) Start(ctx context.Context) error {
 			s.cfg.ReadyFn(false /*waitForInit*/)
 		}
 
-		hlcUpperBound, err := storage.ReadMaxHLCUpperBound(ctx, bootstrappedEngines)
+		hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, bootstrappedEngines)
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
@@ -1623,7 +1630,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// updated.
 	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) {
 		now := s.clock.Now()
-		if err := s.node.stores.VisitStores(func(s *storage.Store) error {
+		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
 			return s.WriteLastUpTimestamp(ctx, now)
 		}); err != nil {
 			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
@@ -2045,7 +2052,7 @@ func (s *Server) bootstrapCluster(ctx context.Context, bootstrapVersion roachpb.
 	// code, the upreplication would be up to the whim of the scanner, which
 	// might be too slow for new clusters.
 	done := false
-	return s.node.stores.VisitStores(func(store *storage.Store) error {
+	return s.node.stores.VisitStores(func(store *kvserver.Store) error {
 		if !done {
 			done = true
 			return store.ForceReplicationScanAndProcess()

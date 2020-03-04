@@ -1,0 +1,51 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.storage.enginepb;
+option go_package = "enginepb";
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// SSTUserProperties contains the user-added properties of a single sstable.
+message SSTUserProperties {
+    string path = 1;
+    // ts_min is the minimum mvcc timestamp present in this sstable.
+    util.hlc.Timestamp ts_min = 2;
+    // ts_max is the maximum mvcc timestamp present in this sstable.
+    util.hlc.Timestamp ts_max = 3;
+}
+
+// SSTUserPropertiesCollection contains the user-added properties of every
+// sstable in a RocksDB instance.
+message SSTUserPropertiesCollection {
+    repeated SSTUserProperties sst = 1 [(gogoproto.nullable) = false];
+    string error = 2;
+}
+
+// HistogramData holds the relevant metrics returned by a call to
+// `rocksdb::Statistics::histogramData()`.
+message HistogramData {
+  double mean = 1;
+  double p50 = 2;
+  double p95 = 3;
+  double p99 = 4;
+  double max = 5;
+  uint64 count = 6;
+  uint64 sum = 7;
+}
+
+// TickersAndHistograms holds maps from ticker/histogram name to its value for
+// all stats measured by a `rocksdb::Statistics` object.
+message TickersAndHistograms {
+  map<string, uint64> tickers = 1;
+  map<string, HistogramData> histograms = 2 [(gogoproto.nullable) = false];
+}

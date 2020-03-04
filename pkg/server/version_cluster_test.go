@@ -21,10 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -196,7 +196,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
 		for _, engine := range tc.TestCluster.Servers[i].Engines() {
-			cv, err := storage.ReadClusterVersion(ctx, engine)
+			cv, err := kvserver.ReadClusterVersion(ctx, engine)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -325,8 +325,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	// Since the wrapped version setting exposes the new versions, it must
 	// definitely be present on all stores on the first try.
-	if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-		cv, err := storage.ReadVersionFromEngineOrZero(ctx, s.Engine())
+	if err := tc.Servers[1].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+		cv, err := kvserver.ReadVersionFromEngineOrZero(ctx, s.Engine())
 		if err != nil {
 			return err
 		}

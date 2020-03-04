@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -79,7 +79,7 @@ func TestDebugCheckStore(t *testing.T) {
 
 	// Introduce a stats divergence on s1.
 	func() {
-		eng, err := engine.NewDefaultEngine(
+		eng, err := storage.NewDefaultEngine(
 			10<<20, /* 10mb */
 			base.StorageConfig{
 				Dir:       storePaths[0],

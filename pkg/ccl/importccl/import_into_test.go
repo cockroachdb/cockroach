@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -159,11 +159,11 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 
 func getFirstStoreReplica(
 	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
-) (*storage.Store, *storage.Replica) {
+) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
-	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	var repl *storage.Replica
+	var repl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
 		repl = store.LookupReplica(roachpb.RKey(key))
 		if repl == nil {

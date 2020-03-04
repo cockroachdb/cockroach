@@ -16,9 +16,9 @@
 #include <rocksdb/env.h>
 #include <string>
 #include <unordered_map>
-#include "protos/storage/engine/enginepb/file_registry.pb.h"
+#include "protos/storage/enginepb/file_registry.pb.h"
 
-namespace enginepb = cockroach::storage::engine::enginepb;
+namespace enginepb = cockroach::storage::enginepb;
 
 namespace cockroach {
 

@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -51,7 +51,7 @@ func clampLatency(d, min, max time.Duration) time.Duration {
 }
 
 type worker struct {
-	db      engine.Engine
+	db      storage.Engine
 	latency struct {
 		syncutil.Mutex
 		*hdrhistogram.WindowedHistogram
@@ -59,7 +59,7 @@ type worker struct {
 	logOnly bool
 }
 
-func newWorker(db engine.Engine) *worker {
+func newWorker(db storage.Engine) *worker {
 	w := &worker{db: db}
 	w.latency.WindowedHistogram = hdrhistogram.NewWindowed(1,
 		minLatency.Nanoseconds(), maxLatency.Nanoseconds(), 1)
@@ -93,7 +93,7 @@ func (w *worker) run(wg *sync.WaitGroup) {
 			for j := 0; j < 5; j++ {
 				block := randBlock(60, 80)
 				key := encoding.EncodeUint32Ascending(buf, rand.Uint32())
-				if err := b.Put(engine.MakeMVCCMetadataKey(key), block); err != nil {
+				if err := b.Put(storage.MakeMVCCMetadataKey(key), block); err != nil {
 					log.Fatal(ctx, err)
 				}
 				buf = key[:0]
@@ -139,7 +139,7 @@ func Run(opts Options) error {
 
 	fmt.Printf("writing to %s\n", opts.Dir)
 
-	db, err := engine.NewDefaultEngine(
+	db, err := storage.NewDefaultEngine(
 		0,
 		base.StorageConfig{
 			Settings: cluster.MakeTestingClusterSettings(),

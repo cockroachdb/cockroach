@@ -15,13 +15,13 @@ import (
 	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -89,14 +89,14 @@ var importBufferIncrementSize = func() *settings.ByteSizeSetting {
 const commandMetadataEstimate = 1 << 20 // 1 MB
 
 func init() {
-	storage.SetImportCmd(evalImport)
+	kvserver.SetImportCmd(evalImport)
 
 	// Ensure that the user cannot set the maximum raft command size so low that
 	// more than half of an Import or AddSSTable command will be taken up by Raft
 	// metadata.
-	if commandMetadataEstimate > storage.MaxCommandSizeFloor/2 {
+	if commandMetadataEstimate > kvserver.MaxCommandSizeFloor/2 {
 		panic(fmt.Sprintf("raft command size floor (%s) is too small for import commands",
-			humanizeutil.IBytes(storage.MaxCommandSizeFloor)))
+			humanizeutil.IBytes(kvserver.MaxCommandSizeFloor)))
 	}
 }
 
@@ -106,7 +106,7 @@ func init() {
 // returns the maximum batch size that will fit within a Raft command.
 func MaxImportBatchSize(st *cluster.Settings) int64 {
 	desiredSize := importBatchSize.Get(&st.SV)
-	maxCommandSize := storage.MaxCommandSize.Get(&st.SV)
+	maxCommandSize := kvserver.MaxCommandSize.Get(&st.SV)
 	if desiredSize+commandMetadataEstimate > maxCommandSize {
 		return maxCommandSize - commandMetadataEstimate
 	}
@@ -142,7 +142,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	defer cArgs.EvalCtx.GetLimiters().ConcurrentImportRequests.Finish()
 
-	var iters []engine.SimpleIterator
+	var iters []storage.SimpleIterator
 	for _, file := range args.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, args.Key)
 
@@ -189,7 +189,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 			}
 		}
 
-		iter, err := engine.NewMemSSTIterator(fileContents, false)
+		iter, err := storage.NewMemSSTIterator(fileContents, false)
 		if err != nil {
 			return nil, err
 		}
@@ -204,8 +204,8 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	defer batcher.Close()
 
-	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
-	iter := engine.MakeMultiIterator(iters)
+	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: args.DataSpan.Key}, storage.MVCCKey{Key: args.DataSpan.EndKey}
+	iter := storage.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
 
@@ -238,7 +238,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 
 		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
-		key := engine.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+		key := storage.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 

@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -38,8 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1288,14 +1288,14 @@ func (s *adminServer) Health(
 //
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
-	nl *storage.NodeLiveness, now time.Time, st *cluster.Settings,
+	nl *kvserver.NodeLiveness, now time.Time, st *cluster.Settings,
 ) map[roachpb.NodeID]storagepb.NodeLivenessStatus {
 	livenesses := nl.GetLivenesses()
-	threshold := storage.TimeUntilStoreDead.Get(&st.SV)
+	threshold := kvserver.TimeUntilStoreDead.Get(&st.SV)
 
 	statusMap := make(map[roachpb.NodeID]storagepb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
-		status := storage.LivenessStatus(liveness, now, threshold)
+		status := kvserver.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status
 	}
 	return statusMap
@@ -1921,9 +1921,9 @@ func (s *adminServer) enqueueRangeLocal(
 		},
 	}
 
-	var store *storage.Store
-	var repl *storage.Replica
-	if err := s.server.node.stores.VisitStores(func(s *storage.Store) error {
+	var store *kvserver.Store
+	var repl *kvserver.Replica
+	if err := s.server.node.stores.VisitStores(func(s *kvserver.Store) error {
 		r, err := s.GetReplica(req.RangeID)
 		if roachpb.IsRangeNotFoundError(err) {
 			return nil

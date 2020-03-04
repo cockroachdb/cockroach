@@ -16,12 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -63,7 +63,7 @@ func TestCanSendToFollower(t *testing.T) {
 	disableEnterprise := utilccl.TestingEnableEnterprise()
 	defer disableEnterprise()
 	st := cluster.MakeTestingClusterSettings()
-	storage.FollowerReadsEnabled.Override(&st.SV, true)
+	kvserver.FollowerReadsEnabled.Override(&st.SV, true)
 
 	old := hlc.Timestamp{
 		WallTime: timeutil.Now().Add(2 * expectedFollowerReadOffset).UnixNano(),
@@ -101,11 +101,11 @@ func TestCanSendToFollower(t *testing.T) {
 	if canSendToFollower(uuid.MakeV4(), st, roRWTxnOld) {
 		t.Fatalf("should not be able to send a ro request from a rw txn to a follower")
 	}
-	storage.FollowerReadsEnabled.Override(&st.SV, false)
+	kvserver.FollowerReadsEnabled.Override(&st.SV, false)
 	if canSendToFollower(uuid.MakeV4(), st, roOld) {
 		t.Fatalf("should not be able to send an old ro batch to a follower when follower reads are disabled")
 	}
-	storage.FollowerReadsEnabled.Override(&st.SV, true)
+	kvserver.FollowerReadsEnabled.Override(&st.SV, true)
 	roNew := roachpb.BatchRequest{Header: roachpb.Header{
 		Txn: &roachpb.Transaction{
 			ReadTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
@@ -149,7 +149,7 @@ func TestOracleFactory(t *testing.T) {
 	disableEnterprise := utilccl.TestingEnableEnterprise()
 	defer disableEnterprise()
 	st := cluster.MakeTestingClusterSettings()
-	storage.FollowerReadsEnabled.Override(&st.SV, true)
+	kvserver.FollowerReadsEnabled.Override(&st.SV, true)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())

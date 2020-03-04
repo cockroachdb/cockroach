@@ -14,9 +14,9 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -39,8 +39,8 @@ func (s *statusServer) ProblemRanges(
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
-		isLiveMap = storage.IsLiveMap{
-			requestedNodeID: storage.IsLiveMapEntry{IsLive: true},
+		isLiveMap = kvserver.IsLiveMap{
+			requestedNodeID: kvserver.IsLiveMapEntry{IsLive: true},
 		}
 	}
 

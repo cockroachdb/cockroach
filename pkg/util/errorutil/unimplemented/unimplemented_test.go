@@ -50,7 +50,7 @@ func TestUnimplemented(t *testing.T) {
 				}
 				if test.expIssue != 0 {
 					ref := fmt.Sprintf("%s\nSee: %s",
-						errors.UnimplementedErrorHint, makeURL(test.expIssue))
+						errors.UnimplementedErrorHint, MakeURL(test.expIssue))
 					if hint == ref {
 						found |= 2
 					}
@@ -79,7 +79,7 @@ func TestUnimplemented(t *testing.T) {
 				}
 
 				if test.expIssue != 0 {
-					url := makeURL(test.expIssue)
+					url := MakeURL(test.expIssue)
 					if links[0].IssueURL != url {
 						t.Errorf("expected link url %q, got %q", url, links[0].IssueURL)
 					}

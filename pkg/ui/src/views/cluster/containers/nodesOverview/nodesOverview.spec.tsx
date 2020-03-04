@@ -22,7 +22,7 @@ import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
 import { livenessByNodeIDSelector } from "src/redux/nodes";
 
-import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
+import NodeLivenessStatus = cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
 
 describe("Nodes Overview page", () => {
   describe("Live <NodeList/> section initial state", () => {

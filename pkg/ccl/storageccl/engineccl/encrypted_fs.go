@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/pebble/vfs"
@@ -107,7 +107,7 @@ func (f *encryptedFile) ReadAt(p []byte, off int64) (n int, err error) {
 // encryptedFS implements vfs.FS.
 type encryptedFS struct {
 	vfs.FS
-	fileRegistry  *engine.PebbleFileRegistry
+	fileRegistry  *storage.PebbleFileRegistry
 	streamCreator *FileCipherStreamCreator
 }
 
@@ -255,7 +255,7 @@ func (e *encryptionStatsHandler) GetKeyIDFromSettings(settings []byte) (string, 
 
 // Init initializes engine.NewEncryptedEncFunc.
 func init() {
-	engine.NewEncryptedEnvFunc = newEncryptedEnv
+	storage.NewEncryptedEnvFunc = newEncryptedEnv
 }
 
 // newEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
@@ -264,8 +264,8 @@ func init() {
 //
 // See the comment at the top of this file for the structure of this environment.
 func newEncryptedEnv(
-	fs vfs.FS, fr *engine.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (vfs.FS, engine.EncryptionStatsHandler, error) {
+	fs vfs.FS, fr *storage.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+) (vfs.FS, storage.EncryptionStatsHandler, error) {
 	options := &baseccl.EncryptionOptions{}
 	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
 		return nil, nil, err

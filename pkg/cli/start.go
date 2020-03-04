@@ -38,9 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -52,10 +53,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -334,7 +335,7 @@ func initTempStorageConfig(
 	// the temporary directory record file before creating any new
 	// temporary directories in case the disk is completely full.
 	if recordPath != "" {
-		if err = engine.CleanupTempDirs(recordPath); err != nil {
+		if err = storage.CleanupTempDirs(recordPath); err != nil {
 			return base.TempStorageConfig{}, errors.Wrap(err, "could not cleanup temporary directories from record file")
 		}
 	}
@@ -391,14 +392,14 @@ func initTempStorageConfig(
 		tempDir = firstStore.Path
 	}
 	// Create the temporary subdirectory for the temp engine.
-	if tempStorageConfig.Path, err = engine.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
+	if tempStorageConfig.Path, err = storage.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
 		return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 	}
 
 	// We record the new temporary directory in the record file (if it
 	// exists) for cleanup in case the node crashes.
 	if recordPath != "" {
-		if err = engine.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
+		if err = storage.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
 			return base.TempStorageConfig{}, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
@@ -583,7 +584,9 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// Until/unless CockroachDB embeds its own tz database, we want
 	// an early sanity check. It's better to inform the user early
 	// than to get surprising errors during SQL queries.
-	checkTzDatabaseAvailability(ctx)
+	if err := checkTzDatabaseAvailability(ctx); err != nil {
+		return errors.Wrap(err, "failed to initialize node")
+	}
 
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
@@ -1041,13 +1044,33 @@ func clientFlagsRPC() string {
 	return strings.Join(flags, " ")
 }
 
-func checkTzDatabaseAvailability(ctx context.Context) {
+func checkTzDatabaseAvailability(ctx context.Context) error {
 	if _, err := timeutil.LoadLocation("America/New_York"); err != nil {
-		log.Shout(ctx, log.Severity_ERROR,
-			"unable to load named time zones, time zone support will be degraded.\n"+
-				"Hint: check that the time zone database is installed on your system, or\n"+
+		log.Errorf(ctx, "timeutil.LoadLocation: %v", err)
+		reportedErr := errors.WithHint(
+			errors.WithIssueLink(
+				errors.New("unable to load named timezones"),
+				errors.IssueLink{IssueURL: unimplemented.MakeURL(36864)}),
+			"Check that the time zone database is installed on your system, or\n"+
 				"set the ZONEINFO environment variable to a Go time zone .zip archive.")
+
+		if envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false) {
+			// The user tells us they really know what they want.
+			reportedErr := &formattedError{err: reportedErr}
+			log.Shout(ctx, log.Severity_WARNING, reportedErr.Error())
+		} else {
+			// Prevent a successful start.
+			//
+			// In the past, we were simply using log.Shout to emit an error,
+			// informing the user that startup could continue with degraded
+			// behavior.  However, usage demonstrated that users typically do
+			// not see the error and instead run into silently incorrect SQL
+			// results. To avoid this situation altogether, it's better to
+			// stop early.
+			return reportedErr
+		}
 	}
+	return nil
 }
 
 func reportConfiguration(ctx context.Context) {
@@ -1101,7 +1124,7 @@ func logOutputDirectory() string {
 // occurs here and not in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(
 	ctx context.Context, cmd *cobra.Command,
-) (*stop.Stopper, error) {
+) (stopper *stop.Stopper, err error) {
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.
@@ -1160,9 +1183,15 @@ func setupAndInitializeLoggingAndProfiling(
 		// directory too large.
 		log.StartGCDaemon(ctx)
 
-		// We have a valid logging directory. Configure Pebble/RocksDB to log into it.
-		engine.InitPebbleLogger(ctx)
-		engine.InitRocksDBLogger(ctx)
+		defer func() {
+			if stopper != nil {
+				// When the function complete successfully, start the loggers
+				// for the storage engines. We need to do this at the end
+				// because we need to register the loggers.
+				stopper.AddCloser(storage.InitPebbleLogger(ctx))
+				stopper.AddCloser(storage.InitRocksDBLogger(ctx))
+			}
+		}()
 	}
 
 	outputDirectory := "."
@@ -1218,7 +1247,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
-	stopper := initBacktrace(outputDirectory)
+	stopper = initBacktrace(outputDirectory)
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil

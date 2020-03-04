@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
@@ -34,7 +34,7 @@ func TestEncryptedFS(t *testing.T) {
 
 	memFS := vfs.NewMem()
 
-	fileRegistry := &engine.PebbleFileRegistry{FS: memFS, DBDir: "/bar"}
+	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/bar"}
 	require.NoError(t, fileRegistry.Load())
 
 	// Using a StoreKeyManager for the test since it is easy to create. Write a key for the
@@ -189,7 +189,7 @@ func TestEncryptedFS(t *testing.T) {
 func TestPebbleEncryption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	opts := engine.DefaultPebbleOptions()
+	opts := storage.DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(1 << 20)
 	defer opts.Cache.Unref()
 
@@ -206,9 +206,9 @@ func TestPebbleEncryption(t *testing.T) {
 	encOptions.DataKeyRotationPeriod = 1000 // arbitrary seconds
 	encOptionsBytes, err := protoutil.Marshal(&encOptions)
 	require.NoError(t, err)
-	db, err := engine.NewPebble(
+	db, err := storage.NewPebble(
 		context.Background(),
-		engine.PebbleConfig{
+		storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Attrs:           roachpb.Attributes{},
 				MaxSize:         512 << 20,
@@ -230,22 +230,22 @@ func TestPebbleEncryption(t *testing.T) {
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
 
 	batch := db.NewWriteOnlyBatch()
-	require.NoError(t, batch.Put(engine.MVCCKey{Key: roachpb.Key("a")}, []byte("a")))
+	require.NoError(t, batch.Put(storage.MVCCKey{Key: roachpb.Key("a")}, []byte("a")))
 	require.NoError(t, batch.Commit(true))
 	require.NoError(t, db.Flush())
-	val, err := db.Get(engine.MVCCKey{Key: roachpb.Key("a")})
+	val, err := db.Get(storage.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
 	db.Close()
 
-	opts2 := engine.DefaultPebbleOptions()
+	opts2 := storage.DefaultPebbleOptions()
 	opts2.Cache = pebble.NewCache(1 << 20)
 	defer opts2.Cache.Unref()
 
 	opts2.FS = memFS
-	db, err = engine.NewPebble(
+	db, err = storage.NewPebble(
 		context.Background(),
-		engine.PebbleConfig{
+		storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
 				Attrs:           roachpb.Attributes{},
 				MaxSize:         512 << 20,
@@ -255,7 +255,7 @@ func TestPebbleEncryption(t *testing.T) {
 			Opts: opts2,
 		})
 	require.NoError(t, err)
-	val, err = db.Get(engine.MVCCKey{Key: roachpb.Key("a")})
+	val, err = db.Get(storage.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
 	db.Close()

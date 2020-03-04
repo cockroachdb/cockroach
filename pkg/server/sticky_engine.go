@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -35,11 +35,11 @@ type stickyInMemEngine struct {
 	closed bool
 
 	// Engine extends the Engine interface.
-	engine.Engine
+	storage.Engine
 }
 
 // stickyInMemEngine implements Engine.
-var _ engine.Engine = &stickyInMemEngine{}
+var _ storage.Engine = &stickyInMemEngine{}
 
 // Close overwrites the default Engine interface to not close the underlying
 // engine if called. We mark the state as closed to reflect a correct result
@@ -77,7 +77,7 @@ func getOrCreateStickyInMemEngine(
 	engineType enginepb.EngineType,
 	attrs roachpb.Attributes,
 	cacheSize int64,
-) (engine.Engine, error) {
+) (storage.Engine, error) {
 	stickyInMemEnginesRegistry.mu.Lock()
 	defer stickyInMemEnginesRegistry.mu.Unlock()
 
@@ -95,7 +95,7 @@ func getOrCreateStickyInMemEngine(
 	engine := &stickyInMemEngine{
 		id:     id,
 		closed: false,
-		Engine: engine.NewInMem(ctx, engineType, attrs, cacheSize),
+		Engine: storage.NewInMem(ctx, engineType, attrs, cacheSize),
 	}
 	stickyInMemEnginesRegistry.entries[id] = engine
 	return engine, nil

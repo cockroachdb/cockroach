@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -192,7 +192,7 @@ func TestDiscardEarlierSamples(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := engine.MergeInternalTimeSeriesData(true /* mergeIntoNil */, false /* usePartialMerge */, internal...)
+	out, err := storage.MergeInternalTimeSeriesData(true /* mergeIntoNil */, false /* usePartialMerge */, internal...)
 	if err != nil {
 		t.Fatal(err)
 	}
