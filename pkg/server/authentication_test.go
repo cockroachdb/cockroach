@@ -26,13 +26,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -680,15 +680,15 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}},
 		{"perReplica", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := storage.NewPerReplicaClient(conn).CollectChecksum(ctx, &storage.CollectChecksumRequest{})
+			_, err := kvserver.NewPerReplicaClient(conn).CollectChecksum(ctx, &kvserver.CollectChecksumRequest{})
 			return err
 		}},
 		{"raft", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := storage.NewMultiRaftClient(conn).RaftMessageBatch(ctx)
+			stream, err := kvserver.NewMultiRaftClient(conn).RaftMessageBatch(ctx)
 			if err != nil {
 				return err
 			}
-			_ = stream.Send(&storage.RaftMessageRequestBatch{})
+			_ = stream.Send(&kvserver.RaftMessageRequestBatch{})
 			_, err = stream.Recv()
 			return err
 		}},

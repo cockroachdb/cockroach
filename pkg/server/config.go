@@ -23,12 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -356,7 +356,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		StorageEngine: engine.DefaultStorageEngine,
+		StorageEngine: storage.DefaultStorageEngine,
 		TempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
 	}
@@ -401,7 +401,7 @@ func (cfg *Config) Report(ctx context.Context) {
 }
 
 // Engines is a container of engines, allowing convenient closing.
-type Engines []engine.Engine
+type Engines []storage.Engine
 
 // Close closes all the Engines.
 // This method has a pointer receiver so that the following pattern works:
@@ -431,7 +431,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	var details []string
 
-	var cache engine.RocksDBCache
+	var cache storage.RocksDBCache
 	var pebbleCache *pebble.Cache
 	if cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		details = append(details, fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
@@ -441,7 +441,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	if cfg.StorageEngine == enginepb.EngineTypeDefault ||
 		cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		details = append(details, fmt.Sprintf("RocksDB cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
-		cache = engine.NewRocksDBCache(cfg.CacheSize)
+		cache = storage.NewRocksDBCache(cfg.CacheSize)
 		defer cache.Release()
 	}
 
@@ -459,7 +459,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	log.Event(ctx, "initializing engines")
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
-		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
+		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 		var sizeInBytes = spec.Size.InBytes
@@ -486,7 +486,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, engine.NewInMem(ctx, cfg.StorageEngine, spec.Attributes, sizeInBytes))
+				engines = append(engines, storage.NewInMem(ctx, cfg.StorageEngine, spec.Attributes, sizeInBytes))
 			}
 		} else {
 			if spec.Size.Percent > 0 {
@@ -504,7 +504,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
-			var eng engine.Engine
+			var eng storage.Engine
 			var err error
 			storageConfig := base.StorageConfig{
 				Attrs:           spec.Attributes,
@@ -517,37 +517,37 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if cfg.StorageEngine == enginepb.EngineTypePebble {
 				// TODO(itsbilal): Tune these options, and allow them to be overridden
 				// in the spec (similar to the existing spec.RocksDBOptions and others).
-				pebbleConfig := engine.PebbleConfig{
+				pebbleConfig := storage.PebbleConfig{
 					StorageConfig: storageConfig,
-					Opts:          engine.DefaultPebbleOptions(),
+					Opts:          storage.DefaultPebbleOptions(),
 				}
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-				eng, err = engine.NewPebble(ctx, pebbleConfig)
+				eng, err = storage.NewPebble(ctx, pebbleConfig)
 			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeDefault {
-				rocksDBConfig := engine.RocksDBConfig{
+				rocksDBConfig := storage.RocksDBConfig{
 					StorageConfig:           storageConfig,
 					MaxOpenFiles:            openFileLimitPerStore,
 					WarnLargeBatchThreshold: 500 * time.Millisecond,
 					RocksDBOptions:          spec.RocksDBOptions,
 				}
 
-				eng, err = engine.NewRocksDB(rocksDBConfig, cache)
+				eng, err = storage.NewRocksDB(rocksDBConfig, cache)
 			} else {
 				// cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB
-				pebbleConfig := engine.PebbleConfig{
+				pebbleConfig := storage.PebbleConfig{
 					StorageConfig: storageConfig,
-					Opts:          engine.DefaultPebbleOptions(),
+					Opts:          storage.DefaultPebbleOptions(),
 				}
 				pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-				pebbleEng, err := engine.NewPebble(ctx, pebbleConfig)
+				pebbleEng, err := storage.NewPebble(ctx, pebbleConfig)
 				if err != nil {
 					return nil, err
 				}
 
-				rocksDBConfig := engine.RocksDBConfig{
+				rocksDBConfig := storage.RocksDBConfig{
 					StorageConfig:           storageConfig,
 					MaxOpenFiles:            openFileLimitPerStore,
 					WarnLargeBatchThreshold: 500 * time.Millisecond,
@@ -555,12 +555,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				rocksDBConfig.Dir = filepath.Join(rocksDBConfig.Dir, "rocksdb")
 
-				rocksdbEng, err := engine.NewRocksDB(rocksDBConfig, cache)
+				rocksdbEng, err := storage.NewRocksDB(rocksDBConfig, cache)
 				if err != nil {
 					return nil, err
 				}
 
-				eng = engine.NewTee(ctx, rocksdbEng, pebbleEng)
+				eng = storage.NewTee(ctx, rocksdbEng, pebbleEng)
 			}
 			if err != nil {
 				return Engines{}, err

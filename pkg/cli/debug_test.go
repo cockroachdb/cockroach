@@ -25,12 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,10 +42,10 @@ import (
 
 func createStore(t *testing.T, path string) {
 	t.Helper()
-	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
+	cache := storage.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
-	db, err := engine.NewRocksDB(
-		engine.RocksDBConfig{
+	db, err := storage.NewRocksDB(
+		storage.RocksDBConfig{
 			StorageConfig: base.StorageConfig{
 				Dir:       path,
 				MustExist: false,
@@ -123,7 +123,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			key := engine.MakeMVCCMetadataKey(roachpb.Key("key"))
+			key := storage.MakeMVCCMetadataKey(roachpb.Key("key"))
 			val := []byte("value")
 			err = db.Put(key, val)
 			if !testutils.IsError(err, test.expErr) {
@@ -353,7 +353,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				}
 
 				for i := 0; i < len(tc.Servers); i++ {
-					err = tc.Servers[i].Stores().VisitStores(func(store *storage.Store) error {
+					err = tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
 						store.SetReplicateQueueActive(true)
 						return nil
 					})
@@ -366,7 +366,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				}
 
 				for i := 0; i < len(tc.Servers); i++ {
-					err = tc.Servers[i].Stores().VisitStores(func(store *storage.Store) error {
+					err = tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
 						return store.ForceConsistencyQueueProcess()
 					})
 					if err != nil {

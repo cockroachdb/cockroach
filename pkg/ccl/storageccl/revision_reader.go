@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -50,13 +50,13 @@ func GetAllRevisions(
 
 	var res []VersionedValues
 	for _, file := range resp.(*roachpb.ExportResponse).Files {
-		sst := engine.MakeRocksDBSstFileReader()
+		sst := storage.MakeRocksDBSstFileReader()
 		defer sst.Close()
 
 		if err := sst.IngestExternalFile(file.SST); err != nil {
 			return nil, err
 		}
-		if err := sst.Iterate(startKey, endKey, func(kv engine.MVCCKeyValue) (bool, error) {
+		if err := sst.Iterate(startKey, endKey, func(kv storage.MVCCKeyValue) (bool, error) {
 			if len(res) == 0 || !res[len(res)-1].Key.Equal(kv.Key.Key) {
 				res = append(res, VersionedValues{Key: kv.Key.Key})
 			}

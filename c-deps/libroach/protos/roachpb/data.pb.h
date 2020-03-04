@@ -31,9 +31,9 @@
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
 #include "roachpb/metadata.pb.h"
-#include "storage/concurrency/lock/locking.pb.h"
-#include "storage/engine/enginepb/mvcc.pb.h"
-#include "storage/engine/enginepb/mvcc3.pb.h"
+#include "kv/kvserver/concurrency/lock/locking.pb.h"
+#include "storage/enginepb/mvcc.pb.h"
+#include "storage/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
 #define PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto 
@@ -904,12 +904,12 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
   void clear_right_mvcc_stats();
   static const int kRightMvccStatsFieldNumber = 4;
   private:
-  const ::cockroach::storage::engine::enginepb::MVCCStats& _internal_right_mvcc_stats() const;
+  const ::cockroach::storage::enginepb::MVCCStats& _internal_right_mvcc_stats() const;
   public:
-  const ::cockroach::storage::engine::enginepb::MVCCStats& right_mvcc_stats() const;
-  ::cockroach::storage::engine::enginepb::MVCCStats* release_right_mvcc_stats();
-  ::cockroach::storage::engine::enginepb::MVCCStats* mutable_right_mvcc_stats();
-  void set_allocated_right_mvcc_stats(::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats);
+  const ::cockroach::storage::enginepb::MVCCStats& right_mvcc_stats() const;
+  ::cockroach::storage::enginepb::MVCCStats* release_right_mvcc_stats();
+  ::cockroach::storage::enginepb::MVCCStats* mutable_right_mvcc_stats();
+  void set_allocated_right_mvcc_stats(::cockroach::storage::enginepb::MVCCStats* right_mvcc_stats);
 
   bool has_freeze_start() const;
   void clear_freeze_start();
@@ -928,7 +928,7 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RangeDescriptor* left_desc_;
   ::cockroach::roachpb::RangeDescriptor* right_desc_;
-  ::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats_;
+  ::cockroach::storage::enginepb::MVCCStats* right_mvcc_stats_;
   ::cockroach::util::hlc::Timestamp* freeze_start_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
@@ -1715,12 +1715,12 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   int ignored_seqnums_size() const;
   void clear_ignored_seqnums();
   static const int kIgnoredSeqnumsFieldNumber = 18;
-  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+  ::cockroach::storage::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >*
       mutable_ignored_seqnums();
-  const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
-  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+  const ::cockroach::storage::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
+  ::cockroach::storage::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >&
       ignored_seqnums() const;
 
   // string name = 2;
@@ -1741,12 +1741,12 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   void clear_meta();
   static const int kMetaFieldNumber = 1;
   private:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& _internal_meta() const;
+  const ::cockroach::storage::enginepb::TxnMeta& _internal_meta() const;
   public:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& meta() const;
-  ::cockroach::storage::engine::enginepb::TxnMeta* release_meta();
-  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_meta();
-  void set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMeta* meta);
+  const ::cockroach::storage::enginepb::TxnMeta& meta() const;
+  ::cockroach::storage::enginepb::TxnMeta* release_meta();
+  ::cockroach::storage::enginepb::TxnMeta* mutable_meta();
+  void set_allocated_meta(::cockroach::storage::enginepb::TxnMeta* meta);
 
   bool has_last_heartbeat() const;
   void clear_last_heartbeat();
@@ -1817,9 +1817,9 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp > observed_timestamps_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::google::protobuf::internal::ArenaStringPtr name_;
-  ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
+  ::cockroach::storage::enginepb::TxnMeta* meta_;
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
   ::cockroach::util::hlc::Timestamp* deprecated_orig_timestamp_;
   ::cockroach::util::hlc::Timestamp* max_timestamp_;
@@ -1942,24 +1942,24 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
   int ignored_seqnums_size() const;
   void clear_ignored_seqnums();
   static const int kIgnoredSeqnumsFieldNumber = 18;
-  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+  ::cockroach::storage::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >*
       mutable_ignored_seqnums();
-  const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
-  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+  const ::cockroach::storage::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
+  ::cockroach::storage::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >&
       ignored_seqnums() const;
 
   bool has_meta() const;
   void clear_meta();
   static const int kMetaFieldNumber = 1;
   private:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& _internal_meta() const;
+  const ::cockroach::storage::enginepb::TxnMeta& _internal_meta() const;
   public:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& meta() const;
-  ::cockroach::storage::engine::enginepb::TxnMeta* release_meta();
-  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_meta();
-  void set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMeta* meta);
+  const ::cockroach::storage::enginepb::TxnMeta& meta() const;
+  ::cockroach::storage::enginepb::TxnMeta* release_meta();
+  ::cockroach::storage::enginepb::TxnMeta* mutable_meta();
+  void set_allocated_meta(::cockroach::storage::enginepb::TxnMeta* meta);
 
   bool has_last_heartbeat() const;
   void clear_last_heartbeat();
@@ -1984,8 +1984,8 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
-  ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
+  ::cockroach::storage::enginepb::TxnMeta* meta_;
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
   int status_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -2203,19 +2203,19 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   void clear_txn();
   static const int kTxnFieldNumber = 2;
   private:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& _internal_txn() const;
+  const ::cockroach::storage::enginepb::TxnMeta& _internal_txn() const;
   public:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& txn() const;
-  ::cockroach::storage::engine::enginepb::TxnMeta* release_txn();
-  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_txn();
-  void set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn);
+  const ::cockroach::storage::enginepb::TxnMeta& txn() const;
+  ::cockroach::storage::enginepb::TxnMeta* release_txn();
+  ::cockroach::storage::enginepb::TxnMeta* mutable_txn();
+  void set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Intent)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::Intent_SingleKeySpan* single_key_span_;
-  ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
+  ::cockroach::storage::enginepb::TxnMeta* txn_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -2309,12 +2309,12 @@ class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   int ignored_seqnums_size() const;
   void clear_ignored_seqnums();
   static const int kIgnoredSeqnumsFieldNumber = 4;
-  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+  ::cockroach::storage::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >*
       mutable_ignored_seqnums();
-  const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
-  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+  const ::cockroach::storage::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
+  ::cockroach::storage::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >&
       ignored_seqnums() const;
 
   bool has_span() const;
@@ -2332,12 +2332,12 @@ class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   void clear_txn();
   static const int kTxnFieldNumber = 2;
   private:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& _internal_txn() const;
+  const ::cockroach::storage::enginepb::TxnMeta& _internal_txn() const;
   public:
-  const ::cockroach::storage::engine::enginepb::TxnMeta& txn() const;
-  ::cockroach::storage::engine::enginepb::TxnMeta* release_txn();
-  ::cockroach::storage::engine::enginepb::TxnMeta* mutable_txn();
-  void set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn);
+  const ::cockroach::storage::enginepb::TxnMeta& txn() const;
+  ::cockroach::storage::enginepb::TxnMeta* release_txn();
+  ::cockroach::storage::enginepb::TxnMeta* mutable_txn();
+  void set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn);
 
   // .cockroach.roachpb.TransactionStatus status = 3;
   void clear_status();
@@ -2345,19 +2345,19 @@ class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // .cockroach.storage.concurrency.lock.Durability durability = 5;
+  // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 5;
   void clear_durability();
   static const int kDurabilityFieldNumber = 5;
-  ::cockroach::storage::concurrency::lock::Durability durability() const;
-  void set_durability(::cockroach::storage::concurrency::lock::Durability value);
+  ::cockroach::kv::kvserver::concurrency::lock::Durability durability() const;
+  void set_durability(::cockroach::kv::kvserver::concurrency::lock::Durability value);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.LockUpdate)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::cockroach::roachpb::Span* span_;
-  ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
+  ::cockroach::storage::enginepb::TxnMeta* txn_;
   int status_;
   int durability_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -3649,32 +3649,32 @@ inline void MergeTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDe
 inline bool MergeTrigger::has_right_mvcc_stats() const {
   return this != internal_default_instance() && right_mvcc_stats_ != NULL;
 }
-inline const ::cockroach::storage::engine::enginepb::MVCCStats& MergeTrigger::_internal_right_mvcc_stats() const {
+inline const ::cockroach::storage::enginepb::MVCCStats& MergeTrigger::_internal_right_mvcc_stats() const {
   return *right_mvcc_stats_;
 }
-inline const ::cockroach::storage::engine::enginepb::MVCCStats& MergeTrigger::right_mvcc_stats() const {
-  const ::cockroach::storage::engine::enginepb::MVCCStats* p = right_mvcc_stats_;
+inline const ::cockroach::storage::enginepb::MVCCStats& MergeTrigger::right_mvcc_stats() const {
+  const ::cockroach::storage::enginepb::MVCCStats* p = right_mvcc_stats_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCStats*>(
-      &::cockroach::storage::engine::enginepb::_MVCCStats_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::enginepb::MVCCStats*>(
+      &::cockroach::storage::enginepb::_MVCCStats_default_instance_);
 }
-inline ::cockroach::storage::engine::enginepb::MVCCStats* MergeTrigger::release_right_mvcc_stats() {
+inline ::cockroach::storage::enginepb::MVCCStats* MergeTrigger::release_right_mvcc_stats() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
   
-  ::cockroach::storage::engine::enginepb::MVCCStats* temp = right_mvcc_stats_;
+  ::cockroach::storage::enginepb::MVCCStats* temp = right_mvcc_stats_;
   right_mvcc_stats_ = NULL;
   return temp;
 }
-inline ::cockroach::storage::engine::enginepb::MVCCStats* MergeTrigger::mutable_right_mvcc_stats() {
+inline ::cockroach::storage::enginepb::MVCCStats* MergeTrigger::mutable_right_mvcc_stats() {
   
   if (right_mvcc_stats_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCStats>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::storage::enginepb::MVCCStats>(GetArenaNoVirtual());
     right_mvcc_stats_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
   return right_mvcc_stats_;
 }
-inline void MergeTrigger::set_allocated_right_mvcc_stats(::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats) {
+inline void MergeTrigger::set_allocated_right_mvcc_stats(::cockroach::storage::enginepb::MVCCStats* right_mvcc_stats) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(right_mvcc_stats_);
@@ -4412,32 +4412,32 @@ inline void ObservedTimestamp::set_allocated_timestamp(::cockroach::util::hlc::T
 inline bool Transaction::has_meta() const {
   return this != internal_default_instance() && meta_ != NULL;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& Transaction::_internal_meta() const {
+inline const ::cockroach::storage::enginepb::TxnMeta& Transaction::_internal_meta() const {
   return *meta_;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& Transaction::meta() const {
-  const ::cockroach::storage::engine::enginepb::TxnMeta* p = meta_;
+inline const ::cockroach::storage::enginepb::TxnMeta& Transaction::meta() const {
+  const ::cockroach::storage::enginepb::TxnMeta* p = meta_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.meta)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      &::cockroach::storage::engine::enginepb::_TxnMeta_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::enginepb::TxnMeta*>(
+      &::cockroach::storage::enginepb::_TxnMeta_default_instance_);
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* Transaction::release_meta() {
+inline ::cockroach::storage::enginepb::TxnMeta* Transaction::release_meta() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.meta)
   
-  ::cockroach::storage::engine::enginepb::TxnMeta* temp = meta_;
+  ::cockroach::storage::enginepb::TxnMeta* temp = meta_;
   meta_ = NULL;
   return temp;
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* Transaction::mutable_meta() {
+inline ::cockroach::storage::enginepb::TxnMeta* Transaction::mutable_meta() {
   
   if (meta_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::storage::enginepb::TxnMeta>(GetArenaNoVirtual());
     meta_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.meta)
   return meta_;
 }
-inline void Transaction::set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMeta* meta) {
+inline void Transaction::set_allocated_meta(::cockroach::storage::enginepb::TxnMeta* meta) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(meta_);
@@ -4829,24 +4829,24 @@ Transaction::in_flight_writes() const {
 inline int Transaction::ignored_seqnums_size() const {
   return ignored_seqnums_.size();
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Transaction::mutable_ignored_seqnums(int index) {
+inline ::cockroach::storage::enginepb::IgnoredSeqNumRange* Transaction::mutable_ignored_seqnums(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.ignored_seqnums)
   return ignored_seqnums_.Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >*
 Transaction::mutable_ignored_seqnums() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.ignored_seqnums)
   return &ignored_seqnums_;
 }
-inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& Transaction::ignored_seqnums(int index) const {
+inline const ::cockroach::storage::enginepb::IgnoredSeqNumRange& Transaction::ignored_seqnums(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.ignored_seqnums)
   return ignored_seqnums_.Get(index);
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Transaction::add_ignored_seqnums() {
+inline ::cockroach::storage::enginepb::IgnoredSeqNumRange* Transaction::add_ignored_seqnums() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.ignored_seqnums)
   return ignored_seqnums_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >&
 Transaction::ignored_seqnums() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.ignored_seqnums)
   return ignored_seqnums_;
@@ -4859,32 +4859,32 @@ Transaction::ignored_seqnums() const {
 inline bool TransactionRecord::has_meta() const {
   return this != internal_default_instance() && meta_ != NULL;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& TransactionRecord::_internal_meta() const {
+inline const ::cockroach::storage::enginepb::TxnMeta& TransactionRecord::_internal_meta() const {
   return *meta_;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& TransactionRecord::meta() const {
-  const ::cockroach::storage::engine::enginepb::TxnMeta* p = meta_;
+inline const ::cockroach::storage::enginepb::TxnMeta& TransactionRecord::meta() const {
+  const ::cockroach::storage::enginepb::TxnMeta* p = meta_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.meta)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      &::cockroach::storage::engine::enginepb::_TxnMeta_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::enginepb::TxnMeta*>(
+      &::cockroach::storage::enginepb::_TxnMeta_default_instance_);
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* TransactionRecord::release_meta() {
+inline ::cockroach::storage::enginepb::TxnMeta* TransactionRecord::release_meta() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.TransactionRecord.meta)
   
-  ::cockroach::storage::engine::enginepb::TxnMeta* temp = meta_;
+  ::cockroach::storage::enginepb::TxnMeta* temp = meta_;
   meta_ = NULL;
   return temp;
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* TransactionRecord::mutable_meta() {
+inline ::cockroach::storage::enginepb::TxnMeta* TransactionRecord::mutable_meta() {
   
   if (meta_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::storage::enginepb::TxnMeta>(GetArenaNoVirtual());
     meta_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.meta)
   return meta_;
 }
-inline void TransactionRecord::set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMeta* meta) {
+inline void TransactionRecord::set_allocated_meta(::cockroach::storage::enginepb::TxnMeta* meta) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(meta_);
@@ -5025,24 +5025,24 @@ TransactionRecord::in_flight_writes() const {
 inline int TransactionRecord::ignored_seqnums_size() const {
   return ignored_seqnums_.size();
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* TransactionRecord::mutable_ignored_seqnums(int index) {
+inline ::cockroach::storage::enginepb::IgnoredSeqNumRange* TransactionRecord::mutable_ignored_seqnums(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.ignored_seqnums)
   return ignored_seqnums_.Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >*
 TransactionRecord::mutable_ignored_seqnums() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionRecord.ignored_seqnums)
   return &ignored_seqnums_;
 }
-inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& TransactionRecord::ignored_seqnums(int index) const {
+inline const ::cockroach::storage::enginepb::IgnoredSeqNumRange& TransactionRecord::ignored_seqnums(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.ignored_seqnums)
   return ignored_seqnums_.Get(index);
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* TransactionRecord::add_ignored_seqnums() {
+inline ::cockroach::storage::enginepb::IgnoredSeqNumRange* TransactionRecord::add_ignored_seqnums() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionRecord.ignored_seqnums)
   return ignored_seqnums_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >&
 TransactionRecord::ignored_seqnums() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionRecord.ignored_seqnums)
   return ignored_seqnums_;
@@ -5164,32 +5164,32 @@ inline void Intent::set_allocated_single_key_span(::cockroach::roachpb::Intent_S
 inline bool Intent::has_txn() const {
   return this != internal_default_instance() && txn_ != NULL;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& Intent::_internal_txn() const {
+inline const ::cockroach::storage::enginepb::TxnMeta& Intent::_internal_txn() const {
   return *txn_;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& Intent::txn() const {
-  const ::cockroach::storage::engine::enginepb::TxnMeta* p = txn_;
+inline const ::cockroach::storage::enginepb::TxnMeta& Intent::txn() const {
+  const ::cockroach::storage::enginepb::TxnMeta* p = txn_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.txn)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      &::cockroach::storage::engine::enginepb::_TxnMeta_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::enginepb::TxnMeta*>(
+      &::cockroach::storage::enginepb::_TxnMeta_default_instance_);
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* Intent::release_txn() {
+inline ::cockroach::storage::enginepb::TxnMeta* Intent::release_txn() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.txn)
   
-  ::cockroach::storage::engine::enginepb::TxnMeta* temp = txn_;
+  ::cockroach::storage::enginepb::TxnMeta* temp = txn_;
   txn_ = NULL;
   return temp;
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* Intent::mutable_txn() {
+inline ::cockroach::storage::enginepb::TxnMeta* Intent::mutable_txn() {
   
   if (txn_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::storage::enginepb::TxnMeta>(GetArenaNoVirtual());
     txn_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.txn)
   return txn_;
 }
-inline void Intent::set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn) {
+inline void Intent::set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(txn_);
@@ -5268,32 +5268,32 @@ inline void LockUpdate::set_allocated_span(::cockroach::roachpb::Span* span) {
 inline bool LockUpdate::has_txn() const {
   return this != internal_default_instance() && txn_ != NULL;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& LockUpdate::_internal_txn() const {
+inline const ::cockroach::storage::enginepb::TxnMeta& LockUpdate::_internal_txn() const {
   return *txn_;
 }
-inline const ::cockroach::storage::engine::enginepb::TxnMeta& LockUpdate::txn() const {
-  const ::cockroach::storage::engine::enginepb::TxnMeta* p = txn_;
+inline const ::cockroach::storage::enginepb::TxnMeta& LockUpdate::txn() const {
+  const ::cockroach::storage::enginepb::TxnMeta* p = txn_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.txn)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      &::cockroach::storage::engine::enginepb::_TxnMeta_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::enginepb::TxnMeta*>(
+      &::cockroach::storage::enginepb::_TxnMeta_default_instance_);
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* LockUpdate::release_txn() {
+inline ::cockroach::storage::enginepb::TxnMeta* LockUpdate::release_txn() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.LockUpdate.txn)
   
-  ::cockroach::storage::engine::enginepb::TxnMeta* temp = txn_;
+  ::cockroach::storage::enginepb::TxnMeta* temp = txn_;
   txn_ = NULL;
   return temp;
 }
-inline ::cockroach::storage::engine::enginepb::TxnMeta* LockUpdate::mutable_txn() {
+inline ::cockroach::storage::enginepb::TxnMeta* LockUpdate::mutable_txn() {
   
   if (txn_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::storage::enginepb::TxnMeta>(GetArenaNoVirtual());
     txn_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LockUpdate.txn)
   return txn_;
 }
-inline void LockUpdate::set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn) {
+inline void LockUpdate::set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(txn_);
@@ -5329,38 +5329,38 @@ inline void LockUpdate::set_status(::cockroach::roachpb::TransactionStatus value
 inline int LockUpdate::ignored_seqnums_size() const {
   return ignored_seqnums_.size();
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* LockUpdate::mutable_ignored_seqnums(int index) {
+inline ::cockroach::storage::enginepb::IgnoredSeqNumRange* LockUpdate::mutable_ignored_seqnums(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_.Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >*
 LockUpdate::mutable_ignored_seqnums() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return &ignored_seqnums_;
 }
-inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& LockUpdate::ignored_seqnums(int index) const {
+inline const ::cockroach::storage::enginepb::IgnoredSeqNumRange& LockUpdate::ignored_seqnums(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_.Get(index);
 }
-inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* LockUpdate::add_ignored_seqnums() {
+inline ::cockroach::storage::enginepb::IgnoredSeqNumRange* LockUpdate::add_ignored_seqnums() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange >&
 LockUpdate::ignored_seqnums() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_;
 }
 
-// .cockroach.storage.concurrency.lock.Durability durability = 5;
+// .cockroach.kv.kvserver.concurrency.lock.Durability durability = 5;
 inline void LockUpdate::clear_durability() {
   durability_ = 0;
 }
-inline ::cockroach::storage::concurrency::lock::Durability LockUpdate::durability() const {
+inline ::cockroach::kv::kvserver::concurrency::lock::Durability LockUpdate::durability() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.durability)
-  return static_cast< ::cockroach::storage::concurrency::lock::Durability >(durability_);
+  return static_cast< ::cockroach::kv::kvserver::concurrency::lock::Durability >(durability_);
 }
-inline void LockUpdate::set_durability(::cockroach::storage::concurrency::lock::Durability value) {
+inline void LockUpdate::set_durability(::cockroach::kv::kvserver::concurrency::lock::Durability value) {
   
   durability_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.LockUpdate.durability)

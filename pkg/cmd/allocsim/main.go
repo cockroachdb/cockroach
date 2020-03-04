@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster/tc"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -402,7 +402,7 @@ func handleStart() bool {
 	// in the few minutes after allocsim starts up causes it to take a long time
 	// for leases to settle onto other nodes even when requests are skewed heavily
 	// onto them.
-	storage.MinLeaseTransferStatsDuration = 10 * time.Second
+	kvserver.MinLeaseTransferStatsDuration = 10 * time.Second
 
 	cli.Main()
 	return true

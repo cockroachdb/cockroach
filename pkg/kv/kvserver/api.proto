@@ -1,0 +1,77 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver;
+option go_package = "kvserver";
+
+import "roachpb/internal_raft.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc3.proto";
+import "gogoproto/gogo.proto";
+
+// StoreRequestHeader locates a Store on a Node.
+message StoreRequestHeader {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
+// A CollectChecksumRequest asks the addressed replica for the result of a
+// roachpb.ComputeChecksumRequest.
+message CollectChecksumRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // checksum_id identifies the corresponding roachpb.ComputeChecksumRequest.
+  bytes checksum_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  bytes checksum = 4;
+}
+
+message CollectChecksumResponse {
+  // The checksum is the sha512 hash of the requested computation. It is empty
+  // if the computation failed.
+  bytes checksum = 1;
+  // snapshot is set if the roachpb.ComputeChecksumRequest had snapshot = true
+  // and the response checksum is different from the request checksum.
+  //
+  // TODO(tschottdorf): with larger ranges, this is no longer tenable.
+  // See https://github.com/cockroachdb/cockroach/issues/21128.
+  roachpb.RaftSnapshotData snapshot = 2;
+  // delta carries the stats of the range minus the recomputed stats.
+  storage.enginepb.MVCCStatsDelta delta = 3 [(gogoproto.nullable) = false];
+  // persisted carries the persisted stats of the replica.
+  storage.enginepb.MVCCStats persisted = 4 [(gogoproto.nullable) = false];
+}
+
+// WaitForApplicationRequest blocks until the addressed replica has applied the
+// command with the specified lease index.
+message WaitForApplicationRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  uint64 lease_index = 3;
+}
+
+message WaitForApplicationResponse {
+}
+
+message WaitForReplicaInitRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+}
+
+message WaitForReplicaInitResponse {
+}
+

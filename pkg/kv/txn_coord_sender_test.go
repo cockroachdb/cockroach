@@ -21,11 +21,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,7 +51,7 @@ func createTestDB(t testing.TB) *localtestcluster.LocalTestCluster {
 }
 
 func createTestDBWithContextAndKnobs(
-	t testing.TB, dbCtx client.DBContext, knobs *storage.StoreTestingKnobs,
+	t testing.TB, dbCtx client.DBContext, knobs *kvserver.StoreTestingKnobs,
 ) *localtestcluster.LocalTestCluster {
 	s := &localtestcluster.LocalTestCluster{
 		DBContext:         &dbCtx,
@@ -284,7 +284,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 // Test that the theartbeat loop detects aborted transactions and stops.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -410,7 +410,7 @@ func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachp
 	return &br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn, nil
 }
 
-func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*TxnCoordSender) {
+func verifyCleanup(key roachpb.Key, eng storage.Engine, t *testing.T, coords ...*TxnCoordSender) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, coord := range coords {
 			if coord.IsTracking() {
@@ -419,7 +419,7 @@ func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*
 		}
 		meta := &enginepb.MVCCMetadata{}
 		//lint:ignore SA1019 historical usage of deprecated eng.GetProto is OK
-		ok, _, _, err := eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
+		ok, _, _, err := eng.GetProto(storage.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}
@@ -647,7 +647,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "errOnFirst", func(t *testing.T, errOnFirst bool) {
 		key := roachpb.Key("a")
 		are := roachpb.NewAmbiguousResultError("very ambiguous")
-		knobs := &storage.StoreTestingKnobs{
+		knobs := &kvserver.StoreTestingKnobs{
 			TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 				for _, req := range ba.Requests {
 					if putReq, ok := req.GetInner().(*roachpb.PutRequest); ok && putReq.Key.Equal(key) {
@@ -2229,7 +2229,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	// happen, for example, if the leaf is used concurrently by multiple requests,
 	// where the first one gets a TransactionAbortedError.
 	errKey := roachpb.Key("a")
-	knobs := &storage.StoreTestingKnobs{
+	knobs := &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
 				txn := ba.Txn.Clone()

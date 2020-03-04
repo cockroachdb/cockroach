@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -54,8 +54,8 @@ func BenchmarkAddSSTable(b *testing.B) {
 			b.StopTimer()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				sstFile := &engine.MemFile{}
-				sst := engine.MakeBackupSSTWriter(sstFile)
+				sstFile := &storage.MemFile{}
+				sst := storage.MakeBackupSSTWriter(sstFile)
 
 				id++
 				backup.ResetKeyValueIteration()
@@ -107,7 +107,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 			kvDB := tc.Server(0).DB()
 
 			id := sqlbase.ID(keys.MinUserDescID)
-			var batch engine.RocksDBBatchBuilder
+			var batch storage.RocksDBBatchBuilder
 
 			var totalLen int64
 			b.StopTimer()

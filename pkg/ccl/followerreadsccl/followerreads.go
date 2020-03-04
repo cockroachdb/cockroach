@@ -18,14 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -87,7 +87,7 @@ func txnCanPerformFollowerRead(txn *roachpb.Transaction) bool {
 
 // canUseFollowerRead determines if a query can be sent to a follower.
 func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timestamp) bool {
-	if !storage.FollowerReadsEnabled.Get(&st.SV) {
+	if !kvserver.FollowerReadsEnabled.Get(&st.SV) {
 		return false
 	}
 	threshold := (-1 * getFollowerReadDuration(st)) - 1*base.DefaultMaxClockOffset

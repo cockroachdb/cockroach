@@ -17,10 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,7 +40,7 @@ func TestUnsplitAt(t *testing.T) {
 	// merge queue should pass the expected descriptor of the RHS into the
 	// AdminMerge request.
 	params.Knobs = base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,
 		},
 	}

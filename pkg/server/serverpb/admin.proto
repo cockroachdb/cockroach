@@ -15,9 +15,9 @@ option go_package = "serverpb";
 import "config/zonepb/zone.proto";
 import "jobs/jobspb/jobs.proto";
 import "server/serverpb/status.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/storagepb/liveness.proto";
-import "storage/storagepb/log.proto";
+import "storage/enginepb/mvcc.proto";
+import "kv/kvserver/storagepb/liveness.proto";
+import "kv/kvserver/storagepb/log.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
@@ -196,7 +196,7 @@ message TableStatsResponse {
   int64 node_count = 3;
   // stats is the summation of MVCCStats for all replicas of this table
   // across the cluster.
-  cockroach.storage.engine.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
+  cockroach.storage.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
   // approximate_disk_bytes is an approximation of the disk space (in bytes)
   // used for all replicas of this table across the cluster.
   uint64 approximate_disk_bytes = 6;
@@ -438,8 +438,8 @@ message LivenessRequest {
 
 // LivenessResponse contains the liveness status of each node on the cluster.
 message LivenessResponse {
-  repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
-  map<int32, cockroach.storage.NodeLivenessStatus> statuses = 2 [
+  repeated cockroach.kv.kvserver.storagepb.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+  map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> statuses = 2 [
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
@@ -526,7 +526,7 @@ message RangeLogResponse {
     string details = 6;
   }
   message Event {
-    storage.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
+    cockroach.kv.kvserver.storagepb.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
     PrettyInfo pretty_info = 2 [(gogoproto.nullable) = false];
   }
   reserved 1; // Previously used.

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -75,12 +75,12 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 	var sst []byte
 	g.GoCtx(func(ctx context.Context) error {
 		sstTS := hlc.Timestamp{WallTime: ts.UnixNano()}
-		sstFile := &engine.MemFile{}
-		sw := engine.MakeIngestionSSTWriter(sstFile)
+		sstFile := &storage.MemFile{}
+		sw := storage.MakeIngestionSSTWriter(sstFile)
 		defer sw.Close()
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				mvccKey := engine.MVCCKey{Timestamp: sstTS, Key: kv.Key}
+				mvccKey := storage.MVCCKey{Timestamp: sstTS, Key: kv.Key}
 				if err := sw.Put(mvccKey, kv.Value.RawBytes); err != nil {
 					return err
 				}

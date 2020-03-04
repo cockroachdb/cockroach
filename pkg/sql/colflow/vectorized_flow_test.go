@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -237,7 +237,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 
 	const baseDirName = "base"
 
-	ngn := engine.NewDefaultInMem()
+	ngn := storage.NewDefaultInMem()
 	defer ngn.Close()
 	require.NoError(t, ngn.CreateDir(baseDirName))
 

@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
@@ -133,7 +133,7 @@ func runSyncer(
 		return encoding.EncodeUvarintAscending(buf[:0:0], uint64(seq))
 	}
 
-	check := func(kv engine.MVCCKeyValue) (bool, error) {
+	check := func(kv storage.MVCCKeyValue) (bool, error) {
 		expKey := key()
 		if !bytes.Equal(kv.Key.Key, expKey) {
 			return false, errors.Errorf(
@@ -184,7 +184,7 @@ func runSyncer(
 			}
 		}()
 
-		k, v := engine.MakeMVCCMetadataKey(key()), []byte("payload")
+		k, v := storage.MakeMVCCMetadataKey(key()), []byte("payload")
 		switch seq % 2 {
 		case 0:
 			if err := db.Put(k, v); err != nil {

@@ -15,7 +15,7 @@
 #include "fmt.h"
 #include "getter.h"
 #include "iterator.h"
-#include "protos/storage/engine/enginepb/rocksdb.pb.h"
+#include "protos/storage/enginepb/rocksdb.pb.h"
 #include "status.h"
 
 using namespace cockroach;
@@ -73,14 +73,14 @@ DBString DBEngine::GetUserProperties() {
   rocksdb::TablePropertiesCollection props;
   rocksdb::Status status = rep->GetPropertiesOfAllTables(&props);
 
-  cockroach::storage::engine::enginepb::SSTUserPropertiesCollection all;
+  cockroach::storage::enginepb::SSTUserPropertiesCollection all;
   if (!status.ok()) {
     all.set_error(status.ToString());
     return ToDBString(all.SerializeAsString());
   }
 
   for (auto i = props.begin(); i != props.end(); i++) {
-    cockroach::storage::engine::enginepb::SSTUserProperties* sst = all.add_sst();
+    cockroach::storage::enginepb::SSTUserProperties* sst = all.add_sst();
     sst->set_path(i->first);
     auto userprops = i->second->user_collected_properties;
 

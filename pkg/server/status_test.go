@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -38,8 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -886,7 +886,7 @@ func TestHotRangesResponse(t *testing.T) {
 
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer storage.EnableLeaseHistory(100)()
+	defer kvserver.EnableLeaseHistory(100)()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.TODO())
 
@@ -1153,7 +1153,7 @@ func TestDiagnosticsResponse(t *testing.T) {
 
 func TestRangeResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer storage.EnableLeaseHistory(100)()
+	defer kvserver.EnableLeaseHistory(100)()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.TODO())
 

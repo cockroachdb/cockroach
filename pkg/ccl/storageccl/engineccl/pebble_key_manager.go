@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -391,7 +391,7 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 	if err != nil {
 		return
 	}
-	if err = engine.SafeWriteToFile(m.fs, m.dbDir, m.registryFilename, bytes); err != nil {
+	if err = storage.SafeWriteToFile(m.fs, m.dbDir, m.registryFilename, bytes); err != nil {
 		return
 	}
 	m.mu.keyRegistry = keyRegistry

@@ -15,7 +15,10 @@ if tc_release_branch; then
   echo "On release branch ($TC_BUILD_BRANCH), so running testrace on all packages ($pkgspec)"
 else
   pkgspec=$(changed_go_pkgs)
-  if [[ -z "$pkgspec" ]]; then
+  if [[ $(echo "$pkgspec" | wc -w) -gt 10 ]]; then
+    echo "PR #$TC_BUILD_BRANCH changed many packages; skipping race detector tests"
+    exit 0
+  elif [[ -z "$pkgspec" ]]; then
     echo "PR #$TC_BUILD_BRANCH has no changed packages; skipping race detector tests"
     exit 0
   fi

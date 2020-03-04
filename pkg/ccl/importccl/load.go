@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -31,8 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -143,7 +143,7 @@ func Load(
 	var tableDesc *sqlbase.ImmutableTableDescriptor
 	var tableName string
 	var prevKey roachpb.Key
-	var kvs []engine.MVCCKeyValue
+	var kvs []storage.MVCCKeyValue
 	var kvBytes int64
 	backup := backupccl.BackupManifest{
 		Descriptors: []sqlbase.Descriptor{
@@ -250,8 +250,8 @@ func Load(
 				}
 				prevKey = kv.Key
 				kvBytes += int64(len(kv.Key) + len(kv.Value.RawBytes))
-				kvs = append(kvs, engine.MVCCKeyValue{
-					Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
+				kvs = append(kvs, storage.MVCCKeyValue{
+					Key:   storage.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
 					Value: kv.Value.RawBytes,
 				})
 			})
@@ -376,7 +376,7 @@ func writeSST(
 	backup *backupccl.BackupManifest,
 	base cloud.ExternalStorage,
 	tempPrefix string,
-	kvs []engine.MVCCKeyValue,
+	kvs []storage.MVCCKeyValue,
 	ts hlc.Timestamp,
 ) error {
 	if len(kvs) == 0 {
@@ -386,8 +386,8 @@ func writeSST(
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
 
-	sstFile := &engine.MemFile{}
-	sst := engine.MakeBackupSSTWriter(sstFile)
+	sstFile := &storage.MemFile{}
+	sst := storage.MakeBackupSSTWriter(sstFile)
 	defer sst.Close()
 	for _, kv := range kvs {
 		kv.Key.Timestamp = ts

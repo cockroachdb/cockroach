@@ -12,8 +12,8 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/pkg/errors"
 )
 
@@ -34,13 +34,13 @@ import (
 import "C"
 
 func init() {
-	engine.SetRocksDBOpenHook(C.DBOpenHookCCL)
+	storage.SetRocksDBOpenHook(C.DBOpenHookCCL)
 }
 
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
 // start and end keys and computes the enginepb.MVCCStats for it.
 func VerifyBatchRepr(
-	repr []byte, start, end engine.MVCCKey, nowNanos int64,
+	repr []byte, start, end storage.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	// We store a 4 byte checksum of each key/value entry in the value. Make
 	// sure the all ones in this BatchRepr validate.
@@ -50,13 +50,13 @@ func VerifyBatchRepr(
 	// checksums in go and constructs the MVCCStats in c++. It'd be nice to move
 	// one or the other.
 	{
-		r, err := engine.NewRocksDBBatchReader(repr)
+		r, err := storage.NewRocksDBBatchReader(repr)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err, "verifying key/value checksums")
 		}
 		for r.Next() {
 			switch r.BatchType() {
-			case engine.BatchTypeValue:
+			case storage.BatchTypeValue:
 				mvccKey, err := r.MVCCKey()
 				if err != nil {
 					return enginepb.MVCCStats{}, errors.Wrapf(err, "verifying key/value checksums")
@@ -109,7 +109,7 @@ func goToCSlice(b []byte) C.DBSlice {
 	}
 }
 
-func goToCKey(key engine.MVCCKey) C.DBKey {
+func goToCKey(key storage.MVCCKey) C.DBKey {
 	return C.DBKey{
 		key:       goToCSlice(key.Key),
 		wall_time: C.int64_t(key.Timestamp.WallTime),
@@ -122,7 +122,7 @@ func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
 		return nil
 	}
 	// Interpret the C pointer as a pointer to a Go array, then slice.
-	return (*[engine.MaxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+	return (*[storage.MaxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
 }
 
 func cStringToGoString(s C.DBString) string {

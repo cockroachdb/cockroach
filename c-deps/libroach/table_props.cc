@@ -29,7 +29,7 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
       // Check to see if an intent was the last key in the SSTable. If
       // it was, we need to extract the timestamp from the intent and
       // update the bounds to include that timestamp.
-      cockroach::storage::engine::enginepb::MVCCMetadata meta;
+      cockroach::storage::enginepb::MVCCMetadata meta;
       if (!meta.ParseFromArray(last_value_.data(), last_value_.size())) {
         // We're unable to parse the MVCCMetadata. Fail open by not
         // setting the min/max timestamp properties.

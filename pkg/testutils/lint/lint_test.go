@@ -384,7 +384,7 @@ func TestLint(t *testing.T) {
 					":!acceptance",
 					":!ccl/acceptanceccl/backup_test.go",
 					":!ccl/backupccl/backup_cloud_test.go",
-					":!storage/cloud",
+					":!kv/kvserver/cloud",
 					":!ccl/workloadccl/fixture_test.go",
 					":!cmd",
 					":!nightly",
@@ -1018,7 +1018,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`.*\.lock`),
-			stream.GrepNot(`^storage\/engine\/rocksdb_error_dict\.go$`),
+			stream.GrepNot(`^storage\/rocksdb_error_dict\.go$`),
 			stream.GrepNot(`^workload/tpcds/tpcds.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)

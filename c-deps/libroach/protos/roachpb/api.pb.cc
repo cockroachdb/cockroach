@@ -150,14 +150,14 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::pr
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicationTarget;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeDescriptor;
 }  // namespace protobuf_roachpb_2fmetadata_2eproto
-namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_IgnoredSeqNumRange;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStatsDelta;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
-}  // namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto
-namespace protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStats;
-}  // namespace protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto
+namespace protobuf_storage_2fenginepb_2fmvcc3_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_IgnoredSeqNumRange;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStatsDelta;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
+}  // namespace protobuf_storage_2fenginepb_2fmvcc3_2eproto
+namespace protobuf_storage_2fenginepb_2fmvcc_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fenginepb_2fmvcc_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStats;
+}  // namespace protobuf_storage_2fenginepb_2fmvcc_2eproto
 namespace protobuf_util_2fhlc_2ftimestamp_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2fhlc_2ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Timestamp;
 }  // namespace protobuf_util_2fhlc_2ftimestamp_2eproto
@@ -1310,7 +1310,7 @@ static void InitDefaultsRecomputeStatsResponse() {
 ::google::protobuf::internal::SCCInfo<2> scc_info_RecomputeStatsResponse =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRecomputeStatsResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_MVCCStatsDelta.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_MVCCStatsDelta.base,}};
 
 static void InitDefaultsEndTxnRequest() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1641,7 +1641,7 @@ static void InitDefaultsPushTxnRequest() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsPushTxnRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsPushTxnResponse() {
@@ -1674,7 +1674,7 @@ static void InitDefaultsRecoverTxnRequest() {
 ::google::protobuf::internal::SCCInfo<2> scc_info_RecoverTxnRequest =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRecoverTxnRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
 
 static void InitDefaultsRecoverTxnResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1706,7 +1706,7 @@ static void InitDefaultsQueryTxnRequest() {
 ::google::protobuf::internal::SCCInfo<2> scc_info_QueryTxnRequest =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsQueryTxnRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
 
 static void InitDefaultsQueryTxnResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1738,7 +1738,7 @@ static void InitDefaultsQueryIntentRequest() {
 ::google::protobuf::internal::SCCInfo<2> scc_info_QueryIntentRequest =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsQueryIntentRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
 
 static void InitDefaultsQueryIntentResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1769,8 +1769,8 @@ static void InitDefaultsResolveIntentRequest() {
 ::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRequest =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsResolveIntentRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsResolveIntentResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1801,9 +1801,9 @@ static void InitDefaultsResolveIntentRangeRequest() {
 ::google::protobuf::internal::SCCInfo<4> scc_info_ResolveIntentRangeRequest =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsResolveIntentRangeRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsResolveIntentRangeResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2391,7 +2391,7 @@ static void InitDefaultsAddSSTableRequest() {
 ::google::protobuf::internal::SCCInfo<2> scc_info_AddSSTableRequest =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsAddSSTableRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
 
 static void InitDefaultsAddSSTableResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2500,7 +2500,7 @@ static void InitDefaultsSubsumeResponse() {
 ::google::protobuf::internal::SCCInfo<3> scc_info_SubsumeResponse =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsSubsumeResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,
+      &protobuf_storage_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsRangeStatsRequest() {
@@ -2532,7 +2532,7 @@ static void InitDefaultsRangeStatsResponse() {
 ::google::protobuf::internal::SCCInfo<2> scc_info_RangeStatsResponse =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRangeStatsResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
 
 static void InitDefaultsRequestUnion() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -10055,8 +10055,8 @@ void RecomputeStatsRequest::InternalSwap(RecomputeStatsRequest* other) {
 void RecomputeStatsResponse::InitAsDefaultInstance() {
   ::cockroach::roachpb::_RecomputeStatsResponse_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(
       ::cockroach::roachpb::ResponseHeader::internal_default_instance());
-  ::cockroach::roachpb::_RecomputeStatsResponse_default_instance_._instance.get_mutable()->added_delta_ = const_cast< ::cockroach::storage::engine::enginepb::MVCCStatsDelta*>(
-      ::cockroach::storage::engine::enginepb::MVCCStatsDelta::internal_default_instance());
+  ::cockroach::roachpb::_RecomputeStatsResponse_default_instance_._instance.get_mutable()->added_delta_ = const_cast< ::cockroach::storage::enginepb::MVCCStatsDelta*>(
+      ::cockroach::storage::enginepb::MVCCStatsDelta::internal_default_instance());
 }
 void RecomputeStatsResponse::clear_added_delta() {
   if (GetArenaNoVirtual() == NULL && added_delta_ != NULL) {
@@ -10086,7 +10086,7 @@ RecomputeStatsResponse::RecomputeStatsResponse(const RecomputeStatsResponse& fro
     header_ = NULL;
   }
   if (from.has_added_delta()) {
-    added_delta_ = new ::cockroach::storage::engine::enginepb::MVCCStatsDelta(*from.added_delta_);
+    added_delta_ = new ::cockroach::storage::enginepb::MVCCStatsDelta(*from.added_delta_);
   } else {
     added_delta_ = NULL;
   }
@@ -10253,7 +10253,7 @@ void RecomputeStatsResponse::MergeFrom(const RecomputeStatsResponse& from) {
     mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
   }
   if (from.has_added_delta()) {
-    mutable_added_delta()->::cockroach::storage::engine::enginepb::MVCCStatsDelta::MergeFrom(from.added_delta());
+    mutable_added_delta()->::cockroach::storage::enginepb::MVCCStatsDelta::MergeFrom(from.added_delta());
   }
 }
 
@@ -14963,8 +14963,8 @@ void PushTxnRequest::InitAsDefaultInstance() {
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
   ::cockroach::roachpb::_PushTxnRequest_default_instance_._instance.get_mutable()->pusher_txn_ = const_cast< ::cockroach::roachpb::Transaction*>(
       ::cockroach::roachpb::Transaction::internal_default_instance());
-  ::cockroach::roachpb::_PushTxnRequest_default_instance_._instance.get_mutable()->pushee_txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_PushTxnRequest_default_instance_._instance.get_mutable()->pushee_txn_ = const_cast< ::cockroach::storage::enginepb::TxnMeta*>(
+      ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
   ::cockroach::roachpb::_PushTxnRequest_default_instance_._instance.get_mutable()->push_to_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
@@ -15017,7 +15017,7 @@ PushTxnRequest::PushTxnRequest(const PushTxnRequest& from)
     pusher_txn_ = NULL;
   }
   if (from.has_pushee_txn()) {
-    pushee_txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.pushee_txn_);
+    pushee_txn_ = new ::cockroach::storage::enginepb::TxnMeta(*from.pushee_txn_);
   } else {
     pushee_txn_ = NULL;
   }
@@ -15303,7 +15303,7 @@ void PushTxnRequest::MergeFrom(const PushTxnRequest& from) {
     mutable_pusher_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.pusher_txn());
   }
   if (from.has_pushee_txn()) {
-    mutable_pushee_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.pushee_txn());
+    mutable_pushee_txn()->::cockroach::storage::enginepb::TxnMeta::MergeFrom(from.pushee_txn());
   }
   if (from.has_push_to()) {
     mutable_push_to()->::cockroach::util::hlc::Timestamp::MergeFrom(from.push_to());
@@ -15586,8 +15586,8 @@ void PushTxnResponse::InternalSwap(PushTxnResponse* other) {
 void RecoverTxnRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_RecoverTxnRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
-  ::cockroach::roachpb::_RecoverTxnRequest_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_RecoverTxnRequest_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::enginepb::TxnMeta*>(
+      ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
 }
 void RecoverTxnRequest::clear_txn() {
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
@@ -15618,7 +15618,7 @@ RecoverTxnRequest::RecoverTxnRequest(const RecoverTxnRequest& from)
     header_ = NULL;
   }
   if (from.has_txn()) {
-    txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.txn_);
+    txn_ = new ::cockroach::storage::enginepb::TxnMeta(*from.txn_);
   } else {
     txn_ = NULL;
   }
@@ -15811,7 +15811,7 @@ void RecoverTxnRequest::MergeFrom(const RecoverTxnRequest& from) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
   if (from.has_txn()) {
-    mutable_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.txn());
+    mutable_txn()->::cockroach::storage::enginepb::TxnMeta::MergeFrom(from.txn());
   }
   if (from.implicitly_committed() != 0) {
     set_implicitly_committed(from.implicitly_committed());
@@ -16085,8 +16085,8 @@ void RecoverTxnResponse::InternalSwap(RecoverTxnResponse* other) {
 void QueryTxnRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_QueryTxnRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
-  ::cockroach::roachpb::_QueryTxnRequest_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_QueryTxnRequest_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::enginepb::TxnMeta*>(
+      ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
 }
 void QueryTxnRequest::clear_txn() {
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
@@ -16119,7 +16119,7 @@ QueryTxnRequest::QueryTxnRequest(const QueryTxnRequest& from)
     header_ = NULL;
   }
   if (from.has_txn()) {
-    txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.txn_);
+    txn_ = new ::cockroach::storage::enginepb::TxnMeta(*from.txn_);
   } else {
     txn_ = NULL;
   }
@@ -16337,7 +16337,7 @@ void QueryTxnRequest::MergeFrom(const QueryTxnRequest& from) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
   if (from.has_txn()) {
-    mutable_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.txn());
+    mutable_txn()->::cockroach::storage::enginepb::TxnMeta::MergeFrom(from.txn());
   }
   if (from.wait_for_update() != 0) {
     set_wait_for_update(from.wait_for_update());
@@ -16640,8 +16640,8 @@ void QueryTxnResponse::InternalSwap(QueryTxnResponse* other) {
 void QueryIntentRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_QueryIntentRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
-  ::cockroach::roachpb::_QueryIntentRequest_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_QueryIntentRequest_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::enginepb::TxnMeta*>(
+      ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
 }
 void QueryIntentRequest::clear_txn() {
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
@@ -16672,7 +16672,7 @@ QueryIntentRequest::QueryIntentRequest(const QueryIntentRequest& from)
     header_ = NULL;
   }
   if (from.has_txn()) {
-    txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.txn_);
+    txn_ = new ::cockroach::storage::enginepb::TxnMeta(*from.txn_);
   } else {
     txn_ = NULL;
   }
@@ -16865,7 +16865,7 @@ void QueryIntentRequest::MergeFrom(const QueryIntentRequest& from) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
   if (from.has_txn()) {
-    mutable_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.txn());
+    mutable_txn()->::cockroach::storage::enginepb::TxnMeta::MergeFrom(from.txn());
   }
   if (from.error_if_missing() != 0) {
     set_error_if_missing(from.error_if_missing());
@@ -17125,8 +17125,8 @@ void QueryIntentResponse::InternalSwap(QueryIntentResponse* other) {
 void ResolveIntentRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ResolveIntentRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
-  ::cockroach::roachpb::_ResolveIntentRequest_default_instance_._instance.get_mutable()->intent_txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_ResolveIntentRequest_default_instance_._instance.get_mutable()->intent_txn_ = const_cast< ::cockroach::storage::enginepb::TxnMeta*>(
+      ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
 }
 void ResolveIntentRequest::clear_intent_txn() {
   if (GetArenaNoVirtual() == NULL && intent_txn_ != NULL) {
@@ -17163,7 +17163,7 @@ ResolveIntentRequest::ResolveIntentRequest(const ResolveIntentRequest& from)
     header_ = NULL;
   }
   if (from.has_intent_txn()) {
-    intent_txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.intent_txn_);
+    intent_txn_ = new ::cockroach::storage::enginepb::TxnMeta(*from.intent_txn_);
   } else {
     intent_txn_ = NULL;
   }
@@ -17418,7 +17418,7 @@ void ResolveIntentRequest::MergeFrom(const ResolveIntentRequest& from) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
   if (from.has_intent_txn()) {
-    mutable_intent_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.intent_txn());
+    mutable_intent_txn()->::cockroach::storage::enginepb::TxnMeta::MergeFrom(from.intent_txn());
   }
   if (from.status() != 0) {
     set_status(from.status());
@@ -17650,8 +17650,8 @@ void ResolveIntentResponse::InternalSwap(ResolveIntentResponse* other) {
 void ResolveIntentRangeRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ResolveIntentRangeRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
-  ::cockroach::roachpb::_ResolveIntentRangeRequest_default_instance_._instance.get_mutable()->intent_txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
-      ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
+  ::cockroach::roachpb::_ResolveIntentRangeRequest_default_instance_._instance.get_mutable()->intent_txn_ = const_cast< ::cockroach::storage::enginepb::TxnMeta*>(
+      ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
   ::cockroach::roachpb::_ResolveIntentRangeRequest_default_instance_._instance.get_mutable()->min_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
@@ -17697,7 +17697,7 @@ ResolveIntentRangeRequest::ResolveIntentRangeRequest(const ResolveIntentRangeReq
     header_ = NULL;
   }
   if (from.has_intent_txn()) {
-    intent_txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.intent_txn_);
+    intent_txn_ = new ::cockroach::storage::enginepb::TxnMeta(*from.intent_txn_);
   } else {
     intent_txn_ = NULL;
   }
@@ -17984,7 +17984,7 @@ void ResolveIntentRangeRequest::MergeFrom(const ResolveIntentRangeRequest& from)
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
   if (from.has_intent_txn()) {
-    mutable_intent_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.intent_txn());
+    mutable_intent_txn()->::cockroach::storage::enginepb::TxnMeta::MergeFrom(from.intent_txn());
   }
   if (from.has_min_timestamp()) {
     mutable_min_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.min_timestamp());
@@ -27926,8 +27926,8 @@ void AdminVerifyProtectedTimestampResponse::InternalSwap(AdminVerifyProtectedTim
 void AddSSTableRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_AddSSTableRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
-  ::cockroach::roachpb::_AddSSTableRequest_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::engine::enginepb::MVCCStats*>(
-      ::cockroach::storage::engine::enginepb::MVCCStats::internal_default_instance());
+  ::cockroach::roachpb::_AddSSTableRequest_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::enginepb::MVCCStats*>(
+      ::cockroach::storage::enginepb::MVCCStats::internal_default_instance());
 }
 void AddSSTableRequest::clear_mvcc_stats() {
   if (GetArenaNoVirtual() == NULL && mvcc_stats_ != NULL) {
@@ -27964,7 +27964,7 @@ AddSSTableRequest::AddSSTableRequest(const AddSSTableRequest& from)
     header_ = NULL;
   }
   if (from.has_mvcc_stats()) {
-    mvcc_stats_ = new ::cockroach::storage::engine::enginepb::MVCCStats(*from.mvcc_stats_);
+    mvcc_stats_ = new ::cockroach::storage::enginepb::MVCCStats(*from.mvcc_stats_);
   } else {
     mvcc_stats_ = NULL;
   }
@@ -28217,7 +28217,7 @@ void AddSSTableRequest::MergeFrom(const AddSSTableRequest& from) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
   if (from.has_mvcc_stats()) {
-    mutable_mvcc_stats()->::cockroach::storage::engine::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
+    mutable_mvcc_stats()->::cockroach::storage::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
   }
   if (from.disallow_shadowing() != 0) {
     set_disallow_shadowing(from.disallow_shadowing());
@@ -29571,8 +29571,8 @@ void SubsumeRequest::InternalSwap(SubsumeRequest* other) {
 void SubsumeResponse::InitAsDefaultInstance() {
   ::cockroach::roachpb::_SubsumeResponse_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(
       ::cockroach::roachpb::ResponseHeader::internal_default_instance());
-  ::cockroach::roachpb::_SubsumeResponse_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::engine::enginepb::MVCCStats*>(
-      ::cockroach::storage::engine::enginepb::MVCCStats::internal_default_instance());
+  ::cockroach::roachpb::_SubsumeResponse_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::enginepb::MVCCStats*>(
+      ::cockroach::storage::enginepb::MVCCStats::internal_default_instance());
   ::cockroach::roachpb::_SubsumeResponse_default_instance_._instance.get_mutable()->freeze_start_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
@@ -29612,7 +29612,7 @@ SubsumeResponse::SubsumeResponse(const SubsumeResponse& from)
     header_ = NULL;
   }
   if (from.has_mvcc_stats()) {
-    mvcc_stats_ = new ::cockroach::storage::engine::enginepb::MVCCStats(*from.mvcc_stats_);
+    mvcc_stats_ = new ::cockroach::storage::enginepb::MVCCStats(*from.mvcc_stats_);
   } else {
     mvcc_stats_ = NULL;
   }
@@ -29839,7 +29839,7 @@ void SubsumeResponse::MergeFrom(const SubsumeResponse& from) {
     mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
   }
   if (from.has_mvcc_stats()) {
-    mutable_mvcc_stats()->::cockroach::storage::engine::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
+    mutable_mvcc_stats()->::cockroach::storage::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
   }
   if (from.has_freeze_start()) {
     mutable_freeze_start()->::cockroach::util::hlc::Timestamp::MergeFrom(from.freeze_start());
@@ -30070,8 +30070,8 @@ void RangeStatsRequest::InternalSwap(RangeStatsRequest* other) {
 void RangeStatsResponse::InitAsDefaultInstance() {
   ::cockroach::roachpb::_RangeStatsResponse_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(
       ::cockroach::roachpb::ResponseHeader::internal_default_instance());
-  ::cockroach::roachpb::_RangeStatsResponse_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::engine::enginepb::MVCCStats*>(
-      ::cockroach::storage::engine::enginepb::MVCCStats::internal_default_instance());
+  ::cockroach::roachpb::_RangeStatsResponse_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::enginepb::MVCCStats*>(
+      ::cockroach::storage::enginepb::MVCCStats::internal_default_instance());
 }
 void RangeStatsResponse::clear_mvcc_stats() {
   if (GetArenaNoVirtual() == NULL && mvcc_stats_ != NULL) {
@@ -30102,7 +30102,7 @@ RangeStatsResponse::RangeStatsResponse(const RangeStatsResponse& from)
     header_ = NULL;
   }
   if (from.has_mvcc_stats()) {
-    mvcc_stats_ = new ::cockroach::storage::engine::enginepb::MVCCStats(*from.mvcc_stats_);
+    mvcc_stats_ = new ::cockroach::storage::enginepb::MVCCStats(*from.mvcc_stats_);
   } else {
     mvcc_stats_ = NULL;
   }
@@ -30295,7 +30295,7 @@ void RangeStatsResponse::MergeFrom(const RangeStatsResponse& from) {
     mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
   }
   if (from.has_mvcc_stats()) {
-    mutable_mvcc_stats()->::cockroach::storage::engine::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
+    mutable_mvcc_stats()->::cockroach::storage::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
   }
   if (from.queries_per_second() != 0) {
     set_queries_per_second(from.queries_per_second());

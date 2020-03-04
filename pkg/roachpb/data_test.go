@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/storage/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"

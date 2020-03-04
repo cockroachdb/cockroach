@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -40,8 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -67,7 +67,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.Insecure = false
 
 	// Configure test storage engine.
-	cfg.StorageEngine = engine.DefaultStorageEngine
+	cfg.StorageEngine = storage.DefaultStorageEngine
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
@@ -125,7 +125,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
 	if knobs := params.Knobs.Store; knobs != nil {
-		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
+		if mo := knobs.(*kvserver.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)
 		}
 	}
@@ -233,9 +233,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 
 	if cfg.TestingKnobs.Store == nil {
-		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
+		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
 	}
-	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
+	cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck = true
 	return cfg
 }
 
@@ -333,7 +333,7 @@ func (ts *TestServer) PGServer() *pgwire.Server {
 }
 
 // RaftTransport returns the RaftTransport used by the TestServer.
-func (ts *TestServer) RaftTransport() *storage.RaftTransport {
+func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 	if ts != nil {
 		return ts.raftTransport
 	}
@@ -419,7 +419,7 @@ func ExpectedInitialRangeCount(
 }
 
 // Stores returns the collection of stores from this TestServer's node.
-func (ts *TestServer) Stores() *storage.Stores {
+func (ts *TestServer) Stores() *kvserver.Stores {
 	return ts.node.stores
 }
 
@@ -434,7 +434,7 @@ func (ts *TestServer) ClusterSettings() *cluster.Settings {
 }
 
 // Engines returns the TestServer's engines.
-func (ts *TestServer) Engines() []engine.Engine {
+func (ts *TestServer) Engines() []storage.Engine {
 	return ts.engines
 }
 
@@ -667,7 +667,7 @@ func (s *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
 // GetFirstStoreID is part of TestServerInterface.
 func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 	firstStoreID := roachpb.StoreID(-1)
-	err := ts.Stores().VisitStores(func(s *storage.Store) error {
+	err := ts.Stores().VisitStores(func(s *kvserver.Store) error {
 		if firstStoreID == -1 {
 			firstStoreID = s.Ident.StoreID
 		}

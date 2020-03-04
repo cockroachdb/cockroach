@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -64,22 +64,22 @@ func TestExportCmd(t *testing.T) {
 
 	exportAndSlurpOne := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter,
-	) ([]string, []engine.MVCCKeyValue) {
+	) ([]string, []storage.MVCCKeyValue) {
 		res, pErr := export(t, start, mvccFilter)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
 		}
 
 		var paths []string
-		var kvs []engine.MVCCKeyValue
-		ingestFunc := func(kv engine.MVCCKeyValue) (bool, error) {
+		var kvs []storage.MVCCKeyValue
+		ingestFunc := func(kv storage.MVCCKeyValue) (bool, error) {
 			kvs = append(kvs, kv)
 			return false, nil
 		}
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
-			sst := engine.MakeRocksDBSstFileReader()
+			sst := storage.MakeRocksDBSstFileReader()
 			defer sst.Close()
 
 			fileContents, err := ioutil.ReadFile(filepath.Join(dir, "foo", file.Path))
@@ -102,9 +102,9 @@ func TestExportCmd(t *testing.T) {
 	type ExportAndSlurpResult struct {
 		end             hlc.Timestamp
 		mvccLatestFiles []string
-		mvccLatestKVs   []engine.MVCCKeyValue
+		mvccLatestKVs   []storage.MVCCKeyValue
 		mvccAllFiles    []string
-		mvccAllKVs      []engine.MVCCKeyValue
+		mvccAllKVs      []storage.MVCCKeyValue
 	}
 	exportAndSlurp := func(t *testing.T, start hlc.Timestamp) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
@@ -285,41 +285,41 @@ func exportUsingGoIterator(
 	startTime, endTime hlc.Timestamp,
 	startKey, endKey roachpb.Key,
 	enableTimeBoundIteratorOptimization bool,
-	reader engine.Reader,
+	reader storage.Reader,
 ) ([]byte, error) {
-	sst, err := engine.MakeRocksDBSstFileWriter()
+	sst, err := storage.MakeRocksDBSstFileWriter()
 	if err != nil {
 		return nil, nil //nolint:returnerrcheck
 	}
 	defer sst.Close()
 
 	var skipTombstones bool
-	var iterFn func(*engine.MVCCIncrementalIterator)
+	var iterFn func(*storage.MVCCIncrementalIterator)
 	switch filter {
 	case roachpb.MVCCFilter_Latest:
 		skipTombstones = true
-		iterFn = (*engine.MVCCIncrementalIterator).NextKey
+		iterFn = (*storage.MVCCIncrementalIterator).NextKey
 	case roachpb.MVCCFilter_All:
 		skipTombstones = false
-		iterFn = (*engine.MVCCIncrementalIterator).Next
+		iterFn = (*storage.MVCCIncrementalIterator).Next
 	default:
 		return nil, nil
 	}
 
-	io := engine.IterOptions{
+	io := storage.IterOptions{
 		UpperBound: endKey,
 	}
 	if enableTimeBoundIteratorOptimization {
 		io.MaxTimestampHint = endTime
 		io.MinTimestampHint = startTime.Next()
 	}
-	iter := engine.NewMVCCIncrementalIterator(reader, engine.MVCCIncrementalIterOptions{
+	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
 		IterOptions: io,
 		StartTime:   startTime,
 		EndTime:     endTime,
 	})
 	defer iter.Close()
-	for iter.SeekGE(engine.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
+	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
@@ -354,21 +354,21 @@ func exportUsingGoIterator(
 	return sstContents, nil
 }
 
-func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []engine.MVCCKeyValue {
+func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKeyValue {
 	t.Helper()
 	if len(data) == 0 {
 		return nil
 	}
 
-	sst := engine.MakeRocksDBSstFileReader()
+	sst := storage.MakeRocksDBSstFileReader()
 	defer sst.Close()
 
 	if err := sst.IngestExternalFile(data); err != nil {
 		t.Fatal(err)
 	}
 
-	var kvs []engine.MVCCKeyValue
-	if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+	var kvs []storage.MVCCKeyValue
+	if err := sst.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
 		kvs = append(kvs, kv)
 		return false, nil
 	}); err != nil {
@@ -380,7 +380,7 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []engine.MVCCKey
 
 func assertEqualKVs(
 	ctx context.Context,
-	e engine.Engine,
+	e storage.Engine,
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	exportAllRevisions bool,
@@ -405,14 +405,14 @@ func assertEqualKVs(
 		}
 
 		// Run new C++ implementation of IncrementalIterator.
-		io := engine.IterOptions{
+		io := storage.IterOptions{
 			UpperBound: endKey,
 		}
 		if enableTimeBoundIteratorOptimization {
 			io.MaxTimestampHint = endTime
 			io.MinTimestampHint = startTime.Next()
 		}
-		var kvs []engine.MVCCKeyValue
+		var kvs []storage.MVCCKeyValue
 		for start := startKey; start != nil; {
 			var sst []byte
 			var summary roachpb.BulkOpSummary
@@ -486,9 +486,9 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 
 	ctx := context.Background()
 
-	mkEngine := func(t *testing.T) (e engine.Engine, cleanup func()) {
+	mkEngine := func(t *testing.T) (e storage.Engine, cleanup func()) {
 		dir, cleanupDir := testutils.TempDir(t)
-		e, err := engine.NewDefaultEngine(
+		e, err := storage.NewDefaultEngine(
 			0,
 			base.StorageConfig{
 				Settings: cluster.MakeTestingClusterSettings(),
@@ -521,7 +521,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 		return numKeys
 	}
 	mkData := func(
-		t *testing.T, e engine.Engine, rnd *rand.Rand, numKeys int,
+		t *testing.T, e storage.Engine, rnd *rand.Rand, numKeys int,
 	) ([]roachpb.Key, []hlc.Timestamp) {
 		// Store generated keys and timestamps.
 		var keys []roachpb.Key
@@ -545,7 +545,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 
 			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 			value.InitChecksum(key)
-			if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+			if err := storage.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -556,7 +556,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 				ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
 				value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 				value.InitChecksum(key)
-				if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}

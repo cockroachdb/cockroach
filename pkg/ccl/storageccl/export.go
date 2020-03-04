@@ -15,14 +15,14 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -65,7 +65,7 @@ func declareKeysExport(
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
-	ctx context.Context, batch engine.Reader, cArgs batcheval.CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch storage.Reader, cArgs batcheval.CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ExportRequest)
 	h := cArgs.Header
@@ -139,7 +139,7 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	io := engine.IterOptions{
+	io := storage.IterOptions{
 		UpperBound: args.EndKey,
 	}
 

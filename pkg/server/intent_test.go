@@ -19,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -75,7 +75,7 @@ func TestIntentResolution(t *testing.T) {
 
 		results := map[string]struct{}{}
 		func() {
-			var storeKnobs storage.StoreTestingKnobs
+			var storeKnobs kvserver.StoreTestingKnobs
 			var mu syncutil.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool

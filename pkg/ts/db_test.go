@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
@@ -122,7 +122,7 @@ func (tm *testModelRunner) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keys.TimeseriesPrefix
 	endKey := startKey.PrefixEnd()
-	res, err := engine.MVCCScan(context.Background(), tm.Eng, startKey, endKey, tm.Clock.Now(), engine.MVCCScanOptions{})
+	res, err := storage.MVCCScan(context.Background(), tm.Eng, startKey, endKey, tm.Clock.Now(), storage.MVCCScanOptions{})
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err)
 	}

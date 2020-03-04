@@ -1,0 +1,33 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.storage.enginepb;
+option go_package = "enginepb";
+
+import "gogoproto/gogo.proto";
+
+// EngineType specifies type of storage engine (eg. rocksdb, pebble).
+enum EngineType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  // Denotes the default engine as the underlying storage engine type. Resolves
+  // during start to the engine type last used. If left unresolved, it's treated
+  // the same as EngineTypeRocksDB.
+  EngineTypeDefault = 0;
+  // Denotes RocksDB as the underlying storage engine type.
+  EngineTypeRocksDB = 1;
+  // Denotes Pebble as the underlying storage engine type.
+  EngineTypePebble = 2;
+  // Denotes TeePebbleRocksDB as the underlying storage engine type. Only use
+  // for testing purposes.
+  EngineTypeTeePebbleRocksDB = 3;
+}

@@ -13,7 +13,7 @@ package roachpb
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/stretchr/testify/require"
 )
 

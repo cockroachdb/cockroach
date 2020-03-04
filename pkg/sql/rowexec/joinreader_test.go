@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -385,7 +385,7 @@ func TestJoinReader(t *testing.T) {
 		},
 	}
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := engine.NewTempEngine(ctx, engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +498,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := engine.NewTempEngine(ctx, engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -593,7 +593,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	st := s.ClusterSettings()
-	tempEngine, _, err := engine.NewTempEngine(context.Background(), engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(context.Background(), storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}

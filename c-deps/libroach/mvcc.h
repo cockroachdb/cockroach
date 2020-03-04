@@ -16,7 +16,7 @@
 #include "encoding.h"
 #include "iterator.h"
 #include "keys.h"
-#include "protos/storage/engine/enginepb/mvcc.pb.h"
+#include "protos/storage/enginepb/mvcc.pb.h"
 #include "status.h"
 #include "timestamp.h"
 
@@ -205,11 +205,11 @@ template <bool reverse> class mvccScanner {
   }
 
   bool getFromIntentHistory() {
-    cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent readIntent;
+    cockroach::storage::enginepb::MVCCMetadata_SequencedIntent readIntent;
     readIntent.set_sequence(txn_sequence_);
 
     auto end = meta_.intent_history().end();
-    cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent intent;
+    cockroach::storage::enginepb::MVCCMetadata_SequencedIntent intent;
 
     // Look for the intent with the sequence number less than or equal to the
     // read sequence. To do so, search using upper_bound, which returns an
@@ -218,8 +218,8 @@ template <bool reverse> class mvccScanner {
     // previous value.
     auto up = std::upper_bound(
         meta_.intent_history().begin(), end, readIntent,
-        [](const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& a,
-           const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& b) -> bool {
+        [](const cockroach::storage::enginepb::MVCCMetadata_SequencedIntent& a,
+           const cockroach::storage::enginepb::MVCCMetadata_SequencedIntent& b) -> bool {
           return a.sequence() < b.sequence();
         });
     while (up != meta_.intent_history().begin()) {
@@ -768,7 +768,7 @@ template <bool reverse> class mvccScanner {
   std::string key_buf_;
   std::string saved_buf_;
   bool peeked_;
-  cockroach::storage::engine::enginepb::MVCCMetadata meta_;
+  cockroach::storage::enginepb::MVCCMetadata meta_;
   // cur_raw_key_ holds either iter_rep_->key() or the saved value of
   // iter_rep_->key() if we've peeked at the previous key (and peeked_
   // is true).

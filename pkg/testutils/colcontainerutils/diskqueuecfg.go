@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -34,7 +34,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 	)
 
 	if inMem {
-		ngn := engine.NewDefaultInMem()
+		ngn := storage.NewDefaultInMem()
 		testingFS = ngn.(fs.FS)
 		if err := testingFS.CreateDir(inMemDirName); err != nil {
 			t.Fatal(err)
@@ -44,7 +44,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 	} else {
 		tempPath, dirCleanup := testutils.TempDir(t)
 		path = tempPath
-		ngn, err := engine.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{Dir: tempPath})
+		ngn, err := storage.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{Dir: tempPath})
 		if err != nil {
 			t.Fatal(err)
 		}

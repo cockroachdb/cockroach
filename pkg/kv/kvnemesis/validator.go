@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -69,7 +69,7 @@ func Validate(steps []Step, kvs *Engine) []error {
 		v.processOp(nil /* txnID */, s.Op)
 	}
 
-	var extraKVs []engine.MVCCKeyValue
+	var extraKVs []storage.MVCCKeyValue
 	for _, kv := range v.kvByValue {
 		extraKVs = append(extraKVs, kv)
 	}
@@ -82,14 +82,14 @@ func Validate(steps []Step, kvs *Engine) []error {
 }
 
 type validator struct {
-	kvByValue map[string]engine.MVCCKeyValue
-	kvsByTxn  map[string][]engine.MVCCKeyValue
+	kvByValue map[string]storage.MVCCKeyValue
+	kvsByTxn  map[string][]storage.MVCCKeyValue
 
 	failures []error
 }
 
 func makeValidator(kvs *Engine) *validator {
-	kvByValue := make(map[string]engine.MVCCKeyValue)
+	kvByValue := make(map[string]storage.MVCCKeyValue)
 	kvs.kvs.Ascend(func(item btree.Item) bool {
 		kv := item.(btreeItem)
 		value := mustGetStringValue(kv.Value)
@@ -99,12 +99,12 @@ func makeValidator(kvs *Engine) *validator {
 			panic(errors.AssertionFailedf(`invariant violation: value %s was written by two operations %s and %s`,
 				value, existing.Key, kv.Key))
 		}
-		kvByValue[value] = engine.MVCCKeyValue(kv)
+		kvByValue[value] = storage.MVCCKeyValue(kv)
 		return true
 	})
 	return &validator{
 		kvByValue: kvByValue,
-		kvsByTxn:  make(map[string][]engine.MVCCKeyValue),
+		kvsByTxn:  make(map[string][]storage.MVCCKeyValue),
 	}
 }
 
@@ -236,7 +236,7 @@ func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operati
 	}
 }
 
-func (v *validator) checkCommittedTxn(atomicType string, txnKVs []engine.MVCCKeyValue) {
+func (v *validator) checkCommittedTxn(atomicType string, txnKVs []storage.MVCCKeyValue) {
 	// If the same key is written multiple times in a transaction, only the last
 	// one makes it to kv.
 	lastWriteIdxByKey := make(map[string]int, len(txnKVs))
@@ -274,7 +274,7 @@ func (v *validator) checkCommittedTxn(atomicType string, txnKVs []engine.MVCCKey
 	}
 }
 
-func (v *validator) checkAmbiguousTxn(atomicType string, txnKVs []engine.MVCCKeyValue) {
+func (v *validator) checkAmbiguousTxn(atomicType string, txnKVs []storage.MVCCKeyValue) {
 	var somethingCommitted bool
 	for _, kv := range txnKVs {
 		if !kv.Key.Timestamp.IsEmpty() {
@@ -289,7 +289,7 @@ func (v *validator) checkAmbiguousTxn(atomicType string, txnKVs []engine.MVCCKey
 	}
 }
 
-func (v *validator) checkUncommittedTxn(atomicType string, txnKVs []engine.MVCCKeyValue) {
+func (v *validator) checkUncommittedTxn(atomicType string, txnKVs []storage.MVCCKeyValue) {
 	var failure string
 	for _, kv := range txnKVs {
 		if kv.Key.Timestamp.IsEmpty() {
@@ -363,7 +363,7 @@ func mustGetStringValue(value []byte) string {
 	return string(value)
 }
 
-func printKVs(kvs ...engine.MVCCKeyValue) string {
+func printKVs(kvs ...storage.MVCCKeyValue) string {
 	sort.Slice(kvs, func(i, j int) bool { return kvs[i].Key.Less(kvs[j].Key) })
 
 	var buf strings.Builder

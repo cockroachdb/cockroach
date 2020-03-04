@@ -24,7 +24,7 @@ export class TableInfo {
   public numColumns: number;
   public numIndices: number;
   public physicalSize: number;
-  public mvccSize: protos.cockroach.storage.engine.enginepb.IMVCCStats;
+  public mvccSize: protos.cockroach.storage.enginepb.IMVCCStats;
   public rangeCount: number;
   public createStatement: string;
   public grants: protos.cockroach.server.serverpb.TableDetailsResponse.IGrant[];
