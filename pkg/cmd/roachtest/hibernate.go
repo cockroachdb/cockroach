@@ -44,9 +44,9 @@ func registerHibernate(r *testRegistry) {
 
 		// TODO(rafi): Once our fork is merged into the main repo, go back to
 		// fetching the latest tag. For now, always use the
-		// `HHH-13724-cockroachdb-support` branch, where we are building the
+		// `HHH-13724-cockroachdb-dialects` branch, where we are building the
 		// dialect.
-		latestTag := "HHH-13724-cockroachdb-support"
+		latestTag := "HHH-13724-cockroachdb-dialects"
 		//t.Status("cloning hibernate and installing prerequisites")
 		//latestTag, err := repeatGetLatestTag(
 		//	ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
