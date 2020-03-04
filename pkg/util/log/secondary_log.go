@@ -44,6 +44,9 @@ var secondaryLogRegistry struct {
 // in which case it specifies the directory for that new logger.
 //
 // The logger's GC daemon stops when the provided context is canceled.
+//
+// The caller is responsible for ensuring the Close() method is
+// eventually called.
 func NewSecondaryLogger(
 	ctx context.Context,
 	dirName *DirName,
@@ -79,31 +82,28 @@ func NewSecondaryLogger(
 	secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers, l)
 	secondaryLogRegistry.mu.Unlock()
 
-	// Make the registry forget about this logger when the context is
-	// canceled. This avoids stacking many secondary loggers together
-	// when there are subsequent tests starting servers in the same
-	// package.
-	go func() {
-		// Wait for the stopper to say "goodbye".
-		<-ctx.Done()
-		// De-register.
-		secondaryLogRegistry.mu.Lock()
-		defer secondaryLogRegistry.mu.Unlock()
-		for i, thatLogger := range secondaryLogRegistry.mu.loggers {
-			if thatLogger != l {
-				continue
-			}
-			secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers[:i], secondaryLogRegistry.mu.loggers[i+1:]...)
-			return
-		}
-	}()
-
 	if enableGc {
 		// Start the log file GC for the secondary logger.
 		go l.logger.gcDaemon(ctx)
 	}
 
 	return l
+}
+
+// Close implements the stopper.Closer interface.
+func (l *SecondaryLogger) Close() {
+	// Make the registry forget about this logger. This avoids
+	// stacking many secondary loggers together when there are
+	// subsequent tests starting servers in the same package.
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for i, thatLogger := range secondaryLogRegistry.mu.loggers {
+		if thatLogger != l {
+			continue
+		}
+		secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers[:i], secondaryLogRegistry.mu.loggers[i+1:]...)
+		return
+	}
 }
 
 func (l *SecondaryLogger) output(
