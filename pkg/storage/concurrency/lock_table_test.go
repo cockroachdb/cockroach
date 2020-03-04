@@ -1044,6 +1044,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			return
 		}
 	}
+	env.lt.Dequeue(g)
 	env.lm.Release(lg)
 	if len(item.locksToAcquire) == 0 {
 		doneCh <- nil
