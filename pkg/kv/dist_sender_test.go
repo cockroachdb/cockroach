@@ -1184,7 +1184,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		Settings:   cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
 	if _, err := client.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -1280,7 +1280,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		Settings:   cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
 	if _, err := client.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -1398,7 +1398,7 @@ func TestSendRPCRetry(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
 	sr, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{MaxSpanRequestKeys: 1}, scan)
 	if err != nil {
 		t.Fatal(err)
@@ -1601,8 +1601,8 @@ func TestMultiRangeGapReverse(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Txn = &txn
-	ba.Add(roachpb.NewReverseScan(splits[0], splits[1]))
-	ba.Add(roachpb.NewReverseScan(splits[2], splits[3]))
+	ba.Add(roachpb.NewReverseScan(splits[0], splits[1], false))
+	ba.Add(roachpb.NewReverseScan(splits[2], splits[3], false))
 
 	// Before fixing https://github.com/cockroachdb/cockroach/issues/18174, this
 	// would error with:
@@ -1705,7 +1705,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 		MaxSpanRequestKeys: 10,
@@ -2050,7 +2050,10 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	// only the scan on local keys that address from "b" to "d".
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &roachpb.Transaction{Name: "test"}
-	ba.Add(roachpb.NewScan(keys.RangeDescriptorKey(roachpb.RKey("a")), keys.RangeDescriptorKey(roachpb.RKey("c"))))
+	ba.Add(roachpb.NewScan(
+		keys.RangeDescriptorKey(roachpb.RKey("a")),
+		keys.RangeDescriptorKey(roachpb.RKey("c")),
+		false /* forUpdate */))
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
@@ -3219,7 +3222,7 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 		ds := NewDistSender(cfg, g)
 
-		scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("b"))
+		scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), false)
 		if _, pErr := client.SendWrapped(context.Background(), ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
@@ -3235,7 +3238,7 @@ func TestEvictMetaRange(t *testing.T) {
 		// Simulate a split on the meta2 range and mark it as stale.
 		isStale = true
 
-		scan = roachpb.NewScan(roachpb.Key("b"), roachpb.Key("c"))
+		scan = roachpb.NewScan(roachpb.Key("b"), roachpb.Key("c"), false)
 		if _, pErr := client.SendWrapped(context.Background(), ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}

@@ -416,6 +416,7 @@ func (db *DB) scan(
 	begin, end interface{},
 	maxRows int64,
 	isReverse bool,
+	forUpdate bool,
 	readConsistency roachpb.ReadConsistencyType,
 ) ([]KeyValue, error) {
 	b := &Batch{}
@@ -423,11 +424,7 @@ func (db *DB) scan(
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
-	if !isReverse {
-		b.Scan(begin, end)
-	} else {
-		b.ReverseScan(begin, end)
-	}
+	b.scan(begin, end, isReverse, forUpdate)
 	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Rows, err
 }
@@ -439,7 +436,20 @@ func (db *DB) scan(
 //
 // key can be either a byte slice or a string.
 func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false, roachpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, false /* forUpdate */, roachpb.CONSISTENT)
+}
+
+// ScanForUpdate retrieves the rows between begin (inclusive) and end
+// (exclusive) in ascending order. Unreplicated, exclusive locks are
+// acquired on each of the returned keys.
+//
+// The returned []KeyValue will contain up to maxRows elements.
+//
+// key can be either a byte slice or a string.
+func (db *DB) ScanForUpdate(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, true /* forUpdate */, roachpb.CONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -451,7 +461,20 @@ func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) (
 func (db *DB) ReverseScan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true, roachpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, false /* forUpdate */, roachpb.CONSISTENT)
+}
+
+// ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
+// (exclusive) in descending order. Unreplicated, exclusive locks are acquired
+// on each of the returned keys.
+//
+// The returned []KeyValue will contain up to maxRows elements.
+//
+// key can be either a byte slice or a string.
+func (db *DB) ReverseScanForUpdate(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, true /* forUpdate */, roachpb.CONSISTENT)
 }
 
 // Del deletes one or more keys.

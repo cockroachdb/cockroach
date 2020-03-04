@@ -431,17 +431,13 @@ func (txn *Txn) Inc(ctx context.Context, key interface{}, value int64) (KeyValue
 }
 
 func (txn *Txn) scan(
-	ctx context.Context, begin, end interface{}, maxRows int64, isReverse bool,
+	ctx context.Context, begin, end interface{}, maxRows int64, isReverse, forUpdate bool,
 ) ([]KeyValue, error) {
 	b := txn.NewBatch()
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
-	if !isReverse {
-		b.Scan(begin, end)
-	} else {
-		b.ReverseScan(begin, end)
-	}
+	b.scan(begin, end, isReverse, forUpdate)
 	r, err := getOneResult(txn.Run(ctx, b), b)
 	return r.Rows, err
 }
@@ -456,7 +452,21 @@ func (txn *Txn) scan(
 func (txn *Txn) Scan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false)
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, false /* forUpdate */)
+}
+
+// ScanForUpdate retrieves the rows between begin (inclusive) and end
+// (exclusive) in ascending order. Unreplicated, exclusive locks are acquired on
+// each of the returned keys.
+//
+// The returned []KeyValue will contain up to maxRows elements (or all results
+// when zero is supplied).
+//
+// key can be either a byte slice or a string.
+func (txn *Txn) ScanForUpdate(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, true /* forUpdate */)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -469,7 +479,21 @@ func (txn *Txn) Scan(
 func (txn *Txn) ReverseScan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true)
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, false /* forUpdate */)
+}
+
+// ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
+// (exclusive) in descending order. Unreplicated, exclusive locks are acquired
+// on each of the returned keys.
+//
+// The returned []KeyValue will contain up to maxRows elements (or all results
+// when zero is supplied).
+//
+// key can be either a byte slice or a string.
+func (txn *Txn) ReverseScanForUpdate(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, true /* forUpdate */)
 }
 
 // Iterate performs a paginated scan and applying the function f to every page.

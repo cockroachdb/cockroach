@@ -237,6 +237,31 @@ func TestDB_Scan(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_ScanForUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(context.TODO(), b); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.ScanForUpdate(context.TODO(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"aa": []byte("1"),
+		"ab": []byte("2"),
+	}
+
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+}
+
 func TestDB_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
@@ -250,6 +275,31 @@ func TestDB_ReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows, err := db.ReverseScan(context.TODO(), "ab", "c", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"bb": []byte("3"),
+		"ab": []byte("2"),
+	}
+
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+}
+
+func TestDB_ReverseScanForUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	b := &client.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(context.TODO(), b); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.ReverseScanForUpdate(context.TODO(), "ab", "c", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
