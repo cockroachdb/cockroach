@@ -291,7 +291,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 	},
 	{
-		// Introduced in v20.1.,
+		// Introduced in v20.1.
 		name:                "create system.role_options table with an entry for (admin, CREATEROLE)",
 		workFn:              createRoleOptionsTable,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionCreateRolePrivilege),
@@ -306,6 +306,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionStatementDiagnosticsSystemTables),
 		newDescriptorIDs: staticIDs(keys.StatementBundleChunksTableID,
 			keys.StatementDiagnosticsRequestsTableID, keys.StatementDiagnosticsTableID),
+	},
+	{
+		// Introduced in v20.1.
+		name:   "remove public permissions on system.comments",
+		workFn: depublicizeSystemComments,
 	},
 }
 
@@ -1088,6 +1093,22 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 		if err := r.execAsRoot(ctx, "update-system-locations",
 			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude,
 		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func depublicizeSystemComments(ctx context.Context, r runner) error {
+	// At some point in time, system.comments was mistakenly created
+	// with all privileges granted to the "public" role (i.e. everyone).
+	// This migration cleans this up.
+
+	for _, priv := range []string{"GRANT", "INSERT", "DELETE", "UPDATE"} {
+		stmt := fmt.Sprintf(`REVOKE %s ON TABLE system.comments FROM public`, priv)
+		// REVOKE should never fail here -- it's always possible for root
+		// to revoke a privilege even if it's not currently granted.
+		if err := r.execAsRoot(ctx, "depublicize-system-comments", stmt); err != nil {
 			return err
 		}
 	}
