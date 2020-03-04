@@ -434,16 +434,30 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 		return cl, (tightl || cl == contradiction)
 
 	case *OrExpr:
-		cl, _ := cb.buildConstraints(t.Left)
-		cr, _ := cb.buildConstraints(t.Right)
+		cl, tightl := cb.buildConstraints(t.Left)
+		cr, tightr := cb.buildConstraints(t.Right)
+
+		// Check whether both sides have the same single column.
+		var singleCol bool
+		if cl.Length() == 1 && cr.Length() == 1 {
+			colsl := cl.Constraint(0).Columns
+			if colsl.Count() == 1 && colsl.Equals(&cr.Constraint(0).Columns) {
+				singleCol = true
+			}
+		}
+
 		cl = cl.Union(cb.evalCtx, cr)
 
-		// The union may not be "tight" because the  new constraint set might allow
-		// additional combinations of values that neither of the input sets allowed. For
-		// example:
+		// The union may not be "tight" because the new constraint set might allow
+		// additional combinations of values that neither of the input sets allowed.
+		// For example:
 		//   (x > 1 AND y > 10) OR (x < 5 AND y < 50)
 		// the union is unconstrained (and thus allows combinations like x,y = 10,0).
-		return cl, false
+		//
+		// An exception is if we know the constraint only involves a single column.
+		// In this case, we can determine tightness based on the tightness of the
+		// input sets.
+		return cl, singleCol && tightl && tightr
 
 	case *RangeExpr:
 		return cb.buildConstraints(t.And)
