@@ -34,6 +34,6 @@ select_in.eg.go
 sort.eg.go
 substring.eg.go
 sum_agg.eg.go
-tuples_differ.eg.go
+values_differ.eg.go
 vec_comparators.eg.go
 window_peer_grouper.eg.go
