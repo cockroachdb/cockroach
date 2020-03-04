@@ -162,6 +162,7 @@ func initCLIDefaults() {
 	demoCtx.disableTelemetry = false
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
+	demoCtx.insecure = false
 
 	authCtx.validityPeriod = 1 * time.Hour
 
@@ -378,4 +379,5 @@ var demoCtx struct {
 	geoPartitionedReplicas    bool
 	simulateLatency           bool
 	transientCluster          *transientCluster
+	insecure                  bool
 }
