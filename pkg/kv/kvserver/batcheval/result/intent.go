@@ -55,10 +55,10 @@ type EndTxnIntents struct {
 }
 
 // FromEndTxn creates a Result communicating that a transaction was
-// completed and its intents should be resolved.
+// completed and its locks should be resolved.
 func FromEndTxn(txn *roachpb.Transaction, alwaysReturn, poison bool) Result {
 	var pd Result
-	if len(txn.IntentSpans) == 0 {
+	if len(txn.LockSpans) == 0 {
 		return pd
 	}
 	pd.Local.EndTxns = []EndTxnIntents{{Txn: txn, Always: alwaysReturn, Poison: poison}}

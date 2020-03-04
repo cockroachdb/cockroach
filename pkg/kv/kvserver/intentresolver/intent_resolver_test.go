@@ -461,7 +461,7 @@ func (sf *sendFuncs) drain(t *testing.T) {
 func TestCleanupTxnIntentsAsyncWithPartialRollback(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
-	txn.IntentSpans = []roachpb.Span{
+	txn.LockSpans = []roachpb.Span{
 		{Key: roachpb.Key("a")},
 		{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 	}
@@ -529,7 +529,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 					ID:           uuid.MakeV4(),
 					MinTimestamp: hlc.Timestamp{WallTime: 123},
 				},
-				IntentSpans: []roachpb.Span{
+				LockSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
 				},
 			},
@@ -595,7 +595,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 		{
 			Txn: &roachpb.Transaction{
 				TxnMeta: txn1.TxnMeta,
-				IntentSpans: []roachpb.Span{
+				LockSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
 					{Key: roachpb.Key("b")},
 				},
@@ -604,7 +604,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 		{
 			Txn: &roachpb.Transaction{
 				TxnMeta: txn2.TxnMeta,
-				IntentSpans: []roachpb.Span{
+				LockSpans: []roachpb.Span{
 					{Key: roachpb.Key("c")},
 					{Key: roachpb.Key("d")},
 				},

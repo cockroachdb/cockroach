@@ -139,19 +139,18 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 		}
 	}
 
-	// Verify that the transaction coordinator is only tracking two intent
+	// Verify that the transaction coordinator is only tracking two lock
 	// spans. "a" and range "aa"-"c".
 	tc.interceptorAlloc.txnPipeliner.footprint.mergeAndSort()
-	intentSpans := tc.interceptorAlloc.txnPipeliner.footprint.asSlice()
-	if len(intentSpans) != 2 {
-		t.Errorf("expected 2 entries in keys range group; got %v", intentSpans)
+	lockSpans := tc.interceptorAlloc.txnPipeliner.footprint.asSlice()
+	if len(lockSpans) != 2 {
+		t.Errorf("expected 2 entries in keys range group; got %v", lockSpans)
 	}
 }
 
-// TestTxnCoordSenderCondenseIntentSpans verifies that intent spans
-// are condensed along range boundaries when they exceed the maximum
-// intent bytes threshold.
-func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
+// TestTxnCoordSenderCondenseLockSpans verifies that lock spans are condensed
+// along range boundaries when they exceed the maximum intent bytes threshold.
+func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	a := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key(nil)}
 	b := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key(nil)}
@@ -214,7 +213,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 				t.Errorf("expected commit to be true")
 			}
 			et := req.(*roachpb.EndTxnRequest)
-			if a, e := et.IntentSpans, expIntents; !reflect.DeepEqual(a, e) {
+			if a, e := et.LockSpans, expIntents; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected end transaction to have intents %+v; got %+v", e, a)
 			}
 			resp.Txn.Status = roachpb.COMMITTED
@@ -542,14 +541,14 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 		}
 	}
 	tc.interceptorAlloc.txnPipeliner.footprint.mergeAndSort()
-	intentSpans := tc.interceptorAlloc.txnPipeliner.footprint.asSlice()
+	lockSpans := tc.interceptorAlloc.txnPipeliner.footprint.asSlice()
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
-	equal := !reflect.DeepEqual(intentSpans, expSpans)
+	equal := !reflect.DeepEqual(lockSpans, expSpans)
 	if err := txn.Rollback(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !equal {
-		t.Fatalf("expected stored intents %v, got %v", expSpans, intentSpans)
+		t.Fatalf("expected stored intents %v, got %v", expSpans, lockSpans)
 	}
 }
 
@@ -936,8 +935,8 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		br.Txn = ba.Txn.Clone()
 		if rArgs, ok := ba.GetArg(roachpb.EndTxn); ok {
 			et := rArgs.(*roachpb.EndTxnRequest)
-			if !reflect.DeepEqual(et.IntentSpans, expectedIntents) {
-				t.Errorf("Invalid intents: %+v; expected %+v", et.IntentSpans, expectedIntents)
+			if !reflect.DeepEqual(et.LockSpans, expectedIntents) {
+				t.Errorf("Invalid intents: %+v; expected %+v", et.LockSpans, expectedIntents)
 			}
 			br.Txn.Status = roachpb.COMMITTED
 		}
@@ -1493,7 +1492,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 			return nil, nil
 		}
 		expIntents := []roachpb.Span{{Key: key}}
-		intents := etReq.IntentSpans
+		intents := etReq.LockSpans
 		if !reflect.DeepEqual(intents, expIntents) {
 			return nil, roachpb.NewErrorf("expected intents %s, got: %s", expIntents, intents)
 		}

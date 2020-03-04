@@ -39,54 +39,54 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 	scan3.Sequence = 3
 	et := &roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}, Commit: true}
 	et.Sequence = 4
-	et.IntentSpans = []roachpb.Span{{Key: keyC}}
+	et.LockSpans = []roachpb.Span{{Key: keyC}}
 	et.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}}
 	testCases := []struct {
-		reqs           []roachpb.Request
-		expIFW         []roachpb.SequencedWrite
-		expIntentSpans []roachpb.Span
-		expErr         string
+		reqs         []roachpb.Request
+		expIFW       []roachpb.SequencedWrite
+		expLockSpans []roachpb.Span
+		expErr       string
 	}{
 		{
-			reqs:           []roachpb.Request{et},
-			expIFW:         []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}},
-			expIntentSpans: []roachpb.Span{{Key: keyC}},
+			reqs:         []roachpb.Request{et},
+			expIFW:       []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}},
+			expLockSpans: []roachpb.Span{{Key: keyC}},
 		},
 		// QueryIntents aren't stripped from the in-flight writes set on the
 		// slow-path of maybeStripInFlightWrites. This is intentional.
 		{
-			reqs:           []roachpb.Request{qi1, et},
-			expIFW:         []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}},
-			expIntentSpans: []roachpb.Span{{Key: keyC}},
+			reqs:         []roachpb.Request{qi1, et},
+			expIFW:       []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}},
+			expLockSpans: []roachpb.Span{{Key: keyC}},
 		},
 		{
-			reqs:           []roachpb.Request{put2, et},
-			expIFW:         []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}},
-			expIntentSpans: []roachpb.Span{{Key: keyB}, {Key: keyC}},
+			reqs:         []roachpb.Request{put2, et},
+			expIFW:       []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}},
+			expLockSpans: []roachpb.Span{{Key: keyB}, {Key: keyC}},
 		},
 		{
 			reqs:   []roachpb.Request{put3, et},
 			expErr: "write in batch with EndTxn missing from in-flight writes",
 		},
 		{
-			reqs:           []roachpb.Request{qi1, put2, et},
-			expIFW:         nil,
-			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+			reqs:         []roachpb.Request{qi1, put2, et},
+			expIFW:       nil,
+			expLockSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
 		},
 		{
-			reqs:           []roachpb.Request{qi1, put2, delRng3, et},
-			expIFW:         nil,
-			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+			reqs:         []roachpb.Request{qi1, put2, delRng3, et},
+			expIFW:       nil,
+			expLockSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
 		},
 		{
-			reqs:           []roachpb.Request{qi1, put2, scan3, et},
-			expIFW:         nil,
-			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+			reqs:         []roachpb.Request{qi1, put2, scan3, et},
+			expIFW:       nil,
+			expLockSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
 		},
 		{
-			reqs:           []roachpb.Request{qi1, put2, delRng3, scan3, et},
-			expIFW:         nil,
-			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+			reqs:         []roachpb.Request{qi1, put2, delRng3, scan3, et},
+			expIFW:       nil,
+			expLockSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
 		},
 	}
 	for _, c := range testCases {
@@ -103,8 +103,8 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 				if !reflect.DeepEqual(resEt.InFlightWrites, c.expIFW) {
 					t.Errorf("expected in-flight writes %v, got %v", c.expIFW, resEt.InFlightWrites)
 				}
-				if !reflect.DeepEqual(resEt.IntentSpans, c.expIntentSpans) {
-					t.Errorf("expected intent spans %v, got %v", c.expIntentSpans, resEt.IntentSpans)
+				if !reflect.DeepEqual(resEt.LockSpans, c.expLockSpans) {
+					t.Errorf("expected lock spans %v, got %v", c.expLockSpans, resEt.LockSpans)
 				}
 			} else {
 				if !testutils.IsError(err, c.expErr) {

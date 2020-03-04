@@ -50,20 +50,20 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 	}
 
 	// Clone the BatchRequest and the EndTxn request before modifying it. We nil
-	// out the request's in-flight writes and make the intent spans immutable on
+	// out the request's in-flight writes and make the lock spans immutable on
 	// append. Code below can use origET to recreate the in-flight write set if
 	// any elements remain in it.
 	origET := et
 	et = origET.ShallowCopy().(*roachpb.EndTxnRequest)
 	et.InFlightWrites = nil
-	et.IntentSpans = et.IntentSpans[:len(et.IntentSpans):len(et.IntentSpans)] // immutable
+	et.LockSpans = et.LockSpans[:len(et.LockSpans):len(et.LockSpans)] // immutable
 	ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests...)
 	ba.Requests[len(ba.Requests)-1].MustSetInner(et)
 
 	// Fast-path: If we know that this batch contains all of the transaction's
 	// in-flight writes, then we can avoid searching in the in-flight writes set
 	// for each request. Instead, we can blindly merge all in-flight writes into
-	// the intent spans and clear out the in-flight writes set.
+	// the lock spans and clear out the in-flight writes set.
 	if len(otherReqs) >= len(origET.InFlightWrites) {
 		writes := 0
 		for _, ru := range otherReqs {
@@ -82,19 +82,19 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		if len(origET.InFlightWrites) < writes {
 			return ba, errors.New("more write in batch with EndTxn than listed in in-flight writes")
 		} else if len(origET.InFlightWrites) == writes {
-			et.IntentSpans = make([]roachpb.Span, len(origET.IntentSpans)+len(origET.InFlightWrites))
-			copy(et.IntentSpans, origET.IntentSpans)
+			et.LockSpans = make([]roachpb.Span, len(origET.LockSpans)+len(origET.InFlightWrites))
+			copy(et.LockSpans, origET.LockSpans)
 			for i, w := range origET.InFlightWrites {
-				et.IntentSpans[len(origET.IntentSpans)+i] = roachpb.Span{Key: w.Key}
+				et.LockSpans[len(origET.LockSpans)+i] = roachpb.Span{Key: w.Key}
 			}
 			// See below for why we set Header.DistinctSpans here.
-			et.IntentSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.IntentSpans)
+			et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
 			return ba, nil
 		}
 	}
 
 	// Slow-path: If not then we remove each transaction write in the batch from
-	// the in-flight write set and merge it into the intent spans.
+	// the in-flight write set and merge it into the lock spans.
 	copiedTo := 0
 	for _, ru := range otherReqs {
 		req := ru.GetInner()
@@ -147,20 +147,20 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		et.InFlightWrites = append(et.InFlightWrites, notInBa...)
 		copiedTo = match + 1
 
-		// Move the write to the intent spans set since it's
-		// no longer being tracked in the in-flight write set.
-		et.IntentSpans = append(et.IntentSpans, roachpb.Span{Key: w.Key})
+		// Move the write to the lock spans set since it's no
+		// longer being tracked in the in-flight write set.
+		et.LockSpans = append(et.LockSpans, roachpb.Span{Key: w.Key})
 	}
 	if et != origET {
 		// Finish building up the remaining in-flight writes.
 		notInBa := origET.InFlightWrites[copiedTo:]
 		et.InFlightWrites = append(et.InFlightWrites, notInBa...)
-		// Re-sort and merge the intent spans. We can set the batch request's
+		// Re-sort and merge the lock spans. We can set the batch request's
 		// DistinctSpans flag based on whether any of in-flight writes in this
 		// batch overlap with each other. This will have (rare) false negatives
-		// when the in-flight writes overlap with existing intent spans, but
-		// never false positives.
-		et.IntentSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.IntentSpans)
+		// when the in-flight writes overlap with existing lock spans, but never
+		// false positives.
+		et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
 	}
 	return ba, nil
 }

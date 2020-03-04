@@ -4408,16 +4408,16 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
 
   // accessors -------------------------------------------------------
 
-  int intent_spans_size() const;
-  void clear_intent_spans();
-  static const int kIntentSpansFieldNumber = 5;
-  ::cockroach::roachpb::Span* mutable_intent_spans(int index);
+  int lock_spans_size() const;
+  void clear_lock_spans();
+  static const int kLockSpansFieldNumber = 5;
+  ::cockroach::roachpb::Span* mutable_lock_spans(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_intent_spans();
-  const ::cockroach::roachpb::Span& intent_spans(int index) const;
-  ::cockroach::roachpb::Span* add_intent_spans();
+      mutable_lock_spans();
+  const ::cockroach::roachpb::Span& lock_spans(int index) const;
+  ::cockroach::roachpb::Span* add_lock_spans();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intent_spans() const;
+      lock_spans() const;
 
   int in_flight_writes_size() const;
   void clear_in_flight_writes();
@@ -4492,7 +4492,7 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > lock_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
   ::cockroach::roachpb::RequestHeader* header_;
   ::cockroach::util::hlc::Timestamp* deadline_;
@@ -19935,30 +19935,30 @@ inline void EndTxnRequest::set_allocated_internal_commit_trigger(::cockroach::ro
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.EndTxnRequest.internal_commit_trigger)
 }
 
-inline int EndTxnRequest::intent_spans_size() const {
-  return intent_spans_.size();
+inline int EndTxnRequest::lock_spans_size() const {
+  return lock_spans_.size();
 }
-inline ::cockroach::roachpb::Span* EndTxnRequest::mutable_intent_spans(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTxnRequest.intent_spans)
-  return intent_spans_.Mutable(index);
+inline ::cockroach::roachpb::Span* EndTxnRequest::mutable_lock_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTxnRequest.lock_spans)
+  return lock_spans_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-EndTxnRequest::mutable_intent_spans() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTxnRequest.intent_spans)
-  return &intent_spans_;
+EndTxnRequest::mutable_lock_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTxnRequest.lock_spans)
+  return &lock_spans_;
 }
-inline const ::cockroach::roachpb::Span& EndTxnRequest::intent_spans(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTxnRequest.intent_spans)
-  return intent_spans_.Get(index);
+inline const ::cockroach::roachpb::Span& EndTxnRequest::lock_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTxnRequest.lock_spans)
+  return lock_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Span* EndTxnRequest::add_intent_spans() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTxnRequest.intent_spans)
-  return intent_spans_.Add();
+inline ::cockroach::roachpb::Span* EndTxnRequest::add_lock_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTxnRequest.lock_spans)
+  return lock_spans_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-EndTxnRequest::intent_spans() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTxnRequest.intent_spans)
-  return intent_spans_;
+EndTxnRequest::lock_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTxnRequest.lock_spans)
+  return lock_spans_;
 }
 
 inline int EndTxnRequest::in_flight_writes_size() const {

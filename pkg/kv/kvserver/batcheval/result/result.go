@@ -35,9 +35,9 @@ type LocalResult struct {
 	EncounteredIntents []roachpb.Intent
 	// WrittenIntents stores any newly written or re-written intents.
 	WrittenIntents []roachpb.LockUpdate
-	// ResolvedIntents stores any resolved intent spans, either with finalized
-	// or pending statuses. Unlike WrittenIntents and EncounteredIntents, values
-	// in this slice will represent spans of intents that were resolved.
+	// ResolvedIntents stores any resolved lock spans, either with finalized or
+	// pending statuses. Unlike WrittenIntents and EncounteredIntents, values in
+	// this slice will represent spans of intents that were resolved.
 	ResolvedIntents []roachpb.LockUpdate
 	// UpdatedTxns stores transaction records that have been updated by
 	// calls to EndTxn, PushTxn, and RecoverTxn.

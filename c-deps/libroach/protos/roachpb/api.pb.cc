@@ -10306,8 +10306,8 @@ void EndTxnRequest::clear_internal_commit_trigger() {
   }
   internal_commit_trigger_ = NULL;
 }
-void EndTxnRequest::clear_intent_spans() {
-  intent_spans_.Clear();
+void EndTxnRequest::clear_lock_spans() {
+  lock_spans_.Clear();
 }
 void EndTxnRequest::clear_in_flight_writes() {
   in_flight_writes_.Clear();
@@ -10317,7 +10317,7 @@ const int EndTxnRequest::kHeaderFieldNumber;
 const int EndTxnRequest::kCommitFieldNumber;
 const int EndTxnRequest::kDeadlineFieldNumber;
 const int EndTxnRequest::kInternalCommitTriggerFieldNumber;
-const int EndTxnRequest::kIntentSpansFieldNumber;
+const int EndTxnRequest::kLockSpansFieldNumber;
 const int EndTxnRequest::kInFlightWritesFieldNumber;
 const int EndTxnRequest::kRequire1PcFieldNumber;
 const int EndTxnRequest::kCanCommitAtHigherTimestampFieldNumber;
@@ -10334,7 +10334,7 @@ EndTxnRequest::EndTxnRequest()
 EndTxnRequest::EndTxnRequest(const EndTxnRequest& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      intent_spans_(from.intent_spans_),
+      lock_spans_(from.lock_spans_),
       in_flight_writes_(from.in_flight_writes_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
@@ -10390,7 +10390,7 @@ void EndTxnRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  intent_spans_.Clear();
+  lock_spans_.Clear();
   in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
@@ -10479,7 +10479,7 @@ bool EndTxnRequest::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intent_spans()));
+                input, add_lock_spans()));
         } else {
           goto handle_unusual;
         }
@@ -10587,10 +10587,10 @@ void EndTxnRequest::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intent_spans_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->lock_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       5,
-      this->intent_spans(static_cast<int>(i)),
+      this->lock_spans(static_cast<int>(i)),
       output);
   }
 
@@ -10628,12 +10628,12 @@ size_t EndTxnRequest::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->intent_spans_size());
+    unsigned int count = static_cast<unsigned int>(this->lock_spans_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intent_spans(static_cast<int>(i)));
+          this->lock_spans(static_cast<int>(i)));
     }
   }
 
@@ -10703,7 +10703,7 @@ void EndTxnRequest::MergeFrom(const EndTxnRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  intent_spans_.MergeFrom(from.intent_spans_);
+  lock_spans_.MergeFrom(from.lock_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
@@ -10745,7 +10745,7 @@ void EndTxnRequest::Swap(EndTxnRequest* other) {
 }
 void EndTxnRequest::InternalSwap(EndTxnRequest* other) {
   using std::swap;
-  CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
+  CastToBase(&lock_spans_)->InternalSwap(CastToBase(&other->lock_spans_));
   CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
   swap(header_, other->header_);
   swap(deadline_, other->deadline_);

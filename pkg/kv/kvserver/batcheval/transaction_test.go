@@ -83,7 +83,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 			RequestHeader: roachpb.RequestHeader{Key: txnKey},
 			Commit:        commit,
 			Poison:        poison,
-			IntentSpans:   []roachpb.Span{{Key: intentKey}},
+			LockSpans:     []roachpb.Span{{Key: intentKey}},
 		}
 		args := CommandArgs{
 			EvalCtx: rec,

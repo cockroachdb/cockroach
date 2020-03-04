@@ -463,8 +463,8 @@ func (r *Replica) evaluate1PC(
 	res.Local.UpdatedTxns = []*roachpb.Transaction{clonedTxn}
 	// TODO(nvanbenschoten): do something like the following once unreplicated
 	// lock spans are added to EndTxn request.
-	// res.Local.ResolvedIntents = make([]roachpb.LockUpdate, len(etArg.IntentSpans))
-	// for i, sp := range etArg.IntentSpans {
+	// res.Local.ResolvedIntents = make([]roachpb.LockUpdate, len(etArg.LockSpans))
+	// for i, sp := range etArg.LockSpans {
 	// 	res.Local.ResolvedIntents[i] = roachpb.LockUpdate{
 	// 		Span:           sp,
 	// 		Txn:            clonedTxn.TxnMeta,

@@ -67,20 +67,20 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	stagingRecord := func() *roachpb.TransactionRecord {
 		record := txn.AsRecord()
 		record.Status = roachpb.STAGING
-		record.IntentSpans = intents
+		record.LockSpans = intents
 		record.InFlightWrites = writes
 		return &record
 	}()
 	committedRecord := func() *roachpb.TransactionRecord {
 		record := txn.AsRecord()
 		record.Status = roachpb.COMMITTED
-		record.IntentSpans = intents
+		record.LockSpans = intents
 		return &record
 	}()
 	abortedRecord := func() *roachpb.TransactionRecord {
 		record := txn.AsRecord()
 		record.Status = roachpb.ABORTED
-		record.IntentSpans = intents
+		record.LockSpans = intents
 		return &record
 	}()
 
@@ -92,7 +92,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		// Request state.
 		headerTxn      *roachpb.Transaction
 		commit         bool
-		noIntentSpans  bool
+		noLockSpans    bool
 		inFlightWrites []roachpb.SequencedWrite
 		deadline       *hlc.Timestamp
 		// Expected result.
@@ -122,9 +122,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			existingTxn:  nil,
 			canCreateTxn: nil, // not needed
 			// Request state.
-			headerTxn:     headerTxn,
-			commit:        false,
-			noIntentSpans: true,
+			headerTxn:   headerTxn,
+			commit:      false,
+			noLockSpans: true,
 			// Expected result.
 			// If the transaction record doesn't exist, a rollback that doesn't
 			// need to record any remote intents won't create it.
@@ -196,12 +196,12 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Request state.
 			headerTxn:      headerTxn,
 			commit:         true,
-			noIntentSpans:  true,
+			noLockSpans:    true,
 			inFlightWrites: writes,
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
-				record.IntentSpans = nil
+				record.LockSpans = nil
 				return &record
 			}(),
 		},
@@ -215,9 +215,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			existingTxn:  nil,
 			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
 			// Request state.
-			headerTxn:     headerTxn,
-			commit:        true,
-			noIntentSpans: true,
+			headerTxn:   headerTxn,
+			commit:      true,
+			noLockSpans: true,
 			// Expected result.
 			// If the transaction record doesn't exist, a commit that doesn't
 			// need to record any remote intents won't create it.
@@ -897,8 +897,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				InFlightWrites: c.inFlightWrites,
 				Deadline:       c.deadline,
 			}
-			if !c.noIntentSpans {
-				req.IntentSpans = intents
+			if !c.noLockSpans {
+				req.LockSpans = intents
 			}
 			var resp roachpb.EndTxnResponse
 			_, err := EndTxn(ctx, batch, CommandArgs{
@@ -1010,7 +1010,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 			RequestHeader:              roachpb.RequestHeader{Key: txn.Key},
 			Commit:                     true,
 			CanCommitAtHigherTimestamp: true,
-			IntentSpans:                intents,
+			LockSpans:                  intents,
 		}
 		var resp roachpb.EndTxnResponse
 		if _, err := EndTxn(ctx, batch, CommandArgs{

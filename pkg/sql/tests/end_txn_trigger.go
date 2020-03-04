@@ -36,7 +36,7 @@ func CheckEndTxnTrigger(args storagebase.FilterArgs) *roachpb.Error {
 	modifiedSystemConfigSpan := modifiedSpanTrigger != nil && modifiedSpanTrigger.SystemConfigSpan
 
 	var hasSystemKey bool
-	for _, span := range req.IntentSpans {
+	for _, span := range req.LockSpans {
 		if bytes.Compare(span.Key, keys.SystemConfigSpan.Key) >= 0 &&
 			bytes.Compare(span.Key, keys.SystemConfigSpan.EndKey) < 0 {
 			hasSystemKey = true

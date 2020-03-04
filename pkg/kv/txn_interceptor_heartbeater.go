@@ -387,7 +387,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	if err := h.stopper.RunAsyncTask(
 		ctx, "txnHeartbeater: aborting txn", func(ctx context.Context) {
 			// Send the abort request through the interceptor stack. This is
-			// important because we need the txnPipeliner to append intent spans
+			// important because we need the txnPipeliner to append lock spans
 			// to the EndTxn request.
 			h.mu.Lock()
 			defer h.mu.Unlock()
