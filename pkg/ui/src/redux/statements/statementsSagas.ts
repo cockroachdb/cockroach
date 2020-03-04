@@ -11,18 +11,31 @@
 import { call, put, takeEvery } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 
-import { createStatementDiagnosticsRequest } from "src/util/api";
-import { REQUEST_STATEMENT_DIAGNOSTICS, EnqueueDiagnosticsPayload, completeStatementDiagnosticsRequest } from "./statementsActions";
+import { createStatementDiagnosticsReport } from "src/util/api";
+import {
+  REQUEST_STATEMENT_DIAGNOSTICS_REPORT,
+  DiagnosticsPayload,
+  completeStatementDiagnosticsReportRequest,
+  failedStatementDiagnosticsReportRequest,
+} from "./statementsActions";
 import { cockroach } from "src/js/protos";
-import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequestsRequest;
+import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+import { refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 
-export function* requestDiagnostics(action: PayloadAction<EnqueueDiagnosticsPayload>) {
+export function* requestDiagnosticsReport(action: PayloadAction<DiagnosticsPayload>) {
   const { statementFingerprint } = action.payload;
-  const statementDiagnosticsRequest = new StatementDiagnosticsRequest({ statement_fingerprint: statementFingerprint });
-  yield call(createStatementDiagnosticsRequest, statementDiagnosticsRequest);
-  yield put(completeStatementDiagnosticsRequest());
+  const diagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest({
+    statement_fingerprint: statementFingerprint,
+  });
+  try {
+    yield call(createStatementDiagnosticsReport, diagnosticsReportRequest);
+    yield put(completeStatementDiagnosticsReportRequest());
+    yield call(refreshStatementDiagnosticsRequests);
+  } catch (e) {
+    yield put(failedStatementDiagnosticsReportRequest());
+  }
 }
 
 export function* statementsSaga() {
-  yield takeEvery(REQUEST_STATEMENT_DIAGNOSTICS, requestDiagnostics);
+  yield takeEvery(REQUEST_STATEMENT_DIAGNOSTICS_REPORT, requestDiagnosticsReport);
 }
