@@ -57,15 +57,19 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	128,
 )
 
-// trackedWritesMaxSize is a threshold in bytes for intent spans stored on the
+// trackedWritesMaxSize is a threshold in bytes for lock spans stored on the
 // coordinator during the lifetime of a transaction. Intents are included with a
 // transaction on commit or abort, to be cleaned up asynchronously. If they
 // exceed this threshold, they're condensed to avoid memory blowup both on the
 // coordinator and (critically) on the EndTxn command at the Raft group
 // responsible for the transaction record.
+//
+// NB: this is called "max_intents_bytes" instead of "max_lock_bytes" because
+// it was created before the concept of intents were generalized to locks.
+// Switching it would require a migration which doesn't seem worth it.
 var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 	"kv.transaction.max_intents_bytes",
-	"maximum number of bytes used to track write intents in transactions",
+	"maximum number of bytes used to track locks in transactions",
 	1<<18, /* 256 KB */
 )
 
@@ -165,8 +169,8 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 // So far, none of these approaches have been integrated.
 type txnPipeliner struct {
 	st *cluster.Settings
-	// Optional; used to condense intent spans, if provided. If not provided,
-	// a transaction's write footprint may grow without bound.
+	// Optional; used to condense lock spans, if provided. If not provided, a
+	// transaction's write footprint may grow without bound.
 	riGen    RangeIteratorGen
 	wrapped  lockedSender
 	disabled bool
@@ -228,16 +232,16 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 		return ba, nil
 	}
 	et := args.(*roachpb.EndTxnRequest)
-	if len(et.IntentSpans) > 0 {
+	if len(et.LockSpans) > 0 {
 		return ba, roachpb.NewErrorf("client must not pass intents to EndTxn")
 	}
 	if len(et.InFlightWrites) > 0 {
 		return ba, roachpb.NewErrorf("client must not pass in-flight writes to EndTxn")
 	}
 
-	// Populate et.IntentSpans and et.InFlightWrites.
+	// Populate et.LockSpans and et.InFlightWrites.
 	if !tp.footprint.empty() {
-		et.IntentSpans = append([]roachpb.Span(nil), tp.footprint.asSlice()...)
+		et.LockSpans = append([]roachpb.Span(nil), tp.footprint.asSlice()...)
 	}
 	if inFlight := tp.ifWrites.len(); inFlight != 0 {
 		et.InFlightWrites = make([]roachpb.SequencedWrite, 0, inFlight)
@@ -246,22 +250,22 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 		})
 	}
 
-	// Augment et.IntentSpans and et.InFlightWrites with writes from
-	// the current batch.
+	// Augment et.LockSpans and et.InFlightWrites with writes from the current
+	// batch.
 	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
 		req := ru.GetInner()
 		h := req.Header()
 		if roachpb.IsIntentWrite(req) {
-			// Ranged writes are added immediately to the intent spans because
+			// Ranged writes are added immediately to the lock spans because
 			// it's not clear where they will actually leave intents. Point
 			// writes are added to the in-flight writes set.
 			//
 			// If we see any ranged writes then we know that the txnCommitter
-			// will fold the in-flight writes into the intent spans immediately
+			// will fold the in-flight writes into the lock spans immediately
 			// and forgo a parallel commit, but let's not break that abstraction
 			// boundary here.
 			if roachpb.IsRange(req) {
-				et.IntentSpans = append(et.IntentSpans, h.Span())
+				et.LockSpans = append(et.LockSpans, h.Span())
 			} else {
 				w := roachpb.SequencedWrite{Key: h.Key, Sequence: h.Sequence}
 				et.InFlightWrites = append(et.InFlightWrites, w)
@@ -269,12 +273,12 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 		}
 	}
 
-	// Sort both sets and condense the intent spans.
-	et.IntentSpans, _ = roachpb.MergeSpans(et.IntentSpans)
+	// Sort both sets and condense the lock spans.
+	et.LockSpans, _ = roachpb.MergeSpans(et.LockSpans)
 	sort.Sort(roachpb.SequencedWriteBySeq(et.InFlightWrites))
 
 	if log.V(3) {
-		for _, intent := range et.IntentSpans {
+		for _, intent := range et.LockSpans {
 			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 		}
 		for _, write := range et.InFlightWrites {
@@ -888,7 +892,7 @@ func (s *condensableSpanSet) maybeCondense(
 		ri.Seek(ctx, roachpb.RKey(sp.Key), Ascending)
 		if !ri.Valid() {
 			// We haven't modified s.s yet, so it is safe to return.
-			log.VEventf(ctx, 2, "failed to condense intent spans: %v", ri.Error())
+			log.VEventf(ctx, 2, "failed to condense lock spans: %v", ri.Error())
 			return
 		}
 		rangeID := ri.Desc().RangeID
@@ -924,7 +928,7 @@ func (s *condensableSpanSet) maybeCondense(
 				// If we didn't fatal here then we would need to ensure that the
 				// spans were restored or a transaction could lose part of its
 				// write footprint.
-				log.Fatalf(ctx, "failed to condense intent spans: "+
+				log.Fatalf(ctx, "failed to condense lock spans: "+
 					"combining span %s yielded invalid result", s)
 			}
 		}

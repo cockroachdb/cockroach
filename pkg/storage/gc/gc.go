@@ -412,8 +412,8 @@ func processLocalKeyRange(
 	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
 		// If the transaction needs to be pushed or there are intents to
 		// resolve, invoke the cleanup function.
-		if !txn.Status.IsFinalized() || len(txn.IntentSpans) > 0 {
-			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsLockUpdates(txn, txn.IntentSpans, lock.Replicated))
+		if !txn.Status.IsFinalized() || len(txn.LockSpans) > 0 {
+			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsLockUpdates(txn, txn.LockSpans, lock.Replicated))
 		}
 		b.FlushingAdd(ctx, key)
 		return nil

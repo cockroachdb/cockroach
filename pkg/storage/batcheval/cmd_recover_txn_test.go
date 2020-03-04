@@ -36,7 +36,7 @@ func TestRecoverTxn(t *testing.T) {
 	ts := hlc.Timestamp{WallTime: 1}
 	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
 	txn.Status = roachpb.STAGING
-	txn.IntentSpans = []roachpb.Span{{Key: k}}
+	txn.LockSpans = []roachpb.Span{{Key: k}}
 	txn.InFlightWrites = []roachpb.SequencedWrite{{Key: k2, Sequence: 0}}
 
 	testutils.RunTrueAndFalse(t, "missing write", func(t *testing.T, missingWrite bool) {
@@ -68,8 +68,8 @@ func TestRecoverTxn(t *testing.T) {
 		// Assert that the response is correct.
 		expTxnRecord := txn.AsRecord()
 		expTxn := expTxnRecord.AsTransaction()
-		// Merge the in-flight writes into the intent spans.
-		expTxn.IntentSpans = []roachpb.Span{{Key: k}, {Key: k2}}
+		// Merge the in-flight writes into the lock spans.
+		expTxn.LockSpans = []roachpb.Span{{Key: k}, {Key: k2}}
 		expTxn.InFlightWrites = nil
 		// Set the correct status.
 		if !missingWrite {

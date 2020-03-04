@@ -82,7 +82,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 			return
 		}
 		et, _ := endTxnArgs(txn1, true)
-		et.IntentSpans = []roachpb.Span{spanA, spanB}
+		et.LockSpans = []roachpb.Span{spanA, spanB}
 		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn1, &et)
 		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et)
@@ -112,7 +112,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 		txn2Copy := *repl.Header().Txn
 		txn2 = &txn2Copy
 		et, _ := endTxnArgs(txn2, true)
-		et.IntentSpans = []roachpb.Span{spanB}
+		et.LockSpans = []roachpb.Span{spanB}
 		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn2, &et)
 		_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et)
