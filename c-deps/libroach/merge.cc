@@ -256,7 +256,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     // corruption error will be returned, but likely only after the next
     // read of the key). In effect, there is no propagation of error
     // information to the client.
-    cockroach::storage::engine::enginepb::MVCCMetadata meta;
+    cockroach::storage::enginepb::MVCCMetadata meta;
     if (existing_value != NULL) {
       if (!meta.ParseFromArray(existing_value->data(), existing_value->size())) {
         // Corrupted existing value.
@@ -282,7 +282,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
                                  const std::deque<rocksdb::Slice>& operand_list,
                                  std::string* new_value,
                                  rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
-    cockroach::storage::engine::enginepb::MVCCMetadata meta;
+    cockroach::storage::enginepb::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
       if (!MergeOne(&meta, operand_list[i], false, logger)) {
@@ -298,10 +298,10 @@ class DBMergeOperator : public rocksdb::MergeOperator {
   }
 
  private:
-  bool MergeOne(cockroach::storage::engine::enginepb::MVCCMetadata* meta,
+  bool MergeOne(cockroach::storage::enginepb::MVCCMetadata* meta,
                 const rocksdb::Slice& operand, bool full_merge,
                 rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
-    cockroach::storage::engine::enginepb::MVCCMetadata operand_meta;
+    cockroach::storage::enginepb::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
@@ -447,8 +447,8 @@ void sortAndDeduplicateColumns(cockroach::roachpb::InternalTimeSeriesData* data,
   }
 }
 
-WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata* left,
-                                    const cockroach::storage::engine::enginepb::MVCCMetadata& right,
+WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::enginepb::MVCCMetadata* left,
+                                    const cockroach::storage::enginepb::MVCCMetadata& right,
                                     bool full_merge, rocksdb::Logger* logger) {
   if (left->has_raw_bytes()) {
     if (!right.has_raw_bytes()) {
@@ -492,7 +492,7 @@ WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMe
 }
 
 // MergeResult serializes the result MVCCMetadata value into a byte slice.
-DBStatus MergeResult(cockroach::storage::engine::enginepb::MVCCMetadata* meta, DBString* result) {
+DBStatus MergeResult(cockroach::storage::enginepb::MVCCMetadata* meta, DBString* result) {
   // TODO(pmattis): Should recompute checksum here. Need a crc32
   // implementation and need to verify the checksumming is identical
   // to what is being done in Go. Zlib's crc32 should be sufficient.

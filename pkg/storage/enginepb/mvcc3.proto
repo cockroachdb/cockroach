@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.storage.engine.enginepb;
+package cockroach.storage.enginepb;
 
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";

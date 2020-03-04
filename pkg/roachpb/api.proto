@@ -15,8 +15,8 @@ option go_package = "roachpb";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/engine/enginepb/mvcc3.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
@@ -63,7 +63,7 @@ message RequestHeader {
   bytes end_key = 4 [(gogoproto.casttype) = "Key"];
   // A zero-indexed transactional sequence number.
   int32 sequence = 5 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
 
 // ResponseHeader is returned with every storage node response.
@@ -527,7 +527,7 @@ message RecomputeStatsResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // added_delta is the adjustment made to the range's stats, i.e. `new_stats = old_stats + added_delta`.
-  storage.engine.enginepb.MVCCStatsDelta added_delta = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.MVCCStatsDelta added_delta = 2 [(gogoproto.nullable) = false];
 }
 
 // An EndTxnRequest is the argument to the EndTxn() method. It specifies
@@ -861,7 +861,7 @@ message PushTxnRequest {
   // the push transaction request. Note that this may not be the most
   // up-to-date value of the transaction record, but will be set or
   // merged as appropriate.
-  storage.engine.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
   // PushTo is the timestamp which PusheeTxn should be pushed to. During
   // conflict resolution, it should be set just after the timestamp of the
   // conflicting read or write.
@@ -904,7 +904,7 @@ message RecoverTxnRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction record to recover.
-  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   // Did all of the STAGING transaction's writes succeed? If so, the transaction
   // is implicitly committed and the commit can be made explicit by giving its
   // record a COMMITTED status. If not, the transaction can be aborted as long
@@ -930,7 +930,7 @@ message QueryTxnRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction record to query.
-  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   // If true, the query will not return until there are changes to either the
   // transaction status or priority -OR- to the set of dependent transactions.
   bool wait_for_update = 3;
@@ -975,7 +975,7 @@ message QueryIntentRequest {
   // successfully written an intent at a larger sequence number then it must
   // have succeeeded in writing an intent at the smaller sequence number as
   // well.
-  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
 
   // If true, return an IntentMissingError if a matching intent is not found.
   // Special-cased to return a SERIALIZABLE retry error if a SERIALIZABLE
@@ -999,14 +999,14 @@ message ResolveIntentRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intent is being resolved.
-  storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
   TransactionStatus status = 3;
   // Optionally poison the abort span for the transaction the intent's
   // range.
   bool poison = 4;
   // The list of ignored seqnum ranges as per the Transaction record.
-  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 5 [
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 5 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "IgnoredSeqNums"
   ];
@@ -1027,7 +1027,7 @@ message ResolveIntentRangeRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intents are being resolved.
-  storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  storage.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
   TransactionStatus status = 3;
   // Optionally poison the abort span for the transaction on all ranges
@@ -1038,7 +1038,7 @@ message ResolveIntentRangeRequest {
   // iteration over the span to find intents to resolve.
   util.hlc.Timestamp min_timestamp = 5 [(gogoproto.nullable) = false];
   // The list of ignored seqnum ranges as per the Transaction record.
-  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 6 [
+  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 6 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "IgnoredSeqNums"
   ];
@@ -1518,7 +1518,7 @@ message AddSSTableRequest {
   // used as-is during evaluation of the AddSSTable command to update the range
   // MVCCStats, instead of computing the stats for the SSTable by iterating it.
   // Including these stats can make the evaluation of AddSSTable much cheaper.
-  storage.engine.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
+  storage.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
 
   // IngestAsWrites causes the content of the provided SSTable to be ingested in
   // a regular WriteBatch, instead of directly adding the provided SST to the
@@ -1608,7 +1608,7 @@ message SubsumeResponse {
   reserved 2;
 
   // MVCCStats are the MVCC statistics for the range.
-  storage.engine.enginepb.MVCCStats mvcc_stats = 3 [
+  storage.enginepb.MVCCStats mvcc_stats = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCStats"
   ];
@@ -1643,7 +1643,7 @@ message RangeStatsResponse {
 
   // MVCCStats are the MVCC statistics for the range that processed the
   // request.
-  storage.engine.enginepb.MVCCStats mvcc_stats = 2 [
+  storage.enginepb.MVCCStats mvcc_stats = 2 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCStats"
   ];

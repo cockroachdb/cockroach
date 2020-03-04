@@ -20,9 +20,9 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "server/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
-import "storage/engine/enginepb/engine.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/engine/enginepb/rocksdb.proto";
+import "storage/enginepb/engine.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/rocksdb.proto";
 import "storage/storagepb/lease_status.proto";
 import "storage/storagepb/state.proto";
 import "storage/storagepb/liveness.proto";
@@ -234,8 +234,8 @@ message EngineStatsInfo {
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
   ];
-  cockroach.storage.engine.enginepb.TickersAndHistograms tickers_and_histograms = 2;
-  cockroach.storage.engine.enginepb.EngineType engine_type = 3;
+  cockroach.storage.enginepb.TickersAndHistograms tickers_and_histograms = 2;
+  cockroach.storage.enginepb.EngineType engine_type = 3;
 }
 
 message EngineStatsRequest {
@@ -557,7 +557,7 @@ message SpanStatsRequest {
 message SpanStatsResponse {
   int32 range_count = 2;
   uint64 approximate_disk_bytes = 3;
-  cockroach.storage.engine.enginepb.MVCCStats total_stats = 1
+  cockroach.storage.enginepb.MVCCStats total_stats = 1
       [ (gogoproto.nullable) = false ];
 }
 

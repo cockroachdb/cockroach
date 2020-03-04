@@ -70,7 +70,7 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
 
-  cockroach::storage::engine::enginepb::MVCCMetadata meta;
+  cockroach::storage::enginepb::MVCCMetadata meta;
   std::string prev_key;
   bool first = false;
   // NB: making this uninitialized triggers compiler warnings

@@ -15,8 +15,8 @@ option go_package = "storagepb";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
-import "storage/engine/enginepb/mvcc.proto";
-import "storage/engine/enginepb/mvcc3.proto";
+import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/mvcc3.proto";
 import "storage/storagepb/state.proto";
 import "util/hlc/timestamp.proto";
 
@@ -34,7 +34,7 @@ message Split {
   // right-hand side of the split during the batch which executed it.
   // The on-disk state of the right-hand side is already correct, but the
   // Store must learn about this delta to update its counters appropriately.
-  storage.engine.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false,
+  storage.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "RHSDelta"];
 }
 
@@ -134,8 +134,8 @@ message ReplicatedEvalResult {
   util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
-  storage.engine.enginepb.MVCCStats deprecated_delta = 10; // See #18828
-  storage.engine.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
+  storage.enginepb.MVCCStats deprecated_delta = 10; // See #18828
+  storage.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
   ChangeReplicas change_replicas = 12;
   int64 raft_log_delta = 13;
 
@@ -183,7 +183,7 @@ message WriteBatch {
 // zero-length batch, and so structs containing pointers to it can be
 // compared with the == operator.
 message LogicalOpLog {
-  repeated storage.engine.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
+  repeated storage.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
 }
 
 // RaftCommand is the message written to the raft log. It contains
