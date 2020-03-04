@@ -1,6 +1,4 @@
-# LogicTest: local-vec
-
-# TODO(asubiotto): Add fakedist-vec-disk configuration to this file.
+# LogicTest: local-vec fakedist-vec-disk
 
 # Test that the exec HashJoiner follows SQL NULL semantics for ON predicate
 # equivalence.
@@ -194,7 +192,7 @@ INSERT INTO t44797_0 VALUES (1.0, 1.0), (2.0, 2.0); INSERT INTO t44797_1 VALUES 
 
 # Note that mixed-type comparisons - of what appears to be "same" values - do
 # not consider those values equal.
-query RRII
+query RRII rowsort
 SELECT * FROM t44797_0 NATURAL JOIN t44797_1
 ----
 1  1.0  2  2
@@ -208,7 +206,7 @@ CREATE TABLE t44797_2(a FLOAT); CREATE TABLE t44797_3(b DECIMAL)
 statement ok
 INSERT INTO t44797_2 VALUES (1.0), (2.0); INSERT INTO t44797_3 VALUES (1.0), (2.0)
 
-query RR
+query RR rowsort
 SELECT * FROM t44797_2 NATURAL JOIN t44797_3
 ----
 1  2.0
