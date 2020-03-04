@@ -253,6 +253,7 @@ const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
   moment.duration(1, "m"),
 );
 export const refreshStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.refresh;
+export const invalidateStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.invalidateData;
 
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,
@@ -288,7 +289,7 @@ export interface APIReducersState {
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
-  statements: CachedDataReducerState<api.StatementsResponseMessageWithDiagnostics>;
+  statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;

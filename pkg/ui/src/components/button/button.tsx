@@ -52,6 +52,7 @@ export function Button(props: ButtonProps) {
     <button
       onClick={onClick}
       className={rootStyles}
+      disabled={disabled}
     >
       <div className="crl-button__container">
         <div className="crl-button__content">
