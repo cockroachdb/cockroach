@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -93,7 +93,7 @@ type storeMetrics interface {
 type MetricsRecorder struct {
 	*HealthChecker
 	gossip       *gossip.Gossip
-	nodeLiveness *storage.NodeLiveness
+	nodeLiveness *kvserver.NodeLiveness
 	rpcContext   *rpc.Context
 	settings     *cluster.Settings
 	clock        *hlc.Clock
@@ -142,7 +142,7 @@ type MetricsRecorder struct {
 // given clock.
 func NewMetricsRecorder(
 	clock *hlc.Clock,
-	nodeLiveness *storage.NodeLiveness,
+	nodeLiveness *kvserver.NodeLiveness,
 	rpcContext *rpc.Context,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,

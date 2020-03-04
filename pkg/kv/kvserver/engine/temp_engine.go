@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/diskmap"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/fs"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"

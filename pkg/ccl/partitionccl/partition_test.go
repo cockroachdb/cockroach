@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1132,7 +1132,7 @@ func setupPartitioningTestCluster(
 	tsArgs := func(attr string) base.TestServerArgs {
 		return base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
 					// Disable LBS because when the scan is happening at the rate it's happening
 					// below, it's possible that one of the system ranges trigger a split.
 					DisableLoadBasedSplitting: true,

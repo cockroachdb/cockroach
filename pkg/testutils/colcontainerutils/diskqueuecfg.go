@@ -14,8 +14,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/fs"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/fs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )

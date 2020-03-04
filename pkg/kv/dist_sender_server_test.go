@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -55,7 +55,7 @@ func strToValue(s string) *roachpb.Value {
 func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
 				DisableSplitQueue: true,
 				DisableMergeQueue: true,
 			},
@@ -1291,7 +1291,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// with the new observed timestamp.
 	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 	var numCPuts int32
-	var storeKnobs storage.StoreTestingKnobs
+	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
 		func(fArgs storagebase.FilterArgs) *roachpb.Error {
 			k := fArgs.Req.Header().Key
@@ -1448,7 +1448,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 
 	// Add a testing request filter which pauses a get request for the
 	// key until after the signal channel is closed.
-	var storeKnobs storage.StoreTestingKnobs
+	var storeKnobs kvserver.StoreTestingKnobs
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	commitCh := make(chan error, 1)
 	storeKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
@@ -1514,7 +1514,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var filterFn atomic.Value
-	var storeKnobs storage.StoreTestingKnobs
+	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
 		func(fArgs storagebase.FilterArgs) *roachpb.Error {
 			fnVal := filterFn.Load()

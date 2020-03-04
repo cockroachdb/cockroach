@@ -18,10 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptreconcile"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -55,7 +55,7 @@ func TestReconciler(t *testing.T) {
 	state.toRemove = map[string]struct{}{}
 	cfg := ptreconcile.Config{
 		Settings: settings,
-		Stores:   s0.GetStores().(*storage.Stores),
+		Stores:   s0.GetStores().(*kvserver.Stores),
 		DB:       s0.DB(),
 		Storage:  ptp,
 		Cache:    ptp,

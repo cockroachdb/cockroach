@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
@@ -36,7 +36,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.DefaultZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	sc.RaftTickInterval = math.MaxInt32
 	sc.RaftElectionTimeoutTicks = 1000000

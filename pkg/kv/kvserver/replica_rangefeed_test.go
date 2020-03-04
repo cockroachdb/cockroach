@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -79,8 +79,8 @@ func TestReplicaRangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	sc := storage.TestStoreConfig(nil)
-	storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
+	sc := kvserver.TestStoreConfig(nil)
+	kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -308,8 +308,8 @@ func TestReplicaRangefeed(t *testing.T) {
 func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
-	storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
+	sc := kvserver.TestStoreConfig(nil)
+	kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -347,8 +347,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	startKey := []byte("a")
 	setup := func(subT *testing.T) (*multiTestContext, roachpb.RangeID) {
 		subT.Helper()
-		sc := storage.TestStoreConfig(nil)
-		storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
+		sc := kvserver.TestStoreConfig(nil)
+		kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
 		mtc := &multiTestContext{
 			storeConfig: &sc,
 			// This test was written before the multiTestContext started creating many
@@ -640,7 +640,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			rangeID:            rangeID,
 			RaftMessageHandler: partitionStore,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *storage.RaftMessageRequest) bool {
+				dropReq: func(req *kvserver.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -648,8 +648,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 				},
-				dropHB:   func(*storage.RaftHeartbeat) bool { return false },
-				dropResp: func(*storage.RaftMessageResponse) bool { return false },
+				dropHB:   func(*kvserver.RaftHeartbeat) bool { return false },
+				dropResp: func(*kvserver.RaftMessageResponse) bool { return false },
 			},
 		})
 
@@ -682,7 +682,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Disable rangefeeds, which stops logical op logs from being provided
 		// with Raft commands.
-		storage.RangefeedEnabled.Override(&mtc.storeConfig.Settings.SV, false)
+		kvserver.RangefeedEnabled.Override(&mtc.storeConfig.Settings.SV, false)
 
 		// Perform a write on the range.
 		pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
@@ -887,8 +887,8 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	// where a closed timestamp message is lost or a node restarts. To recover,
 	// the servers will need to request an update from the leaseholder.
 	for i := 0; i < tc.NumServers(); i++ {
-		stores := tc.Server(i).GetStores().(*storage.Stores)
-		err := stores.VisitStores(func(s *storage.Store) error {
+		stores := tc.Server(i).GetStores().(*kvserver.Stores)
+		err := stores.VisitStores(func(s *kvserver.Store) error {
 			s.ClearClosedTimestampStorage()
 			return nil
 		})

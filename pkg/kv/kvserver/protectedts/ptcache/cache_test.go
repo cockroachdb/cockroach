@@ -19,12 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptcache"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -108,7 +108,7 @@ func TestRefresh(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: storagebase.ReplicaRequestFilter(st.requestFilter),
 				},
 			},

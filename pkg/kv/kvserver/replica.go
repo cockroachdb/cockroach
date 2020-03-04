@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage
+package kvserver
 
 import (
 	"context"
@@ -22,18 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/abortspan"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/split"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"

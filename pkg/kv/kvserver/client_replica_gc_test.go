@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -64,7 +64,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// no GC will take place since the consistent RangeLookup hits the first
 	// Node. We use the TestingEvalFilter to make sure that the second Node
 	// waits for the first.
-	cfg := storage.TestStoreConfig(nil)
+	cfg := kvserver.TestStoreConfig(nil)
 	mtc.storeConfig = &cfg
 	mtc.storeConfig.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
@@ -152,7 +152,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
-	cfg := storage.TestStoreConfig(nil)
+	cfg := kvserver.TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableEagerReplicaRemoval = true
 	mtc.storeConfig = &cfg
 
@@ -177,7 +177,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 
 	// Increment the clock's timestamp to make the replica GC queue process the range.
 	mtc.advanceClock(context.TODO())
-	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
+	mtc.manualClock.Increment(int64(kvserver.ReplicaGCQueueInactivityThreshold + 1))
 
 	// Make sure the range is removed from the store.
 	testutils.SucceedsSoon(t, func() error {

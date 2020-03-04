@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -50,7 +50,7 @@ func predDemoting(rDesc roachpb.ReplicaDescriptor) bool {
 }
 
 type replicationTestKnobs struct {
-	storeKnobs                       storage.StoreTestingKnobs
+	storeKnobs                       kvserver.StoreTestingKnobs
 	replicaAddStopAfterLearnerAtomic int64
 	replicaAddStopAfterJointConfig   int64
 	replicationAlwaysUseJointConfig  int64
@@ -86,11 +86,11 @@ func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
 
 func getFirstStoreReplica(
 	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
-) (*storage.Store, *storage.Replica) {
+) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
-	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	var repl *storage.Replica
+	var repl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
 		repl = store.LookupReplica(roachpb.RKey(key))
 		if repl == nil {
@@ -110,7 +110,7 @@ func getFirstStoreReplica(
 // for other queues that do this.
 func getFirstStoreMetric(t *testing.T, s serverutils.TestServerInterface, name string) int64 {
 	t.Helper()
-	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	var c int64
@@ -140,7 +140,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	blockUntilSnapshotCh := make(chan struct{})
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
 		close(blockUntilSnapshotCh)
 		select {
 		case <-blockSnapshotsCh:
@@ -197,7 +197,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 		key roachpb.Key, id roachpb.ReplicaID, servers []*server.TestServer,
 	) {
 		t.Helper()
-		var repls []*storage.Replica
+		var repls []*kvserver.Replica
 		for _, s := range servers {
 			_, repl := getFirstStoreReplica(t, s, key)
 			repls = append(repls, repl)
@@ -278,7 +278,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 
 	var rejectSnapshots int64
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&rejectSnapshots) > 0 {
 			return errors.New(`nope`)
 		}
@@ -465,7 +465,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
-	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
 		select {
 		case <-blockSnapshotsCh:
 		case <-time.After(10 * time.Second):
@@ -526,7 +526,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
 		blockUntilSnapshotCh <- struct{}{}
 		<-blockSnapshotsCh
 		return nil
@@ -591,7 +591,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	// In this case we'll get a snapshot error from the replicate queue which
 	// will retry the up-replication with a new descriptor and succeed.
 	ltk.storeKnobs.DisableEagerReplicaRemoval = true
-	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&skipReceiveSnapshotKnobAtomic) > 0 {
 			return nil
 		}

@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -54,7 +54,7 @@ func TestMaxImportBatchSize(t *testing.T) {
 	for i, testCase := range testCases {
 		st := cluster.MakeTestingClusterSettings()
 		importBatchSize.Override(&st.SV, testCase.importBatchSize)
-		storage.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
+		kvserver.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
 		if e, a := MaxImportBatchSize(st), testCase.expected; e != a {
 			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
 		}
@@ -196,7 +196,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	// AmbiguousResultError. Import should be resilient to this.
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
-	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				switch filterArgs.Req.(type) {

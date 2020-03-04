@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -90,7 +90,7 @@ func TestDBAddSSTable(t *testing.T) {
 		})
 		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
-		store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +99,7 @@ func TestDBAddSSTable(t *testing.T) {
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.
-func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store *storage.Store) {
+func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store *kvserver.Store) {
 	{
 		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)
@@ -193,7 +193,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		var metrics *storage.StoreMetrics
+		var metrics *kvserver.StoreMetrics
 		var before int64
 		if store != nil {
 			metrics = store.Metrics()
@@ -248,7 +248,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		var metrics *storage.StoreMetrics
+		var metrics *kvserver.StoreMetrics
 		var before int64
 		if store != nil {
 			metrics = store.Metrics()

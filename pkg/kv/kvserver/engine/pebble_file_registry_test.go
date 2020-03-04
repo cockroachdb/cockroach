@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/kr/pretty"

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 
 	// Before running the tests, enable instrumentation that tracks protos which
 	// are marshaled downstream of raft.
-	stopTrackingAndGetTypes := storage.TrackRaftProtos()
+	stopTrackingAndGetTypes := kvserver.TrackRaftProtos()
 
 	code := m.Run()
 

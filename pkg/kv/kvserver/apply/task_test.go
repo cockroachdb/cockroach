@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"

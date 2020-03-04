@@ -16,7 +16,7 @@ dependencies.
 By convention, tests in package storage_test have names of the form
 client_*.go.
 */
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -40,11 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -70,17 +70,17 @@ import (
 
 // createTestStore creates a test store using an in-memory
 // engine.
-func createTestStore(t testing.TB, stopper *stop.Stopper) (*storage.Store, *hlc.ManualClock) {
+func createTestStore(t testing.TB, stopper *stop.Stopper) (*kvserver.Store, *hlc.ManualClock) {
 	manual := hlc.NewManualClock(123)
-	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	store := createTestStoreWithOpts(t, testStoreOpts{cfg: &cfg}, stopper)
 	return store, manual
 }
 
 // DEPRECATED. Use createTestStoreWithOpts().
 func createTestStoreWithConfig(
-	t testing.TB, stopper *stop.Stopper, storeCfg storage.StoreConfig,
-) *storage.Store {
+	t testing.TB, stopper *stop.Stopper, storeCfg kvserver.StoreConfig,
+) *kvserver.Store {
 	store := createTestStoreWithOpts(t,
 		testStoreOpts{
 			cfg: &storeCfg,
@@ -99,7 +99,7 @@ type testStoreOpts struct {
 	// all the system ranges that are generally created for a cluster at boostrap.
 	dontCreateSystemRanges bool
 
-	cfg *storage.StoreConfig
+	cfg *kvserver.StoreConfig
 	eng engine.Engine
 }
 
@@ -108,11 +108,11 @@ type testStoreOpts struct {
 // tests.
 func createTestStoreWithOpts(
 	t testing.TB, opts testStoreOpts, stopper *stop.Stopper,
-) *storage.Store {
-	var storeCfg storage.StoreConfig
+) *kvserver.Store {
+	var storeCfg kvserver.StoreConfig
 	if opts.cfg == nil {
 		manual := hlc.NewManualClock(123)
-		storeCfg = storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+		storeCfg = kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	} else {
 		storeCfg = *opts.cfg
 	}
@@ -141,7 +141,7 @@ func createTestStoreWithOpts(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(), storeCfg.DefaultZoneConfig,
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	stores := storage.NewStores(
+	stores := kvserver.NewStores(
 		ac, storeCfg.Clock,
 		clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion)
 
@@ -172,18 +172,18 @@ func createTestStoreWithOpts(
 		distSender,
 	)
 	storeCfg.DB = client.NewDB(ac, tcsFactory, storeCfg.Clock)
-	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
-	storeCfg.Transport = storage.NewDummyRaftTransport(storeCfg.Settings)
+	storeCfg.StorePool = kvserver.NewTestStorePool(storeCfg)
+	storeCfg.Transport = kvserver.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
 	ctx := context.Background()
 	if !opts.dontBootstrap {
-		if err := storage.InitEngine(
+		if err := kvserver.InitEngine(
 			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, clusterversion.TestingClusterVersion,
 		); err != nil {
 			t.Fatal(err)
 		}
 	}
-	store := storage.NewStore(ctx, storeCfg, eng, nodeDesc)
+	store := kvserver.NewStore(ctx, storeCfg, eng, nodeDesc)
 	if !opts.dontBootstrap {
 		var kvs []roachpb.KeyValue
 		var splits []roachpb.RKey
@@ -196,7 +196,7 @@ func createTestStoreWithOpts(
 				return splits[i].Less(splits[j])
 			})
 		}
-		err := storage.WriteInitialClusterData(
+		err := kvserver.WriteInitialClusterData(
 			ctx,
 			eng,
 			kvs, /* initialValues */
@@ -252,7 +252,7 @@ func createTestStoreWithOpts(
 
 type multiTestContext struct {
 	t           testing.TB
-	storeConfig *storage.StoreConfig
+	storeConfig *kvserver.StoreConfig
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
@@ -271,7 +271,7 @@ type multiTestContext struct {
 	}
 
 	nodeDialer *nodedialer.Dialer
-	transport  *storage.RaftTransport
+	transport  *kvserver.RaftTransport
 
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
@@ -282,7 +282,7 @@ type multiTestContext struct {
 	distSenders []*kv.DistSender
 	dbs         []*client.DB
 	gossips     []*gossip.Gossip
-	storePools  []*storage.StorePool
+	storePools  []*kvserver.StorePool
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
@@ -292,11 +292,11 @@ type multiTestContext struct {
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
 	mu             *syncutil.RWMutex
-	senders        []*storage.Stores
-	stores         []*storage.Store
+	senders        []*kvserver.Stores
+	stores         []*kvserver.Store
 	stoppers       []*stop.Stopper
 	idents         []roachpb.StoreIdent
-	nodeLivenesses []*storage.NodeLiveness
+	nodeLivenesses []*kvserver.NodeLiveness
 }
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
@@ -332,16 +332,16 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 
 	m.nodeIDtoAddrMu.RWMutex = &syncutil.RWMutex{}
 	m.mu = &syncutil.RWMutex{}
-	m.stores = make([]*storage.Store, numStores)
-	m.storePools = make([]*storage.StorePool, numStores)
+	m.stores = make([]*kvserver.Store, numStores)
+	m.storePools = make([]*kvserver.StorePool, numStores)
 	m.distSenders = make([]*kv.DistSender, numStores)
 	m.dbs = make([]*client.DB, numStores)
 	m.stoppers = make([]*stop.Stopper, numStores)
-	m.senders = make([]*storage.Stores, numStores)
+	m.senders = make([]*kvserver.Stores, numStores)
 	m.idents = make([]roachpb.StoreIdent, numStores)
 	m.grpcServers = make([]*grpc.Server, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
-	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
+	m.nodeLivenesses = make([]*kvserver.NodeLiveness, numStores)
 
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(123)
@@ -373,7 +373,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		}
 	}
 	m.nodeDialer = nodedialer.New(m.rpcContext, m.getNodeIDAddress)
-	m.transport = storage.NewRaftTransport(
+	m.transport = kvserver.NewRaftTransport(
 		log.AmbientContext{Tracer: st.Tracer}, st,
 		m.nodeDialer, nil, m.transportStopper,
 	)
@@ -690,7 +690,7 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 		// querying all stores; it may not be present on all stores, but the
 		// current version is guaranteed to be present on one of them as long
 		// as all stores are alive.
-		if err := str.VisitStores(func(s *storage.Store) error {
+		if err := str.VisitStores(func(s *kvserver.Store) error {
 			firstRng := s.LookupReplica(roachpb.RKeyMin)
 			if firstRng != nil {
 				descs = append(descs, firstRng.Desc())
@@ -709,13 +709,13 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return descs[len(descs)-1], nil
 }
 
-func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
-	var cfg storage.StoreConfig
+func (m *multiTestContext) makeStoreConfig(i int) kvserver.StoreConfig {
+	var cfg kvserver.StoreConfig
 	if m.storeConfig != nil {
 		cfg = *m.storeConfig
 		cfg.Clock = m.clocks[i]
 	} else {
-		cfg = storage.TestStoreConfig(m.clocks[i])
+		cfg = kvserver.TestStoreConfig(m.clocks[i])
 		m.storeConfig = &cfg
 	}
 	cfg.NodeDialer = m.nodeDialer
@@ -771,15 +771,15 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 }
 
 func (m *multiTestContext) populateStorePool(
-	idx int, cfg storage.StoreConfig, nodeLiveness *storage.NodeLiveness,
+	idx int, cfg kvserver.StoreConfig, nodeLiveness *kvserver.NodeLiveness,
 ) {
-	m.storePools[idx] = storage.NewStorePool(
+	m.storePools[idx] = kvserver.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		m.gossips[idx],
 		m.clocks[idx],
 		nodeLiveness.GetNodeCount,
-		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
+		kvserver.MakeStorePoolNodeLivenessFunc(nodeLiveness),
 		/* deterministic */ false,
 	)
 }
@@ -797,8 +797,8 @@ func (m *multiTestContext) addStore(idx int) {
 	var needBootstrap bool
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
-		_, err := storage.ReadStoreIdent(context.Background(), eng)
-		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
+		_, err := kvserver.ReadStoreIdent(context.Background(), eng)
+		if _, notBootstrapped := err.(*kvserver.NotBootstrappedError); notBootstrapped {
 			needBootstrap = true
 		} else if err != nil {
 			m.t.Fatal(err)
@@ -813,7 +813,7 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	grpcServer := rpc.NewServer(m.rpcContext)
 	m.grpcServers[idx] = grpcServer
-	storage.RegisterMultiRaftServer(grpcServer, m.transport)
+	kvserver.RegisterMultiRaftServer(grpcServer, m.transport)
 
 	stopper := stop.NewStopper()
 
@@ -847,7 +847,7 @@ func (m *multiTestContext) addStore(idx int) {
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
+	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
 		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
@@ -858,7 +858,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	ctx := context.Background()
 	if needBootstrap {
-		if err := storage.InitEngine(ctx, eng, roachpb.StoreIdent{
+		if err := kvserver.InitEngine(ctx, eng, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
 		}, clusterversion.TestingClusterVersion); err != nil {
@@ -877,7 +877,7 @@ func (m *multiTestContext) addStore(idx int) {
 				return splits[i].Less(splits[j])
 			})
 		}
-		err := storage.WriteInitialClusterData(
+		err := kvserver.WriteInitialClusterData(
 			ctx,
 			eng,
 			kvs, /* initialValues */
@@ -887,17 +887,17 @@ func (m *multiTestContext) addStore(idx int) {
 			m.t.Fatal(err)
 		}
 	}
-	store := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	store := kvserver.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if err := store.Start(ctx, stopper); err != nil {
 		m.t.Fatal(err)
 	}
 
-	sender := storage.NewStores(ambient, clock,
+	sender := kvserver.NewStores(ambient, clock,
 		clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion,
 	)
 	sender.AddStore(store)
-	perReplicaServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
-	storage.RegisterPerReplicaServer(grpcServer, perReplicaServer)
+	perReplicaServer := kvserver.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
+	kvserver.RegisterPerReplicaServer(grpcServer, perReplicaServer)
 
 	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
 	if err != nil {
@@ -1027,7 +1027,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg := m.makeStoreConfig(i)
 	m.populateDB(i, m.storeConfig.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
-	m.nodeLivenesses[i] = storage.NewNodeLiveness(
+	m.nodeLivenesses[i] = kvserver.NewNodeLiveness(
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,
 		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
@@ -1036,7 +1036,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]
 	ctx := context.Background()
-	store := storage.NewStore(ctx, cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
+	store := kvserver.NewStore(ctx, cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
 	m.stores[i] = store
 
 	// Need to start the store before adding it so that the store ID is initialized.
@@ -1069,7 +1069,7 @@ func (m *multiTestContext) restartStore(i int) {
 	})
 }
 
-func (m *multiTestContext) Store(i int) *storage.Store {
+func (m *multiTestContext) Store(i int) *kvserver.Store {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.stores[i]
@@ -1091,7 +1091,7 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 
 // findMemberStoreLocked finds a non-stopped Store which is a member
 // of the given range.
-func (m *multiTestContext) findMemberStoreLocked(desc roachpb.RangeDescriptor) *storage.Store {
+func (m *multiTestContext) findMemberStoreLocked(desc roachpb.RangeDescriptor) *kvserver.Store {
 	for _, s := range m.stores {
 		if s == nil {
 			// Store is stopped.
@@ -1375,7 +1375,7 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 	}
 
 	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
-		if err = nl.Heartbeat(ctx, l); err != storage.ErrEpochIncremented {
+		if err = nl.Heartbeat(ctx, l); err != kvserver.ErrEpochIncremented {
 			break
 		}
 	}
@@ -1402,9 +1402,9 @@ func (m *multiTestContext) advanceClock(ctx context.Context) {
 
 // getRaftLeader returns the replica that is the current raft leader for the
 // specified rangeID.
-func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Replica {
+func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *kvserver.Replica {
 	m.t.Helper()
-	var raftLeaderRepl *storage.Replica
+	var raftLeaderRepl *kvserver.Replica
 	testutils.SucceedsSoon(m.t, func() error {
 		m.mu.RLock()
 		defer m.mu.RUnlock()

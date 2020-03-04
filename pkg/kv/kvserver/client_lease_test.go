@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -43,7 +43,7 @@ func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "enableEpoch", func(t *testing.T, enableEpoch bool) {
-		sc := storage.TestStoreConfig(nil)
+		sc := kvserver.TestStoreConfig(nil)
 		sc.TestingKnobs.DisableMergeQueue = true
 		sc.EnableEpochRangeLeases = enableEpoch
 		mtc := &multiTestContext{storeConfig: &sc}
@@ -92,7 +92,7 @@ func TestStoreRangeLease(t *testing.T) {
 // between expiration and epoch and back.
 func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -158,7 +158,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 // data is gossiped at startup.
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -229,7 +229,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 // network.
 func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -265,7 +265,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 
 func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -339,7 +339,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 			<-ch
 		}
 	}
-	knobs.Store.(*storage.StoreTestingKnobs).TestingProposalFilter = func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args storagebase.ProposalFilterArgs) *roachpb.Error {
 		blockIfShould(args)
 		return nil
 	}

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -148,7 +148,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	// is reached. If an error is seen on any replica then it is returned to the
 	// errgroup.
 	baRead = makeReadBatchRequestForDesc(desc, ts)
-	ensureCanReadFromReplicaUntilDeadline := func(r *storage.Replica) {
+	ensureCanReadFromReplicaUntilDeadline := func(r *kvserver.Replica) {
 		g.Go(func() error {
 			for timeutil.Now().Before(deadline) {
 				resp, pErr := r.Send(gCtx, baRead)
@@ -369,7 +369,7 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 }
 
 func verifyNotLeaseHolderErrors(
-	t *testing.T, ba roachpb.BatchRequest, repls []*storage.Replica, expectedNLEs int,
+	t *testing.T, ba roachpb.BatchRequest, repls []*kvserver.Replica, expectedNLEs int,
 ) {
 	g, ctx := errgroup.WithContext(context.Background())
 	var notLeaseholderErrs int64
@@ -406,11 +406,11 @@ func replsForRange(
 	t *testing.T,
 	tc serverutils.TestClusterInterface,
 	desc roachpb.RangeDescriptor,
-) (repls []*storage.Replica) {
+) (repls []*kvserver.Replica) {
 	testutils.SucceedsSoon(t, func() error {
 		repls = nil
 		for i := 0; i < numNodes; i++ {
-			repl, _, err := tc.Server(i).GetStores().(*storage.Stores).GetReplicaForRangeID(desc.RangeID)
+			repl, _, err := tc.Server(i).GetStores().(*kvserver.Stores).GetReplicaForRangeID(desc.RangeID)
 			if err != nil {
 				return err
 			}
@@ -457,13 +457,13 @@ func setupTestClusterForClosedTimestampTesting(
 	tc serverutils.TestClusterInterface,
 	db0 *gosql.DB,
 	kvTableDesc roachpb.RangeDescriptor,
-	repls []*storage.Replica,
+	repls []*kvserver.Replica,
 ) {
 
 	tc = serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
 					RangeFeedPushTxnsInterval: 10 * time.Millisecond,
 					RangeFeedPushTxnsAge:      20 * time.Millisecond,
 				},
@@ -592,7 +592,7 @@ func verifyCanReadFromAllRepls(
 	ctx context.Context,
 	t *testing.T,
 	baRead roachpb.BatchRequest,
-	repls []*storage.Replica,
+	repls []*kvserver.Replica,
 	f respFunc,
 ) error {
 	t.Helper()

@@ -11,7 +11,7 @@
 package result
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 

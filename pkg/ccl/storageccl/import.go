@@ -15,10 +15,10 @@ import (
 	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/bulk"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -89,14 +89,14 @@ var importBufferIncrementSize = func() *settings.ByteSizeSetting {
 const commandMetadataEstimate = 1 << 20 // 1 MB
 
 func init() {
-	storage.SetImportCmd(evalImport)
+	kvserver.SetImportCmd(evalImport)
 
 	// Ensure that the user cannot set the maximum raft command size so low that
 	// more than half of an Import or AddSSTable command will be taken up by Raft
 	// metadata.
-	if commandMetadataEstimate > storage.MaxCommandSizeFloor/2 {
+	if commandMetadataEstimate > kvserver.MaxCommandSizeFloor/2 {
 		panic(fmt.Sprintf("raft command size floor (%s) is too small for import commands",
-			humanizeutil.IBytes(storage.MaxCommandSizeFloor)))
+			humanizeutil.IBytes(kvserver.MaxCommandSizeFloor)))
 	}
 }
 
@@ -106,7 +106,7 @@ func init() {
 // returns the maximum batch size that will fit within a Raft command.
 func MaxImportBatchSize(st *cluster.Settings) int64 {
 	desiredSize := importBatchSize.Get(&st.SV)
-	maxCommandSize := storage.MaxCommandSize.Get(&st.SV)
+	maxCommandSize := kvserver.MaxCommandSize.Get(&st.SV)
 	if desiredSize+commandMetadataEstimate > maxCommandSize {
 		return maxCommandSize - commandMetadataEstimate
 	}

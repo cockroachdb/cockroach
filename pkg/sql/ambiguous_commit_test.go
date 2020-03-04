@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -119,7 +119,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		if ambiguousSuccess {
-			params.Knobs.Store = &storage.StoreTestingKnobs{
+			params.Knobs.Store = &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(args roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 					if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
 						return maybeRPCError(req.(*roachpb.ConditionalPutRequest))

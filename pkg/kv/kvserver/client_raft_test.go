@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage_test
+package kvserver_test
 
 import (
 	"bytes"
@@ -28,12 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -77,7 +77,7 @@ func mustGetInt(v *roachpb.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 
@@ -92,7 +92,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	engineStopper.AddCloser(eng)
 	var rangeID2 roachpb.RangeID
 
-	get := func(store *storage.Store, rangeID roachpb.RangeID, key roachpb.Key) int64 {
+	get := func(store *kvserver.Store, rangeID roachpb.RangeID, key roachpb.Key) int64 {
 		args := getArgs(key)
 		resp, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 			RangeID: rangeID,
@@ -102,7 +102,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		}
 		return mustGetInt(resp.(*roachpb.GetResponse).Value)
 	}
-	validate := func(store *storage.Store) {
+	validate := func(store *kvserver.Store) {
 		if val := get(store, rangeID, key1); val != 13 {
 			t.Errorf("key %q: expected 13 but got %v", key1, val)
 		}
@@ -189,7 +189,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 // applied so they are not retried after recovery.
 func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg := kvserver.TestStoreConfig(nil)
 	// Splits can cause our chosen keys to end up on ranges other than range 1,
 	// and trying to handle that complicates the test without providing any
 	// added benefit.
@@ -288,7 +288,7 @@ func TestReplicateRange(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 	// Verify no intent remains on range descriptor key.
@@ -341,7 +341,7 @@ func TestRestoreReplicas(t *testing.T) {
 
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/40351")
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// Disable periodic gossip activities. The periodic gossiping of the first
 	// range can cause spurious lease transfers which cause this test to fail.
 	sc.TestingKnobs.DisablePeriodicGossips = true
@@ -374,7 +374,7 @@ func TestRestoreReplicas(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := firstRng.ChangeReplicas(context.Background(), firstRng.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := firstRng.ChangeReplicas(context.Background(), firstRng.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -440,7 +440,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
 			if et, ok := filterArgs.Req.(*roachpb.EndTxnRequest); ok && et.Commit {
@@ -462,7 +462,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "boom") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "boom") {
 		t.Fatalf("did not get expected error: %+v", err)
 	}
 
@@ -480,7 +480,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	// are pushable by making the transaction abandoned.
 	mtc.manualClock.Increment(10 * base.DefaultTxnHeartbeatInterval.Nanoseconds())
 
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -547,7 +547,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -631,7 +631,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		// Recompute under raft lock so that the log doesn't change while we
 		// compute its size.
 		repl.RaftLock()
-		realSize, err := storage.ComputeRaftLogSize(
+		realSize, err := kvserver.ComputeRaftLogSize(
 			context.Background(), repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
 		)
 		size, _ := repl.GetRaftLogSize()
@@ -897,10 +897,10 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
 			// two stores.
-			h.dropReq = func(req *storage.RaftMessageRequest) bool {
+			h.dropReq = func(req *kvserver.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *storage.RaftHeartbeat) bool {
+			h.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
@@ -980,7 +980,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 			rangeID:            1,
 			RaftMessageHandler: mtc.stores[s],
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *storage.RaftMessageRequest) bool {
+				dropReq: func(req *kvserver.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -988,8 +988,8 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 				},
-				dropHB:   func(*storage.RaftHeartbeat) bool { return false },
-				dropResp: func(*storage.RaftMessageResponse) bool { return false },
+				dropHB:   func(*kvserver.RaftHeartbeat) bool { return false },
+				dropResp: func(*kvserver.RaftMessageResponse) bool { return false },
 			},
 		})
 	}
@@ -1014,17 +1014,17 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 }
 
 type fakeSnapshotStream struct {
-	nextReq *storage.SnapshotRequest
+	nextReq *kvserver.SnapshotRequest
 	nextErr error
 }
 
 // Recv implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Recv() (*storage.SnapshotRequest, error) {
+func (c fakeSnapshotStream) Recv() (*kvserver.SnapshotRequest, error) {
 	return c.nextReq, c.nextErr
 }
 
 // Send implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Send(request *storage.SnapshotResponse) error {
+func (c fakeSnapshotStream) Send(request *kvserver.SnapshotResponse) error {
 	return nil
 }
 
@@ -1049,11 +1049,11 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	desc.AddReplica(2, 2, roachpb.LEARNER)
 	rep2Desc, found := desc.GetReplicaDescriptor(2)
 	require.True(t, found)
-	header := storage.SnapshotRequest_Header{
+	header := kvserver.SnapshotRequest_Header{
 		CanDecline: true,
 		RangeSize:  100,
 		State:      storagepb.ReplicaState{Desc: desc},
-		RaftMessageRequest: storage.RaftMessageRequest{
+		RaftMessageRequest: kvserver.RaftMessageRequest{
 			RangeID:     rep.RangeID,
 			FromReplica: repDesc,
 			ToReplica:   rep2Desc,
@@ -1152,7 +1152,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.TestingKnobs.DisableReplicateQueue = true
 	// Disable the replica GC queue so that it doesn't accidentally pick up the
@@ -1215,11 +1215,11 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			NodeID:  mtc.stores[2].Ident.NodeID,
 			StoreID: mtc.stores[2].Ident.StoreID,
 		})
-		_, err = rep2.ChangeReplicas(context.Background(), &desc, storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs)
+		_, err = rep2.ChangeReplicas(context.Background(), &desc, kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
-	if err := replicateRHS(); !testutils.IsError(err, storage.IntersectingSnapshotMsg) {
+	if err := replicateRHS(); !testutils.IsError(err, kvserver.IntersectingSnapshotMsg) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -1246,7 +1246,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 	// possible for node 3 to propose the RequestLease command and have that
 	// command executed by the other nodes but to never see the execution locally
 	// because it is caught up by applying a snapshot.
-	testCases := map[string]storage.StoreTestingKnobs{
+	testCases := map[string]kvserver.StoreTestingKnobs{
 		"reasonSnapshotApplied": {
 			DisableRefreshReasonNewLeader: true,
 			DisableRefreshReasonTicks:     true,
@@ -1258,7 +1258,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 	}
 	for name, c := range testCases {
 		t.Run(name, func(t *testing.T) {
-			sc := storage.TestStoreConfig(nil)
+			sc := kvserver.TestStoreConfig(nil)
 			sc.TestingKnobs = c
 			// Disable periodic gossip tasks which can move the range 1 lease
 			// unexpectedly.
@@ -1390,7 +1390,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// Drop the raft tick interval so the Raft group is ticked more.
 	sc.RaftTickInterval = 10 * time.Millisecond
 	// Don't timeout raft leader. We don't want leadership moving.
@@ -1534,8 +1534,8 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 // under-replicated ranges and replicate them.
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer storage.SetMockAddSSTable()()
-	sc := storage.TestStoreConfig(nil)
+	defer kvserver.SetMockAddSSTable()()
+	sc := kvserver.TestStoreConfig(nil)
 	// Prevent the split queue from creating additional ranges while we're
 	// waiting for replication.
 	sc.TestingKnobs.DisableSplitQueue = true
@@ -1557,7 +1557,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		var replicaCounts [3]int64
 		for i, s := range mtc.stores {
 			var err error
-			mtc.stores[i].VisitReplicas(func(r *storage.Replica) bool {
+			mtc.stores[i].VisitReplicas(func(r *kvserver.Replica) bool {
 				replicaCounts[i]++
 				// Synchronize with the replica's raft processing goroutine.
 				r.RaftLock()
@@ -1653,7 +1653,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 			NodeID:  mtc.stores[storeNum].Ident.NodeID,
 			StoreID: mtc.stores[storeNum].Ident.StoreID,
 		})
-		_, err := repl.ChangeReplicas(context.Background(), desc, storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs)
+		_, err := repl.ChangeReplicas(context.Background(), desc, kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -1798,7 +1798,7 @@ func TestReplicateRestartAfterTruncation(t *testing.T) {
 }
 
 func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReAdd bool) {
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// Don't timeout raft leaders or range leases (see the relation between
 	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
@@ -1869,7 +1869,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	if removeBeforeTruncateAndReAdd {
 		// Verify old replica is GC'd. Wait out the replica gc queue
 		// inactivity threshold and force a gc scan.
-		mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
+		mtc.manualClock.Increment(int64(kvserver.ReplicaGCQueueInactivityThreshold + 1))
 		testutils.SucceedsSoon(t, func() error {
 			mtc.stores[1].MustForceReplicaGCScanAndProcess()
 			_, err := mtc.stores[1].GetReplica(rangeID)
@@ -1894,7 +1894,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// We're gonna want to validate the state of the store before and after the
 	// replica GC queue does its work, so we disable the replica gc queue here
 	// and run it manually when we're ready.
@@ -2003,7 +2003,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
 	mtc.advanceClock(context.TODO())
-	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
+	mtc.manualClock.Increment(int64(kvserver.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	mtc.stores[1].MustForceReplicaGCScanAndProcess()
 
@@ -2049,7 +2049,7 @@ func TestQuotaPool(t *testing.T) {
 	const numReplicas = 3
 	const rangeID = 1
 	ctx := context.Background()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
@@ -2089,7 +2089,7 @@ func TestQuotaPool(t *testing.T) {
 	testutils.SucceedsSoon(t, assertEqualLastIndex)
 
 	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate	goroutine.
-	raftLockReplica := func(repl *storage.Replica) {
+	raftLockReplica := func(repl *kvserver.Replica) {
 		ch := make(chan struct{})
 		go func() { repl.RaftLock(); close(ch) }()
 		<-ch
@@ -2103,7 +2103,7 @@ func TestQuotaPool(t *testing.T) {
 		t.Fatalf("failed to initialize quota pool: %v", err)
 	}
 	leaderRepl.RaftUnlock()
-	followerRepl := func() *storage.Replica {
+	followerRepl := func() *kvserver.Replica {
 		for _, store := range mtc.stores {
 			repl, err := store.GetReplica(rangeID)
 			if err != nil {
@@ -2201,7 +2201,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	const numReplicas = 3
 	const rangeID = 1
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
@@ -2217,7 +2217,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	mtc.replicateRange(rangeID, 1, 2)
 
 	leaderRepl := mtc.getRaftLeader(rangeID)
-	followerRepl := func() *storage.Replica {
+	followerRepl := func() *kvserver.Replica {
 		for _, store := range mtc.stores {
 			repl, err := store.GetReplica(rangeID)
 			if err != nil {
@@ -2248,7 +2248,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 	// Increment leader's clock close to MaxQuotaReplicaLivenessDuration, but
 	// not past it.
-	mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() - 1)
+	mtc.manualClock.Increment(kvserver.MaxQuotaReplicaLivenessDuration.Nanoseconds() - 1)
 
 	// Send a request to the leader replica. followerRepl is locked so it will
 	// not respond.
@@ -2276,7 +2276,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// we check whether the follower is eventually considered inactive.
 	testutils.SucceedsSoon(t, func() error {
 		// Increment leader's clock past MaxQuotaReplicaLivenessDuration
-		mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
+		mtc.manualClock.Increment(kvserver.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
 
 		// Send another request to the leader replica. followerRepl is locked
 		// so it will not respond.
@@ -2449,7 +2449,7 @@ outer:
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
@@ -2526,7 +2526,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 	for i, td := range testData {
 		func() {
-			storeCfg := storage.TestStoreConfig(nil /* clock */)
+			storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 			storeCfg.TestingKnobs.DisableMergeQueue = true
 			mtc := &multiTestContext{
 				storeConfig: &storeCfg,
@@ -2546,7 +2546,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			replica2 := store0.LookupReplica(roachpb.RKey(key2))
 
-			rg2 := func(s *storage.Store) client.Sender {
+			rg2 := func(s *kvserver.Store) client.Sender {
 				return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
 					if ba.RangeID == 0 {
 						ba.RangeID = replica2.RangeID
@@ -2564,7 +2564,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			if td.remove {
 				// Simulate second replica being transferred by removing it.
-				if err := store0.RemoveReplica(context.Background(), replica2, replica2.Desc().NextReplicaID, storage.RemoveOptions{
+				if err := store0.RemoveReplica(context.Background(), replica2, replica2.Desc().NextReplicaID, kvserver.RemoveOptions{
 					DestroyData: true,
 				}); err != nil {
 					t.Fatal(err)
@@ -2607,7 +2607,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 // a remote node correctly after the Replica was removed from the Store.
 func TestRaftAfterRemoveRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
@@ -2649,10 +2649,10 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),
 	}
-	mtc.transport.SendAsync(&storage.RaftMessageRequest{
+	mtc.transport.SendAsync(&kvserver.RaftMessageRequest{
 		ToReplica:   replica1,
 		FromReplica: replica2,
-		Heartbeats: []storage.RaftHeartbeat{
+		Heartbeats: []kvserver.RaftHeartbeat{
 			{
 				RangeID:       rangeID,
 				FromReplicaID: replica2.ReplicaID,
@@ -2739,8 +2739,8 @@ func TestRemovePlaceholderRace(t *testing.T) {
 					NodeID:  mtc.stores[1].Ident.NodeID,
 					StoreID: mtc.stores[1].Ident.StoreID,
 				})
-				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonUnknown, "", chgs); err != nil {
-					if storage.IsSnapshotError(err) {
+				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonUnknown, "", chgs); err != nil {
+					if kvserver.IsSnapshotError(err) {
 						continue
 					} else {
 						t.Fatal(err)
@@ -2754,13 +2754,13 @@ func TestRemovePlaceholderRace(t *testing.T) {
 
 type noConfChangeTestHandler struct {
 	rangeID roachpb.RangeID
-	storage.RaftMessageHandler
+	kvserver.RaftMessageHandler
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 	ctx context.Context,
-	req *storage.RaftMessageRequest,
-	respStream storage.RaftMessageResponseStream,
+	req *kvserver.RaftMessageRequest,
+	respStream kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	for i, e := range req.Message.Entries {
 		if e.Type == raftpb.EntryConfChange {
@@ -2768,7 +2768,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
 				panic(err)
 			}
-			var ccCtx storage.ConfChangeContext
+			var ccCtx kvserver.ConfChangeContext
 			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
@@ -2789,7 +2789,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftResponse(
-	ctx context.Context, resp *storage.RaftMessageResponse,
+	ctx context.Context, resp *kvserver.RaftMessageResponse,
 ) error {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
@@ -2836,7 +2836,7 @@ func TestReplicaGCRace(t *testing.T) {
 		NodeID:  toStore.Ident.NodeID,
 		StoreID: toStore.Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2852,10 +2852,10 @@ func TestReplicaGCRace(t *testing.T) {
 		t.Fatalf("expected %s to have a replica on %s", rangeDesc, toStore)
 	}
 
-	hbReq := storage.RaftMessageRequest{
+	hbReq := kvserver.RaftMessageRequest{
 		FromReplica: fromReplicaDesc,
 		ToReplica:   toReplicaDesc,
-		Heartbeats: []storage.RaftHeartbeat{
+		Heartbeats: []kvserver.RaftHeartbeat{
 			{
 				RangeID:       rangeID,
 				FromReplicaID: fromReplicaDesc.ReplicaID,
@@ -2885,7 +2885,7 @@ func TestReplicaGCRace(t *testing.T) {
 
 	// Remove the victim replica and manually GC it.
 	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2902,7 +2902,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// Create a new transport for store 0. Error responses are passed
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
-	fromTransport := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
+	fromTransport := kvserver.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
@@ -3095,7 +3095,7 @@ func TestDecommission(t *testing.T) {
 func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
@@ -3147,7 +3147,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		mtc.advanceClock(context.TODO())
 		mtc.manualClock.Increment(int64(
-			storage.ReplicaGCQueueInactivityThreshold) + 1)
+			kvserver.ReplicaGCQueueInactivityThreshold) + 1)
 		mtc.stores[1].MustForceReplicaGCScanAndProcess()
 
 		actual := mtc.readIntFromEngines(roachpb.Key("a"))
@@ -3233,7 +3233,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	mtc.stores[2].SetReplicaGCQueueActive(true)
 	mtc.advanceClock(context.TODO())
 	mtc.manualClock.Increment(int64(
-		storage.ReplicaGCQueueInactivityThreshold) + 1)
+		kvserver.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].MustForceReplicaGCScanAndProcess()
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 0, 0})
 
@@ -3245,13 +3245,13 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 type errorChannelTestHandler chan *roachpb.Error
 
 func (errorChannelTestHandler) HandleRaftRequest(
-	_ context.Context, _ *storage.RaftMessageRequest, _ storage.RaftMessageResponseStream,
+	_ context.Context, _ *kvserver.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	panic("unimplemented")
 }
 
 func (d errorChannelTestHandler) HandleRaftResponse(
-	ctx context.Context, resp *storage.RaftMessageResponse,
+	ctx context.Context, resp *kvserver.RaftMessageResponse,
 ) error {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
@@ -3263,7 +3263,7 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 }
 
 func (errorChannelTestHandler) HandleSnapshot(
-	_ *storage.SnapshotRequest_Header, _ storage.SnapshotResponseStream,
+	_ *kvserver.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
 ) error {
 	panic("unimplemented")
 }
@@ -3359,7 +3359,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// Error responses are passed back along the same grpc stream as the request
 	// so it's ok that there are two (this one and the one actually used by the
 	// store).
-	transport0 := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
+	transport0 := kvserver.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(mtc.gossips[0])),
 		nil, /* grpcServer */
@@ -3370,7 +3370,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 	// Simulate the removed node asking to trigger an election. Try and try again
 	// until we're reasonably sure the message was sent.
-	for !transport0.SendAsync(&storage.RaftMessageRequest{
+	for !transport0.SendAsync(&kvserver.RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -3407,7 +3407,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{
 		storeConfig: &sc,
@@ -3484,7 +3484,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 func TestReplicaLazyLoad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.RaftTickInterval = 10 * time.Millisecond // safe because there is only a single node
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
@@ -3665,7 +3665,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numStores = 3
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	// Suppress timeout-based elections (which also includes a previous
 	// leader stepping down due to a quorum check). Running tests on a
@@ -3765,7 +3765,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 func TestRaftBlockedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{
@@ -3827,7 +3827,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 func TestRangeQuiescence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := &multiTestContext{
@@ -3865,7 +3865,7 @@ func TestRangeQuiescence(t *testing.T) {
 	waitForQuiescence(rangeID)
 
 	// Find the leader replica.
-	var rep *storage.Replica
+	var rep *kvserver.Replica
 	var leaderIdx int
 	for leaderIdx = range mtc.stores {
 		var err error
@@ -3903,7 +3903,7 @@ func TestRangeQuiescence(t *testing.T) {
 // lease points to a different replica.
 func TestInitRaftGroupOnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
@@ -3972,7 +3972,7 @@ func TestFailedConfChange(t *testing.T) {
 	// Trigger errors at apply time so they happen on both leaders and
 	// followers.
 	var filterActive int32
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) == 1 && filterArgs.ChangeReplicas != nil {
 			return 0, roachpb.NewErrorf("boom")
@@ -4048,7 +4048,7 @@ func TestFailedConfChange(t *testing.T) {
 // compactor queue.
 func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -4067,14 +4067,14 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 		NodeID:  deleteStore.Ident.NodeID,
 		StoreID: deleteStore.Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
 		// Function to check compaction metrics indicating a suggestion
 		// was queued or a compaction was processed or skipped.
-		haveCompaction := func(s *storage.Store, exp bool) error {
+		haveCompaction := func(s *kvserver.Store, exp bool) error {
 			queued := s.Compactor().Metrics.BytesQueued.Value()
 			comps := s.Compactor().Metrics.BytesCompacted.Count()
 			skipped := s.Compactor().Metrics.BytesSkipped.Count()
@@ -4101,7 +4101,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	var filterRangeIDAtomic int64
 
 	ctx := context.Background()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.DisableReplicaGCQueue = true
 	sc.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) (retErr *roachpb.Error) {
@@ -4143,8 +4143,8 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	leaseIndex0 := repl0.LastAssignedLeaseIndex()
 
 	type target struct {
-		client storage.PerReplicaClient
-		header storage.StoreRequestHeader
+		client kvserver.PerReplicaClient
+		header kvserver.StoreRequestHeader
 	}
 
 	var targets []target
@@ -4154,15 +4154,15 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 			t.Fatal(err)
 		}
 		targets = append(targets, target{
-			client: storage.NewPerReplicaClient(conn),
-			header: storage.StoreRequestHeader{NodeID: s.Ident.NodeID, StoreID: s.Ident.StoreID},
+			client: kvserver.NewPerReplicaClient(conn),
+			header: kvserver.StoreRequestHeader{NodeID: s.Ident.NodeID, StoreID: s.Ident.StoreID},
 		})
 	}
 
 	// Wait for a command that is already applied. The request should return
 	// immediately.
 	for i, target := range targets {
-		_, err := target.client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+		_, err := target.client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
 			StoreRequestHeader: target.header,
 			RangeID:            rangeID,
 			LeaseIndex:         leaseIndex0,
@@ -4181,7 +4181,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 		errChs = append(errChs, errCh)
 		target := target
 		go func() {
-			_, err := target.client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+			_, err := target.client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
 				StoreRequestHeader: target.header,
 				RangeID:            rangeID,
 				LeaseIndex:         leaseIndex0 + count,
@@ -4224,7 +4224,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	// GC the replica while a request is in progress. The request should return
 	// an error.
 	go func() {
-		_, err := targets[2].client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+		_, err := targets[2].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
 			StoreRequestHeader: targets[2].header,
 			RangeID:            rangeID,
 			LeaseIndex:         math.MaxUint64,
@@ -4253,7 +4253,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
-		_, err := targets[0].client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+		_, err := targets[0].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
 			StoreRequestHeader: targets[0].header,
 			RangeID:            rangeID,
 			LeaseIndex:         math.MaxUint64,
@@ -4268,7 +4268,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -4284,11 +4284,11 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := storage.NewPerReplicaClient(conn)
-	storeHeader := storage.StoreRequestHeader{NodeID: store.Ident.NodeID, StoreID: store.Ident.StoreID}
+	client := kvserver.NewPerReplicaClient(conn)
+	storeHeader := kvserver.StoreRequestHeader{NodeID: store.Ident.NodeID, StoreID: store.Ident.StoreID}
 
 	// Test that WaitForReplicaInit returns successfully if the replica exists.
-	_, err = client.WaitForReplicaInit(ctx, &storage.WaitForReplicaInitRequest{
+	_, err = client.WaitForReplicaInit(ctx, &kvserver.WaitForReplicaInitRequest{
 		StoreRequestHeader: storeHeader,
 		RangeID:            roachpb.RangeID(1),
 	})
@@ -4300,7 +4300,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	{
 		timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
-		_, err = client.WaitForReplicaInit(timeoutCtx, &storage.WaitForReplicaInitRequest{
+		_, err = client.WaitForReplicaInit(timeoutCtx, &kvserver.WaitForReplicaInitRequest{
 			StoreRequestHeader: storeHeader,
 			RangeID:            roachpb.RangeID(2),
 		})
@@ -4315,15 +4315,15 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 		// Constructing an permanently-uninitialized replica is somewhat difficult.
 		// Sending a fake Raft heartbeat for a range ID that the store hasn't seen
 		// before does the trick.
-		var repl42 *storage.Replica
+		var repl42 *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
-			mtc.transport.SendAsync(&storage.RaftMessageRequest{
+			mtc.transport.SendAsync(&kvserver.RaftMessageRequest{
 				ToReplica: roachpb.ReplicaDescriptor{
 					NodeID:  store.Ident.NodeID,
 					StoreID: store.Ident.StoreID,
 				},
-				Heartbeats: []storage.RaftHeartbeat{{RangeID: 42, ToReplicaID: 1}},
+				Heartbeats: []kvserver.RaftHeartbeat{{RangeID: 42, ToReplicaID: 1}},
 			}, rpc.DefaultClass)
 			repl42, err = store.GetReplica(42)
 			return err
@@ -4334,7 +4334,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
-		_, err = client.WaitForReplicaInit(timeoutCtx, &storage.WaitForReplicaInitRequest{
+		_, err = client.WaitForReplicaInit(timeoutCtx, &kvserver.WaitForReplicaInitRequest{
 			StoreRequestHeader: storeHeader,
 			RangeID:            roachpb.RangeID(42),
 		})
@@ -4351,7 +4351,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.TraceAllRaftEvents = true
 	sc.TestingKnobs.DisableSplitQueue = true
 	sc.TestingKnobs.DisableMergeQueue = true
@@ -4374,7 +4374,7 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 			rangeID:            ri.Desc.RangeID,
 			RaftMessageHandler: mtc.stores[i],
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *storage.RaftMessageRequest) bool {
+				dropReq: func(req *kvserver.RaftMessageRequest) bool {
 					return rand.Intn(2) == 0
 				},
 			},
@@ -4457,7 +4457,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	}
 	// Prevent the split queue from creating additional ranges while we're
 	// waiting for replication.
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{
 		storeConfig:     &sc,
 		clock:           clock,
@@ -4570,7 +4570,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 				}
 			}
 
-			tsc := storage.TestStoreConfig(nil)
+			tsc := kvserver.TestStoreConfig(nil)
 			tsc.TestingKnobs.TestingApplyFilter = applyFilterFn(blockPreApplication)
 			tsc.TestingKnobs.TestingPostApplyFilter = applyFilterFn(blockPostApplication)
 
@@ -4716,7 +4716,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		t.Skip("disabled on teeing engine")
 	}
-	sc := storage.TestStoreConfig(nil)
+	sc := kvserver.TestStoreConfig(nil)
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
@@ -4756,7 +4756,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		b.AddRawRequest(adminSplitArgs(key))
 		require.NoError(t, db.Run(ctx, b))
 	}
-	ensureNoTombstone := func(t *testing.T, store *storage.Store, rangeID roachpb.RangeID) {
+	ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
 		var tombstone roachpb.RangeTombstone
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := engine.MVCCGetProto(
@@ -4766,7 +4766,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		require.False(t, ok)
 	}
 	getHardState := func(
-		t *testing.T, store *storage.Store, rangeID roachpb.RangeID,
+		t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
 	) raftpb.HardState {
 		hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.Engine())
 		require.NoError(t, err)
@@ -5140,7 +5140,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	)
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 				DisableReplicaGCQueue: true,
 				TestingRequestFilter: storagebase.ReplicaRequestFilter(func(_ context.Context, r roachpb.BatchRequest) *roachpb.Error {
 					if r.RangeID == roachpb.RangeID(atomic.LoadInt64(&rangeID)) {
@@ -5212,7 +5212,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	require.True(t, found)
 	newReplDesc := replDesc
 	newReplDesc.ReplicaID = desc.NextReplicaID
-	require.Nil(t, store.HandleRaftRequest(ctx, &storage.RaftMessageRequest{
+	require.Nil(t, store.HandleRaftRequest(ctx, &kvserver.RaftMessageRequest{
 		RangeID:       desc.RangeID,
 		RangeStartKey: desc.StartKey,
 		FromReplica:   fromReplDesc,
@@ -5232,8 +5232,8 @@ func (n noopRaftMessageResponseSteam) Context() context.Context {
 	return context.Background()
 }
 
-func (n noopRaftMessageResponseSteam) Send(*storage.RaftMessageResponse) error {
+func (n noopRaftMessageResponseSteam) Send(*kvserver.RaftMessageResponse) error {
 	return nil
 }
 
-var _ storage.RaftMessageResponseStream = noopRaftMessageResponseSteam{}
+var _ kvserver.RaftMessageResponseStream = noopRaftMessageResponseSteam{}

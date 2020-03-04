@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -289,7 +289,7 @@ func TestErrorOnRollback(t *testing.T) {
 	// We're going to inject an error into our EndTxn.
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
 				TestingProposalFilter: func(fArgs storagebase.ProposalFilterArgs) *roachpb.Error {
 					if !fArgs.Req.IsSingleRequest() {
 						return nil
@@ -490,7 +490,7 @@ func TestQueryProgress(t *testing.T) {
 	// then close once it has checked the progress).
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
 					if req.IsSingleRequest() {
 						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)

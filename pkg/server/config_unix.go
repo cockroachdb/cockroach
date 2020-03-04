@@ -16,7 +16,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )

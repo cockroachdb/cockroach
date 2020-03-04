@@ -16,12 +16,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptcache"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptreconcile"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/protectedts/ptverifier"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -32,7 +32,7 @@ import (
 type Config struct {
 	Settings             *cluster.Settings
 	DB                   *client.DB
-	Stores               *storage.Stores
+	Stores               *kvserver.Stores
 	ReconcileStatusFuncs ptreconcile.StatusFuncs
 	InternalExecutor     sqlutil.InternalExecutor
 }

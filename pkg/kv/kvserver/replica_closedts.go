@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package storage
+package kvserver
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/storage/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 )
 
 // EmitMLAI registers the replica's last assigned max lease index with the
