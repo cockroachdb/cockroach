@@ -434,16 +434,22 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 		return cl, (tightl || cl == contradiction)
 
 	case *OrExpr:
-		cl, _ := cb.buildConstraints(t.Left)
-		cr, _ := cb.buildConstraints(t.Right)
-		cl = cl.Union(cb.evalCtx, cr)
+		cl, tightl := cb.buildConstraints(t.Left)
+		cr, tightr := cb.buildConstraints(t.Right)
+		res := cl.Union(cb.evalCtx, cr)
 
-		// The union may not be "tight" because the  new constraint set might allow
-		// additional combinations of values that neither of the input sets allowed. For
-		// example:
+		// The union may not be "tight" because the new constraint set might allow
+		// additional combinations of values that neither of the input sets allowed.
+		// For example:
 		//   (x > 1 AND y > 10) OR (x < 5 AND y < 50)
 		// the union is unconstrained (and thus allows combinations like x,y = 10,0).
-		return cl, false
+		//
+		// An exception is if we know the input sets and union each only involve a
+		// single constraint, which means all three constraints have the same
+		// columns. In this case, we can determine tightness based on the tightness
+		// of the input sets.
+		tight := tightl && tightr && cl.Length() == 1 && cr.Length() == 1 && res.Length() == 1
+		return res, tight
 
 	case *RangeExpr:
 		return cb.buildConstraints(t.And)
