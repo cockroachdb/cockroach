@@ -53,7 +53,7 @@ func DeleteRange(
 	}
 	// NB: Even if args.ReturnKeys is false, we want to know which intents were
 	// written if we're evaluating the DeleteRange for a transaction so that we
-	// can update the Result's WrittenIntents field.
+	// can update the Result's AcquiredLocks field.
 	returnKeys := args.ReturnKeys || h.Txn != nil
 	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
 		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.MaxSpanRequestKeys, timestamp, h.Txn, returnKeys,
@@ -72,5 +72,5 @@ func DeleteRange(
 	// desirable, but while it remains, we need to assume that an intent could
 	// have been written even when an error is returned. This is harmless if the
 	// error is not consumed by the caller because the result will be discarded.
-	return result.FromWrittenIntents(h.Txn, deleted...), err
+	return result.FromAcquiredLocks(h.Txn, deleted...), err
 }
