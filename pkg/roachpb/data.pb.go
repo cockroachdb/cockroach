@@ -9,8 +9,8 @@ import (
 	io "io"
 	math "math"
 
+	github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	lock "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 	proto "github.com/gogo/protobuf/proto"

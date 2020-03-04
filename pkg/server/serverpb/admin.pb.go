@@ -12,8 +12,8 @@ import (
 	time "time"
 
 	zonepb "github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/engine/enginepb"
 	jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	enginepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/engine/enginepb"
 	storagepb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	github_com_cockroachdb_cockroach_pkg_sql_sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
