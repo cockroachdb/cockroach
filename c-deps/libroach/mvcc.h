@@ -16,7 +16,7 @@
 #include "encoding.h"
 #include "iterator.h"
 #include "keys.h"
-#include "protos/storage/engine/enginepb/mvcc.pb.h"
+#include "protos/storage/enginepb/mvcc.pb.h"
 #include "status.h"
 #include "timestamp.h"
 

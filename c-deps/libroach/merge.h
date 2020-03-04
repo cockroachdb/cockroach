@@ -14,7 +14,7 @@
 #include <rocksdb/merge_operator.h>
 #include "defines.h"
 #include "protos/roachpb/internal.pb.h"
-#include "protos/storage/engine/enginepb/mvcc.pb.h"
+#include "protos/storage/enginepb/mvcc.pb.h"
 
 namespace cockroach {
 

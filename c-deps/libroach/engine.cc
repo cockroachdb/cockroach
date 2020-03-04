@@ -15,7 +15,7 @@
 #include "fmt.h"
 #include "getter.h"
 #include "iterator.h"
-#include "protos/storage/engine/enginepb/rocksdb.pb.h"
+#include "protos/storage/enginepb/rocksdb.pb.h"
 #include "status.h"
 
 using namespace cockroach;
