@@ -16,7 +16,7 @@ import { connect } from "react-redux";
 import { Link, RouteComponentProps, match as Match, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { refreshStatements } from "src/redux/apiReducers";
+import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -44,7 +44,9 @@ import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./
 import { getMatchParamByName } from "src/util/query";
 import DiagnosticsView from "./diagnosticsView";
 import classNames from "classnames";
-import { selectDiagnosticRequestsByStatementFingerprint } from "src/redux/statements/statementsSelectors";
+import {
+  selectDiagnosticsReportsCountByStatementFingerprint,
+} from "src/redux/statements/statementsSelectors";
 import { Button, BackIcon } from "oss/src/components/button";
 
 const { TabPane } = Tabs;
@@ -83,6 +85,7 @@ interface StatementDetailsOwnProps {
   statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
   refreshStatements: typeof refreshStatements;
+  refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
   nodesSummary: NodesSummary;
   diagnosticsCount: number;
 }
@@ -164,10 +167,12 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
 
   componentWillMount() {
     this.props.refreshStatements();
+    this.props.refreshStatementDiagnosticsRequests();
   }
 
   componentWillReceiveProps() {
     this.props.refreshStatements();
+    this.props.refreshStatementDiagnosticsRequests();
   }
 
   prevPage = () => this.props.history.goBack();
@@ -320,7 +325,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
           </Row>
         </TabPane>
         <TabPane tab={`Diagnostics ${diagnosticsCount > 0 ? `(${diagnosticsCount})` : ""}`} key="2">
-          <DiagnosticsView statementId={statement} />
+          <DiagnosticsView statementFingerprint={statement} />
         </TabPane>
         <TabPane tab="Logical Plan" key="3">
           <SummaryCard>
@@ -501,15 +506,19 @@ export const selectStatement = createSelector(
   },
 );
 
-const mapStateToProps = (state: AdminUIState, props: StatementDetailsProps) => ({
-  statement: selectStatement(state, props),
-  statementsError: state.cachedData.statements.lastError,
-  nodeNames: nodeDisplayNameByIDSelector(state),
-  diagnosticsCount: selectDiagnosticRequestsByStatementFingerprint(state, props.statement.statement).length,
-});
+const mapStateToProps = (state: AdminUIState, props: StatementDetailsProps) => {
+  const statement = selectStatement(state, props);
+  return {
+    statement,
+    statementsError: state.cachedData.statements.lastError,
+    nodeNames: nodeDisplayNameByIDSelector(state),
+    diagnosticsCount: selectDiagnosticsReportsCountByStatementFingerprint(state, statement?.statement),
+  };
+};
 
 const mapDispatchToProps = {
   refreshStatements,
+  refreshStatementDiagnosticsRequests,
 };
 
 // tslint:disable-next-line:variable-name

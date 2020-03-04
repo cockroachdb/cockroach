@@ -15,12 +15,17 @@ export const selectStatementByFingerprint = createSelector(
   (state: AdminUIState) => state.cachedData.statements.data?.statements,
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
   (statements, statementFingerprint) =>
-    (statements || []).find((statement: any) => statement.key.key_data.query === statementFingerprint),
+    (statements || []).find(statement => statement.key.key_data.query === statementFingerprint),
 );
 
-export const selectDiagnosticRequestsByStatementFingerprint = createSelector(
-  (state: AdminUIState) => state.cachedData.statementDiagnosticsRequests.data?.requests || [],
+export const selectDiagnosticsReportByStatementFingerprint = createSelector(
+  (state: AdminUIState) => state.cachedData.statementDiagnosticsReports.data?.reports || [],
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
   (requests, statementFingerprint) =>
-    requests.filter(request => request.statement_fingerprint === statementFingerprint),
+    (requests || []).filter(request => request.statement_fingerprint === statementFingerprint),
+);
+
+export const selectDiagnosticsReportsCountByStatementFingerprint = createSelector(
+  selectDiagnosticsReportByStatementFingerprint,
+  (requests) => requests.length,
 );
