@@ -266,7 +266,7 @@ func main() {
 		// probably makes sense to avoid stressrace if too many tests changed,
 		// which typically indicates large-scale refactors.
 		avoidViaHack := *currentPull.Number == 45640
-		if len(pkgs) > 0 && !avoidViaHack {
+		if len(pkgs) > 0 && avoidViaHack {
 			// 10 minutes total seems OK, but at least a minute per test.
 			duration := (10 * time.Minute) / time.Duration(len(pkgs))
 			if duration < time.Minute {
