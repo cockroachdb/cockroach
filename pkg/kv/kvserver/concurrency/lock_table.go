@@ -1421,21 +1421,36 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 		if holderTxn == nil {
 			continue
 		}
+		// Note that mvccResolveWriteIntent() has special handling of the case
+		// where the pusher is using an epoch lower than the epoch of the intent
+		// (replicated lock), but is trying to push to a higher timestamp. The
+		// replicated lock gets written with the newer epoch (not the epoch known
+		// to the pusher) but a higher timestamp. Then the pusher will call into
+		// this function with that lower epoch. Instead of trying to be consistent
+		// with mvccResolveWriteIntent() in the current state of the replicated
+		// lock we simply forget the replicated lock since it is no longer in the
+		// way of this request. For unreplicated locks the lock table is the
+		// source of truth so we best-effort mirror the behavior of
+		// mvccResolveWriteIntent() by updating the timestamp.
 		if lock.Durability(i) == lock.Replicated || txn.Epoch > holderTxn.Epoch {
 			l.holder.holder[i].txn = nil
 			l.holder.holder[i].seqs = nil
 			continue
 		}
-		// Held in same epoch.
-		l.holder.holder[i].seqs = removeIgnored(l.holder.holder[i].seqs, up.IgnoredSeqNums)
-		if len(l.holder.holder[i].seqs) == 0 {
-			l.holder.holder[i].txn = nil
-			continue
-		}
+		// Unreplicated lock held in same epoch or a higher epoch.
 		if advancedTs {
-			l.holder.holder[i].txn = txn
 			l.holder.holder[i].ts = ts
 		}
+		if txn.Epoch == holderTxn.Epoch {
+			l.holder.holder[i].seqs = removeIgnored(l.holder.holder[i].seqs, up.IgnoredSeqNums)
+			if len(l.holder.holder[i].seqs) == 0 {
+				l.holder.holder[i].txn = nil
+				continue
+			}
+			l.holder.holder[i].txn = txn
+		}
+		// Else txn.Epoch < holderTxn.Epoch, so only the timestamp has been
+		// potentially updated.
 		isLocked = true
 	}
 
