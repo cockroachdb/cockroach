@@ -8,36 +8,38 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { call, put, takeEvery } from "redux-saga/effects";
+import { all, call, put, takeEvery } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 
 import { createStatementDiagnosticsReport } from "src/util/api";
 import {
-  REQUEST_STATEMENT_DIAGNOSTICS_REPORT,
-  DiagnosticsPayload,
-  completeStatementDiagnosticsReportRequest,
-  failedStatementDiagnosticsReportRequest,
+  CREATE_STATEMENT_DIAGNOSTICS_REPORT,
+  DiagnosticsReportPayload,
+  createStatementDiagnosticsReportCompleteAction,
+  createStatementDiagnosticsReportFailedAction,
 } from "./statementsActions";
 import { cockroach } from "src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 
-export function* requestDiagnosticsReport(action: PayloadAction<DiagnosticsPayload>) {
+export function* createDiagnosticsReportSaga(action: PayloadAction<DiagnosticsReportPayload>) {
   const { statementFingerprint } = action.payload;
   const diagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest({
     statement_fingerprint: statementFingerprint,
   });
   try {
     yield call(createStatementDiagnosticsReport, diagnosticsReportRequest);
-    yield put(completeStatementDiagnosticsReportRequest());
+    yield put(createStatementDiagnosticsReportCompleteAction());
     yield put(invalidateStatementDiagnosticsRequests());
     // PUT expects action wih `type` field which isn't defined in `refresh` ThunkAction interface
     yield put(refreshStatementDiagnosticsRequests() as any);
   } catch (e) {
-    yield put(failedStatementDiagnosticsReportRequest());
+    yield put(createStatementDiagnosticsReportFailedAction());
   }
 }
 
 export function* statementsSaga() {
-  yield takeEvery(REQUEST_STATEMENT_DIAGNOSTICS_REPORT, requestDiagnosticsReport);
+  yield all([
+    takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, createDiagnosticsReportSaga),
+  ]);
 }
