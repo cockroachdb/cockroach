@@ -1475,90 +1475,6 @@ var mjTestCases = []joinTestCase{
 		onExpr:       execinfrapb.Expression{Expr: "@2 + @3 < 50"},
 		expected:     tuples{{1, 10}, {4, 40}},
 	},
-	{
-		description:  "LEFT SEMI JOIN test with ON expression (filter only on left)",
-		joinType:     sqlbase.JoinType_LEFT_SEMI,
-		leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
-		rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
-		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
-		rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
-		leftOutCols:  []uint32{0, 1},
-		rightOutCols: []uint32{},
-		leftEqCols:   []uint32{0},
-		rightEqCols:  []uint32{0},
-		onExpr:       execinfrapb.Expression{Expr: "@1 < 4"},
-		expected:     tuples{{1, 10}, {3, nil}},
-	},
-	{
-		description:  "LEFT SEMI JOIN test with ON expression (filter only on right)",
-		joinType:     sqlbase.JoinType_LEFT_SEMI,
-		leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
-		rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
-		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
-		rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
-		leftOutCols:  []uint32{0, 1},
-		rightOutCols: []uint32{},
-		leftEqCols:   []uint32{0},
-		rightEqCols:  []uint32{0},
-		onExpr:       execinfrapb.Expression{Expr: "@4 < 14"},
-		expected:     tuples{{3, nil}},
-	},
-	{
-		description:  "LEFT SEMI JOIN test with ON expression (filter on both)",
-		joinType:     sqlbase.JoinType_LEFT_SEMI,
-		leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
-		rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
-		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
-		rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
-		leftOutCols:  []uint32{0, 1},
-		rightOutCols: []uint32{},
-		leftEqCols:   []uint32{0},
-		rightEqCols:  []uint32{0},
-		onExpr:       execinfrapb.Expression{Expr: "@2 + @3 < 50"},
-		expected:     tuples{{1, 10}, {4, 40}},
-	},
-	{
-		description:  "LEFT ANTI JOIN test with ON expression (filter only on left)",
-		joinType:     sqlbase.JoinType_LEFT_ANTI,
-		leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
-		rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
-		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
-		rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
-		leftOutCols:  []uint32{0, 1},
-		rightOutCols: []uint32{},
-		leftEqCols:   []uint32{0},
-		rightEqCols:  []uint32{0},
-		onExpr:       execinfrapb.Expression{Expr: "@1 < 4"},
-		expected:     tuples{{nil, 0}, {2, 20}, {4, 40}},
-	},
-	{
-		description:  "LEFT ANTI JOIN test with ON expression (filter only on right)",
-		joinType:     sqlbase.JoinType_LEFT_ANTI,
-		leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
-		rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
-		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
-		rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
-		leftOutCols:  []uint32{0, 1},
-		rightOutCols: []uint32{},
-		leftEqCols:   []uint32{0},
-		rightEqCols:  []uint32{0},
-		onExpr:       execinfrapb.Expression{Expr: "@4 < 14"},
-		expected:     tuples{{nil, 0}, {1, 10}, {2, 20}, {4, 40}},
-	},
-	{
-		description:  "LEFT ANTI JOIN test with ON expression (filter on both)",
-		joinType:     sqlbase.JoinType_LEFT_ANTI,
-		leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
-		rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
-		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
-		rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
-		leftOutCols:  []uint32{0, 1},
-		rightOutCols: []uint32{},
-		leftEqCols:   []uint32{0},
-		rightEqCols:  []uint32{0},
-		onExpr:       execinfrapb.Expression{Expr: "@2 + @3 < 50"},
-		expected:     tuples{{nil, 0}, {2, 20}, {3, nil}},
-	},
 }
 
 func TestMergeJoiner(t *testing.T) {
@@ -1654,8 +1570,6 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 					typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				if err != nil {
 					t.Fatal("error in merge join op constructor", err)
@@ -1731,8 +1645,6 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-						nil,   /* filterConstructor */
-						false, /* filterOnlyOnLeft */
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1813,8 +1725,6 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
-						nil,   /* filterConstructor */
-						false, /* filterOnlyOnLeft */
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1945,8 +1855,6 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								typs,
 								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-								nil,   /* filterConstructor */
-								false, /* filterOnlyOnLeft */
 							)
 
 							if err != nil {
@@ -2046,8 +1954,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}
@@ -2079,8 +1985,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}
@@ -2114,8 +2018,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}

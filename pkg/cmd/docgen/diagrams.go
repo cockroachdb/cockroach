@@ -350,10 +350,21 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
-		name:   "alter_user_password_stmt",
-		inline: []string{"password_clause", "opt_with"},
+		name:   "alter_role_stmt",
+		inline: []string{"opt_role_options"},
 		replace: map[string]string{
-			"string_or_placeholder 'WITH'":      "name 'WITH'",
+			"string_or_placeholder":             "name'",
+			"opt_role_options":                  "OPTIONS",
+			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
+			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
+		unlink: []string{"name", "password"},
+	},
+	{
+		name:   "alter_user_stmt",
+		inline: []string{"opt_role_options"},
+		replace: map[string]string{
+			"string_or_placeholder":             "name'",
+			"opt_role_options":                  "OPTIONS",
 			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
 			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
 		unlink: []string{"name", "password"},
@@ -588,20 +599,21 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_role_stmt",
-		inline: []string{"role_or_group"},
+		inline: []string{"opt_role_options"},
 		replace: map[string]string{
-			"string_or_placeholder": "name",
-		},
+			"string_or_placeholder":             "name",
+			"opt_role_options":                  "OPTIONS",
+			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
+			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
 	},
 	{
 		name:   "create_user_stmt",
-		inline: []string{"opt_with", "password_clause", "opt_password"},
+		inline: []string{"opt_role_options"},
 		replace: map[string]string{
-			"'PASSWORD' string_or_placeholder": "'PASSWORD' password",
-			"'USER' string_or_placeholder":     "'USER' name",
-			"'EXISTS' string_or_placeholder":   "'EXISTS' name",
-		},
-		unlink: []string{"password"},
+			"string_or_placeholder":             "name",
+			"opt_role_options":                  "OPTIONS",
+			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
+			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
 	},
 	{
 		name: "default_value_column_level",
@@ -674,6 +686,10 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "drop_role_stmt",
+		replace: map[string]string{"string_or_placeholder_list": "name"},
+	},
+	{
+		name:    "drop_user_stmt",
 		replace: map[string]string{"string_or_placeholder_list": "name"},
 	},
 	{

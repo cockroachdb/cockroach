@@ -48,16 +48,6 @@ type joinTypeInfo struct {
 	IsLeftAnti   bool
 
 	String string
-
-	// FilterSupported indicates whether ON expression is supported for this
-	// join type. If it is not supported, then we will not be generating the
-	// corresponding to such a case code.
-	FilterSupported bool
-}
-
-type filterInfo struct {
-	HasFilter bool
-	String    string
 }
 
 func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
@@ -80,8 +70,6 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
 	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$.JoinType.String}}", -1)
 	s = strings.Replace(s, "_JOIN_TYPE", "$.JoinType", -1)
-	s = strings.Replace(s, "_FILTER_INFO_STRING", "{{$filterInfo.String}}", -1)
-	s = strings.Replace(s, "_FILTER_INFO", "$filterInfo", -1)
 	s = strings.Replace(s, "_MJ_OVERLOAD", "$mjOverload", -1)
 	s = strings.Replace(s, "_L_HAS_NULLS", "$.lHasNulls", -1)
 	s = strings.Replace(s, "_R_HAS_NULLS", "$.rHasNulls", -1)
@@ -110,8 +98,8 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 5)
-	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "FilterInfo" $2 "SelPermutation" $3 "lHasNulls" $4 "rHasNulls" $5}}`)
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 4)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "SelPermutation" $2 "lHasNulls" $3 "rHasNulls" $4}}`)
 
 	sourceFinishedSwitch := makeFunctionRegex("_SOURCE_FINISHED_SWITCH", 1)
 	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -177,27 +165,14 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 		},
 	}
 
-	filterInfos := []filterInfo{
-		{
-			HasFilter: false,
-			String:    "",
-		},
-		{
-			HasFilter: true,
-			String:    "WithOnExpr",
-		},
-	}
-
 	return tmpl.Execute(wr, struct {
 		MJOverloads     interface{}
 		SelPermutations interface{}
 		JoinType        interface{}
-		FilterInfos     interface{}
 	}{
 		MJOverloads:     mjOverloads,
 		SelPermutations: selPermutations,
 		JoinType:        jti,
-		FilterInfos:     filterInfos,
 	})
 }
 
@@ -206,8 +181,6 @@ func init() {
 		{
 			IsInner: true,
 			String:  "Inner",
-			// Note that filter is supported with INNER join, but it is handled
-			// differently.
 		},
 		{
 			IsLeftOuter: true,
@@ -223,14 +196,12 @@ func init() {
 			String:       "FullOuter",
 		},
 		{
-			IsLeftSemi:      true,
-			String:          "LeftSemi",
-			FilterSupported: true,
+			IsLeftSemi: true,
+			String:     "LeftSemi",
 		},
 		{
-			IsLeftAnti:      true,
-			String:          "LeftAnti",
-			FilterSupported: true,
+			IsLeftAnti: true,
+			String:     "LeftAnti",
 		},
 	}
 

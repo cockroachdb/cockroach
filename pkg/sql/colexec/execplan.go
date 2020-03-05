@@ -198,12 +198,9 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.MergeJoiner != nil:
-		if !core.MergeJoiner.OnExpr.Empty() {
-			switch core.MergeJoiner.Type {
-			case sqlbase.JoinType_INNER, sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
-			default:
-				return false, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
-			}
+		if !core.MergeJoiner.OnExpr.Empty() &&
+			core.MergeJoiner.Type != sqlbase.JoinType_INNER {
+			return false, errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
 		return true, nil
 
@@ -783,40 +780,7 @@ func NewColOperator(
 				return result, err
 			}
 
-			var (
-				onExpr            *execinfrapb.Expression
-				filterOnlyOnLeft  bool
-				filterConstructor func(Operator) (Operator, error)
-			)
 			joinType := core.MergeJoiner.Type
-			if !core.MergeJoiner.OnExpr.Empty() {
-				// At the moment, we want to be on the conservative side and not run
-				// queries with ON expressions when vectorize=auto, so we say that the
-				// merge join is not streaming which will reject running such a query
-				// through vectorized engine with 'auto' setting.
-				// TODO(yuzefovich): remove this when we're confident in ON expression
-				// support.
-				result.IsStreaming = false
-
-				onExpr = &core.MergeJoiner.OnExpr
-				switch joinType {
-				case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
-					onExprPlanning := makeFilterPlanningState(len(leftPhysTypes), len(rightPhysTypes))
-					filterOnlyOnLeft, err = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
-					filterConstructor = func(op Operator) (Operator, error) {
-						r := NewColOperatorResult{
-							Op:          op,
-							ColumnTypes: append(leftLogTypes, rightLogTypes...),
-						}
-						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount)
-						return r.Op, err
-					}
-				}
-			}
-			if err != nil {
-				return result, err
-			}
-
 			mergeJoinerMemAccount := streamingMemAccount
 			if !result.IsStreaming && !useStreamingMemAccountForBuffering {
 				// If the merge joiner is buffering, create an unlimited buffering
@@ -829,15 +793,13 @@ func NewColOperator(
 			}
 			result.Op, err = NewMergeJoinOp(
 				NewAllocator(ctx, mergeJoinerMemAccount),
-				core.MergeJoiner.Type,
+				joinType,
 				inputs[0],
 				inputs[1],
 				leftPhysTypes,
 				rightPhysTypes,
 				core.MergeJoiner.LeftOrdering.Columns,
 				core.MergeJoiner.RightOrdering.Columns,
-				filterConstructor,
-				filterOnlyOnLeft,
 			)
 			if err != nil {
 				return result, err
@@ -845,14 +807,14 @@ func NewColOperator(
 
 			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
 
-			if onExpr != nil && joinType == sqlbase.JoinType_INNER {
+			if !core.MergeJoiner.OnExpr.Empty() && joinType == sqlbase.JoinType_INNER {
 				// We will plan other Operators on top of the merge joiner, so we need
 				// to account for the internal memory explicitly.
 				if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
 					result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
 				}
 				if err = result.planFilterExpr(
-					ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount,
+					ctx, flowCtx.NewEvalCtx(), core.MergeJoiner.OnExpr, streamingMemAccount,
 				); err != nil {
 					return result, err
 				}
@@ -1051,31 +1013,6 @@ func NewColOperator(
 		result.Op = NewLimitOp(result.Op, int(post.Limit))
 	}
 	return result, err
-}
-
-type filterPlanningState struct {
-	numLeftInputCols  int
-	numRightInputCols int
-}
-
-func makeFilterPlanningState(numLeftInputCols, numRightInputCols int) filterPlanningState {
-	return filterPlanningState{
-		numLeftInputCols:  numLeftInputCols,
-		numRightInputCols: numRightInputCols,
-	}
-}
-
-// isFilterOnlyOnLeft returns whether the filter expression doesn't use columns
-// from the right side.
-func (p *filterPlanningState) isFilterOnlyOnLeft(filter execinfrapb.Expression) (bool, error) {
-	// Find all needed columns for filter only from the right side.
-	neededColumnsForFilter, err := findIVarsInRange(
-		filter, p.numLeftInputCols, p.numLeftInputCols+p.numRightInputCols,
-	)
-	if err != nil {
-		return false, errors.Errorf("error parsing filter expression %q: %s", filter, err)
-	}
-	return len(neededColumnsForFilter) == 0, nil
 }
 
 // createBufferingUnlimitedMemMonitor instantiates an unlimited memory monitor.

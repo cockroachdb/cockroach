@@ -92,8 +92,8 @@ transaction_stmt ::=
 
 alter_stmt ::=
 	alter_ddl_stmt
-	| alter_user_stmt
 	| alter_role_stmt
+	| alter_user_stmt
 
 backup_stmt ::=
 	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
@@ -105,8 +105,8 @@ cancel_stmt ::=
 	| cancel_sessions_stmt
 
 create_stmt ::=
-	create_user_stmt
-	| create_role_stmt
+	create_role_stmt
+	| create_user_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
 
@@ -297,12 +297,13 @@ alter_ddl_stmt ::=
 	| alter_range_stmt
 	| alter_partition_stmt
 
-alter_user_stmt ::=
-	alter_user_password_stmt
-
 alter_role_stmt ::=
-	'ALTER' role_or_group string_or_placeholder role_privileges
-	| 'ALTER' role_or_group string_or_placeholder 'WITH' role_privileges
+	'ALTER' role_or_group string_or_placeholder opt_role_options
+	| 'ALTER' role_or_group 'IF' 'EXISTS' string_or_placeholder opt_role_options
+
+alter_user_stmt ::=
+	'ALTER' 'USER' string_or_placeholder opt_role_options
+	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder opt_role_options
 
 partitioned_backup ::=
 	string_or_placeholder
@@ -332,17 +333,13 @@ cancel_sessions_stmt ::=
 	| 'CANCEL' 'SESSIONS' select_stmt
 	| 'CANCEL' 'SESSIONS' 'IF' 'EXISTS' select_stmt
 
-create_user_stmt ::=
-	'CREATE' 'USER' string_or_placeholder opt_password
-	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_password
-
 create_role_stmt ::=
-	'CREATE' role_or_group string_or_placeholder
-	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder
-	| 'CREATE' role_or_group string_or_placeholder role_privileges
-	| 'CREATE' role_or_group string_or_placeholder 'WITH' role_privileges
-	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder role_privileges
-	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder 'WITH' role_privileges
+	'CREATE' role_or_group string_or_placeholder opt_role_options
+	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
+
+create_user_stmt ::=
+	'CREATE' 'USER' string_or_placeholder opt_role_options
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
 
 create_ddl_stmt ::=
 	create_changefeed_stmt
@@ -390,8 +387,8 @@ drop_ddl_stmt ::=
 	| drop_sequence_stmt
 
 drop_role_stmt ::=
-	'DROP' 'ROLE' string_or_placeholder_list
-	| 'DROP' 'ROLE' 'IF' 'EXISTS' string_or_placeholder_list
+	'DROP' role_or_group string_or_placeholder_list
+	| 'DROP' role_or_group 'IF' 'EXISTS' string_or_placeholder_list
 
 drop_user_stmt ::=
 	'DROP' 'USER' string_or_placeholder_list
@@ -1009,22 +1006,15 @@ alter_range_stmt ::=
 alter_partition_stmt ::=
 	alter_zone_partition_stmt
 
-alter_user_password_stmt ::=
-	'ALTER' 'USER' string_or_placeholder password_clause
-	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder password_clause
-
 role_or_group ::=
 	'ROLE'
 
-role_privileges ::=
-	role_privilege_list
+opt_role_options ::=
+	opt_with role_options
+	| 
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
-
-opt_password ::=
-	password_clause
-	| 
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
@@ -1374,13 +1364,12 @@ alter_zone_partition_stmt ::=
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
-password_clause ::=
-	opt_with 'PASSWORD' string_or_placeholder
-	| opt_with 'PASSWORD' 'NULL'
+opt_with ::=
+	'WITH'
+	| 
 
-role_privilege_list ::=
-	role_privilege
-	| role_privilege role_privilege_list
+role_options ::=
+	( role_option ) ( ( role_option ) )*
 
 changefeed_targets ::=
 	single_table_pattern_list
@@ -1388,10 +1377,6 @@ changefeed_targets ::=
 
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
-
-opt_with ::=
-	'WITH'
-	| 
 
 opt_template_clause ::=
 	'TEMPLATE' opt_equal non_reserved_word_or_sconst
@@ -1781,9 +1766,10 @@ alter_index_cmds ::=
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
 
-role_privilege ::=
+role_option ::=
 	'CREATEROLE'
 	| 'NOCREATEROLE'
+	| password_clause
 
 single_table_pattern_list ::=
 	( table_name ) ( ( ',' table_name ) )*
@@ -2063,6 +2049,10 @@ sequence_option_elem ::=
 	| 'START' signed_iconst64
 	| 'START' 'WITH' signed_iconst64
 	| 'VIRTUAL'
+
+password_clause ::=
+	'PASSWORD' string_or_placeholder
+	| 'PASSWORD' 'NULL'
 
 opt_asc_desc ::=
 	'ASC'

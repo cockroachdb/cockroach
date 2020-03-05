@@ -28,4 +28,11 @@ func TestNoLinkForbidden(t *testing.T) {
 			"github.com/cockroachdb/cockroach/pkg/sql/rowflow",
 		}, nil,
 	)
+	buildutil.VerifyNoImports(t,
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen/cmd/execgen", true,
+		[]string{
+			"github.com/cockroachdb/cockroach/pkg/sql/sqlbase",
+			"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb",
+		}, nil,
+	)
 }

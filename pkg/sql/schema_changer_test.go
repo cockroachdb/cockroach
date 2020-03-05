@@ -2348,15 +2348,16 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 
 	// Protects backfillNotification.
 	var mu syncutil.Mutex
-	var backfillNotification chan struct{}
+	var backfillNotification, continueNotification chan struct{}
 	// We have to have initBackfillNotification return the new
 	// channel rather than having later users read the original
 	// backfillNotification to make the race detector happy.
-	initBackfillNotification := func() chan struct{} {
+	initBackfillNotification := func() (chan struct{}, chan struct{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		backfillNotification = make(chan struct{})
-		return backfillNotification
+		continueNotification = make(chan struct{})
+		return backfillNotification, continueNotification
 	}
 	notifyBackfill := func() {
 		mu.Lock()
@@ -2364,6 +2365,9 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 		if backfillNotification != nil {
 			close(backfillNotification)
 			backfillNotification = nil
+		}
+		if continueNotification != nil {
+			<-continueNotification
 		}
 	}
 	params, _ := tests.CreateTestServerParams()
@@ -2395,7 +2399,7 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		backfillNotif := initBackfillNotification()
+		backfillNotif, _ := initBackfillNotification()
 		var wg sync.WaitGroup
 		wg.Add(1)
 		// Create an index on the table that will need to get rewritten.
@@ -2433,7 +2437,7 @@ DROP TABLE IF EXISTS t.test;
 CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 			t.Fatal(err)
 		}
-		backfillNotif := initBackfillNotification()
+		backfillNotif, continueNotif := initBackfillNotification()
 		// Can't use bulkInsertIntoTable here because that only works with 2 columns.
 		inserts := make([]string, maxValue+1)
 		for i := 0; i < maxValue+1; i++ {
@@ -2458,6 +2462,9 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		if !testutils.IsError(err, "pq: unimplemented: table test is currently undergoing a schema change") {
 			t.Errorf("expected to concurrent primary key change to error, but got %+v", err)
 		}
+
+		// After the expected error, let the backfill continue.
+		close(continueNotif)
 
 		wg.Wait()
 

@@ -969,7 +969,7 @@ EXPLAIN (VEC) SELECT s_name, count(*) AS numwait FROM supplier, lineitem l1, ord
         └ *rowexec.joinReader
           └ *colexec.hashJoiner
             ├ *rowexec.hashJoiner
-            │ ├ *colexec.mergeJoinLeftAntiWithOnExprOp
+            │ ├ *rowexec.mergeJoiner
             │ │ ├ *colexec.selGTInt64Int64Op
             │ │ │ └ *colexec.colBatchScan
             │ │ └ *colexec.selGTInt64Int64Op
