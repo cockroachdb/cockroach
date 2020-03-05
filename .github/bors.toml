@@ -2,7 +2,8 @@ status = [
   "GitHub CI (Cockroach)"
 ]
 pr_status = [
-  "license/cla"
+# The CLA check is being flaky 20200305
+#  "license/cla"
 ]
 block_labels = [
   "do-not-merge"
