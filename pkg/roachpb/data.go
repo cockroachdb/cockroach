@@ -1162,8 +1162,10 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) 
 	return s.get(nodeID)
 }
 
-// AddIgnoredSeqNumRange adds the given range to the transaction's list of
-// ignored seqnum ranges.
+// AddIgnoredSeqNumRange adds the given range to the given list of
+// ignored seqnum ranges. Since none of the references held by a Transaction
+// allow interior mutations, the existing list is copied instead of being
+// mutated in place.
 //
 // The following invariants are assumed to hold and are preserved:
 // - the list contains no overlapping ranges
@@ -1196,16 +1198,16 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) 
 //   previously seen value.
 func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange) {
 	// Truncate the list at the last element not included in the new range.
+
 	list := t.IgnoredSeqNums
-	i := 0
-	for ; i < len(list); i++ {
-		if list[i].End < newRange.Start {
-			continue
-		}
-		break
-	}
-	list = list[:i]
-	t.IgnoredSeqNums = append(list, newRange)
+	i := sort.Search(len(list), func(i int) bool {
+		return list[i].End >= newRange.Start
+	})
+
+	cpy := make([]enginepb.IgnoredSeqNumRange, i+1)
+	copy(cpy[:i], list[:i])
+	cpy[i] = newRange
+	t.IgnoredSeqNums = cpy
 }
 
 // AsRecord returns a TransactionRecord object containing only the subset of
