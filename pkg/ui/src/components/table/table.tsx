@@ -22,6 +22,7 @@ export interface TableProps<T> {
   dataSource: Array<T>;
   noDataMessage?: string;
   tableLayout?: "fixed" | "auto";
+  pageSize?: number;
 }
 
 const customizeRenderEmpty = (text: string) => () => (
@@ -36,7 +37,7 @@ Table.defaultProps = {
 };
 
 export function Table<T>(props: TableProps<T>) {
-  const { columns, dataSource, noDataMessage, tableLayout } = props;
+  const { columns, dataSource, noDataMessage, tableLayout, pageSize } = props;
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
     <AntTable<T>
@@ -45,7 +46,8 @@ export function Table<T>(props: TableProps<T>) {
       dataSource={dataSource}
       expandRowByClick
       tableLayout={tableLayout}
-      pagination={{hideOnSinglePage: true}} />
+      pagination={{hideOnSinglePage: true, pageSize }}
+    />
     </ConfigProvider>
   );
 }
