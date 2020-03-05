@@ -536,3 +536,11 @@ func ConditionalGetTableDescFromTxn(
 	}
 	return existingKV.Value, nil
 }
+
+// CanClearRangeForDrop returns if an index can be deleted by deleting every
+// key from a single span.
+// This determines whether an index is dropped during a schema change, or if
+// it is only deleted upon GC.
+func CanClearRangeForDrop(index *IndexDescriptor) bool {
+	return !index.IsInterleaved()
+}
