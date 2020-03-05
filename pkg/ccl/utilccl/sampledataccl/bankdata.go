@@ -62,7 +62,7 @@ func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (
 
 	// TODO(dan): The csv load will be less overhead, use it when we have it.
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := importccl.Load(ctx, db, &stmts, `data`, `nodelocal:///`, ts, chunkBytes, tempDir, dir)
+	desc, err := importccl.Load(ctx, db, &stmts, `data`, `nodelocal://0/`, ts, chunkBytes, tempDir, dir)
 	if err != nil {
 		return nil, err
 	}
