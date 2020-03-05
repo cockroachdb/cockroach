@@ -170,6 +170,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	result := plan.(*planTop)
+	result.mem = execMemo
 	result.stmt = stmt
 	result.flags = opc.flags
 

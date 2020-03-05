@@ -252,7 +252,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 	}
 
-	var discardRows bool
+	var discardRows, explainBundle bool
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is always an error when in the Open state. It's legitimate only in
@@ -346,6 +346,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		res.ResetStmtType(ps.AST)
 
 		discardRows = s.DiscardRows
+
+	case *tree.ExplainBundle:
+		stmt.Statement.AST = s.Statement
+		// XXX .SQL?
+		discardRows = true
+		explainBundle = true
 	}
 
 	// For regular statements (the ones that get to this point), we
@@ -450,6 +456,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.discardRows = discardRows
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+	p.collectBundle = explainBundle
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
 	}
@@ -478,6 +485,12 @@ func (ex *connExecutor) execStmtInOpenState(
 				rewCap: rc,
 			}
 			return ev, payload, nil
+		}
+	}
+	if explainBundle {
+		if err := p.generateExplainBundle(ctx, res); err != nil {
+			res.SetError(err)
+			return makeErrEvent(err)
 		}
 	}
 	// No event was generated.
@@ -775,6 +788,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // either the optimizer or the heuristic planner.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
 	planner.curPlan.init(planner.stmt, ex.appStats)
+	if planner.collectBundle {
+		planner.curPlan.instrumentation.savePlanString = true
+	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
