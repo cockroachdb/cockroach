@@ -273,6 +273,53 @@ func (ed *EncDatum) Encode(
 	}
 }
 
+// Fingerprint appends a unique hash of ed to the given slice. If datums are intended
+// to be deduplicated or grouped with hashes, this function should be used
+// instead of encode. Additionally, Fingerprint has the property that if the
+// fingerprints of a set of datums are appended together, the resulting
+// fingerprint will uniquely identify the set.
+func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([]byte, error) {
+	if err := ed.EnsureDecoded(typ, a); err != nil {
+		return nil, err
+	}
+	switch typ.Family() {
+	case types.JsonFamily:
+		// We must use value encodings without a column ID even if the EncDatum already
+		// is encoded with the value encoding so that the hashes are indeed unique.
+		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
+	case types.ArrayFamily:
+		// Arrays may contain composite data, so we cannot just value
+		// encode an array (that would give same-valued composite
+		// datums a different encoding).
+		if ed.Datum == tree.DNull {
+			return ed.Encode(typ, a, DatumEncoding_ASCENDING_KEY, appendTo)
+		}
+		// Allocate one EncDatum upfront rather than using the DatumToEncDatum
+		// to avoid allocating an EncDatum on each iteration of the loop.
+		e := EncDatum{}
+		array := ed.Datum.(*tree.DArray)
+		// Append a type header to the encoding to differentiate between
+		// NULL and ARRAY[NULL].
+		appendTo = append(appendTo, byte(encoding.Array))
+		var err error
+		for _, d := range array.Array {
+			e.Datum = d
+			appendTo, err = e.Fingerprint(array.ParamTyp, a, appendTo)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return appendTo, nil
+	default:
+		// For values that are key encodable, using the ascending key.
+		// TODO (rohany): However, there should be a knob for the hasher that sees
+		//  what kind of encoding already exists on the enc datums incoming to the
+		//  DistSQL operators, and should use that encoding to avoid re-encoding
+		//  datums into different encoding types as much as possible.
+		return ed.Encode(typ, a, DatumEncoding_ASCENDING_KEY, appendTo)
+	}
+}
+
 // Compare returns:
 //    -1 if the receiver is less than rhs,
 //    0  if the receiver is equal to rhs,

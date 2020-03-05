@@ -196,13 +196,7 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 			continue
 		}
 
-		// TODO(irfansharif): Different rows may come with different encodings,
-		// e.g. if they come from different streams that were merged, in which
-		// case the encodings don't match (despite having the same underlying
-		// datums). We instead opt to always choose sqlbase.DatumEncoding_ASCENDING_KEY
-		// but we may want to check the first row for what encodings are already
-		// available.
-		appendTo, err = datum.Encode(&d.types[i], &d.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = datum.Fingerprint(&d.types[i], &d.datumAlloc, appendTo)
 		if err != nil {
 			return nil, err
 		}
