@@ -171,6 +171,34 @@ message DroppedTableDetails {
   Status status = 3;
 }
 
+// WaitingForGCDetails is the payload of the job which waits for the TTL of
+// schema elements to expire and then GCs them.
+// These should store the drop times.
+message WaitingForGCDetails {
+  message DroppedIndex {
+    int64 index_id = 1 [(gogoproto.customname) = "IndexID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.IndexID"];
+    int64 drop_time = 2;
+  }
+
+  message DroppedID {
+    int64 id = 1 [(gogoproto.customname) = "ID",
+                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    int64 drop_time = 2;
+  }
+
+  // Indexes to GC.
+  repeated DroppedIndex indexes = 1 [(gogoproto.nullable) = false];
+
+  // Entire tables to GC.
+  repeated DroppedID tables = 2 [(gogoproto.nullable) = false];
+
+  // If dropping indexes, the table ID which has those indexes. If dropping a
+  // database, the database ID.
+  int64 parent_id = 3 [(gogoproto.customname) = "ParentID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+}
+
 message SchemaChangeDetails {
   reserved 1;
   // A schema change can involve running multiple processors backfilling
@@ -192,6 +220,37 @@ message SchemaChangeDetails {
 
 message SchemaChangeProgress {
 
+}
+
+message WaitingForGCProgress {
+  enum Status {
+    // Waiting for the index/table to expire.
+    WAITING_FOR_GC = 0;
+    // The GC TLL has expired. This element will be deleted. Changes to the GC
+    // TTL at this point will not have any effect.
+    DELETING = 1;
+    // This element has been deleted. The job is done when all elements are in
+    // this state.
+    DELETED = 2;
+  }
+
+  message IndexProgress {
+    int64 index_id = 1 [(gogoproto.customname) = "IndexID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.IndexID"];
+    Status status = 2;
+  }
+
+  message TableProgress {
+    int64 id = 1 [(gogoproto.customname) = "ID",
+                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    Status status = 2;
+  }
+
+  // Indexes to GC.
+  repeated IndexProgress indexes = 1 [(gogoproto.nullable) = false];
+
+  // Entire tables to GC.
+  repeated TableProgress tables = 2 [(gogoproto.nullable) = false];
 }
 
 message ChangefeedTarget {
@@ -308,6 +367,7 @@ message Payload {
     ImportDetails import = 13;
     ChangefeedDetails changefeed = 14;
     CreateStatsDetails createStats = 15;
+    WaitingForGCDetails waitingForGC = 21;
   }
 }
 
@@ -326,6 +386,7 @@ message Progress {
     ImportProgress import = 13;
     ChangefeedProgress changefeed = 14;
     CreateStatsProgress createStats = 15;
+    WaitingForGCProgress waitingForGC = 16;
   }
 }
 
@@ -341,6 +402,7 @@ enum Type {
   CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
   AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
+  WAITING_FOR_GC = 8 [(gogoproto.enumvalue_customname) = "TypeWaitingForGC"];
 }
 
 message Job {
