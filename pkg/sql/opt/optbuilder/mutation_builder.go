@@ -280,8 +280,9 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	if fromClausePresent {
 		var pkCols opt.ColSet
 
-		// We need to ensure that the join has a maximum of one row for every row in the
-		// table and we ensure this by constructing a distinct on the primary key columns.
+		// We need to ensure that the join has a maximum of one row for every row
+		// in the table and we ensure this by constructing a distinct on the primary
+		// key columns.
 		primaryIndex := mb.tab.Index(cat.PrimaryIndex)
 		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
 			pkCol := mb.outScope.cols[primaryIndex.Column(i).Ordinal]
@@ -294,7 +295,8 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		}
 
 		if !pkCols.Empty() {
-			mb.outScope = mb.b.buildDistinctOn(pkCols, mb.outScope, false /* forUpsert */)
+			mb.outScope = mb.b.buildDistinctOn(
+				pkCols, mb.outScope, false /* nullsAreDistinct */, false /* errorOnDup */)
 		}
 	}
 
