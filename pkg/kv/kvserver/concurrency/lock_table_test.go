@@ -266,7 +266,7 @@ func TestLockTableBasic(t *testing.T) {
 				ts := scanTimestamp(t, d)
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
-				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID}
+				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID, Sequence: txnMeta.Sequence}
 				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
 				txnMeta.WriteTimestamp = ts
 				txnsByName[txnName] = txnMeta
