@@ -1,6 +1,4 @@
-# LogicTest: local local-vec
-
-# TODO(asubiotto): Add fakedist-vec-disk configuration to this file.
+# LogicTest: local local-vec fakedist-vec-disk
 
 # Disable automatic stats.
 statement ok
@@ -609,7 +607,7 @@ statement error negative substring length -1 not allowed
 SELECT substring(x, 0, -1) FROM builtin_test
 
 # Regression test for #44881 (non-Int64 argument types).
-query T
+query T rowsort
 SELECT substring(x, -1::INT2, 3::INT4) FROM builtin_test
 ----
 H
