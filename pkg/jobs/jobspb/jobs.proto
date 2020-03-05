@@ -249,6 +249,21 @@ message ResolvedSpan {
 message ChangefeedProgress {
   reserved 1;
   repeated ResolvedSpan resolved_spans = 2 [(gogoproto.nullable) = false];
+
+  // ProtectedTimestampRecord is the ID of the protected timestamp record
+  // corresponding to this job. While the job ought to clean up the record
+  // when it enters a terminal state, there may be cases where it cannot or
+  // does not run the code to do so. To deal with this there is a background
+  // reconcilliation loop to ensure that protected timestamps are cleaned up.
+  //
+  // A record is created with the job if the job requires an initial backfill.
+  // Furthermore, once subsequent backfills begin, record will be created and
+  // released accordingly.
+  bytes protected_timestamp_record = 3 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
 }
 
 // CreateStatsDetails are used for the CreateStats job, which is triggered
