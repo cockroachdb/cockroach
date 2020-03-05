@@ -864,8 +864,8 @@ func (ag *aggregatorBase) encode(
 	appendTo []byte, row sqlbase.EncDatumRow,
 ) (encoding []byte, err error) {
 	for _, colIdx := range ag.groupCols {
-		appendTo, err = row[colIdx].Encode(
-			&ag.inputTypes[colIdx], &ag.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = row[colIdx].Fingerprint(
+			&ag.inputTypes[colIdx], &ag.datumAlloc, appendTo)
 		if err != nil {
 			return appendTo, err
 		}

@@ -308,9 +308,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
 				s.sketches[i].sketch.Insert(intbuf[:])
 			} else {
-				// We need to use a KEY encoding because equal values should have the same
-				// encoding.
-				buf, err = row[col].Encode(&s.outTypes[col], &da, sqlbase.DatumEncoding_ASCENDING_KEY, buf[:0])
+				buf, err = row[col].Fingerprint(&s.outTypes[col], &da, buf[:0])
 				if err != nil {
 					return false, err
 				}

@@ -1483,6 +1483,9 @@ func TestLint(t *testing.T) {
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.
 	t.Run("TestRoachVet", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
 		// The -printfuncs functionality is interesting and
 		// under-documented. It checks two things:
 		//

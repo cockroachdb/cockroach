@@ -2149,3 +2149,24 @@ statement ok
 SELECT DISTINCT ON (b) b
 FROM t44469_a INNER LOOKUP JOIN t44469_b ON a = b INNER LOOKUP JOIN t44469_cd ON c = 1 AND d = a
 ORDER BY b
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x JSONB, y INT);
+INSERT INTO t VALUES
+  ('{"foo": "bar"}', 5),
+  ('{"foo": "bar"}', 10),
+  ('[1, 2]', 5),
+  ('[1, 2]', 20),
+  ('{"foo": "bar", "bar": "baz"}', 5),
+  ('{"foo": "bar", "bar": "baz"}', 30),
+  ('{"foo": {"bar" : "baz"}}', 5),
+  ('{"foo": {"bar" : "baz"}}', 40)
+
+query TT
+SELECT x, SUM (y) FROM t GROUP BY (x) ORDER BY SUM (y)
+----
+{"foo": "bar"}                15
+[1, 2]                        25
+{"bar": "baz", "foo": "bar"}  35
+{"foo": {"bar": "baz"}}       45
