@@ -949,7 +949,7 @@ project
  │    │    │    │    ├── outer: (4)
  │    │    │    │    ├── limit hint: 10.00
  │    │    │    │    ├── scan b
- │    │    │    │    │    └── limit hint: 30.00
+ │    │    │    │    │    └── limit hint: 10.00
  │    │    │    │    └── filters
  │    │    │    │         └── s:4 >= 'foo' [outer=(4), constraints=(/4: [/'foo' - ]; tight)]
  │    │    │    └── 10

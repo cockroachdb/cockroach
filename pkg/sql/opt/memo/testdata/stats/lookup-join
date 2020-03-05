@@ -59,7 +59,7 @@ inner-join (lookup abcd)
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── select
  │    │    ├── columns: m:1(int) n:2(int!null)
- │    │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=0.333333333, null(2)=0]
+ │    │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0]
  │    │    ├── scan small
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
