@@ -13,6 +13,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -315,7 +316,7 @@ d
 			create:   `i int8, j int8`,
 			typ:      "DELIMITED",
 			data:     "bad_int\t2\n3\t4",
-			err:      "row 1: parse",
+			err:      "error parsing row 1",
 			rejected: "bad_int\t2\n",
 			query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
 		},
@@ -373,8 +374,8 @@ d
 			with:     `WITH fields_enclosed_by = '$'`,
 			typ:      "DELIMITED",
 			data:     "$foo\tnormal\nbaz\tbar",
-			err:      "row 1: unmatched field enclosure at start of field",
-			rejected: "$foo\tnormal\nbaz\tbar",
+			err:      "error parsing row 1: unmatched field enclosure at start of field",
+			rejected: "$foo\tnormal\nbaz\tbar\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -394,7 +395,7 @@ d
 			typ:      "DELIMITED",
 			data:     "normal\t$foo",
 			err:      "row 1: unmatched field enclosure at start of field",
-			rejected: "normal\t$foo",
+			rejected: "normal\t$foo\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -404,7 +405,7 @@ d
 			typ:      "DELIMITED",
 			data:     "normal\tfoo$",
 			err:      "row 1: unmatched field enclosure at end of field",
-			rejected: "normal\tfoo$",
+			rejected: "normal\tfoo$\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -414,7 +415,7 @@ d
 			typ:      "DELIMITED",
 			data:     `\`,
 			err:      "row 1: unmatched literal",
-			rejected: `\`,
+			rejected: "\\\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -433,9 +434,9 @@ d
 			create: `s STRING`,
 			with:   `WITH fields_escaped_by = '@'`,
 			typ:    "DELIMITED",
-			data:   "@N\nN@@\nNULL",
+			data:   "@N\nN@@@\n\nNULL",
 			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@"}, {"NULL"}},
+				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@\n"}, {"NULL"}},
 			},
 		},
 		{
@@ -465,7 +466,7 @@ d
 			typ:      "DELIMITED",
 			data:     `\N\N`,
 			err:      "row 1: unexpected null encoding",
-			rejected: `\N\N`,
+			rejected: `\N\N` + "\n",
 			query:    map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
@@ -989,7 +990,7 @@ COPY t (a, b, c) FROM stdin;
 						sqlDB.CheckQueryResults(t, query, res)
 					}
 					if tc.rejected != mockRecorder.rejectedString {
-						t.Errorf("expected:\n%v\ngot:\n%v\n", tc.rejected,
+						t.Errorf("expected:\n%q\ngot:\n%q\n", tc.rejected,
 							mockRecorder.rejectedString)
 					}
 				}
@@ -2398,6 +2399,19 @@ func (s *csvBenchmarkStream) Row() (interface{}, error) {
 	return s.data[s.pos%len(s.data)], nil
 }
 
+// Read implements Reader interface.  It's used by delimited
+// benchmark to read its tab separated input.
+func (s *csvBenchmarkStream) Read(buf []byte) (int, error) {
+	if s.Scan() {
+		r, err := s.Row()
+		if err != nil {
+			return 0, err
+		}
+		return copy(buf, strings.Join(r.([]string), "\t")+"\n"), nil
+	}
+	return 0, io.EOF
+}
+
 var _ importRowProducer = &csvBenchmarkStream{}
 
 // BenchmarkConvertRecord-16    	 1000000	      2107 ns/op	  56.94 MB/s	    3600 B/op	     101 allocs/op
@@ -2410,7 +2424,7 @@ var _ importRowProducer = &csvBenchmarkStream{}
 // BenchmarkConvertRecord-16    	  500000	      2365 ns/op	  50.73 MB/s	    3606 B/op	     101 allocs/op
 // BenchmarkConvertRecord-16    	  500000	      2376 ns/op	  50.49 MB/s	    3606 B/op	     101 allocs/op
 // BenchmarkConvertRecord-16    	  500000	      2390 ns/op	  50.20 MB/s	    3606 B/op	     101 allocs/op
-func BenchmarkConvertRecord(b *testing.B) {
+func BenchmarkCSVConvertRecord(b *testing.B) {
 	ctx := context.TODO()
 
 	tpchLineItemDataRows := [][]string{
@@ -2488,6 +2502,106 @@ func BenchmarkConvertRecord(b *testing.B) {
 	consumer := &csvRowConsumer{importCtx: importCtx, opts: &roachpb.CSVOptions{}}
 	b.ResetTimer()
 	require.NoError(b, runParallelImport(ctx, importCtx, &importFileContext{}, producer, consumer))
+	close(kvCh)
+	b.ReportAllocs()
+}
+
+// goos: darwin
+// goarch: amd64
+// pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2473 ns/op	  48.51 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2580 ns/op	  46.51 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2678 ns/op	  44.80 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2897 ns/op	  41.41 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3250 ns/op	  36.92 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3261 ns/op	  36.80 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3016 ns/op	  39.79 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2943 ns/op	  40.77 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      3004 ns/op	  39.94 MB/s
+// BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
+func BenchmarkDelimitedConvertRecord(b *testing.B) {
+	ctx := context.TODO()
+
+	tpchLineItemDataRows := [][]string{
+		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
+		{"1", "67310", "7311", "2", "36", "45983.16", "0.09", "0.06", "N", "O", "1996-04-12", "1996-02-28", "1996-04-20", "TAKE BACK RETURN", "MAIL", "ly final dependencies: slyly bold "},
+		{"1", "63700", "3701", "3", "8", "13309.60", "0.10", "0.02", "N", "O", "1996-01-29", "1996-03-05", "1996-01-31", "TAKE BACK RETURN", "REG AIR", "riously. regular, express dep"},
+		{"1", "2132", "4633", "4", "28", "28955.64", "0.09", "0.06", "N", "O", "1996-04-21", "1996-03-30", "1996-05-16", "NONE", "AIR", "lites. fluffily even de"},
+		{"1", "24027", "1534", "5", "24", "22824.48", "0.10", "0.04", "N", "O", "1996-03-30", "1996-03-14", "1996-04-01", "NONE", "FOB", " pending foxes. slyly re"},
+		{"1", "15635", "638", "6", "32", "49620.16", "0.07", "0.02", "N", "O", "1996-01-30", "1996-02-07", "1996-02-03", "DELIVER IN PERSON", "MAIL", "arefully slyly ex"},
+		{"2", "106170", "1191", "1", "38", "44694.46", "0.00", "0.05", "N", "O", "1997-01-28", "1997-01-14", "1997-02-02", "TAKE BACK RETURN", "RAIL", "ven requests. deposits breach a"},
+		{"3", "4297", "1798", "1", "45", "54058.05", "0.06", "0.00", "R", "F", "1994-02-02", "1994-01-04", "1994-02-23", "NONE", "AIR", "ongside of the furiously brave acco"},
+		{"3", "19036", "6540", "2", "49", "46796.47", "0.10", "0.00", "R", "F", "1993-11-09", "1993-12-20", "1993-11-24", "TAKE BACK RETURN", "RAIL", " unusual accounts. eve"},
+		{"3", "128449", "3474", "3", "27", "39890.88", "0.06", "0.07", "A", "F", "1994-01-16", "1993-11-22", "1994-01-23", "DELIVER IN PERSON", "SHIP", "nal foxes wake."},
+	}
+	b.SetBytes(120) // Raw input size. With 8 indexes, expect more on output side.
+
+	stmt, err := parser.ParseOne(`CREATE TABLE lineitem (
+		l_orderkey      INT8 NOT NULL,
+		l_partkey       INT8 NOT NULL,
+		l_suppkey       INT8 NOT NULL,
+		l_linenumber    INT8 NOT NULL,
+		l_quantity      DECIMAL(15,2) NOT NULL,
+		l_extendedprice DECIMAL(15,2) NOT NULL,
+		l_discount      DECIMAL(15,2) NOT NULL,
+		l_tax           DECIMAL(15,2) NOT NULL,
+		l_returnflag    CHAR(1) NOT NULL,
+		l_linestatus    CHAR(1) NOT NULL,
+		l_shipdate      DATE NOT NULL,
+		l_commitdate    DATE NOT NULL,
+		l_receiptdate   DATE NOT NULL,
+		l_shipinstruct  CHAR(25) NOT NULL,
+		l_shipmode      CHAR(10) NOT NULL,
+		l_comment       VARCHAR(44) NOT NULL,
+		PRIMARY KEY     (l_orderkey, l_linenumber),
+		INDEX l_ok      (l_orderkey ASC),
+		INDEX l_pk      (l_partkey ASC),
+		INDEX l_sk      (l_suppkey ASC),
+		INDEX l_sd      (l_shipdate ASC),
+		INDEX l_cd      (l_commitdate ASC),
+		INDEX l_rd      (l_receiptdate ASC),
+		INDEX l_pk_sk   (l_partkey ASC, l_suppkey ASC),
+		INDEX l_sk_pk   (l_suppkey ASC, l_partkey ASC)
+	)`)
+	if err != nil {
+		b.Fatal(err)
+	}
+	create := stmt.AST.(*tree.CreateTable)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	kvCh := make(chan row.KVBatch)
+	// no-op drain kvs channel.
+	go func() {
+		for range kvCh {
+		}
+	}()
+
+	descr := tableDesc.TableDesc()
+	cols := make(tree.NameList, len(descr.Columns))
+	for i, col := range descr.Columns {
+		cols[i] = tree.Name(col.Name)
+	}
+	r, err := newMysqloutfileReader(roachpb.MySQLOutfileOptions{
+		RowSeparator:   '\n',
+		FieldSeparator: '\t',
+	}, kvCh, 0, 0, descr, &evalCtx)
+	require.NoError(b, err)
+
+	producer := &csvBenchmarkStream{
+		n:    b.N,
+		pos:  0,
+		data: tpchLineItemDataRows,
+	}
+
+	delimited := &fileReader{Reader: producer}
+	b.ResetTimer()
+	require.NoError(b, r.readFile(ctx, delimited, 0, "benchmark", 0, nil))
 	close(kvCh)
 	b.ReportAllocs()
 }
