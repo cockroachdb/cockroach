@@ -153,12 +153,6 @@ var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
-var primaryKeyChangesEnabledClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_primary_key_changes.enabled",
-	"default value for experimental_enable_primary_key_changes session setting; allows use of primary key changes by default",
-	false,
-)
-
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
@@ -1900,10 +1894,6 @@ func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 
 func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 	m.data.ForceSavepointRestart = val
-}
-
-func (m *sessionDataMutator) SetPrimaryKeyChangesEnabled(val bool) {
-	m.data.PrimaryKeyChangesEnabled = val
 }
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {

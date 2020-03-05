@@ -24,11 +24,7 @@ var hibernateBlacklists = blacklistsForVersion{
 // in the test log.
 var hibernateBlackList20_1 = blacklist{}
 
-var hibernateBlackList19_2 = blacklist{
-	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                           "31708",
-	"org.hibernate.jpa.test.query.NativeQueryOrdinalParametersTest.testCteNativeQueryOrdinalParameter": "38636",
-	"org.hibernate.test.hql.ASTParserLoadingTest.testStandardFunctions":                                "31708",
-}
+var hibernateBlackList19_2 = blacklist{}
 
 var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                                                                               "31708",

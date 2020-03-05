@@ -486,7 +486,6 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 
 	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
 
-	sqlDB.Exec(t, `SET experimental_enable_primary_key_changes = true`)
 	sqlDB.Exec(t, `CREATE UNIQUE INDEX id2 ON data.bank (id)`)
 	sqlDB.Exec(t, `ALTER TABLE data.bank ALTER PRIMARY KEY USING COLUMNS(id)`)
 
