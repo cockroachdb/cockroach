@@ -62,8 +62,12 @@ inline std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
 inline std::string ToString(DBString s) { return std::string(s.data, s.len); }
 
 // ToSlice converts a DBSlice/DBString to a rocksdb::Slice.
-inline rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data, s.len); }
-inline rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data, s.len); }
+// Unfortunately, rocksdb::Slice represents empty slice with an
+// empty string (rocksdb::Slice("", 0)), as opposed to nullptr.
+// This is problematic since rocksdb has various
+// assertions checking for slice.data != nullptr.
+inline rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data == nullptr ? "" : s.data, s.len); }
+inline rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data == nullptr ? "" : s.data, s.len); }
 
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
