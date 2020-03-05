@@ -11,11 +11,11 @@
 import { expectSaga } from "redux-saga-test-plan";
 import { call } from "redux-saga-test-plan/matchers";
 
-import { requestDiagnosticsReport } from "./statementsSagas";
+import { createDiagnosticsReportSaga } from "./statementsSagas";
 import {
-  completeStatementDiagnosticsReportRequest,
-  failedStatementDiagnosticsReportRequest,
-  requestStatementDiagnosticsReport,
+  createStatementDiagnosticsReportCompleteAction,
+  createStatementDiagnosticsReportFailedAction,
+  createStatementDiagnosticsReportAction,
 } from "./statementsActions";
 import { createStatementDiagnosticsReport } from "src/util/api";
 import { cockroach } from "src/js/protos";
@@ -26,17 +26,17 @@ describe("statementsSagas", () => {
   describe("requestDiagnostics generator", () => {
     it("calls api#createStatementDiagnosticsReport with statement fingerprint as payload", () => {
       const statementFingerprint = "some-id";
-      const action = requestStatementDiagnosticsReport(statementFingerprint);
+      const action = createStatementDiagnosticsReportAction(statementFingerprint);
       const diagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest({
         statement_fingerprint: statementFingerprint,
       });
 
-      return expectSaga(requestDiagnosticsReport, action)
+      return expectSaga(createDiagnosticsReportSaga, action)
         .provide([
           [call.fn(createStatementDiagnosticsReport), Promise.resolve()],
         ])
         .call(createStatementDiagnosticsReport, diagnosticsReportRequest)
-        .put(completeStatementDiagnosticsReportRequest())
+        .put(createStatementDiagnosticsReportCompleteAction())
         .dispatch(action)
         .run();
     });
@@ -44,17 +44,17 @@ describe("statementsSagas", () => {
 
   it("calls dispatched failed action if api#createStatementDiagnosticsReport request failed ", () => {
     const statementFingerprint = "some-id";
-    const action = requestStatementDiagnosticsReport(statementFingerprint);
+    const action = createStatementDiagnosticsReportAction(statementFingerprint);
     const diagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest({
       statement_fingerprint: statementFingerprint,
     });
 
-    return expectSaga(requestDiagnosticsReport, action)
+    return expectSaga(createDiagnosticsReportSaga, action)
       .provide([
         [call.fn(createStatementDiagnosticsReport), throwError(new Error())],
       ])
       .call(createStatementDiagnosticsReport, diagnosticsReportRequest)
-      .put(failedStatementDiagnosticsReportRequest())
+      .put(createStatementDiagnosticsReportFailedAction())
       .dispatch(action)
       .run();
   });
