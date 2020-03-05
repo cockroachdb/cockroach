@@ -16,18 +16,17 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type aggOverloads struct {
-	Agg       execinfrapb.AggregatorSpec_Func
+	Agg       string
 	Overloads []*overload
 }
 
 // AggNameLower returns the aggregation name in lower case, e.g. "min".
 func (a aggOverloads) AggNameLower() string {
-	return strings.ToLower(a.Agg.String())
+	return strings.ToLower(a.Agg)
 }
 
 // AggNameTitle returns the aggregation name in title case, e.g. "Min".
@@ -68,11 +67,11 @@ func genMinMaxAgg(wr io.Writer) error {
 	}
 	data := []aggOverloads{
 		{
-			Agg:       execinfrapb.AggregatorSpec_MIN,
+			Agg:       "MIN",
 			Overloads: sameTypeComparisonOpToOverloads[tree.LT],
 		},
 		{
-			Agg:       execinfrapb.AggregatorSpec_MAX,
+			Agg:       "MAX",
 			Overloads: sameTypeComparisonOpToOverloads[tree.GT],
 		},
 	}

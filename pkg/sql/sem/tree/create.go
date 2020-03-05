@@ -21,11 +21,12 @@ package tree
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -1232,63 +1233,73 @@ const (
 	_ = SeqOptAs
 )
 
-// CreateUser represents a CREATE USER statement.
-type CreateUser struct {
-	Name        Expr
-	Password    Expr // nil if no password specified
-	IfNotExists bool
-}
+// ToRoleOptions converts KVOptions to a roleoption.List using
+// typeAsString to convert exprs to strings.
+func (o KVOptions) ToRoleOptions(
+	typeAsString func(e Expr, op string) (func() (string, error), error), op string,
+) (roleoption.List, error) {
+	roleOptions := make(roleoption.List, len(o))
 
-// HasPassword returns if the CreateUser has a password.
-func (node *CreateUser) HasPassword() bool {
-	return node.Password != nil
-}
+	for i, ro := range o {
+		option, err := roleoption.ToOption(ro.Key.String())
+		if err != nil {
+			return nil, err
+		}
 
-// Format implements the NodeFormatter interface.
-func (node *CreateUser) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE USER ")
-	if node.IfNotExists {
-		ctx.WriteString("IF NOT EXISTS ")
-	}
-	ctx.FormatNode(node.Name)
-	if node.HasPassword() {
-		ctx.WriteString(" WITH PASSWORD ")
-		if ctx.flags.HasFlags(FmtShowPasswords) {
-			ctx.FormatNode(node.Password)
+		if ro.Value != nil {
+			if ro.Value == DNull {
+				roleOptions[i] = roleoption.RoleOption{
+					Option: option, HasValue: true, IsNull: true,
+				}
+			} else {
+				strFn, err := typeAsString(ro.Value, op)
+				if err != nil {
+					return nil, err
+				}
+
+				if err != nil {
+					return nil, err
+				}
+				roleOptions[i] = roleoption.RoleOption{
+					Option: option, Value: strFn, HasValue: true, IsNull: false,
+				}
+			}
 		} else {
-			ctx.WriteString("*****")
+			roleOptions[i] = roleoption.RoleOption{
+				Option: option, HasValue: false,
+			}
 		}
 	}
+
+	return roleOptions, nil
 }
 
-// AlterUserSetPassword represents an ALTER USER ... WITH PASSWORD statement.
-type AlterUserSetPassword struct {
-	Name     Expr
-	Password Expr
-	IfExists bool
-}
+func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
+	for _, option := range *o {
+		ctx.WriteString(" ")
+		ctx.WriteString(strings.ToUpper(option.Key.String()))
 
-// Format implements the NodeFormatter interface.
-func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER USER ")
-	if node.IfExists {
-		ctx.WriteString("IF EXISTS ")
-	}
-	ctx.FormatNode(node.Name)
-	ctx.WriteString(" WITH PASSWORD ")
-	if ctx.flags.HasFlags(FmtShowPasswords) {
-		ctx.FormatNode(node.Password)
-	} else {
-		ctx.WriteString("*****")
+		// Password is a special case.
+		if strings.ToUpper(option.Key.String()) == "PASSWORD" {
+			ctx.WriteString(" ")
+			if ctx.flags.HasFlags(FmtShowPasswords) {
+				ctx.FormatNode(option.Value)
+			} else {
+				ctx.WriteString("*****")
+			}
+		} else if option.Value == DNull {
+			ctx.WriteString(" ")
+			ctx.FormatNode(option.Value)
+		}
 	}
 }
 
 // CreateRole represents a CREATE ROLE statement.
 type CreateRole struct {
-	Name           Expr
-	RolePrivileges roleprivilege.List
-	HasWith        bool
-	IfNotExists    bool
+	Name        Expr
+	IfNotExists bool
+	IsRole      bool
+	KVOptions   KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -1298,33 +1309,80 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(node.Name)
-	if node.HasWith {
-		ctx.WriteString(" WITH ")
-	} else if len(node.RolePrivileges) > 0 {
-		ctx.WriteString(" ")
-	}
-	if len(node.RolePrivileges) > 0 {
-		node.RolePrivileges.Format(&ctx.Buffer)
+
+	if len(node.KVOptions) > 0 {
+		ctx.WriteString(" WITH")
+		node.KVOptions.formatAsRoleOptions(ctx)
 	}
 }
 
-// AlterRolePrivileges represents an ALTER ROLE ... WITH <OPTION...> statement.
-type AlterRolePrivileges struct {
-	Name           Expr
-	HasWith        bool
-	RolePrivileges roleprivilege.List
+// CreateUser represents a CREATE USER statement.
+// CreateUser is an alias for CREATE ROLE.
+// CreateUser is separated from CreateUser syntax since we disable
+// CREATE ROLE syntax for non-enterprise.
+type CreateUser struct {
+	Name        Expr
+	IfNotExists bool
+	IsRole      bool
+	KVOptions   KVOptions
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterRolePrivileges) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER ROLE ")
-	ctx.FormatNode(node.Name)
-	if node.HasWith {
-		ctx.WriteString(" WITH ")
-	} else {
-		ctx.WriteString(" ")
+func (node *CreateUser) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE USER ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
 	}
-	node.RolePrivileges.Format(&ctx.Buffer)
+	ctx.FormatNode(node.Name)
+
+	if len(node.KVOptions) > 0 {
+		ctx.WriteString(" WITH")
+		node.KVOptions.formatAsRoleOptions(ctx)
+	}
+}
+
+// AlterRole represents an ALTER ROLE statement.
+type AlterRole struct {
+	Name      Expr
+	IfExists  bool
+	IsRole    bool
+	KVOptions KVOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterRole) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ROLE ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+
+	if len(node.KVOptions) > 0 {
+		ctx.WriteString(" WITH")
+		node.KVOptions.formatAsRoleOptions(ctx)
+	}
+}
+
+// AlterUser is an alias for AlterRole.
+type AlterUser struct {
+	Name      Expr
+	IfExists  bool
+	IsRole    bool
+	KVOptions KVOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterUser) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER USER ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+
+	if len(node.KVOptions) > 0 {
+		ctx.WriteString(" WITH")
+		node.KVOptions.formatAsRoleOptions(ctx)
+	}
 }
 
 // CreateView represents a CREATE VIEW statement.

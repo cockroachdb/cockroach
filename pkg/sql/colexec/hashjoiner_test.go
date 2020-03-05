@@ -939,11 +939,6 @@ func runHashJoinTestCase(
 	t *testing.T, tc joinTestCase, hjOpConstructor func(sources []Operator) (Operator, error),
 ) {
 	tc.init()
-	if !tc.onExpr.Empty() && tc.joinType != sqlbase.JoinType_INNER {
-		// Currently, onExpr is supported only for INNER join, so we skip all
-		// other cases.
-		return
-	}
 	inputs := []tuples{tc.leftTuples, tc.rightTuples}
 	typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
 	var runner testRunner

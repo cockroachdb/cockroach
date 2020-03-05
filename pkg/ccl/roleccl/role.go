@@ -37,8 +37,28 @@ func createRolePlanHook(
 	}
 
 	// Call directly into the OSS code.
-	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, true, /* isRole */
-		"CREATE ROLE", createRole.RolePrivileges)
+	return p.CreateRoleNode(ctx, createRole.Name, createRole.IfNotExists, true, /* isRole */
+		"CREATE ROLE", createRole.KVOptions)
+}
+
+func alterRolePlanHook(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (sql.PlanNode, error) {
+	alterRole, ok := stmt.(*tree.AlterRole)
+	if !ok {
+		return nil, nil
+	}
+
+	cfg := p.ExecCfg()
+	if err := utilccl.CheckEnterpriseEnabled(
+		cfg.Settings, cfg.ClusterID(), cfg.Organization(), "ALTER ROLE",
+	); err != nil {
+		return nil, err
+	}
+
+	// Call directly into the OSS code.
+	return p.AlterRoleNode(ctx, alterRole.Name, alterRole.IfExists, true, /* isRole */
+		"CREATE ROLE", alterRole.KVOptions)
 }
 
 func dropRolePlanHook(
@@ -57,7 +77,8 @@ func dropRolePlanHook(
 	}
 
 	// Call directly into the OSS code.
-	return p.DropUserNode(ctx, dropRole.Names, dropRole.IfExists, true /* isRole */, "DROP ROLE")
+	return p.DropRoleNode(ctx, dropRole.Names, dropRole.IfExists, true, /* isRole */
+		"DROP ROLE")
 }
 
 func grantRolePlanHook(
@@ -96,7 +117,7 @@ func grantRolePlanHook(
 		}
 		for _, r := range grant.Roles {
 			// If the user is an admin, don't check if the user is allowed to add/drop
-			// users in the role. However, if the role being modified is the admin role, then
+			// roles in the role. However, if the role being modified is the admin role, then
 			// make sure the user is an admin with the admin option.
 			if hasAdminRole && string(r) != sqlbase.AdminRole {
 				continue
@@ -110,10 +131,10 @@ func grantRolePlanHook(
 			}
 		}
 
-		// Check that users and roles exist.
-		// TODO(mberhault): just like GRANT/REVOKE privileges, we fetch the list of all users.
-		// This is wasteful when we have a LOT of users compared to the number of users being operated on.
-		users, err := p.GetAllUsersAndRoles(ctx)
+		// Check that roles exist.
+		// TODO(mberhault): just like GRANT/REVOKE privileges, we fetch the list of all roles.
+		// This is wasteful when we have a LOT of roles compared to the number of roles being operated on.
+		roles, err := p.GetAllRoles(ctx)
 		if err != nil {
 			return err
 		}
@@ -121,17 +142,15 @@ func grantRolePlanHook(
 		// NOTE: membership manipulation involving the "public" pseudo-role fails with
 		// "role public does not exist". This matches postgres behavior.
 
-		// Check roles: these have to be roles.
 		for _, r := range grant.Roles {
-			if isRole, ok := users[string(r)]; !ok || !isRole {
-				return pgerror.Newf(pgcode.UndefinedObject, "role %s does not exist", r)
+			if _, ok := roles[string(r)]; !ok {
+				return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
 			}
 		}
 
-		// Check grantees: these can be users or roles.
 		for _, m := range grant.Members {
-			if _, ok := users[string(m)]; !ok {
-				return pgerror.Newf(pgcode.UndefinedObject, "user or role %s does not exist", m)
+			if _, ok := roles[string(m)]; !ok {
+				return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m)
 			}
 		}
 
@@ -250,7 +269,7 @@ func revokeRolePlanHook(
 		}
 		for _, r := range revoke.Roles {
 			// If the user is an admin, don't check if the user is allowed to add/drop
-			// users in the role. However, if the role being modified is the admin role, then
+			// roles in the role. However, if the role being modified is the admin role, then
 			// make sure the user is an admin with the admin option.
 			if hasAdminRole && string(r) != sqlbase.AdminRole {
 				continue
@@ -264,25 +283,23 @@ func revokeRolePlanHook(
 			}
 		}
 
-		// Check that users and roles exist.
-		// TODO(mberhault): just like GRANT/REVOKE privileges, we fetch the list of all users.
-		// This is wasteful when we have a LOT of users compared to the number of users being operated on.
-		users, err := p.GetAllUsersAndRoles(ctx)
+		// Check that roles exist.
+		// TODO(mberhault): just like GRANT/REVOKE privileges, we fetch the list of all roles.
+		// This is wasteful when we have a LOT of roles compared to the number of roles being operated on.
+		roles, err := p.GetAllRoles(ctx)
 		if err != nil {
 			return err
 		}
 
-		// Check roles: these have to be roles.
 		for _, r := range revoke.Roles {
-			if isRole, ok := users[string(r)]; !ok || !isRole {
-				return pgerror.Newf(pgcode.UndefinedObject, "role %s does not exist", r)
+			if _, ok := roles[string(r)]; !ok {
+				return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
 			}
 		}
 
-		// Check members: these can be users or roles.
 		for _, m := range revoke.Members {
-			if _, ok := users[string(m)]; !ok {
-				return pgerror.Newf(pgcode.UndefinedObject, "user or role %s does not exist", m)
+			if _, ok := roles[string(m)]; !ok {
+				return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m)
 			}
 		}
 
@@ -301,7 +318,7 @@ func revokeRolePlanHook(
 				if string(r) == sqlbase.AdminRole && string(m) == security.RootUser {
 					// We use CodeObjectInUseError which is what happens if you tried to delete the current user in pg.
 					return pgerror.Newf(pgcode.ObjectInUse,
-						"user %s cannot be removed from role %s or lose the ADMIN OPTION",
+						"role/user %s cannot be removed from role %s or lose the ADMIN OPTION",
 						security.RootUser, sqlbase.AdminRole)
 				}
 				affected, err := p.ExecCfg().InternalExecutor.Exec(
@@ -332,6 +349,7 @@ func revokeRolePlanHook(
 
 func init() {
 	sql.AddWrappedPlanHook(createRolePlanHook)
+	sql.AddWrappedPlanHook(alterRolePlanHook)
 	sql.AddWrappedPlanHook(dropRolePlanHook)
 	sql.AddPlanHook(grantRolePlanHook)
 	sql.AddPlanHook(revokeRolePlanHook)

@@ -478,15 +478,6 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 	}, nil
 }
 
-// typeAsStringOrNull is like TypeAsString but allows NULLs.
-func (p *planner) typeAsStringOrNull(e tree.Expr, op string) (func() (bool, string, error), error) {
-	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
-	if err != nil {
-		return nil, err
-	}
-	return p.makeStringEvalFn(typedE), nil
-}
-
 func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {
 	return func() (bool, string, error) {
 		d, err := typedE.Eval(p.EvalContext())
