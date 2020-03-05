@@ -140,6 +140,38 @@ type NewColOperatorResult struct {
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
 
+// resetToState resets r to the state specified in arg. arg may be a shallow
+// copy made at a given point in time.
+func (r *NewColOperatorResult) resetToState(ctx context.Context, arg NewColOperatorResult) {
+	// MetadataSources are left untouched since there is no need to do any
+	// cleaning there.
+
+	// Close BoundAccounts that are not present in arg.BufferingOpMemAccounts.
+	accs := make(map[*mon.BoundAccount]struct{})
+	for _, a := range arg.BufferingOpMemAccounts {
+		accs[a] = struct{}{}
+	}
+	for _, a := range r.BufferingOpMemAccounts {
+		if _, ok := accs[a]; !ok {
+			a.Close(ctx)
+		}
+	}
+	// Stop BytesMonitors that are not present in arg.BufferingOpMemMonitors.
+	mons := make(map[*mon.BytesMonitor]struct{})
+	for _, m := range arg.BufferingOpMemMonitors {
+		mons[m] = struct{}{}
+	}
+
+	for _, m := range r.BufferingOpMemMonitors {
+		if _, ok := mons[m]; !ok {
+			m.Stop(ctx)
+		}
+	}
+
+	// Shallow copy over the rest.
+	*r = arg
+}
+
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
@@ -191,19 +223,14 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.HashJoiner != nil:
-		if !core.HashJoiner.OnExpr.Empty() &&
-			core.HashJoiner.Type != sqlbase.JoinType_INNER {
-			return false, errors.Newf("can't plan non-inner hash join with on expressions")
+		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
+			return false, errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
 		return true, nil
 
 	case core.MergeJoiner != nil:
-		if !core.MergeJoiner.OnExpr.Empty() {
-			switch core.MergeJoiner.Type {
-			case sqlbase.JoinType_INNER, sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
-			default:
-				return false, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
-			}
+		if !core.MergeJoiner.OnExpr.Empty() && core.MergeJoiner.Type != sqlbase.InnerJoin {
+			return false, errors.Errorf("can't plan vectorized non-inner merge joins with ON expressions")
 		}
 		return true, nil
 
@@ -392,6 +419,64 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 	), nil
 }
 
+// createAndWrapRowSource takes a processor spec, creating the row source and
+// wrapping it using wrapRowSources. Note that the post process spec is included
+// in the processor creation, so make sure to clear it if it will be inspected
+// again. NewColOperatorResult is updated with the new OutputTypes and the
+// resulting Columnarizer if there is no error. The result is also annotated as
+// streaming because the resulting operator is not a buffering operator (even if
+// it is a buffering processor). This is not a problem for memory accounting
+// because each processor does that on its own, so the used memory will be
+// accounted for.
+func (r *NewColOperatorResult) createAndWrapRowSource(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	inputs []Operator,
+	inputTypes [][]types.T,
+	streamingMemAccount *mon.BoundAccount,
+	spec *execinfrapb.ProcessorSpec,
+	processorConstructor execinfra.ProcessorConstructor,
+) error {
+	c, err := wrapRowSources(
+		ctx,
+		flowCtx,
+		inputs,
+		inputTypes,
+		streamingMemAccount,
+		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
+			// We provide a slice with a single nil as 'outputs' parameter because
+			// all processors expect a single output. Passing nil is ok here
+			// because when wrapping the processor, the materializer will be its
+			// output, and it will be set up in wrapRowSources.
+			proc, err := processorConstructor(
+				ctx, flowCtx, spec.ProcessorID, &spec.Core, &spec.Post, inputs,
+				[]execinfra.RowReceiver{nil}, /* outputs */
+				nil,                          /* localProcessors */
+			)
+			if err != nil {
+				return nil, err
+			}
+			var (
+				rs execinfra.RowSource
+				ok bool
+			)
+			if rs, ok = proc.(execinfra.RowSource); !ok {
+				return nil, errors.Newf(
+					"processor %s is not an execinfra.RowSource", spec.Core.String(),
+				)
+			}
+			r.ColumnTypes = rs.OutputTypes()
+			return rs, nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+	r.Op, r.IsStreaming = c, true
+	r.MetadataSources = append(r.MetadataSources, c)
+	return nil
+}
+
 // NewColOperator creates a new columnar operator according to the given spec.
 func NewColOperator(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
@@ -433,6 +518,10 @@ func NewColOperator(
 	// it is sufficient to look only at the "core" operator.
 	result.IsStreaming = false
 
+	// resultCopyPreSpecPlanningStateShallowCopy is a shallow copy of the result
+	// before any specs are planned. Used if there is a need to backtrack.
+	resultPreSpecPlanningStateShallowCopy := result
+
 	supported, err := isSupported(spec)
 	if !supported {
 		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
@@ -452,59 +541,19 @@ func NewColOperator(
 		}
 
 		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
-		var (
-			c          *Columnarizer
-			inputTypes [][]types.T
-		)
 
+		inputTypes := make([][]types.T, 0, len(spec.Input))
 		for _, input := range spec.Input {
 			inputTypes = append(inputTypes, input.ColumnTypes)
 		}
 
-		c, err = wrapRowSources(
-			ctx,
-			flowCtx,
-			inputs,
-			inputTypes,
-			streamingMemAccount,
-			func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
-				// We provide a slice with a single nil as 'outputs' parameter because
-				// all processors expect a single output. Passing nil is ok here
-				// because when wrapping the processor, the materializer will be its
-				// output, and it will be set up in wrapRowSources.
-				proc, err := processorConstructor(
-					ctx, flowCtx, spec.ProcessorID, core, post, inputs,
-					[]execinfra.RowReceiver{nil}, /* outputs */
-					nil,                          /* localProcessors */
-				)
-				if err != nil {
-					return nil, err
-				}
-				var (
-					rs execinfra.RowSource
-					ok bool
-				)
-				if rs, ok = proc.(execinfra.RowSource); !ok {
-					return nil, errors.Newf(
-						"processor %s is not an execinfra.RowSource", core.String(),
-					)
-				}
-				// The wrapped processors need to be passed the post-process specs,
-				// since they inspect them to figure out information about needed
-				// columns. This means that we'll let those processors do any renders
-				// or filters, which isn't ideal. We could improve this.
-				post = &execinfrapb.PostProcessSpec{}
-				result.ColumnTypes = rs.OutputTypes()
-				return rs, nil
-			},
-		)
+		err = result.createAndWrapRowSource(ctx, flowCtx, inputs, inputTypes, streamingMemAccount, spec, processorConstructor)
+		// The wrapped processors need to be passed the post-process specs,
+		// since they inspect them to figure out information about needed
+		// columns. This means that we'll let those processors do any renders
+		// or filters, which isn't ideal. We could improve this.
+		post = &execinfrapb.PostProcessSpec{}
 
-		// We say that the wrapped processor is "streaming" because it is not a
-		// buffering operator (even if it is a buffering processor). This is not a
-		// problem for memory accounting because each processor does that on its
-		// own, so the used memory will be accounted for.
-		result.Op, result.IsStreaming = c, true
-		result.MetadataSources = append(result.MetadataSources, c)
 	} else {
 		switch {
 		case core.Noop != nil:
@@ -754,10 +803,28 @@ func NewColOperator(
 				if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
 					result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
 				}
-				if err = result.planFilterExpr(
+				ppr := postProcessResult{
+					Op:          result.Op,
+					ColumnTypes: result.ColumnTypes,
+				}
+				if err = ppr.planFilterExpr(
 					ctx, flowCtx.NewEvalCtx(), core.HashJoiner.OnExpr, streamingMemAccount,
 				); err != nil {
-					return result, err
+					// ON expression planning failed. Fall back to planning the filter
+					// using row execution.
+					log.VEventf(
+						ctx, 2,
+						"vectorized hash join ON expr planning failed with error %v ON expr is %s, attempting to wrap as a row source",
+						err, core.HashJoiner.OnExpr.String(),
+					)
+
+					onExprAsFilter := &execinfrapb.PostProcessSpec{Filter: core.HashJoiner.OnExpr}
+					err = result.wrapPostProcessSpec(ctx, flowCtx, onExprAsFilter, streamingMemAccount, processorConstructor)
+					if err != nil {
+						return result, err
+					}
+				} else {
+					result.updateWithPostProcessResult(ppr)
 				}
 			}
 
@@ -783,38 +850,15 @@ func NewColOperator(
 				return result, err
 			}
 
-			var (
-				onExpr            *execinfrapb.Expression
-				filterOnlyOnLeft  bool
-				filterConstructor func(Operator) (Operator, error)
-			)
-			joinType := core.MergeJoiner.Type
+			var onExpr *execinfrapb.Expression
 			if !core.MergeJoiner.OnExpr.Empty() {
-				// At the moment, we want to be on the conservative side and not run
-				// queries with ON expressions when vectorize=auto, so we say that the
-				// merge join is not streaming which will reject running such a query
-				// through vectorized engine with 'auto' setting.
-				// TODO(yuzefovich): remove this when we're confident in ON expression
-				// support.
-				result.IsStreaming = false
-
-				onExpr = &core.MergeJoiner.OnExpr
-				switch joinType {
-				case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
-					onExprPlanning := makeFilterPlanningState(len(leftPhysTypes), len(rightPhysTypes))
-					filterOnlyOnLeft, err = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
-					filterConstructor = func(op Operator) (Operator, error) {
-						r := NewColOperatorResult{
-							Op:          op,
-							ColumnTypes: append(leftLogTypes, rightLogTypes...),
-						}
-						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount)
-						return r.Op, err
-					}
+				if core.MergeJoiner.Type != sqlbase.JoinType_INNER {
+					return result, errors.AssertionFailedf(
+						"ON expression (%s) was unexpectedly planned for merge joiner with join type %s",
+						core.MergeJoiner.OnExpr.String(), core.MergeJoiner.Type.String(),
+					)
 				}
-			}
-			if err != nil {
-				return result, err
+				onExpr = &core.MergeJoiner.OnExpr
 			}
 
 			mergeJoinerMemAccount := streamingMemAccount
@@ -836,8 +880,8 @@ func NewColOperator(
 				rightPhysTypes,
 				core.MergeJoiner.LeftOrdering.Columns,
 				core.MergeJoiner.RightOrdering.Columns,
-				filterConstructor,
-				filterOnlyOnLeft,
+				nil,   /* filterConstructor */
+				false, /* filterOnlyOnLeft */
 			)
 			if err != nil {
 				return result, err
@@ -845,16 +889,34 @@ func NewColOperator(
 
 			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
 
-			if onExpr != nil && joinType == sqlbase.JoinType_INNER {
+			if onExpr != nil {
 				// We will plan other Operators on top of the merge joiner, so we need
 				// to account for the internal memory explicitly.
 				if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
 					result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
 				}
-				if err = result.planFilterExpr(
+				ppr := postProcessResult{
+					Op:          result.Op,
+					ColumnTypes: result.ColumnTypes,
+				}
+				if err = ppr.planFilterExpr(
 					ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount,
 				); err != nil {
-					return result, err
+					// ON expression planning failed. Fall back to planning the filter
+					// using row execution.
+					log.VEventf(
+						ctx, 2,
+						"vectorized merge join ON expr planning failed with error %v ON expr is %s, attempting to wrap as a row source",
+						err, onExpr.String(),
+					)
+
+					onExprAsFilter := &execinfrapb.PostProcessSpec{Filter: *onExpr}
+					err = result.wrapPostProcessSpec(ctx, flowCtx, onExprAsFilter, streamingMemAccount, processorConstructor)
+					if err != nil {
+						return result, err
+					}
+				} else {
+					result.updateWithPostProcessResult(ppr)
 				}
 			}
 
@@ -1003,15 +1065,89 @@ func NewColOperator(
 	// Note: at this point, it is legal for ColumnTypes to be empty (it is
 	// legal for empty rows to be passed between processors).
 
+	ppr := postProcessResult{
+		Op:          result.Op,
+		ColumnTypes: result.ColumnTypes,
+	}
+	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount)
+	if err != nil {
+		log.VEventf(
+			ctx, 2,
+			"vectorized post process planning failed with error %v post spec is %s, attempting to wrap as a row source",
+			err, post,
+		)
+		if core.TableReader != nil {
+			// We cannot naively wrap a TableReader's post-processing spec since it
+			// might project out unneeded columns that are of unsupported types. These
+			// columns are still returned, either as coltypes.Unhandled if the type is
+			// unsupported, or as an empty column of a supported type. If we were to
+			// wrap an unsupported post-processing spec, a Materializer would naively
+			// decode these columns, which would return errors (e.g. UUIDs require 16
+			// bytes, coltypes.Unhandled may not be decoded).
+			inputTypes := make([][]types.T, 0, len(spec.Input))
+			for _, input := range spec.Input {
+				inputTypes = append(inputTypes, input.ColumnTypes)
+			}
+			result.resetToState(ctx, resultPreSpecPlanningStateShallowCopy)
+			if wrapErr := result.createAndWrapRowSource(
+				ctx, flowCtx, inputs, inputTypes, streamingMemAccount, spec, processorConstructor,
+			); wrapErr != nil {
+				// There was an error wrapping the TableReader.
+				return result, err
+			}
+		} else {
+			err = result.wrapPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, processorConstructor)
+		}
+		// post was consumed. It won't be looked at again, but clear it to be safe.
+		post = &execinfrapb.PostProcessSpec{}
+	} else {
+		// The result can be updated with the post process result.
+		result.updateWithPostProcessResult(ppr)
+	}
+	return result, err
+}
+
+// wrapPostProcessSpec plans the given post process spec by wrapping a noop
+// processor with that output spec. This is used to fall back to row execution
+// when encountering unsupported post processing specs. An error is returned
+// if the wrapping failed. A reason for this could be an unsupported type, in
+// which case the row execution engine is used fully.
+func (r *NewColOperatorResult) wrapPostProcessSpec(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	post *execinfrapb.PostProcessSpec,
+	streamingMemAccount *mon.BoundAccount,
+	processorConstructor execinfra.ProcessorConstructor,
+) error {
+	noopSpec := &execinfrapb.ProcessorSpec{
+		Core: execinfrapb.ProcessorCoreUnion{
+			Noop: &execinfrapb.NoopCoreSpec{},
+		},
+		Post: *post,
+	}
+	return r.createAndWrapRowSource(
+		ctx, flowCtx, []Operator{r.Op}, [][]types.T{r.ColumnTypes}, streamingMemAccount, noopSpec, processorConstructor,
+	)
+}
+
+// planPostProcessSpec plans the post processing stage specified in post on top
+// of r.Op.
+func (r *postProcessResult) planPostProcessSpec(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	post *execinfrapb.PostProcessSpec,
+	streamingMemAccount *mon.BoundAccount,
+) error {
 	if !post.Filter.Empty() {
-		if err = result.planFilterExpr(
+		if err := r.planFilterExpr(
 			ctx, flowCtx.NewEvalCtx(), post.Filter, streamingMemAccount,
 		); err != nil {
-			return result, err
+			return err
 		}
 	}
+
 	if post.Projection {
-		result.addProjection(post.OutputColumns)
+		r.addProjection(post.OutputColumns)
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
@@ -1020,37 +1156,37 @@ func NewColOperator(
 				helper            execinfra.ExprHelper
 				renderInternalMem int
 			)
-			err := helper.Init(expr, result.ColumnTypes, flowCtx.EvalCtx)
+			err := helper.Init(expr, r.ColumnTypes, flowCtx.EvalCtx)
 			if err != nil {
-				return result, err
+				return err
 			}
 			var outputIdx int
-			result.Op, outputIdx, result.ColumnTypes, renderInternalMem, err = planProjectionOperators(
-				ctx, flowCtx.NewEvalCtx(), helper.Expr, result.ColumnTypes, result.Op, streamingMemAccount,
+			r.Op, outputIdx, r.ColumnTypes, renderInternalMem, err = planProjectionOperators(
+				ctx, flowCtx.NewEvalCtx(), helper.Expr, r.ColumnTypes, r.Op, streamingMemAccount,
 			)
 			if err != nil {
-				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return result, errors.AssertionFailedf("missing outputIdx")
+				return errors.AssertionFailedf("missing outputIdx")
 			}
-			result.InternalMemUsage += renderInternalMem
+			r.InternalMemUsage += renderInternalMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
-		result.Op = NewSimpleProjectOp(result.Op, len(result.ColumnTypes), renderedCols)
+		r.Op = NewSimpleProjectOp(r.Op, len(r.ColumnTypes), renderedCols)
 		newTypes := make([]types.T, 0, len(renderedCols))
 		for _, j := range renderedCols {
-			newTypes = append(newTypes, result.ColumnTypes[j])
+			newTypes = append(newTypes, r.ColumnTypes[j])
 		}
-		result.ColumnTypes = newTypes
+		r.ColumnTypes = newTypes
 	}
 	if post.Offset != 0 {
-		result.Op = NewOffsetOp(result.Op, int(post.Offset))
+		r.Op = NewOffsetOp(r.Op, int(post.Offset))
 	}
 	if post.Limit != 0 {
-		result.Op = NewLimitOp(result.Op, int(post.Limit))
+		r.Op = NewLimitOp(r.Op, int(post.Limit))
 	}
-	return result, err
+	return nil
 }
 
 type filterPlanningState struct {
@@ -1144,7 +1280,19 @@ func (r *NewColOperatorResult) createStandaloneMemAccount(
 	return &standaloneMemAccount
 }
 
-func (r *NewColOperatorResult) planFilterExpr(
+type postProcessResult struct {
+	Op               Operator
+	ColumnTypes      []types.T
+	InternalMemUsage int
+}
+
+func (r *NewColOperatorResult) updateWithPostProcessResult(ppr postProcessResult) {
+	r.Op = ppr.Op
+	r.ColumnTypes = ppr.ColumnTypes
+	r.InternalMemUsage += ppr.InternalMemUsage
+}
+
+func (r *postProcessResult) planFilterExpr(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	filter execinfrapb.Expression,
@@ -1186,7 +1334,7 @@ func (r *NewColOperatorResult) planFilterExpr(
 
 // addProjection adds a simple projection to r (Op and ColumnTypes are updated
 // accordingly).
-func (r *NewColOperatorResult) addProjection(projection []uint32) {
+func (r *postProcessResult) addProjection(projection []uint32) {
 	r.Op = NewSimpleProjectOp(r.Op, len(r.ColumnTypes), projection)
 	// Update output ColumnTypes.
 	newTypes := make([]types.T, 0, len(projection))
@@ -1550,6 +1698,9 @@ func planProjectionExpr(
 	input Operator,
 	acc *mon.BoundAccount,
 ) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
+	if !left.ResolvedType().Equivalent(right.ResolvedType()) {
+		return nil, resultIdx, ct, internalMemUsed, errors.New("mixed type projections unsupported")
+	}
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
