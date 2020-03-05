@@ -624,12 +624,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			anyOrder: true,
 		},
 		{
-			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			onExprSupported: true,
+			joinType: sqlbase.JoinType_LEFT_SEMI,
 		},
 		{
-			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			onExprSupported: true,
+			joinType: sqlbase.JoinType_LEFT_ANTI,
 		},
 	}
 

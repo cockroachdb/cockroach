@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1608,9 +1609,10 @@ func TestMergeJoiner(t *testing.T) {
 			func(input []Operator) (Operator, error) {
 				spec := createSpecForMergeJoiner(tc)
 				args := NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              input,
-					StreamingMemAccount: testMemAcc,
+					Spec:                 spec,
+					Inputs:               input,
+					StreamingMemAccount:  testMemAcc,
+					ProcessorConstructor: rowexec.NewProcessor,
 				}
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				result, err := NewColOperator(ctx, flowCtx, args)
@@ -1654,8 +1656,6 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 					typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				if err != nil {
 					t.Fatal("error in merge join op constructor", err)
@@ -1731,8 +1731,6 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-						nil,   /* filterConstructor */
-						false, /* filterOnlyOnLeft */
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1813,8 +1811,6 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
-						nil,   /* filterConstructor */
-						false, /* filterOnlyOnLeft */
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1945,8 +1941,6 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								typs,
 								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-								nil,   /* filterConstructor */
-								false, /* filterOnlyOnLeft */
 							)
 
 							if err != nil {
@@ -2046,8 +2040,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}
@@ -2079,8 +2071,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}
@@ -2114,8 +2104,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					nil,   /* filterConstructor */
-					false, /* filterOnlyOnLeft */
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}
