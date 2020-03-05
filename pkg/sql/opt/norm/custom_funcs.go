@@ -1897,7 +1897,7 @@ func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) opt.ColumnID {
 }
 
 // MakeOrderedGrouping constructs a new GroupingPrivate using the given
-// grouping columns and OrderingChoice private.
+// grouping columns and OrderingChoice private. The ErrorOnDup will be false.
 func (c *CustomFuncs) MakeOrderedGrouping(
 	groupingCols opt.ColSet, ordering physical.OrderingChoice,
 ) *memo.GroupingPrivate {

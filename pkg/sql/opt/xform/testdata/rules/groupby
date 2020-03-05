@@ -1431,7 +1431,7 @@ memo (optimized, ~5KB, required=[presentation: array_agg:5])
 memo
 SELECT DISTINCT u, v, w FROM kuvw
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2-4)) (distinct-on G2 G3 cols=(2-4),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2-4),ordering=+4,+3,+2) (distinct-on G2 G3 cols=(2-4),ordering=+3,+4)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2-4),ordering=+2,+3,+4)
@@ -1578,7 +1578,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, v, w
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+3,+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2),ordering=+3,+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2),ordering=+3,+4 opt(2))

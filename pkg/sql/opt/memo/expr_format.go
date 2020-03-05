@@ -293,6 +293,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
 		}
+		if !f.HasFlags(ExprFmtHideMiscProps) && private.ErrorOnDup {
+			tp.Childf("error-on-dup")
+		}
 
 	case *LimitExpr:
 		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {

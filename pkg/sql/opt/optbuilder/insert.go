@@ -665,8 +665,12 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 
 	insertColSet := mb.outScope.expr.Relational().OutputCols
 
-	// Loop over each UNIQUE index, potentially creating a left join + filter for
-	// each one.
+	// Ignore any ordering requested by the input.
+	// TODO(andyk): do we need to do more here?
+	mb.outScope.ordering = nil
+
+	// Loop again over each UNIQUE index, potentially creating a left join +
+	// filter for each one.
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		index := mb.tab.Index(idx)
 		if !index.IsUnique() {
@@ -735,6 +739,20 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 			memo.EmptyProjectionsExpr,
 			insertColSet,
 		)
+
+		// Add an UpsertDistinctOn operator to ensure there are no duplicate input
+		// rows for this unique index. Duplicate rows can trigger conflict errors
+		// at runtime, which DO NOTHING is not supposed to do. See issue #37880.
+		var conflictCols opt.ColSet
+		for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
+			indexCol := index.Column(i)
+			conflictCols.Add(mb.outScope.cols[mb.insertOrds[indexCol.Ordinal]].id)
+		}
+
+		// Treat NULL values as distinct from one another. And if duplicates are
+		// detected, remove them rather than raising an error.
+		mb.outScope = mb.b.buildDistinctOn(
+			conflictCols, mb.outScope, true /* nullsAreDistinct */, false /* errorOnDup */)
 	}
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.DeletableColumnCount())
@@ -769,7 +787,8 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		conflictCols.Add(mb.outScope.cols[mb.insertOrds[ord]].id)
 	}
 	mb.outScope.ordering = nil
-	mb.outScope = mb.b.buildDistinctOn(conflictCols, mb.outScope, true /* forUpsert */)
+	mb.outScope = mb.b.buildDistinctOn(
+		conflictCols, mb.outScope, true /* nullsAreDistinct */, true /* errorOnDup */)
 
 	// Re-alias all INSERT columns so that they are accessible as if they were
 	// part of a special data source named "crdb_internal.excluded".
