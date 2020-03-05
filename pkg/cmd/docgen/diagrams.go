@@ -820,7 +820,7 @@ var specs = []stmtSpec{
 		},
 		replace: map[string]string{
 			"string_or_placeholder": "file_location",
-			"import_format":         "'CSV'",
+			"import_format":         "('CSV' | 'AVRO')",
 		},
 		unlink: []string{"file_location"},
 	},
@@ -832,7 +832,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"table_option":          "table_name",
 			"insert_column_item":    "column_name",
-			"import_format":         "'CSV'",
+			"import_format":         "('CSV' | 'AVRO')",
 			"string_or_placeholder": "file_location",
 			"kv_option":             "option '=' value"},
 		unlink: []string{"table_name", "column_name", "file_location", "option", "value"},
