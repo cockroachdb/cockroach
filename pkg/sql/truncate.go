@@ -516,7 +516,7 @@ func reassignIndexComment(
 	return nil
 }
 
-// truncateTableInChunks truncates the data of a table in chunks. It deletes a
+// ClearTableDataInChunks truncates the data of a table in chunks. It deletes a
 // range of data for the table, which includes the PK and all indexes.
 // The table has already been marked for deletion and has been purged from the
 // descriptor cache on all nodes.
@@ -525,7 +525,7 @@ func reassignIndexComment(
 // therefore the entire table can be deleted with no concern for conflicts (we
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
-func truncateTableInChunks(
+func ClearTableDataInChunks(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *kv.DB, traceKV bool,
 ) error {
 	const chunkSize = TableTruncateChunkSize
@@ -562,4 +562,12 @@ func truncateTableInChunks(
 		done = resume.Key == nil
 	}
 	return nil
+}
+
+// canClearRangeForDrop returns if an index can be deleted by deleting every
+// key from a single span.
+// This determines whether an index is dropped during a schema change, or if
+// it is only deleted upon GC.
+func canClearRangeForDrop(index *sqlbase.IndexDescriptor) bool {
+	return !index.IsInterleaved()
 }
