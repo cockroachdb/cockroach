@@ -2646,7 +2646,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 	}
 
 	// Calculate distinct counts.
-	applied := sb.updateDistinctCountsFromConstraint(c, e, relProps)
+	applied, lastColMinDistinct := sb.updateDistinctCountsFromConstraint(c, e, relProps)
 	for i, n := 0, c.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 		col := c.Columns.Get(i).ID()
 		constrainedCols.Add(col)
@@ -2661,7 +2661,11 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 
 		// Set the distinct count for the current column of the constraint
 		// according to unknownDistinctCountRatio.
-		sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
+		var lowerBound float64
+		if i == applied {
+			lowerBound = lastColMinDistinct
+		}
+		sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts, lowerBound)
 	}
 
 	if !sb.shouldUseHistogram(relProps) {
@@ -2703,7 +2707,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 		col := c.Columns.Get(0).ID()
 
 		// Calculate distinct counts.
-		applied := sb.updateDistinctCountsFromConstraint(c, e, relProps)
+		applied, lastColMinDistinct := sb.updateDistinctCountsFromConstraint(c, e, relProps)
 		if applied == 0 {
 			// If a constraint cannot be applied, it may represent an
 			// inequality like x < 1. As a result, distinctCounts does not fully
@@ -2714,7 +2718,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 
 			// Set the distinct count for the first column of the constraint
 			// according to unknownDistinctCountRatio.
-			sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
+			sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts, lastColMinDistinct)
 		}
 
 		if !tight {
@@ -2795,9 +2799,20 @@ func (sb *statisticsBuilder) updateNullCountsFromProps(e RelExpr, relProps *prop
 // constraint. For example, /a: [/1 - /1000000] would find a distinct count of
 // 1000000 for column "a" even if there are only 10 rows in the table. This
 // discrepancy must be resolved by the calling function.
+//
+// Even if the distinct count can not be inferred for a particular column,
+// It's possible that we can determine a lower bound. In particular, if the
+// query specifically mentions some exact values we should use that as a hint.
+// For example, consider the following constraint:
+//
+//   /a: [ - 5][10 - 10][15 - 15]
+//
+// In this case, updateDistinctCountsFromConstraint will infer that there
+// are at least two distinct values (10 and 15). This lower bound will be
+// returned in the second return value, lastColMinDistinct.
 func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 	c *constraint.Constraint, e RelExpr, relProps *props.Relational,
-) (applied int) {
+) (applied int, lastColMinDistinct float64) {
 	// All of the columns that are part of the prefix have a finite number of
 	// distinct values.
 	prefix := c.Prefix(sb.evalCtx)
@@ -2813,13 +2828,15 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 		distinctCount := 1.0
 
 		var val tree.Datum
+		countable := true
 		for i := 0; i < c.Spans.Count(); i++ {
 			sp := c.Spans.Get(i)
 			if sp.StartKey().Length() <= col || sp.EndKey().Length() <= col {
 				// We can't determine the distinct count for this column. For example,
 				// the number of distinct values for column b in the constraint
 				// /a/b: [/1/1 - /1] cannot be determined.
-				return applied
+				countable = false
+				continue
 			}
 			startVal := sp.StartKey().Value(col)
 			endVal := sp.EndKey().Value(col)
@@ -2836,7 +2853,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 					if !startDate.IsFinite() || !endDate.IsFinite() {
 						// One of the boundaries is not finite, so we can't determine the
 						// distinct count for this column.
-						return applied
+						countable = false
+						continue
 					}
 					start = float64(startDate.PGEpochDays())
 					end = float64(endDate.PGEpochDays())
@@ -2844,7 +2862,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 					// We can't determine the distinct count for this column. For example,
 					// the number of distinct values in the constraint
 					// /a: [/'cherry' - /'mango'] cannot be determined.
-					return applied
+					countable = false
+					continue
 				}
 				// We assume that both start and end boundaries are inclusive. This
 				// should be the case for integer and date columns (due to
@@ -2855,7 +2874,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 					distinctCount += start - end
 				}
 			}
-			if i != 0 {
+			if i != 0 && val != nil {
 				compare := startVal.Compare(sb.evalCtx, val)
 				ascending := c.Columns.Get(col).Ascending()
 				if (compare > 0 && ascending) || (compare < 0 && !ascending) {
@@ -2872,10 +2891,18 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 					// In this case, /a is a prefix, but not an exact prefix. Trying to
 					// figure out the distinct count for column b may be more trouble
 					// than it's worth. For now, don't bother trying.
-					return applied
+					countable = false
+					continue
 				}
 			}
 			val = endVal
+		}
+
+		if !countable {
+			// The last column was not fully applied since there was at least one
+			// uncountable span. The calculated distinct count will be used as a
+			// lower bound for updateDistinctCountFromUnappliedConjuncts.
+			return applied, distinctCount
 		}
 
 		colID := c.Columns.Get(col).ID()
@@ -2883,17 +2910,20 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 		applied = col + 1
 	}
 
-	return applied
+	return applied, 0
 }
 
 // updateDistinctCountFromUnappliedConjuncts is used to update the distinct
 // count for a constrained column when the exact count cannot be determined.
+// The provided lowerBound serves as a lower bound on the calculated distinct
+// count.
 func (sb *statisticsBuilder) updateDistinctCountFromUnappliedConjuncts(
-	colID opt.ColumnID, e RelExpr, relProps *props.Relational, numConjuncts float64,
+	colID opt.ColumnID, e RelExpr, relProps *props.Relational, numConjuncts, lowerBound float64,
 ) {
 	colSet := opt.MakeColSet(colID)
 	inputStat, _ := sb.colStatFromInput(colSet, e)
 	distinctCount := inputStat.DistinctCount * math.Pow(unknownFilterSelectivity, numConjuncts)
+	distinctCount = max(distinctCount, lowerBound)
 	sb.ensureColStat(colSet, distinctCount, e, relProps)
 }
 
