@@ -39,29 +39,29 @@ const (
 
 	usertableSchemaRelational = `(
 		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
-		FIELD0 TEXT,
-		FIELD1 TEXT,
-		FIELD2 TEXT,
-		FIELD3 TEXT,
-		FIELD4 TEXT,
-		FIELD5 TEXT,
-		FIELD6 TEXT,
-		FIELD7 TEXT,
-		FIELD8 TEXT,
-		FIELD9 TEXT
+		FIELD0 TEXT NOT NULL,
+		FIELD1 TEXT NOT NULL,
+		FIELD2 TEXT NOT NULL,
+		FIELD3 TEXT NOT NULL,
+		FIELD4 TEXT NOT NULL,
+		FIELD5 TEXT NOT NULL,
+		FIELD6 TEXT NOT NULL,
+		FIELD7 TEXT NOT NULL,
+		FIELD8 TEXT NOT NULL,
+		FIELD9 TEXT NOT NULL
 	)`
 	usertableSchemaRelationalWithFamilies = `(
 		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
-		FIELD0 TEXT,
-		FIELD1 TEXT,
-		FIELD2 TEXT,
-		FIELD3 TEXT,
-		FIELD4 TEXT,
-		FIELD5 TEXT,
-		FIELD6 TEXT,
-		FIELD7 TEXT,
-		FIELD8 TEXT,
-		FIELD9 TEXT,
+		FIELD0 TEXT NOT NULL,
+		FIELD1 TEXT NOT NULL,
+		FIELD2 TEXT NOT NULL,
+		FIELD3 TEXT NOT NULL,
+		FIELD4 TEXT NOT NULL,
+		FIELD5 TEXT NOT NULL,
+		FIELD6 TEXT NOT NULL,
+		FIELD7 TEXT NOT NULL,
+		FIELD8 TEXT NOT NULL,
+		FIELD9 TEXT NOT NULL,
 		FAMILY (ycsb_key),
 		FAMILY (FIELD0),
 		FAMILY (FIELD1),
@@ -210,7 +210,7 @@ func (g *ycsb) Tables() []workload.Table {
 		if g.json {
 			return []interface{}{key, "{}"}
 		}
-		return []interface{}{key, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
+		return []interface{}{key, "", "", "", "", "", "", "", "", "", ""}
 	}
 	if g.json {
 		usertable.Schema = usertableSchemaJSON
