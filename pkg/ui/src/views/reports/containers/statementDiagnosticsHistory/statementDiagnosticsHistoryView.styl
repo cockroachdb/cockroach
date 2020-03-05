@@ -8,7 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import DiagnosticsView from "./diagnosticsView";
+@require '~src/components/core/index.styl'
 
-export default DiagnosticsView;
-export * from "./diagnosticsUtils";
+.diagnostics-history-view
+  &__table-container
+    background $colors--white
+    padding $spacing-medium-small
+
+  & .crl-table-wrapper .ant-table-row:hover .nodes-table__link
+    color $colors--primary-blue-3
+    text-decoration underline
+
+  &__table-header
+    margin-bottom $spacing-x-small

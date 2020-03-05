@@ -49,6 +49,7 @@ import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import StatementDetails from "src/views/statements/statementDetails";
 import StatementsPage from "src/views/statements/statementsPage";
+import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -156,6 +157,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route exact path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
                   <Route exact path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
                   <Route exact path={`/reports/stores/:${nodeIDAttr}`} component={ Stores } />
+                  <Route exact path={`/reports/statements/diagnosticshistory`} component={ StatementsDiagnosticsHistoryView } />
 
                   { /* old route redirects */ }
                   <Redirect exact from="/cluster" to="/metrics/overview/cluster" />
