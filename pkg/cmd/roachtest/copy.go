@@ -164,5 +164,9 @@ func getDefaultRangeSize(
         AS range_max_bytes
 FROM
     [SHOW ZONE CONFIGURATION FOR RANGE default];`).Scan(&rangeMinBytes, &rangeMaxBytes)
+	// Older cluster versions do not contain this column. Use the old default.
+	if err != nil && strings.Contains(err.Error(), `column "raw_config_sql" does not exist`) {
+		rangeMinBytes, rangeMaxBytes, err = 32<<20 /* 32MB */, 64<<20 /* 64MB */, nil
+	}
 	return rangeMinBytes, rangeMaxBytes, err
 }

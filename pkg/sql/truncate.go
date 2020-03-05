@@ -466,10 +466,11 @@ func reassignColumnComment(
 	}
 
 	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 			ctx,
 			"set-column-comment",
 			p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 			keys.ColumnCommentType,
 			newID,
@@ -479,10 +480,11 @@ func reassignColumnComment(
 			return err
 		}
 
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 			ctx,
 			"delete-column-comment",
 			p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 			keys.ColumnCommentType,
 			oldID,

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,10 +45,11 @@ func (p *planner) CommentOnDatabase(
 
 func (n *commentOnDatabaseNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			"set-db-comment",
 			params.p.Txn(),
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.DatabaseCommentType,
 			n.dbDesc.ID,
@@ -56,10 +58,11 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			"delete-db-comment",
 			params.p.Txn(),
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.DatabaseCommentType,
 			n.dbDesc.ID)
