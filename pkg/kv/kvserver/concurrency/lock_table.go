@@ -704,12 +704,32 @@ func (l *lockState) Format(buf *strings.Builder) {
 		}
 		return fmt.Sprintf("txn: %v, ts: %v%s", txn.ID, ts, seqStr)
 	}
+	holderInfoStr := func() string {
+		var b strings.Builder
+		first := true
+		for i := range l.holder.holder {
+			if l.holder.holder[i].txn == nil {
+				continue
+			}
+			if !first {
+				fmt.Fprintf(&b, ", ")
+			}
+			first = false
+			h := &l.holder.holder[i]
+			fmt.Fprintf(&b, "epoch: %d, seqs: [%d", h.txn.Epoch, h.seqs[0])
+			for j := 1; j < len(h.seqs); j++ {
+				fmt.Fprintf(&b, ", %d", h.seqs[j])
+			}
+			fmt.Fprintf(&b, "]")
+		}
+		return b.String()
+	}
 	txn, ts, _ := l.getLockerInfo()
 	if txn == nil {
 		fmt.Fprintf(buf, "  res: req: %d, %s\n",
 			l.reservation.seqNum, waitingOnStr(l.reservation.txn, l.reservation.writeTS))
 	} else {
-		fmt.Fprintf(buf, "  holder: %s\n", waitingOnStr(txn, ts))
+		fmt.Fprintf(buf, "  holder: %s, info: %s\n", waitingOnStr(txn, ts), holderInfoStr())
 	}
 	if l.waitingReaders.Len() > 0 {
 		fmt.Fprintln(buf, "   waiting readers:")
@@ -1191,14 +1211,14 @@ func (l *lockState) discoveredLock(
 		if !l.isLockedBy(txn.ID) {
 			panic("bug in caller or lockTable")
 		}
-		if l.holder.holder[lock.Replicated].txn == nil {
-			l.holder.holder[lock.Replicated].txn = txn
-			l.holder.holder[lock.Replicated].ts = ts
-		}
 	} else {
 		l.holder.locked = true
-		l.holder.holder[lock.Replicated].txn = txn
-		l.holder.holder[lock.Replicated].ts = ts
+	}
+	holder := &l.holder.holder[lock.Replicated]
+	if holder.txn == nil {
+		holder.txn = txn
+		holder.ts = ts
+		holder.seqs = append(holder.seqs, txn.Sequence)
 	}
 
 	// Queue the existing reservation holder. Note that this reservation
@@ -1365,7 +1385,7 @@ func removeIgnored(
 	held := heldSeqNums[:0]
 	for _, n := range heldSeqNums {
 		i := sort.Search(len(ignoredSeqNums), func(i int) bool { return ignoredSeqNums[i].End >= n })
-		if ignoredSeqNums[i].Start > n {
+		if i == len(ignoredSeqNums) || ignoredSeqNums[i].Start > n {
 			held = append(held, n)
 		}
 	}
@@ -1394,6 +1414,7 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 	ts := up.Txn.WriteTimestamp
 	txn := &up.Txn
 	_, beforeTs, _ := l.getLockerInfo()
+	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	for i := range l.holder.holder {
 		holderTxn := l.holder.holder[i].txn
@@ -1411,8 +1432,10 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 			l.holder.holder[i].txn = nil
 			continue
 		}
-		l.holder.holder[i].txn = txn
-		l.holder.holder[i].ts = ts
+		if advancedTs {
+			l.holder.holder[i].txn = txn
+			l.holder.holder[i].ts = ts
+		}
 		isLocked = true
 	}
 
@@ -1422,11 +1445,12 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 		return gc, nil
 	}
 
-	if ts.Less(beforeTs) {
-		return false, errors.Errorf("caller violated contract")
-	} else if beforeTs.Less(ts) {
+	if advancedTs {
 		l.increasedLockTs(ts)
 	}
+	// Else no change for waiters. This can happen due to a race between different
+	// callers of UpdateLocks().
+
 	return false, nil
 }
 

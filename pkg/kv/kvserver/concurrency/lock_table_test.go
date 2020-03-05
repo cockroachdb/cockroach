@@ -76,7 +76,7 @@ release txn=<name> span=<start>[,<end>]
 
  Releases locks for the named transaction.
 
-update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>]
+update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>] [ignored-seqs=<int>[,<int>]]
 ----
 <error string>
 
@@ -126,16 +126,18 @@ func TestLockTableBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
 		var lt lockTable
-		txnsByName := make(map[string]*enginepb.TxnMeta)
-		txnCounter := uint128.FromInts(0, 0)
-		requestsByName := make(map[string]Request)
-		guardsByReqName := make(map[string]lockTableGuard)
+		newState := func() (map[string]*enginepb.TxnMeta, uint128.Uint128, map[string]Request, map[string]lockTableGuard) {
+			return make(map[string]*enginepb.TxnMeta), uint128.FromInts(0, 0), make(map[string]Request),
+				make(map[string]lockTableGuard)
+		}
+		txnsByName, txnCounter, requestsByName, guardsByReqName := newState()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
 				lt = &lockTableImpl{maxLocks: int64(maxLocks)}
+				txnsByName, txnCounter, requestsByName, guardsByReqName = newState()
 				return ""
 
 			case "new-txn":
@@ -271,8 +273,23 @@ func TestLockTableBasic(t *testing.T) {
 				var s string
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
+				var ignored []enginepb.IgnoredSeqNumRange
+				if d.HasArg("ignored-seqs") {
+					var seqsStr string
+					d.ScanArgs(t, "ignored-seqs", &seqsStr)
+					parts := strings.Split(seqsStr, ",")
+					for _, p := range parts {
+						num, err := strconv.ParseInt(p, 10, 32)
+						if err != nil {
+							d.Fatalf(t, "error parsing ignored seqnums: %s", err)
+						}
+						ignored = append(ignored,
+							enginepb.IgnoredSeqNumRange{Start: enginepb.TxnSeq(num), End: enginepb.TxnSeq(num)})
+					}
+				}
 				// TODO(sbhola): also test STAGING.
-				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
+				intent := &roachpb.LockUpdate{
+					Span: span, Txn: *txnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
