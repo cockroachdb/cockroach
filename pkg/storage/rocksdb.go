@@ -2633,10 +2633,20 @@ func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStat
 // is only intended for use in converting arguments to C
 // functions. The C function must copy any data that it wishes to
 // retain once the function returns.
+//
+// We almost always convert DBSlice(s) to rocksdb::Slice.
+// Unfortunately, rocksdb::Slice represents empty slice with an
+// empty string (rocksdb::Slice("", 0)), as opposed to nullptr.
+// This is problematic since rocksdb has various
+// assertions checking for slice.data != nullptr.
+// Therefore, we represent an empty slice with an empty []byte array.
+var emptySlice = []byte{0}
+
 func goToCSlice(b []byte) C.DBSlice {
 	if len(b) == 0 {
-		return C.DBSlice{data: nil, len: 0}
+		return C.DBSlice{data: (*C.char)(unsafe.Pointer(&emptySlice[0])), len: 0}
 	}
+
 	return C.DBSlice{
 		data: (*C.char)(unsafe.Pointer(&b[0])),
 		len:  C.size_t(len(b)),
