@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // tableDeleter handles writing kvs and forming table rows for deletes.
@@ -106,6 +106,7 @@ func (td *tableDeleter) deleteAllRows(
 		log.VEvent(ctx, 2, "delete forced to scan: table is interleaved")
 		return td.deleteAllRowsScan(ctx, resume, limit, traceKV)
 	}
+	// TODO(pbardea): Is this ever called anymore?
 	return td.deleteAllRowsFast(ctx, resume, limit, traceKV)
 }
 

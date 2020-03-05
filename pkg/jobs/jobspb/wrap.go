@@ -26,6 +26,7 @@ var _ Details = RestoreDetails{}
 var _ Details = SchemaChangeDetails{}
 var _ Details = ChangefeedDetails{}
 var _ Details = CreateStatsDetails{}
+var _ Details = SchemaChangeGCDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -35,6 +36,7 @@ var _ ProgressDetails = RestoreProgress{}
 var _ ProgressDetails = SchemaChangeProgress{}
 var _ ProgressDetails = ChangefeedProgress{}
 var _ ProgressDetails = CreateStatsProgress{}
+var _ ProgressDetails = SchemaChangeGCProgress{}
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -60,6 +62,8 @@ func DetailsType(d isPayload_Details) Type {
 			return TypeAutoCreateStats
 		}
 		return TypeCreateStats
+	case *Payload_SchemaChangeGC:
+		return TypeSchemaChangeGC
 	default:
 		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -86,6 +90,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_Changefeed{Changefeed: &d}
 	case CreateStatsProgress:
 		return &Progress_CreateStats{CreateStats: &d}
+	case SchemaChangeGCProgress:
+		return &Progress_SchemaChangeGC{SchemaChangeGC: &d}
 	default:
 		panic(fmt.Sprintf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -107,6 +113,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.Changefeed
 	case *Payload_CreateStats:
 		return *d.CreateStats
+	case *Payload_SchemaChangeGC:
+		return *d.SchemaChangeGC
 	default:
 		return nil
 	}
@@ -128,6 +136,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.Changefeed
 	case *Progress_CreateStats:
 		return *d.CreateStats
+	case *Progress_SchemaChangeGC:
+		return *d.SchemaChangeGC
 	default:
 		return nil
 	}
@@ -162,6 +172,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_Changefeed{Changefeed: &d}
 	case CreateStatsDetails:
 		return &Payload_CreateStats{CreateStats: &d}
+	case SchemaChangeGCDetails:
+		return &Payload_SchemaChangeGC{SchemaChangeGC: &d}
 	default:
 		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
