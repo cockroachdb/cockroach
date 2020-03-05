@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/syncmap"
 )
 
@@ -105,7 +106,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 			GCBytesAge:      gcByteAge,
 		}
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
-		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec})
+		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec}, hlc.Timestamp{})
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
@@ -126,10 +127,44 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			LiveBytes:         int64(liveBytes),
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
-		}, zonepb.GCPolicy{TTLSeconds: 60})
+		}, zonepb.GCPolicy{TTLSeconds: 60}, hlc.Timestamp{})
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const seed = 1
+	var ms enginepb.MVCCStats
+	ms.SysCount += probablyLargeAbortSpanSysCountThreshold
+	ms.SysBytes += probablyLargeAbortSpanSysBytesThreshold
+
+	gcThresh := hlc.Timestamp{WallTime: 1}
+	expiration := storagebase.TxnCleanupThreshold.Nanoseconds() + 1
+
+	// GC triggered if abort span should all be gc'able and it's likely large.
+	{
+		r := makeGCQueueScoreImpl(
+			context.Background(), seed,
+			hlc.Timestamp{WallTime: expiration + 1},
+			ms, zonepb.GCPolicy{TTLSeconds: 10000},
+			gcThresh,
+		)
+		require.True(t, r.ShouldQueue)
+		require.NotZero(t, r.FinalScore)
+	}
+
+	// Heuristic doesn't fire if likely last GC within TxnCleanupThreshold.
+	{
+		r := makeGCQueueScoreImpl(context.Background(), seed,
+			hlc.Timestamp{WallTime: expiration},
+			ms, zonepb.GCPolicy{TTLSeconds: 10000},
+			gcThresh,
+		)
+		require.False(t, r.ShouldQueue)
+		require.Zero(t, r.FinalScore)
 	}
 }
 
@@ -248,7 +283,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
 	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
-	})
+	}, hlc.Timestamp{})
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
 			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
