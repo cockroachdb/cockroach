@@ -382,10 +382,6 @@ func (sc *SchemaChanger) ExtendLease(
 	return nil
 }
 
-func (sc *SchemaChanger) canClearRangeForDrop(index *sqlbase.IndexDescriptor) bool {
-	return !index.IsInterleaved()
-}
-
 // DropTableDesc removes a descriptor from the KV database.
 func (sc *SchemaChanger) DropTableDesc(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, traceKV bool,
@@ -446,7 +442,7 @@ func (sc *SchemaChanger) truncateTable(
 	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
 	if table.DropTime == 0 {
-		return truncateTableInChunks(ctx, table, sc.db, false /* traceKV */)
+		return ClearTableDataInChunks(ctx, table, sc.db, false /* traceKV */)
 	}
 
 	tableKey := roachpb.RKey(keys.MakeTablePrefix(uint32(table.ID)))
@@ -521,6 +517,7 @@ func (sc *SchemaChanger) truncateTable(
 func (sc *SchemaChanger) maybeDropTable(
 	ctx context.Context, inSession bool, table *sqlbase.TableDescriptor,
 ) error {
+	// Only drop the table in the async case (when inSession == false).
 	if !table.Dropped() || inSession {
 		return nil
 	}
@@ -1354,7 +1351,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			isRollback = mutation.Rollback
 			if indexDesc := mutation.GetIndex(); mutation.Direction == sqlbase.DescriptorMutation_DROP &&
 				indexDesc != nil {
-				if sc.canClearRangeForDrop(indexDesc) {
+				if canClearRangeForDrop(indexDesc) {
 					jobSucceeded = false
 					scDesc.GCMutations = append(
 						scDesc.GCMutations,
@@ -2178,6 +2175,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if zoneCfg == nil {
 							// Do nothing, use the old zone config's TTL.
 							continue
+
 						}
 						if placeholder == nil {
 							placeholder = zoneCfg
