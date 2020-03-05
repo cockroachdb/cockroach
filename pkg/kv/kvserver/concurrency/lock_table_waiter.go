@@ -187,12 +187,21 @@ func (w *lockTableWaiterImpl) WaitOn(
 					delay = 0
 				}
 
-				if timer == nil {
-					timer = timeutil.NewTimer()
-					defer timer.Stop()
+				if delay > 0 {
+					if timer == nil {
+						timer = timeutil.NewTimer()
+						defer timer.Stop()
+					}
+					timer.Reset(delay)
+					timerC = timer.C
+				} else {
+					// If we don't want to delay the push, don't use a real timer.
+					// Doing so is both a waste of resources and, more importantly,
+					// makes TestConcurrencyManagerBasic flaky because there's no
+					// guarantee that the timer will fire before the goroutine enters
+					// a "select" waiting state on the next iteration of this loop.
+					timerC = closedTimerC
 				}
-				timer.Reset(delay)
-				timerC = timer.C
 				timerWaitingState = state
 
 			case waitElsewhere:
@@ -237,7 +246,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// of a dependency cycle or that the lock holder's coordinator node
 			// has crashed.
 			timerC = nil
-			timer.Read = true
+			if timer != nil {
+				timer.Read = true
+			}
 
 			// If the request is conflicting with a held lock then it pushes its
 			// holder synchronously - there is no way it will be able to proceed
@@ -450,4 +461,11 @@ func minDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+var closedTimerC chan time.Time
+
+func init() {
+	closedTimerC = make(chan time.Time)
+	close(closedTimerC)
 }
