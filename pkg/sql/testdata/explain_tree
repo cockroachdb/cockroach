@@ -6,9 +6,9 @@ CREATE TABLE t.orders (oid INT PRIMARY KEY, cid INT, value DECIMAL, date DATE)
 plan-string
 SELECT oid FROM t.orders WHERE oid = 123
 ----
-0 scan  (oid int) 
-0 .table orders@primary (oid int) 
-0 .spans /123-/123/# (oid int) 
+scan                         (oid int)
+      table  orders@primary
+      spans  /123-/123/#
 
 plan-tree
 SELECT oid FROM t.orders WHERE oid = 123
@@ -24,13 +24,13 @@ children: []
 plan-string
 SELECT cid, date, value FROM t.orders
 ----
-0 render  (cid int, date date, value decimal) 
-0 .render 0 (@1)[int] (cid int, date date, value decimal) 
-0 .render 1 (@3)[date] (cid int, date date, value decimal) 
-0 .render 2 (@2)[decimal] (cid int, date date, value decimal) 
-1 scan  (cid int, date date, value decimal) 
-1 .table orders@primary (cid int, date date, value decimal) 
-1 .spans ALL (cid int, date date, value decimal) 
+render                               (cid int, date date, value decimal)
+ │         render 0  (@1)[int]
+ │         render 1  (@3)[date]
+ │         render 2  (@2)[decimal]
+ └── scan                            (cid int, value decimal, date date)
+           table     orders@primary
+           spans     ALL
 
 plan-tree
 SELECT cid, date, value FROM t.orders
@@ -55,26 +55,26 @@ children:
 plan-string
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
 ----
-0 render  (cid int, sum decimal) 
-0 .render 0 (@2)[int] (cid int, sum decimal) 
-0 .render 1 (@3)[decimal] (cid int, sum decimal) 
-1 sort  (cid int, sum decimal) 
-1 .order +column6 (cid int, sum decimal) 
-2 render  (cid int, sum decimal) 
-2 .render 0 ((1)[decimal] - (@2)[decimal])[decimal] (cid int, sum decimal) 
-2 .render 1 (@1)[int] (cid int, sum decimal) 
-2 .render 2 (@2)[decimal] (cid int, sum decimal) 
-3 group  (cid int, sum decimal) 
-3 .aggregate 0 cid (cid int, sum decimal) 
-3 .aggregate 1 sum(value) (cid int, sum decimal) 
-3 .group by cid (cid int, sum decimal) 
-4 render  (cid int, sum decimal) 
-4 .render 0 (@1)[int] (cid int, sum decimal) 
-4 .render 1 (@2)[decimal] (cid int, sum decimal) 
-5 scan  (cid int, sum decimal) 
-5 .table orders@primary (cid int, sum decimal) 
-5 .spans ALL (cid int, sum decimal) 
-5 .filter ((@3)[date] > ('2015-01-01')[date])[bool] (cid int, sum decimal) 
+render                                                                                 (cid int, sum decimal)
+ │                             render 0     (@2)[int]
+ │                             render 1     (@3)[decimal]
+ └── sort                                                                              (column6 decimal, cid int, sum decimal)  +column6
+      │                        order        +column6
+      └── render                                                                       (column6 decimal, cid int, sum decimal)
+           │                   render 0     ((1)[decimal] - (@2)[decimal])[decimal]
+           │                   render 1     (@1)[int]
+           │                   render 2     (@2)[decimal]
+           └── group                                                                   (cid int, sum decimal)
+                │              aggregate 0  cid
+                │              aggregate 1  sum(value)
+                │              group by     cid
+                └── render                                                             (cid int, value decimal)
+                     │         render 0     (@1)[int]
+                     │         render 1     (@2)[decimal]
+                     └── scan                                                          (cid int, value decimal, date date)
+                               table        orders@primary
+                               spans        ALL
+                               filter       ((@3)[date] > ('2015-01-01')[date])[bool]
 
 plan-tree
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
@@ -129,9 +129,9 @@ children:
 plan-string
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
 ----
-0 scan  (value decimal) 
-0 .table orders@primary (value decimal) 
-0 .spans ALL (value decimal) 
+scan                         (value decimal)
+      table  orders@primary
+      spans  ALL
 
 plan-tree
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
@@ -147,22 +147,22 @@ children: []
 plan-string
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
-0 render  (cid int, date date, value decimal) 
-0 .render 0 (@1)[int] (cid int, date date, value decimal) 
-0 .render 1 (@3)[date] (cid int, date date, value decimal) 
-0 .render 2 (@2)[decimal] (cid int, date date, value decimal) 
-1 hash-join  (cid int, date date, value decimal) 
-1 .type inner (cid int, date date, value decimal) 
-1 .equality (date) = (date) (cid int, date date, value decimal) 
-1 .right cols are key  (cid int, date date, value decimal) 
-2 scan  (cid int, date date, value decimal) 
-2 .table orders@primary (cid int, date date, value decimal) 
-2 .spans ALL (cid int, date date, value decimal) 
-2 distinct  (cid int, date date, value decimal) 
-2 .distinct on date (cid int, date date, value decimal) 
-3 scan  (cid int, date date, value decimal) 
-3 .table orders@primary (cid int, date date, value decimal) 
-3 .spans ALL (cid int, date date, value decimal) 
+render                                                    (cid int, date date, value decimal)
+ │                   render 0            (@1)[int]
+ │                   render 1            (@3)[date]
+ │                   render 2            (@2)[decimal]
+ └── hash-join                                            (cid int, value decimal, date date, date date)
+      │              type                inner
+      │              equality            (date) = (date)
+      │              right cols are key
+      ├── scan                                            (cid int, value decimal, date date)
+      │              table               orders@primary
+      │              spans               ALL
+      └── distinct                                        (date date)
+           │         distinct on         date
+           └── scan                                       (date date)
+                     table               orders@primary
+                     spans               ALL
 
 plan-tree
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
@@ -224,23 +224,23 @@ CREATE TABLE t.actors (
 plan-string
 SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies
 ----
-0 root  (movie_id int, title string, name string) 
-1 render  (movie_id int, title string, name string) 
-1 .render 0 (@1)[int] (movie_id int, title string, name string) 
-1 .render 1 (@2)[string] (movie_id int, title string, name string) 
-1 .render 2 (@S1)[string] (movie_id int, title string, name string) 
-2 scan  (movie_id int, title string, name string) 
-2 .table movies@primary (movie_id int, title string, name string) 
-2 .spans ALL (movie_id int, title string, name string) 
-1 subquery  (movie_id int, title string, name string) 
-1 .id @S1 (movie_id int, title string, name string) 
-1 .original sql (SELECT name FROM t.actors WHERE name = 'Foo') (movie_id int, title string, name string) 
-1 .exec mode one row (movie_id int, title string, name string) 
-2 max1row  (movie_id int, title string, name string) 
-3 scan  (movie_id int, title string, name string) 
-3 .table actors@primary (movie_id int, title string, name string) 
-3 .spans ALL (movie_id int, title string, name string) 
-3 .filter ((@1)[string] = ('Foo')[string])[bool] (movie_id int, title string, name string) 
+root                                                                               (movie_id int, title string, name string)
+ ├── render                                                                        (movie_id int, title string, name string)
+ │    │              render 0      (@1)[int]
+ │    │              render 1      (@2)[string]
+ │    │              render 2      (@S1)[string]
+ │    └── scan                                                                     (id int, title string)
+ │                   table         movies@primary
+ │                   spans         ALL
+ └── subquery                                                                      (movie_id int, title string, name string)
+      │              id            @S1
+      │              original sql  (SELECT name FROM t.actors WHERE name = 'Foo')
+      │              exec mode     one row
+      └── max1row                                                                  (name string)
+           └── scan                                                                (name string)
+                     table         actors@primary
+                     spans         ALL
+                     filter        ((@1)[string] = ('Foo')[string])[bool]
 
 plan-tree
 SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies
