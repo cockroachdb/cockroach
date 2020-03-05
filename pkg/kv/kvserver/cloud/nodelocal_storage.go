@@ -39,9 +39,6 @@ func MakeLocalStorageURI(path string) string {
 
 func makeNodeLocalURIWithNodeID(nodeID roachpb.NodeID, path string) string {
 	path = strings.TrimPrefix(path, "/")
-	if nodeID == 0 {
-		return fmt.Sprintf("nodelocal:///%s", path)
-	}
 	return fmt.Sprintf("nodelocal://%d/%s", nodeID, path)
 }
 

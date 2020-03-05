@@ -100,20 +100,20 @@ func getTestFiles(numFiles int) csvTestFiles {
 		suffix = "-race"
 	}
 	for i := 0; i < numFiles; i++ {
-		testFiles.files = append(testFiles.files, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s", i, suffix)+"?nonsecret=nosecrets"))
-		testFiles.gzipFiles = append(testFiles.gzipFiles, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s.gz", i, suffix)+"?AWS_SESSION_TOKEN=secrets"))
-		testFiles.bzipFiles = append(testFiles.bzipFiles, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d%s.bz2", i, suffix)))
-		testFiles.filesWithOpts = append(testFiles.filesWithOpts, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d-opts%s", i, suffix)))
-		testFiles.filesWithDups = append(testFiles.filesWithDups, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("data-%d-dup%s", i, suffix)))
+		testFiles.files = append(testFiles.files, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d%s", i, suffix)+"?nonsecret=nosecrets"))
+		testFiles.gzipFiles = append(testFiles.gzipFiles, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d%s.gz", i, suffix)+"?AWS_SESSION_TOKEN=secrets"))
+		testFiles.bzipFiles = append(testFiles.bzipFiles, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d%s.bz2", i, suffix)))
+		testFiles.filesWithOpts = append(testFiles.filesWithOpts, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d-opts%s", i, suffix)))
+		testFiles.filesWithDups = append(testFiles.filesWithDups, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d-dup%s", i, suffix)))
 	}
 
-	testFiles.fileWithDupKeySameValue = append(testFiles.fileWithDupKeySameValue, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("dup-key-same-value%s", suffix)))
-	testFiles.fileWithShadowKeys = append(testFiles.fileWithShadowKeys, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("shadow-data%s", suffix)))
+	testFiles.fileWithDupKeySameValue = append(testFiles.fileWithDupKeySameValue, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("dup-key-same-value%s", suffix)))
+	testFiles.fileWithShadowKeys = append(testFiles.fileWithShadowKeys, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("shadow-data%s", suffix)))
 
 	wildcardFileName := "data-[0-9]"
-	testFiles.filesUsingWildcard = append(testFiles.filesUsingWildcard, fmt.Sprintf(`'nodelocal:///%s%s'`, wildcardFileName, suffix))
-	testFiles.gzipFilesUsingWildcard = append(testFiles.gzipFilesUsingWildcard, fmt.Sprintf(`'nodelocal:///%s%s.gz'`, wildcardFileName, suffix))
-	testFiles.bzipFilesUsingWildcard = append(testFiles.gzipFilesUsingWildcard, fmt.Sprintf(`'nodelocal:///%s%s.bz2'`, wildcardFileName, suffix))
+	testFiles.filesUsingWildcard = append(testFiles.filesUsingWildcard, fmt.Sprintf(`'nodelocal://0/%s%s'`, wildcardFileName, suffix))
+	testFiles.gzipFilesUsingWildcard = append(testFiles.gzipFilesUsingWildcard, fmt.Sprintf(`'nodelocal://0/%s%s.gz'`, wildcardFileName, suffix))
+	testFiles.bzipFilesUsingWildcard = append(testFiles.gzipFilesUsingWildcard, fmt.Sprintf(`'nodelocal://0/%s%s.bz2'`, wildcardFileName, suffix))
 
 	return testFiles
 }

@@ -492,7 +492,7 @@ func (f *cloudFeedFactory) Feed(create string, args ...interface{}) (TestFeed, e
 	}
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
-	sinkURI := `experimental-nodelocal:///` + feedDir
+	sinkURI := `experimental-nodelocal://0/` + feedDir
 	// TODO(dan): This is a pretty unsatisfying way to test that the sink passes
 	// through params it doesn't understand to ExternalStorage.
 	sinkURI += `?should_be=ignored`
