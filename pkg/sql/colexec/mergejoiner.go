@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -182,8 +181,6 @@ func NewMergeJoinOp(
 	rightTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
-	filterConstructor func(Operator) (Operator, error),
-	filterOnlyOnLeft bool,
 ) (Operator, error) {
 	// TODO(yuzefovich): get rid off "outCols" entirely and plumb the assumption
 	// of outputting all columns into the merge joiner itself.
@@ -208,23 +205,7 @@ func NewMergeJoinOp(
 		rightTypes,
 		leftOrdering,
 		rightOrdering,
-		filterConstructor,
-		filterOnlyOnLeft,
 	)
-	if filterConstructor != nil {
-		switch joinType {
-		case sqlbase.JoinType_INNER:
-			execerror.VectorizedInternalPanic("INNER JOIN with ON expression is handled differently")
-		case sqlbase.JoinType_LEFT_SEMI:
-			return &mergeJoinLeftSemiWithOnExprOp{base}, err
-		case sqlbase.JoinType_LEFT_ANTI:
-			return &mergeJoinLeftAntiWithOnExprOp{base}, err
-		default:
-			execerror.VectorizedInternalPanic(
-				fmt.Sprintf("unsupported join type %s with ON expression", joinType.String()),
-			)
-		}
-	}
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 		return &mergeJoinInnerOp{base}, err
@@ -282,8 +263,6 @@ func newMergeJoinBase(
 	rightTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
-	filterConstructor func(Operator) (Operator, error),
-	filterOnlyOnLeft bool,
 ) (mergeJoinBase, error) {
 	lEqCols := make([]uint32, len(leftOrdering))
 	lDirections := make([]execinfrapb.Ordering_Column_Direction, len(leftOrdering))
@@ -331,15 +310,6 @@ func newMergeJoinBase(
 		return base, err
 	}
 	base.scratch.tempVecByType = make(map[coltypes.T]coldata.Vec)
-	if filterConstructor != nil {
-		base.filter, err = newJoinerFilter(
-			base.allocator,
-			leftTypes,
-			rightTypes,
-			filterConstructor,
-			filterOnlyOnLeft,
-		)
-	}
 	return base, err
 }
 
@@ -370,8 +340,6 @@ type mergeJoinBase struct {
 		// *not* be exposed outside of the merge joiner.
 		tempVecByType map[coltypes.T]coldata.Vec
 	}
-
-	filter *joinerFilter
 }
 
 func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
@@ -413,10 +381,6 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 
 	o.groups = makeGroupsBuffer(coldata.BatchSize())
 	o.resetBuilderCrossProductState()
-
-	if o.filter != nil {
-		o.filter.Init()
-	}
 }
 
 func (o *mergeJoinBase) resetBuilderCrossProductState() {

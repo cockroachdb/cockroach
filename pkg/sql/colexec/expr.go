@@ -16,6 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// Remove unused warning.
+var _ = findIVarsInRange
+
 // findIVarsInRange searches Expr for presence of tree.IndexedVars with indices
 // in range [start, end). It returns a slice containing all such indices.
 func findIVarsInRange(expr execinfrapb.Expression, start int, end int) ([]uint32, error) {
