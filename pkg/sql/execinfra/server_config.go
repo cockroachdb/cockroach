@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -173,6 +174,11 @@ type ServerConfig struct {
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
+
+	// ProtectedTimestampProvider maintains the state of the protected timestamp
+	// subsystem. It is queried during the GC process and in the handling of
+	// AdminVerifyProtectedTimestampRequest.
+	ProtectedTimestampProvider protectedts.Provider
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

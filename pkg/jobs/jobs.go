@@ -82,7 +82,11 @@ func init() {
 	// race.
 	var jobPayload jobspb.Payload
 	jobsDetailsInterfaceType := reflect.TypeOf(&jobPayload.Details).Elem()
+	var jobProgress jobspb.Progress
+	jobsProgressDetailsInterfaceType := reflect.TypeOf(&jobProgress.Details).Elem()
 	protoutil.RegisterUnclonableType(jobsDetailsInterfaceType, reflect.Array)
+	protoutil.RegisterUnclonableType(jobsProgressDetailsInterfaceType, reflect.Array)
+
 }
 
 // Status represents the status of a job in the system.jobs table.

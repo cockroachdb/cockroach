@@ -32,10 +32,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2013,6 +2018,7 @@ func TestChangefeedDescription(t *testing.T) {
 	// Only the enterprise version uses jobs.
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
+
 func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2131,6 +2137,173 @@ func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 
 	// Only the enterprise version uses jobs.
 	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedProtectedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	var (
+		ctx      = context.Background()
+		userSpan = roachpb.Span{
+			Key:    keys.UserTableDataMin,
+			EndKey: keys.TableDataMax,
+		}
+		done               = make(chan struct{})
+		blockRequestCh     = make(chan chan chan struct{}, 1)
+		requestBlockedScan = func() (waitForBlockedScan func() (unblockScan func())) {
+			blockRequest := make(chan chan struct{})
+			blockRequestCh <- blockRequest // test sends to filter to request a block
+			return func() (unblockScan func()) {
+				toClose := <-blockRequest // filter sends back to test to report blocked
+				return func() {
+					close(toClose) // test closes to unblock filter
+				}
+			}
+		}
+		requestFilter = storagebase.ReplicaRequestFilter(func(
+			ctx context.Context, ba roachpb.BatchRequest,
+		) *roachpb.Error {
+			if ba.Txn == nil || ba.Txn.Name != "changefeed backfill" {
+				return nil
+			}
+			scanReq, ok := ba.GetArg(roachpb.Scan)
+			if !ok {
+				return nil
+			}
+			if !userSpan.Contains(scanReq.Header().Span()) {
+				return nil
+			}
+			select {
+			case notifyCh := <-blockRequestCh:
+				waitUntilClosed := make(chan struct{})
+				notifyCh <- waitUntilClosed
+				select {
+				case <-waitUntilClosed:
+				case <-done:
+				}
+			default:
+			}
+			return nil
+		})
+		mkGetPtsRec = func(t *testing.T, ptp protectedts.Provider, clock *hlc.Clock) func() *ptpb.Record {
+			return func() (r *ptpb.Record) {
+				t.Helper()
+				require.NoError(t, ptp.Refresh(ctx, clock.Now()))
+				ptp.Iterate(ctx, userSpan.Key, userSpan.EndKey, func(record *ptpb.Record) (wantMore bool) {
+					r = record
+					return false
+				})
+				return r
+			}
+		}
+		mkCheckRecord = func(t *testing.T, tableID int) func(r *ptpb.Record) error {
+			expectedKeys := map[string]struct{}{
+				string(keys.MakeTablePrefix(uint32(tableID))):        {},
+				string(keys.MakeTablePrefix(keys.DescriptorTableID)): {},
+			}
+			return func(ptr *ptpb.Record) error {
+				if ptr == nil {
+					return errors.Errorf("expected protected timestamp")
+				}
+				require.Equal(t, len(ptr.Spans), len(expectedKeys), ptr.Spans, expectedKeys)
+				for _, s := range ptr.Spans {
+					require.Contains(t, expectedKeys, string(s.Key))
+				}
+				return nil
+			}
+		}
+		checkNoRecord = func(ptr *ptpb.Record) error {
+			if ptr != nil {
+				return errors.Errorf("expected protected timestamp to not exist, found %v", ptr)
+			}
+			return nil
+		}
+		mkWaitForRecordCond = func(t *testing.T, getRecord func() *ptpb.Record, check func(record *ptpb.Record) error) func() {
+			return func() {
+				t.Helper()
+				testutils.SucceedsSoon(t, func() error { return check(getRecord()) })
+			}
+		}
+	)
+
+	t.Run(`enterprise`, enterpriseTestWithServerArgs(
+		func(args *base.TestServerArgs) {
+			storeKnobs := &kvserver.StoreTestingKnobs{}
+			storeKnobs.TestingRequestFilter = requestFilter
+			args.Knobs.Store = storeKnobs
+		},
+		func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			defer close(done)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1`)
+			sqlDB.Exec(t, `ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
+
+			var tableID int
+			sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables `+
+				`WHERE name = 'foo' AND database_name = current_database()`).
+				Scan(&tableID)
+
+			ptp := f.Server().DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+			getPtsRec := mkGetPtsRec(t, ptp, f.Server().Clock())
+			waitForRecord := mkWaitForRecordCond(t, getPtsRec, mkCheckRecord(t, tableID))
+			waitForNoRecord := mkWaitForRecordCond(t, getPtsRec, checkNoRecord)
+			waitForBlocked := requestBlockedScan()
+
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`).(*cdctest.TableFeed)
+			defer closeFeed(t, foo)
+			{
+				// Ensure that there's a protected timestamp on startup that goes
+				// away after the initial scan.
+				unblock := waitForBlocked()
+				require.NotNil(t, getPtsRec())
+				unblock()
+				assertPayloads(t, foo, []string{
+					`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+					`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+					`foo: [4]->{"after": {"a": 4, "b": "c"}}`,
+					`foo: [7]->{"after": {"a": 7, "b": "d"}}`,
+					`foo: [8]->{"after": {"a": 8, "b": "e"}}`,
+				})
+				expectResolvedTimestamp(t, foo)
+				waitForNoRecord()
+			}
+
+			{
+				// Ensure that a protected timestamp is created for a backfill due
+				// to a schema change and removed after.
+				waitForBlocked = requestBlockedScan()
+				sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN c INT NOT NULL DEFAULT 1`)
+				unblock := waitForBlocked()
+				waitForRecord()
+				unblock()
+				assertPayloads(t, foo, []string{
+					`foo: [1]->{"after": {"a": 1, "b": "a", "c": 1}}`,
+					`foo: [2]->{"after": {"a": 2, "b": "b", "c": 1}}`,
+					`foo: [4]->{"after": {"a": 4, "b": "c", "c": 1}}`,
+					`foo: [7]->{"after": {"a": 7, "b": "d", "c": 1}}`,
+					`foo: [8]->{"after": {"a": 8, "b": "e", "c": 1}}`,
+				})
+				expectResolvedTimestamp(t, foo)
+				waitForNoRecord()
+			}
+
+			{
+				// Ensure that the protected timestamp is removed when the job is
+				// canceled.
+				waitForBlocked = requestBlockedScan()
+				sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d INT NOT NULL DEFAULT 2`)
+				unblock := waitForBlocked()
+				waitForRecord()
+				sqlDB.Exec(t, `CANCEL JOB $1`, foo.JobID)
+				waitForNoRecord()
+				unblock()
+			}
+		}))
 }
 
 func TestManyChangefeedsOneTable(t *testing.T) {
