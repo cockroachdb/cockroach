@@ -21,7 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -33,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/pkg/errors"
 )
 
@@ -264,18 +270,61 @@ func changefeedPlanHook(
 		// been setup okay. This intentionally abuses what would normally be
 		// hooked up to resultsCh to avoid a bunch of extra plumbing.
 		startedCh := make(chan tree.Datums)
-		job, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, startedCh, jobs.Record{
-			Description: jobDescription,
-			Username:    p.User(),
-			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
-				for _, desc := range targetDescs {
-					sqlDescIDs = append(sqlDescIDs, desc.GetID())
+
+		// The below block creates the job and if there's an initial scan, protects
+		// the data required for that scan. We protect the data here rather than in
+		// Resume to shorten the window that data may be GC'd. The protected
+		// timestamps are removed and created during the execution of the changefeed
+		// by the changeFrontier when checkpointing progress. Additionally protected
+		// timestamps are removed in OnFailOrCancel. See the comment on
+		// changeFrontier.manageProtectedTimestamps for more details on the handling of
+		// protected timestamps.
+		var sj *jobs.StartableJob
+		{
+			var protectedTimestampID uuid.UUID
+			var spansToProtect []roachpb.Span
+			if hasInitialScan := initialScanFromOptions(details.Opts); hasInitialScan {
+				protectedTimestampID = uuid.MakeV4()
+				spansToProtect = makeSpansToProtect(details.Targets)
+				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
+			}
+
+			jr := jobs.Record{
+				Description: jobDescription,
+				Username:    p.User(),
+				DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+					for _, desc := range targetDescs {
+						sqlDescIDs = append(sqlDescIDs, desc.GetID())
+					}
+					return sqlDescIDs
+				}(),
+				Details:  details,
+				Progress: *progress.GetChangefeed(),
+			}
+			createJobAndProtectedTS := func(ctx context.Context, txn *kv.Txn) (err error) {
+				sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, startedCh)
+				if err != nil {
+					return err
 				}
-				return sqlDescIDs
-			}(),
-			Details:  details,
-			Progress: *progress.GetChangefeed(),
-		})
+				if protectedTimestampID == uuid.Nil {
+					return nil
+				}
+				ptr := jobsprotectedts.MakeRecord(protectedTimestampID, *sj.ID(),
+					statementTime, spansToProtect)
+				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr)
+			}
+			if err := p.ExecCfg().DB.Txn(ctx, createJobAndProtectedTS); err != nil {
+				if sj != nil {
+					if err := sj.CleanupOnRollback(ctx); err != nil {
+						log.Warningf(ctx, "failed to cleanup aborted job: %v", err)
+					}
+				}
+				return err
+			}
+		}
+
+		// Start the job and wait for it to signal on startedCh.
+		errCh, err := sj.Start(ctx)
 		if err != nil {
 			return err
 		}
@@ -287,9 +336,8 @@ func changefeedPlanHook(
 		case <-startedCh:
 			// The feed set up without error, return control to the user.
 		}
-
 		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDInt(tree.DInt(*sj.ID())),
 		}
 		return nil
 	}
@@ -535,4 +583,28 @@ func (b *changefeedResumer) Resume(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *changefeedResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
+func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, planHookState interface{}) error {
+	phs := planHookState.(sql.PlanHookState)
+	execCfg := phs.ExecCfg()
+	progress := b.job.Progress()
+	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.ProtectedTimestampProvider,
+		progress.GetChangefeed().ProtectedTimestampRecord)
+	return nil
+}
+
+// Try to clean up a protected timestamp created by the changefeed.
+func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
+	ctx context.Context, db *kv.DB, pts protectedts.Storage, ptsID uuid.UUID,
+) {
+	if ptsID == uuid.Nil {
+		return
+	}
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return pts.Release(ctx, txn, ptsID)
+	}); err != nil && !crdberrors.Is(err, protectedts.ErrNotExists) {
+		// NB: The record should get cleaned up by the reconciliation loop.
+		// No good reason to cause more trouble by returning an error here.
+		// Log and move on.
+		log.Warningf(ctx, "failed to remove protected timestamp record %v: %v", ptsID, err)
+	}
+}

@@ -18,7 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -34,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -423,15 +427,6 @@ type changeFrontier struct {
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
 	sink Sink
-	// boundary tracks scan boundaries due to schema changes. If the changefeed is
-	// configured to stop on schema change then the changeFrontier will wait for
-	// the span frontier to reach the boundary, will drain, and then will exit.
-	//
-	// boundary values are communicated to the changeFrontier via Resolved
-	// messages send from the aggregators. The policy regarding which schema
-	// change events lead to a boundary is controlled by the KV feed based on its
-	// configuration.
-	boundary hlc.Timestamp
 	// freqEmitResolved, if >= 0, is a lower bound on the duration between
 	// resolved timestamp emits.
 	freqEmitResolved time.Duration
@@ -439,6 +434,22 @@ type changeFrontier struct {
 	lastEmitResolved time.Time
 	// lastSlowSpanLog is the last time a slow span from `sf` was logged.
 	lastSlowSpanLog time.Time
+
+	// schemaChangeBoundary represents an hlc timestamp at which a schema change
+	// event occurred to a target watched by this frontier. If the changefeed is
+	// configured to stop on schema change then the changeFrontier will wait for
+	// the span frontier to reach the schemaChangeBoundary, will drain, and then
+	// will exit. If the changefeed is configured to backfill on schema changes,
+	// the changeFrontier will protect the scan timestamp in order to ensure that
+	// the scan complete. The protected timestamp will be released when a new scan
+	// schemaChangeBoundary is created or the changefeed reaches a timestamp that
+	// is near the present.
+	//
+	// schemaChangeBoundary values are communicated to the changeFrontier via
+	// Resolved messages send from the changeAggregators. The policy regarding
+	// which schema change events lead to a schemaChangeBoundary is controlled
+	// by the KV feed based on OptSchemaChangeEvents and OptSchemaChangePolicy.
+	schemaChangeBoundary hlc.Timestamp
 
 	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
@@ -615,11 +626,10 @@ func (cf *changeFrontier) closeMetrics() {
 	cf.metrics.mu.Unlock()
 }
 
-// boundaryReached returns true if the spanFrontier is at the current boundary.
-func (cf *changeFrontier) boundaryReached() (r bool) {
-	// NB: We don't need to check if the frontier moved past the boundary
-	// if the policy is to stop on schema change.
-	return !cf.boundary.IsEmpty() && cf.boundary.Equal(cf.sf.Frontier())
+// schemaChangeBoundaryReached returns true if the spanFrontier is at the
+// current schemaChangeBoundary.
+func (cf *changeFrontier) schemaChangeBoundaryReached() (r bool) {
+	return !cf.schemaChangeBoundary.IsEmpty() && cf.schemaChangeBoundary.Equal(cf.sf.Frontier())
 }
 
 // shouldFailOnSchemaChange checks the job's spec to determine whether it should
@@ -627,6 +637,13 @@ func (cf *changeFrontier) boundaryReached() (r bool) {
 func (cf *changeFrontier) shouldFailOnSchemaChange() bool {
 	policy := changefeedbase.SchemaChangePolicy(cf.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
 	return policy == changefeedbase.OptSchemaChangePolicyStop
+}
+
+// shouldFailOnSchemaChange checks the job's spec to determine whether it should
+// install protected timestamps when encountering scan boundaries.
+func (cf *changeFrontier) shouldProtectBoundaries() bool {
+	policy := changefeedbase.SchemaChangePolicy(cf.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	return policy == changefeedbase.OptSchemaChangePolicyBackfill
 }
 
 // Next is part of the RowSource interface.
@@ -638,11 +655,11 @@ func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMeta
 			return cf.resolvedBuf.Pop(), nil
 		}
 
-		if cf.boundaryReached() && cf.shouldFailOnSchemaChange() {
+		if cf.schemaChangeBoundaryReached() && cf.shouldFailOnSchemaChange() {
 			// TODO(ajwerner): make this more useful by at least informing the client
 			// of which tables changed.
 			cf.MoveToDraining(pgerror.Newf(pgcode.SchemaChangeOccurred,
-				"schema change occurred at %v", cf.boundary.Next().AsOfSystemTime()))
+				"schema change occurred at %v", cf.schemaChangeBoundary.Next().AsOfSystemTime()))
 			break
 		}
 
@@ -703,30 +720,34 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		return nil
 	}
 
-	// We want to ensure that we mark the boundary and then we want to detect when
-	// the frontier reaches to or past the boundary.
-	if resolved.BoundaryReached && (cf.boundary.IsEmpty() || resolved.Timestamp.Less(cf.boundary)) {
-		cf.boundary = resolved.Timestamp
+	// We want to ensure that we mark the schemaChangeBoundary and then we want to detect when
+	// the frontier reaches to or past the schemaChangeBoundary.
+	if resolved.BoundaryReached && (cf.schemaChangeBoundary.IsEmpty() || resolved.Timestamp.Less(cf.schemaChangeBoundary)) {
+		cf.schemaChangeBoundary = resolved.Timestamp
+	}
+	// If we've moved past a schemaChangeBoundary, make sure to clear it.
+	if !resolved.BoundaryReached && !cf.schemaChangeBoundary.IsEmpty() && cf.schemaChangeBoundary.Less(resolved.Timestamp) {
+		cf.schemaChangeBoundary = hlc.Timestamp{}
 	}
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
+	isBehind := cf.maybeLogBehindSpan(frontierChanged)
 	if frontierChanged {
-		if err := cf.handleFrontierChanged(); err != nil {
+		if err := cf.handleFrontierChanged(isBehind); err != nil {
 			return err
 		}
 	}
-	cf.maybeLogBehindSpan(frontierChanged)
 	return nil
 }
 
-func (cf *changeFrontier) handleFrontierChanged() error {
+func (cf *changeFrontier) handleFrontierChanged(isBehind bool) error {
 	newResolved := cf.sf.Frontier()
 	cf.metrics.mu.Lock()
 	if cf.metricsID != -1 {
 		cf.metrics.mu.resolved[cf.metricsID] = newResolved
 	}
 	cf.metrics.mu.Unlock()
-	if err := checkpointResolvedTimestamp(cf.Ctx, cf.jobProgressedFn, cf.sf); err != nil {
+	if err := cf.checkpointResolvedTimestamp(newResolved, isBehind); err != nil {
 		return err
 	}
 	if err := cf.maybeEmitResolved(newResolved); err != nil {
@@ -735,12 +756,113 @@ func (cf *changeFrontier) handleFrontierChanged() error {
 	return nil
 }
 
+// checkpointResolvedTimestamp checkpoints a changefeed-level resolved timestamp
+// to the jobs record. It additionally manages the protected timestamp state
+// which is stored in the job progress details. It is only called if the new
+// resolved timestamp is later than the current one. The isBehind argument is
+// used to determine whether an existing protected timestamp should be released.
+func (cf *changeFrontier) checkpointResolvedTimestamp(
+	resolved hlc.Timestamp, isBehind bool,
+) (err error) {
+	// NB: Sinkless changefeeds will not have a jobProgressedFn. In fact, they
+	// have no distributed state whatsoever. Because of this they also do not
+	// use protected timestamps.
+	if cf.jobProgressedFn == nil {
+		return nil
+	}
+	return cf.jobProgressedFn(cf.Ctx, func(
+		ctx context.Context, txn *kv.Txn, details jobspb.ProgressDetails,
+	) (hlc.Timestamp, error) {
+		progress := details.(*jobspb.Progress_Changefeed).Changefeed
+		if err := cf.manageProtectedTimestamps(ctx, progress, txn, resolved, isBehind); err != nil {
+			return hlc.Timestamp{}, err
+		}
+		return resolved, nil
+	})
+}
+
+// manageProtectedTimestamps is called when the resolved timestamp is being
+// checkpointed. The changeFrontier always checkpoints resolved timestamps
+// which occur at scan boundaries. It releases previously protected timestamps
+// if the changefeed is not behind. See maybeLogBehindSpan for details on the
+// behind calculation.
+//
+// Note that this function is never called for sinkless changefeeds as they have
+// no corresponding job and thus no corresponding distributed state on which to
+// attach protected timestamp information.
+//
+// TODO(ajwerner): Adopt protected timestamps for sinkless changefeeds,
+// perhaps by using whatever mechanism is eventually built to protect
+// data for long-running SQL transactions. There's some discussion of this
+// use case in the protected timestamps RFC.
+func (cf *changeFrontier) manageProtectedTimestamps(
+	ctx context.Context,
+	progress *jobspb.ChangefeedProgress,
+	txn *kv.Txn,
+	resolved hlc.Timestamp,
+	isBehind bool,
+) error {
+	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
+	if err := cf.maybeReleaseProtectedTimestamp(ctx, progress, pts, txn, isBehind); err != nil {
+		return err
+	}
+	return cf.maybeProtectTimestamp(ctx, progress, pts, txn, resolved)
+}
+
+// maybeReleaseProtectedTimestamp will release the current protected timestamp
+// if either the resolved timestamp is close to the present or we've reached
+// a new schemaChangeBoundary which will be protected.
+func (cf *changeFrontier) maybeReleaseProtectedTimestamp(
+	ctx context.Context,
+	progress *jobspb.ChangefeedProgress,
+	pts protectedts.Storage,
+	txn *kv.Txn,
+	isBehind bool,
+) error {
+	if progress.ProtectedTimestampRecord == uuid.Nil {
+		return nil
+	}
+	if !cf.schemaChangeBoundaryReached() && isBehind {
+		log.VEventf(ctx, 2, "not releasing protected timestamp because changefeed is behind")
+		return nil
+	}
+	log.VEventf(ctx, 2, "releasing protected timestamp %v",
+		progress.ProtectedTimestampRecord)
+	if err := pts.Release(ctx, txn, progress.ProtectedTimestampRecord); err != nil {
+		return err
+	}
+	progress.ProtectedTimestampRecord = uuid.Nil
+	return nil
+}
+
+// maybeProtectTimestamp creates a new protected timestamp when the
+// changeFrontier reaches a scanBoundary and the schemaChangePolicy indicates
+// that we should perform a backfill (see cf.shouldProtectBoundaries()).
+func (cf *changeFrontier) maybeProtectTimestamp(
+	ctx context.Context,
+	progress *jobspb.ChangefeedProgress,
+	pts protectedts.Storage,
+	txn *kv.Txn,
+	resolved hlc.Timestamp,
+) error {
+	if cf.isSinkless() || !cf.schemaChangeBoundaryReached() || !cf.shouldProtectBoundaries() {
+		return nil
+	}
+	progress.ProtectedTimestampRecord = uuid.MakeV4()
+	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
+		progress.ProtectedTimestampRecord, resolved)
+	spansToProtect := makeSpansToProtect(cf.spec.Feed.Targets)
+	rec := jobsprotectedts.MakeRecord(
+		progress.ProtectedTimestampRecord, cf.spec.JobID, resolved, spansToProtect)
+	return pts.Protect(ctx, txn, rec)
+}
+
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 	if cf.freqEmitResolved == emitNoResolved {
 		return nil
 	}
 	sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
-	shouldEmit := sinceEmitted >= cf.freqEmitResolved || cf.boundaryReached()
+	shouldEmit := sinceEmitted >= cf.freqEmitResolved || cf.schemaChangeBoundaryReached()
 	if !shouldEmit {
 		return nil
 	}
@@ -753,8 +875,10 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 	return nil
 }
 
-// Potentially log the most behind span in the frontier for debugging.
-func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
+// Potentially log the most behind span in the frontier for debugging. The
+// returned boolean will be true if the resolved timestamp lags far behind the
+// present as defined by the current configuration.
+func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind bool) {
 	// These two cluster setting values represent the target responsiveness of
 	// poller and range feed. The cluster setting for switching between poller and
 	// rangefeed is only checked at changefeed start/resume, so instead of
@@ -767,11 +891,11 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
 	now := timeutil.Now()
 	resolvedBehind := now.Sub(frontier.GoTime())
 	if resolvedBehind <= slownessThreshold {
-		return
+		return false
 	}
 
 	description := `sinkless feed`
-	if cf.spec.JobID != 0 {
+	if cf.isSinkless() {
 		description = fmt.Sprintf("job %d", cf.spec.JobID)
 	}
 	if frontierChanged {
@@ -784,6 +908,7 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
 		s := cf.sf.PeekFrontierSpan()
 		log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
+	return true
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -795,4 +920,10 @@ func (cf *changeFrontier) ConsumerDone() {
 func (cf *changeFrontier) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	cf.InternalClose()
+}
+
+// isSinkless returns true if this changeFrontier is sinkless and thus does not
+// have a job.
+func (cf *changeFrontier) isSinkless() bool {
+	return cf.spec.JobID == 0
 }
