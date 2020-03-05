@@ -878,13 +878,13 @@ func getZoneConfigRaw(
 	return &zone, nil
 }
 
-// removeIndexZoneConfigs removes the zone configurations for some
+// RemoveIndexZoneConfigs removes the zone configurations for some
 // indexs being dropped. It is a no-op if there is no zone
 // configuration.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
-func removeIndexZoneConfigs(
+func RemoveIndexZoneConfigs(
 	ctx context.Context,
 	txn *client.Txn,
 	execCfg *ExecutorConfig,

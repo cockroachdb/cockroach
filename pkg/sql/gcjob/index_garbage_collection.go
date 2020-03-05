@@ -1,0 +1,107 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package gcjob
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
+)
+
+// gcIndexes find the indexes that need to be GC'd, GC's them, and then updates
+// the cleans up the table descriptor, zone configs and job payload to indicate
+// the work that it did.
+func gcIndexes(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	parentID sqlbase.ID,
+	progress *jobspb.WaitingForGCProgress,
+) error {
+	droppedIndexes := progress.Indexes
+
+	parentTable, err := getTableDescriptor(ctx, execCfg, parentID)
+	if err != nil {
+		return err
+	}
+
+	for _, index := range droppedIndexes {
+		if index.Status != jobspb.WaitingForGCProgress_DELETING {
+			continue
+		}
+
+		indexDesc := sqlbase.IndexDescriptor{ID: index.IndexID}
+		if err := clearIndex(ctx, execCfg.DB, parentTable, indexDesc); err != nil {
+			return err
+		}
+
+		// All the data chunks have been removed. Now also removed the
+		// zone configs for the dropped indexes, if any.
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, parentTable.GetID(), []sqlbase.IndexDescriptor{indexDesc})
+		}); err != nil {
+			return err
+		}
+
+		if err := completeDroppedIndex(ctx, execCfg, parentTable, index.IndexID, progress); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// clearIndexes issues Clear Range requests over all specified indexes.
+func clearIndex(
+	ctx context.Context,
+	db *client.DB,
+	tableDesc *sqlbase.TableDescriptor,
+	index sqlbase.IndexDescriptor,
+) error {
+	if index.IsInterleaved() {
+		return errors.Errorf("unexpected interleaved index %d", index.ID)
+	}
+
+	sp := tableDesc.IndexSpan(index.ID)
+
+	// ClearRange cannot be run in a transaction, so create a
+	// non-transactional batch to send the request.
+	b := &client.Batch{}
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    sp.Key,
+			EndKey: sp.EndKey,
+		},
+	})
+	return db.Run(ctx, b)
+}
+
+// completeDroppedIndexes updates the mutations of the table descriptor to
+// indicate that the index was dropped, as well as the job detail payload.
+func completeDroppedIndex(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	table *sqlbase.TableDescriptor,
+	indexID sqlbase.IndexID,
+	progress *jobspb.WaitingForGCProgress,
+) error {
+	if err := updateDescriptorMutations(ctx, execCfg, table, indexID); err != nil {
+		return err
+	}
+
+	markIndexGCed(indexID, progress)
+
+	return nil
+}
