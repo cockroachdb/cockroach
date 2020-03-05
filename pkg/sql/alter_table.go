@@ -663,6 +663,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Mark descriptorChanged so that a mutation job is scheduled at the end of startExec.
 			descriptorChanged = true
 
+			// Send a notice to users about the async cleanup jobs.
+			params.p.noticeSender.AppendNotice(
+				pgerror.Noticef(
+					"primary key changes spawn async cleanup jobs. Future schema changes on %q may be delayed as these jobs finish",
+					n.tableDesc.Name,
+				),
+			)
+
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
 				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")
