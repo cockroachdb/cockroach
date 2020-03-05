@@ -2131,7 +2131,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// to import data from csv where columns order is different and import expression
 	// defines in what order columns should be imported to align with table definition
 	t.Run("target-cols-reordered", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE TABLE t (a INT PRIMARY KEY, b int, c STRING NOT NULL, d DECIMAL NOT NULL)")
+		sqlDB.Exec(t, "CREATE TABLE t (a INT PRIMARY KEY, b INT, c STRING NOT NULL, d DECIMAL NOT NULL)")
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		const data = `"3.14,c is a string",1\n"2.73,another string",2`
