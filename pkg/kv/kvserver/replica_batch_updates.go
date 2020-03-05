@@ -69,7 +69,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		for _, ru := range otherReqs {
 			req := ru.GetInner()
 			switch {
-			case roachpb.IsTransactionWrite(req) && !roachpb.IsRange(req):
+			case roachpb.IsIntentWrite(req) && !roachpb.IsRange(req):
 				// Concurrent point write.
 				writes++
 			case req.Method() == roachpb.QueryIntent:
@@ -100,7 +100,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		req := ru.GetInner()
 		seq := req.Header().Sequence
 		switch {
-		case roachpb.IsTransactionWrite(req) && !roachpb.IsRange(req):
+		case roachpb.IsIntentWrite(req) && !roachpb.IsRange(req):
 			// Concurrent point write.
 		case req.Method() == roachpb.QueryIntent:
 			// Earlier pipelined point write that hasn't been proven yet. We

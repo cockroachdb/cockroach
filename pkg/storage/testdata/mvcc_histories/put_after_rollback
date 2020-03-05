@@ -13,7 +13,7 @@ with t=A k=k2
 get: "k2" -> /BYTES/b @0.000000001,0
 get: "k2" -> <no data>
 >> at end:
-txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
 meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
 data: "k2"/0.000000001,0 -> /BYTES/b
 
@@ -26,7 +26,7 @@ with t=A k=k3
   del
 ----
 >> at end:
-txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
 meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
 data: "k2"/0.000000001,0 -> /BYTES/b
 meta: "k3"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} ts=0.000000001,0 del=true klen=12 vlen=0
@@ -43,7 +43,7 @@ with t=A k=k4
   cput      v=c
 ----
 >> at end:
-txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=60} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=60} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
 meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
 data: "k2"/0.000000001,0 -> /BYTES/b
 meta: "k3"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} ts=0.000000001,0 del=true klen=12 vlen=0
@@ -72,7 +72,7 @@ with t=B k=k5
 meta: "k5" -> txn={id=00000000 key="k5" pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=30} ts=0.000000005,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 meta: "k5" -> txn={id=00000000 key="k5" pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=40} ts=0.000000005,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 >> at end:
-txn: "B" meta={id=00000000 key="k5" pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000005,0 wto=false max=0,0 isn=1
+txn: "B" meta={id=00000000 key="k5" pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000005,0 wto=false max=0,0 isn=1
 meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} ts=0.000000001,0 del=false klen=12 vlen=6
 data: "k2"/0.000000001,0 -> /BYTES/b
 meta: "k3"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=40} ts=0.000000001,0 del=true klen=12 vlen=0

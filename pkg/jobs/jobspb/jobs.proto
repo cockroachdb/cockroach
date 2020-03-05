@@ -233,6 +233,7 @@ message ChangefeedDetails {
 message ResolvedSpan {
   roachpb.Span span = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  bool boundary_reached = 3;
 }
 
 message ChangefeedProgress {

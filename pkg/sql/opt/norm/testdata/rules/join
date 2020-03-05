@@ -248,7 +248,7 @@ left-join (hash)
  │    │    ├── key: (3)
  │    │    └── fd: (3)-->(4-7)
  │    └── filters
- │         ├── (i:4 < 0) OR (i:4 > 10) [outer=(4), constraints=(/4: (/NULL - /-1] [/11 - ])]
+ │         ├── (i:4 < 0) OR (i:4 > 10) [outer=(4), constraints=(/4: (/NULL - /-1] [/11 - ]; tight)]
  │         └── s:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  └── filters
       ├── y:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]

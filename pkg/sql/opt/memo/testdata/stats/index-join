@@ -114,7 +114,7 @@ SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=133.333333, distinct(1)=133.333333, null(1)=0, distinct(2)=74.8385577, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=128.888889, null(2,3)=0, distinct(1-3)=133.333333, null(1-3)=0]
+ ├── stats: [rows=400, distinct(1)=400, null(1)=0, distinct(2)=98.8470785, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=360, null(2,3)=0, distinct(1-3)=400, null(1-3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  └── scan a@secondary
@@ -131,7 +131,7 @@ SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=133.333333, distinct(3)=2, null(3)=0]
+ ├── stats: [rows=400, distinct(3)=2, null(3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  ├── scan a
@@ -140,7 +140,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters
-      └── (s:3 = 'foo') OR (s:3 = 'bar') [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo'])]
+      └── (s:3 = 'foo') OR (s:3 = 'bar') [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
 
 # Bump up null counts.
 exec-ddl
@@ -226,12 +226,12 @@ SELECT * FROM a WHERE (s = 'foo' OR s = 'bar') AND s IS NOT NULL
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=66.6666667, distinct(1)=66.6666667, null(1)=0, distinct(2)=49.3854989, null(2)=33.3333333, distinct(3)=2, null(3)=0, distinct(2,3)=65.7755838, null(2,3)=50, distinct(1-3)=63.4151782, null(1-3)=50]
+ ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(2)=88.4618791, null(2)=100, distinct(3)=2, null(3)=0, distinct(2,3)=191.943229, null(2,3)=150, distinct(1-3)=172.017276, null(1-3)=150]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
-      ├── stats: [rows=66.6666667, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=200, distinct(3)=2, null(3)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
       ├── scan a@secondary
@@ -243,14 +243,14 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           └── (s:3 = 'foo') OR (s:3 = 'bar') [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo'])]
+           └── (s:3 = 'foo') OR (s:3 = 'bar') [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
 
 norm
 SELECT * FROM a WHERE (s = 'foo' OR s = 'bar') AND s IS NOT NULL
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=66.6666667, distinct(3)=2, null(3)=0]
+ ├── stats: [rows=200, distinct(3)=2, null(3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  ├── scan a
@@ -259,5 +259,4 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters
-      ├── (s:3 = 'foo') OR (s:3 = 'bar') [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo'])]
-      └── s:3 IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      └── ((s:3 = 'foo') OR (s:3 = 'bar')) AND (s:3 IS NOT NULL) [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]

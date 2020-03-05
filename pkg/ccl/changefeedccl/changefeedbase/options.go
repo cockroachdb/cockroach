@@ -16,6 +16,14 @@ type EnvelopeType string
 // FormatType configures the encoding format.
 type FormatType string
 
+// SchemaChangeEventClass defines a set of schema change event types which
+// trigger the action defined by the SchemaChangeEventPolicy.
+type SchemaChangeEventClass string
+
+// SchemaChangePolicy defines the behavior of a changefeed when a schema
+// change event which is a member of the changefeed's schema change events.
+type SchemaChangePolicy string
+
 // Constants for the options.
 const (
 	OptConfluentSchemaRegistry = `confluent_schema_registry`
@@ -27,6 +35,27 @@ const (
 	OptUpdatedTimestamps       = `updated`
 	OptDiff                    = `diff`
 	OptCompression             = `compression`
+	OptSchemaChangeEvents      = `schema_change_events`
+	OptSchemaChangePolicy      = `schema_change_policy`
+
+	// OptSchemaChangeEventClassColumnChange corresponds to all schema change
+	// events which add or remove any column.
+	OptSchemaChangeEventClassColumnChange SchemaChangeEventClass = `column_changes`
+	// OptSchemaChangeEventClassDefault corresponds to all schema change
+	// events which add a column with a default value or remove any column.
+	OptSchemaChangeEventClassDefault SchemaChangeEventClass = `default`
+
+	// OptSchemaChangePolicyBackfill indicates that when a schema change event
+	// occurs, a full table backfill should occur.
+	OptSchemaChangePolicyBackfill SchemaChangePolicy = `backfill`
+	// OptSchemaChangePolicyNoBackfill indicates that when a schema change event occurs
+	// no backfill should occur and the changefeed should continue.
+	OptSchemaChangePolicyNoBackfill SchemaChangePolicy = `nobackfill`
+	// OptSchemaChangePolicyStop indicates that when a schema change event occurs
+	// the changefeed should resolve all data up to when it occurred and then
+	// exit with an error indicating the HLC timestamp of the change from which
+	// the user could continue.
+	OptSchemaChangePolicyStop SchemaChangePolicy = `stop`
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
@@ -64,4 +93,6 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
 	OptDiff:                    sql.KVStringOptRequireNoValue,
 	OptCompression:             sql.KVStringOptRequireValue,
+	OptSchemaChangeEvents:      sql.KVStringOptRequireValue,
+	OptSchemaChangePolicy:      sql.KVStringOptRequireValue,
 }

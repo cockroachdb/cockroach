@@ -111,7 +111,7 @@ select
  │         └── c_mult_2:5
  │              └── k_int:1 + 1
  └── filters
-      └── (k_int:1 = 2) OR (k_int:1 = 3) [outer=(1), constraints=(/1: [/2 - /2] [/3 - /3])]
+      └── (k_int:1 = 2) OR (k_int:1 = 3) [outer=(1), constraints=(/1: [/2 - /2] [/3 - /3]; tight)]
 
 # Don't constrain the index for a NULL value.
 opt

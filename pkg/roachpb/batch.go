@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -99,7 +100,7 @@ func (ba *BatchRequest) IsReadOnly() bool {
 // RequiresLeaseHolder returns true if the request can only be served by the
 // leaseholders of the ranges it addresses.
 func (ba *BatchRequest) RequiresLeaseHolder() bool {
-	return !ba.IsReadOnly() || ba.Header.ReadConsistency.RequiresReadLease()
+	return ba.IsLocking() || ba.Header.ReadConsistency.RequiresReadLease()
 }
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
@@ -119,9 +120,14 @@ func (ba *BatchRequest) IsAllTransactional() bool {
 	return ba.hasFlagForAll(isTxn)
 }
 
-// IsTransactionWrite returns true iff the BatchRequest contains a txn write.
-func (ba *BatchRequest) IsTransactionWrite() bool {
-	return ba.hasFlag(isTxnWrite)
+// IsLocking returns true iff the BatchRequest intends to acquire locks.
+func (ba *BatchRequest) IsLocking() bool {
+	return ba.hasFlag(isLocking)
+}
+
+// IsIntentWrite returns true iff the BatchRequest contains an intent write.
+func (ba *BatchRequest) IsIntentWrite() bool {
+	return ba.hasFlag(isIntentWrite)
 }
 
 // IsUnsplittable returns true iff the BatchRequest an un-splittable request.
@@ -254,7 +260,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 			return false
 		}
 		if seq == nextSeq {
-			if !IsTransactionWrite(req) {
+			if !IsIntentWrite(req) {
 				return false
 			}
 			nextSeq++
@@ -337,15 +343,15 @@ func (br *BatchResponse) String() string {
 	return strings.Join(str, ", ")
 }
 
-// IntentSpanIterate calls the passed method with the key ranges of the
-// transactional writes contained in the batch. Usually the key spans
+// LockSpanIterate calls the passed method with the key ranges of the
+// transactional locks contained in the batch. Usually the key spans
 // contained in the requests are used, but when a response contains a
-// ResumeSpan the ResumeSpan is subtracted from the request span to provide a
-// more minimal span of keys affected by the request.
-func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
+// ResumeSpan the ResumeSpan is subtracted from the request span to
+// provide a more minimal span of keys affected by the request.
+func (ba *BatchRequest) LockSpanIterate(br *BatchResponse, fn func(Span, lock.Durability)) {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
-		if !IsTransactionWrite(req) {
+		if !IsLocking(req) {
 			continue
 		}
 		var resp Response
@@ -353,7 +359,7 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 			resp = br.Responses[i].GetInner()
 		}
 		if span, ok := ActualSpan(req, resp); ok {
-			fn(span)
+			fn(span, LockingDurability(req))
 		}
 	}
 }

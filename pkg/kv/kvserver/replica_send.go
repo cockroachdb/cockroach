@@ -501,15 +501,15 @@ func (r *Replica) collectSpans(
 	//
 	// TODO(bdarnell): revisit as the local portion gets its appropriate
 	// use.
-	if ba.IsReadOnly() {
-		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
-	} else {
+	if ba.IsLocking() {
 		guess := len(ba.Requests)
 		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
 			// EndTxn declares a global write for each of its intent spans.
 			guess += len(et.(*roachpb.EndTxnRequest).IntentSpans) - 1
 		}
 		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
+	} else {
+		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	}
 
 	// For non-local, MVCC spans we annotate them with the request timestamp

@@ -331,7 +331,7 @@ project
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
  │    └── filters
- │         └── (k:1 <= 1) OR (k:1 > 5) [outer=(1), constraints=(/1: (/NULL - /1] [/6 - ])]
+ │         └── (k:1 <= 1) OR (k:1 > 5) [outer=(1), constraints=(/1: (/NULL - /1] [/6 - ]; tight)]
  └── projections
       └── (k:1 <= 1) OR (k:1 > 5) [as=expr:6, outer=(1)]
 
@@ -346,7 +346,7 @@ project
  │    ├── scan a
  │    │    └── columns: f:3
  │    └── filters
- │         └── (f:3 IS NULL) OR (f:3 != 10.5) [outer=(3), constraints=(/3: [/NULL - /10.499999999999998] [/10.500000000000002 - ])]
+ │         └── (f:3 IS NULL) OR (f:3 != 10.5) [outer=(3), constraints=(/3: [/NULL - /10.499999999999998] [/10.500000000000002 - ]; tight)]
  └── projections
       └── (f:3 IS NULL) OR (f:3 != 10.5) [as=expr:6, outer=(3)]
 
@@ -593,9 +593,10 @@ project
       │         │    ├── scan xy
       │         │    │    ├── columns: x:7!null y:8
       │         │    │    ├── key: (7)
-      │         │    │    └── fd: (7)-->(8)
+      │         │    │    ├── fd: (7)-->(8)
+      │         │    │    └── limit hint: 500.00
       │         │    └── filters
-      │         │         └── (x:7 = 1) OR (x:7 = 2) [outer=(7), constraints=(/7: [/1 - /1] [/2 - /2])]
+      │         │         └── (x:7 = 1) OR (x:7 = 2) [outer=(7), constraints=(/7: [/1 - /1] [/2 - /2]; tight)]
       │         └── 1
       └── (k:1 + 1) * 2 [as=r:10, outer=(1)]
 

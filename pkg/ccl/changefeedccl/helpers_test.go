@@ -152,20 +152,6 @@ func assertPayloadsAvro(
 	}
 }
 
-func skipResolvedTimestamps(t *testing.T, f cdctest.TestFeed) {
-	t.Helper()
-	for {
-		m, err := f.Next()
-		if err != nil {
-			t.Fatal(err)
-		} else if m == nil {
-			t.Fatal(`expected message`)
-		} else if m.Key != nil {
-			t.Errorf(`unexpected row %s: %s->%s`, m.Topic, m.Key, m.Value)
-		}
-	}
-}
-
 func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 	t.Helper()
 	d, _, err := apd.NewFromString(s)
