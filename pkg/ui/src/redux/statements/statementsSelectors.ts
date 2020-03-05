@@ -29,3 +29,8 @@ export const selectDiagnosticsReportsCountByStatementFingerprint = createSelecto
   selectDiagnosticsReportsByStatementFingerprint,
   (requests) => requests.length,
 );
+
+export const selectStatementDiagnosticsReports = createSelector(
+  (state: AdminUIState) => state.cachedData.statementDiagnosticsReports.data?.reports,
+  diagnosticsReports => diagnosticsReports,
+);
