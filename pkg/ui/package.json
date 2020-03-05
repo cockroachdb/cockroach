@@ -14,6 +14,7 @@
     "create-react-context": "^0.3.0",
     "highlight.js": "^9.10.0",
     "lodash": "^4.17.4",
+    "long": "^4.0.0",
     "mini-create-react-context": "^0.3.2",
     "moment": "^2.19.3",
     "nvd3": "^1.8.5",
