@@ -869,6 +869,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return &ie
 		}
 
+	s.distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
+
 	for _, m := range s.pgServer.Metrics() {
 		s.registry.AddMetricStruct(m)
 	}

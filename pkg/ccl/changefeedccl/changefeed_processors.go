@@ -16,9 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -34,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -597,6 +601,13 @@ func (cf *changeFrontier) shouldFailOnSchemaChange() bool {
 	return policy == changefeedbase.OptSchemaChangePolicyStop
 }
 
+// shouldFailOnSchemaChange checks the job's spec to determine whether it should
+// install protected timestamps when encountering scan boundaries.
+func (cf *changeFrontier) shouldProtectBoundaries() bool {
+	policy := changefeedbase.SchemaChangePolicy(cf.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	return policy == changefeedbase.OptSchemaChangePolicyBackfill
+}
+
 // Next is part of the RowSource interface.
 func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for cf.State == execinfra.StateRunning {
@@ -676,6 +687,10 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	if resolved.BoundaryReached && (cf.boundary.IsEmpty() || resolved.Timestamp.Less(cf.boundary)) {
 		cf.boundary = resolved.Timestamp
 	}
+	// If we've moved past a boundary, make sure to clear it.
+	if !resolved.BoundaryReached && !cf.boundary.IsEmpty() && cf.boundary.Less(resolved.Timestamp) {
+		cf.boundary = hlc.Timestamp{}
+	}
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
 	if frontierChanged {
@@ -694,13 +709,85 @@ func (cf *changeFrontier) handleFrontierChanged() error {
 		cf.metrics.mu.resolved[cf.metricsID] = newResolved
 	}
 	cf.metrics.mu.Unlock()
-	if err := checkpointResolvedTimestamp(cf.Ctx, cf.jobProgressedFn, cf.sf); err != nil {
+	if err := cf.checkpointResolvedTimestamp(newResolved); err != nil {
 		return err
 	}
 	if err := cf.maybeEmitResolved(newResolved); err != nil {
 		return err
 	}
 	return nil
+}
+
+// checkpointResolvedTimestamp checkpoints a changefeed-level resolved timestamp
+// to the jobs record. It is only called if the new resolved timestamp is later
+// than the current one.
+func (cf *changeFrontier) checkpointResolvedTimestamp(resolved hlc.Timestamp) (err error) {
+	if cf.jobProgressedFn == nil {
+		return nil
+	}
+	return cf.jobProgressedFn(cf.Ctx, func(
+		ctx context.Context, txn *client.Txn, details jobspb.ProgressDetails,
+	) (hlc.Timestamp, error) {
+		progress := details.(*jobspb.Progress_Changefeed).Changefeed
+		if err := cf.manageProtectedTimestamps(ctx, progress, txn, resolved); err != nil {
+			return hlc.Timestamp{}, err
+		}
+		return resolved, nil
+	})
+}
+
+// manageProtectedTimestamps is called when the resolved timestamp is being
+// checkpointed. The changeFrontier always checkpoints resolved timestamps
+// which occur at scan boundaries.
+func (cf *changeFrontier) manageProtectedTimestamps(
+	ctx context.Context, progress *jobspb.ChangefeedProgress, txn *client.Txn, resolved hlc.Timestamp,
+) error {
+	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
+	if err := cf.maybeReleaseProtectedTimestamp(ctx, progress, pts, txn); err != nil {
+		return err
+	}
+	return cf.maybeProtectTimestamp(ctx, progress, pts, txn, resolved)
+}
+
+func (cf *changeFrontier) maybeReleaseProtectedTimestamp(
+	ctx context.Context,
+	progress *jobspb.ChangefeedProgress,
+	pts protectedts.Storage,
+	txn *client.Txn,
+) error {
+	if progress.ProtectedTimestampRecord.Equal(uuid.Nil) {
+		return nil
+	}
+	if log.V(2) {
+		log.Infof(ctx, "releasing protected timestamp %v",
+			progress.ProtectedTimestampRecord)
+	}
+	if err := pts.Release(ctx, txn, progress.ProtectedTimestampRecord); err != nil {
+		return err
+	}
+	progress.ProtectedTimestampRecord = uuid.Nil
+	return nil
+}
+
+func (cf *changeFrontier) maybeProtectTimestamp(
+	ctx context.Context,
+	progress *jobspb.ChangefeedProgress,
+	pts protectedts.Storage,
+	txn *client.Txn,
+	resolved hlc.Timestamp,
+) error {
+	if cf.isSinkless() || !cf.boundaryReached() || !cf.shouldProtectBoundaries() {
+		return nil
+	}
+	progress.ProtectedTimestampRecord = uuid.MakeV4()
+	if log.V(2) {
+		log.Infof(ctx, "creating protected timestamp %v at %v",
+			progress.ProtectedTimestampRecord, resolved)
+	}
+	spansToProtect := makeSpansToProtect(cf.spec.Feed.Targets)
+	rec := jobsprotectedts.MakeRecord(
+		progress.ProtectedTimestampRecord, cf.spec.JobID, resolved, spansToProtect)
+	return pts.Protect(ctx, txn, rec)
 }
 
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
@@ -763,4 +850,10 @@ func (cf *changeFrontier) ConsumerDone() {
 func (cf *changeFrontier) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	cf.InternalClose()
+}
+
+// isSinkless returns true if this changeFrontier is sinkless and thus does not
+// have a job.
+func (cf *changeFrontier) isSinkless() bool {
+	return cf.spec.JobID == 0
 }
