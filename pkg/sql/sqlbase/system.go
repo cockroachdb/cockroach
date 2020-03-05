@@ -267,10 +267,9 @@ CREATE TABLE system.statement_diagnostics_requests(
 	statement_fingerprint STRING NOT NULL,
 	statement_diagnostics_id INT8,
 	requested_at TIMESTAMPTZ NOT NULL,
-	completed_at TIMESTAMPTZ,
 	INDEX completed_idx (completed, id) STORING (statement_fingerprint),
 
-	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, completed_at)
+	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at)
 );`
 
 	StatementDiagnosticsTableSchema = `
@@ -1368,14 +1367,13 @@ var (
 			{Name: "statement_fingerprint", ID: 3, Type: *types.String, Nullable: false},
 			{Name: "statement_diagnostics_id", ID: 4, Type: *types.Int, Nullable: true},
 			{Name: "requested_at", ID: 5, Type: *types.TimestampTZ, Nullable: false},
-			{Name: "completed_at", ID: 6, Type: *types.TimestampTZ, Nullable: true},
 		},
-		NextColumnID: 7,
+		NextColumnID: 6,
 		Families: []ColumnFamilyDescriptor{
 			{
 				Name:        "primary",
-				ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "completed_at"},
-				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5, 6},
+				ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5},
 			},
 		},
 		NextFamilyID: 1,

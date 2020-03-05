@@ -1151,7 +1151,6 @@ system         public        statement_diagnostics            statement         
 system         public        statement_diagnostics            statement_fingerprint     2
 system         public        statement_diagnostics            trace                     5
 system         public        statement_diagnostics_requests   completed                 2
-system         public        statement_diagnostics_requests   completed_at              6
 system         public        statement_diagnostics_requests   id                        1
 system         public        statement_diagnostics_requests   requested_at              5
 system         public        statement_diagnostics_requests   statement_diagnostics_id  4
