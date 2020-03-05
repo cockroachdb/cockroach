@@ -837,9 +837,17 @@ var pgBuiltins = map[string]builtinDefinition{
 					// below to pick up the table comment by accident.
 					return tree.DNull, nil
 				}
+				// Note: the following is equivalent to:
+				//
+				// SELECT description FROM pg_catalog.pg_description
+				//  WHERE objoid=$1 AND objsubid=$2 LIMIT 1
+				//
+				// TODO(jordanlewis): Really we'd like to query this directly
+				// on pg_description and let predicate push-down do its job.
 				r, err := ctx.InternalExecutor.QueryRow(
 					ctx.Ctx(), "pg_get_coldesc",
-					ctx.Txn, `
+					ctx.Txn,
+					`
 SELECT COALESCE(c.comment, pc.comment) FROM system.comments c
 FULL OUTER JOIN crdb_internal.predefined_comments pc
 ON pc.object_id=c.object_id AND pc.sub_id=c.sub_id AND pc.type = c.type

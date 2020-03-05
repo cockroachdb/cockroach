@@ -186,11 +186,7 @@ system  public  comments                         admin   GRANT
 system  public  comments                         admin   INSERT
 system  public  comments                         admin   SELECT
 system  public  comments                         admin   UPDATE
-system  public  comments                         public  DELETE
-system  public  comments                         public  GRANT
-system  public  comments                         public  INSERT
 system  public  comments                         public  SELECT
-system  public  comments                         public  UPDATE
 system  public  comments                         root    DELETE
 system  public  comments                         root    GRANT
 system  public  comments                         root    INSERT

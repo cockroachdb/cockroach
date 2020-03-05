@@ -1554,6 +1554,7 @@ func IsReservedID(id ID) bool {
 
 // newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
 func newCommentPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
+	selectPriv := privilege.List{privilege.SELECT}
 	return &PrivilegeDescriptor{
 		Users: []UserPrivileges{
 			{
@@ -1562,7 +1563,7 @@ func newCommentPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
 			},
 			{
 				User:       PublicRole,
-				Privileges: priv.ToBitField(),
+				Privileges: selectPriv.ToBitField(),
 			},
 			{
 				User:       security.RootUser,
