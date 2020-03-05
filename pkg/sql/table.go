@@ -796,6 +796,23 @@ type tableCollectionModifier interface {
 	copyModifiedSchema(to *TableCollection)
 }
 
+// validatePrimaryKeys verifies that all tables modified in the transaction have
+// an enabled primary key after potentially undergoing DROP PRIMARY KEY, which
+// is required to be followed by ADD PRIMARY KEY.
+func (tc *TableCollection) validatePrimaryKeys() error {
+	modifiedTables := tc.getTablesWithNewVersion()
+	for i := range modifiedTables {
+		table := tc.getUncommittedTableByID(modifiedTables[i].id).MutableTableDescriptor
+		if !table.HasPrimaryKey() {
+			return errors.Errorf(
+				"primary key of table %s dropped without subsequent addition of new primary key",
+				table.Name,
+			)
+		}
+	}
+	return nil
+}
+
 // createOrUpdateSchemaChangeJob finalizes the current mutations in the table
 // descriptor. If a schema change job in the system.jobs table has not been
 // created for mutations in the current transaction, one is created. The
