@@ -2144,7 +2144,9 @@ func TestImportIntoCSV(t *testing.T) {
 		defer srv.Close()
 
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (d, c, a) CSV DATA ("%s")`, srv.URL))
-		sqlDB.CheckQueryResults(t, `SELECT COUNT(*) FROM t`, [][]string{{"2"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t ORDER BY a`, 
+				[][]string{{"1", "NULL", "c is a string", "3.14"}, {"2", "NULL", "another string", "2.73"}},
+		)
 	})
 
 	// Tests behvior when the existing table being imported into has fewer columns
