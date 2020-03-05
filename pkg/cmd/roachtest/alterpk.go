@@ -77,7 +77,6 @@ func registerAlterPK(r *testRegistry) {
 			db := c.Conn(ctx, roachNodes[0])
 			defer db.Close()
 			cmd := `
-			SET experimental_enable_primary_key_changes=true;
 			USE bank;
 			ALTER TABLE bank ALTER COLUMN balance SET NOT NULL;
 			ALTER TABLE bank ALTER PRIMARY KEY USING COLUMNS (id, balance)
@@ -144,9 +143,7 @@ func registerAlterPK(r *testRegistry) {
 
 			db := c.Conn(ctx, roachNodes[0])
 			defer db.Close()
-			alterCmd := `SET experimental_enable_primary_key_changes = true;
-							USE tpcc;
-							%s;`
+			alterCmd := `USE tpcc; %s;`
 			t.Status("beginning primary key change")
 			if _, err := db.ExecContext(ctx, fmt.Sprintf(alterCmd, randStmt)); err != nil {
 				t.Fatal(err)
