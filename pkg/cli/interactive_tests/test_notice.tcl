@@ -17,5 +17,10 @@ send "CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON
 eexpect "NOTICE: index \"drop_index_test_index\" will be dropped asynchronously and will be complete after the GC TTL"
 end_test
 
+start_test "Check that altering the primary key of a table prints a message about async jobs."
+send "CREATE TABLE alterpk (x INT NOT NULL); ALTER TABLE alterpk ALTER PRIMARY KEY USING COLUMNS (x);\r"
+eexpect "NOTICE: primary key changes spawn async cleanup jobs. Future schema changes on \"alterpk\" may be delayed as these jobs finish"
+end_test
+
 send "\\q\r"
 eexpect eof

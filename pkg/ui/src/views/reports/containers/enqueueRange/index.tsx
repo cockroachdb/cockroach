@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,11 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React, { Fragment } from "react";
 import Helmet from "react-helmet";
-import {RouteComponentProps, withRouter} from "react-router-dom";
-import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+import moment from "moment";
 
 import { enqueueRange } from "src/util/api";
 import { cockroach } from "src/js/protos";
@@ -75,15 +74,25 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
     });
   }
 
+  handleEnqueueRange = (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => {
+    const req = new EnqueueRangeRequest({
+      queue: queue,
+      range_id: rangeID,
+      node_id: nodeID,
+      skip_should_queue: skipShouldQueue,
+    });
+    return enqueueRange(req, moment.duration({ hours: 1 }));
+  }
+
   handleSubmit = (evt: React.FormEvent<any>) => {
     evt.preventDefault();
 
-    this.props.handleEnqueueRange(
+    this.handleEnqueueRange(
       this.state.queue,
       // These parseInts should succeed because <input type="number" />
       // enforces numeric input. Otherwise they're NaN.
-      _.parseInt(this.state.rangeID),
-      _.parseInt(this.state.nodeID),
+      parseInt(this.state.rangeID, 10),
+      parseInt(this.state.nodeID, 10),
       this.state.skipShouldQueue,
     ).then(
       response => {
@@ -156,7 +165,7 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
     }
 
     return (
-      <Fragment>Error running EnqueueRange: { error.message }</Fragment>
+      <Fragment>Error running EnqueueRange: {error.message}</Fragment>
     );
   }
 
@@ -232,20 +241,6 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
   }
 }
 
-// tslint:disable-next-line:variable-name
-const EnqueueRangeConnected = withRouter(connect(
-  null,
-  {
-    handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => {
-      const req = new EnqueueRangeRequest({
-        queue: queue,
-        range_id: rangeID,
-        node_id: nodeID,
-        skip_should_queue: skipShouldQueue,
-      });
-      return enqueueRange(req);
-    },
-  },
-)(EnqueueRange));
+const EnqueueRangeConnected = withRouter(EnqueueRange);
 
 export default EnqueueRangeConnected;

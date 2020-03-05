@@ -1536,7 +1536,8 @@ pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
 pkg/sql/colexec/window_peer_grouper.eg.go: pkg/sql/colexec/window_peer_grouper_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
-	execgen $@
+	execgen $@ > $@.tmp; cmp $@.tmp $@ && rm -f $@.tmp || mv $@.tmp $@
+
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
