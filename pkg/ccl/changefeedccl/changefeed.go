@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -376,13 +377,13 @@ func checkpointResolvedTimestamp(
 	// this resolved timestamp, keep this update of the high-water mark
 	// before emitting the resolved timestamp to the sink.
 	if jobProgressedFn != nil {
-		progressedClosure := func(ctx context.Context, d jobspb.ProgressDetails) hlc.Timestamp {
+		progressedClosure := func(ctx context.Context, _ *client.Txn, d jobspb.ProgressDetails) (hlc.Timestamp, error) {
 			// TODO(dan): This was making enormous jobs rows, especially in
 			// combination with how many mvcc versions there are. Cut down on
 			// the amount of data used here dramatically and re-enable.
 			//
 			// d.(*jobspb.Progress_Changefeed).Changefeed.ResolvedSpans = resolvedSpans
-			return resolved
+			return resolved, nil
 		}
 		if err := jobProgressedFn(ctx, progressedClosure); err != nil {
 			return err
