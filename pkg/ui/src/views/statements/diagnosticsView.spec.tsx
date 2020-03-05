@@ -12,13 +12,14 @@ import React from "react";
 import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
 import sinon, { SinonSpy } from "sinon";
+import Long from "long";
 
 import "src/enzymeInit";
 import { DiagnosticsView, EmptyDiagnosticsView } from "./diagnosticsView";
 import { Table } from "oss/src/components";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
-import IStatementDiagnosticsRequest = cockroach.server.serverpb.IStatementDiagnosticsRequest;
+import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const sandbox = sinon.createSandbox();
 
@@ -56,7 +57,7 @@ describe("DiagnosticsView", () => {
 
   describe("With tracing data", () => {
     beforeEach(() => {
-      const diagnosticsRequests: IStatementDiagnosticsRequest[] = [
+      const diagnosticsRequests: IStatementDiagnosticsReport[] = [
         generateDiagnosticsRequest(),
         generateDiagnosticsRequest(),
       ];
@@ -82,7 +83,7 @@ describe("DiagnosticsView", () => {
     });
 
     it("Activate button is disabled if diagnostics is requested and waiting query", () => {
-      const diagnosticsRequests: IStatementDiagnosticsRequest[] = [
+      const diagnosticsRequests: IStatementDiagnosticsReport[] = [
         generateDiagnosticsRequest({ completed: false }),
         generateDiagnosticsRequest(),
       ];
@@ -104,14 +105,12 @@ describe("DiagnosticsView", () => {
   });
 });
 
-function generateDiagnosticsRequest(extendObject: Partial<IStatementDiagnosticsRequest> = {}): IStatementDiagnosticsRequest {
+function generateDiagnosticsRequest(extendObject: Partial<IStatementDiagnosticsReport> = {}): IStatementDiagnosticsReport {
   const diagnosticsRequest = {
     statement_fingerprint: "SELECT * FROM table",
     completed: true,
     requested_at: {
-      seconds: {
-        toNumber: () => Date.now(),
-      } as any,
+      seconds: Long.fromNumber(Date.now()),
       nanos: Math.random() * 1000000,
     },
   };
