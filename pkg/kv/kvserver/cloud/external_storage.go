@@ -195,8 +195,17 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 		conf.Provider = roachpb.ExternalStorageProvider_Http
 		conf.HttpPath.BaseUri = path
 	case "nodelocal":
+		if uri.Host == "" {
+			return conf, errors.Errorf(
+				"host component of nodelocal URI must be a node ID (" +
+					"use 'self' to specify each node should access its own local filesystem)",
+			)
+		} else if uri.Host == "self" {
+			uri.Host = "0"
+		}
+
 		nodeID, err := strconv.Atoi(uri.Host)
-		if err != nil && uri.Host != "" {
+		if err != nil {
 			return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", path)
 		}
 		conf.Provider = roachpb.ExternalStorageProvider_LocalFile
