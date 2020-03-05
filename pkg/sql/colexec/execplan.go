@@ -140,6 +140,8 @@ type NewColOperatorResult struct {
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
 
+const noFilterIdx = -1
+
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
@@ -218,37 +220,41 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.Windower != nil:
-		if len(core.Windower.WindowFns) != 1 {
-			return false, errors.Newf("only a single window function is currently supported")
-		}
-		wf := core.Windower.WindowFns[0]
-		if wf.Frame != nil &&
-			(wf.Frame.Mode != execinfrapb.WindowerSpec_Frame_RANGE ||
-				wf.Frame.Bounds.Start.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
-				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != execinfrapb.WindowerSpec_Frame_CURRENT_ROW)) {
-			return false, errors.Newf("window functions with non-default window frames are not supported")
-		}
-		if wf.Func.AggregateFunc != nil {
-			return false, errors.Newf("aggregate functions used as window functions are not supported")
-		}
-		if len(core.Windower.PartitionBy) > 0 || len(wf.Ordering.Columns) > 0 {
-			// When we have non-empty PARTITION BY and ORDER BY clauses, we will need
-			// to plan a sorter which currently doesn't support operating on interval
-			// type.
-			inputTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-			if err != nil {
-				return false, err
-			}
-			for _, t := range inputTypes {
-				if t == coltypes.Interval {
-					return false, errors.WithIssueLink(errors.Errorf("window functions involving interval type not supported"),
-						errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
+		for _, wf := range core.Windower.WindowFns {
+			if wf.Frame != nil {
+				frame, err := wf.Frame.ConvertToAST()
+				if err != nil {
+					return false, err
+				}
+				if !frame.IsDefaultFrame() {
+					return false, errors.Newf("window functions with non-default window frames are not supported")
 				}
 			}
-		}
+			if wf.FilterColIdx != noFilterIdx {
+				return false, errors.Newf("window functions with FILTER clause are not supported")
+			}
+			if wf.Func.AggregateFunc != nil {
+				return false, errors.Newf("aggregate functions used as window functions are not supported")
+			}
+			if len(core.Windower.PartitionBy) > 0 || len(wf.Ordering.Columns) > 0 {
+				// When we have non-empty PARTITION BY and ORDER BY clauses, we will need
+				// to plan a sorter which currently doesn't support operating on interval
+				// type.
+				inputTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+				if err != nil {
+					return false, err
+				}
+				for _, t := range inputTypes {
+					if t == coltypes.Interval {
+						return false, errors.WithIssueLink(errors.Errorf("window functions involving interval type not supported"),
+							errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
+					}
+				}
+			}
 
-		if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
-			return false, errors.Newf("window function %s is not supported", wf.String())
+			if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
+				return false, errors.Newf("window function %s is not supported", wf.String())
+			}
 		}
 		return true, nil
 
@@ -845,107 +851,112 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err
 			}
-			wf := core.Windower.WindowFns[0]
-			input := inputs[0]
-			var typs []coltypes.T
-			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-			if err != nil {
-				return result, err
-			}
-			tempColOffset, partitionColIdx := uint32(0), columnOmitted
-			peersColIdx := columnOmitted
 			memMonitorsPrefix := "window-"
-			windowFn := *wf.Func.WindowFunc
-			if len(core.Windower.PartitionBy) > 0 {
-				// TODO(yuzefovich): add support for hashing partitioner (probably by
-				// leveraging hash routers once we can distribute). The decision about
-				// which kind of partitioner to use should come from the optimizer.
-				partitionColIdx = int(wf.OutputColIdx)
-				input, err = NewWindowSortingPartitioner(
-					NewAllocator(ctx, streamingMemAccount), input, typs,
-					core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
-					func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
-						return result.createDiskBackedSort(
-							ctx, flowCtx, args, input, inputTypes,
-							execinfrapb.Ordering{Columns: orderingCols},
-							0 /* matchLen */, spec.ProcessorID,
-							&execinfrapb.PostProcessSpec{}, memMonitorsPrefix)
-					},
-				)
-				// Window partitioner will append a boolean column.
-				tempColOffset++
-				typs = append(typs, coltypes.Bool)
-			} else {
-				if len(wf.Ordering.Columns) > 0 {
-					input, err = result.createDiskBackedSort(
-						ctx, flowCtx, args, input, typs, wf.Ordering, 0, /* matchLen */
-						spec.ProcessorID, &execinfrapb.PostProcessSpec{}, memMonitorsPrefix,
+			input := inputs[0]
+			result.ColumnTypes = spec.Input[0].ColumnTypes
+			// Most supported window functions can run in auto mode because they are
+			// streaming operators and internally they might use a sorter which can
+			// fall back to disk if needed.
+			canRunInAutoMode := true
+			for _, wf := range core.Windower.WindowFns {
+				var typs []coltypes.T
+				typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
+				if err != nil {
+					return result, err
+				}
+				tempColOffset, partitionColIdx := uint32(0), columnOmitted
+				peersColIdx := columnOmitted
+				windowFn := *wf.Func.WindowFunc
+				if len(core.Windower.PartitionBy) > 0 {
+					// TODO(yuzefovich): add support for hashing partitioner (probably by
+					// leveraging hash routers once we can distribute). The decision about
+					// which kind of partitioner to use should come from the optimizer.
+					partitionColIdx = int(wf.OutputColIdx)
+					input, err = NewWindowSortingPartitioner(
+						NewAllocator(ctx, streamingMemAccount), input, typs,
+						core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
+						func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
+							return result.createDiskBackedSort(
+								ctx, flowCtx, args, input, inputTypes,
+								execinfrapb.Ordering{Columns: orderingCols},
+								0 /* matchLen */, spec.ProcessorID,
+								&execinfrapb.PostProcessSpec{}, memMonitorsPrefix)
+						},
 					)
+					// Window partitioner will append a boolean column.
+					tempColOffset++
+					typs = append(typs, coltypes.Bool)
+				} else {
+					if len(wf.Ordering.Columns) > 0 {
+						input, err = result.createDiskBackedSort(
+							ctx, flowCtx, args, input, typs, wf.Ordering, 0, /* matchLen */
+							spec.ProcessorID, &execinfrapb.PostProcessSpec{}, memMonitorsPrefix,
+						)
+					}
 				}
-			}
-			if err != nil {
-				return result, err
-			}
-			if windowFnNeedsPeersInfo(*wf.Func.WindowFunc) {
-				peersColIdx = int(wf.OutputColIdx + tempColOffset)
-				input, err = NewWindowPeerGrouper(
-					NewAllocator(ctx, streamingMemAccount),
-					input, typs, wf.Ordering.Columns,
-					partitionColIdx, peersColIdx,
-				)
-				// Window peer grouper will append a boolean column.
-				tempColOffset++
-				typs = append(typs, coltypes.Bool)
-			}
-
-			switch windowFn {
-			case execinfrapb.WindowerSpec_ROW_NUMBER:
-				result.Op = NewRowNumberOperator(
-					NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
-				)
-			case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
-				result.Op, err = NewRankOperator(
-					NewAllocator(ctx, streamingMemAccount), input, windowFn, wf.Ordering.Columns,
-					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
-				)
-			case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-				memAccount := streamingMemAccount
-				if !useStreamingMemAccountForBuffering {
-					memAccount = result.createBufferingMemAccount(ctx, flowCtx, "relative-rank")
+				if err != nil {
+					return result, err
 				}
-				result.Op, err = NewRelativeRankOperator(
-					NewAllocator(ctx, memAccount), input, typs, windowFn, wf.Ordering.Columns,
-					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
-				)
-			default:
-				return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
-			}
-
-			if tempColOffset > 0 {
-				// We want to project out temporary columns (which have indices in the
-				// range [wf.OutputColIdx, wf.OutputColIdx+tempColOffset)).
-				projection := make([]uint32, 0, wf.OutputColIdx+tempColOffset)
-				for i := uint32(0); i < wf.OutputColIdx; i++ {
-					projection = append(projection, i)
+				if windowFnNeedsPeersInfo(*wf.Func.WindowFunc) {
+					peersColIdx = int(wf.OutputColIdx + tempColOffset)
+					input, err = NewWindowPeerGrouper(
+						NewAllocator(ctx, streamingMemAccount),
+						input, typs, wf.Ordering.Columns,
+						partitionColIdx, peersColIdx,
+					)
+					// Window peer grouper will append a boolean column.
+					tempColOffset++
+					typs = append(typs, coltypes.Bool)
 				}
-				projection = append(projection, wf.OutputColIdx+tempColOffset)
-				result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
-			}
 
-			_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, []types.T{}...)
-			if err != nil {
-				return result, err
+				switch windowFn {
+				case execinfrapb.WindowerSpec_ROW_NUMBER:
+					result.Op = NewRowNumberOperator(
+						NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+					)
+				case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
+					result.Op, err = NewRankOperator(
+						NewAllocator(ctx, streamingMemAccount), input, windowFn, wf.Ordering.Columns,
+						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
+					)
+				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
+					memAccount := streamingMemAccount
+					if !useStreamingMemAccountForBuffering {
+						memAccount = result.createBufferingMemAccount(ctx, flowCtx, memMonitorsPrefix+"relative-rank")
+					}
+					result.Op, err = NewRelativeRankOperator(
+						NewAllocator(ctx, memAccount), input, typs, windowFn, wf.Ordering.Columns,
+						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
+					)
+					// Relative rank operators are buffering operators, and currently
+					// they don't support falling back to disk, so we cannot run such
+					// plan in 'auto' mode.
+					// TODO(yuzefovich): add spilling to disk for percent_rank and
+					// cume_dist.
+					canRunInAutoMode = false
+				default:
+					return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
+				}
+
+				if tempColOffset > 0 {
+					// We want to project out temporary columns (which have indices in the
+					// range [wf.OutputColIdx, wf.OutputColIdx+tempColOffset)).
+					projection := make([]uint32, 0, wf.OutputColIdx+tempColOffset)
+					for i := uint32(0); i < wf.OutputColIdx; i++ {
+						projection = append(projection, i)
+					}
+					projection = append(projection, wf.OutputColIdx+tempColOffset)
+					result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
+				}
+
+				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, []types.T{}...)
+				if err != nil {
+					return result, err
+				}
+				result.ColumnTypes = append(result.ColumnTypes, *returnType)
+				input = result.Op
 			}
-			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *returnType)
-			if windowFn != execinfrapb.WindowerSpec_PERCENT_RANK &&
-				windowFn != execinfrapb.WindowerSpec_CUME_DIST {
-				// Window functions can run in auto mode because they are streaming
-				// operators (except for percent_rank and cume_dist) and internally
-				// they might use a sorter which can fall back to disk if needed.
-				result.CanRunInAutoMode = true
-				// TODO(yuzefovich): add spilling to disk for percent_rank and
-				// cume_dist.
-			}
+			result.CanRunInAutoMode = canRunInAutoMode
 
 		default:
 			return result, errors.Newf("unsupported processor core %q", core)

@@ -107,7 +107,7 @@ func (w *slidingWindowFunc) Compute(
 		return nil, err
 	}
 
-	if !wfr.DefaultFrameExclusion() {
+	if !wfr.Frame.DefaultFrameExclusion() {
 		// We cannot use a sliding window approach because we have a frame
 		// exclusion clause - some rows will be in and out of the frame which
 		// breaks the necessary assumption, so we fallback to a naive quadratic
@@ -272,7 +272,7 @@ func (w *slidingWindowSumFunc) Compute(
 	if err != nil {
 		return nil, err
 	}
-	if !wfr.DefaultFrameExclusion() {
+	if !wfr.Frame.DefaultFrameExclusion() {
 		// We cannot use a sliding window approach because we have a frame
 		// exclusion clause - some rows will be in and out of the frame which
 		// breaks the necessary assumption, so we fallback to a naive quadratic

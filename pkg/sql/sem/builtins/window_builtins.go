@@ -197,7 +197,7 @@ func NewAggregateWindowFunc(
 func (w *aggregateWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	if !wfr.FirstInPeerGroup() && wfr.DefaultFrameExclusion() {
+	if !wfr.FirstInPeerGroup() && wfr.Frame.DefaultFrameExclusion() {
 		return w.peerRes, nil
 	}
 
@@ -294,7 +294,7 @@ func (w *framableAggregateWindowFunc) Compute(
 	if err != nil {
 		return nil, err
 	}
-	if !wfr.FirstInPeerGroup() && wfr.DefaultFrameExclusion() {
+	if !wfr.FirstInPeerGroup() && wfr.Frame.DefaultFrameExclusion() {
 		// The concept of window framing takes precedence over the concept of
 		// peers - although we calculated the result for one of the peers of the
 		// current row, it is possible for that peer to have a different window
@@ -758,7 +758,7 @@ func (nthValueWindow) Compute(
 	var idx int
 	// Note that we do not need to check whether a filter is present because
 	// filters are only supported for aggregate functions.
-	if wfr.DefaultFrameExclusion() {
+	if wfr.Frame.DefaultFrameExclusion() {
 		// We subtract 1 because nth is counting from 1.
 		idx = frameStartIdx + nth - 1
 	} else {
