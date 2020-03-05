@@ -381,11 +381,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"all nodes are not the correct version for primary key changes")
 			}
 
-			if !params.p.EvalContext().SessionData.PrimaryKeyChangesEnabled {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
-			}
-
 			if t.Sharded != nil {
 				if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionHashShardedIndexes) {
 					return invalidClusterForShardedIndexError

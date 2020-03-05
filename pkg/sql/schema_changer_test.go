@@ -2274,7 +2274,6 @@ func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT PRIMARY KEY, y INT NOT NULL, z INT, INDEX i (z));
 INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3); 
@@ -2410,9 +2409,7 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 		// Wait until the create index mutation has progressed before starting the alter primary key.
 		<-backfillNotif
 
-		if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
-ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2448,9 +2445,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		wg.Add(1)
 		// Alter the primary key of the table.
 		go func() {
-			if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
-ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
+			if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
 				t.Error(err)
 			}
 			wg.Done()
@@ -2459,9 +2454,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
 		<-backfillNotif
 
 		// This must be rejected, because there is a primary key change already in progress.
-		_, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
-ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+		_, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
 		if !testutils.IsError(err, "pq: unimplemented: table test is currently undergoing a schema change") {
 			t.Errorf("expected to concurrent primary key change to error, but got %+v", err)
 		}
@@ -2469,9 +2462,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
 		wg.Wait()
 
 		// After the first primary key change is done, the follow up primary key change should succeed.
-		if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
-ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2510,7 +2501,6 @@ func TestSchemaChangeWhileExecutingPrimaryKeyChange(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT NOT NULL, v INT);
 `); err != nil {
@@ -2594,7 +2584,6 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT NOT NULL, v INT);
 `); err != nil {
@@ -2652,7 +2641,6 @@ func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (
 	x INT PRIMARY KEY, 
@@ -2802,7 +2790,6 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, w INT, INDEX i (w));
 INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
@@ -2864,7 +2851,6 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT NOT NULL, v INT);
 `); err != nil {
@@ -2921,7 +2907,6 @@ func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT NOT NULL, y INT NOT NULL, z INT NOT NULL, w int, INDEX i (w));
 INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3); 
