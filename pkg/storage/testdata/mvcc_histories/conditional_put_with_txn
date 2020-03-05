@@ -2,7 +2,7 @@ run ok
 txn_begin t=A ts=123
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
 
 # Write value1.
 
@@ -12,7 +12,7 @@ with t=A
   cput k=k v=v
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=1} ts=0.000000123,0 del=false klen=12 vlen=6
 data: "k"/0.000000123,0 -> /BYTES/v
 
@@ -25,7 +25,7 @@ with t=A
   cput k=k v=v2 cond=v
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=2} lock=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000123,0 min=0,0 seq=2} ts=0.000000123,0 del=false klen=12 vlen=7 ih={{1 /BYTES/v}}
 data: "k"/0.000000123,0 -> /BYTES/v2
 
@@ -38,7 +38,7 @@ with t=A
   cput k=k v=v3
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000123,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000123,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000123,0 min=0,0 seq=1} ts=0.000000123,0 del=false klen=12 vlen=7
 data: "k"/0.000000123,0 -> /BYTES/v3
 
@@ -86,7 +86,7 @@ with t=A
   cput k=c v=cput cond=value
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
 meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=1} ts=0.000000002,0 del=false klen=12 vlen=9
 data: "c"/0.000000002,0 -> /BYTES/cput
 data: "c"/0.000000001,0 -> /BYTES/value
@@ -100,9 +100,9 @@ with t=A
   cput k=c v=cput cond=value
 ----
 >> txn_restart ts=3 t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000003,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000003,0 wto=false max=0,0
 >> txn_step t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000003,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=1} lock=true stat=PENDING rts=0.000000003,0 wto=false max=0,0
 >> cput k=c v=cput cond=value t=A
 meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=9
 data: "c"/0.000000003,0 -> /BYTES/cput

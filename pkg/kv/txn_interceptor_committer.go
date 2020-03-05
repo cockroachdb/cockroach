@@ -303,7 +303,7 @@ func (tc *txnCommitter) canCommitInParallel(
 	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
 		req := ru.GetInner()
 		switch {
-		case roachpb.IsTransactionWrite(req):
+		case roachpb.IsIntentWrite(req):
 			if roachpb.IsRange(req) {
 				// Similar to how we can't pipeline ranged writes, we also can't
 				// commit in parallel with them. The reason for this is that the

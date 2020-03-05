@@ -18,7 +18,7 @@ with t=A
   txn_step  seq=20
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=6
 data: "k"/0.000000011,0 -> /BYTES/a
 data: "k"/0.000000001,0 -> /BYTES/first
@@ -64,7 +64,7 @@ with t=B
   txn_step  seq=30
 ----
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 data: "k"/0.000000011,0 -> /BYTES/b
 data: "k"/0.000000001,0 -> /BYTES/first
@@ -112,7 +112,7 @@ with t=C
   txn_step  seq=40
 ----
 >> at end:
-txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 data: "k"/0.000000011,0 -> /BYTES/c
 data: "k"/0.000000001,0 -> /BYTES/first
@@ -168,7 +168,7 @@ with t=D
   txn_step  seq=30
 ----
 >> at end:
-txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
+txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 data: "k"/0.000000011,0 -> /BYTES/b
 data: "k"/0.000000001,0 -> /BYTES/first

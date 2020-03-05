@@ -130,7 +130,7 @@ func (c *replicatedCmd) CanAckBeforeApplication() bool {
 	// We don't try to ack async consensus writes before application because we
 	// know that there isn't a client waiting for the result.
 	req := c.proposal.Request
-	return req.IsTransactionWrite() && !req.AsyncConsensus
+	return req.IsIntentWrite() && !req.AsyncConsensus
 }
 
 // AckSuccess implements the apply.CheckedCommand interface.
