@@ -1158,7 +1158,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		for _, ts := range highWaters {
 			if err := job.HighWaterProgressed(
-				ctx, func(context.Context, jobspb.ProgressDetails) hlc.Timestamp { return ts },
+				ctx, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) { return ts, nil },
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -1181,11 +1181,25 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
 		if err := job.HighWaterProgressed(
-			ctx, func(context.Context, jobspb.ProgressDetails) hlc.Timestamp {
-				return hlc.Timestamp{WallTime: -1}
+			ctx, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
+				return hlc.Timestamp{WallTime: -1}, nil
 			},
 		); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
+		}
+	})
+
+	t.Run("error propagates", func(t *testing.T) {
+		job, _ := createDefaultJob()
+		if err := job.Started(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.HighWaterProgressed(
+			ctx, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
+				return hlc.Timestamp{WallTime: 2}, errors.Errorf("boom")
+			},
+		); !testutils.IsError(err, "boom") {
+			t.Fatalf("expected 'boom' error, but got %v", err)
 		}
 	})
 
