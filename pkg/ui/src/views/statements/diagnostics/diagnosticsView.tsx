@@ -40,6 +40,7 @@ import "./diagnosticsView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
+import { getDiagnosticsStatus } from "./diagnosticsUtils";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -51,16 +52,6 @@ interface DiagnosticsViewState {
   traces: {
     [diagnosticsId: string]: string;
   };
-}
-
-type DiagnosticsStatuses = "READY" | "WAITING FOR QUERY" | "ERROR";
-
-function getDiagnosticsStatus(diagnosticsRequest: IStatementDiagnosticsReport): DiagnosticsStatuses {
-  if (diagnosticsRequest.completed) {
-    return "READY";
-  }
-
-  return "WAITING FOR QUERY";
 }
 
 export class DiagnosticsView extends React.Component<DiagnosticsViewProps, DiagnosticsViewState> {
@@ -171,7 +162,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
           columns={this.columns}
         />
         <div className="crl-statements-diagnostics-view__footer">
-          <Link to="/reports/statements/diagnostics">All statement diagnostics</Link>
+          <Link to="/reports/statements/diagnosticshistory">All statement diagnostics</Link>
         </div>
         <DownloadFile ref={this.downloadRef}/>
       </SummaryCard>
