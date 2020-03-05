@@ -153,3 +153,15 @@ func (node *Explain) ParseOptions() (ExplainOptions, error) {
 	}
 	return res, nil
 }
+
+// ExplainBundle represents an EXPLAIN BUNDLE statement. It is a different node
+// type than Explain to allow easier special treatment in the SQL layer.
+type ExplainBundle struct {
+	Statement Statement
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ExplainBundle) Format(ctx *FmtCtx) {
+	ctx.WriteString("EXPLAIN BUNDLE ")
+	ctx.FormatNode(node.Statement)
+}

@@ -2028,6 +2028,11 @@ func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(d, p.Doc(node.Statement))
 }
 
+func (node *ExplainBundle) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Keyword("EXPLAIN BUNDLE")
+	return p.nestUnder(d, p.Doc(node.Statement))
+}
+
 func (node *NotExpr) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(
 		pretty.Keyword("NOT"),
