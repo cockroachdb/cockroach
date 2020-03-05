@@ -132,7 +132,7 @@ CANCEL QUERIES VALUES (1, 2)
 error (42601): too many columns in CANCEL QUERIES data
 
 build
-EXPORT INTO CSV 'nodelocal://foo' FROM SELECT * FROM ab
+EXPORT INTO CSV 'nodelocal://0/foo' FROM SELECT * FROM ab
 ----
 export
  ├── columns: filename:4 rows:5 bytes:6
@@ -141,10 +141,10 @@ export
  │    ├── columns: a:1 b:2
  │    └── scan ab
  │         └── columns: a:1 b:2 rowid:3!null
- └── 'nodelocal://foo'
+ └── 'nodelocal://0/foo'
 
 build
-EXPORT INTO CSV 'nodelocal://foo' WITH 'foo', 'bar'='baz' FROM SELECT * FROM ab
+EXPORT INTO CSV 'nodelocal://0/foo' WITH 'foo', 'bar'='baz' FROM SELECT * FROM ab
 ----
 export
  ├── columns: filename:4 rows:5 bytes:6
@@ -153,7 +153,7 @@ export
  │    ├── columns: a:1 b:2
  │    └── scan ab
  │         └── columns: a:1 b:2 rowid:3!null
- ├── 'nodelocal://foo'
+ ├── 'nodelocal://0/foo'
  └── k-v-options
       ├── k-v-options-item foo
       │    └── CAST(NULL AS STRING)
@@ -161,7 +161,7 @@ export
            └── 'baz'
 
 build
-EXPORT INTO CSV 'nodelocal://foo' WITH 'foo' = $1 FROM SELECT * FROM ab
+EXPORT INTO CSV 'nodelocal://0/foo' WITH 'foo' = $1 FROM SELECT * FROM ab
 ----
 export
  ├── columns: filename:4 rows:5 bytes:6
@@ -170,7 +170,7 @@ export
  │    ├── columns: a:1 b:2
  │    └── scan ab
  │         └── columns: a:1 b:2 rowid:3!null
- ├── 'nodelocal://foo'
+ ├── 'nodelocal://0/foo'
  └── k-v-options
       └── k-v-options-item foo
            └── $1

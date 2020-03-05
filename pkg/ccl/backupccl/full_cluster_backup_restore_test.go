@@ -51,7 +51,7 @@ func TestFullClusterBackup(t *testing.T) {
 	sqlDB.Exec(t, `ALTER DATABASE data2 CONFIGURE ZONE USING gc.ttlseconds = 900`)
 	// Populate system.jobs.
 	// Note: this is not the backup under test, this just serves as a job which should appear in the restore.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal:///throwawayjob'`)
+	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
 	preBackupJobs := sqlDB.QueryStr(t, "SELECT * FROM system.jobs")
 	// Populate system.settings.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5`)
@@ -190,7 +190,7 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
-	const incrementalBackupLocation = "nodelocal:///inc-full-backup"
+	const incrementalBackupLocation = "nodelocal://0/inc-full-backup"
 	_, _, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, initNone)
 	defer cleanupFn()

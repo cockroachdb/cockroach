@@ -1133,12 +1133,12 @@ func TestImportCSVStmt(t *testing.T) {
 	`), 0666); err != nil {
 		t.Fatal(err)
 	}
-	schema := []interface{}{"nodelocal:///table"}
+	schema := []interface{}{"nodelocal://0/table"}
 
 	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
 	}
-	empty := []string{"'nodelocal:///empty.csv'"}
+	empty := []string{"'nodelocal://0/empty.csv'"}
 
 	// Support subtests by keeping track of the number of jobs that are executed.
 	testNum := -1
@@ -1576,20 +1576,20 @@ func TestExportImportRoundTrip(t *testing.T) {
 		// need to differ across runs, so we let the test runner format the stmts field
 		// with a unique directory name per run.
 		{
-			stmts: `EXPORT INTO CSV 'nodelocal:///%[1]s' FROM SELECT ARRAY['a', 'b', 'c'];
-							IMPORT TABLE t (x TEXT[]) CSV DATA ('nodelocal:///%[1]s/n1.0.csv')`,
+			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY['a', 'b', 'c'];
+							IMPORT TABLE t (x TEXT[]) CSV DATA ('nodelocal://0/%[1]s/n1.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT ARRAY['a', 'b', 'c']`,
 		},
 		{
-			stmts: `EXPORT INTO CSV 'nodelocal:///%[1]s' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63'];
-							IMPORT TABLE t (x BYTES[]) CSV DATA ('nodelocal:///%[1]s/n1.0.csv')`,
+			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63'];
+							IMPORT TABLE t (x BYTES[]) CSV DATA ('nodelocal://0/%[1]s/n1.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63']`,
 		},
 		{
-			stmts: `EXPORT INTO CSV 'nodelocal:///%[1]s' FROM SELECT 'dog' COLLATE en;
-							IMPORT TABLE t (x STRING COLLATE en) CSV DATA ('nodelocal:///%[1]s/n1.0.csv')`,
+			stmts: `EXPORT INTO CSV 'nodelocal://0/%[1]s' FROM SELECT 'dog' COLLATE en;
+							IMPORT TABLE t (x STRING COLLATE en) CSV DATA ('nodelocal://0/%[1]s/n1.0.csv')`,
 			tbl:      "t",
 			expected: `SELECT 'dog' COLLATE en`,
 		},
@@ -1667,7 +1667,7 @@ func TestImportIntoCSV(t *testing.T) {
 	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
 	}
-	empty := []string{"'nodelocal:///empty.csv'"}
+	empty := []string{"'nodelocal://0/empty.csv'"}
 
 	// Support subtests by keeping track of the number of jobs that are executed.
 	testNum := -1
@@ -1834,7 +1834,7 @@ func TestImportIntoCSV(t *testing.T) {
 		{
 			"import-no-files-match-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
-			[]string{`'nodelocal:///data-[0-9][0-9]*'`},
+			[]string{`'nodelocal://0/data-[0-9][0-9]*'`},
 			` WITH decompress = 'auto'`,
 			`pq: no files matched uri provided`,
 		},
@@ -3095,11 +3095,11 @@ func TestImportMysql(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	files := getMysqldumpTestdata(t)
-	simple := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.simple, baseDir))}
-	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.second, baseDir))}
-	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB, baseDir))}
-	multitableGz := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB+".gz", baseDir))}
-	multitableBz := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB+".bz2", baseDir))}
+	simple := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(files.simple, baseDir))}
+	second := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(files.second, baseDir))}
+	multitable := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(files.wholeDB, baseDir))}
+	multitableGz := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(files.wholeDB+".gz", baseDir))}
+	multitableBz := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(files.wholeDB+".bz2", baseDir))}
 
 	const expectSimple, expectSecond, expectEverything = 1 << 0, 1 << 2, 1 << 3
 	const expectAll = -1
@@ -3228,7 +3228,7 @@ func TestImportMysqlOutfile(t *testing.T) {
 			var opts []interface{}
 
 			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) DELIMITED DATA ($1)`, i)
-			opts = append(opts, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(cfg.filename, baseDir)))
+			opts = append(opts, fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(cfg.filename, baseDir)))
 
 			var flags []string
 			if cfg.opts.RowSeparator != '\n' {
@@ -3289,7 +3289,7 @@ func TestImportPgCopy(t *testing.T) {
 			var opts []interface{}
 
 			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) PGCOPY DATA ($1)`, i)
-			opts = append(opts, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(cfg.filename, baseDir)))
+			opts = append(opts, fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(cfg.filename, baseDir)))
 
 			var flags []string
 			if cfg.opts.Delimiter != '\t' {
@@ -3349,11 +3349,11 @@ func TestImportPgDump(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	simplePgTestRows, simpleFile := getSimplePostgresDumpTestdata(t)
-	simple := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(simpleFile, baseDir))}
+	simple := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(simpleFile, baseDir))}
 	secondTableRowCount, secondFile := getSecondPostgresDumpTestdata(t)
-	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(secondFile, baseDir))}
+	second := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(secondFile, baseDir))}
 	multitableFile := getMultiTablePostgresDumpTestdata(t)
-	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(multitableFile, baseDir))}
+	multitable := []interface{}{fmt.Sprintf("nodelocal://0%s", strings.TrimPrefix(multitableFile, baseDir))}
 
 	const expectAll, expectSimple, expectSecond = 1, 2, 3
 
@@ -3498,7 +3498,7 @@ func TestImportCockroachDump(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal:///cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal://0/cockroachdump/dump.sql")
 	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY i", [][]string{
 		{"1", "test"},
 		{"2", "other"},
@@ -3553,7 +3553,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal:///cockroachdump/dump.sql")
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal://0/cockroachdump/dump.sql")
 
 	// Verify that statistics have been created.
 	sqlDB.CheckQueryResultsRetry(t,
@@ -3587,12 +3587,12 @@ func TestImportAvro(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
-	simpleOcf := fmt.Sprintf("nodelocal:///%s", "simple.ocf")
-	simpleSchemaURI := fmt.Sprintf("nodelocal:///%s", "simple-schema.json")
-	simpleJSON := fmt.Sprintf("nodelocal:///%s", "simple-sorted.json")
-	simplePrettyJSON := fmt.Sprintf("nodelocal:///%s", "simple-sorted.pjson")
-	simpleBinRecords := fmt.Sprintf("nodelocal:///%s", "simple-sorted-records.avro")
-	tableSchema := fmt.Sprintf("nodelocal:///%s", "simple-schema.sql")
+	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+	simpleSchemaURI := fmt.Sprintf("nodelocal://0/%s", "simple-schema.json")
+	simpleJSON := fmt.Sprintf("nodelocal://0/%s", "simple-sorted.json")
+	simplePrettyJSON := fmt.Sprintf("nodelocal://0/%s", "simple-sorted.pjson")
+	simpleBinRecords := fmt.Sprintf("nodelocal://0/%s", "simple-sorted-records.avro")
+	tableSchema := fmt.Sprintf("nodelocal://0/%s", "simple-schema.sql")
 
 	data, err := ioutil.ReadFile("testdata/avro/simple-schema.json")
 	if err != nil {
