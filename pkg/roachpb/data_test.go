@@ -1935,3 +1935,51 @@ func TestAsLockUpdates(t *testing.T) {
 		require.Equal(t, dur, intent.Durability)
 	}
 }
+
+func TestAddIgnoredSeqNumRange(t *testing.T) {
+	type r = enginepb.IgnoredSeqNumRange
+
+	mr := func(a, b enginepb.TxnSeq) r {
+		return r{Start: a, End: b}
+	}
+
+	testData := []struct {
+		list     []r
+		newRange r
+		exp      []r
+	}{
+		{
+			[]r{},
+			mr(1, 2),
+			[]r{mr(1, 2)},
+		},
+		{
+			[]r{mr(1, 2)},
+			mr(1, 4),
+			[]r{mr(1, 4)},
+		},
+		{
+			[]r{mr(1, 2), mr(3, 6)},
+			mr(8, 10),
+			[]r{mr(1, 2), mr(3, 6), mr(8, 10)},
+		},
+		{
+			[]r{mr(1, 2), mr(5, 6)},
+			mr(3, 8),
+			[]r{mr(1, 2), mr(3, 8)},
+		},
+		{
+			[]r{mr(1, 2), mr(5, 6)},
+			mr(1, 8),
+			[]r{mr(1, 8)},
+		},
+	}
+
+	for _, tc := range testData {
+		txn := Transaction{
+			IgnoredSeqNums: tc.list,
+		}
+		txn.AddIgnoredSeqNumRange(tc.newRange)
+		require.Equal(t, tc.exp, txn.IgnoredSeqNums)
+	}
+}

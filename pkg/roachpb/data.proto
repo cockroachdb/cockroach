@@ -501,10 +501,11 @@ message Transaction {
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
   // A list of ignored seqnum ranges.
   //
-  // The user code must guarantee this list to be non-overlapping,
-  // non-contiguous (i.e. it must coalesce ranges to avoid situations
-  // where a range's end seqnum is equal to the next range's start
-  // seqnum), and sorted in seqnum order.
+  // The slice is maintained as non-overlapping, non-contiguous (i.e. it must
+  // coalesce ranges to avoid situations where a range's end seqnum is equal to
+  // the next range's start seqnum), and sorted in seqnum order. It should be
+  // treated as immutable and all updates should be performed on a copy of the
+  // slice.
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
     [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 

@@ -1162,6 +1162,54 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) 
 	return s.get(nodeID)
 }
 
+// AddIgnoredSeqNumRange adds the given range to the given list of
+// ignored seqnum ranges. Since none of the references held by a Transaction
+// allow interior mutations, the existing list is copied instead of being
+// mutated in place.
+//
+// The following invariants are assumed to hold and are preserved:
+// - the list contains no overlapping ranges
+// - the list contains no contiguous ranges
+// - the list is sorted, with larger seqnums at the end
+//
+// Additionally, the caller must ensure:
+//
+// 1) if the new range overlaps with some range in the list, then it
+//    also overlaps with every subsequent range in the list.
+//
+// 2) the new range's "end" seqnum is larger or equal to the "end"
+//    seqnum of the last element in the list.
+//
+// For example:
+//     current list [3 5] [10 20] [22 24]
+//     new item:    [8 26]
+//     final list:  [3 5] [8 26]
+//
+//     current list [3 5] [10 20] [22 24]
+//     new item:    [28 32]
+//     final list:  [3 5] [10 20] [22 24] [28 32]
+//
+// This corresponds to savepoints semantics:
+//
+// - Property 1 says that a rollback to an earlier savepoint
+//   rolls back over all writes following that savepoint.
+// - Property 2 comes from that the new range's 'end' seqnum is the
+//   current write seqnum and thus larger than or equal to every
+//   previously seen value.
+func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange) {
+	// Truncate the list at the last element not included in the new range.
+
+	list := t.IgnoredSeqNums
+	i := sort.Search(len(list), func(i int) bool {
+		return list[i].End >= newRange.Start
+	})
+
+	cpy := make([]enginepb.IgnoredSeqNumRange, i+1)
+	copy(cpy[:i], list[:i])
+	cpy[i] = newRange
+	t.IgnoredSeqNums = cpy
+}
+
 // AsRecord returns a TransactionRecord object containing only the subset of
 // fields from the receiver that must be persisted in the transaction record.
 func (t *Transaction) AsRecord() TransactionRecord {

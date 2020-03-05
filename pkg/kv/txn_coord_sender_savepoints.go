@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -118,8 +117,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s client.Save
 		return nil
 	}
 
-	tc.mu.txn.IgnoredSeqNums = roachpb.AddIgnoredSeqNumRange(
-		tc.mu.txn.IgnoredSeqNums,
+	tc.mu.txn.AddIgnoredSeqNumRange(
 		enginepb.IgnoredSeqNumRange{
 			Start: st.seqNum + 1, End: tc.interceptorAlloc.txnSeqNumAllocator.writeSeq,
 		})
