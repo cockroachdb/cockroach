@@ -11,31 +11,31 @@
 import { Action } from "redux";
 import { PayloadAction } from "src/interfaces/action";
 
-export const REQUEST_STATEMENT_DIAGNOSTICS_REPORT = "cockroachui/statements/REQUEST_STATEMENT_DIAGNOSTICS_REPORT";
-export const STATEMENT_DIAGNOSTICS_REPORT_REQUEST_COMPLETE = "cockroachui/statements/STATEMENT_DIAGNOSTICS_REPORT_REQUEST_COMPLETE";
-export const STATEMENT_DIAGNOSTICS_REPORT_REQUEST_FAILED = "cockroachui/statements/STATEMENT_DIAGNOSTICS_REPORT_REQUEST_FAILED";
+export const CREATE_STATEMENT_DIAGNOSTICS_REPORT = "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";
+export const CREATE_STATEMENT_DIAGNOSTICS_COMPLETE = "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_COMPLETE";
+export const CREATE_STATEMENT_DIAGNOSTICS_FAILED = "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_FAILED";
 
-export type DiagnosticsPayload = {
+export type DiagnosticsReportPayload = {
   statementFingerprint: string;
 };
 
-export function requestStatementDiagnosticsReport(statementFingerprint: string): PayloadAction<DiagnosticsPayload> {
+export function createStatementDiagnosticsReportAction(statementFingerprint: string): PayloadAction<DiagnosticsReportPayload> {
   return {
-    type: REQUEST_STATEMENT_DIAGNOSTICS_REPORT,
+    type: CREATE_STATEMENT_DIAGNOSTICS_REPORT,
     payload: {
       statementFingerprint,
     },
   };
 }
 
-export function completeStatementDiagnosticsReportRequest(): Action {
+export function createStatementDiagnosticsReportCompleteAction(): Action {
   return {
-    type: STATEMENT_DIAGNOSTICS_REPORT_REQUEST_COMPLETE,
+    type: CREATE_STATEMENT_DIAGNOSTICS_COMPLETE,
   };
 }
 
-export function failedStatementDiagnosticsReportRequest(): Action {
+export function createStatementDiagnosticsReportFailedAction(): Action {
   return {
-    type: STATEMENT_DIAGNOSTICS_REPORT_REQUEST_FAILED,
+    type: CREATE_STATEMENT_DIAGNOSTICS_FAILED,
   };
 }
