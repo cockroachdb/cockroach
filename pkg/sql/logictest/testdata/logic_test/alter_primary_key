@@ -1,5 +1,4 @@
 statement ok
-SET experimental_enable_primary_key_changes = true;
 SET experimental_enable_hash_sharded_indexes = true
 
 statement ok
