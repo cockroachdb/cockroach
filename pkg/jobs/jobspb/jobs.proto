@@ -171,6 +171,38 @@ message DroppedTableDetails {
   Status status = 3;
 }
 
+// WaitingForGCDetails is the payload of the job which waits for the TTL of
+// schema elements to expire and then GCs them.
+// These should store the drop times.
+message WaitingForGCDetails {
+  message DroppedIndex {
+    int64 index_id = 1 [(gogoproto.customname) = "IndexID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.IndexID"];
+    int64 drop_time = 2;
+    int64 deadline = 3;
+  }
+
+  message DroppedID {
+    int64 id = 1 [(gogoproto.customname) = "ID",
+                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    // DropTime is used re-calculate the deadline when the zone config was updated.
+    int64 drop_time = 2;
+    // Deadline is used to check if an element should be GC'd without needing to
+    // ask the zone config on every check
+    int64 deadline = 3;
+  }
+
+  // Populated when dropping indexes.
+  repeated DroppedIndex indexes = 1 [(gogoproto.nullable) = false];
+
+  // The tables to be dropped, or the table contain the indexes to be dropped.
+  repeated DroppedID tables = 2 [(gogoproto.nullable) = false];
+
+  // Populated when dropping a database.
+  int64 database_id = 3 [(gogoproto.customname) = "DatabaseID",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+}
+
 message SchemaChangeDetails {
   reserved 1;
   // A schema change can involve running multiple processors backfilling
@@ -191,6 +223,10 @@ message SchemaChangeDetails {
 }
 
 message SchemaChangeProgress {
+
+}
+
+message WaitingForGCProgress {
 
 }
 
@@ -307,6 +343,7 @@ message Payload {
     ImportDetails import = 13;
     ChangefeedDetails changefeed = 14;
     CreateStatsDetails createStats = 15;
+    WaitingForGCDetails waitingForGC = 21;
   }
 }
 
@@ -325,6 +362,7 @@ message Progress {
     ImportProgress import = 13;
     ChangefeedProgress changefeed = 14;
     CreateStatsProgress createStats = 15;
+    WaitingForGCProgress waitingForGC = 16;
   }
 }
 
@@ -340,6 +378,7 @@ enum Type {
   CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
   AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
+  WAITING_FOR_GC = 8 [(gogoproto.enumvalue_customname) = "TypeWaitingForGC"];
 }
 
 message Job {

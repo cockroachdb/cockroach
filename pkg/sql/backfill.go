@@ -219,7 +219,7 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Column:
 				needColumnBackfill = true
 			case *sqlbase.DescriptorMutation_Index:
-				if !sc.canClearRangeForDrop(t.Index) {
+				if !canClearRangeForDrop(t.Index) {
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
 			case *sqlbase.DescriptorMutation_Constraint:
@@ -687,7 +687,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
-				if !sc.canClearRangeForDrop(&desc) {
+				if canClearRangeForDrop(&desc) {
 					resume, err = td.deleteIndex(
 						ctx,
 						&desc,
