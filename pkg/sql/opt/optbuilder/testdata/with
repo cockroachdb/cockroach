@@ -448,3 +448,14 @@ delete xy
                 │         │                        └── variable: u [type=int]
                 │         └── const: 5 [type=int]
                 └── variable: x [type=int]
+
+# Regression test for #43963.
+build
+WITH a AS (SELECT 1 AS testval) SELECT a.testval FROM a
+----
+project
+ ├── columns: testval:1(int!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 1 [type=int]
