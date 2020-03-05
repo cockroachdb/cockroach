@@ -12,26 +12,45 @@ import React from "react";
 import { connect } from "react-redux";
 import { Link as RouterLink } from "react-router-dom";
 import moment from "moment";
+import Long from "long";
 
-import { Button, Text, TextTypes, Table, ColumnsConfig, Badge, Anchor } from "src/components";
+import {
+  Button,
+  Text,
+  TextTypes,
+  Table,
+  ColumnsConfig,
+  Badge,
+  Anchor,
+  DownloadFile,
+  DownloadFileRef,
+} from "src/components";
 import { AdminUIState } from "src/redux/state";
+import { getStatementDiagnostics } from "src/util/api";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import {
   selectDiagnosticsReportsByStatementFingerprint,
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
-import { requestStatementDiagnosticsReport } from "src/redux/statements";
+import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import "./diagnosticsView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
 }
 
 type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispatchToProps;
+
+interface DiagnosticsViewState {
+  traces: {
+    [diagnosticsId: string]: string;
+  };
+}
 
 type DiagnosticsStatuses = "READY" | "WAITING FOR QUERY" | "ERROR";
 
@@ -56,14 +75,15 @@ function getDiagnosticsStatus(diagnosticsRequest: IStatementDiagnosticsReport): 
   return "WAITING FOR QUERY";
 }
 
-export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
-  columns: ColumnsConfig<any> = [
+export class DiagnosticsView extends React.Component<DiagnosticsViewProps, DiagnosticsViewState> {
+  columns: ColumnsConfig<IStatementDiagnosticsReport> = [
     {
       key: "activatedOn",
       title: "Activated on",
       sorter: true,
       render: (_text, record) => {
-        return moment(record.activatedOn).format("LL[ at ]h:mm a");
+        const timestamp = record.requested_at.seconds.toNumber() * 1000;
+        return moment(timestamp).format("LL[ at ]h:mm a");
       },
     },
     {
@@ -71,12 +91,15 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
       title: "status",
       sorter: true,
       width: "60px",
-      render: (_text, record) => (
-        <Badge
-          text={record.status}
-          status={mapDiagnosticsStatusToBadge(record.status)}
-        />
-      ),
+      render: (_text, record) => {
+        const status = getDiagnosticsStatus(record);
+        return (
+          <Badge
+            text={status}
+            status={mapDiagnosticsStatusToBadge(status)}
+          />
+        );
+      },
     },
     {
       key: "actions",
@@ -84,10 +107,11 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
       sorter: false,
       width: "160px",
       render: (_text, record) => {
-        if (record.status === "READY") {
+        if (record.completed) {
           return (
             <div className="crl-statements-diagnostics-view__actions-column">
               <Button
+                onClick={() => this.getStatementDiagnostics(record.statement_diagnostics_id)}
                 size="small"
                 type="flat"
                 iconPosition="left"
@@ -110,15 +134,23 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
     },
   ];
 
+  downloadRef = React.createRef<DownloadFileRef>();
+
+  getStatementDiagnostics = async (diagnosticsId: Long) => {
+    const request = new StatementDiagnosticsRequest({ statement_diagnostics_id: diagnosticsId });
+    const response = await getStatementDiagnostics(request);
+    const trace = response.diagnostics?.trace;
+    this.downloadRef.current?.download("trace.json", "application/json", trace);
+  }
+
   render() {
     const { hasData, diagnosticsReports, activate, statementFingerprint } = this.props;
 
     const canRequestDiagnostics = diagnosticsReports.every(diagnostic => diagnostic.completed);
 
-    const dataSource = diagnosticsReports.map((diagnostic, idx) => ({
+    const dataSource = diagnosticsReports.map((diagnosticsReport, idx) => ({
+      ...diagnosticsReport,
       key: idx,
-      activatedOn: diagnostic.requested_at.seconds.toNumber() * 1000,
-      status: getDiagnosticsStatus(diagnostic),
     }));
 
     if (!hasData) {
@@ -153,6 +185,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps> {
         <div className="crl-statements-diagnostics-view__footer">
           <RouterLink to="/reports/statements/diagnostics">All statement diagnostics</RouterLink>
         </div>
+        <DownloadFile ref={this.downloadRef}/>
       </SummaryCard>
     );
   }
@@ -220,7 +253,7 @@ const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapS
 };
 
 const mapDispatchToProps: MapDispatchToProps = {
-  activate: requestStatementDiagnosticsReport,
+  activate: createStatementDiagnosticsReportAction,
 };
 
 export default connect<
