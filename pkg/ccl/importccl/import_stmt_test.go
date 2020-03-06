@@ -3665,6 +3665,12 @@ func TestImportAvro(t *testing.T) {
 			args:   []interface{}{simpleOcf},
 		},
 		{
+			name:   "import-ocf-into-table-with-strict-validation",
+			sql:    "IMPORT INTO simple AVRO DATA ($1)  WITH strict_validation",
+			create: "CREATE TABLE simple (i INT8, s text, b bytea)",
+			args:   []interface{}{simpleOcf},
+		},
+		{
 			name: "import-ocf-create-using",
 			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
 			args: []interface{}{tableSchema, simpleOcf},
