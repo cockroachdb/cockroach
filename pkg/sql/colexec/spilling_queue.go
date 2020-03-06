@@ -114,6 +114,11 @@ func newRewindableSpillingQueue(
 
 func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error {
 	if batch.Length() == 0 {
+		if q.diskQueue != nil {
+			if err := q.diskQueue.Enqueue(batch); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 

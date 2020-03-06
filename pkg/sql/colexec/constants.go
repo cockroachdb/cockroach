@@ -23,3 +23,5 @@ const DefaultVectorizeRowCountThreshold = 1000
 // that the vectorized engine can have (globally) for use of the temporary
 // storage.
 const VecMaxOpenFDsLimit = 256
+
+const defaultMemoryLimit = 64 << 20 /* 64 MiB */
