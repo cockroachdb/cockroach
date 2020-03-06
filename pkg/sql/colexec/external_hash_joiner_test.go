@@ -13,14 +13,12 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,6 +29,17 @@ import (
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
+
+// externalHJTestMaxNumberPartitions specifies the minimum number of partitions
+// that the maximum limit on the number of partitions for the external hash
+// joiner can be set to. Here is the reasoning (note that we only describe a
+// point in time when the operator will use the most number of files
+// descriptors simultaneously - the operator is supposed to release FDs once it
+// is done with the corresponding partitions): external hash joiner itself
+// needs at least two partitions per side (i.e. we need at least 4), but during
+// the fallback to sort + merge join we will be using 6 (external sorter on
+// each side will use 2 to read its own partitions and 1 more to write out).
+const externalHJTestMaxNumberPartitions = 6
 
 func TestExternalHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -51,8 +60,6 @@ func TestExternalHashJoiner(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	// External hash joiner needs at least two partitions per side.
-	const maxNumberPartitions = 4
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
@@ -85,7 +92,7 @@ func TestExternalHashJoiner(t *testing.T) {
 						tc.skipAllNullsInjection = true
 					}
 					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
-						sem := NewTestingSemaphore(maxNumberPartitions)
+						sem := NewTestingSemaphore(externalHJTestMaxNumberPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						spec := createSpecForHashJoiner(tc)
 						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(
@@ -150,12 +157,10 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	var spilled bool
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	// External hash joiner needs at least two partitions per side.
-	const maxNumberPartitions = 4
 	hj, accounts, monitors, err := createDiskBackedHashJoiner(
 		ctx, flowCtx, spec, []Operator{leftSource, rightSource},
 		func() { spilled = true }, queueCfg, 0, /* numForcedRepartitions */
-		NewTestingSemaphore(maxNumberPartitions),
+		NewTestingSemaphore(externalHJTestMaxNumberPartitions),
 	)
 	defer func() {
 		for _, memAccount := range accounts {
@@ -167,15 +172,15 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	}()
 	require.NoError(t, err)
 	hj.Init()
-	err = execerror.CatchVectorizedRuntimeError(func() {
-		for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
-		}
-	})
+	// We have a full cross-product, so we should get the number of tuples
+	// squared in the output.
+	expectedTuplesCount := nBatches * nBatches * coldata.BatchSize() * coldata.BatchSize()
+	actualTuplesCount := 0
+	for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+		actualTuplesCount += b.Length()
+	}
 	require.True(t, spilled)
-	// Currently, we don't have the fallback in place, so we expect an error.
-	// TODO(yuzefovich): change this once we have the fallback.
-	require.NotNil(t, err)
-	require.True(t, strings.Contains(err.Error(), externalHJFallbackToSortMergeJoinMsg))
+	require.Equal(t, expectedTuplesCount, actualTuplesCount)
 }
 
 func BenchmarkExternalHashJoiner(b *testing.B) {
