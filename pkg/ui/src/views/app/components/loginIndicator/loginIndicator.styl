@@ -11,17 +11,24 @@
 @require '~src/components/core/index.styl'
 
 .login-indicator
+  &__title
+    margin-left $spacing-smaller
+    margin-right $spacing-x-small
 
 .login-indicator--insecure
   display flex
   flex-direction row
-  color $colors--functional-yellow-4
-  text-transform uppercase
+  font-family $font-family--base
+  color $colors--functional-orange-4
   align-items center
   cursor default
-
-  path
-    fill $colors--functional-yellow-4
-
-.login-indicator--insecure > div
-  margin-left $spacing-small
+  font-size $font-size--medium
+  line-height 22px
+  .image-container
+    width 32px
+    height 32px
+    display flex
+    justify-content center
+    align-items center
+    border-radius 16px
+    background-color $colors--functional-orange-1
