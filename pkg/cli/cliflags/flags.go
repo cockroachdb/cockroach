@@ -641,6 +641,23 @@ Instead, require the user to always specify access keys.`,
 		Description: CertsDir.Description,
 	}
 
+	CertPrincipalMap = FlagInfo{
+		Name: "cert-principal-map",
+		Description: `
+A comma separated list of <cert-principal>:<db-principal> mappings. This allows
+mapping the principal in a cert to a DB principal such as "node" or "root" or
+any SQL user. This is intended for use in situations where the certificate
+management system places restrictions on the Subject.CommonName or
+SubjectAlternateName fields in the certificate (e.g. disallowing a CommonName
+such as "node" or "root"). If multiple mappings are provided for the same
+<cert-principal>, the last one specified in the list takes precedence. A
+principal not specified in the map is passed through as-is via the identity
+function. A cert is allowed to authenticate a DB principal if the DB principal
+name is contained in the mapped CommonName or DNS-type SubjectAlternateName
+fields.
+`,
+	}
+
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",
