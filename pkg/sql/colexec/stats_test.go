@@ -85,9 +85,9 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput := NewVectorizedStatsCollector(rightSource, 1 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		rightInput.SetOutputWatch(mjInputWatch)
 
-		mergeJoiner, err := NewMergeJoinOp(
-			testAllocator, defaultMemoryLimit, queueCfg, NewTestingSemaphore(4),
-			sqlbase.InnerJoin, leftInput, rightInput,
+		mergeJoiner, err := newMergeJoinOp(
+			testAllocator, defaultMemoryLimit, queueCfg,
+			NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
 			[]coltypes.T{coltypes.Int64}, []coltypes.T{coltypes.Int64},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
