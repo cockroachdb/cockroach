@@ -54,6 +54,8 @@ export interface Alert extends AlertInfo {
   // Makes alert to be positioned in the top right corner of the screen instead of
   // stretching to full width.
   showAsAlert?: boolean;
+  autoClose?: boolean;
+  closable?: boolean;
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;

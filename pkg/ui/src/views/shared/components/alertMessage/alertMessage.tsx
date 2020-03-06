@@ -16,6 +16,8 @@ import { AlertInfo, AlertLevel } from "src/redux/alerts";
 import "./alertMessage.styl";
 
 interface AlertMessageProps extends AlertInfo {
+  autoClose: boolean;
+  closable: boolean;
   dismiss(): void;
 }
 
@@ -52,6 +54,23 @@ const getIconType = (alertLevel: AlertLevel): string => {
 };
 
 export class AlertMessage extends React.Component<AlertMessageProps> {
+  static defaultProps = {
+    closable: true,
+  };
+
+  timeoutHandler: number;
+
+  componentDidMount() {
+    const { autoClose, dismiss } = this.props;
+    if (autoClose) {
+      this.timeoutHandler = setTimeout(dismiss, 6000);
+    }
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.timeoutHandler);
+  }
+
   render() {
     const {
       level,
@@ -59,6 +78,7 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
       link,
       title,
       text,
+      closable,
     } = this.props;
 
     let description: React.ReactNode = text;
@@ -76,12 +96,14 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
         description={description}
         showIcon
         icon={<Icon type={iconType} theme="filled" className="alert-massage__icon" />}
-        closable
+        closable={closable}
         onClose={dismiss}
         closeText={
-          <div className="alert-massage__close-text">
-            &times;
-          </div>
+          closable && (
+            <div className="alert-massage__close-text">
+              &times;
+            </div>
+          )
         }
         type={type} />
     );
