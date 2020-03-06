@@ -834,7 +834,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.UserPriority> transaction_user_priority
 %type <tree.ReadWriteMode> transaction_read_mode
 
-%type <str> name opt_name opt_name_parens opt_to_savepoint
+%type <str> name opt_name opt_name_parens
 %type <str> privilege savepoint_name
 %type <tree.KVOption> role_option password_clause
 %type <tree.Operator> subquery_op
@@ -5479,9 +5479,9 @@ opt_set_data:
   SET DATA {}
 | /* EMPTY */ {}
 
-// %Help: RELEASE - complete a retryable block
+// %Help: RELEASE - complete a sub-transaction
 // %Category: Txn
-// %Text: RELEASE [SAVEPOINT] cockroach_restart
+// %Text: RELEASE [SAVEPOINT] <savepoint name>
 // %SeeAlso: SAVEPOINT, WEBDOCS/savepoint.html
 release_stmt:
   RELEASE savepoint_name
@@ -5512,9 +5512,9 @@ resume_stmt:
   }
 | RESUME error // SHOW HELP: RESUME JOBS
 
-// %Help: SAVEPOINT - start a retryable block
+// %Help: SAVEPOINT - start a sub-transaction
 // %Category: Txn
-// %Text: SAVEPOINT cockroach_restart
+// %Text: SAVEPOINT <savepoint name>
 // %SeeAlso: RELEASE, WEBDOCS/savepoint.html
 savepoint_stmt:
   SAVEPOINT name
@@ -5582,42 +5582,26 @@ opt_abort_mod:
 | WORK        {}
 | /* EMPTY */ {}
 
-// %Help: ROLLBACK - abort the current transaction
+// %Help: ROLLBACK - abort the current (sub-)transaction
 // %Category: Txn
-// %Text: ROLLBACK [TRANSACTION] [TO [SAVEPOINT] cockroach_restart]
+// %Text:
+// ROLLBACK [TRANSACTION]
+// ROLLBACK [TRANSACTION] TO [SAVEPOINT] <savepoint name>
 // %SeeAlso: BEGIN, COMMIT, SAVEPOINT, WEBDOCS/rollback-transaction.html
 rollback_stmt:
-  ROLLBACK opt_to_savepoint
+  ROLLBACK opt_transaction
   {
-    if $2 != "" {
-      $$.val = &tree.RollbackToSavepoint{Savepoint: tree.Name($2)}
-    } else {
-      $$.val = &tree.RollbackTransaction{}
-    }
+     $$.val = &tree.RollbackTransaction{}
+  }
+| ROLLBACK opt_transaction TO savepoint_name
+  {
+     $$.val = &tree.RollbackToSavepoint{Savepoint: tree.Name($4)}
   }
 | ROLLBACK error // SHOW HELP: ROLLBACK
 
 opt_transaction:
   TRANSACTION {}
 | /* EMPTY */ {}
-
-opt_to_savepoint:
-  TRANSACTION
-  {
-    $$ = ""
-  }
-| TRANSACTION TO savepoint_name
-  {
-    $$ = $3
-  }
-| TO savepoint_name
-  {
-    $$ = $2
-  }
-| /* EMPTY */
-  {
-    $$ = ""
-  }
 
 savepoint_name:
   SAVEPOINT name
