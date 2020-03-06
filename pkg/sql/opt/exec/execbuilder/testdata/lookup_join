@@ -678,7 +678,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
 ·           distributed     true         ·                   ·
-·           vectorized      false        ·                   ·
+·           vectorized      true         ·                   ·
 merge-join  ·               ·            (d, e, f, a, b, c)  +f
  │          type            inner        ·                   ·
  │          equality        (f) = (a)    ·                   ·
