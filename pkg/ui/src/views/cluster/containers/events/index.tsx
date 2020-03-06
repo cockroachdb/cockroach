@@ -69,7 +69,9 @@ export class EventRow extends React.Component<EventRowProps, {}> {
           <div className="events__message">{e.content}</div>
         </ToolTipWrapper>
       </td>
-      <td><div className="events__timestamp">{e.fromNowString}</div></td>
+      <td>
+        <div className="events__timestamp">{e.fromNowString}</div>
+      </td>
     </tr>;
   }
 }
