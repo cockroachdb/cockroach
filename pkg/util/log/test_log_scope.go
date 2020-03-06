@@ -83,16 +83,16 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
 	mainLog.mu.Lock()
 	defer mainLog.mu.Unlock()
-	oldStderrThreshold := logging.stderrThreshold
+	oldStderrThreshold := logging.stderrThreshold.get()
 	oldNoStderrRedirect := mainLog.noStderrRedirect
 
 	undo := func() {
 		mainLog.mu.Lock()
 		defer mainLog.mu.Unlock()
-		logging.stderrThreshold = oldStderrThreshold
+		logging.stderrThreshold.set(oldStderrThreshold)
 		mainLog.noStderrRedirect = oldNoStderrRedirect
 	}
-	logging.stderrThreshold = stderrSeverity
+	logging.stderrThreshold.set(stderrSeverity)
 	mainLog.noStderrRedirect = true
 	return undo, mainLog.logDir.Set(dir)
 }
