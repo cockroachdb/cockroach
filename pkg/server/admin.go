@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -49,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -114,6 +117,34 @@ func (s *adminServer) RegisterService(g *grpc.Server) {
 func (s *adminServer) RegisterGateway(
 	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
+	// Register the /_admin/v1/stmtbundle endpoint, which serves statement support
+	// bundles as files.
+	stmtBundlePattern := gwruntime.MustPattern(gwruntime.NewPattern(
+		1, /* version */
+		[]int{
+			int(gwutil.OpLitPush), 0, int(gwutil.OpLitPush), 1, int(gwutil.OpLitPush), 2,
+			int(gwutil.OpPush), 0, int(gwutil.OpConcatN), 1, int(gwutil.OpCapture), 3},
+		[]string{"_admin", "v1", "stmtbundle", "id"},
+		"", /* verb */
+	))
+
+	mux.Handle("GET", stmtBundlePattern, func(
+		w http.ResponseWriter, req *http.Request, pathParams map[string]string,
+	) {
+		idStr, ok := pathParams["id"]
+		if !ok {
+			http.Error(w, "missing id", http.StatusBadRequest)
+			return
+		}
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		s.getStatementBundle(ctx, id, w)
+	})
+
+	// Register the endpoints defined in the proto.
 	return serverpb.RegisterAdminHandler(ctx, mux, conn)
 }
 
@@ -1492,6 +1523,59 @@ func (s *adminServer) QueryPlan(
 	return &serverpb.QueryPlanResponse{
 		DistSQLPhysicalQueryPlan: string(dbDatum),
 	}, nil
+}
+
+// getStatementBundle retrieves the statement bundle with the given id and
+// writes it out as an attachment.
+func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
+	sessionUser, err := userFromContext(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	row, err := s.server.internalExecutor.QueryRowEx(
+		ctx, "admin-stmt-bundle", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: sessionUser},
+		"SELECT bundle_chunks FROM system.statement_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
+		id,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if row == nil {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	// Put together the entire bundle. Ideally we would stream it in chunks,
+	// but it's hard to return errors once we start.
+	var bundle bytes.Buffer
+	chunkIDs := row[0].(*tree.DArray).Array
+	for _, chunkID := range chunkIDs {
+		chunkRow, err := s.server.internalExecutor.QueryRowEx(
+			ctx, "admin-stmt-bundle", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: sessionUser},
+			"SELECT data FROM system.statement_bundle_chunks WHERE id=$1",
+			chunkID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if row == nil {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		}
+		data := chunkRow[0].(*tree.DBytes)
+		bundle.WriteString(string(*data))
+	}
+
+	w.Header().Set(
+		"Content-Disposition",
+		fmt.Sprintf("attachment; filename=stmt-bundle-%d.zip", id),
+	)
+
+	_, _ = io.Copy(w, &bundle)
 }
 
 // Drain puts the node into the specified drain mode(s) and optionally

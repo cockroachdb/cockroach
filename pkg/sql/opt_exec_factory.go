@@ -887,8 +887,9 @@ func (ef *execFactory) ConstructPlan(
 		plan: root.(planNode),
 		// TODO(radu): these fields can be modified by planning various opaque
 		// statements. We should have a cleaner way of plumbing these.
-		avoidBuffering: ef.planner.curPlan.avoidBuffering,
-		auditEvents:    ef.planner.curPlan.auditEvents,
+		avoidBuffering:  ef.planner.curPlan.avoidBuffering,
+		auditEvents:     ef.planner.curPlan.auditEvents,
+		instrumentation: ef.planner.curPlan.instrumentation,
 	}
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))

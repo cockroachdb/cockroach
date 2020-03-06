@@ -521,7 +521,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BUCKET_COUNT
-%token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
+%token <str> BLOB BOOL BOOLEAN BOTH BUNDLE BY BYTEA BYTES
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK
@@ -2692,6 +2692,10 @@ explain_stmt:
 | EXPLAIN ANALYSE '(' explain_option_list ')' preparable_stmt
   {
     $$.val = &tree.Explain{Options: append($4.strs(), "ANALYZE"), Statement: $6.stmt()}
+  }
+| EXPLAIN BUNDLE preparable_stmt
+  {
+    $$.val = &tree.ExplainBundle{Statement: $3.stmt()}
   }
 // This second error rule is necessary, because otherwise
 // preparable_stmt also provides "selectclause := '(' error ..." and
@@ -9722,6 +9726,7 @@ unreserved_keyword:
 | BLOB
 | BOOL
 | BUCKET_COUNT
+| BUNDLE
 | BY
 | BYTEA
 | BYTES
