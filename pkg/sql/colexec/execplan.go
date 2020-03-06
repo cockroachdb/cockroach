@@ -624,6 +624,7 @@ func NewColOperator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
 					aggSpec.GroupCols, aggCols,
 				)
+				result.CanRunInAutoMode = true
 			} else {
 				result.Op, err = NewOrderedAggregator(
 					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
@@ -660,6 +661,7 @@ func NewColOperator(
 					NewAllocator(ctx, distinctMemAccount), inputs[0],
 					core.Distinct.DistinctColumns, typs, hashTableNumBuckets,
 				)
+				result.CanRunInAutoMode = true
 			}
 
 		case core.Ordinality != nil:
