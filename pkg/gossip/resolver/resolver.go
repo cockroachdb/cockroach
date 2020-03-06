@@ -11,12 +11,18 @@
 package resolver
 
 import (
+	"fmt"
 	"net"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/pkg/errors"
+)
+
+var (
+	lookupSRV = net.LookupSRV
 )
 
 // Resolver is an interface which provides an abstract factory for
@@ -36,6 +42,37 @@ func NewResolver(address string) (Resolver, error) {
 	// Ensure addr has port and host set.
 	address = ensureHostPort(address, base.DefaultPort)
 	return &socketResolver{typ: "tcp", addr: address}, nil
+}
+
+// SRV returns a slice of addresses from SRV record lookup
+func SRV(name string) ([]string, error) {
+	// Ignore port
+	name, _, err := netutil.SplitHostPort(name, base.DefaultPort)
+	if err != nil {
+		return nil, err
+	}
+
+	if name == "" {
+		// nolint:returnerrcheck
+		return nil, nil
+	}
+
+	// "" as the addr and proto forces the direct look up of the name
+	_, recs, err := lookupSRV("", "", name)
+	if err != nil {
+		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.Err == "no such host" {
+			return nil, nil
+		}
+
+		return nil, errors.Wrapf(err, "failed to lookup SRV record for %q", name)
+	}
+
+	var addrs = make([]string, len(recs))
+	for i, r := range recs {
+		addrs[i] = net.JoinHostPort(r.Target, fmt.Sprintf("%d", r.Port))
+	}
+
+	return addrs, nil
 }
 
 // NewResolverFromAddress takes a net.Addr and constructs a resolver.
