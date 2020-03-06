@@ -840,8 +840,8 @@ EXECGEN_TARGETS = \
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
 $(info Cleaning old generated files.)
-$(shell find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) -delete)
-$(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -delete 2>/dev/null)
+$(shell find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) -print -delete 2>/dev/null)
+$(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -print -delete 2>/dev/null)
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1535,9 +1535,9 @@ pkg/sql/colexec/values_differ.eg.go: pkg/sql/colexec/values_differ_tmpl.go
 pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
 pkg/sql/colexec/window_peer_grouper.eg.go: pkg/sql/colexec/window_peer_grouper_tmpl.go
 
-$(EXECGEN_TARGETS): bin/execgen
-	execgen $@ > $@.tmp; cmp $@.tmp $@ && rm -f $@.tmp || mv $@.tmp $@
-
+%.eg.go: bin/execgen
+	@echo EXECGEN $@; execgen $@ > $@.tmp || { rm -f $@.tmp; exit 1; }
+	@cmp $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
