@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,6 +88,9 @@ type txnState struct {
 	// through the use of AS OF SYSTEM TIME.
 	isHistorical bool
 
+	// lastEpoch is the last observed epoch in the current txn.
+	lastEpoch enginepb.TxnEpoch
+
 	// mon tracks txn-bound objects like the running state of
 	// planNode in the midst of performing a computation.
 	mon *mon.BytesMonitor
@@ -152,6 +156,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
 	ts.isHistorical = false
+	ts.lastEpoch = 0
 
 	// Create a context for this transaction. It will include a root span that
 	// will contain everything executed as part of the upcoming SQL txn, including
