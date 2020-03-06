@@ -34,7 +34,7 @@ func TestAsOfTime(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: asyncSchemaChangerDisabled,
+		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 	}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
