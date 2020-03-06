@@ -283,7 +283,8 @@ commit_stmt ::=
 	| 'END' opt_transaction
 
 rollback_stmt ::=
-	'ROLLBACK' opt_to_savepoint
+	'ROLLBACK' opt_transaction
+	| 'ROLLBACK' opt_transaction 'TO' savepoint_name
 
 abort_stmt ::=
 	'ABORT' opt_abort_mod
@@ -960,12 +961,6 @@ opt_transaction ::=
 
 begin_transaction ::=
 	transaction_mode_list
-	| 
-
-opt_to_savepoint ::=
-	'TRANSACTION'
-	| 'TRANSACTION' 'TO' savepoint_name
-	| 'TO' savepoint_name
 	| 
 
 opt_abort_mod ::=
