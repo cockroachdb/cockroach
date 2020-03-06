@@ -839,9 +839,11 @@ EXECGEN_TARGETS = \
 
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
-$(info Cleaning old generated files.)
-$(shell find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) -print -delete 2>/dev/null)
-$(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -print -delete 2>/dev/null)
+$(shell for obsolete in $$(find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) 2>/dev/null) \
+			$$(find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) 2>/dev/null); do \
+	  echo "Removing obsolete file $$obsolete..."; \
+	  rm -f $$obsolete; \
+	done)
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
