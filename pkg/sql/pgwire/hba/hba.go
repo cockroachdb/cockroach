@@ -21,6 +21,7 @@ package hba
 import (
 	"fmt"
 	"net"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,6 +51,12 @@ type Entry struct {
 	MethodFn     interface{}
 	Options      [][2]string
 	OptionQuotes []bool
+	// Input is the original configuration line in the HBA configuration string.
+	// This is used for auditing purposes.
+	Input string
+	// Generated is true if the entry was expanded from another. All the
+	// generated entries share the same value for Input.
+	Generated bool
 }
 
 // ConnType represents the type of connection matched by a rule.
@@ -93,6 +100,15 @@ func (c Conf) String() string {
 		return "# (empty configuration)\n"
 	}
 	var sb strings.Builder
+	sb.WriteString("# Original configuration:\n")
+	for _, e := range c.Entries {
+		if e.Generated {
+			continue
+		}
+		fmt.Fprintf(&sb, "# %s\n", e.Input)
+	}
+	sb.WriteString("#\n# Interpreted configuration:\n")
+
 	table := tablewriter.NewWriter(&sb)
 	table.SetAutoWrapText(false)
 	table.SetReflowDuringAutoWrap(false)
@@ -138,6 +154,14 @@ func (h Entry) GetOption(name string) string {
 		}
 	}
 	return val
+}
+
+// Equivalent returns true iff the entry is equivalent to another,
+// excluding the original syntax.
+func (h Entry) Equivalent(other Entry) bool {
+	h.Input = ""
+	other.Input = ""
+	return reflect.DeepEqual(h, other)
 }
 
 // GetOptions returns all values of option name.
@@ -343,6 +367,9 @@ outer:
 		for userIdx, iu := range allUsers {
 			entry.User = allUsers[userIdx : userIdx+1]
 			entry.User[0].Value = tree.Name(iu.Value).Normalize()
+			if userIdx > 0 {
+				entry.Generated = true
+			}
 			entries = append(entries, entry)
 		}
 	}

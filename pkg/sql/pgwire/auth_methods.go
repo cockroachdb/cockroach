@@ -100,6 +100,9 @@ func authPassword(
 	if err != nil {
 		return nil, err
 	}
+	if len(hashedPassword) == 0 {
+		c.Logf(ctx, "user has no password defined")
+	}
 
 	return security.UserAuthPasswordHook(
 		false /*insecure*/, password, hashedPassword,
@@ -142,8 +145,10 @@ func authCertPassword(
 ) (security.UserAuthHook, error) {
 	var fn AuthMethod
 	if len(tlsState.PeerCertificates) == 0 {
+		c.Logf(ctx, "no client certificate, proceeding with password authentication")
 		fn = authPassword
 	} else {
+		c.Logf(ctx, "client presented certificate, proceeding with certificate validation")
 		fn = authCert
 	}
 	return fn(ctx, c, tlsState, pwRetrieveFn, execCfg, entry)

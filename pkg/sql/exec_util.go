@@ -568,6 +568,7 @@ type ExecutorConfig struct {
 	ExecLogger        *log.SecondaryLogger
 	AuditLogger       *log.SecondaryLogger
 	SlowQueryLogger   *log.SecondaryLogger
+	AuthLogger        *log.SecondaryLogger
 	InternalExecutor  *InternalExecutor
 	QueryCache        *querycache.C
 
