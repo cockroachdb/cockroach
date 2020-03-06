@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 @require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
 
 .events
   font-family Lato-Regular
@@ -16,7 +17,7 @@
     width 100%
     border-collapse collapse
     tr
-      height 39px
+      height 60px
       border-bottom 1px solid $table-border-color
       &:last-child
         border 0
@@ -24,19 +25,24 @@
       padding-left 0
 
 .events__message
-  font-size 14
-  color $body-color
+  font-family $font-family--base
+  font-size 14px
+  line-height 22px
+  color $colors--neutral-8
   text-overflow ellipsis
   display block
   white-space nowrap
   overflow hidden
-  width 180px
+  width 169px
+  margin-bottom 18px
 
 .events__timestamp
-  font-size 12
-  color $tooltip-color
+  font-family $font-family--base
+  font-size 12px
+  line-height 20px
+  color $colors--neutral-6
   margin-left 20px
-  text-align right
+  width 65px
 
 .events__more-link
   text-align center

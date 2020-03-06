@@ -10,6 +10,7 @@
 
 @require nib
 @require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
 
 $dropdown-hover-color = darken($background-color, 2.5%)
 
@@ -59,15 +60,18 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     line-height 17px
   
   &__range-title
-    background #e5e5e5
+    display flex
+    justify-content center
+    align-items center
+    background $colors--neutral-3
     width 34px
     text-align center
     border-radius 3px
-    color #5f6c87
+    color $colors--neutral-7
     font-size 12px
+    line-height 24px
+    letter-spacing 0.1px
     font-family Lato-Bold
-    padding 2px 0px
-    display inline-block
 
   &__select
     display inline-block
