@@ -870,6 +870,14 @@ define WindowPrivate {
     # Ordering is the ordering that the window function is computed relative to
     # within each partition.
     Ordering OrderingChoice
+
+    # RangeOffsetColumn is the column ID of a single column from ORDER BY
+    # clause (when there is only one column). We store it separately because
+    # Ordering might be simplified (when that single column is in Partition),
+    # but the execution still needs to know the original ordering with RANGE
+    # mode of framing when at least one of the bounds has "offset". This column
+    # ID is used to reconstruct the Ordering during exec build phase.
+    RangeOffsetColumn ColumnID
 }
 
 # With executes Binding, making its results available to Main. Within Main, the
