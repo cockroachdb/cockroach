@@ -338,24 +338,18 @@ var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 // time by first waiting for all nodes to be on the current (pre-update) version
 // of the table desc.
 //
-// The update closure for all tables is called after the wait. The map argument
-// is a map of the table descriptors with the IDs given in tableIDs, and the
-// closure mutates those descriptors. The txn argument closure is intended to be
-// used for updating jobs. Note that it can't be used for anything except
-// writing to system tables, since we set the system config trigger to write the
-// schema changes.
+// The update closure for all tables is called after the wait. The argument to
+// the closure is a map of the table descriptors with the IDs given in tableIDs,
+// and the closure mutates those descriptors.
 //
 // The closure may be called multiple times if retries occur; make sure it does
 // not have side effects.
 //
 // Returns the updated versions of the descriptors.
-//
-// TODO (lucy): Providing the txn for the update closure just to update a job
-// is not ideal. There must be a better API for this.
 func (s LeaseStore) PublishMultiple(
 	ctx context.Context,
 	tableIDs []sqlbase.ID,
-	update func(*client.Txn, map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error,
+	update func(map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error,
 	logEvent func(*client.Txn) error,
 ) (map[sqlbase.ID]*sqlbase.ImmutableTableDescriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
@@ -399,13 +393,8 @@ func (s LeaseStore) PublishMultiple(
 				versions[id] = descsToUpdate[id].Version
 			}
 
-			// This is to write the updated descriptors.
-			if err := txn.SetSystemConfigTrigger(); err != nil {
-				return err
-			}
-
 			// Run the update closure.
-			if err := update(txn, descsToUpdate); err != nil {
+			if err := update(descsToUpdate); err != nil {
 				return err
 			}
 			for _, id := range tableIDs {
@@ -424,6 +413,10 @@ func (s LeaseStore) PublishMultiple(
 				tableDescs[id] = descsToUpdate[id]
 			}
 
+			// Write the updated descriptors.
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
 			b := txn.NewBatch()
 			for tableID, tableDesc := range tableDescs {
 				if err := writeDescToBatch(ctx, false /* kvTrace */, s.settings, b, tableID, tableDesc.TableDesc()); err != nil {
@@ -479,8 +472,6 @@ func (s LeaseStore) PublishMultiple(
 // not have side effects.
 //
 // Returns the updated version of the descriptor.
-// TODO (lucy): Maybe have the closure take a *client.Txn to match
-// PublishMultiple.
 func (s LeaseStore) Publish(
 	ctx context.Context,
 	tableID sqlbase.ID,
@@ -488,7 +479,7 @@ func (s LeaseStore) Publish(
 	logEvent func(*client.Txn) error,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	tableIDs := []sqlbase.ID{tableID}
-	updates := func(_ *client.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
+	updates := func(descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
 		desc, ok := descs[tableID]
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", tableID)

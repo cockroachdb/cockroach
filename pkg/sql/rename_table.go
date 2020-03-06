@@ -125,9 +125,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
-	if err := p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
+	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
 		return err
 	}
 

@@ -1606,6 +1606,26 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	})
 
+	// Create and start the schema change manager only after a NodeID
+	// has been assigned.
+	var testingKnobs *sql.SchemaChangerTestingKnobs
+	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
+		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+	} else {
+		testingKnobs = new(sql.SchemaChangerTestingKnobs)
+	}
+
+	sql.NewSchemaChangeManager(
+		s.cfg.AmbientCtx,
+		s.execCfg,
+		testingKnobs,
+		*s.db,
+		s.node.Descriptor,
+		s.execCfg.DistSQLPlanner,
+		// We're reusing the ieFactory from the distSQLServer.
+		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
+	).Start(s.stopper)
+
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, s.stopper)
 

@@ -25,11 +25,10 @@ SELECT * FROM a
 statement ok
 DROP TABLE a
 
-# TODO (lucy): update
 query TT
 SELECT status, running_status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'
 ----
-succeeded  NULL
+running  waiting for GC TTL
 
 query T
 SHOW TABLES FROM test

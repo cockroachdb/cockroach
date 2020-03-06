@@ -48,14 +48,10 @@ query II
 SELECT * FROM kview
 ----
 
-# TODO (lucy): update with GC job
 query TT
 SELECT status, running_status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'
 ----
-succeeded  NULL
-succeeded  NULL
-succeeded  NULL
-succeeded  NULL
+running  waiting for GC TTL
 
 # Ensure that TRUNCATE works with a self referential FK.
 statement ok
