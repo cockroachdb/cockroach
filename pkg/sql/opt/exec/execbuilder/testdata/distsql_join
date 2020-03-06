@@ -33,7 +33,7 @@ query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
 ·                distributed     true               ·             ·
-·                vectorized      false              ·             ·
+·                vectorized      true               ·             ·
 render           ·               ·                  (a, b)        ·
  │               render 0        a                  ·             ·
  │               render 1        b                  ·             ·

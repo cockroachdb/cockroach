@@ -86,7 +86,6 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	if input == &o.right {
 		bufferedGroup = o.proberState.rBufferedGroup
 	}
-	lastBufferedTupleIdx := bufferedGroup.Length() - 1
 	tupleToLookAtIdx := rowIdx
 	sel := batch.Selection()
 	if sel != nil {
@@ -101,16 +100,16 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 		switch colTyp {
 		// {{ range . }}
 		case _TYPES_T:
-			// We perform this null check on every equality column of the last
+			// We perform this null check on every equality column of the first
 			// buffered tuple regardless of the join type since it is done only once
 			// per batch. In some cases (like INNER JOIN, or LEFT OUTER JOIN with the
 			// right side being an input) this check will always return false since
 			// nulls couldn't be buffered up though.
-			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt(lastBufferedTupleIdx) {
+			if bufferedGroup.firstTuple[colIdx].Nulls().NullAt(0) {
 				return true
 			}
-			bufferedCol := bufferedGroup.ColVec(int(colIdx))._TemplateType()
-			prevVal := execgen.UNSAFEGET(bufferedCol, lastBufferedTupleIdx)
+			bufferedCol := bufferedGroup.firstTuple[colIdx]._TemplateType()
+			prevVal := execgen.UNSAFEGET(bufferedCol, 0)
 			var curVal _GOTYPE
 			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx) {
 				return true

@@ -762,25 +762,17 @@ func NewColOperator(
 			}
 
 			joinType := core.MergeJoiner.Type
-			mergeJoinerMemAccount := streamingMemAccount
-			if !result.IsStreaming && !useStreamingMemAccountForBuffering {
-				// If the merge joiner is buffering, create an unlimited buffering
-				// account for now.
-				// TODO(asubiotto): Once we support spilling to disk in the merge
-				//  joiner, make this a limited account. Done this way so that we can
-				//  still run plans that include a merge join with a low memory limit
-				//  to test disk spilling of other components for the time being.
-				mergeJoinerMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "merge-joiner")
-			}
+			// We are using an unlimited memory monitor here because merge joiner
+			// itself is responsible for making sure that we stay within the memory
+			// limit, and it will fall back to disk if necessary.
+			unlimitedAllocator := NewAllocator(
+				ctx, result.createBufferingUnlimitedMemAccount(
+					ctx, flowCtx, "merge-joiner",
+				))
 			result.Op, err = NewMergeJoinOp(
-				NewAllocator(ctx, mergeJoinerMemAccount),
-				joinType,
-				inputs[0],
-				inputs[1],
-				leftPhysTypes,
-				rightPhysTypes,
-				core.MergeJoiner.LeftOrdering.Columns,
-				core.MergeJoiner.RightOrdering.Columns,
+				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg, args.FDSemaphore,
+				joinType, inputs[0], inputs[1], leftPhysTypes, rightPhysTypes,
+				core.MergeJoiner.LeftOrdering.Columns, core.MergeJoiner.RightOrdering.Columns,
 			)
 			if err != nil {
 				return result, err
@@ -800,6 +792,10 @@ func NewColOperator(
 					return result, err
 				}
 			}
+
+			// Merge joiner can run in auto mode because it falls back to disk if
+			// there is not enough memory available.
+			result.CanRunInAutoMode = true
 
 		case core.Sorter != nil:
 			if err := checkNumIn(inputs, 1); err != nil {

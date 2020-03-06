@@ -409,7 +409,7 @@ query TTT
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
 ·           distributed         false
-·           vectorized          false
+·           vectorized          true
 merge-join  ·                   ·
  │          type                inner
  │          equality            (cust) = (id)
@@ -865,7 +865,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -886,7 +886,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -907,7 +907,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -952,7 +952,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
 ·           distributed     false              ·                   ·
-·           vectorized      false              ·                   ·
+·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
@@ -968,7 +968,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 ·           distributed     false              ·                   ·
-·           vectorized      false              ·                   ·
+·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
@@ -984,7 +984,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 ·           distributed     false              ·                   ·
-·           vectorized      false              ·                   ·
+·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
@@ -1000,7 +1000,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, x, y, v)  ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -1026,7 +1026,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -1047,7 +1047,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -1091,7 +1091,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 ·           distributed     false              ·                   ·
-·           vectorized      false              ·                   ·
+·           vectorized      true               ·                   ·
 merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
@@ -1107,7 +1107,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, x, y, v)  ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -1131,7 +1131,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
 ·                distributed     false              ·                   ·
-·                vectorized      false              ·                   ·
+·                vectorized      true               ·                   ·
 render           ·               ·                  (x, y, u, v)        ·
  │               render 0        x                  ·                   ·
  │               render 1        y                  ·                   ·
@@ -1614,7 +1614,7 @@ query TTT
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
 ·                    distributed     false
-·                    vectorized      false
+·                    vectorized      true
 render               ·               ·
  └── merge-join      ·               ·
       │              type            inner
@@ -1636,7 +1636,7 @@ query TTT
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
 ·                    distributed     false
-·                    vectorized      false
+·                    vectorized      true
 render               ·               ·
  └── merge-join      ·               ·
       │              type            inner
@@ -1658,7 +1658,7 @@ query TTT
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
 ·               distributed     false
-·               vectorized      false
+·               vectorized      true
 merge-join      ·               ·
  │              type            inner
  │              equality        (x) = (x)

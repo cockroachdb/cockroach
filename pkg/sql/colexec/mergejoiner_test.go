@@ -23,7 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -1487,7 +1490,12 @@ func TestMergeJoiner(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
-
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+	var (
+		memAccounts []*mon.BoundAccount
+		memMonitors []*mon.BytesMonitor
+	)
 	for _, tc := range mjTestCases {
 		tc.init()
 
@@ -1520,23 +1528,44 @@ func TestMergeJoiner(t *testing.T) {
 		} else {
 			runner = runTestsWithTyps
 		}
-		runner(t, []tuples{tc.leftTuples, tc.rightTuples}, nil /* typs */, tc.expected, mergeJoinVerifier,
-			func(input []Operator) (Operator, error) {
-				spec := createSpecForMergeJoiner(tc)
-				args := NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              input,
-					StreamingMemAccount: testMemAcc,
-				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := NewColOperator(ctx, flowCtx, args)
-				if err != nil {
-					return nil, err
-				}
-				return result.Op, nil
+		// We test all cases with the default memory limit (regular scenario) and a
+		// limit of 1 byte (to force the buffered groups to spill to disk).
+		for _, memoryLimit := range []int64{1, defaultMemoryLimit} {
+			t.Run(fmt.Sprintf("MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description), func(t *testing.T) {
+				runner(t, []tuples{tc.leftTuples, tc.rightTuples}, nil /* typs */, tc.expected, mergeJoinVerifier,
+					func(input []Operator) (Operator, error) {
+						spec := createSpecForMergeJoiner(tc)
+						args := NewColOperatorArgs{
+							Spec:                spec,
+							Inputs:              input,
+							StreamingMemAccount: testMemAcc,
+							DiskQueueCfg:        queueCfg,
+							FDSemaphore:         NewTestingSemaphore(mjFDLimit),
+						}
+						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+						result, err := NewColOperator(ctx, flowCtx, args)
+						if err != nil {
+							return nil, err
+						}
+						memAccounts = append(memAccounts, result.BufferingOpMemAccounts...)
+						memMonitors = append(memMonitors, result.BufferingOpMemMonitors...)
+						return result.Op, nil
+					})
 			})
+		}
+	}
+	for _, memAccount := range memAccounts {
+		memAccount.Close(ctx)
+	}
+	for _, memMonitor := range memMonitors {
+		memMonitor.Stop(ctx)
 	}
 }
+
+// Merge joiner will be using two spillingQueues, and each of them will use
+// 2 file descriptors.
+const mjFDLimit = 4
 
 // TestFullOuterMergeJoinWithMaximumNumberOfGroups will create two input
 // sources such that the left one contains rows with even numbers 0, 2, 4, ...
@@ -1547,6 +1576,8 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	nTuples := coldata.BatchSize() * 4
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 	for _, outBatchSize := range []int{1, 16, coldata.BatchSize() - 1, coldata.BatchSize(), coldata.BatchSize() + 1} {
 		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
 			func(t *testing.T) {
@@ -1562,7 +1593,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 				leftSource := newChunkingBatchSource(typs, colsLeft, nTuples)
 				rightSource := newChunkingBatchSource(typs, colsRight, nTuples)
 				a, err := NewMergeJoinOp(
-					testAllocator,
+					testAllocator, defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 					sqlbase.FullOuterJoin,
 					leftSource,
 					rightSource,
@@ -1621,6 +1652,8 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 func TestMergeJoinerMultiBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 	for _, numInputBatches := range []int{1, 2, 16} {
 		for _, outBatchSize := range []int{1, 16, coldata.BatchSize()} {
 			t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
@@ -1638,6 +1671,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 
 					a, err := NewMergeJoinOp(
 						testAllocator,
+						defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1683,6 +1717,8 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 	for _, groupSize := range []int{coldata.BatchSize() / 8, coldata.BatchSize() / 4, coldata.BatchSize() / 2} {
 		if groupSize == 0 {
 			// We might be varying coldata.BatchSize() so that when it is divided by
@@ -1718,6 +1754,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 
 					a, err := NewMergeJoinOp(
 						testAllocator,
+						defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1834,6 +1871,8 @@ func newBatchesOfRandIntRows(
 func TestMergeJoinerRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 	for _, numInputBatches := range []int{1, 2, 16, 256} {
 		for _, maxRunLength := range []int64{2, 3, 100} {
 			for _, skipValues := range []bool{false, true} {
@@ -1848,6 +1887,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 
 							a, err := NewMergeJoinOp(
 								testAllocator,
+								defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 								sqlbase.InnerJoin,
 								leftSource,
 								rightSource,
@@ -1935,6 +1975,10 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	}
 
 	batch := testAllocator.NewMemBatch(sourceTypes)
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
+	defer cleanup()
+	benchMemAccount := testMemMonitor.MakeBoundAccount()
+	defer benchMemAccount.Close(ctx)
 
 	// 1:1 join.
 	for _, nBatches := range []int{1, 4, 16, 1024} {
@@ -1947,8 +1991,9 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 
+				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					testAllocator,
+					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 					leftSource, rightSource,
 					[]uint32{0, 1}, []uint32{2, 3},
 					sourceTypes, sourceTypes,
@@ -1978,8 +2023,9 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 
+				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					testAllocator,
+					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 					leftSource, rightSource,
 					[]uint32{0, 1}, []uint32{2, 3},
 					sourceTypes, sourceTypes,
@@ -2011,8 +2057,9 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
 
+				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					testAllocator,
+					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 					leftSource, rightSource,
 					[]uint32{0, 1}, []uint32{2, 3},
 					sourceTypes, sourceTypes,
