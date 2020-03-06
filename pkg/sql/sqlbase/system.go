@@ -1510,16 +1510,11 @@ func addSystemDatabaseToSchema(
 
 	systemZoneConf := defaultSystemZoneConfig
 	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
-	jobsZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, metaRangeZoneConf))
-
-	// Jobs zone config entry with a shorter GC time.
-	jobsZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, jobsZoneConf))
 
 	// Some reporting tables have shorter GC times.
 	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{

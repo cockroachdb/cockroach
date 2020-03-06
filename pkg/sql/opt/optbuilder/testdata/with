@@ -1341,3 +1341,20 @@ with &1 (foo)
                           │    └── ()
                           └── projections
                                └── column1:1 [as=x:3]
+
+# Regression test for #43963.
+build
+WITH a AS (SELECT 1 AS testval) SELECT a.testval FROM a
+----
+with &1 (a)
+ ├── columns: testval:2!null
+ ├── project
+ │    ├── columns: testval:1!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── 1 [as=testval:1]
+ └── with-scan &1 (a)
+      ├── columns: testval:2!null
+      └── mapping:
+           └──  testval:1 => testval:2

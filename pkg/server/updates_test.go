@@ -774,7 +774,6 @@ func TestReportUsage(t *testing.T) {
 		keys.RootNamespaceID,
 		keys.LivenessRangesID,
 		keys.MetaRangesID,
-		keys.JobsTableID,
 		keys.RangeEventTableID,
 		keys.SystemDatabaseID,
 	} {
