@@ -471,6 +471,28 @@ CREATE TABLE crdb_internal.jobs (
 			return err
 		}
 
+		// Attempt to account for the memory of the retrieved rows and the data
+		// we're going to unmarshal and keep bufferred in RAM.
+		//
+		// TODO(ajwerner): This is a pretty terrible hack. Instead the internal
+		// executor should be hooked into the memory monitor associated with this
+		// conn executor. If we did that we would still want to account for the
+		// unmarshaling. Additionally, it's probably a good idea to paginate this
+		// and other virtual table queries but that's a bigger task.
+		ba := p.ExtendedEvalContext().Mon.MakeBoundAccount()
+		defer ba.Close(ctx)
+		for _, r := range rows {
+			var rowSize int64
+			for _, d := range r {
+				// NB: Add the datum size twice to count the fact that we already allocated
+				// it once and we're about to unmarshal it and keep that around.
+				rowSize += int64(d.Size()) * 2
+			}
+			if err := ba.Grow(ctx, rowSize); err != nil {
+				return err
+			}
+		}
+
 		for _, r := range rows {
 			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
