@@ -225,7 +225,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	defer s.Stopper().Stop(ctx)
 	init(s.ClusterSettings())
 
-	storage, err := cloud.ExternalStorageConfFromURI("nodelocal:///foo")
+	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

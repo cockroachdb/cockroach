@@ -31,7 +31,7 @@ func TestPutLocal(t *testing.T) {
 	dest := MakeLocalStorageURI(p)
 
 	testExportStore(t, dest, false)
-	testListFiles(t, "nodelocal:///listing-test/basepath")
+	testListFiles(t, "nodelocal://0/listing-test/basepath")
 }
 
 func TestLocalIOLimits(t *testing.T) {
@@ -44,13 +44,13 @@ func TestLocalIOLimits(t *testing.T) {
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 
 	baseDir, err := ExternalStorageFromURI(
-		ctx, "nodelocal:///", base.ExternalIOConfig{}, testSettings, clientFactory)
+		ctx, "nodelocal://0/", base.ExternalIOConfig{}, testSettings, clientFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
-		u := fmt.Sprintf("nodelocal://%s", dest)
+		u := fmt.Sprintf("nodelocal://0%s", dest)
 		e, err := ExternalStorageFromURI(
 			ctx, u, base.ExternalIOConfig{}, testSettings, clientFactory)
 		if err != nil {
@@ -66,7 +66,7 @@ func TestLocalIOLimits(t *testing.T) {
 	}
 
 	for host, expectErr := range map[string]bool{"": false, "1": false, "0": false, "blah": true} {
-		u := fmt.Sprintf("nodelocal://%s/path/to/file", host)
+		u := fmt.Sprintf("nodelocal://0%s/path/to/file", host)
 
 		var expected string
 		if expectErr {
