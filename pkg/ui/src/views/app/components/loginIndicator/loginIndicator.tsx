@@ -54,10 +54,12 @@ class LoginIndicator extends React.Component<LoginIndicatorProps, LoginIndicator
     if (!loginState.loginEnabled()) {
       return (
         <div className="login-indicator login-indicator--insecure">
-          <div>Insecure mode</div>
-          <div className="image-container"
-               title="Insecure mode"
-               dangerouslySetInnerHTML={trustIcon(unlockedIcon)}/>
+          <div
+            className="image-container"
+            title="Insecure mode"
+            dangerouslySetInnerHTML={trustIcon(unlockedIcon)}
+          />
+          <div className="login-indicator__title">Insecure mode</div>
         </div>
       );
     }
