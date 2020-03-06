@@ -917,6 +917,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.go",
 			":!*.pb.gw.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
+			":!sql/colexec/execerror/error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",

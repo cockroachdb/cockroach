@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,5 +33,5 @@ func TestCancelChecker(t *testing.T) {
 	err := execerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)
 	})
-	require.Equal(t, sqlbase.QueryCanceledError, err)
+	require.True(t, errors.Is(err, sqlbase.QueryCanceledError))
 }
