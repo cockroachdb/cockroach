@@ -65,5 +65,5 @@ func genOverloadsTestUtils(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genOverloadsTestUtils, "overloads_test_utils.eg.go")
+	registerGenerator(genOverloadsTestUtils, "overloads_test_utils.eg.go", "")
 }

@@ -17,8 +17,10 @@ import (
 	"text/template"
 )
 
+const castTmpl = "pkg/sql/colexec/cast_tmpl.go"
+
 func genCastOperators(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/cast_tmpl.go")
+	t, err := ioutil.ReadFile(castTmpl)
 	if err != nil {
 		return err
 	}
@@ -55,5 +57,5 @@ func genCastOperators(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genCastOperators, "cast.eg.go")
+	registerGenerator(genCastOperators, "cast.eg.go", castTmpl)
 }

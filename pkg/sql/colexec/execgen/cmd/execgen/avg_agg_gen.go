@@ -56,8 +56,10 @@ var (
 	_ = avgAggTmplInfo{}.AssignDivInt64
 )
 
+const avgAggTmpl = "pkg/sql/colexec/avg_agg_tmpl.go"
+
 func genAvgAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/avg_agg_tmpl.go")
+	t, err := ioutil.ReadFile(avgAggTmpl)
 	if err != nil {
 		return err
 	}
@@ -102,5 +104,5 @@ func genAvgAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genAvgAgg, "avg_agg.eg.go")
+	registerGenerator(genAvgAgg, "avg_agg.eg.go", avgAggTmpl)
 }

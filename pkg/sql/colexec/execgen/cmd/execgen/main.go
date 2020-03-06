@@ -49,21 +49,28 @@ type execgen struct {
 
 type generator func(io.Writer) error
 
-var generators = make(map[string]generator)
+var generators = make(map[string]entry)
 
-func registerGenerator(g generator, filename string) {
+type entry struct {
+	fn  generator
+	dep string
+}
+
+func registerGenerator(g generator, filename, dep string) {
 	if _, ok := generators[filename]; ok {
 		execerror.VectorizedInternalPanic(fmt.Sprintf("%s generator already registered", filename))
 	}
-	generators[filename] = g
+	generators[filename] = entry{fn: g, dep: dep}
 }
 
 func (g *execgen) run(args ...string) bool {
 	// Parse command line.
+	var printDeps bool
 	g.cmdLine = flag.NewFlagSet("execgen", flag.ContinueOnError)
 	g.cmdLine.SetOutput(g.stdErr)
 	g.cmdLine.Usage = g.usage
 	g.cmdLine.BoolVar(&g.useGoFmt, "useGoFmt", true, "run go fmt on generated code")
+	g.cmdLine.BoolVar(&printDeps, "M", false, "print the dependency list")
 	err := g.cmdLine.Parse(args)
 	if err != nil {
 		return false
@@ -79,14 +86,23 @@ func (g *execgen) run(args ...string) bool {
 
 	for _, out := range args {
 		_, file := filepath.Split(out)
-		gen := generators[file]
-		if gen == nil {
+		entry := generators[file]
+		if entry.fn == nil {
 			g.reportError(errors.Errorf("unrecognized filename: %s", file))
 			return false
 		}
-		if err := g.generate(gen); err != nil {
-			g.reportError(err)
-			return false
+		if printDeps {
+			if entry.dep == "" {
+				// This output file has no template dependency (its template
+				// is embedded entirely in execgen). Skip it.
+				continue
+			}
+			fmt.Printf("%s: %s\n", out, entry.dep)
+		} else {
+			if err := g.generate(entry.fn); err != nil {
+				g.reportError(err)
+				return false
+			}
 		}
 	}
 

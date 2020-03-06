@@ -57,8 +57,10 @@ var (
 	_ = rankTmplInfo{}.UpdateRankIncrement()
 )
 
+const rankTmpl = "pkg/sql/colexec/rank_tmpl.go"
+
 func genRankOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/rank_tmpl.go")
+	d, err := ioutil.ReadFile(rankTmpl)
 	if err != nil {
 		return err
 	}
@@ -88,5 +90,5 @@ func genRankOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRankOps, "rank.eg.go")
+	registerGenerator(genRankOps, "rank.eg.go", rankTmpl)
 }
