@@ -61,3 +61,15 @@ func (s *Smither) sample(n, mean int, fn func(i int)) {
 		fn(perms[ki])
 	}
 }
+
+const letters = "abcdefghijklmnopqrstuvwxyz"
+
+// randString generates a random string with a target length using characters
+// from the input alphabet string.
+func (s *Smither) randString(length int, alphabet string) string {
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i] = alphabet[s.rnd.Intn(len(alphabet))]
+	}
+	return string(buf)
+}
