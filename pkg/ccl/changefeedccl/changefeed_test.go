@@ -357,6 +357,55 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 
 // Test how Changefeeds react to schema changes that do not require a backfill
 // operation.
+func TestChangefeedInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	scope := log.Scope(t)
+	defer scope.Close(t)
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
+
+		t.Run(`no cursor - no initial scan`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE no_initial_scan (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (1)`)
+
+			noInitialScan := feed(t, f, `CREATE CHANGEFEED FOR no_initial_scan `+
+				`WITH no_initial_scan, resolved='10ms'`)
+			defer closeFeed(t, noInitialScan)
+			expectResolvedTimestamp(t, noInitialScan)
+			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (2)`)
+			assertPayloads(t, noInitialScan, []string{
+				`no_initial_scan: [2]->{"after": {"a": 2}}`,
+			})
+		})
+
+		t.Run(`cursor - with initial scan`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE initial_scan (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO initial_scan VALUES (1), (2), (3)`)
+			var tsStr string
+			var i int
+			sqlDB.QueryRow(t, `SELECT count(*), cluster_logical_timestamp() from initial_scan`).Scan(&i, &tsStr)
+			initialScan := feed(t, f, `CREATE CHANGEFEED FOR initial_scan `+
+				`WITH initial_scan, resolved='10ms', cursor='`+tsStr+`'`)
+			defer closeFeed(t, initialScan)
+			assertPayloads(t, initialScan, []string{
+				`initial_scan: [1]->{"after": {"a": 1}}`,
+				`initial_scan: [2]->{"after": {"a": 2}}`,
+				`initial_scan: [3]->{"after": {"a": 3}}`,
+			})
+			sqlDB.Exec(t, `INSERT INTO initial_scan VALUES (4)`)
+			assertPayloads(t, initialScan, []string{
+				`initial_scan: [4]->{"after": {"a": 4}}`,
+			})
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+// Test how Changefeeds react to schema changes that do not require a backfill
+// operation.
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	scope := log.Scope(t)
@@ -1884,6 +1933,16 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `diff is only usable with envelope=wrapped`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, envelope='row'`, `kafka://nope`,
+	)
+
+	// WITH initial_scan and no_initial_scan disallowed
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan and no_initial_scan`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan, no_initial_scan`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan and no_initial_scan`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan`, `kafka://nope`,
 	)
 }
 
