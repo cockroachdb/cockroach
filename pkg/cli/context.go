@@ -291,9 +291,10 @@ var debugCtx struct {
 // Defaults set by InitCLIDefaults() above.
 var startCtx struct {
 	// server-specific values of some flags.
-	serverInsecure    bool
-	serverSSLCertsDir string
-	serverListenAddr  string
+	serverInsecure         bool
+	serverSSLCertsDir      string
+	serverCertsNamePattern string
+	serverListenAddr       string
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string

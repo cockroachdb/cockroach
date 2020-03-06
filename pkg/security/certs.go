@@ -234,7 +234,12 @@ func createCACertAndKey(
 // The CA cert and key must load properly. If multiple certificates
 // exist in the CA cert, the first one is used.
 func CreateNodePair(
-	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	overwrite bool,
+	certNodeSuffix string,
+	hosts []string,
 ) error {
 	if len(caKeyPath) == 0 {
 		return errors.New("the path to the CA key is required")
@@ -265,7 +270,8 @@ func CreateNodePair(
 		return errors.Errorf("could not generate new node key: %v", err)
 	}
 
-	nodeCert, err := GenerateServerCert(caCert, caPrivateKey, nodeKey.Public(), lifetime, hosts)
+	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
+		nodeKey.Public(), lifetime, NodeUser+certNodeSuffix, hosts)
 	if err != nil {
 		return errors.Errorf("error creating node server certificate and key: %s", err)
 	}

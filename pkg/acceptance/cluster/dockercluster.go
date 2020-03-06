@@ -449,7 +449,8 @@ func (l *DockerCluster) createNodeCerts() {
 	maybePanic(security.CreateNodePair(
 		certsDir,
 		filepath.Join(certsDir, security.EmbeddedCAKey),
-		keyLen, 48*time.Hour, true /* overwrite */, nodes))
+		keyLen, 48*time.Hour, true /* overwrite */, "", /* node-user-suffix */
+		nodes))
 }
 
 // startNode starts a Docker container to run testNode. It may be called in

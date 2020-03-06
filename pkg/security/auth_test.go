@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -73,6 +74,59 @@ func TestGetCertificateUser(t *testing.T) {
 		t.Error(err)
 	} else if name != "foo" {
 		t.Errorf("expected name: foo, got: %s", name)
+	}
+}
+
+func TestSetCertNamePattern(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		pattern  string
+		expected string
+	}{
+		{``, "must specify exactly one parenthesized subexpression"},
+		{`(`, "error parsing regexp"},
+		{`(a)(b)`, "must specify exactly one parenthesized subexpression"},
+		{`(.*)\.cockroachlabs\.com`, ""},
+		{`(.*)`, ""},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			err := security.SetCertNamePattern(c.pattern)
+			if !testutils.IsError(err, c.expected) {
+				t.Fatalf("expected %q, but found %v", c.expected, err)
+			}
+		})
+	}
+}
+
+func TestGetCertificateUserPattern(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		user     string
+		pattern  string
+		expected string
+	}{
+		{"foo", `(.*)`, "foo"},
+		{"foo", `(.*)o`, "fo"},
+		{"node", `(.*)o`, "node"},                    // fail open (anchored regexp doesn't match)
+		{"node", `(.*)\.cockroachlabs\.com`, "node"}, // fail open (regexp doesn't match)
+		{"node.cockroachlabs.com", `(.*)\.cockroachlabs\.com`, "node"},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			if err := security.SetCertNamePattern(c.pattern); err != nil {
+				t.Fatal(err)
+			}
+			name, err := security.GetCertificateUser(makeFakeTLSState([]string{c.user}, []int{2}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.expected != name {
+				t.Fatalf("expected %q, but found %q", c.expected, name)
+			}
+		})
 	}
 }
 
