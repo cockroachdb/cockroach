@@ -184,16 +184,17 @@ SELECT * FROM (SELECT * FROM generate_series(1, 2)) a FOR UPDATE
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
 
-statement ok
-GRANT GRANT on t to testuser
-
 user testuser
 
 statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
 SELECT * FROM t
 
+user root
+
 statement ok
 GRANT SELECT ON t TO testuser
+
+user testuser
 
 statement ok
 SELECT * FROM t
@@ -204,8 +205,12 @@ SELECT * FROM t FOR UPDATE
 statement error pgcode 42501 user testuser does not have UPDATE privilege on relation t
 SELECT * FROM t FOR SHARE
 
+user root
+
 statement ok
 GRANT UPDATE ON t TO testuser
+
+user testuser
 
 statement ok
 SELECT * FROM t FOR UPDATE
