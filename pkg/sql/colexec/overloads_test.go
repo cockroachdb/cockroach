@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,10 +26,10 @@ func TestIntegerAddition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The addition overload is the same for all integer widths, so we only test
 	// one of them.
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(1, math.MaxInt16) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(-1, math.MinInt16) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(math.MaxInt16, 1) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(math.MinInt16, -1) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(1, math.MaxInt16) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(-1, math.MinInt16) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(math.MaxInt16, 1) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performPlusInt16Int16(math.MinInt16, -1) }), tree.ErrIntOutOfRange))
 
 	require.Equal(t, int16(math.MaxInt16), performPlusInt16Int16(1, math.MaxInt16-1))
 	require.Equal(t, int16(math.MinInt16), performPlusInt16Int16(-1, math.MinInt16+1))
@@ -45,10 +46,10 @@ func TestIntegerSubtraction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The subtraction overload is the same for all integer widths, so we only
 	// test one of them.
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(1, -math.MaxInt16) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(-2, math.MaxInt16) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(math.MaxInt16, -1) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(math.MinInt16, 1) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(1, -math.MaxInt16) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(-2, math.MaxInt16) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(math.MaxInt16, -1) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMinusInt16Int16(math.MinInt16, 1) }), tree.ErrIntOutOfRange))
 
 	require.Equal(t, int16(math.MaxInt16), performMinusInt16Int16(1, -math.MaxInt16+1))
 	require.Equal(t, int16(math.MinInt16), performMinusInt16Int16(-1, math.MaxInt16))
@@ -77,9 +78,9 @@ func TestIntegerDivision(t *testing.T) {
 	}
 	require.Equal(t, 0, res.Cmp(d))
 
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt16Int16(10, 0) }))
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt32Int32(10, 0) }))
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt64Int64(10, 0) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivInt16Int16(10, 0) }), tree.ErrDivByZero))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivInt32Int32(10, 0) }), tree.ErrDivByZero))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivInt64Int64(10, 0) }), tree.ErrDivByZero))
 
 	res = performDivInt16Int16(math.MaxInt16, -1)
 	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt16, 0)))
@@ -91,24 +92,24 @@ func TestIntegerDivision(t *testing.T) {
 
 func TestIntegerMultiplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MaxInt16-1, 100) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MaxInt16-1, 3) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MinInt16+1, 3) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MinInt16+1, 100) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MaxInt16-1, 100) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MaxInt16-1, 3) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MinInt16+1, 3) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MinInt16+1, 100) }), tree.ErrIntOutOfRange))
 
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MaxInt32-1, 100) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MaxInt32-1, 3) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MinInt32+1, 3) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MinInt32+1, 100) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MaxInt32-1, 100) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MaxInt32-1, 3) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MinInt32+1, 3) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MinInt32+1, 100) }), tree.ErrIntOutOfRange))
 
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MaxInt64-1, 100) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MaxInt64-1, 3) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MinInt64+1, 3) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MinInt64+1, 100) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MaxInt64-1, 100) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MaxInt64-1, 3) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MinInt64+1, 3) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MinInt64+1, 100) }), tree.ErrIntOutOfRange))
 
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MinInt16, -1) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MinInt32, -1) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MinInt64, -1) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt16Int16(math.MinInt16, -1) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt32Int32(math.MinInt32, -1) }), tree.ErrIntOutOfRange))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performMultInt64Int64(math.MinInt64, -1) }), tree.ErrIntOutOfRange))
 
 	require.Equal(t, int16(-math.MaxInt16), performMultInt16Int16(math.MaxInt16, -1))
 	require.Equal(t, int32(-math.MaxInt32), performMultInt32Int32(math.MaxInt32, -1))
@@ -159,15 +160,15 @@ func TestDecimalDivByZero(t *testing.T) {
 	nonZeroDec.SetFinite(4, 0)
 	zeroDec.SetFinite(0, 0)
 
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt16(nonZeroDec, 0) }))
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt32(nonZeroDec, 0) }))
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt64(nonZeroDec, 0) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt16(nonZeroDec, 0) }), tree.ErrDivByZero))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt32(nonZeroDec, 0) }), tree.ErrDivByZero))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt64(nonZeroDec, 0) }), tree.ErrDivByZero))
 
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt64Decimal(2, zeroDec) }))
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt32Decimal(2, zeroDec) }))
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt16Decimal(2, zeroDec) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivInt64Decimal(2, zeroDec) }), tree.ErrDivByZero))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivInt32Decimal(2, zeroDec) }), tree.ErrDivByZero))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivInt16Decimal(2, zeroDec) }), tree.ErrDivByZero))
 
-	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalDecimal(nonZeroDec, zeroDec) }))
+	require.True(t, errors.Is(execerror.CatchVectorizedRuntimeError(func() { performDivDecimalDecimal(nonZeroDec, zeroDec) }), tree.ErrDivByZero))
 }
 
 func TestDecimalComparison(t *testing.T) {
