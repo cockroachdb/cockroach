@@ -1010,7 +1010,7 @@ var specs = []stmtSpec{
 	{
 		name:    "rollback_transaction",
 		stmt:    "rollback_stmt",
-		inline:  []string{"opt_to_savepoint"},
+		inline:  []string{"opt_transaction"},
 		match:   []*regexp.Regexp{regexp.MustCompile("'ROLLBACK'")},
 		replace: map[string]string{"'TRANSACTION'": "", "'TO'": "'TO' 'SAVEPOINT'", "savepoint_name": "cockroach_restart"},
 		unlink:  []string{"cockroach_restart"},
