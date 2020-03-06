@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "kv/kvserver/concurrency/lock/locking.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
@@ -349,6 +350,18 @@ message ScanRequest {
   // will set the batch_responses field in the ScanResponse instead of the rows
   // field.
   ScanFormat scan_format = 4;
+
+  // The desired key-level locking mode used during this scan. When set to None
+  // (the default), no key-level locking mode is used - meaning that the scan
+  // does not acquire any locks. When set to any other strength, a lock of that
+  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
+  // each of the keys scanned by the request, subject to any key limit applied
+  // to the batch which limits the number of keys returned.
+  //
+  // NOTE: the locks acquire with this strength are point locks on each of the
+  // keys returned by the request, not a single range lock over the entire span
+  // scanned by the request.
+  kv.kvserver.concurrency.lock.Strength key_locking = 5;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -384,6 +397,18 @@ message ReverseScanRequest {
   // will set the batch_responses field in the ScanResponse instead of the rows
   // field.
   ScanFormat scan_format = 4;
+
+  // The desired key-level locking mode used during this scan. When set to None
+  // (the default), no key-level locking mode is used - meaning that the scan
+  // does not acquire any locks. When set to any other strength, a lock of that
+  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
+  // each of the keys scanned by the request, subject to any key limit applied
+  // to the batch which limits the number of keys returned.
+  //
+  // NOTE: the locks acquire with this strength are point locks on each of the
+  // keys returned by the request, not a single range lock over the entire span
+  // scanned by the request.
+  kv.kvserver.concurrency.lock.Strength key_locking = 5;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -549,10 +574,10 @@ message EndTxnRequest {
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
   InternalCommitTrigger internal_commit_trigger = 4;
-  // Set of spans that the transaction has written intents into. These
-  // are spans which must be resolved on txn completion. Note that these
-  // spans may be condensed to cover aggregate spans if the keys written
-  // by the transaction exceeded a size threshold.
+  // Set of spans that the transaction has acquired locks within. These are
+  // spans which must be resolved on txn completion. Note that these spans
+  // may be condensed to cover aggregate spans if the keys locked by the
+  // transaction exceeded a size threshold.
   //
   // The set logically extends to include the keys of all writes in the
   // in-flight write set. However, those keys are not stored in this set
@@ -561,7 +586,7 @@ message EndTxnRequest {
   //
   // The slice is maintained in sorted order and all spans are maximally
   // merged such that no two spans here overlap each other.
-  repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
+  repeated Span lock_spans = 5 [(gogoproto.nullable) = false];
   // Set of in-flight intent writes that have been issued by the transaction but
   // which may not have succeeded yet. If any promised writes are provided, a
   // committing EndTxn request will move a PENDING transaction to the STAGING
@@ -590,7 +615,7 @@ message EndTxnRequest {
   // set, it allows the server to handle pushes and write too old conditions
   // locally.
   bool can_commit_at_higher_timestamp = 8;
-  // True to indicate that intent spans should be resolved with poison=true.
+  // True to indicate that lock spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
   // main thread of client operation, as in the case of an asynchronous abort
   // from the TxnCoordSender on a failed heartbeat. It should only be set to

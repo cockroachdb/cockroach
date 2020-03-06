@@ -2988,7 +2988,7 @@ statement ok
 CREATE TABLE fam_parent (
   k INT PRIMARY KEY,
   a INT,
-  b INT,
+  b INT NOT NULL,
   FAMILY (k, a),
   FAMILY (b)
 )
@@ -3017,7 +3017,10 @@ user testuser
 
 # Run an INSERT which needs to check existence of the row. If we try to scan
 # the entire row, this blocks on the other transaction. We should only be
-# scanning the primary column family.
+# scanning the primary column family. A critical reason why this works is
+# because column b is NOT NULL, so the UPDATE statement does not read or
+# acquire FOR UPDATE locks on the primary column family because a lookup
+# on b's column family is enough to determine whether the row exists or not.
 statement ok
 INSERT INTO fam_child VALUES (1, 1)
 

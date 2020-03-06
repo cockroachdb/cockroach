@@ -24,7 +24,7 @@
 <tr><td><code>kv.replication_reports.interval</code></td><td>duration</td><td><code>1m0s</code></td><td>the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)</td></tr>
 <tr><td><code>kv.snapshot_rebalance.max_rate</code></td><td>byte size</td><td><code>8.0 MiB</code></td><td>the rate limit (bytes/sec) to use for rebalance and upreplication snapshots</td></tr>
 <tr><td><code>kv.snapshot_recovery.max_rate</code></td><td>byte size</td><td><code>8.0 MiB</code></td><td>the rate limit (bytes/sec) to use for recovery snapshots</td></tr>
-<tr><td><code>kv.transaction.max_intents_bytes</code></td><td>integer</td><td><code>262144</code></td><td>maximum number of bytes used to track write intents in transactions</td></tr>
+<tr><td><code>kv.transaction.max_intents_bytes</code></td><td>integer</td><td><code>262144</code></td><td>maximum number of bytes used to track locks in transactions</td></tr>
 <tr><td><code>kv.transaction.max_refresh_spans_bytes</code></td><td>integer</td><td><code>256000</code></td><td>maximum number of bytes used to track refresh spans in serializable transactions</td></tr>
 <tr><td><code>server.auth_log.sql_connections.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)</td></tr>
 <tr><td><code>server.auth_log.sql_sessions.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)</td></tr>

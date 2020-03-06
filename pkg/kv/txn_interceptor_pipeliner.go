@@ -57,15 +57,19 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	128,
 )
 
-// trackedWritesMaxSize is a threshold in bytes for intent spans stored on the
-// coordinator during the lifetime of a transaction. Intents are included with a
+// trackedWritesMaxSize is a threshold in bytes for lock spans stored on the
+// coordinator during the lifetime of a transaction. Locks are included with a
 // transaction on commit or abort, to be cleaned up asynchronously. If they
 // exceed this threshold, they're condensed to avoid memory blowup both on the
 // coordinator and (critically) on the EndTxn command at the Raft group
 // responsible for the transaction record.
+//
+// NB: this is called "max_intents_bytes" instead of "max_lock_bytes" because
+// it was created before the concept of intents were generalized to locks.
+// Switching it would require a migration which doesn't seem worth it.
 var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 	"kv.transaction.max_intents_bytes",
-	"maximum number of bytes used to track write intents in transactions",
+	"maximum number of bytes used to track locks in transactions",
 	1<<18, /* 256 KB */
 )
 
@@ -117,10 +121,10 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 // It also follows that they will need to be queried during transaction
 // recovery.
 //
-// This is fantastic from the standpoint of transaction latency because it means
-// that the consensus latency for every write in a transaction, including the
-// write to the transaction record, is paid in parallel (mod pipeline stalls)
-// and an entire transaction can commit in a single consensus round-trip!
+// This is beneficial from the standpoint of latency because it means that the
+// consensus latency for every write in a transaction, including the write to
+// the transaction record, is paid in parallel (mod pipeline stalls) and an
+// entire transaction can commit in a single consensus round-trip!
 //
 // On the flip side, this means that every unproven write is considered
 // in-flight at the time of the commit and needs to be proven at the time of the
@@ -163,10 +167,19 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 //    they finish consensus without any extra RPCs.
 //
 // So far, none of these approaches have been integrated.
+//
+// The txnPipeliner also tracks the locks that a transaction has acquired in a
+// set of spans known as the "lock footprint". This lock footprint contains
+// spans encompassing all keys and key ranges where locks have been acquired at
+// some point by the transaction. This set includes the bounds of locks acquired
+// by all locking read and write requests. Additionally, it includes the bounds
+// of locks acquired by the current and all previous epochs. These spans are
+// attached to any end transaction request that is passed through the pipeliner
+// to ensure that they the locks within them are released.
 type txnPipeliner struct {
 	st *cluster.Settings
-	// Optional; used to condense intent spans, if provided. If not provided,
-	// a transaction's write footprint may grow without bound.
+	// Optional; used to condense lock spans, if provided. If not provided, a
+	// transaction's lock footprint may grow without bound.
 	riGen    RangeIteratorGen
 	wrapped  lockedSender
 	disabled bool
@@ -175,20 +188,22 @@ type txnPipeliner struct {
 	// to have succeeded. They will need to be proven before the transaction
 	// can commit.
 	ifWrites inFlightWriteSet
-	// The transaction's write footprint contains spans where intent writes have
-	// been performed at some point by the transaction. The span set contains
-	// spans encompassing all writes that have already been proven in this epoch
-	// and all writes, in-flight or not, at the end of prior epochs. All of the
-	// transaction's in-flight writes are morally in this set as well, but they
-	// are not stored here to avoid duplication.
+	// The transaction's lock footprint contains spans where locks (replicated
+	// and unreplicated) have been acquired at some point by the transaction.
+	// The span set contains spans encompassing the keys from all intent writes
+	// that have already been proven during this epoch and the keys from all
+	// locking reads that have been performed during this epoch. Additionally,
+	// the span set contains all locks held at the end of prior epochs. All of
+	// the transaction's in-flight writes are morally in this set as well, but
+	// they are not stored here to avoid duplication.
 	//
 	// Unlike the in-flight writes, this set does not need to be tracked with
 	// full precision. Instead, the tracking can be an overestimate (i.e. the
-	// spans may cover keys never written to) and should be thought of as an
+	// spans may cover keys never locked) and should be thought of as an
 	// upper-bound on the influence that the transaction has had. The set
 	// contains all keys spans that the transaction will need to eventually
 	// clean up upon its completion.
-	footprint condensableSpanSet
+	lockFootprint condensableSpanSet
 }
 
 // SendLocked implements the lockedSender interface.
@@ -196,8 +211,8 @@ func (tp *txnPipeliner) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If an EndTxn request is part of this batch, attach the in-flight writes
-	// and the write footprint to it.
-	ba, pErr := tp.attachWritesToEndTxn(ctx, ba)
+	// and the lock footprint to it.
+	ba, pErr := tp.attachLocksToEndTxn(ctx, ba)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -208,19 +223,20 @@ func (tp *txnPipeliner) SendLocked(
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr := tp.wrapped.SendLocked(ctx, ba)
 
-	// Update the in-flight write set and the write footprint with the results
-	// of the request.
-	tp.updateWriteTracking(ctx, ba, br)
+	// Update the in-flight write set and the lock footprint with the results of
+	// the request.
+	tp.updateLockTracking(ctx, ba, br)
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
 	return tp.stripQueryIntents(br), nil
 }
 
-// attachWritesToEndTxn attaches the in-flight writes and the write footprint
-// that the interceptor has been tracking to any EndTxn requests present in the
-// provided batch. It augments these sets with writes from the current batch.
-func (tp *txnPipeliner) attachWritesToEndTxn(
+// attachLocksToEndTxn attaches the in-flight writes and the lock footprint that
+// the interceptor has been tracking to any EndTxn requests present in the
+// provided batch. It augments these sets with locking requests from the current
+// batch.
+func (tp *txnPipeliner) attachLocksToEndTxn(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (roachpb.BatchRequest, *roachpb.Error) {
 	args, hasET := ba.GetArg(roachpb.EndTxn)
@@ -228,16 +244,16 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 		return ba, nil
 	}
 	et := args.(*roachpb.EndTxnRequest)
-	if len(et.IntentSpans) > 0 {
+	if len(et.LockSpans) > 0 {
 		return ba, roachpb.NewErrorf("client must not pass intents to EndTxn")
 	}
 	if len(et.InFlightWrites) > 0 {
 		return ba, roachpb.NewErrorf("client must not pass in-flight writes to EndTxn")
 	}
 
-	// Populate et.IntentSpans and et.InFlightWrites.
-	if !tp.footprint.empty() {
-		et.IntentSpans = append([]roachpb.Span(nil), tp.footprint.asSlice()...)
+	// Populate et.LockSpans and et.InFlightWrites.
+	if !tp.lockFootprint.empty() {
+		et.LockSpans = append([]roachpb.Span(nil), tp.lockFootprint.asSlice()...)
 	}
 	if inFlight := tp.ifWrites.len(); inFlight != 0 {
 		et.InFlightWrites = make([]roachpb.SequencedWrite, 0, inFlight)
@@ -246,35 +262,36 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 		})
 	}
 
-	// Augment et.IntentSpans and et.InFlightWrites with writes from
-	// the current batch.
+	// Augment et.LockSpans and et.InFlightWrites with writes from the current
+	// batch.
 	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
 		req := ru.GetInner()
 		h := req.Header()
-		if roachpb.IsIntentWrite(req) {
-			// Ranged writes are added immediately to the intent spans because
+		if roachpb.IsLocking(req) {
+			// Ranged writes are added immediately to the lock spans because
 			// it's not clear where they will actually leave intents. Point
-			// writes are added to the in-flight writes set.
+			// writes are added to the in-flight writes set. All other locking
+			// requests are also added to the lock spans.
 			//
 			// If we see any ranged writes then we know that the txnCommitter
-			// will fold the in-flight writes into the intent spans immediately
+			// will fold the in-flight writes into the lock spans immediately
 			// and forgo a parallel commit, but let's not break that abstraction
 			// boundary here.
-			if roachpb.IsRange(req) {
-				et.IntentSpans = append(et.IntentSpans, h.Span())
-			} else {
+			if roachpb.IsIntentWrite(req) && !roachpb.IsRange(req) {
 				w := roachpb.SequencedWrite{Key: h.Key, Sequence: h.Sequence}
 				et.InFlightWrites = append(et.InFlightWrites, w)
+			} else {
+				et.LockSpans = append(et.LockSpans, h.Span())
 			}
 		}
 	}
 
-	// Sort both sets and condense the intent spans.
-	et.IntentSpans, _ = roachpb.MergeSpans(et.IntentSpans)
+	// Sort both sets and condense the lock spans.
+	et.LockSpans, _ = roachpb.MergeSpans(et.LockSpans)
 	sort.Sort(roachpb.SequencedWriteBySeq(et.InFlightWrites))
 
 	if log.V(3) {
-		for _, intent := range et.IntentSpans {
+		for _, intent := range et.LockSpans {
 			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 		}
 		for _, write := range et.InFlightWrites {
@@ -290,7 +307,7 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 // touches any of the in-flight writes. In effect, this allows us to prove that
 // a write succeeded before depending on its existence. We later prune down the
 // list of writes we proved to exist that are no longer "in-flight" in
-// updateWriteTracking.
+// updateLockTracking.
 func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
 
@@ -421,32 +438,32 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	return ba
 }
 
-// updateWriteTracking reads the response for the given request and uses it to
-// update the tracked in-flight write set and write footprint. It does so by
-// performing three actions: 1. it adds all async writes that the request
-// performed to the in-flight
-//    write set.
-// 2. it adds all non-async writes that the request performed to the write
-//    footprint.
-// 3. it moves all in-flight writes that the request proved to exist from
-//    the in-flight writes set to the write footprint.
+// updateLockTracking reads the response for the given request and uses it to
+// update the tracked in-flight write set and lock footprint. It does so by
+// performing three actions:
+//  1. it adds all async writes that the request performed to the in-flight
+//     write set.
+//  2. it adds all non-async writes and locking reads that the request
+//     performed to the lock footprint.
+//  3. it moves all in-flight writes that the request proved to exist from
+//     the in-flight writes set to the lock footprint.
 //
-// After updating the write sets, the write footprint is condensed to ensure
-// that it remains under its memory limit.
+// After updating the write sets, the lock footprint is condensed to ensure that
+// it remains under its memory limit.
 //
 // If no response is provided (indicating an error), all writes from the batch
-// are added directly to the write footprint to avoid leaking any intents when
-// the transaction cleans up.
-func (tp *txnPipeliner) updateWriteTracking(
+// are added directly to the lock footprint to avoid leaking any locks when the
+// transaction cleans up.
+func (tp *txnPipeliner) updateLockTracking(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) {
-	// After adding new writes to the write footprint, check whether we need to
+	// After adding new writes to the lock footprint, check whether we need to
 	// condense the set to stay below memory limits.
-	defer tp.footprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
+	defer tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
 
-	// If the request failed, add all intent writes directly to the write
-	// footprint. This reduces the likelihood of dangling intents blocking
-	// concurrent writers for extended periods of time. See #3346.
+	// If the request failed, add all lock acquisitions attempts directly to the
+	// lock footprint. This reduces the likelihood of dangling locks blocking
+	// concurrent requests for extended periods of time. See #3346.
 	if br == nil {
 		// The transaction cannot continue in this epoch whether this is
 		// a retryable error or not.
@@ -490,33 +507,31 @@ func (tp *txnPipeliner) updateWriteTracking(
 			// case here because it happens a lot in tests.
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
-				// Move to write footprint.
-				tp.footprint.insert(roachpb.Span{Key: qiReq.Key})
+				// Move to lock footprint.
+				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
 			}
-		} else if roachpb.IsIntentWrite(req) {
-			// If the request was a transactional write, track its intents.
+		} else if roachpb.IsLocking(req) {
+			// If the request intended to acquire locks, track its lock spans.
 			if ba.AsyncConsensus {
 				// Record any writes that were performed asynchronously. We'll
 				// need to prove that these succeeded sometime before we commit.
 				header := req.Header()
 				tp.ifWrites.insert(header.Key, header.Sequence)
 			} else {
-				// If the writes weren't performed asynchronously then add them
-				// directly to our write footprint.
+				// If the lock acquisitions weren't performed asynchronously
+				// then add them directly to our lock footprint. Locking read
+				// requests will always hit this path because they will never
+				// use async consensus.
 				if sp, ok := roachpb.ActualSpan(req, resp); ok {
-					tp.footprint.insert(sp)
+					tp.lockFootprint.insert(sp)
 				}
 			}
 		}
 	}
 }
 
-func (tp *txnPipeliner) trackLocks(s roachpb.Span, dur lock.Durability) {
-	// TODO(nvanbenschoten): handle unreplicated locks.
-	if dur != lock.Replicated {
-		panic("unexpected lock durability")
-	}
-	tp.footprint.insert(s)
+func (tp *txnPipeliner) trackLocks(s roachpb.Span, _ lock.Durability) {
+	tp.lockFootprint.insert(s)
 }
 
 // stripQueryIntents adjusts the BatchResponse to hide the fact that this
@@ -593,14 +608,14 @@ func (tp *txnPipeliner) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
-	// Move all in-flight writes into the write footprint. These writes no
-	// longer need to be tracked precisely, but we don't want to forget about
-	// them and fail to clean them up.
+	// Move all in-flight writes into the lock footprint. These writes no longer
+	// need to be tracked precisely, but we don't want to forget about them and
+	// fail to clean them up.
 	if tp.ifWrites.len() > 0 {
 		tp.ifWrites.ascend(func(w *inFlightWrite) {
-			tp.footprint.insert(roachpb.Span{Key: w.Key})
+			tp.lockFootprint.insert(roachpb.Span{Key: w.Key})
 		})
-		tp.footprint.mergeAndSort()
+		tp.lockFootprint.mergeAndSort()
 		tp.ifWrites.clear(true /* reuse */)
 	}
 }
@@ -611,20 +626,20 @@ func (tp *txnPipeliner) createSavepointLocked(context.Context, *savepoint) {}
 // rollbackToSavepointLocked is part of the txnReqInterceptor interface.
 func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
 	// Move all the writes in txnPipeliner that are not in the savepoint to the
-	// write footprint. We no longer care if these write succeed or fail, so we're
+	// lock footprint. We no longer care if these write succeed or fail, so we're
 	// going to stop tracking these as in-flight writes. The respective intents
 	// still need to be cleaned up at the end of the transaction.
 	var writesToDelete []*inFlightWrite
 	needCollecting := !s.Initial()
 	tp.ifWrites.ascend(func(w *inFlightWrite) {
 		if w.Sequence > s.seqNum {
-			tp.footprint.insert(roachpb.Span{Key: w.Key})
+			tp.lockFootprint.insert(roachpb.Span{Key: w.Key})
 			if needCollecting {
 				writesToDelete = append(writesToDelete, w)
 			}
 		}
 	})
-	tp.footprint.mergeAndSort()
+	tp.lockFootprint.mergeAndSort()
 
 	// Restore the inflight writes from the savepoint (minus the ones that have
 	// been verified in the meantime) by removing all the extra ones.
@@ -640,10 +655,10 @@ func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoi
 // closeLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {}
 
-// haveWrites returns whether the interceptor has observed any writes,
-// including currently in-flight ones.
-func (tp *txnPipeliner) haveWrites() bool {
-	return tp.ifWrites.len() > 0 || !tp.footprint.empty()
+// hasAcquiredLocks returns whether the interceptor has made an attempt to
+// acquire any locks, whether doing so was known to be successful or not.
+func (tp *txnPipeliner) hasAcquiredLocks() bool {
+	return tp.ifWrites.len() > 0 || !tp.lockFootprint.empty()
 }
 
 // inFlightWrites represent a commitment to proving (via QueryIntent) that
@@ -928,7 +943,7 @@ func (s *condensableSpanSet) maybeCondense(
 		ri.Seek(ctx, roachpb.RKey(sp.Key), Ascending)
 		if !ri.Valid() {
 			// We haven't modified s.s yet, so it is safe to return.
-			log.VEventf(ctx, 2, "failed to condense intent spans: %v", ri.Error())
+			log.VEventf(ctx, 2, "failed to condense lock spans: %v", ri.Error())
 			return
 		}
 		rangeID := ri.Desc().RangeID
@@ -963,8 +978,8 @@ func (s *condensableSpanSet) maybeCondense(
 			if !cs.Valid() {
 				// If we didn't fatal here then we would need to ensure that the
 				// spans were restored or a transaction could lose part of its
-				// write footprint.
-				log.Fatalf(ctx, "failed to condense intent spans: "+
+				// lock footprint.
+				log.Fatalf(ctx, "failed to condense lock spans: "+
 					"combining span %s yielded invalid result", s)
 			}
 		}

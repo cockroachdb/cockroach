@@ -180,10 +180,6 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 var maxInsertBatchSize = 10000
 
 func (n *insertNode) startExec(params runParams) error {
-	if err := params.p.maybeSetSystemConfig(n.run.ti.tableDesc().GetID()); err != nil {
-		return err
-	}
-
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 

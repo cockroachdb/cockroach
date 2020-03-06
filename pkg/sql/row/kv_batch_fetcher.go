@@ -13,8 +13,10 @@ package row
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -134,6 +136,34 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	}
 }
 
+// getKeyLockingStrength returns the configured per-key locking strength to use
+// for key-value scans.
+func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
+	switch f.lockStr {
+	case sqlbase.ScanLockingStrength_FOR_NONE:
+		return lock.None
+
+	case sqlbase.ScanLockingStrength_FOR_KEY_SHARE:
+		// Promote to FOR_SHARE.
+		fallthrough
+	case sqlbase.ScanLockingStrength_FOR_SHARE:
+		// We currently perform no per-key locking when FOR_SHARE is used
+		// because Shared locks have not yet been implemented.
+		return lock.None
+
+	case sqlbase.ScanLockingStrength_FOR_NO_KEY_UPDATE:
+		// Promote to FOR_UPDATE.
+		fallthrough
+	case sqlbase.ScanLockingStrength_FOR_UPDATE:
+		// We currently perform exclusive per-key locking when FOR_UPDATE is
+		// used because Upgrade locks have not yet been implemented.
+		return lock.Exclusive
+
+	default:
+		panic(fmt.Sprintf("unknown locking strength %s", f.lockStr))
+	}
+}
+
 // makeKVBatchFetcher initializes a kvBatchFetcher for the given spans.
 //
 // If useBatchLimit is true, batches are limited to kvBatchSize. If
@@ -243,20 +273,21 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 	ba.Header.ReturnRangeInfo = f.returnRangeInfo
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
+	keyLocking := f.getKeyLockingStrength()
 	if f.reverse {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
-			// TODO(nvanbenschoten): use f.lockStr here.
+			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
+			scans[i].KeyLocking = keyLocking
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
 		for i := range f.spans {
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
-			// TODO(nvanbenschoten): use f.lockStr here.
+			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
+			scans[i].KeyLocking = keyLocking
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}

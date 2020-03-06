@@ -30,8 +30,8 @@
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
-#include "roachpb/metadata.pb.h"
 #include "kv/kvserver/concurrency/lock/locking.pb.h"
+#include "roachpb/metadata.pb.h"
 #include "storage/enginepb/mvcc.pb.h"
 #include "storage/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
@@ -1690,16 +1690,16 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >&
       observed_timestamps() const;
 
-  int intent_spans_size() const;
-  void clear_intent_spans();
-  static const int kIntentSpansFieldNumber = 11;
-  ::cockroach::roachpb::Span* mutable_intent_spans(int index);
+  int lock_spans_size() const;
+  void clear_lock_spans();
+  static const int kLockSpansFieldNumber = 11;
+  ::cockroach::roachpb::Span* mutable_lock_spans(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_intent_spans();
-  const ::cockroach::roachpb::Span& intent_spans(int index) const;
-  ::cockroach::roachpb::Span* add_intent_spans();
+      mutable_lock_spans();
+  const ::cockroach::roachpb::Span& lock_spans(int index) const;
+  ::cockroach::roachpb::Span* add_lock_spans();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intent_spans() const;
+      lock_spans() const;
 
   int in_flight_writes_size() const;
   void clear_in_flight_writes();
@@ -1815,7 +1815,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp > observed_timestamps_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > lock_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::google::protobuf::internal::ArenaStringPtr name_;
@@ -1917,16 +1917,16 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   // accessors -------------------------------------------------------
 
-  int intent_spans_size() const;
-  void clear_intent_spans();
-  static const int kIntentSpansFieldNumber = 11;
-  ::cockroach::roachpb::Span* mutable_intent_spans(int index);
+  int lock_spans_size() const;
+  void clear_lock_spans();
+  static const int kLockSpansFieldNumber = 11;
+  ::cockroach::roachpb::Span* mutable_lock_spans(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_intent_spans();
-  const ::cockroach::roachpb::Span& intent_spans(int index) const;
-  ::cockroach::roachpb::Span* add_intent_spans();
+      mutable_lock_spans();
+  const ::cockroach::roachpb::Span& lock_spans(int index) const;
+  ::cockroach::roachpb::Span* add_lock_spans();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intent_spans() const;
+      lock_spans() const;
 
   int in_flight_writes_size() const;
   void clear_in_flight_writes();
@@ -1982,7 +1982,7 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > lock_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::cockroach::storage::enginepb::TxnMeta* meta_;
@@ -4768,33 +4768,33 @@ inline void Transaction::set_write_too_old(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.write_too_old)
 }
 
-inline int Transaction::intent_spans_size() const {
-  return intent_spans_.size();
+inline int Transaction::lock_spans_size() const {
+  return lock_spans_.size();
 }
-inline void Transaction::clear_intent_spans() {
-  intent_spans_.Clear();
+inline void Transaction::clear_lock_spans() {
+  lock_spans_.Clear();
 }
-inline ::cockroach::roachpb::Span* Transaction::mutable_intent_spans(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.intent_spans)
-  return intent_spans_.Mutable(index);
+inline ::cockroach::roachpb::Span* Transaction::mutable_lock_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.lock_spans)
+  return lock_spans_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-Transaction::mutable_intent_spans() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.intent_spans)
-  return &intent_spans_;
+Transaction::mutable_lock_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.lock_spans)
+  return &lock_spans_;
 }
-inline const ::cockroach::roachpb::Span& Transaction::intent_spans(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.intent_spans)
-  return intent_spans_.Get(index);
+inline const ::cockroach::roachpb::Span& Transaction::lock_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.lock_spans)
+  return lock_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Span* Transaction::add_intent_spans() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.intent_spans)
-  return intent_spans_.Add();
+inline ::cockroach::roachpb::Span* Transaction::add_lock_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.lock_spans)
+  return lock_spans_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-Transaction::intent_spans() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.intent_spans)
-  return intent_spans_;
+Transaction::lock_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.lock_spans)
+  return lock_spans_;
 }
 
 inline int Transaction::in_flight_writes_size() const {
@@ -4964,33 +4964,33 @@ inline void TransactionRecord::set_allocated_last_heartbeat(::cockroach::util::h
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionRecord.last_heartbeat)
 }
 
-inline int TransactionRecord::intent_spans_size() const {
-  return intent_spans_.size();
+inline int TransactionRecord::lock_spans_size() const {
+  return lock_spans_.size();
 }
-inline void TransactionRecord::clear_intent_spans() {
-  intent_spans_.Clear();
+inline void TransactionRecord::clear_lock_spans() {
+  lock_spans_.Clear();
 }
-inline ::cockroach::roachpb::Span* TransactionRecord::mutable_intent_spans(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.intent_spans)
-  return intent_spans_.Mutable(index);
+inline ::cockroach::roachpb::Span* TransactionRecord::mutable_lock_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.lock_spans)
+  return lock_spans_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-TransactionRecord::mutable_intent_spans() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionRecord.intent_spans)
-  return &intent_spans_;
+TransactionRecord::mutable_lock_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionRecord.lock_spans)
+  return &lock_spans_;
 }
-inline const ::cockroach::roachpb::Span& TransactionRecord::intent_spans(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.intent_spans)
-  return intent_spans_.Get(index);
+inline const ::cockroach::roachpb::Span& TransactionRecord::lock_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.lock_spans)
+  return lock_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Span* TransactionRecord::add_intent_spans() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionRecord.intent_spans)
-  return intent_spans_.Add();
+inline ::cockroach::roachpb::Span* TransactionRecord::add_lock_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionRecord.lock_spans)
+  return lock_spans_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-TransactionRecord::intent_spans() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionRecord.intent_spans)
-  return intent_spans_;
+TransactionRecord::lock_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionRecord.lock_spans)
+  return lock_spans_;
 }
 
 inline int TransactionRecord::in_flight_writes_size() const {
