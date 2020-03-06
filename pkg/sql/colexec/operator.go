@@ -57,6 +57,25 @@ const (
 	OperatorInitialized
 )
 
+// externalOperatorUsageMode indicates the usage mode of an external operator. It
+// will decide whether to close any disk-related resources when the operator is
+// entering into "finished" state.
+type externalOperatorUsageMode int
+
+const (
+	// externalOperatorUsageModeDefault is the usage mode in which the external
+	// operator will close all disk-related resources when it enters into
+	// "finished" state. Note that an operator with such usage mode is *not *safe
+	// for reuse after being reset.
+	externalOperatorUsageModeDefault externalOperatorUsageMode = iota
+	// externalOperatorUsageModeReusable is the usage mode in which the external
+	// operator will *not* close all disk-related resources when it enters into
+	// "finished" state. Note that an operator with such usage mode is safe for
+	// reuse after being reset. The actual release of the resources will occur
+	// upon the call to Close() method.
+	externalOperatorUsageModeReusable
+)
+
 // NonExplainable is a marker interface which identifies an Operator that
 // should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
 // explain option will override the omitting behavior.

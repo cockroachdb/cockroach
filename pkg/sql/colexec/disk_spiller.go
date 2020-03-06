@@ -167,8 +167,10 @@ func newTwoInputDiskSpiller(
 	return &diskSpillerBase{
 		inputs:                 []Operator{inputOne, inputTwo},
 		inMemoryOp:             inMemoryOp,
+		inMemoryOpInitStatus:   OperatorNotInitialized,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo),
+		distBackedOpInitStatus: OperatorNotInitialized,
 		spillingCallbackFn:     spillingCallbackFn,
 	}
 }
@@ -178,27 +180,30 @@ func newTwoInputDiskSpiller(
 type diskSpillerBase struct {
 	NonExplainable
 
-	inputs      []Operator
-	initialized bool
-	spilled     bool
+	inputs  []Operator
+	spilled bool
 
 	inMemoryOp             bufferingInMemoryOperator
+	inMemoryOpInitStatus   OperatorInitStatus
 	inMemoryMemMonitorName string
 	diskBackedOp           Operator
+	distBackedOpInitStatus OperatorInitStatus
 	spillingCallbackFn     func()
 }
 
+var _ resettableOperator = &diskSpillerBase{}
+
 func (d *diskSpillerBase) Init() {
-	if d.initialized {
+	if d.inMemoryOpInitStatus == OperatorInitialized {
 		return
 	}
-	d.initialized = true
 	// It is possible that Init() call below will hit an out of memory error,
 	// but we decide to bail on this query, so we do not catch internal panics.
 	//
 	// Also note that d.input is the input to d.inMemoryOp, so calling Init()
 	// only on the latter is sufficient.
 	d.inMemoryOp.Init()
+	d.inMemoryOpInitStatus = OperatorInitialized
 }
 
 func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
@@ -218,13 +223,33 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 				d.spillingCallbackFn()
 			}
 			d.diskBackedOp.Init()
-			return d.Next(ctx)
+			d.distBackedOpInitStatus = OperatorInitialized
+			return d.diskBackedOp.Next(ctx)
 		}
 		// Either not an out of memory error or an OOM error coming from a
 		// different operator, so we propagate it further.
 		execerror.VectorizedInternalPanic(err)
 	}
 	return batch
+}
+
+func (d *diskSpillerBase) reset() {
+	for _, input := range d.inputs {
+		if r, ok := input.(resetter); ok {
+			r.reset()
+		}
+	}
+	if d.inMemoryOpInitStatus == OperatorInitialized {
+		if r, ok := d.inMemoryOp.(resetter); ok {
+			r.reset()
+		}
+	}
+	if d.distBackedOpInitStatus == OperatorInitialized {
+		if r, ok := d.diskBackedOp.(resetter); ok {
+			r.reset()
+		}
+	}
+	d.spilled = false
 }
 
 func (d *diskSpillerBase) Close() error {
@@ -282,7 +307,7 @@ type bufferExportingOperator struct {
 	firstSourceDone bool
 }
 
-var _ Operator = &bufferExportingOperator{}
+var _ resettableOperator = &bufferExportingOperator{}
 
 func newBufferExportingOperator(
 	firstSource bufferingInMemoryOperator, secondSource Operator,
@@ -305,7 +330,17 @@ func (b *bufferExportingOperator) Next(ctx context.Context) coldata.Batch {
 	batch := b.firstSource.ExportBuffered(b.secondSource)
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
-		return b.Next(ctx)
+		return b.secondSource.Next(ctx)
 	}
 	return batch
+}
+
+func (b *bufferExportingOperator) reset() {
+	if r, ok := b.firstSource.(resetter); ok {
+		r.reset()
+	}
+	if r, ok := b.secondSource.(resetter); ok {
+		r.reset()
+	}
+	b.firstSourceDone = false
 }

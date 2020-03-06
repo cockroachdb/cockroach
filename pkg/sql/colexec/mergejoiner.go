@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"io"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -96,9 +97,15 @@ type mjBuilderCrossProductState struct {
 type mjBufferedGroup struct {
 	*spillingQueue
 	// firstTuple stores a single tuple that was first in the buffered group.
-	firstTuple  []coldata.Vec
-	numTuples   int
-	needToReset bool
+	firstTuple []coldata.Vec
+	numTuples  int
+}
+
+func (bg *mjBufferedGroup) reset() {
+	if bg.spillingQueue != nil {
+		bg.spillingQueue.reset()
+	}
+	bg.numTuples = 0
 }
 
 // mjProberState contains all the state required to execute in the probing
@@ -115,8 +122,10 @@ type mjProberState struct {
 	// Local buffer for the last left and right groups which is used when the
 	// group ends with a batch and the group on each side needs to be saved to
 	// state in order to be able to continue it in the next batch.
-	lBufferedGroup mjBufferedGroup
-	rBufferedGroup mjBufferedGroup
+	lBufferedGroup            mjBufferedGroup
+	rBufferedGroup            mjBufferedGroup
+	lBufferedGroupNeedToReset bool
+	rBufferedGroupNeedToReset bool
 }
 
 // mjState represents the state of the merge joiner.
@@ -199,12 +208,13 @@ type mergeJoinInput struct {
 // expanding the groups (leftGroups and rightGroups) when a group spans
 // multiple batches.
 
-// NewMergeJoinOp returns a new merge join operator with the given spec that
+// newMergeJoinOp returns a new merge join operator with the given spec that
 // implements sort-merge join. It performs a merge on the left and right input
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
-func NewMergeJoinOp(
+func newMergeJoinOp(
 	unlimitedAllocator *Allocator,
+	usageMode externalOperatorUsageMode,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
@@ -215,7 +225,7 @@ func NewMergeJoinOp(
 	rightTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
-) (Operator, error) {
+) (resettableOperator, error) {
 	// TODO(yuzefovich): get rid off "outCols" entirely and plumb the assumption
 	// of outputting all columns into the merge joiner itself.
 	leftOutCols := make([]uint32, len(leftTypes))
@@ -230,7 +240,7 @@ func NewMergeJoinOp(
 		rightOutCols = rightOutCols[:0]
 	}
 	base, err := newMergeJoinBase(
-		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore,
+		unlimitedAllocator, usageMode, memoryLimit, diskQueueCfg, fdSemaphore,
 		left, right, leftOutCols, rightOutCols,
 		leftTypes, rightTypes, leftOrdering, rightOrdering,
 	)
@@ -283,6 +293,7 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 
 func newMergeJoinBase(
 	unlimitedAllocator *Allocator,
+	usageMode externalOperatorUsageMode,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
@@ -312,6 +323,7 @@ func newMergeJoinBase(
 	base := mergeJoinBase{
 		twoInputNode:       newTwoInputNode(left, right),
 		unlimitedAllocator: unlimitedAllocator,
+		usageMode:          usageMode,
 		memoryLimit:        memoryLimit,
 		diskQueueCfg:       diskQueueCfg,
 		fdSemaphore:        fdSemaphore,
@@ -351,6 +363,7 @@ func newMergeJoinBase(
 type mergeJoinBase struct {
 	twoInputNode
 
+	usageMode          externalOperatorUsageMode
 	unlimitedAllocator *Allocator
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
@@ -385,6 +398,24 @@ type mergeJoinBase struct {
 		//lBufferedGroupBatch coldata.Batch
 		//rBufferedGroupBatch coldata.Batch
 	}
+}
+
+var _ resetter = &mergeJoinBase{}
+
+func (o *mergeJoinBase) reset() {
+	if r, ok := o.left.source.(resetter); ok {
+		r.reset()
+	}
+	if r, ok := o.right.source.(resetter); ok {
+		r.reset()
+	}
+	o.outputReady = false
+	o.state = mjEntry
+	o.proberState.lBatch = nil
+	o.proberState.rBatch = nil
+	o.proberState.lBufferedGroup.reset()
+	o.proberState.rBufferedGroup.reset()
+	o.resetBuilderCrossProductState()
 }
 
 func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
@@ -554,19 +585,13 @@ func (o *mergeJoinBase) initProberState(ctx context.Context) {
 		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next(ctx)
 		o.proberState.rLength = o.proberState.rBatch.Length()
 	}
-	if o.proberState.lBufferedGroup.needToReset {
-		if o.proberState.lBufferedGroup.spillingQueue != nil {
-			o.proberState.lBufferedGroup.reset()
-		}
-		o.proberState.lBufferedGroup.numTuples = 0
-		o.proberState.lBufferedGroup.needToReset = false
+	if o.proberState.lBufferedGroupNeedToReset {
+		o.proberState.lBufferedGroup.reset()
+		o.proberState.lBufferedGroupNeedToReset = false
 	}
-	if o.proberState.rBufferedGroup.needToReset {
-		if o.proberState.rBufferedGroup.spillingQueue != nil {
-			o.proberState.rBufferedGroup.reset()
-		}
-		o.proberState.rBufferedGroup.numTuples = 0
-		o.proberState.rBufferedGroup.needToReset = false
+	if o.proberState.rBufferedGroupNeedToReset {
+		o.proberState.rBufferedGroup.reset()
+		o.proberState.rBufferedGroupNeedToReset = false
 	}
 }
 
@@ -673,4 +698,29 @@ func (o *mergeJoinBase) finishProbe(ctx context.Context) {
 		o.proberState.rBatch,
 		o.proberState.rIdx,
 	)
+}
+
+func (o *mergeJoinBase) Close() error {
+	var retErr error
+	if c, ok := o.left.source.(io.Closer); ok {
+		retErr = c.Close()
+	}
+	if c, ok := o.right.source.(io.Closer); ok {
+		if err := c.Close(); err != nil && retErr == nil {
+			retErr = err
+		}
+	}
+	if o.proberState.lBufferedGroup.spillingQueue != nil {
+		if err := o.proberState.lBufferedGroup.close(); err != nil && retErr == nil {
+			retErr = err
+		}
+		o.proberState.lBufferedGroup.spillingQueue = nil
+	}
+	if o.proberState.rBufferedGroup.spillingQueue != nil {
+		if err := o.proberState.rBufferedGroup.close(); err != nil && retErr == nil {
+			retErr = err
+		}
+		o.proberState.rBufferedGroup.spillingQueue = nil
+	}
+	return retErr
 }

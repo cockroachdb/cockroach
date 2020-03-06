@@ -282,6 +282,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args NewColOperatorArgs,
+	usageMode externalOperatorUsageMode,
 	input Operator,
 	inputTypes []coltypes.T,
 	ordering execinfrapb.Ordering,
@@ -384,6 +385,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 			return newExternalSorter(
 				ctx,
 				unlimitedAllocator,
+				usageMode,
 				standaloneMemAccount,
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
@@ -778,6 +780,13 @@ func NewColOperator(
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							diskQueueCfg,
 							args.FDSemaphore,
+							func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
+								return result.createDiskBackedSort(
+									ctx, flowCtx, args, externalOperatorUsageModeReusable, input, inputTypes,
+									execinfrapb.Ordering{Columns: orderingCols},
+									0 /* matchLen */, spec.ProcessorID,
+									&execinfrapb.PostProcessSpec{}, monitorNamePrefix)
+							},
 							args.TestingKnobs.NumForcedRepartitions,
 						)
 					},
@@ -836,8 +845,9 @@ func NewColOperator(
 				ctx, result.createBufferingUnlimitedMemAccount(
 					ctx, flowCtx, "merge-joiner",
 				))
-			result.Op, err = NewMergeJoinOp(
-				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg, args.FDSemaphore,
+			result.Op, err = newMergeJoinOp(
+				unlimitedAllocator, externalOperatorUsageModeDefault, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0], inputs[1], leftPhysTypes, rightPhysTypes,
 				core.MergeJoiner.LeftOrdering.Columns, core.MergeJoiner.RightOrdering.Columns,
 			)
@@ -870,7 +880,7 @@ func NewColOperator(
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
 			result.Op, err = result.createDiskBackedSort(
-				ctx, flowCtx, args, input, inputTypes, ordering, matchLen,
+				ctx, flowCtx, args, externalOperatorUsageModeDefault, input, inputTypes, ordering, matchLen,
 				spec.ProcessorID, post, "", /* memMonitorNamePrefix */
 			)
 			result.ColumnTypes = spec.Input[0].ColumnTypes
@@ -908,7 +918,7 @@ func NewColOperator(
 						core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
 						func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
 							return result.createDiskBackedSort(
-								ctx, flowCtx, args, input, inputTypes,
+								ctx, flowCtx, args, externalOperatorUsageModeDefault, input, inputTypes,
 								execinfrapb.Ordering{Columns: orderingCols},
 								0 /* matchLen */, spec.ProcessorID,
 								&execinfrapb.PostProcessSpec{}, memMonitorsPrefix)
@@ -920,8 +930,9 @@ func NewColOperator(
 				} else {
 					if len(wf.Ordering.Columns) > 0 {
 						input, err = result.createDiskBackedSort(
-							ctx, flowCtx, args, input, typs, wf.Ordering, 0, /* matchLen */
-							spec.ProcessorID, &execinfrapb.PostProcessSpec{}, memMonitorsPrefix,
+							ctx, flowCtx, args, externalOperatorUsageModeDefault, input, typs,
+							wf.Ordering, 0 /* matchLen */, spec.ProcessorID,
+							&execinfrapb.PostProcessSpec{}, memMonitorsPrefix,
 						)
 					}
 				}
