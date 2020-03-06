@@ -2035,11 +2035,11 @@ func TestImportIntoCSV(t *testing.T) {
 			e INT8,
 			f STRING)`
 
-		data = "1,5,e,7,12,teststr"
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 
+			data = "1"
 			sqlDB.Exec(t, `IMPORT INTO t (a) CSV DATA ($1)`, srv.URL)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
 				sqlDB.QueryStr(t, `SELECT 1, NULL, NULL, NULL, NULL, 'NULL'`),
@@ -2049,6 +2049,7 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 
+			data = "1,teststr"
 			sqlDB.Exec(t, `IMPORT INTO t (a, f) CSV DATA ($1)`, srv.URL)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
 				sqlDB.QueryStr(t, `SELECT 1, NULL, NULL, NULL, NULL, 'teststr'`),
@@ -2057,6 +2058,8 @@ func TestImportIntoCSV(t *testing.T) {
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
+
+			data = "7,12,teststr"
 			sqlDB.Exec(t, `IMPORT INTO t (d, e, f) CSV DATA ($1)`, srv.URL)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
 				sqlDB.QueryStr(t, `SELECT NULL, NULL, NULL, 7, 12, 'teststr'`),
@@ -2076,22 +2079,44 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i+1000, v)
 		}
 
-		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t (a) CSV DATA (%s)", testFiles.files[0]))
+		data := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(strings.Join(data, "\n")))
+			}
+		}))
+		defer srv.Close()
+
+		sqlDB.Exec(t, "IMPORT INTO t (a) CSV DATA ($1)", srv.URL)
 
 		var result int
 		numExistingRows := len(insert)
 		// Verify that the target column has been populated.
 		sqlDB.QueryRow(t, `SELECT count(*) FROM t WHERE a IS NOT NULL`).Scan(&result)
-		if expect := numExistingRows + rowsPerFile; result != expect {
+		if expect := numExistingRows + len(data); result != expect {
 			t.Fatalf("expected %d rows, got %d", expect, result)
 		}
 
 		// Verify that the non-target columns have NULLs.
 		sqlDB.QueryRow(t, `SELECT count(*) FROM t WHERE b IS NULL`).Scan(&result)
-		expectedNulls := rowsPerFile
+		expectedNulls := len(data)
 		if result != expectedNulls {
 			t.Fatalf("expected %d rows, got %d", expectedNulls, result)
 		}
+	})
+
+	// Tests IMPORT INTO with a CSV file having more columns when targeted, expected to
+	// get an error indicating the error.
+	t.Run("csv-with-more-than-targeted-columns", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+
+		// Expect an error if attempting to IMPORT INTO with CSV having more columns
+		// than targeted.
+		sqlDB.ExpectErr(
+			t, `row 1: expected 1 fields, got 2`,
+			fmt.Sprintf("IMPORT INTO t (a) CSV DATA (%s)", testFiles.files[0]),
+		)
 	})
 
 	// Tests IMPORT INTO with a target column set which does not include all PKs.
@@ -2125,6 +2150,27 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.ExpectErr(
 			t, "row 1: expected 3 fields, got 2",
 			fmt.Sprintf(`IMPORT INTO t (a, b, c) CSV DATA (%s)`, testFiles.files[0]),
+		)
+	})
+
+	// Tests the case where we create table columns in specific order while trying
+	// to import data from csv where columns order is different and import expression
+	// defines in what order columns should be imported to align with table definition
+	t.Run("target-cols-reordered", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE TABLE t (a INT PRIMARY KEY, b INT, c STRING NOT NULL, d DECIMAL NOT NULL)")
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+
+		const data = "3.14,c is a string,1\n2.73,another string,2"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (d, c, a) CSV DATA ("%s")`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t ORDER BY a`,
+			[][]string{{"1", "NULL", "c is a string", "3.14"}, {"2", "NULL", "another string", "2.73"}},
 		)
 	})
 
