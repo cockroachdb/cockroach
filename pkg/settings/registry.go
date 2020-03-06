@@ -59,6 +59,9 @@ var retiredSettings = map[string]struct{}{
 	"changefeed.push.enabled":                              {},
 	"sql.defaults.optimizer":                               {},
 	"kv.bulk_io_write.addsstable_max_rate":                 {},
+	// removed as of 20.1.
+	"schemachanger.lease.duration":       {},
+	"schemachanger.lease.renew_fraction": {},
 }
 
 // register adds a setting to the registry.
