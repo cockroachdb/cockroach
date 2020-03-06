@@ -10,12 +10,14 @@
 
 font-face('SourceSansPro-Bold')
 font-face('SourceSansPro-Regular')
-font-face('SFMono')
+font-face('SFMono-Semibold')
+font-face('SFMono-Regular')
+font-face('RobotoMono-Medium')
 
 $font-family--base = SourceSansPro-Regular
 $font-family--bold = SourceSansPro-Bold
 $font-family--semi-bold = SourceSansPro-SemiBold
-$font-family--monospace = SFMono
+$font-family--monospace = SFMono-Regular, RobotoMono-Medium
 
 $font-weight--extra-bold = 900
 $font-weight--bold = 600
@@ -96,3 +98,9 @@ $text--body-strong
   font-size $font-size--medium
   line-height $line-height--medium
   font-weight $font-weight--bold
+
+$text--code
+  font-family $font-family--monospace
+  font-size $font-size--medium
+  line-height $line-height--medium
+  font-weight $font-weight--medium
