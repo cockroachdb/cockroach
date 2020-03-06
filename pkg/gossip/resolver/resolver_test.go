@@ -11,9 +11,12 @@
 package resolver
 
 import (
+	"errors"
+	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseResolverAddress(t *testing.T) {
@@ -80,5 +83,67 @@ func TestGetAddress(t *testing.T) {
 		if address.String() != tc.addressValue {
 			t.Errorf("#%d: expected address value=%s, got %+v", tcNum, tc.addressValue, address)
 		}
+	}
+}
+
+func TestSRV(t *testing.T) {
+	type lookupFunc func(service, proto, name string) (string, []*net.SRV, error)
+
+	lookupWithErr := func(err error) lookupFunc {
+		return func(service, proto, name string) (string, []*net.SRV, error) {
+			if service != "" || proto != "" {
+				t.Errorf("unexpected params in erroring LookupSRV() call")
+			}
+			return "", nil, err
+		}
+	}
+
+	dnsErr := &net.DNSError{Err: "no such host", Name: "", Server: "", IsTimeout: false}
+
+	lookupSuccess := func(service, proto, name string) (string, []*net.SRV, error) {
+		if service != "" || proto != "" {
+			t.Errorf("unexpected params in successful LookupSRV() call")
+		}
+
+		srvs := []*net.SRV{
+			{Target: "node1", Port: 26222},
+			{Target: "node2", Port: 35222},
+		}
+
+		return "cluster", srvs, nil
+	}
+
+	expectedAddrs := []string{"node1:26222", "node2:35222"}
+
+	testCases := []struct {
+		address  string
+		success  bool
+		lookuper lookupFunc
+		want     []string
+	}{
+		{":26222", true, nil, nil},
+		{"some.host", true, lookupWithErr(dnsErr), nil},
+		{"some.host", false, lookupWithErr(errors.New("another error")), nil},
+		{"some.host", true, lookupSuccess, expectedAddrs},
+		{"some.host:26222", true, lookupSuccess, expectedAddrs},
+		// "real" `lookupSRV` returns "no such host" when resolving IP addresses
+		{"127.0.0.1", true, lookupWithErr(dnsErr), nil},
+		{"127.0.0.1:26222", true, lookupWithErr(dnsErr), nil},
+		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]", true, lookupWithErr(dnsErr), nil},
+		{"[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:26222", true, lookupWithErr(dnsErr), nil},
+	}
+
+	for tcNum, tc := range testCases {
+		lookupSRV = tc.lookuper
+
+		resolvers, err := SRV(tc.address)
+
+		if (err == nil) != tc.success {
+			t.Errorf("#%d: expected success=%t, got err=%v", tcNum, tc.success, err)
+		}
+
+		require.Equal(t, tc.want, resolvers, "Test #%d failed", tcNum)
+
+		lookupSRV = net.LookupSRV
 	}
 }
