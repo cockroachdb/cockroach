@@ -12,6 +12,7 @@
 
 .alert-massage
   max-width 470px
+  min-height 50px
   font-size 12px
   // it is !important because Ant sets margin to 0
   // when closing animation happens and Alert panel
@@ -22,9 +23,14 @@
   box-shadow 0 0 10px 0 rgba(71, 88, 114, 0.47)
   background-color #ffffff
   border-color #ffffff
+  display: flex;
+  flex-direction column
+  justify-content center
+
   .alert-massage__icon
     font-size 20px
     left 16px
+    top 15px
   .ant-alert-close-icon
     margin unset
     right 0
