@@ -11,6 +11,7 @@
 import React from "react";
 
 import { Badge, Anchor, Tooltip } from "src/components";
+import { statementDiagnostics } from "src/util/docs";
 import { DiagnosticStatuses } from "./diagnosticStatuses";
 import "./diagnosticStatusBadge.styl";
 
@@ -40,7 +41,7 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
           {`Go to the detail page for this statement and click the ‘diagnostics’ tab.
            The statement diagnostics download will include EXPLAIN plans, table statistics, and traces. `}
           <Anchor
-            href="" // TODO (koorosh): Provide meaningful url on docs.
+            href={statementDiagnostics}
             target="_blank"
           >
             Learn more
@@ -58,7 +59,7 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
             {`A download button will appear on the statement list and detail pages when the query is ready.
             The download will include EXPLAIN plans, table statistics, and traces. `}
             <Anchor
-              href="" // TODO (koorosh): Provide meaningful url on docs.
+              href={statementDiagnostics}
               target="_blank"
             >
               Learn more
@@ -71,7 +72,7 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
         <div>
           {"There was an error when attempting to collect diagnostics for this statement. Please try activating again. "}
           <Anchor
-            href="" // TODO (koorosh): Provide meaningful url on docs.
+            href={statementDiagnostics}
             target="_blank"
           >
             Learn more
