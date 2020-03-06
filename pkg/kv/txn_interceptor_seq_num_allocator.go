@@ -175,5 +175,16 @@ func (s *txnSeqNumAllocator) epochBumpedLocked() {
 	s.readSeq = 0
 }
 
+// createSavepointLocked is part of the txnReqInterceptor interface.
+func (s *txnSeqNumAllocator) createSavepointLocked(ctx context.Context, sp *savepoint) {
+	sp.seqNum = s.writeSeq
+}
+
+// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+func (*txnSeqNumAllocator) rollbackToSavepointLocked(context.Context, savepoint) {
+	// Nothing to restore. The seq nums keep increasing. The TxnCoordSender has
+	// added a range of sequence numbers to the ignored list.
+}
+
 // closeLocked is part of the txnInterceptor interface.
 func (*txnSeqNumAllocator) closeLocked() {}

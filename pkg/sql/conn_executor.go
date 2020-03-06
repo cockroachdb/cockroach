@@ -980,6 +980,10 @@ type connExecutor struct {
 		// stateOpen.
 		autoRetryCounter int
 
+		// numDDL keeps track of how many DDL statements have been
+		// executed so far.
+		numDDL int
+
 		// txnRewindPos is the position within stmtBuf to which we'll rewind when
 		// performing automatic retries. This is more or less the position where the
 		// current transaction started.
@@ -1013,6 +1017,13 @@ type connExecutor struct {
 		// committed or aborted). It is set when txn is started but can remain
 		// unset when txn is executed within another higher-level txn.
 		onTxnFinish func(txnEvent)
+
+		// savepoints maintains the stack of savepoints currently open.
+		savepoints savepointStack
+		// savepointsAtTxnRewindPos is a snapshot of the savepoints stack before
+		// processing the command at position txnRewindPos. When rewinding, we're
+		// going to restore this snapshot.
+		savepointsAtTxnRewindPos savepointStack
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1191,12 +1202,16 @@ func (ex *connExecutor) resetExtraTxnState(
 
 	switch ev {
 	case txnCommit, txnRollback:
+		ex.extraTxnState.savepoints.clear()
 		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
 		if ex.extraTxnState.onTxnFinish != nil {
 			ex.extraTxnState.onTxnFinish(ev)
 			ex.extraTxnState.onTxnFinish = nil
 		}
 	}
+	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
+	// a ROLLBACK TO SAVEPOINT that generated the event, and that statement deals with the
+	// savepoints, or it's a rewind which also deals with them.
 
 	return nil
 }
@@ -1558,6 +1573,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		}
 	case rewind:
 		ex.rewindPrepStmtNamespace(ctx)
+		ex.extraTxnState.savepoints = ex.extraTxnState.savepointsAtTxnRewindPos
 		advInfo.rewCap.rewindAndUnlock(ctx)
 	case stayInPlace:
 		// Nothing to do. The same statement will be executed again.
@@ -1684,6 +1700,7 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 	ex.extraTxnState.txnRewindPos = pos
 	ex.stmtBuf.ltrim(ctx, pos)
 	ex.commitPrepStmtNamespace(ctx)
+	ex.extraTxnState.savepointsAtTxnRewindPos = ex.extraTxnState.savepoints.clone()
 }
 
 // stmtDoesntNeedRetry returns true if the given statement does not need to be
@@ -1700,8 +1717,6 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 		return InTxnBlock
 	case stateAborted:
 		return InFailedTxnBlock
-	case stateRestartWait:
-		return InTxnBlock
 	case stateNoTxn:
 		return IdleTxnBlock
 	case stateCommitWait:
@@ -1869,10 +1884,6 @@ func errIsRetriable(err error) bool {
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
 	retriable := errIsRetriable(err)
 	if retriable {
-		if _, inOpen := ex.machine.CurState().(stateOpen); !inOpen {
-			panic(fmt.Sprintf("retriable error in unexpected state: %#v",
-				ex.machine.CurState()))
-		}
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		ev := eventRetriableErr{
 			IsCommit:     fsm.FromBool(isCommit(stmt)),
@@ -2364,11 +2375,12 @@ type StatementCounters struct {
 	TxnCommitCount   telemetry.CounterWithMetric
 	TxnRollbackCount telemetry.CounterWithMetric
 
-	// Savepoint operations. SavepointCount is for real SQL savepoints
-	// (which we don't yet support; this is just a placeholder for
-	// telemetry); the RestartSavepoint variants are for the
+	// Savepoint operations. SavepointCount is for real SQL savepoints;
+	// the RestartSavepoint variants are for the
 	// cockroach-specific client-side retry protocol.
 	SavepointCount                  telemetry.CounterWithMetric
+	ReleaseSavepointCount           telemetry.CounterWithMetric
+	RollbackToSavepointCount        telemetry.CounterWithMetric
 	RestartSavepointCount           telemetry.CounterWithMetric
 	ReleaseRestartSavepointCount    telemetry.CounterWithMetric
 	RollbackToRestartSavepointCount telemetry.CounterWithMetric
@@ -2388,14 +2400,18 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnCommitStarted, internal)),
 		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackStarted, internal)),
-		SavepointCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaSavepointStarted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointStarted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaReleaseRestartSavepointStarted, internal)),
 		RollbackToRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToRestartSavepointStarted, internal)),
+		SavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSavepointStarted, internal)),
+		ReleaseSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaReleaseSavepointStarted, internal)),
+		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRollbackToSavepointStarted, internal)),
 		SelectCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaSelectStarted, internal)),
 		UpdateCount: telemetry.NewCounterWithMetric(
@@ -2421,14 +2437,18 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnCommitExecuted, internal)),
 		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackExecuted, internal)),
-		SavepointCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaSavepointExecuted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointExecuted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaReleaseRestartSavepointExecuted, internal)),
 		RollbackToRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToRestartSavepointExecuted, internal)),
+		SavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSavepointExecuted, internal)),
+		ReleaseSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaReleaseSavepointExecuted, internal)),
+		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRollbackToSavepointExecuted, internal)),
 		SelectCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaSelectExecuted, internal)),
 		UpdateCount: telemetry.NewCounterWithMetric(
@@ -2464,15 +2484,23 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 	case *tree.RollbackTransaction:
 		sc.TxnRollbackCount.Inc()
 	case *tree.Savepoint:
-		if err := ex.validateSavepointName(t.Name); err == nil {
+		if ex.isCommitOnReleaseSavepoint(t.Name) {
 			sc.RestartSavepointCount.Inc()
 		} else {
 			sc.SavepointCount.Inc()
 		}
 	case *tree.ReleaseSavepoint:
-		sc.ReleaseRestartSavepointCount.Inc()
+		if ex.isCommitOnReleaseSavepoint(t.Savepoint) {
+			sc.ReleaseRestartSavepointCount.Inc()
+		} else {
+			sc.ReleaseSavepointCount.Inc()
+		}
 	case *tree.RollbackToSavepoint:
-		sc.RollbackToRestartSavepointCount.Inc()
+		if ex.isCommitOnReleaseSavepoint(t.Savepoint) {
+			sc.RollbackToRestartSavepointCount.Inc()
+		} else {
+			sc.RollbackToSavepointCount.Inc()
+		}
 	default:
 		if tree.CanModifySchema(stmt) {
 			sc.DdlCount.Inc()

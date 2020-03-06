@@ -549,7 +549,7 @@ CommitWait
 statement ok
 COMMIT
 
-# RestartWait state
+# Aborted state
 # The SELECT 1 is necessary to move the txn out of the AutoRetry state,
 # otherwise the next statement is automatically retried on the server.
 statement ok
@@ -561,7 +561,7 @@ SELECT crdb_internal.force_retry('1h':::INTERVAL)
 query T
 SHOW TRANSACTION STATUS
 ----
-RestartWait
+Aborted
 
 statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
@@ -693,146 +693,6 @@ SELECT currval('s')
 statement ok
 ROLLBACK;
   DROP SEQUENCE s
-
-
-# Wrong savepoint name moves the txn state from RestartWait to Aborted.
-statement ok
-BEGIN TRANSACTION;
-  SAVEPOINT cockroach_restart;
-  SELECT 1
-
-query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
-SELECT crdb_internal.force_retry('1h':::INTERVAL)
-
-query T
-SHOW TRANSACTION STATUS
-----
-RestartWait
-
-statement error pq: SAVEPOINT "cockroach_restart" is in use
-ROLLBACK TO SAVEPOINT bogus_name
-
-query T
-SHOW TRANSACTION STATUS
-----
-Aborted
-
-statement ok
-ROLLBACK
-
-# General savepoints
-statement ok
-BEGIN TRANSACTION
-
-statement error SAVEPOINT not supported except for cockroach_restart
-SAVEPOINT other
-
-statement ok
-ROLLBACK
-
-statement ok
-BEGIN TRANSACTION
-
-statement error SAVEPOINT not supported except for cockroach_restart
-RELEASE SAVEPOINT other
-
-statement ok
-ROLLBACK
-
-statement ok
-BEGIN TRANSACTION
-
-statement error SAVEPOINT not supported except for cockroach_restart
-ROLLBACK TO SAVEPOINT other
-
-statement ok
-ROLLBACK
-
-# Savepoint must be first statement in a transaction.
-statement ok
-BEGIN TRANSACTION; UPSERT INTO kv VALUES('savepoint', 'true')
-
-statement error SAVEPOINT cockroach_restart needs to be the first statement in a transaction
-SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK
-
-# Can rollback to a savepoint if no statements have been executed.
-statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-# Can do it twice in a row.
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-# Can rollback after a transactional write, even from a non-error state.
-statement ok
-UPSERT INTO kv VALUES('savepoint', 'true')
-
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-statement ok
-COMMIT
-
-# Because we rolled back, the 'savepoint' insert will not have been committed.
-query I
-SELECT count(*) FROM kv WHERE k = 'savepoint'
-----
-0
-
-
-# Can ROLLBACK TO SAVEPOINT even from a non-retryable error.
-statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart
-
-statement error pq: relation "bogus_name" does not exist
-SELECT * from bogus_name
-
-query T
-SHOW TRANSACTION STATUS
-----
-Aborted
-
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-query T
-SHOW TRANSACTION STATUS
-----
-Open
-
-statement ok
-ROLLBACK
-
-
-# ROLLBACK TO SAVEPOINT in a txn without a SAVEPOINT.
-statement ok
-BEGIN
-
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK
-
-
-# ROLLBACK TO SAVEPOINT in an aborted txn without a SAVEPOINT.
-statement ok
-BEGIN
-
-statement error pq: relation "bogus_name" does not exist
-SELECT * from bogus_name
-
-statement ok
-ROLLBACK TO SAVEPOINT cockroach_restart
-
-statement ok
-ROLLBACK
 
 
 # Test READ ONLY/WRITE syntax.
@@ -1022,14 +882,6 @@ BEGIN; SELECT 1
 
 query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
-
-statement ok
-ROLLBACK
-
-# Check that we don't crash when doing a release that wasn't preceded by a
-# savepoint.
-statement ok
-BEGIN; RELEASE SAVEPOINT cockroach_restart
 
 statement ok
 ROLLBACK

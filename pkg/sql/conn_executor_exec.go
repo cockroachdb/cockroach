@@ -120,7 +120,7 @@ func (ex *connExecutor) execStmt(
 		case eventNonRetriableErr:
 			ex.recordFailure()
 		}
-	case stateAborted, stateRestartWait:
+	case stateAborted:
 		ev, payload = ex.execStmtInAbortedState(ctx, stmt, res)
 	case stateCommitWait:
 		ev, payload = ex.execStmtInCommitWaitState(stmt, res)
@@ -273,10 +273,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ex.execSavepointInOpenState(ctx, s, res)
 
 	case *tree.ReleaseSavepoint:
-		return ex.execReleaseSavepointInOpenState(ctx, s, res)
+		ev, payload := ex.execRelease(ctx, s, res)
+		return ev, payload, nil
 
 	case *tree.RollbackToSavepoint:
-		return ex.execRollbackToSavepointInOpenState(ctx, s, res)
+		ev, payload := ex.execRollbackToSavepointInOpenState(ctx, s, res)
+		return ev, payload, nil
 
 	case *tree.Prepare:
 		// This is handling the SQL statement "PREPARE". See execPrepare for
@@ -603,30 +605,26 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	ev, payload, _ := ex.commitSQLTransactionInternal(ctx, stmt)
-	return ev, payload
+	err := ex.commitSQLTransactionInternal(ctx, stmt)
+	if err != nil {
+		return ex.makeErrEvent(err, stmt)
+	}
+	return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 }
 
-// commitSQLTransactionInternal is the part of a commit common to
-// commitSQLTransaction and runReleaseRestartSavepointAsTxnCommit.
 func (ex *connExecutor) commitSQLTransactionInternal(
 	ctx context.Context, stmt tree.Statement,
-) (ev fsm.Event, payload fsm.EventPayload, ok bool) {
-	ex.clearSavepoints()
-
+) error {
 	if err := ex.extraTxnState.tables.validatePrimaryKeys(); err != nil {
-		ev, payload = ex.makeErrEvent(err, stmt)
-		return ev, payload, false
+		return err
 	}
 
 	if err := ex.checkTableTwoVersionInvariant(ctx); err != nil {
-		ev, payload = ex.makeErrEvent(err, stmt)
-		return ev, payload, false
+		return err
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
-		ev, payload = ex.makeErrEvent(err, stmt)
-		return ev, payload, false
+		return err
 	}
 
 	// Now that we've committed, if we modified any table we need to make sure
@@ -635,15 +633,12 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 	if tables := ex.extraTxnState.tables.getTablesWithNewVersion(); tables != nil {
 		ex.extraTxnState.tables.releaseLeases(ctx)
 	}
-
-	return eventTxnFinish{}, eventTxnFinishPayload{commit: true}, true
+	return nil
 }
 
 // rollbackSQLTransaction executes a ROLLBACK statement: the KV transaction is
 // rolled-back and an event is produced.
 func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, fsm.EventPayload) {
-	ex.clearSavepoints()
-
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
@@ -778,6 +773,13 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err
 	}
+
+	// TODO(knz): Remove this accounting if/when savepoint rollbacks
+	// support rolling back over DDL.
+	if planner.curPlan.flags.IsSet(planFlagIsDDL) {
+		ex.extraTxnState.numDDL++
+	}
+
 	return nil
 }
 
@@ -959,41 +961,45 @@ func (ex *connExecutor) execStmtInNoTxnState(
 func (ex *connExecutor) execStmtInAbortedState(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
-	_, inRestartWait := ex.machine.CurState().(stateRestartWait)
 
-	// TODO(andrei/cuongdo): Figure out what statements to count here.
-	switch s := stmt.AST.(type) {
-	case *tree.CommitTransaction, *tree.RollbackTransaction:
-		if inRestartWait {
-			ev, payload := ex.rollbackSQLTransaction(ctx)
-			return ev, payload
-		}
-		ex.clearSavepoints()
-
-		// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
-		res.ResetStmtType((*tree.RollbackTransaction)(nil))
-
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
-
-	case *tree.RollbackToSavepoint:
-		return ex.execRollbackToSavepointInAbortedState(ctx, inRestartWait, s, res)
-
-	case *tree.Savepoint:
-		return ex.execSavepointInAbortedState(ctx, inRestartWait, s, res)
-
-	default:
+	reject := func() (fsm.Event, fsm.EventPayload) {
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		if inRestartWait {
-			payload := eventNonRetriableErrPayload{
-				err: sqlbase.NewTransactionAbortedError(
-					"Expected \"ROLLBACK TO SAVEPOINT cockroach_restart\"" /* customMsg */),
-			}
-			return ev, payload
-		}
 		payload := eventNonRetriableErrPayload{
 			err: sqlbase.NewTransactionAbortedError("" /* customMsg */),
 		}
 		return ev, payload
+	}
+
+	switch s := stmt.AST.(type) {
+	case *tree.CommitTransaction, *tree.RollbackTransaction:
+		if _, ok := s.(*tree.CommitTransaction); ok {
+			// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
+			res.ResetStmtType((*tree.RollbackTransaction)(nil))
+		}
+		return ex.rollbackSQLTransaction(ctx)
+
+	case *tree.RollbackToSavepoint:
+		return ex.execRollbackToSavepointInAbortedState(ctx, s)
+
+	case *tree.Savepoint:
+		if ex.isCommitOnReleaseSavepoint(s.Name) {
+			// We allow SAVEPOINT cockroach_restart as an alternative to ROLLBACK TO
+			// SAVEPOINT cockroach_restart in the Aborted state. This is needed
+			// because any client driver (that we know of) which links subtransaction
+			// `ROLLBACK/RELEASE` to an object's lifetime will fail to `ROLLBACK` on a
+			// failed `RELEASE`. Instead, we now can use the creation of another
+			// subtransaction object (which will issue another `SAVEPOINT` statement)
+			// to indicate retry intent. Specifically, this change was prompted by
+			// subtransaction handling in `libpqxx` (C++ driver) and `rust-postgres`
+			// (Rust driver).
+			res.ResetStmtType((*tree.RollbackToSavepoint)(nil))
+			return ex.execRollbackToSavepointInAbortedState(
+				ctx, &tree.RollbackToSavepoint{Savepoint: s.Name})
+		}
+		return reject()
+
+	default:
+		return reject()
 	}
 }
 
@@ -1014,7 +1020,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
 		// get a COMMIT in state Aborted.
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+		return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 	default:
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
 		payload = eventNonRetriableErrPayload{
@@ -1033,6 +1039,8 @@ func (ex *connExecutor) runObserverStatement(
 	switch sqlStmt := stmt.AST.(type) {
 	case *tree.ShowTransactionStatus:
 		return ex.runShowTransactionState(ctx, res)
+	case *tree.ShowSavepointStatus:
+		return ex.runShowSavepointState(ctx, res)
 	case *tree.ShowSyntax:
 		return ex.runShowSyntax(ctx, sqlStmt.Statement, res)
 	case *tree.SetTracing:

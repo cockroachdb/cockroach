@@ -179,7 +179,7 @@ func registerDjango(r *testRegistry) {
 		//  too large.
 		var fullTestResults []byte
 		for _, testName := range enabledDjangoTests {
-			c.l.Printf("Running django test app %s", testName)
+			t.Status("Running django test app", testName)
 			// Running the test suite is expected to error out, so swallow the error.
 			rawResults, _ := c.RunWithBuffer(
 				ctx, t.l, node, fmt.Sprintf(djangoRunTestCmd, testName))
