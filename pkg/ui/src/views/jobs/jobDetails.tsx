@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Divider, Row } from "antd";
+import { Col, Row } from "antd";
 import _ from "lodash";
 import { TimestampToMoment } from "oss/src/util/convert";
 import React from "react";
@@ -27,14 +27,9 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import {
-  JobStatusVisual,
-  jobToVisual,
-} from "src/views/jobs/jobStatusOptions";
-import { Duration } from "src/views/jobs/duration";
-import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
 import { Button, BackIcon } from "src/components/button";
 import { DATE_FORMAT } from "src/util/format";
+import { JobStatusCell } from "./jobStatusCell";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -60,52 +55,6 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
 
   prevPage = () => this.props.history.goBack();
 
-  renderStatus = () => {
-    const { job } = this.props;
-    const percent = job.fraction_completed * 100;
-    const jobStatusVisual = jobToVisual(job);
-    switch (jobStatusVisual) {
-      case JobStatusVisual.BadgeOnly:
-        return (
-          <div>
-            <JobStatusBadge jobStatus={this.props.job.status} />
-          </div>
-        );
-      case JobStatusVisual.BadgeWithDuration:
-        return (
-          <div className="job-status__line">
-            <JobStatusBadge jobStatus={this.props.job.status} />
-            <Divider type="vertical" />
-            <span><Duration job={this.props.job} /></span>
-          </div>
-        );
-      case JobStatusVisual.BadgeWithMessage:
-        return (
-          <div className="job-status__line">
-            <JobStatusBadge jobStatus={this.props.job.status} />
-            <Divider type="vertical" />
-            <span>{this.props.job.running_status}</span>
-          </div>
-        );
-      case JobStatusVisual.ProgressBarWithDuration:
-        return (
-          <div>
-            <ProgressBar job={this.props.job} lineWidth={2} showPercentage={false} />
-            <div className="job-status__line--percentage">
-              <span>{percent.toFixed() + "%"} done</span>
-              <Divider type="vertical" /><Duration job={this.props.job} />
-            </div>
-          </div>
-        );
-      default:
-        return (
-          <div>
-            <JobStatusBadge jobStatus={this.props.job.status} />
-          </div>
-        );
-    }
-  }
-
   renderContent = () => {
     const { job } = this.props;
     return (
@@ -114,7 +63,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
           <SqlBox value={ job.description } />
           <SummaryCard>
             <h3 className="summary--card__status--title">Status</h3>
-            {this.renderStatus()}
+            <JobStatusCell job={job} lineWidth={1.5} />
           </SummaryCard>
         </Col>
         <Col className="gutter-row" span={8}>
