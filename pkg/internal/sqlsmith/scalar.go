@@ -415,16 +415,21 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		s.sample(len(refs), 2, func(i int) {
 			parts = append(parts, refs[i].item)
 		})
-		var order tree.OrderBy
+		var (
+			order      tree.OrderBy
+			orderTypes []*types.T
+		)
 		s.sample(len(refs)-len(parts), 2, func(i int) {
+			ref := refs[i+len(parts)]
 			order = append(order, &tree.Order{
-				Expr:      refs[i+len(parts)].item,
+				Expr:      ref.item,
 				Direction: s.randDirection(),
 			})
+			orderTypes = append(orderTypes, ref.typ)
 		})
 		var frame *tree.WindowFrame
 		if s.coin() {
-			frame = makeWindowFrame(s, refs, order)
+			frame = makeWindowFrame(s, refs, orderTypes)
 		}
 		window = &tree.WindowDef{
 			Partitions: parts,
@@ -457,11 +462,11 @@ func randWindowFrameMode(s *Smither) tree.WindowFrameMode {
 	return windowFrameModes[s.rnd.Intn(len(windowFrameModes))]
 }
 
-func makeWindowFrame(s *Smither, refs colRefs, orderBy tree.OrderBy) *tree.WindowFrame {
+func makeWindowFrame(s *Smither, refs colRefs, orderTypes []*types.T) *tree.WindowFrame {
 	var frameMode tree.WindowFrameMode
 	for {
 		frameMode = randWindowFrameMode(s)
-		if len(orderBy) > 0 || frameMode != tree.GROUPS {
+		if len(orderTypes) > 0 || frameMode != tree.GROUPS {
 			// GROUPS mode requires an ORDER BY clause, so if it is not present and
 			// GROUPS mode was randomly chosen, we need to generate again; otherwise,
 			// we're done.
@@ -472,13 +477,19 @@ func makeWindowFrame(s *Smither, refs colRefs, orderBy tree.OrderBy) *tree.Windo
 	// bound can be omitted.
 	var startBound tree.WindowFrameBound
 	var endBound *tree.WindowFrameBound
-	if frameMode == tree.RANGE {
-		// RANGE mode is special in that if a bound is of type OffsetPreceding or
-		// OffsetFollowing, it requires that ORDER BY clause of the window function
-		// have exactly one column that can be only of the following types:
-		// DInt, DFloat, DDecimal, DInterval; so for now let's avoid this
-		// complication and not choose offset bound types.
-		// TODO(yuzefovich): fix this.
+	// RANGE mode is special in that if a bound is of type OffsetPreceding or
+	// OffsetFollowing, it requires that ORDER BY clause of the window function
+	// have exactly one column that can be only of the following types:
+	// Int, Float, Decimal, Interval.
+	allowRangeWithOffsets := false
+	if len(orderTypes) == 1 {
+		switch orderTypes[0].Family() {
+		case types.IntFamily, types.FloatFamily,
+			types.DecimalFamily, types.IntervalFamily:
+			allowRangeWithOffsets = true
+		}
+	}
+	if frameMode == tree.RANGE && !allowRangeWithOffsets {
 		if s.coin() {
 			startBound.BoundType = tree.UnboundedPreceding
 		} else {
@@ -519,10 +530,15 @@ func makeWindowFrame(s *Smither, refs colRefs, orderBy tree.OrderBy) *tree.Windo
 		}
 		// We will set offsets regardless of the bound type, but they will only be
 		// used when a bound is either OffsetPreceding or OffsetFollowing. Both
-		// ROWS and GROUPS mode need non-negative integers as bounds.
-		startBound.OffsetExpr = makeScalar(s, types.Int, refs)
+		// ROWS and GROUPS mode need non-negative integers as bounds whereas RANGE
+		// mode takes the type as the single ORDER BY clause has.
+		typ := types.Int
+		if frameMode == tree.RANGE {
+			typ = orderTypes[0]
+		}
+		startBound.OffsetExpr = makeScalar(s, typ, refs)
 		if endBound != nil {
-			endBound.OffsetExpr = makeScalar(s, types.Int, refs)
+			endBound.OffsetExpr = makeScalar(s, typ, refs)
 		}
 	}
 	return &tree.WindowFrame{
