@@ -32,6 +32,7 @@ const defaultCertLifetime = 5 * 366 * 24 * time.Hour // five years
 var keySize int
 var caCertificateLifetime time.Duration
 var certificateLifetime time.Duration
+var certNodeUserSuffix string
 var allowCAKeyReuse bool
 var overwriteFiles bool
 var generatePKCS8Key bool
@@ -119,6 +120,9 @@ At least one host should be passed in (either IP address or dns name).
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
 Creation fails if the CA expiration time is before the desired certificate expiration.
+
+Use --cert-node-user-suffix to specify a suffix for the "node" user stored in
+the certificate. The common name field becomes "node"<cert-node-user-suffix>.
 `,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -142,6 +146,7 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 			keySize,
 			certificateLifetime,
 			overwriteFiles,
+			certNodeUserSuffix,
 			args),
 		"failed to generate node certificate and key")
 }

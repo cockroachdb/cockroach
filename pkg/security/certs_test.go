@@ -127,7 +127,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 	// Try generating node certs without CA certs present.
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*48, false, []string{"localhost"},
+		testKeySize, time.Hour*48, false, "", []string{"localhost"},
 	); err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
@@ -141,7 +141,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*48, false, []string{"localhost"},
+		testKeySize, time.Hour*48, false, "", []string{"localhost"},
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -161,7 +161,7 @@ func generateBaseCerts(certsDir string) error {
 
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
+		testKeySize, time.Hour*48, true, "", []string{"127.0.0.1"},
 	); err != nil {
 		return errors.Errorf("could not generate Node pair: %v", err)
 	}
@@ -192,7 +192,7 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
+		testKeySize, time.Hour*48, true, "", []string{"127.0.0.1"},
 	); err != nil {
 		return errors.Errorf("could not generate Node pair: %v", err)
 	}

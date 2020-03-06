@@ -13,6 +13,7 @@ package security
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -447,8 +448,18 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 	cert := ci.ParsedCertificates[0]
 
 	// Check Subject Common Name.
-	if a, e := cert.Subject.CommonName, NodeUser; a != e {
-		return errors.Errorf("client/server node certificate has Subject \"CN=%s\", expected \"CN=%s\"", a, e)
+	//
+	// TODO(peter): Test this function when a certNamePattern is present.
+	if a, e := transformCommonName(cert.Subject.CommonName), NodeUser; a != e {
+		certNamePattern.Lock()
+		var extra string
+		if certNamePattern.re != nil {
+			extra = fmt.Sprintf(", name-pattern %q", certNamePattern.re)
+		}
+		certNamePattern.Unlock()
+
+		return errors.Errorf("client/server node certificate has Subject \"CN=%s\", expected \"CN=%s\"%s",
+			a, e, extra)
 	}
 
 	return nil
@@ -464,7 +475,9 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 		// This is done in validateDualPurposeNodeCert.
 	case ClientPem:
 		// Check that CommonName matches the username extracted from the filename.
-		if a, e := cert.Subject.CommonName, ci.Name; a != e {
+		//
+		// TODO(peter): Test this function when a certNamePattern is present.
+		if a, e := transformCommonName(cert.Subject.CommonName), ci.Name; a != e {
 			return errors.Errorf("client certificate has Subject \"CN=%s\", expected \"CN=%s\" (must match filename)", a, e)
 		}
 	}

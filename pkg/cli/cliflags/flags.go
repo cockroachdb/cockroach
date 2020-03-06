@@ -641,6 +641,24 @@ Instead, require the user to always specify access keys.`,
 		Description: CertsDir.Description,
 	}
 
+	CertNamePattern = FlagInfo{
+		Name: "cert-name-pattern",
+		Description: `
+A regular expression used to extract the user from certificate CommonName. If
+not set, the default is equivalent to specifying "(.*)". The regular expression
+must specify exactly one parenthesized subexpression which becomes the user if
+the regular expression matches a certificate's CommonName. If the regular
+expression does not match, the entire CommonName field is used for the user.
+`,
+	}
+
+	CertNodeUserSuffix = FlagInfo{
+		Name: "cert-node-user-suffix",
+		Description: `
+A suffix to append to the "node" user name when generating a node certificate.
+`,
+	}
+
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",

@@ -357,6 +357,7 @@ func generateCerts() (certsDir string, cleanup func(), err error) {
 		defaultKeySize,
 		defaultCertLifetime,
 		false, /* overwrite */
+		certNodeUserSuffix,
 		[]string{"127.0.0.1"},
 	); err != nil {
 		return "", nil, err

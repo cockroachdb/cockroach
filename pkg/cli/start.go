@@ -544,6 +544,11 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	//
 	// This includes propagating server flags dependent on the
 	// flags specified for the command.
+	if startCtx.serverCertsNamePattern != "" {
+		if err := security.SetCertNamePattern(startCtx.serverCertsNamePattern); err != nil {
+			return err
+		}
+	}
 	serverCfg.Insecure = startCtx.serverInsecure
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.User = security.NodeUser

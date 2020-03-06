@@ -12,7 +12,9 @@ package security
 
 import (
 	"crypto/tls"
+	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -23,9 +25,50 @@ const (
 	RootUser = "root"
 )
 
+var certNamePattern struct {
+	syncutil.Mutex
+	re *regexp.Regexp
+}
+
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster.
 type UserAuthHook func(string, bool) error
+
+// SetCertNamePattern specifies a regular expression that is used to extract
+// the "user" component from a certificate's common name field instead of
+// treating the full common name as the user. If not specified, the default
+// behavior is the same as specifying `(.*)`. The regex must specify exactly
+// one parenthesized subexpression that will be captured.
+func SetCertNamePattern(pattern string) error {
+	re, err := regexp.Compile("^" + pattern + "$")
+	if err != nil {
+		return err
+	}
+	if re.NumSubexp() != 1 {
+		return errors.Errorf("%q must specify exactly one parenthesized subexpression: %d",
+			pattern, re.NumSubexp())
+	}
+	certNamePattern.Lock()
+	certNamePattern.re = re
+	certNamePattern.Unlock()
+	return nil
+}
+
+func transformCommonName(commonName string) string {
+	// If a certNamePattern is specified, use it to extract the component that
+	// will be returned. We fail open. If the substring doesn't match we return
+	// the entire common name field.
+	certNamePattern.Lock()
+	re := certNamePattern.re
+	certNamePattern.Unlock()
+	if re != nil {
+		match := re.FindStringSubmatch(commonName)
+		if len(match) == 2 {
+			commonName = match[1]
+		}
+	}
+	return commonName
+}
 
 // GetCertificateUser extract the username from a client certificate.
 func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
@@ -38,7 +81,8 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	// The go server handshake code verifies the first certificate, using
 	// any following certificates as intermediates. See:
 	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
-	return tlsState.PeerCertificates[0].Subject.CommonName, nil
+	commonName := tlsState.PeerCertificates[0].Subject.CommonName
+	return transformCommonName(commonName), nil
 }
 
 // UserAuthCertHook builds an authentication hook based on the security

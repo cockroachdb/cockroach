@@ -376,6 +376,10 @@ func init() {
 		// variables, but share the same default.
 		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
 
+		// Certificate name pattern.
+		StringFlag(f, &startCtx.serverCertsNamePattern,
+			cliflags.CertNamePattern, startCtx.serverCertsNamePattern)
+
 		// Cluster joining flags. We need to enable this both for 'start'
 		// and 'start-single-node' although the latter does not support
 		// --join, because it delegates its logic to that of 'start', and
@@ -433,6 +437,11 @@ func init() {
 		// All certs commands need the certificate directory.
 		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
 	}
+
+	// --cert-node-suffix is appended to the "node" user when generating node
+	// certificates.
+	StringFlag(createNodeCertCmd.Flags(), &certNodeUserSuffix,
+		cliflags.CertNodeUserSuffix, certNodeUserSuffix)
 
 	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd} {
 		f := cmd.Flags()
