@@ -65,7 +65,7 @@ export class EventRow extends React.Component<EventRowProps, {}> {
     const e = getEventInfo(event);
     return <tr>
       <td>
-        <ToolTipWrapper text={ e.content }>
+        <ToolTipWrapper placement="left" text={ e.content }>
           <div className="events__message">{e.content}</div>
         </ToolTipWrapper>
       </td>

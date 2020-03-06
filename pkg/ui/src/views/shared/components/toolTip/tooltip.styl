@@ -1,0 +1,63 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.ant-tooltip.tooltip__preset--white
+  max-width 500px
+  .ant-tooltip-content
+    position relative
+    &:after, &:before
+      content ''
+      display block;
+      position absolute;
+      width 0
+      height 0
+      border-style solid
+    &:after
+      border-width 10px
+    &:before
+      border-width 10px
+  .ant-tooltip-arrow
+    &:before
+      background-color transparent
+  .ant-tooltip-inner
+    padding 10px
+    border-radius 3px
+    border solid 1px $colors--neutral-2
+    box-shadow 0 4px 4px 0 rgba(0, 0, 0, 0.15)
+    background rgba($colors--neutral-0, .98)
+    font-family Lato-Regular
+    text-align left
+    color #5F6C87
+
+.tooltip__preset--placement-bottom
+  .ant-tooltip-content
+    &:after, &:before
+      transform translate(-50%, 0)
+      left 50%
+    &:after
+      top -19px
+      border-color transparent transparent $colors--neutral-0 transparent
+    &:before
+      top -21px
+      border-color transparent transparent $colors--neutral-2 transparent
+
+.tooltip__preset--placement-left
+  .ant-tooltip-content
+    &:after, &:before
+      top 50%
+      transform translate(0, -50%)
+    &:after
+      right -16px
+      border-color transparent transparent transparent $colors--neutral-0
+    &:before
+      right -18px
+      border-color transparent transparent transparent $colors--neutral-2
