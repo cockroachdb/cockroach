@@ -57,6 +57,16 @@ const (
 	// the user could continue.
 	OptSchemaChangePolicyStop SchemaChangePolicy = `stop`
 
+	// OptInitialScan enables an initial scan. This is the default when no
+	// cursor is specified, leading to an initial scan at the statement time of
+	// the creation of the changeffed. If used in conjunction with a cursor,
+	// an initial scan will be performed at the cursor timestamp.
+	OptInitialScan = `initial_scan`
+	// OptInitialScan enables an initial scan. This is the default when a
+	// cursor is specified. This option is useful to create a changefeed which
+	// subscribes only to new messages.
+	OptNoInitialScan = `no_initial_scan`
+
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
@@ -95,4 +105,6 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptCompression:             sql.KVStringOptRequireValue,
 	OptSchemaChangeEvents:      sql.KVStringOptRequireValue,
 	OptSchemaChangePolicy:      sql.KVStringOptRequireValue,
+	OptInitialScan:             sql.KVStringOptRequireNoValue,
+	OptNoInitialScan:           sql.KVStringOptRequireNoValue,
 }

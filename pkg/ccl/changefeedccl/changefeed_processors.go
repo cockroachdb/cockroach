@@ -233,17 +233,28 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		SchemaChangeEvents: changefeedbase.SchemaChangeEventClass(ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents]),
 		SchemaChangePolicy: changefeedbase.SchemaChangePolicy(ca.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy]),
 	}
-	// The initial scan semantics are currently defined by whether this is the
-	// first run of a changefeed which did not specify a cursor.
-	kvfeedCfg.NeedsInitialScan = kvfeedCfg.InitialHighWater == (hlc.Timestamp{})
-	if kvfeedCfg.NeedsInitialScan {
-		kvfeedCfg.InitialHighWater = ca.spec.Feed.StatementTime
+
+	{
+		noCursor := kvfeedCfg.InitialHighWater.IsEmpty()
+		if noCursor {
+			kvfeedCfg.InitialHighWater = ca.spec.Feed.StatementTime
+		}
+
+		// The initial scan semantics are default to whether this is the first run
+		// of a changefeed which did not specify a cursor. This can be overridden
+		// with additional options.
+		needsInitialScan := noCursor
+		if _, initialScanOpt := ca.spec.Feed.Opts[changefeedbase.OptInitialScan]; initialScanOpt {
+			needsInitialScan = true
+		} else if _, noInitialScanOpt := ca.spec.Feed.Opts[changefeedbase.OptNoInitialScan]; noInitialScanOpt {
+			needsInitialScan = false
+		}
+		kvfeedCfg.NeedsInitialScan = needsInitialScan
 	}
 
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
-
-	ca.tickFn = emitEntries(
-		ca.flowCtx.Cfg.Settings, ca.spec.Feed, sf, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+	ca.tickFn = emitEntries(ca.flowCtx.Cfg.Settings, ca.spec.Feed, initialHighWater,
+		sf, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
