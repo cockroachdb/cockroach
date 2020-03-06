@@ -31,10 +31,9 @@ import (
 // easier test mocking of outputs.
 type routerOutput interface {
 	execinfra.OpNode
-	// addBatch adds the elements specified by the selection vector from batch to
-	// the output. It returns whether or not the output changed its state to
-	// blocked (see implementations).
-	addBatch(context.Context, coldata.Batch, []int) bool
+	// addBatch adds the elements from batch to the output. It returns whether or
+	// not the output changed its state to blocked (see implementations).
+	addBatch(context.Context, coldata.Batch) bool
 	// cancel tells the output to stop producing batches.
 	cancel(ctx context.Context)
 }
@@ -60,53 +59,13 @@ type routerOutputOp struct {
 
 	mu struct {
 		syncutil.Mutex
-		// unlimitedAllocator tracks the memory usage of this router output,
-		// providing a signal for when it should spill to disk.
-		// The memory lifecycle is as follows:
-		//
-		// o.mu.pendingBatch is allocated as a "staging" area. Tuples are copied
-		// into it in addBatch.
-		// A read may come in in this state, in which case pendingBatch is returned
-		// and references to it are removed. Since batches are unsafe for reuse,
-		// the batch is also manually released from the allocator.
-		// If a read does not come in and the batch becomes full of tuples, that
-		// batch is stored in o.mu.data, which is a queue with an in-memory circular
-		// buffer backed by disk. If the batch fits in memory, a reference to it
-		// is retained and a new pendingBatch is allocated.
-		//
-		// If a read comes in at this point, the batch is dequeued from o.mu.data
-		// and returned, but the memory is still accounted for. In fact, memory use
-		// increases up to when o.mu.data is full and must spill to disk.
-		// Once it spills to disk, the spillingQueue (o.mu.data), will release
-		// batches it spills to disk to stop accounting for them.
-		// The tricky part comes when o.mu.data is dequeued from. In this case, the
-		// reference for a previously-returned batch is overwritten with an on-disk
-		// batch, so the memory for the overwritten batch is released, while the
-		// new batch's memory is retained. Note that if batches are being dequeued
-		// from disk, it must be the case that the circular buffer is now empty,
-		// holding references to batches that have been previously returned.
-		//
-		// In short, batches whose references are retained are also retained in the
-		// allocator, but if any references are overwritten or lost, those batches
-		// are released.
-		unlimitedAllocator *Allocator
-		cond               *sync.Cond
-		done               bool
-		// pendingBatch is a partially-filled batch with data added through
-		// addBatch. Once this batch reaches capacity, it is flushed to data. The
-		// main use of pendingBatch is coalescing various fragmented batches into
-		// one.
-		pendingBatch coldata.Batch
+		cond              *sync.Cond
+		done              bool
+		zeroBatchEnqueued bool
 		// data is a spillingQueue, a circular buffer backed by a disk queue.
 		data      *spillingQueue
 		numUnread int
 		blocked   bool
-	}
-
-	testingKnobs struct {
-		// alwaysFlush, if set to true, will always flush o.mu.pendingBatch to
-		// o.mu.data.
-		alwaysFlush bool
 	}
 
 	// These fields default to defaultRouterOutputBlockedThreshold and
@@ -164,7 +123,6 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 		blockedThreshold:    blockedThreshold,
 		outputBatchSize:     outputBatchSize,
 	}
-	o.mu.unlimitedAllocator = unlimitedAllocator
 	o.mu.cond = sync.NewCond(&o.mu)
 	o.mu.data = newSpillingQueue(unlimitedAllocator, types, memoryLimit, cfg, fdSemaphore, outputBatchSize)
 
@@ -182,27 +140,16 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	if o.mu.done {
 		return coldata.ZeroBatch
 	}
-	for o.mu.pendingBatch == nil && o.mu.data.empty() && !o.mu.done {
+	for (o.mu.data.empty() && !o.mu.zeroBatchEnqueued) && !o.mu.done {
 		// Wait until there is data to read or the output is canceled.
 		o.mu.cond.Wait()
 	}
 	if o.mu.done {
 		return coldata.ZeroBatch
 	}
-	var b coldata.Batch
-	if o.mu.pendingBatch != nil && o.mu.data.empty() {
-		// o.mu.data is empty (i.e. nothing has been flushed to the spillingQueue),
-		// but there is a o.mu.pendingBatch that has not been flushed yet. Return
-		// this batch directly.
-		b = o.mu.pendingBatch
-		o.mu.unlimitedAllocator.ReleaseBatch(b)
-		o.mu.pendingBatch = nil
-	} else {
-		var err error
-		b, err = o.mu.data.dequeue()
-		if err != nil {
-			execerror.VectorizedInternalPanic(err)
-		}
+	b, err := o.mu.data.dequeue()
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
 	}
 	o.mu.numUnread -= b.Length()
 	if o.mu.numUnread <= o.blockedThreshold {
@@ -214,6 +161,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		// cleaning up and releasing possible disk infrastructure.
 		o.closeLocked(ctx)
 	}
+	//fmt.Printf("%p: Next batch, len=%d\n", o, b.Length())
 	return b
 }
 
@@ -240,12 +188,7 @@ func (o *routerOutputOp) cancel(ctx context.Context) {
 	o.mu.Unlock()
 }
 
-// addBatch copies the columns in batch according to selection into an internal
-// buffer.
-// The routerOutputOp only adds the elements specified by selection. Therefore,
-// an empty selection slice will add no elements. Note that the selection vector
-// on the batch is ignored. This is so that callers of addBatch can push the
-// same batch with different selection vectors to many different outputs.
+// addBatch adds batch to the output.
 // True is returned if the the output changes state to blocked (note: if the
 // output is already blocked, false is returned).
 // TODO(asubiotto): We should explore pipelining addBatch if disk-spilling
@@ -253,69 +196,22 @@ func (o *routerOutputOp) cancel(ctx context.Context) {
 //  disk as the code is written, meaning that we impact the performance of
 //  writing rows to a fast output if we have to write to disk for a single
 //  slow output.
-func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, selection []int) bool {
-	if len(selection) > batch.Length() {
-		selection = selection[:batch.Length()]
-	}
+func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	//fmt.Printf("%p: add batch, len=%d\n", o, batch.Length())
 	if batch.Length() == 0 {
-		if o.mu.pendingBatch != nil {
-			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
-				execerror.VectorizedInternalPanic(err)
-			}
+		if err := o.mu.data.enqueue(ctx, batch); err != nil {
+			execerror.VectorizedInternalPanic(err)
 		}
-		o.mu.pendingBatch = coldata.ZeroBatch
+		o.mu.zeroBatchEnqueued = true
 		o.mu.cond.Signal()
 		return false
 	}
-
-	if len(selection) == 0 {
-		// Non-zero batch with no selection vector. Nothing to do.
-		return false
+	o.mu.numUnread += batch.Length()
+	if err := o.mu.data.enqueue(ctx, batch); err != nil {
+		execerror.VectorizedInternalPanic(err)
 	}
-
-	// Increment o.mu.numUnread before going into the loop, as we will consume
-	// selection.
-	o.mu.numUnread += len(selection)
-
-	for toAppend := len(selection); toAppend > 0; {
-		if o.mu.pendingBatch == nil {
-			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithSize(o.types, o.outputBatchSize)
-		}
-		available := o.outputBatchSize - o.mu.pendingBatch.Length()
-		numAppended := toAppend
-		if toAppend > available {
-			numAppended = available
-		}
-		o.mu.unlimitedAllocator.PerformOperation(o.mu.pendingBatch.ColVecs(), func() {
-			for i, t := range o.types {
-				o.mu.pendingBatch.ColVec(i).Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							ColType:   t,
-							Src:       batch.ColVec(i),
-							Sel:       selection[:numAppended],
-							DestIdx:   o.mu.pendingBatch.Length(),
-							SrcEndIdx: numAppended,
-						},
-					},
-				)
-			}
-		})
-		newLength := o.mu.pendingBatch.Length() + numAppended
-		o.mu.pendingBatch.SetLength(newLength)
-		if o.testingKnobs.alwaysFlush || newLength >= o.outputBatchSize {
-			// The capacity in o.mu.pendingBatch has been filled.
-			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
-				execerror.VectorizedInternalPanic(err)
-			}
-			o.mu.pendingBatch = nil
-		}
-		toAppend -= numAppended
-		selection = selection[numAppended:]
-	}
-
 	stateChanged := false
 	if o.mu.numUnread > o.blockedThreshold && !o.mu.blocked {
 		// The output is now blocked.
@@ -343,6 +239,7 @@ func (o *routerOutputOp) reset() {
 	o.mu.data.reset()
 	o.mu.numUnread = 0
 	o.mu.blocked = false
+	o.mu.zeroBatchEnqueued = false
 	o.mu.Unlock()
 }
 
@@ -370,6 +267,7 @@ type HashRouter struct {
 		bufferedMeta []execinfrapb.ProducerMetadata
 	}
 
+	scratchSel []int
 	// tupleDistributor is used to decide to which output a particular tuple
 	// should be routed.
 	tupleDistributor *tupleHashDistributor
@@ -432,6 +330,7 @@ func newHashRouterWithOutputs(
 		hashCols:            hashCols,
 		outputs:             outputs,
 		unblockedEventsChan: unblockEventsChan,
+		scratchSel:          make([]int, coldata.BatchSize()),
 		tupleDistributor:    newTupleHashDistributor(defaultInitHashValue, len(outputs)),
 	}
 	return r
@@ -510,18 +409,49 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		// Done. Push an empty batch to outputs to tell them the data is done as
 		// well.
 		for _, o := range r.outputs {
-			o.addBatch(ctx, b, nil)
+			o.addBatch(ctx, b)
 		}
 		return true
 	}
 
 	selections := r.tupleDistributor.distribute(ctx, b, r.types, r.hashCols)
+	// We will be modifying the selection vector on the batch, so we need to
+	// store its original state.
+	//usesSel := b.Selection() != nil
+	//var origSel []int
+	//if usesSel {
+	//	copy(r.scratchSel[:n], b.Selection()[:n])
+	//	origSel = r.scratchSel
+	//}
 	for i, o := range r.outputs {
-		if o.addBatch(ctx, b, selections[i]) {
-			// This batch blocked the output.
-			r.numBlockedOutputs++
+		b.SetSelection(true)
+		batchSel := b.Selection()
+		outputSel := selections[i]
+		if len(outputSel) > 0 {
+			//if usesSel {
+			// We need to remap the output selection using the original selection
+			// vector on the batch.
+			//batchSel = batchSel[:len(outputSel)]
+			//for i, selIdx := range outputSel {
+			//	batchSel[i] = origSel[selIdx]
+			//}
+			//} else {
+			// There is no selection vector on the batch itself, so we can copy the
+			// "distributed" selection directly.
+			copy(batchSel[:len(outputSel)], outputSel)
+			//}
+			b.SetLength(len(outputSel))
+			if o.addBatch(ctx, b) {
+				// This batch blocked the output.
+				r.numBlockedOutputs++
+			}
 		}
 	}
+	//b.SetSelection(usesSel)
+	//if usesSel {
+	//	copy(b.Selection()[:n], origSel[:n])
+	//}
+	//b.SetLength(n)
 	return false
 }
 

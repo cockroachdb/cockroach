@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -51,6 +50,7 @@ type spillingQueue struct {
 	diskQueueCfg   colcontainer.DiskQueueCfg
 	diskQueue      colcontainer.Queue
 	fdSemaphore    semaphore.Semaphore
+	enqueueScratch coldata.Batch
 	dequeueScratch coldata.Batch
 
 	rewindable      bool
@@ -114,6 +114,11 @@ func newRewindableSpillingQueue(
 
 func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error {
 	if batch.Length() == 0 {
+		if q.diskQueue != nil {
+			if err := q.diskQueue.Enqueue(batch); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -127,6 +132,28 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 			return err
 		}
 		q.unlimitedAllocator.ReleaseBatch(batch)
+		// TODO(yuzefovich): we could also add coalescing behavior when enqueueing
+		// to diskQueue.
+		if batch.Selection() != nil {
+			if q.enqueueScratch == nil {
+				q.enqueueScratch = q.unlimitedAllocator.NewMemBatch(q.typs)
+			}
+			q.unlimitedAllocator.PerformOperation(q.enqueueScratch.ColVecs(), func() {
+				for i, typ := range q.typs {
+					q.enqueueScratch.ColVec(i).Copy(
+						coldata.CopySliceArgs{
+							SliceArgs: coldata.SliceArgs{
+								ColType:   typ,
+								Src:       batch.ColVec(i),
+								Sel:       batch.Selection(),
+								SrcEndIdx: batch.Length(),
+							},
+						})
+				}
+				q.enqueueScratch.SetLength(batch.Length())
+			})
+			batch = q.enqueueScratch
+		}
 		if err := q.diskQueue.Enqueue(batch); err != nil {
 			return err
 		}
@@ -134,13 +161,53 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 		return nil
 	}
 
-	q.items[q.curTailIdx] = batch
-	q.curTailIdx++
-	if q.curTailIdx == len(q.items) {
-		q.curTailIdx = 0
+	batchLen := batch.Length()
+	copied := q.copyTuplesIntoTailBatch(batch, 0, batchLen)
+	if copied < batchLen {
+		// Not all tuples fit into the tail batch, so we need to create a new one
+		// and copy the remaining tuples into that.
+		q.curTailIdx++
+		if q.curTailIdx == len(q.items) {
+			q.curTailIdx = 0
+		}
+		q.copyTuplesIntoTailBatch(batch, copied, batchLen)
 	}
-	q.numInMemoryItems++
 	return nil
+}
+
+// copyTuplesIntoTailBatch copies tuples from batch with indices in range
+// [startIdx, endIdx) that can fit into the batch at the tail of the queue. It
+// returns the number of tuples actually copied. If the tail batch is nil, then
+// full-sized batch is allocated.
+func (q *spillingQueue) copyTuplesIntoTailBatch(batch coldata.Batch, startIdx, endIdx int) int {
+	if q.items[q.curTailIdx] == nil {
+		q.items[q.curTailIdx] = q.unlimitedAllocator.NewMemBatch(q.typs)
+		q.numInMemoryItems++
+	}
+	destBatch := q.items[q.curTailIdx]
+	numOldTuples := destBatch.Length()
+	tuplesToCopy := coldata.BatchSize() - numOldTuples
+	if endIdx-startIdx < tuplesToCopy {
+		tuplesToCopy = endIdx - startIdx
+	}
+	if tuplesToCopy > 0 {
+		q.unlimitedAllocator.PerformOperation(destBatch.ColVecs(), func() {
+			for i, typ := range q.typs {
+				destBatch.ColVec(i).Copy(coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:     typ,
+						Src:         batch.ColVec(i),
+						Sel:         batch.Selection(),
+						DestIdx:     numOldTuples,
+						SrcStartIdx: startIdx,
+						SrcEndIdx:   startIdx + tuplesToCopy,
+					},
+				})
+			}
+			destBatch.SetLength(numOldTuples + tuplesToCopy)
+		})
+	}
+	return tuplesToCopy
 }
 
 func (q *spillingQueue) dequeue() (coldata.Batch, error) {
@@ -152,9 +219,9 @@ func (q *spillingQueue) dequeue() (coldata.Batch, error) {
 		(!q.rewindable && q.numInMemoryItems == 0) {
 		// No more in-memory items. Fill the circular buffer as much as possible.
 		// Note that there must be at least one element on disk.
-		if !q.rewindable && q.curHeadIdx != q.curTailIdx {
-			execerror.VectorizedInternalPanic(fmt.Sprintf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
-		}
+		//if !q.rewindable && q.curHeadIdx != q.curTailIdx {
+		//	execerror.VectorizedInternalPanic(fmt.Sprintf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
+		//}
 		// NOTE: Only one item is dequeued from disk since a deserialized batch is
 		// only valid until the next call to Dequeue. In practice we could Dequeue
 		// up until a new file region is loaded (which will overwrite the memory of

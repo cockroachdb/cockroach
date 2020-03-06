@@ -146,7 +146,12 @@ func TestRouterOutputAddBatch(t *testing.T) {
 				in.Init()
 				for {
 					b := in.Next(ctx)
-					o.addBatch(ctx, b, tc.selection)
+					if b.Length() > 0 {
+						b.SetSelection(true)
+						copy(b.Selection()[:len(tc.selection)], tc.selection)
+						b.SetLength(len(tc.selection))
+					}
+					o.addBatch(ctx, b)
 					if b.Length() == 0 {
 						break
 					}
@@ -188,7 +193,12 @@ func TestRouterOutputNext(t *testing.T) {
 			unblockEvent: func(in Operator, o *routerOutputOp) {
 				for {
 					b := in.Next(ctx)
-					o.addBatch(ctx, b, fullSelection)
+					if b.Length() > 0 {
+						b.SetSelection(true)
+						copy(b.Selection()[:len(fullSelection)], fullSelection)
+						b.SetLength(len(fullSelection))
+					}
+					o.addBatch(ctx, b)
 					if b.Length() == 0 {
 						break
 					}
@@ -201,7 +211,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// ReaderWaitsForZeroBatch verifies that a reader blocking on Next will
 			// also get unblocked with no data other than the zero batch.
 			unblockEvent: func(_ Operator, o *routerOutputOp) {
-				o.addBatch(ctx, coldata.ZeroBatch, nil /* selection */)
+				o.addBatch(ctx, coldata.ZeroBatch)
 			},
 			expected: tuples{},
 			name:     "ReaderWaitsForZeroBatch",
@@ -284,7 +294,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 		t.Run(fmt.Sprintf("NextAfterZeroBatchDoesntBlock/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2))
-			o.addBatch(ctx, coldata.ZeroBatch, fullSelection)
+			o.addBatch(ctx, coldata.ZeroBatch)
 			o.Next(ctx)
 			o.Next(ctx)
 			select {
@@ -330,19 +340,30 @@ func TestRouterOutputNext(t *testing.T) {
 			b := in.Next(ctx)
 			// Make sure the output doesn't consider itself blocked. We're right at the
 			// limit but not over.
-			if o.addBatch(ctx, b, selection) {
+			b.SetSelection(true)
+			copy(b.Selection()[:len(selection)], selection)
+			b.SetLength(len(selection))
+			if o.addBatch(ctx, b) {
 				t.Fatal("unexpectedly blocked")
 			}
 			b = in.Next(ctx)
 			// This addBatch call should now block the output.
-			if !o.addBatch(ctx, b, selection) {
+			b.SetSelection(true)
+			copy(b.Selection()[:len(selection)], selection)
+			b.SetLength(len(selection))
+			if !o.addBatch(ctx, b) {
 				t.Fatal("unexpectedly still unblocked")
 			}
 
 			// Add the rest of the data.
 			for {
 				b = in.Next(ctx)
-				if o.addBatch(ctx, b, selection) {
+				if b.Length() > 0 {
+					b.SetSelection(true)
+					copy(b.Selection()[:len(selection)], selection)
+					b.SetLength(len(selection))
+				}
+				if o.addBatch(ctx, b) {
 					t.Fatal("should only return true when switching from unblocked to blocked")
 				}
 				if b.Length() == 0 {
@@ -420,8 +441,12 @@ func TestRouterOutputRandom(t *testing.T) {
 								expected[len(expected)-1][j] = b.ColVec(j).Int64()[i]
 							}
 						}
-
-						if o.addBatch(ctx, b, selection) {
+						if b.Length() > 0 {
+							b.SetSelection(true)
+							copy(b.Selection()[:len(selection)], selection)
+							b.SetLength(len(selection))
+						}
+						if o.addBatch(ctx, b) {
 							if lastBlockedState {
 								// We might have missed an unblock event during the last loop.
 								select {
@@ -490,17 +515,15 @@ func TestRouterOutputRandom(t *testing.T) {
 
 type callbackRouterOutput struct {
 	ZeroInputNode
-	addBatchCb func(coldata.Batch, []int) bool
+	addBatchCb func(coldata.Batch) bool
 	cancelCb   func()
 }
 
 var _ routerOutput = callbackRouterOutput{}
 
-func (o callbackRouterOutput) addBatch(
-	ctx context.Context, batch coldata.Batch, selection []int,
-) bool {
+func (o callbackRouterOutput) addBatch(ctx context.Context, batch coldata.Batch) bool {
 	if o.addBatchCb != nil {
-		return o.addBatchCb(batch, selection)
+		return o.addBatchCb(batch)
 	}
 	return false
 }
@@ -549,14 +572,25 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		// Capture the index.
 		outputIdx := i
 		outputs[i] = callbackRouterOutput{
-			addBatchCb: func(batch coldata.Batch, sel []int) bool {
-				for _, j := range sel {
-					key := batch.ColVec(0).Int64()[j]
-					if _, ok := valsYetToSee[key]; !ok {
-						t.Fatalf("pushed alread seen value to router output: %d", key)
+			addBatchCb: func(batch coldata.Batch) bool {
+				if sel := batch.Selection(); sel != nil {
+					for _, j := range sel[:batch.Length()] {
+						key := batch.ColVec(0).Int64()[j]
+						if _, ok := valsYetToSee[key]; !ok {
+							t.Fatalf("pushed alread seen value to router output: %d", key)
+						}
+						delete(valsYetToSee, key)
+						valsPushed[outputIdx]++
 					}
-					delete(valsYetToSee, key)
-					valsPushed[outputIdx]++
+				} else {
+					for j := 0; j < batch.Length(); j++ {
+						key := batch.ColVec(0).Int64()[j]
+						if _, ok := valsYetToSee[key]; !ok {
+							t.Fatalf("pushed alread seen value to router output: %d", key)
+						}
+						delete(valsYetToSee, key)
+						valsPushed[outputIdx]++
+					}
 				}
 				return false
 			},
@@ -592,7 +626,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	for i := range outputs {
 		// We'll just be checking canceled.
 		outputs[i] = callbackRouterOutput{
-			addBatchCb: func(_ coldata.Batch, _ []int) bool {
+			addBatchCb: func(_ coldata.Batch) bool {
 				atomic.AddInt64(&numAddBatches, 1)
 				return false
 			},
@@ -717,8 +751,6 @@ func TestHashRouterOneOutput(t *testing.T) {
 			o := newOpTestOutput(routerOutputs[0], expected)
 
 			ro := routerOutputs[0].(*routerOutputOp)
-			// Set alwaysFlush so that data is always flushed to the spillingQueue.
-			ro.testingKnobs.alwaysFlush = true
 
 			var wg sync.WaitGroup
 			wg.Add(1)
@@ -873,7 +905,6 @@ func TestHashRouterRandom(t *testing.T) {
 						t.Fatalf("unexpected number of results %d, expected %d", actualTotal, len(data))
 					}
 					if expectedDistribution == nil {
-						expectedDistribution = resultsByOp
 						return
 					}
 					for i, numVals := range expectedDistribution {
