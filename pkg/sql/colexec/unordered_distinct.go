@@ -64,8 +64,6 @@ type unorderedDistinct struct {
 	ht            *hashTable
 	buildFinished bool
 
-	// sel is a list of indices to select representing the distinct rows.
-	sel           []int
 	distinctCount int
 
 	output           coldata.Batch
@@ -85,31 +83,14 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	if !op.buildFinished {
 		op.buildFinished = true
 		op.ht.build(ctx, op.input)
-		op.ht.findTupleGroups(ctx)
 
-		// Since next is no longer useful and pre-allocated to the appropriate
-		// size, we can use it as the selection vector. This way we don't have to
-		// reallocate a huge array.
-		//op.sel = op.ht.next
-		// TODO(yuzefovich): consider changing hash table to operate on ints
-		// instead of uint64s. Then we'll be able to reuse op.ht.next.
-		op.sel = make([]int, op.ht.vals.Length())
-		// We calculate keyID for tuple at index i as "i+1," so we start from
-		// position 1.
-		for i, isHead := range op.ht.head[1:] {
-			if isHead {
-				// The tuple at index i is the "head" of the linked list of tuples that
-				// are the same on the distinct columns, so we will include it while
-				// all other tuples from the linked list will be skipped.
-				op.sel[op.distinctCount] = i
-				op.distinctCount++
-			}
-		}
+		// We're using the hashTable in distinct mode, so it buffers only distinct
+		// tuples, as a result, we will be simply returning all buffered tuples.
+		op.distinctCount = op.ht.vals.Length()
 	}
 
 	// Create and return the next batch of input to a maximum size of
-	// coldata.BatchSize(). The rows in the new batch are specified by the
-	// corresponding slice in the selection vector.
+	// coldata.BatchSize().
 	nSelected := 0
 	batchEnd := op.outputBatchStart + coldata.BatchSize()
 	if batchEnd > op.distinctCount {
@@ -126,7 +107,6 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 					SliceArgs: coldata.SliceArgs{
 						ColType:     op.ht.valTypes[op.ht.outCols[i]],
 						Src:         fromCol,
-						Sel:         op.sel,
 						SrcStartIdx: op.outputBatchStart,
 						SrcEndIdx:   batchEnd,
 					},

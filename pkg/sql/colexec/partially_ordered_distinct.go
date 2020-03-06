@@ -121,7 +121,7 @@ func newChunkerOperator(
 	return &chunkerOperator{
 		input:         input,
 		inputTypes:    inputTypes,
-		windowedBatch: allocator.NewMemBatchWithSize(inputTypes, 0),
+		windowedBatch: allocator.NewMemBatchNoCols(inputTypes, coldata.BatchSize()),
 	}
 }
 

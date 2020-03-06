@@ -31,12 +31,12 @@ func _COLLECT_PROBE_OUTER(
 ) int { // */}}
 	// {{define "collectProbeOuter" -}}
 	// Early bounds checks.
-	_ = hj.ht.headID[batchSize-1]
+	_ = hj.ht.probeScratch.headID[batchSize-1]
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
-		currentID := hj.ht.headID[i]
+		currentID := hj.ht.probeScratch.headID[i]
 
 		for {
 			if nResults >= hj.outputBatchSize {
@@ -61,7 +61,7 @@ func _COLLECT_PROBE_OUTER(
 			hj.probeState.probeIdx[nResults] = i
 			// {{end}}
 			currentID = hj.ht.same[currentID]
-			hj.ht.headID[i] = currentID
+			hj.ht.probeScratch.headID[i] = currentID
 			nResults++
 
 			if currentID == 0 {
@@ -80,12 +80,12 @@ func _COLLECT_PROBE_NO_OUTER(
 ) int { // */}}
 	// {{define "collectProbeNoOuter" -}}
 	// Early bounds checks.
-	_ = hj.ht.headID[batchSize-1]
+	_ = hj.ht.probeScratch.headID[batchSize-1]
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
-		currentID := hj.ht.headID[i]
+		currentID := hj.ht.probeScratch.headID[i]
 		for currentID != 0 {
 			if nResults >= hj.outputBatchSize {
 				hj.probeState.prevBatch = batch
@@ -100,7 +100,7 @@ func _COLLECT_PROBE_NO_OUTER(
 			hj.probeState.probeIdx[nResults] = i
 			// {{end}}
 			currentID = hj.ht.same[currentID]
-			hj.ht.headID[i] = currentID
+			hj.ht.probeScratch.headID[i] = currentID
 			nResults++
 		}
 	}
@@ -115,12 +115,12 @@ func _COLLECT_LEFT_ANTI(
 ) int { // */}}
 	// {{define "collectLeftAnti" -}}
 	// Early bounds checks.
-	_ = hj.ht.headID[batchSize-1]
+	_ = hj.ht.probeScratch.headID[batchSize-1]
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
 	for i := int(0); i < batchSize; i++ {
-		currentID := hj.ht.headID[i]
+		currentID := hj.ht.probeScratch.headID[i]
 		if currentID == 0 {
 			// currentID of 0 indicates that ith probing row didn't have a match, so
 			// we include it into the output.
@@ -141,7 +141,7 @@ func _COLLECT_LEFT_ANTI(
 func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize int, _USE_SEL bool) { // */}}
 	// {{define "distinctCollectProbeOuter" -}}
 	// Early bounds checks.
-	_ = hj.ht.groupID[batchSize-1]
+	_ = hj.ht.probeScratch.groupID[batchSize-1]
 	_ = hj.probeState.probeRowUnmatched[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
@@ -150,7 +150,7 @@ func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize int, _USE_SEL bool)
 	// {{end}}
 	for i := int(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
-		id := hj.ht.groupID[i]
+		id := hj.ht.probeScratch.groupID[i]
 		rowUnmatched := id == 0
 		hj.probeState.probeRowUnmatched[i] = rowUnmatched
 		if !rowUnmatched {
@@ -169,16 +169,16 @@ func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize int, _USE_SEL bool)
 func _DISTINCT_COLLECT_PROBE_NO_OUTER(hj *hashJoiner, batchSize int, nResults int, _USE_SEL bool) { // */}}
 	// {{define "distinctCollectProbeNoOuter" -}}
 	// Early bounds checks.
-	_ = hj.ht.groupID[batchSize-1]
+	_ = hj.ht.probeScratch.groupID[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
 	for i := int(0); i < batchSize; i++ {
-		if hj.ht.groupID[i] != 0 {
+		if hj.ht.probeScratch.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
-			hj.probeState.buildIdx[nResults] = int(hj.ht.groupID[i] - 1)
+			hj.probeState.buildIdx[nResults] = int(hj.ht.probeScratch.groupID[i] - 1)
 			// {{if .UseSel}}
 			hj.probeState.probeIdx[nResults] = sel[i]
 			// {{else}}
