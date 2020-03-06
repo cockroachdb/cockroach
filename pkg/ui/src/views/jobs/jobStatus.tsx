@@ -15,7 +15,7 @@ import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import {cockroach} from "src/js/protos";
 import {JobStatusVisual, jobToVisual} from "src/views/jobs/jobStatusOptions";
 
-export class JobStatus extends React.PureComponent<{ job: Job }> {
+export class JobStatus extends React.PureComponent<{ job: Job, lineWidth?: number }> {
   render() {
     const visualType = jobToVisual(this.props.job);
 
@@ -34,7 +34,7 @@ export class JobStatus extends React.PureComponent<{ job: Job }> {
       case JobStatusVisual.ProgressBarWithDuration:
         return (
           <div>
-            <ProgressBar job={this.props.job} lineWidth={11} showPercentage={true}/>
+            <ProgressBar job={this.props.job} lineWidth={this.props.lineWidth || 11} showPercentage={true}/>
             <span className="jobs-table__duration">
               <Duration job={this.props.job}/>
             </span>

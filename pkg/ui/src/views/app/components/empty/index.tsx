@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// import { Button } from "antd";
 import React from "react";
 import heroBannerLp from "assets/heroBannerLp.png";
 import "./styles.styl";
