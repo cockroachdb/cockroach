@@ -10,6 +10,7 @@
 
 import React from "react";
 import cn from "classnames";
+import Back from "assets/back-arrow.svg";
 
 import "./button.styl";
 
@@ -54,10 +55,11 @@ export function Button(props: ButtonProps) {
       className={rootStyles}
     >
       <div className="crl-button__container">
+        { iconPosition === "left" && renderIcon() }
         <div className="crl-button__content">
           {children}
         </div>
-        { renderIcon() }
+        { iconPosition === "right" && renderIcon() }
       </div>
     </button>
   );
@@ -71,3 +73,6 @@ Button.defaultProps = {
   className: "",
   iconPosition: "left",
 };
+
+// tslint:disable-next-line: variable-name
+export const BackIcon = () => <img src={Back} alt="back" />;
