@@ -29,17 +29,9 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
-	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
-	for _, typ := range coltypes.AllTypes {
-		// TODO(yuzefovich): We do not support interval conversion yet.
-		if typ == coltypes.Interval {
-			continue
-		}
-		availableTyps = append(availableTyps, typ)
-	}
 	typs := make([]coltypes.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = availableTyps[rng.Intn(len(availableTyps))]
+		typs[i] = coltypes.AllTypes[rng.Intn(len(coltypes.AllTypes))]
 	}
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1
@@ -51,7 +43,7 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	unsupportedTypes := []coltypes.T{coltypes.Interval}
+	unsupportedTypes := []coltypes.T{coltypes.Unhandled}
 	for _, typ := range unsupportedTypes {
 		_, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
 		require.Error(t, err)

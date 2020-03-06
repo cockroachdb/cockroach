@@ -11,6 +11,7 @@
 package colserde
 
 import (
+	"encoding/binary"
 	"fmt"
 	"reflect"
 	"unsafe"
@@ -20,6 +21,7 @@ import (
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
@@ -90,6 +92,7 @@ var supportedTypes = func() map[coltypes.T]struct{} {
 		coltypes.Int32,
 		coltypes.Int64,
 		coltypes.Timestamp,
+		coltypes.Interval,
 	} {
 		typs[t] = struct{}{}
 	}
@@ -116,10 +119,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			arrowBitmap = n.NullBitmap()
 		}
 
-		if typ == coltypes.Bool || typ == coltypes.Decimal || typ == coltypes.Timestamp {
-			// Bools, Decimals, and Timestamps are handled differently from other
-			// coltypes. Refer to the comment on ArrowBatchConverter.builders for
-			// more information.
+		if typ == coltypes.Bool || typ == coltypes.Decimal || typ == coltypes.Timestamp || typ == coltypes.Interval {
 			var data *array.Data
 			switch typ {
 			case coltypes.Bool:
@@ -143,6 +143,22 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 						return nil, err
 					}
 					c.builders.binaryBuilder.Append(marshaled)
+				}
+				data = c.builders.binaryBuilder.NewBinaryArray().Data()
+			case coltypes.Interval:
+				intervals := vec.Interval()[:n]
+				// Appending to the binary builder will copy the bytes, so it's safe to
+				// reuse a scratch bytes to encode the interval into.
+				scratchIntervalBytes := make([]byte, sizeOfInt64*3)
+				for _, interval := range intervals {
+					nanos, months, days, err := interval.Encode()
+					if err != nil {
+						return nil, err
+					}
+					binary.LittleEndian.PutUint64(scratchIntervalBytes[0:sizeOfInt64], uint64(nanos))
+					binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64:sizeOfInt64*2], uint64(months))
+					binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64*2:sizeOfInt64*3], uint64(days))
+					c.builders.binaryBuilder.Append(scratchIntervalBytes)
 				}
 				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			default:
@@ -310,6 +326,32 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 			vecArr := vec.Timestamp()
 			for i := 0; i < len(offsets)-1; i++ {
 				if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
+					return err
+				}
+			}
+			arr = bytesArr
+		case coltypes.Interval:
+			// TODO(asubiotto): this serialization is quite inefficient compared to
+			//  the direct casts below. Improve it.
+			bytesArr := array.NewBinaryData(d)
+			bytes := bytesArr.ValueBytes()
+			if bytes == nil {
+				// All bytes values are empty, so the representation is solely with the
+				// offsets slice, so create an empty slice so that the conversion
+				// corresponds.
+				bytes = make([]byte, 0)
+			}
+			offsets := bytesArr.ValueOffsets()
+			vecArr := vec.Interval()
+			for i := 0; i < len(offsets)-1; i++ {
+				intervalBytes := bytes[offsets[i]:offsets[i+1]]
+				var err error
+				vecArr[i], err = duration.Decode(
+					int64(binary.LittleEndian.Uint64(intervalBytes[0:sizeOfInt64])),
+					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64:sizeOfInt64*2])),
+					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64*2:sizeOfInt64*3])),
+				)
+				if err != nil {
 					return err
 				}
 			}

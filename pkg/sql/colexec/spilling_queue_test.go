@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -30,15 +29,6 @@ func TestSpillingQueue(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-
-	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
-	for _, typ := range coltypes.AllTypes {
-		// TODO(yuzefovich): We do not support interval serialization yet.
-		if typ == coltypes.Interval {
-			continue
-		}
-		availableTyps = append(availableTyps, typ)
-	}
 
 	rng, _ := randutil.NewPseudoRand()
 	for _, rewindable := range []bool{false, true} {
@@ -67,10 +57,9 @@ func TestSpillingQueue(t *testing.T) {
 				// Create random input.
 				batches := make([]coldata.Batch, 0, numBatches)
 				op := NewRandomDataOp(testAllocator, rng, RandomDataOpArgs{
-					AvailableTyps: availableTyps,
-					NumBatches:    cap(batches),
-					BatchSize:     1 + rng.Intn(coldata.BatchSize()),
-					Nulls:         true,
+					NumBatches: cap(batches),
+					BatchSize:  1 + rng.Intn(coldata.BatchSize()),
+					Nulls:      true,
 					BatchAccumulator: func(b coldata.Batch) {
 						batches = append(batches, CopyBatch(testAllocator, b))
 					},

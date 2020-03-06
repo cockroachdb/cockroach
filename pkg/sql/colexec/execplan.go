@@ -207,16 +207,6 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.Sorter != nil:
-		inputTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		if err != nil {
-			return false, err
-		}
-		for _, t := range inputTypes {
-			if t == coltypes.Interval {
-				return false, errors.WithIssueLink(errors.Errorf("sort on interval type not supported"),
-					errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
-			}
-		}
 		return true, nil
 
 	case core.Windower != nil:
@@ -235,21 +225,6 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 			}
 			if wf.Func.AggregateFunc != nil {
 				return false, errors.Newf("aggregate functions used as window functions are not supported")
-			}
-			if len(core.Windower.PartitionBy) > 0 || len(wf.Ordering.Columns) > 0 {
-				// When we have non-empty PARTITION BY and ORDER BY clauses, we will need
-				// to plan a sorter which currently doesn't support operating on interval
-				// type.
-				inputTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-				if err != nil {
-					return false, err
-				}
-				for _, t := range inputTypes {
-					if t == coltypes.Interval {
-						return false, errors.WithIssueLink(errors.Errorf("window functions involving interval type not supported"),
-							errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/45392"})
-					}
-				}
 			}
 
 			if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
@@ -294,11 +269,6 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 	if len(ordering.Columns) == int(matchLen) {
 		// The input is already fully ordered, so there is nothing to sort.
 		return input, nil
-	}
-	for _, t := range inputTypes {
-		if t == coltypes.Interval {
-			execerror.VectorizedInternalPanic("attempted to create a sort on interval type after isSupported check")
-		}
 	}
 	if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
