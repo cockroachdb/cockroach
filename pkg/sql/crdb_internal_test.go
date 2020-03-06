@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgx/pgtype"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -288,5 +291,53 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 	if !found {
 		t.Fatal("column disappeared")
 	}
+}
 
+// TestCrdbInternalJobsOOM verifies that the memory budget works correctly for
+// crdb_internal.jobs.
+func TestCrdbInternalJobsOOM(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The budget needs to be large enough to establish the initial database
+	// connection, but small enough to overflow easily. It's set to be comfortably
+	// large enough that the server can start up with a bit of
+	// extra space to overflow.
+	const lowMemoryBudget = 500000
+	const fieldSize = 10000
+	const numRows = 10
+	const statement = "SELECT count(*) FROM crdb_internal.jobs"
+
+	insertRows := func(sqlDB *gosql.DB) {
+		for i := 0; i < numRows; i++ {
+			if _, err := sqlDB.Exec(`
+INSERT INTO system.jobs(id, status, payload, progress)
+VALUES ($1, 'StatusRunning', repeat('a', $2)::BYTES, repeat('a', $2)::BYTES)`, i, fieldSize); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	t.Run("over budget jobs table", func(t *testing.T) {
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+			SQLMemoryPoolSize: lowMemoryBudget,
+		})
+		defer s.Stopper().Stop(context.Background())
+
+		insertRows(sqlDB)
+		if _, err := sqlDB.Exec(statement); err.(*pq.Error).Code != pgcode.OutOfMemory {
+			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
+		}
+	})
+
+	t.Run("under budget jobs table", func(t *testing.T) {
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+			SQLMemoryPoolSize: 2 * lowMemoryBudget,
+		})
+		defer s.Stopper().Stop(context.Background())
+
+		insertRows(sqlDB)
+		if _, err := sqlDB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
