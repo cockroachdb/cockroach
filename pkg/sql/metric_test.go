@@ -252,9 +252,6 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 1); err != nil {
-		t.Error(err)
-	}
 	if _, err := checkCounterDelta(s, sql.MetaTxnBeginStarted, accum.txnBeginCount, 1); err != nil {
 		t.Error(err)
 	}
@@ -264,6 +261,10 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+
+	if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 1); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -309,8 +310,8 @@ func TestSavepointMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := txn.Exec("SAVEPOINT blah"); err == nil {
-		t.Fatal("expected an error but didn't get one")
+	if _, err := txn.Exec("SAVEPOINT blah"); err != nil {
+		t.Fatal(err)
 	}
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)

@@ -781,6 +781,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_sequences_stmt
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
+%type <tree.Statement> show_savepoint_stmt
 %type <tree.Statement> show_stats_stmt
 %type <tree.Statement> show_syntax_stmt
 %type <tree.Statement> show_tables_stmt
@@ -3368,6 +3369,7 @@ show_stmt:
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
+| show_savepoint_stmt       // EXTEND WITH HELP: SHOW SAVEPOINT
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
 | show_sequences_stmt       // EXTEND WITH HELP: SHOW SEQUENCES
 | show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
@@ -3819,6 +3821,17 @@ show_syntax_stmt:
     $$.val = &tree.ShowSyntax{Statement: $3}
   }
 | SHOW SYNTAX error // SHOW HELP: SHOW SYNTAX
+
+// %Help: SHOW SAVEPOINT - display current savepoint properties
+// %Category: Cfg
+// %Text: SHOW SAVEPOINT STATUS
+show_savepoint_stmt:
+  SHOW SAVEPOINT STATUS
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowSavepointStatus{}
+  }
+| SHOW SAVEPOINT error // SHOW HELP: SHOW SAVEPOINT
 
 // %Help: SHOW TRANSACTION - display current transaction properties
 // %Category: Cfg

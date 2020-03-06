@@ -395,6 +395,15 @@ func (node *ShowTransactionStatus) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TRANSACTION STATUS")
 }
 
+// ShowSavepointStatus represents a SHOW SAVEPOINT STATUS statement.
+type ShowSavepointStatus struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSavepointStatus) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW SAVEPOINT STATUS")
+}
+
 // ShowUsers represents a SHOW USERS statement.
 type ShowUsers struct {
 }

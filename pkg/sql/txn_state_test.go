@@ -114,14 +114,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 // createAbortedState returns a txnState initialized with an aborted txn.
 func (tc *testContext) createAbortedState() (fsm.State, *txnState) {
 	_, ts := tc.createOpenState(explicitTxn)
-	ts.mu.txn.CleanupOnError(ts.Ctx, errors.Errorf("dummy error"))
 	return stateAborted{}, ts
-}
-
-func (tc *testContext) createRestartWaitState() (fsm.State, *txnState) {
-	_, ts := tc.createOpenState(explicitTxn)
-	s := stateRestartWait{}
-	return s, ts
 }
 
 func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
@@ -419,7 +412,7 @@ func TestTransitions(t *testing.T) {
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
 			},
-			expState: stateRestartWait{},
+			expState: stateAborted{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
 				expEv:   noEvent,
@@ -564,21 +557,39 @@ func TestTransitions(t *testing.T) {
 			expTxn: nil,
 		},
 		{
-			// The txn is starting again (e.g. ROLLBACK TO SAVEPOINT while in Aborted).
-			name: "Aborted->Starting",
+			// The txn is starting again (ROLLBACK TO SAVEPOINT <not cockroach_restart> while in Aborted).
+			name: "Aborted->Open",
 			init: func() (fsm.State, *txnState, error) {
 				s, ts := testCon.createAbortedState()
 				return s, ts, nil
 			},
-			ev: eventTxnStart{ImplicitTxn: fsm.False},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx),
+			ev:       eventSavepointRollback{},
+			expState: stateOpen{ImplicitTxn: fsm.False},
+			expAdv: expAdvance{
+				expCode: advanceOne,
+				expEv:   noEvent,
+			},
+			expTxn: &expKVTxn{},
+		},
+		{
+			// The txn is starting again (ROLLBACK TO SAVEPOINT cockroach_restart while in Aborted).
+			name: "Aborted->Restart",
+			init: func() (fsm.State, *txnState, error) {
+				s, ts := testCon.createAbortedState()
+				return s, ts, nil
+			},
+			ev:       eventTxnRestart{},
 			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnRestart,
 			},
-			expTxn: &expKVTxn{},
+			expTxn: &expKVTxn{
+				userPriority: &pri,
+				tsNanos:      &now.WallTime,
+				origTSNanos:  &now.WallTime,
+				maxTSNanos:   &maxTS.WallTime,
+			},
 		},
 		{
 			// The txn is starting again (e.g. ROLLBACK TO SAVEPOINT while in Aborted).
@@ -589,9 +600,7 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createAbortedState()
 				return s, ts, nil
 			},
-			ev: eventTxnStart{ImplicitTxn: fsm.False},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadOnly, now.GoTime(),
-				&now, tranCtx),
+			ev:       eventTxnRestart{},
 			expState: stateOpen{ImplicitTxn: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -600,56 +609,6 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{
 				tsNanos: proto.Int64(now.WallTime),
 			},
-		},
-		//
-		// Tests starting from the RestartWait state.
-		//
-		{
-			// The txn got finished, such as after a ROLLBACK.
-			name: "RestartWait->NoTxn",
-			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createRestartWaitState()
-				err := ts.mu.txn.Rollback(ts.Ctx)
-				return s, ts, err
-			},
-			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: false},
-			expState:  stateNoTxn{},
-			expAdv: expAdvance{
-				expCode: advanceOne,
-				expEv:   txnRollback,
-			},
-			expTxn: nil,
-		},
-		{
-			// The txn got restarted, through a ROLLBACK TO SAVEPOINT.
-			name: "RestartWait->Open",
-			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createRestartWaitState()
-				return s, ts, nil
-			},
-			ev:       eventTxnRestart{},
-			expState: stateOpen{ImplicitTxn: fsm.False},
-			expAdv: expAdvance{
-				expCode: advanceOne,
-				expEv:   txnRestart,
-			},
-			expTxn: &expKVTxn{},
-		},
-		{
-			name: "RestartWait->Aborted",
-			init: func() (fsm.State, *txnState, error) {
-				s, ts := testCon.createRestartWaitState()
-				return s, ts, nil
-			},
-			ev:        eventNonRetriableErr{IsCommit: fsm.False},
-			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
-			expState:  stateAborted{},
-			expAdv: expAdvance{
-				expCode: skipBatch,
-				expEv:   noEvent,
-			},
-			expTxn: &expKVTxn{},
 		},
 		//
 		// Tests starting from the CommitWait state.
