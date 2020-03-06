@@ -23,6 +23,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -265,7 +266,11 @@ func CreateNodePair(
 		return errors.Errorf("could not generate new node key: %v", err)
 	}
 
-	nodeCert, err := GenerateServerCert(caCert, caPrivateKey, nodeKey.Public(), lifetime, hosts)
+	// Allow control of the principal to place in the cert via an env var. This
+	// is intended for testing purposes only.
+	nodeUser := envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser)
+	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
+		nodeKey.Public(), lifetime, nodeUser, hosts)
 	if err != nil {
 		return errors.Errorf("error creating node server certificate and key: %s", err)
 	}
