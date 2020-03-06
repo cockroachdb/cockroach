@@ -42,6 +42,7 @@ import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnos
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
+import { createStatementDiagnosticsAlertLocalSetting } from "oss/src/redux/alerts";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -122,8 +123,17 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     this.downloadRef.current?.download("trace.json", "application/json", trace);
   }
 
+  onActivateButtonClick = () => {
+    const { activate, statementFingerprint } = this.props;
+    activate(statementFingerprint);
+  }
+
+  componentWillUnmount() {
+    this.props.dismissAlertMessage();
+  }
+
   render() {
-    const { hasData, diagnosticsReports, activate, statementFingerprint } = this.props;
+    const { hasData, diagnosticsReports } = this.props;
 
     const canRequestDiagnostics = diagnosticsReports.every(diagnostic => diagnostic.completed);
 
@@ -150,7 +160,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
             Statement diagnostics
           </Text>
           <Button
-            onClick={() => activate(statementFingerprint)}
+            onClick={this.onActivateButtonClick}
             disabled={!canRequestDiagnostics}
             type="secondary"
           >
@@ -218,6 +228,7 @@ interface MapStateToProps {
 
 interface MapDispatchToProps {
   activate: (statementFingerprint: string) => void;
+  dismissAlertMessage: () => void;
 }
 
 const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapStateToProps => {
@@ -232,6 +243,7 @@ const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapS
 
 const mapDispatchToProps: MapDispatchToProps = {
   activate: createStatementDiagnosticsReportAction,
+  dismissAlertMessage: () => createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
 };
 
 export default connect<
