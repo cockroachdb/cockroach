@@ -101,3 +101,5 @@
 - Version: 25 (MinAcceptedVersion: 24)
     - Add locking strength and wait policy fields to TableReader, JoinReader,
       IndexSkipTableReader, and InterleavedReaderJoiner spec.
+- Version: 26 (MinAcceptedVersion: 24)
+    - Add the numeric tuple field accessor and the ByIndex field to ColumnAccessExpr.

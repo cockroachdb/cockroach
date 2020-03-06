@@ -55,6 +55,11 @@ type Record struct {
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
 	RunningStatus RunningStatus
+	// NonCancelable is used to denote when a job cannot be canceled. This field
+	// will not be respected in mixed version clusters where some nodes have
+	// a version < 20.1, so it can only be used in cases where all nodes having
+	// versions >= 20.1 is guaranteed.
+	NonCancelable bool
 }
 
 // StartableJob is a job created with a transaction to be started later.
@@ -375,6 +380,9 @@ func (j *Job) cancelRequested(
 	ctx context.Context, fn func(context.Context, *client.Txn) error,
 ) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Payload.Noncancelable {
+			return errors.Newf("job %d: not cancelable", j.ID())
+		}
 		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
 			return nil
 		}

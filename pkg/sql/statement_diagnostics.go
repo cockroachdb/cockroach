@@ -14,11 +14,13 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,6 +40,52 @@ type StmtDiagnosticsRequester interface {
 	//
 	// It returns the ID of the new row.
 	InsertRequest(ctx context.Context, fprint string) (int, error)
+
+	// GetAllRequests retrieves all the rows in the
+	// system.statement_diagnostics_requests table.
+	GetAllRequests(ctx context.Context) ([]StmtDiagnosticsRequest, error)
+
+	// GetStatementDiagnostics retrieves an entry in the system.statement_diagnostics
+	// table identified by the given ID.
+	GetStatementDiagnostics(ctx context.Context, ID int) (*StmtDiagnostics, error)
+}
+
+type StmtDiagnosticsRequest struct {
+	ID                     int
+	StatementFingerprint   string
+	Completed              bool
+	StatementDiagnosticsID int
+	RequestedAt            time.Time
+	CompletedAt            *time.Time
+}
+
+type StmtDiagnostics struct {
+	ID                   int
+	StatementFingerprint string
+	Trace                string
+	CollectedAt          time.Time
+}
+
+func (request *StmtDiagnosticsRequest) ToProto() serverpb.StatementDiagnosticsReport {
+	resp := serverpb.StatementDiagnosticsReport{
+		Id:                     int64(request.ID),
+		Completed:              request.Completed,
+		StatementFingerprint:   request.StatementFingerprint,
+		StatementDiagnosticsId: int64(request.StatementDiagnosticsID),
+		RequestedAt:            request.RequestedAt,
+		CompletedAt:            request.CompletedAt,
+	}
+	return resp
+}
+
+func (diagnostics *StmtDiagnostics) ToProto() serverpb.StatementDiagnostics {
+	resp := serverpb.StatementDiagnostics{
+		Id:                   int64(diagnostics.ID),
+		StatementFingerprint: diagnostics.StatementFingerprint,
+		CollectedAt:          diagnostics.CollectedAt,
+		Trace:                diagnostics.Trace,
+	}
+	return resp
 }
 
 // stmtDiagnosticsRequestRegistry maintains a view on the statement fingerprints
@@ -64,6 +112,109 @@ type stmtDiagnosticsRequestRegistry struct {
 	gossip *gossip.Gossip
 	nodeID roachpb.NodeID
 }
+
+func (r *stmtDiagnosticsRequestRegistry) GetStatementDiagnostics(
+	ctx context.Context, statementDiagnosticsID int) (*StmtDiagnostics, error) {
+	var err error
+	row, err := r.ie.QueryRowEx(ctx, "stmt-diag-get-one", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{
+			User: security.RootUser,
+		},
+		`SELECT
+			id,
+			statement_fingerprint,
+			collected_at,
+			trace
+		FROM
+			system.statement_diagnostics
+		WHERE
+			id = $1`, statementDiagnosticsID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, errors.New(
+			"requested a statement diagnostic that does not exist",
+		)
+	}
+
+	resp := StmtDiagnostics{
+		ID: statementDiagnosticsID,
+	}
+
+	if statementFingerprint, ok := row[1].(*tree.DString); ok {
+		resp.StatementFingerprint = statementFingerprint.String()
+	}
+
+	if collectedAt, ok := row[2].(*tree.DTimestampTZ); ok {
+		resp.CollectedAt = collectedAt.Time
+	}
+
+	if traceJSON, ok := row[3].(*tree.DJSON); ok {
+		traceJSONString, err := traceJSON.AsText()
+		if err != nil {
+			return nil, err
+		}
+		resp.Trace = *traceJSONString
+	}
+
+	return &resp, nil
+}
+
+func (r *stmtDiagnosticsRequestRegistry) GetAllRequests(
+	ctx context.Context,
+) ([]StmtDiagnosticsRequest, error) {
+	var err error
+	rows, err := r.ie.QueryEx(ctx, "stmt-diag-get-all", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{
+			User: security.RootUser,
+		},
+		`SELECT
+			id,
+			statement_fingerprint,
+			completed,
+			statement_diagnostics_id,
+			requested_at,
+			completed_at
+		FROM
+			system.statement_diagnostics_requests`)
+	if err != nil {
+		return nil, err
+	}
+
+	requests := make([]StmtDiagnosticsRequest, len(rows))
+	for i, row := range rows {
+		id := int(*row[0].(*tree.DInt))
+		statementFingerprint := string(*row[1].(*tree.DString))
+		completed := bool(*row[2].(*tree.DBool))
+		req := StmtDiagnosticsRequest{
+			ID:                   id,
+			StatementFingerprint: statementFingerprint,
+			Completed:            completed,
+		}
+
+		if row[3] != tree.DNull {
+			sdi := int(*row[3].(*tree.DInt))
+			req.StatementDiagnosticsID = sdi
+		}
+
+		if requestedAt, ok := row[4].(*tree.DTimestampTZ); ok {
+			req.RequestedAt = requestedAt.Time
+		}
+
+		if row[5] != tree.DNull {
+			if completedAt, ok := row[5].(*tree.DTimestampTZ); ok {
+				req.CompletedAt = &completedAt.Time
+			}
+		}
+
+		requests[i] = req
+	}
+
+	return requests, nil
+}
+
+var _ StmtDiagnosticsRequester = &stmtDiagnosticsRequestRegistry{}
 
 func newStmtDiagnosticsRequestRegistry(
 	ie *InternalExecutor, db *client.DB, g *gossip.Gossip, nodeID roachpb.NodeID,
@@ -308,8 +459,8 @@ func (r *stmtDiagnosticsRequestRegistry) insertDiagnostics(
 		_, err := r.ie.ExecEx(ctx, "stmt-diag-mark-completed", txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"UPDATE system.statement_diagnostics_requests "+
-				"SET completed = true, statement_diagnostics_id = $1 WHERE id = $2",
-			traceID, req.id)
+				"SET completed = true, completed_at = $1, statement_diagnostics_id = $2 WHERE id = $3",
+			timeutil.Now(), traceID, req.id)
 		return err
 	})
 }

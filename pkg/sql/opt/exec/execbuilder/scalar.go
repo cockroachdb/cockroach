@@ -348,6 +348,7 @@ func (b *Builder) buildColumnAccess(
 	}
 	childTyp := colAccess.Input.DataType()
 	colIdx := int(colAccess.Idx)
+	// Find a label if there is one. It's OK if there isn't.
 	lbl := ""
 	if childTyp.TupleLabels() != nil {
 		lbl = childTyp.TupleLabels()[colIdx]

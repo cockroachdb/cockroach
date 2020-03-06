@@ -564,9 +564,8 @@ func (expr *TupleStar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
-	// Although we're going to elide the tuple star, we need to ensure
-	// the expression is indeed a labeled tuple first.
-	if resolvedType.Family() != types.TupleFamily || len(resolvedType.TupleLabels()) == 0 {
+	// We need to ensure the expression is a tuple.
+	if resolvedType.Family() != types.TupleFamily {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
@@ -592,26 +591,33 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
-	if resolvedType.Family() != types.TupleFamily || len(resolvedType.TupleLabels()) == 0 {
+	if resolvedType.Family() != types.TupleFamily || (!expr.ByIndex && len(resolvedType.TupleLabels()) == 0) {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
-	// Go through all of the labels to find a match.
-	expr.ColIndex = -1
-	for i, label := range resolvedType.TupleLabels() {
-		if label == expr.ColName {
-			if expr.ColIndex != -1 {
-				// Found a duplicate label.
-				return nil, pgerror.Newf(pgcode.AmbiguousColumn, "column reference %q is ambiguous", label)
-			}
-			expr.ColIndex = i
+	if expr.ByIndex {
+		// By-index reference. Verify that the index is valid.
+		if expr.ColIndex < 0 || expr.ColIndex >= len(resolvedType.TupleContents()) {
+			return nil, pgerror.Newf(pgcode.Syntax, "tuple column %d does not exist", expr.ColIndex+1)
 		}
-	}
-	if expr.ColIndex < 0 {
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
-			"could not identify column %q in %s",
-			ErrNameStringP(&expr.ColName), resolvedType,
-		)
+	} else {
+		// Go through all of the labels to find a match.
+		expr.ColIndex = -1
+		for i, label := range resolvedType.TupleLabels() {
+			if label == expr.ColName {
+				if expr.ColIndex != -1 {
+					// Found a duplicate label.
+					return nil, pgerror.Newf(pgcode.AmbiguousColumn, "column reference %q is ambiguous", label)
+				}
+				expr.ColIndex = i
+			}
+		}
+		if expr.ColIndex < 0 {
+			return nil, pgerror.Newf(pgcode.DatatypeMismatch,
+				"could not identify column %q in %s",
+				ErrNameStringP(&expr.ColName), resolvedType,
+			)
+		}
 	}
 
 	// Optimization: if the expression is actually a tuple, then

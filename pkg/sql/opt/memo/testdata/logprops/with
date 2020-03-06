@@ -24,7 +24,8 @@ with &1 (foo)
       ├── key: (3)
       ├── fd: (3)-->(4)
       ├── prune: (3,4)
-      └── cte-uses: map[1:1]
+      └── cte-uses
+           └── &1: count=1 used-columns=(1,2)
 
 # Side effects should be propagated up to the top-level from the Binding side
 # of a WITH.
@@ -93,7 +94,8 @@ with &1 (foo)
       ├── key: ()
       ├── fd: ()-->(3)
       ├── prune: (3)
-      ├── cte-uses: map[1:1]
+      ├── cte-uses
+      │    └── &1: count=1 used-columns=(1)
       ├── with-scan &1 (foo)
       │    ├── columns: "?column?":2(int!null)
       │    ├── mapping:
@@ -102,7 +104,8 @@ with &1 (foo)
       │    ├── key: ()
       │    ├── fd: ()-->(2)
       │    ├── prune: (2)
-      │    └── cte-uses: map[1:1]
+      │    └── cte-uses
+      │         └── &1: count=1 used-columns=(1)
       └── projections
            └── div [as="?column?":3, type=decimal, side-effects]
                 ├── const: 1 [type=int]
@@ -138,7 +141,8 @@ with &1 (foo)
       ├── key: ()
       ├── fd: ()-->(3)
       ├── prune: (3)
-      ├── cte-uses: map[1:1]
+      ├── cte-uses
+      │    └── &1: count=1 used-columns=(1)
       ├── with-scan &1 (foo)
       │    ├── columns: int8:2(int)
       │    ├── mapping:
@@ -147,7 +151,8 @@ with &1 (foo)
       │    ├── key: ()
       │    ├── fd: ()-->(2)
       │    ├── prune: (2)
-      │    └── cte-uses: map[1:1]
+      │    └── cte-uses
+      │         └── &1: count=1 used-columns=(1)
       └── projections
            └── const: 1 [as="?column?":3, type=int]
 

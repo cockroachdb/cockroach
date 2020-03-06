@@ -1181,14 +1181,12 @@ func MakeTableDesc(
 	// If all nodes in the cluster know how to handle secondary indexes with column families,
 	// write the new version into new index descriptors.
 	indexEncodingVersion := sqlbase.BaseIndexFormatVersion
-	// We can't use st.Version.IsActive because this method is sometimes called
-	// before the version has been initialized, leading to a panic. There are also
-	// cases where this function is called in tests where st is nil.
-	if st != nil {
-		if version := st.Version.ActiveVersionOrEmpty(ctx); version != (clusterversion.ClusterVersion{}) &&
-			version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
-			indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
-		}
+	// We can't use st.Version.IsActive because this method is used during
+	// server setup before the cluster version has been initialized.
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	if version != (clusterversion.ClusterVersion{}) &&
+		version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
+		indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
 	}
 
 	for i, def := range n.Defs {
@@ -1210,7 +1208,7 @@ func MakeTableDesc(
 				if st == nil {
 					return desc, invalidClusterForShardedIndexError
 				}
-				if version := st.Version.ActiveVersionOrEmpty(ctx); version == (clusterversion.ClusterVersion{}) ||
+				if version == (clusterversion.ClusterVersion{}) ||
 					!version.IsActive(clusterversion.VersionHashShardedIndexes) {
 					return desc, invalidClusterForShardedIndexError
 				}

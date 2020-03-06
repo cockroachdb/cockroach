@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -346,8 +347,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableAlterPrimaryKey:
 			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
-			version := params.p.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
-			if !version.IsActive(clusterversion.VersionPrimaryKeyChanges) {
+			if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionPrimaryKeyChanges) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"all nodes are not the correct version for primary key changes")
 			}
@@ -358,7 +358,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if t.Sharded != nil {
-				if !version.IsActive(clusterversion.VersionHashShardedIndexes) {
+				if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionHashShardedIndexes) {
 					return invalidClusterForShardedIndexError
 				}
 				if !params.p.EvalContext().SessionData.HashShardedIndexesEnabled {
@@ -374,18 +374,29 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"cannot create table and change it's primary key in the same transaction")
 			}
 
-			// Ensure that there is not another primary key change attempted within this transaction.
+			// Ensure that other schema changes on this table are not currently
+			// executing, and that other schema changes have not been performed
+			// in the current transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
 			for i := range n.tableDesc.Mutations {
-				if desc := n.tableDesc.Mutations[i].GetPrimaryKeySwap(); desc != nil {
-					if n.tableDesc.Mutations[i].MutationID == currentMutationID {
-						return unimplemented.NewWithIssue(
-							43376, "multiple primary key changes in the same transaction are unsupported")
+				mut := &n.tableDesc.Mutations[i]
+				if mut.MutationID == currentMutationID {
+					return unimplemented.NewWithIssuef(
+						45510, "cannot perform a primary key change on %s "+
+							"with other schema changes on %s in the same transaction", n.tableDesc.Name, n.tableDesc.Name)
+				}
+				if mut.MutationID < currentMutationID {
+					// We can handle indexes being deleted concurrently. We do this
+					// in order to not be blocked on index drops created by a previous
+					// primary key change. If we errored out when seeing a previous
+					// index drop, then users would see a confusing message that a
+					// schema change is in progress when it doesn't seem like one is.
+					// TODO (rohany): This feels like such a hack until (#45150) is fixed.
+					if mut.GetIndex() != nil && mut.Direction == sqlbase.DescriptorMutation_DROP {
+						continue
 					}
-					if n.tableDesc.Mutations[i].MutationID < currentMutationID {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"table %s is currently undergoing a primary key change", n.tableDesc.Name)
-					}
+					return unimplemented.NewWithIssuef(
+						45510, "table %s is currently undergoing a schema change", n.tableDesc.Name)
 				}
 			}
 
@@ -405,7 +416,31 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			// Disable primary key changes on tables that are interleaved parents.
 			if len(n.tableDesc.PrimaryIndex.InterleavedBy) != 0 {
-				return errors.New("cannot change the primary key of an interleaved parent")
+				var sb strings.Builder
+				sb.WriteString("[")
+				comma := ", "
+				for i := range n.tableDesc.PrimaryIndex.InterleavedBy {
+					interleave := &n.tableDesc.PrimaryIndex.InterleavedBy[i]
+					if i != 0 {
+						sb.WriteString(comma)
+					}
+					childTable, err := params.p.Tables().getTableVersionByID(
+						params.ctx,
+						params.p.Txn(),
+						interleave.Table,
+						tree.ObjectLookupFlags{},
+					)
+					if err != nil {
+						return err
+					}
+					sb.WriteString(childTable.Name)
+				}
+				sb.WriteString("]")
+				return errors.Newf(
+					"cannot change primary key of table %s because table(s) %s are interleaved into it",
+					n.tableDesc.Name,
+					sb.String(),
+				)
 			}
 
 			nameExists := func(name string) bool {
@@ -424,6 +459,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				CreatedExplicitly: true,
 				EncodingType:      sqlbase.PrimaryIndexEncoding,
 				Type:              sqlbase.IndexDescriptor_FORWARD,
+				Version:           sqlbase.SecondaryIndexFamilyFormatVersion,
 			}
 
 			// If the new index is requested to be sharded, set up the index descriptor
@@ -463,6 +499,25 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if err := n.tableDesc.AllocateIDs(); err != nil {
 				return err
+			}
+
+			// Ensure that the new primary index stores all columns in the table. We can't
+			// use AllocateID's to fill the stored columns here because it assumes
+			// that the indexed columns are n.PrimaryIndex.ColumnIDs, but here we want
+			// to consider the indexed columns to be newPrimaryIndexDesc.ColumnIDs.
+			newPrimaryIndexDesc.StoreColumnNames, newPrimaryIndexDesc.StoreColumnIDs = nil, nil
+			for _, col := range n.tableDesc.Columns {
+				containsCol := false
+				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
+					if colID == col.ID {
+						containsCol = true
+						break
+					}
+				}
+				if !containsCol {
+					newPrimaryIndexDesc.StoreColumnIDs = append(newPrimaryIndexDesc.StoreColumnIDs, col.ID)
+					newPrimaryIndexDesc.StoreColumnNames = append(newPrimaryIndexDesc.StoreColumnNames, col.Name)
+				}
 			}
 
 			if t.Interleave != nil {
@@ -529,10 +584,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			// TODO (rohany): this loop will be unused until #45510 is resolved.
 			for i := range n.tableDesc.Mutations {
 				mut := &n.tableDesc.Mutations[i]
-				// TODO (rohany): It's unclear about what to do if there are other mutations within
-				//  this transaction too.
 				// If there is an index that is getting built right now that started in a previous txn, we
 				// need to potentially rebuild that index as well.
 				if idx := mut.GetIndex(); mut.MutationID < currentMutationID && idx != nil &&

@@ -481,7 +481,7 @@
     $input:*
     $checks:*
     $mutationPrivate:* &
-        (CanPruneCols $input $needed:(NeededMutationCols $mutationPrivate))
+        (CanPruneCols $input $needed:(NeededMutationCols $mutationPrivate $checks))
 )
 =>
 ((OpName)
