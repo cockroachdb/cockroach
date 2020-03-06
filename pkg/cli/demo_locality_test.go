@@ -12,6 +12,8 @@
 
 package cli
 
+import "github.com/cockroachdb/cockroach/pkg/security"
+
 func Example_demo_locality() {
 	c := newCLITest(cliTestParams{noServer: true})
 	defer c.cleanup()
@@ -23,6 +25,10 @@ func Example_demo_locality() {
 			`-e`, `select node_id, locality from crdb_internal.gossip_nodes order by node_id`},
 	}
 	setCLIDefaultsForTests()
+	// We must reset the security asset loader here, otherwise the dummy
+	// asset loader that is set by default in tests will not be able to
+	// find the certs that demo sets up.
+	security.ResetAssetLoader()
 	for _, cmd := range testData {
 		c.RunWithArgs(cmd)
 	}
