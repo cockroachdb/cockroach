@@ -110,7 +110,7 @@ func runImport(
 	return summary, nil
 }
 
-type readFileFunc func(context.Context, *fileReader, int32, string, int64, chan string) error
+type readFileFunc func(context.Context, *fileReader, int32, int64, chan string) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -231,7 +231,7 @@ func readInputFiles(
 
 				grp.GoCtx(func(ctx context.Context) error {
 					defer close(rejected)
-					if err := fileFunc(ctx, src, dataFileIndex, dataFile, resumePos[dataFileIndex], rejected); err != nil {
+					if err := fileFunc(ctx, src, dataFileIndex, resumePos[dataFileIndex], rejected); err != nil {
 						return err
 					}
 					return nil
@@ -241,7 +241,7 @@ func readInputFiles(
 					return errors.Wrap(err, dataFile)
 				}
 			} else {
-				if err := fileFunc(ctx, src, dataFileIndex, dataFile, resumePos[dataFileIndex], nil /* rejected */); err != nil {
+				if err := fileFunc(ctx, src, dataFileIndex, resumePos[dataFileIndex], nil /* rejected */); err != nil {
 					return errors.Wrap(err, dataFile)
 				}
 			}
