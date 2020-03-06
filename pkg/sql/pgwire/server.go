@@ -16,6 +16,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,7 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // ATTENTION: After changing this value in a unit test, you probably want to
@@ -60,6 +63,16 @@ var connResultsBufferSize = settings.RegisterPublicByteSizeSetting(
 		"Setting to 0 disables any buffering.",
 	16<<10, // 16 KiB
 )
+
+var logConnAuth = settings.RegisterPublicBoolSetting(
+	"server.auth_log.sql_connections.enabled",
+	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
+	false)
+
+var logSessionAuth = settings.RegisterPublicBoolSetting(
+	"server.auth_log.sql_sessions.enabled",
+	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
+	false)
 
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
@@ -168,6 +181,11 @@ type Server struct {
 	connMonitor   mon.BytesMonitor
 
 	stopper *stop.Stopper
+
+	// testingLogEnabled is used in unit tests in this package to
+	// force-enable conn/auth logging without dancing around the
+	// asynchronicity of cluster settings.
+	testingLogEnabled int32
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
@@ -421,6 +439,15 @@ func (s SocketType) asConnType() (hba.ConnType, error) {
 	}
 }
 
+func (s *Server) connLogEnabled() bool {
+	return atomic.LoadInt32(&s.testingLogEnabled) != 0 || logConnAuth.Get(&s.execCfg.Settings.SV)
+}
+
+// TestingEnableConnAuthLogging is exported for use in tests.
+func (s *Server) TestingEnableConnAuthLogging() {
+	atomic.StoreInt32(&s.testingLogEnabled, 1)
+}
+
 // ServeConn serves a single connection, driving the handshake process and
 // delegating to the appropriate connection type.
 //
@@ -435,6 +462,25 @@ func (s SocketType) asConnType() (hba.ConnType, error) {
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) error {
 	ctx, draining, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
+
+	// Some bookkeeping, for security-minded administrators.
+	// This registers the connection to the authentication log.
+	connStart := timeutil.Now()
+	if s.connLogEnabled() {
+		s.execCfg.AuthLogger.Logf(ctx, "received connection")
+		telemetry.Inc(sqltelemetry.LoggedConnections)
+	} else {
+		telemetry.Inc(sqltelemetry.UnloggedConnections)
+	}
+	defer func() {
+		// The duration of the session is logged at the end so that the
+		// reader of the log file can know how much to look back in time
+		// to find when the connection was opened. This is important
+		// because the log files may have been rotated since.
+		if s.connLogEnabled() {
+			s.execCfg.AuthLogger.Logf(ctx, "disconnected; duration: %s", timeutil.Now().Sub(connStart))
+		}
+	}()
 
 	// In any case, first check the command in the start-up message.
 	//
@@ -465,6 +511,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	if clientErr != nil {
 		return s.sendErr(ctx, conn, clientErr)
 	}
+	ctx = logtags.AddTag(ctx, connType.String(), nil)
 
 	// What does the client want to do?
 	switch version {
@@ -509,18 +556,16 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
-	serveConn(
+	s.serveConn(
 		ctx, conn, sArgs,
-		&s.metrics, reserved, s.SQLServer,
-		s.IsDraining,
+		reserved,
 		authOptions{
 			connType:        connType,
 			insecure:        s.cfg.Insecure,
 			ie:              s.execCfg.InternalExecutor,
 			auth:            s.GetAuthenticationConfiguration(),
 			testingAuthHook: testingAuthHook,
-		},
-		s.stopper)
+		})
 	return nil
 }
 

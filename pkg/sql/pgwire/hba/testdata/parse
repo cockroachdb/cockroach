@@ -51,18 +51,30 @@ subtest quoted_columns
 line
 "local" a b c
 ----
+# Original configuration:
+# "local" a b c
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 local  a        b            c
 
 line
 local a b "method"
 ----
+# Original configuration:
+# local a b "method"
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD   OPTIONS
 local  a        b            "method"
 
 line
 host all all all gss k=v " someopt = withspaces "
 ----
+# Original configuration:
+# host all all all gss k=v " someopt = withspaces "
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   all      all  all     gss    k=v " someopt = withspaces "
 
@@ -73,30 +85,50 @@ subtest keyword_all
 line
 host all b c d
 ----
+# Original configuration:
+# host all b c d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   all      b    c       d
 
 line
 host "all" b c d
 ----
+# Original configuration:
+# host "all" b c d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   "all"    b    c       d
 
 line
 host a all c d
 ----
+# Original configuration:
+# host a all c d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   a        all  c       d
 
 line
 host a "all" c d
 ----
+# Original configuration:
+# host a "all" c d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER  ADDRESS METHOD OPTIONS
 host   a        "all" c       d
 
 line
 host a b all d
 ----
+# Original configuration:
+# host a b all d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   a        b    all     d
 
@@ -127,6 +159,10 @@ error: multiple values specified for host address
 line
 local a b 1.1.1.1
 ----
+# Original configuration:
+# local a b 1.1.1.1
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD  OPTIONS
 local  a        b            1.1.1.1
 
@@ -134,6 +170,10 @@ local  a        b            1.1.1.1
 line
 host a b 0.0.0.0/0 d
 ----
+# Original configuration:
+# host a b 0.0.0.0/0 d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS   METHOD OPTIONS
 host   a        b    0.0.0.0/0 d
 
@@ -145,18 +185,30 @@ unknown directive: parse
 line
 host a b ::1/0 d
 ----
+# Original configuration:
+# host a b ::1/0 d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   a        b    ::/0    d
 
 line
 host a b 2.3.4.5/8 d
 ----
+# Original configuration:
+# host a b 2.3.4.5/8 d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS   METHOD OPTIONS
 host   a        b    2.0.0.0/8 d
 
 line
 host all all fe80::7a31:c1ff:0000:0000/96 cert
 ----
+# Original configuration:
+# host all all fe80::7a31:c1ff:0000:0000/96 cert
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS                METHOD OPTIONS
 host   all      all  fe80::7a31:c1ff:0:0/96 cert
 
@@ -169,12 +221,20 @@ error: multiple values specified for netmask
 line
 host a b 2.3.4.5 255.255.0.0 d
 ----
+# Original configuration:
+# host a b 2.3.4.5 255.255.0.0 d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS    METHOD OPTIONS
 host   a        b    2.3.0.0/16 d
 
 line
 host a b fe80:7a31:c1ff:: ffff:fff0:: d
 ----
+# Original configuration:
+# host a b fe80:7a31:c1ff:: ffff:fff0:: d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS        METHOD OPTIONS
 host   a        b    fe80:7a30::/28 d
 
@@ -191,6 +251,10 @@ error: invalid IP mask "8.0.0.8": address is not a mask
 line
 host a b myhost d
 ----
+# Original configuration:
+# host a b myhost d
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   a        b    myhost  d
 
@@ -222,6 +286,13 @@ host a,b,c d,e,f all trust
 host all testuser,"all" 0.0.0.0/0 cert
 ----
 # String render check:
+# Original configuration:
+# host a,b,c all all trust
+# host all a,b,c all trust
+# host a,b,c d,e,f all trust
+# host all testuser,"all" 0.0.0.0/0 cert
+#
+# Interpreted configuration:
 # TYPE DATABASE USER           ADDRESS   METHOD OPTIONS
 host   a,b,c    all            all       trust
 host   all      a,b,c          all       trust
@@ -245,6 +316,8 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             MethodFn:     nil,
             Options:      nil,
             OptionQuotes: nil,
+            Input:        "host a,b,c all all trust",
+            Generated:    false,
         },
         {
             ConnType: 6,
@@ -261,6 +334,8 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             MethodFn:     nil,
             Options:      nil,
             OptionQuotes: nil,
+            Input:        "host all a,b,c all trust",
+            Generated:    false,
         },
         {
             ConnType: 6,
@@ -279,6 +354,8 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             MethodFn:     nil,
             Options:      nil,
             OptionQuotes: nil,
+            Input:        "host a,b,c d,e,f all trust",
+            Generated:    false,
         },
         {
             ConnType: 6,
@@ -297,6 +374,8 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             MethodFn:     nil,
             Options:      nil,
             OptionQuotes: nil,
+            Input:        "host all testuser,\"all\" 0.0.0.0/0 cert",
+            Generated:    false,
         },
     },
 }
@@ -306,6 +385,10 @@ multiline
 host "all","test space",something some,"us ers" all cert
 ----
 # String render check:
+# Original configuration:
+# host "all","test space",something some,"us ers" all cert
+#
+# Interpreted configuration:
 # TYPE DATABASE                     USER          ADDRESS METHOD OPTIONS
 host   "all","test space",something some,"us ers" all     cert
 # Detail:
@@ -327,6 +410,8 @@ host   "all","test space",something some,"us ers" all     cert
             MethodFn:     nil,
             Options:      nil,
             OptionQuotes: nil,
+            Input:        "host \"all\",\"test space\",something some,\"us ers\" all cert",
+            Generated:    false,
         },
     },
 }
@@ -358,6 +443,10 @@ multiline
 host all all all gss k=v " someopt = withspaces "
 ----
 # String render check:
+# Original configuration:
+# host all all all gss k=v " someopt = withspaces "
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
 host   all      all  all     gss    k=v " someopt = withspaces "
 # Detail:
@@ -379,6 +468,8 @@ host   all      all  all     gss    k=v " someopt = withspaces "
                 {" someopt ", " withspaces "},
             },
             OptionQuotes: {false, true},
+            Input:        "host all all all gss k=v \" someopt = withspaces \"",
+            Generated:    false,
         },
     },
 }
@@ -425,6 +516,11 @@ host all all root cert-password ignored=value
 host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
 ----
 # String render check:
+# Original configuration:
+# host all all root cert-password ignored=value
+# host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
+#
+# Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      all  root    cert-password ignored=value
 host   all      all  all     gss           krb_realm=other include_realm=0 krb_realm=te-st12.COM
@@ -446,6 +542,8 @@ host   all      all  all     gss           krb_realm=other include_realm=0 krb_r
                 {"ignored", "value"},
             },
             OptionQuotes: {false},
+            Input:        "host all all root cert-password ignored=value",
+            Generated:    false,
         },
         {
             ConnType: 6,
@@ -464,6 +562,8 @@ host   all      all  all     gss           krb_realm=other include_realm=0 krb_r
                 {"krb_realm", "te-st12.COM"},
             },
             OptionQuotes: {false, false, false},
+            Input:        "host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM",
+            Generated:    false,
         },
     },
 }
@@ -477,6 +577,11 @@ host db all 0.0.0.0/0 cert
 host "all" "all" 0.0.0.0/0 cert
 ----
 # String render check:
+# Original configuration:
+# host db all 0.0.0.0/0 cert
+# host "all" "all" 0.0.0.0/0 cert
+#
+# Interpreted configuration:
 # TYPE DATABASE USER  ADDRESS   METHOD OPTIONS
 host   db       all   0.0.0.0/0 cert
 host   "all"    "all" 0.0.0.0/0 cert
@@ -499,6 +604,8 @@ host   "all"    "all" 0.0.0.0/0 cert
             MethodFn:     nil,
             Options:      nil,
             OptionQuotes: nil,
+            Input:        "host db all 0.0.0.0/0 cert",
+            Generated:    false,
         },
         {
             ConnType: 6,
@@ -516,6 +623,8 @@ host   "all"    "all" 0.0.0.0/0 cert
             MethodFn:     nil,
             Options:      nil,
             OptionQuotes: nil,
+            Input:        "host \"all\" \"all\" 0.0.0.0/0 cert",
+            Generated:    false,
         },
     },
 }

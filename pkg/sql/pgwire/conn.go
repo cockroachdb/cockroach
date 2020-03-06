@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -90,6 +91,11 @@ type conn struct {
 	msgBuilder writeBuffer
 
 	sv *settings.Values
+
+	// testingLogEnabled is used in unit tests in this package to
+	// force-enable auth logging without dancing around the
+	// asynchronicity of cluster settings.
+	testingLogEnabled bool
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -130,16 +136,12 @@ type conn struct {
 // first time a Sync command is processed outside of a transaction - the logic
 // being that we want to stop when we're both outside transactions and outside
 // batches.
-func serveConn(
+func (s *Server) serveConn(
 	ctx context.Context,
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
-	metrics *ServerMetrics,
 	reserved mon.BoundAccount,
-	sqlServer *sql.Server,
-	draining func() bool,
 	authOpt authOptions,
-	stopper *stop.Stopper,
 ) {
 	sArgs.RemoteAddr = netConn.RemoteAddr()
 
@@ -147,10 +149,11 @@ func serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, metrics, &sqlServer.GetExecutorConfig().Settings.SV)
+	c := newConn(netConn, sArgs, &s.metrics, &s.execCfg.Settings.SV)
+	c.testingLogEnabled = atomic.LoadInt32(&s.testingLogEnabled) > 0
 
 	// Do the reading of commands from the network.
-	c.serveImpl(ctx, draining, sqlServer, reserved, authOpt, stopper)
+	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt, s.stopper)
 }
 
 func newConn(
@@ -185,6 +188,10 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
+func (c *conn) authLogEnabled() bool {
+	return c.testingLogEnabled || logSessionAuth.Get(c.sv)
+}
+
 // serveImpl continuously reads from the network connection and pushes execution
 // instructions into a sql.StmtBuf, from where they'll be processed by a command
 // "processor" goroutine (a connExecutor).
@@ -206,9 +213,20 @@ func (c *conn) serveImpl(
 	authOpt authOptions,
 	stopper *stop.Stopper,
 ) {
-	defer func() { _ = c.conn.Close() }()
-
 	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+
+	inTestWithoutSQL := sqlServer == nil
+	var authLogger *log.SecondaryLogger
+	if !inTestWithoutSQL {
+		authLogger = sqlServer.GetExecutorConfig().AuthLogger
+		sessionStart := timeutil.Now()
+		defer func() {
+			_ = c.conn.Close()
+			if c.authLogEnabled() {
+				authLogger.Logf(ctx, "session terminated; duration: %s", timeutil.Now().Sub(sessionStart))
+			}
+		}()
+	}
 
 	// NOTE: We're going to write a few messages to the connection in this method,
 	// for the handshake. After that, all writes are done async, in the
@@ -236,8 +254,18 @@ func (c *conn) serveImpl(
 	})
 	c.rd = *bufio.NewReader(c.conn)
 
+	// the authPipe below logs authentication messages iff its auth
+	// logger is non-nil. We define this here.
+	var sessionAuthLogger *log.SecondaryLogger
+	if !inTestWithoutSQL && c.authLogEnabled() {
+		sessionAuthLogger = authLogger
+		telemetry.Inc(sqltelemetry.LoggedAuthAttempts)
+	} else {
+		telemetry.Inc(sqltelemetry.UnloggedAuthAttempts)
+	}
+
 	// We'll build an authPipe to communicate with the authentication process.
-	authPipe := newAuthPipe(c)
+	authPipe := newAuthPipe(c, sessionAuthLogger)
 	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from

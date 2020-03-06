@@ -33,8 +33,13 @@ import (
 type scannedInput struct {
 	// The list of lines is a triple-nested list structure.  Each line is a list of
 	// fields, and each field is a List of tokens.
-	lines   [][][]String
+	lines   []hbaLine
 	linenos []int
+}
+
+type hbaLine struct {
+	input  string
+	tokens [][]String
 }
 
 // Parse parses the provided HBA configuration.
@@ -61,9 +66,11 @@ func Parse(input string) (*Conf, error) {
 // parseHbaLine parses one line of HBA configuration.
 //
 // Inspired from pg's src/backend/libpq/hba.c, parse_hba_line().
-func parseHbaLine(line [][]String) (entry Entry, err error) {
+func parseHbaLine(inputLine hbaLine) (entry Entry, err error) {
 	fieldIdx := 0
 
+	entry.Input = inputLine.input
+	line := inputLine.tokens
 	// Read the connection type.
 	if len(line[fieldIdx]) > 1 {
 		return entry, errors.WithHint(
