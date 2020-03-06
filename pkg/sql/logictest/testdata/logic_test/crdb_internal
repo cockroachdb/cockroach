@@ -229,7 +229,6 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
 0   RANGE default
 1   DATABASE system
-15  TABLE system.public.jobs
 16  RANGE meta
 17  RANGE system
 18  RANGE timeseries

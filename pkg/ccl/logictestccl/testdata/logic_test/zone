@@ -559,7 +559,6 @@ FROM crdb_internal.zones
 ----
 RANGE default                                                                 default   NULL         NULL                          NULL       NULL
 DATABASE system                                                               NULL      system       NULL                          NULL       NULL
-TABLE system.public.jobs                                                      NULL      system       jobs                          NULL       NULL
 RANGE meta                                                                    meta      NULL         NULL                          NULL       NULL
 RANGE system                                                                  system    NULL         NULL                          NULL       NULL
 RANGE liveness                                                                liveness  NULL         NULL                          NULL       NULL

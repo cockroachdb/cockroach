@@ -614,11 +614,9 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 ) (ev fsm.Event, payload fsm.EventPayload, ok bool) {
 	ex.clearSavepoints()
 
-	for _, sc := range ex.extraTxnState.schemaChangers.schemaChangers {
-		if err := sc.validateTablePrimaryKeys(ctx, ex.state.mu.txn); err != nil {
-			ev, payload = ex.makeErrEvent(err, stmt)
-			return ev, payload, false
-		}
+	if err := ex.extraTxnState.tables.validatePrimaryKeys(); err != nil {
+		ev, payload = ex.makeErrEvent(err, stmt)
+		return ev, payload, false
 	}
 
 	if err := ex.checkTableTwoVersionInvariant(ctx); err != nil {

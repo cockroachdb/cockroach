@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -411,6 +412,8 @@ var DefaultCancelInterval = base.DefaultTxnHeartbeatInterval
 // DefaultAdoptInterval is mutable for testing. NB: Updates to this value after
 // Registry.Start has been called will not have any effect.
 var DefaultAdoptInterval = 30 * time.Second
+
+var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
 
 // gcInterval is how often we check for and delete job records older than the
 // retention limit.
@@ -959,7 +962,14 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 	if log.V(3) {
 		log.Infof(ctx, "evaluating %d jobs for adoption", len(rows))
 	}
+
+	var adopted int
 	for _, row := range rows {
+		if adopted >= maxAdoptionsPerLoop {
+			// Leave excess jobs for other nodes to get their fair share.
+			break
+		}
+
 		id := (*int64)(row[0].(*tree.DInt))
 
 		payload, err := UnmarshalPayload(row[1])
@@ -1108,8 +1118,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			close(resultsCh)
 		}()
 
-		// Only adopt one job per turn to allow other nodes their fair share.
-		break
+		adopted++
 	}
 
 	return nil
