@@ -42,6 +42,11 @@ import (
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if util.RaceEnabled {
+		// This test was seen taking north of 20m under race.
+		t.Skip("too heavyweight for race")
+	}
+
 	testutils.RunTrueAndFalse(t, "atomic", func(t *testing.T, atomic bool) {
 		testReplicateQueueRebalanceInner(t, atomic)
 	})
