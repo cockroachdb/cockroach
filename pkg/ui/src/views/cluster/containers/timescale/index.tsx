@@ -78,7 +78,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     newSettings.windowEnd = null;
     if (newSettings) {
       this.setQueryParamsByDates(newSettings.windowSize, moment());
-      this.props.setTimeScale(newSettings);
+      this.props.setTimeScale({ ...newSettings, key: newTimescaleKey.value });
     }
   }
 
@@ -108,8 +108,13 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
     if (!windowEnd || windowEnd > moment().subtract(currentScale.windowValid)) {
-      if (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } } as any)) {
-        selected = (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } } as any));
+      const size = { windowSize: { _data: windowSize._data } } ;
+      if (_.find(timewindow.availableTimeScales, size as any)) {
+        const data = {
+          ..._.find(timewindow.availableTimeScales, size as any),
+          key: _.findKey(timewindow.availableTimeScales, size as any),
+        };
+        selected = data;
       } else {
         key = "Custom";
       }
@@ -172,9 +177,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const start = queryStart && moment.unix(Number(queryStart)).utc();
     const end = queryEnd && moment.unix(Number(queryEnd)).utc();
 
-    if (start || end) {
-      this.setDatesByQueryParams({ start, end });
-    }
+    this.setDatesByQueryParams({ start, end });
   }
 
   setQueryParams = (date: moment.Moment, type: DateTypes) => {
@@ -213,14 +216,19 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     });
   }
 
-  setDatesByQueryParams = (dates: timewindow.TimeWindow) => {
-    const selected = _.clone(this.props.currentScale);
-    const end  = dates.end || moment().set({hours: 23, minutes: 59, seconds: 0});
-    const start = dates.start || moment().set({hours: 0, minutes: 0, seconds: 0});
-
-    selected.key = "Custom";
-    this.props.setTimeScale(selected);
+  setDatesByQueryParams = (dates?: timewindow.TimeWindow) => {
+    const currentWindow = _.clone(this.props.currentWindow);
+    const end = dates.end || currentWindow.end;
+    const start = dates.start || currentWindow.start;
+    const seconds = moment.duration(moment(end).diff(start)).asSeconds();
+    const timeScale = timewindow.findClosestTimeScale(seconds);
+    const now = moment();
+    if (moment.duration(now.diff(end)).asMinutes() > timeScale.sampleSize.asMinutes()) {
+      timeScale.key = "Custom";
+    }
+    timeScale.windowEnd = null;
     this.props.setTimeRange({ end, start });
+    this.props.setTimeScale(timeScale);
   }
 
   setDate = (date: moment.Moment, type: DateTypes) => {

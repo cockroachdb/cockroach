@@ -122,6 +122,13 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
   },
 );
 
+export const findClosestTimeScale = (seconds: number) => {
+  const data: TimeScale[] = [];
+  Object.keys(availableTimeScales).forEach((val) => data.push(availableTimeScales[val]));
+  data.sort( (a, b) => (Math.abs(seconds - a.windowSize.asSeconds()) - Math.abs(seconds - b.windowSize.asSeconds())) );
+  return data[0].windowSize.asSeconds() === seconds ? data[0] : { ...data[0], key: "Custom" };
+};
+
 export class TimeWindowState {
   // Currently selected scale.
   scale: TimeScale;
@@ -157,7 +164,7 @@ export function timeWindowReducer(state = new TimeWindowState(), action: Action)
       state = _.clone(state);
       if (scale.key === "Custom") {
         state.useTimeRage = true;
-      } else if (state.scale.key !== scale.key) {
+      } else {
         state.useTimeRage = false;
       }
       state.scale = scale;
