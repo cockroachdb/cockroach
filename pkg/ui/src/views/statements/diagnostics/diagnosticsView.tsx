@@ -104,8 +104,6 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
               >
                 Download
               </Button>
-              <div className="crl-statements-diagnostics-view__vertical-line" />
-              <Button size="small" type="flat">View trace</Button>
             </div>
           );
         }

@@ -89,8 +89,6 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
               >
                 Download
               </Button>
-              <div className="crl-statements-diagnostics-view__vertical-line" />
-              <Button size="small" type="flat">View trace</Button>
             </div>
           );
         }
