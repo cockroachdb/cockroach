@@ -22,7 +22,6 @@ import (
 // SSTWriter writes SSTables.
 type SSTWriter struct {
 	fw *sstable.Writer
-	f  writeCloseSyncer
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
@@ -44,7 +43,7 @@ func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts.FilterPolicy = nil
 	opts.MergerName = "nullptr"
 	sst := sstable.NewWriter(f, opts)
-	return SSTWriter{fw: sst, f: f}
+	return SSTWriter{fw: sst}
 }
 
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
@@ -55,13 +54,13 @@ func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts.TableFormat = sstable.TableFormatRocksDBv2
 	opts.MergerName = "nullptr"
 	sst := sstable.NewWriter(f, opts)
-	return SSTWriter{fw: sst, f: f}
+	return SSTWriter{fw: sst}
 }
 
 // Finish finalizes the writer and returns the constructed file's contents,
 // since the last call to Truncate (if any). At least one kv entry must have been added.
 func (fw *SSTWriter) Finish() error {
-	if fw.fw == nil {
+	if fw.Closed() {
 		return errors.New("cannot call Finish on a closed writer")
 	}
 	if err := fw.fw.Close(); err != nil {
@@ -73,7 +72,7 @@ func (fw *SSTWriter) Finish() error {
 
 // ClearRange implements the Writer interface.
 func (fw *SSTWriter) ClearRange(start, end MVCCKey) error {
-	if fw.fw == nil {
+	if fw.Closed() {
 		return errors.New("cannot call ClearRange on a closed writer")
 	}
 	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
@@ -85,7 +84,7 @@ func (fw *SSTWriter) ClearRange(start, end MVCCKey) error {
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.
 func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
-	if fw.fw == nil {
+	if fw.Closed() {
 		return errors.New("cannot call Put on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
@@ -100,7 +99,7 @@ func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 
 // Clear implements the Writer interface.
 func (fw *SSTWriter) Clear(key MVCCKey) error {
-	if fw.fw == nil {
+	if fw.Closed() {
 		return errors.New("cannot call Clear on a closed writer")
 	}
 	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
@@ -115,7 +114,7 @@ func (fw *SSTWriter) SingleClear(key MVCCKey) error {
 
 // ClearIterRange implements the Writer interface.
 func (fw *SSTWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
-	if fw.fw == nil {
+	if fw.Closed() {
 		return errors.New("cannot call ClearIterRange on a closed writer")
 	}
 
@@ -142,7 +141,7 @@ func (fw *SSTWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error
 
 // Merge implements the Writer interface.
 func (fw *SSTWriter) Merge(key MVCCKey, value []byte) error {
-	if fw.fw == nil {
+	if fw.Closed() {
 		return errors.New("cannot call Merge on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
@@ -161,9 +160,14 @@ func (fw *SSTWriter) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDet
 	// No-op.
 }
 
+// Closed checks to see if the underlying sstable.writer is present.
+func (fw *SSTWriter) Closed() bool {
+	return fw.fw == nil
+}
+
 // Close finishes and frees memory and other resources. Close is idempotent.
 func (fw *SSTWriter) Close() {
-	if fw.fw == nil {
+	if fw.Closed() {
 		return
 	}
 	// pebble.Writer *does* return interesting errors from Close... but normally

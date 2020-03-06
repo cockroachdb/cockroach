@@ -701,3 +701,116 @@ CREATE INVERTED INDEX ON table_with_nulls (a)
 
 statement ok
 DROP TABLE table_with_nulls
+
+statement ok
+DROP TABLE c
+
+subtest arrays
+
+statement ok
+CREATE TABLE c (
+  id INT PRIMARY KEY,
+  foo INT[],
+  bar STRING[],
+  INVERTED INDEX (foo),
+  FAMILY "primary" (id, foo, bar)
+)
+
+statement ok
+INSERT INTO c VALUES(0, NULL, NULL)
+
+statement ok
+INSERT INTO c VALUES(1, ARRAY[], ARRAY['foo', 'bar', 'baz'])
+
+statement ok
+CREATE INDEX ON c USING GIN (bar)
+
+query TT
+SHOW CREATE TABLE c
+----
+c  CREATE TABLE c (
+   id INT8 NOT NULL,
+   foo INT8[] NULL,
+   bar STRING[] NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   INVERTED INDEX c_foo_idx (foo),
+   INVERTED INDEX c_bar_idx (bar),
+   FAMILY "primary" (id, foo, bar)
+)
+
+query ITT
+SELECT * from c WHERE bar @> ARRAY['foo']
+----
+1  {}  {foo,bar,baz}
+
+query ITT
+SELECT * from c WHERE bar @> ARRAY['bar', 'baz']
+----
+1  {}  {foo,bar,baz}
+
+query ITT
+SELECT * from c WHERE bar @> ARRAY['bar', 'qux']
+----
+
+statement ok
+INSERT INTO c VALUES(2, NULL, NULL)
+
+statement ok
+INSERT INTO c VALUES(3, ARRAY[0,1,NULL], ARRAY['a',NULL,'b',NULL])
+
+statement ok
+INSERT INTO c VALUES(4, ARRAY[1,2,3], ARRAY['b',NULL,'c'])
+
+statement ok
+INSERT INTO c VALUES(5, ARRAY[], ARRAY[NULL, NULL])
+
+# Create a second inverted index on c, to test backfills.
+statement ok
+CREATE INVERTED INDEX ON c(foo)
+
+statement ok
+CREATE INVERTED INDEX ON c(bar)
+
+query ITT
+SELECT * FROM c WHERE foo @> ARRAY[0]
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+
+query error unsupported comparison operator
+SELECT * FROM c WHERE foo @> 0
+
+query ITT
+SELECT * FROM c WHERE foo @> ARRAY[1] ORDER BY id
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+4  {1,2,3}     {b,NULL,c}
+
+# This is expected, although it looks odd, because in SQL,
+# ARRAY[NULL] @> ARRAY[NULL] returns false.
+query ITT
+SELECT * FROM c WHERE foo @> ARRAY[NULL]::INT[]
+----
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY['a']
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY['b'] ORDER BY id
+----
+3  {0,1,NULL}  {a,NULL,b,NULL}
+4  {1,2,3}     {b,NULL,c}
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY['c']
+----
+4  {1,2,3}  {b,NULL,c}
+
+query ITT
+SELECT * FROM c WHERE bar @> ARRAY[]::TEXT[] ORDER BY id
+----
+1  {}          {foo,bar,baz}
+3  {0,1,NULL}  {a,NULL,b,NULL}
+4  {1,2,3}     {b,NULL,c}
+5  {}          {NULL,NULL}

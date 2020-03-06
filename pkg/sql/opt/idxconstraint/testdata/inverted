@@ -44,3 +44,55 @@ index-constraints vars=(jsonb, int) inverted-index=@1
 ----
 [/'{"a": 1}' - /'{"a": 1}']
 Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')
+
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> ARRAY[1]
+----
+[/ARRAY[1] - /ARRAY[1]]
+
+index-constraints vars=(int[]) inverted-index=@1
+ARRAY[1] <@ @1
+----
+[/ARRAY[1] - /ARRAY[1]]
+
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> ARRAY[1,2]
+----
+[/ARRAY[1] - /ARRAY[1]]
+Remaining filter: @1 @> ARRAY[1,2]
+
+# Currently we only generate spans from one of the @> expressions.
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> ARRAY[1] AND @1 @> ARRAY[2]
+----
+[/ARRAY[1] - /ARRAY[1]]
+Remaining filter: @1 @> ARRAY[2]
+
+# This could be better - @1 @> ARRAY[] is always true, but we currently
+# don't remove the extra filter.
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> ARRAY[]::INT[]
+----
+[ - ]
+Remaining filter: @1 @> ARRAY[]
+
+# Arrays never contain ARRAY[NULL,...]
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> ARRAY[NULL]::INT[]
+----
+
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> ARRAY[1, NULL]::INT[]
+----
+
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> ARRAY[NULL, 1]::INT[]
+----
+
+# NOTE: this should be a contradiction, but the test harness strips the
+# constraint out too early by accident, I think.
+index-constraints vars=(int[]) inverted-index=@1
+@1 @> NULL
+----
+[ - ]
+Remaining filter: NULL

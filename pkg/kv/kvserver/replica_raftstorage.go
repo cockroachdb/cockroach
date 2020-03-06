@@ -577,10 +577,10 @@ func snapshot(
 // They are managed by the caller, including cleaning up obsolete on-disk
 // payloads in case the log tail is replaced.
 //
-// NOTE: This method takes a engine.Writer because reads are unnecessary when
+// NOTE: This method takes a storage.Writer because reads are unnecessary when
 // prevLastIndex is 0 and prevLastTerm is invalidLastTerm. In the case where
 // reading is necessary (I.E. entries are getting overwritten or deleted), a
-// engine.ReadWriter must be passed in.
+// storage.ReadWriter must be passed in.
 func (r *Replica) append(
 	ctx context.Context,
 	writer storage.Writer,
@@ -606,11 +606,11 @@ func (r *Replica) append(
 		if ent.Index > prevLastIndex {
 			err = storage.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		} else {
-			// We type assert `writer` to also be an engine.ReadWriter only in
+			// We type assert `writer` to also be an storage.ReadWriter only in
 			// the case where we're replacing existing entries.
 			eng, ok := writer.(storage.ReadWriter)
 			if !ok {
-				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
+				panic("expected writer to be a storage.ReadWriter when overwriting log entries")
 			}
 			err = storage.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		}
@@ -623,11 +623,11 @@ func (r *Replica) append(
 	lastTerm := entries[len(entries)-1].Term
 	// Delete any previously appended log entries which never committed.
 	if prevLastIndex > 0 {
-		// We type assert `writer` to also be an engine.ReadWriter only in the
+		// We type assert `writer` to also be an storage.ReadWriter only in the
 		// case where we're deleting existing entries.
 		eng, ok := writer.(storage.ReadWriter)
 		if !ok {
-			panic("expected writer to be a engine.ReadWriter when deleting log entries")
+			panic("expected writer to be a storage.ReadWriter when deleting log entries")
 		}
 		for i := lastIndex + 1; i <= prevLastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
@@ -1066,14 +1066,21 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
-			if err := storage.ClearRangeWithHeuristic(
-				r.store.Engine(),
-				&subsumedReplSST,
-				keyRanges[i].End.Key,
-				totalKeyRanges[i].End.Key,
-			); err != nil {
-				subsumedReplSST.Close()
-				return err
+			unconstrainedSpan := roachpb.Span{Key: keyRanges[i].End.Key, EndKey: totalKeyRanges[i].End.Key}
+			span, empty, err := rditer.ConstrainToKeys(r.Engine(), unconstrainedSpan)
+			if err != nil {
+				return errors.Wrapf(err, "error constraining width of range deletion tombstone")
+			}
+			if !empty {
+				if err := storage.ClearRangeWithHeuristic(
+					r.store.Engine(),
+					&subsumedReplSST,
+					span.Key,
+					span.EndKey,
+				); err != nil {
+					subsumedReplSST.Close()
+					return err
+				}
 			}
 			if err := subsumedReplSST.Finish(); err != nil {
 				return err

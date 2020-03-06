@@ -3600,8 +3600,9 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
-	// Returns the number of distinct inverted index entries that would be generated for a JSON value.
-	"crdb_internal.json_num_index_entries": makeBuiltin(
+	// Returns the number of distinct inverted index entries that would be
+	// generated for a value.
+	"crdb_internal.num_inverted_index_entries": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categorySystemInfo,
 			NullableArgs: true,
@@ -3619,6 +3620,28 @@ may increase either contention or retry errors, or both.`,
 					return nil, err
 				}
 				return tree.NewDInt(tree.DInt(n)), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.AnyArray}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := args[0]
+				if arg == tree.DNull {
+					return tree.DZero, nil
+				}
+				arr := tree.MustBeDArray(arg)
+				if !arr.HasNonNulls {
+					// Inverted indexes on arrays don't contain entries for null array
+					// elements.
+					return tree.DZero, nil
+				}
+				keys, err := sqlbase.EncodeInvertedIndexTableKeys(arr, nil)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(len(keys))), nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
