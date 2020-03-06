@@ -1485,7 +1485,7 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 	h := roachpb.Header{Txn: txn}
 	req1 := putArgs(key, []byte("foo"))
 	req2, _ := endTxnArgs(txn, true /* commit */)
-	req2.IntentSpans = []roachpb.Span{{Key: key}}
+	req2.LockSpans = []roachpb.Span{{Key: key}}
 	req3 := getArgs(key)
 
 	testCases := []struct {
@@ -1537,7 +1537,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	}
 
 	req2, h := endTxnArgs(txn, true /* commit */)
-	req2.IntentSpans = []roachpb.Span{{Key: key}}
+	req2.LockSpans = []roachpb.Span{{Key: key}}
 	assignSeqNumsForReqs(txn, &req2)
 	if _, pErr := tc.SendWrappedWith(h, &req2); pErr != nil {
 		t.Fatal(pErr)
@@ -4326,7 +4326,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 
 		// Abort the transaction again. No error is returned.
 		args, h := endTxnArgs(txn, false /* commit */)
-		args.IntentSpans = []roachpb.Span{{Key: key}}
+		args.LockSpans = []roachpb.Span{{Key: key}}
 		resp, pErr := tc.SendWrappedWith(h, &args)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -4363,7 +4363,7 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 		put := putArgs(key, []byte("value"))
 		et, _ := endTxnArgs(txn, true)
 		et.CanCommitAtHigherTimestamp = noPriorReads
-		et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}}
+		et.LockSpans = []roachpb.Span{{Key: key, EndKey: nil}}
 		ba.Header = roachpb.Header{Txn: txn}
 		ba.Add(&put)
 		ba.Add(&et)
@@ -4530,7 +4530,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// EndTxn.
 	etTxn := br.Txn.Clone()
 	et, etH := endTxnArgs(etTxn, true)
-	et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
+	et.LockSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
 	assignSeqNumsForReqs(etTxn, &et)
 	if _, pErr := tc.SendWrappedWith(etH, &et); pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
@@ -4625,7 +4625,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 		}
 		putKey = putKey.Next() // for the next iteration
 		args, h := endTxnArgs(txn, true)
-		args.IntentSpans = test.intents
+		args.LockSpans = test.intents
 		assignSeqNumsForReqs(txn, &args)
 		if _, pErr := tc.SendWrappedWith(h, &args); pErr != nil {
 			t.Fatal(pErr)
@@ -4679,7 +4679,7 @@ func setupResolutionTest(
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, commit)
-	args.IntentSpans = []roachpb.Span{{Key: key}, {Key: splitKey.AsRawKey()}}
+	args.LockSpans = []roachpb.Span{{Key: key}, {Key: splitKey.AsRawKey()}}
 	assignSeqNumsForReqs(txn, &args)
 	if _, pErr := tc.SendWrappedWith(h, &args); pErr != nil {
 		t.Fatal(pErr)
@@ -4733,9 +4733,9 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 	}
 	hbResp := reply.(*roachpb.HeartbeatTxnResponse)
 	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey()}}
-	if !reflect.DeepEqual(hbResp.Txn.IntentSpans, expIntents) {
+	if !reflect.DeepEqual(hbResp.Txn.LockSpans, expIntents) {
 		t.Fatalf("expected persisted intents %v, got %v",
-			expIntents, hbResp.Txn.IntentSpans)
+			expIntents, hbResp.Txn.LockSpans)
 	}
 }
 
@@ -4853,7 +4853,7 @@ func TestEndTxnDirectGC_1PC(t *testing.T) {
 			txn := newTransaction("test", key, 1, tc.Clock())
 			put := putArgs(key, []byte("value"))
 			et, etH := endTxnArgs(txn, commit)
-			et.IntentSpans = []roachpb.Span{{Key: key}}
+			et.LockSpans = []roachpb.Span{{Key: key}}
 			assignSeqNumsForReqs(txn, &put, &et)
 
 			var ba roachpb.BatchRequest
@@ -8210,7 +8210,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	ba = roachpb.BatchRequest{}
 	et, etH := endTxnArgs(txn, true /* commit */)
-	et.IntentSpans = []roachpb.Span{{Key: key}}
+	et.LockSpans = []roachpb.Span{{Key: key}}
 	assignSeqNumsForReqs(txn, &et)
 	ba.Header = etH
 	ba.Add(&et)
@@ -9010,12 +9010,12 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	// injected error.
 	txn := newTransaction("test", key, roachpb.NormalUserPriority, s.Clock())
 	// Increase the sequence to make it look like there have been some writes.
-	// This fits with the IntentSpans that we're going to set on the EndTxn.
+	// This fits with the LockSpans that we're going to set on the EndTxn.
 	// Without properly setting the sequence number, the EndTxn batch would
 	// erroneously execute as a 1PC.
 	txn.Sequence++
 	etArgs, _ := endTxnArgs(txn, true /* commit */)
-	etArgs.IntentSpans = []roachpb.Span{{Key: roachpb.Key("bb")}}
+	etArgs.LockSpans = []roachpb.Span{{Key: roachpb.Key("bb")}}
 	var ba roachpb.BatchRequest
 	ba.Header.Txn = txn
 	ba.Add(&etArgs)
@@ -10031,6 +10031,86 @@ func TestReplicaPushed1PC(t *testing.T) {
 		t.Errorf("did not get expected error. resp=%s", br)
 	} else if wtoe, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
 		t.Errorf("expected WriteTooOldError, got %s", wtoe)
+	}
+}
+
+// TestReplicaNotifyLockTableOn1PC verifies that a 1-phase commit transaction
+// notifies the concurrency manager's lock-table that the transaction has been
+// committed. This is necessary even though the transaction, by virtue of
+// performing a 1PC commit, could not have written any intents. It still could
+// have acquired read locks.
+func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	// Disable txn liveness pushes. See below for why.
+	st := tc.store.cfg.Settings
+	st.Manual.Store(true)
+	concurrency.LockTableLivenessPushDelay.Override(&st.SV, 24*time.Hour)
+
+	// Write a value to a key A.
+	key := roachpb.Key("a")
+	initVal := incrementArgs(key, 1)
+	if _, pErr := tc.SendWrapped(initVal); pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Create a new transaction and perform a "for update" scan. This should
+	// acquire unreplicated, exclusive locks on the key.
+	txn := newTransaction("test", key, 1, tc.Clock())
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: txn}
+	ba.Add(roachpb.NewScan(key, key.Next(), true /* forUpdate */))
+	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Try to write to the key outside of this transaction. Should wait on the
+	// "for update" lock in a lock wait-queue in the concurrency manager until
+	// the lock is released. If we don't notify the lock-table when the first
+	// txn eventually commits, this will wait for much longer than it needs to.
+	// It will eventually push the first txn and notice that it has committed.
+	// However, we've disabled liveness pushes in this test, so the test will
+	// block forever without the lock-table notification. We didn't need to
+	// disable deadlock detection pushes because this is a non-transactional
+	// write, so it never performs them.
+	pErrC := make(chan *roachpb.Error, 1)
+	go func() {
+		otherWrite := incrementArgs(key, 1)
+		_, pErr := tc.SendWrapped(otherWrite)
+		pErrC <- pErr
+	}()
+
+	// The second write should not complete.
+	select {
+	case pErr := <-pErrC:
+		t.Fatalf("write unexpectedly finished with error: %v", pErr)
+	case <-time.After(5 * time.Millisecond):
+	}
+
+	// Update the locked value and commit in a single batch. This should release
+	// the "for update" lock.
+	ba = roachpb.BatchRequest{}
+	incArgs := incrementArgs(key, 1)
+	et, etH := endTxnArgs(txn, true /* commit */)
+	et.Require1PC = true
+	et.LockSpans = []roachpb.Span{{Key: key, EndKey: key.Next()}}
+	ba.Header = etH
+	ba.Add(incArgs, &et)
+	assignSeqNumsForReqs(txn, incArgs, &et)
+	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// The second write should complete.
+	pErr := <-pErrC
+	if pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
 	}
 }
 
@@ -11300,7 +11380,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.COMMITTED)(txn, now)
 				// RecoverTxn does not synchronously resolve local intents.
-				record.IntentSpans = intents
+				record.LockSpans = intents
 				return record
 			},
 		},
@@ -11458,7 +11538,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, now)
 				// RecoverTxn does not synchronously resolve local intents.
-				record.IntentSpans = intents
+				record.LockSpans = intents
 				return record
 			},
 		},

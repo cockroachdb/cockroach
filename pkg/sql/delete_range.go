@@ -165,9 +165,6 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
 	}
-	if err := params.p.maybeSetSystemConfig(d.desc.GetID()); err != nil {
-		return err
-	}
 	if d.interleavedFastPath {
 		for i := range d.spans {
 			d.spans[i].EndKey = d.spans[i].EndKey.PrefixEnd()

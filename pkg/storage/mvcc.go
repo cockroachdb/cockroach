@@ -2651,9 +2651,7 @@ func MVCCResolveWriteIntentUsingIter(
 	if len(intent.EndKey) > 0 {
 		return false, errors.Errorf("can't resolve range intent as point intent")
 	}
-	return mvccResolveWriteIntent(
-		ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf, false, /* forRange */
-	)
+	return mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 }
 
 // unsafeNextVersion positions the iterator at the successor to latestKey. If this value
@@ -2675,9 +2673,6 @@ func unsafeNextVersion(iter Iterator, latestKey MVCCKey) (MVCCKey, []byte, bool,
 }
 
 // mvccResolveWriteIntent is the core logic for resolving an intent.
-// The forRange parameter specifies whether the intent is part of a
-// range of write intents. In this case, checks which make sense only
-// in the context of resolving a specific point intent are skipped.
 // Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
 	ctx context.Context,
@@ -2686,7 +2681,6 @@ func mvccResolveWriteIntent(
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	buf *putBuffer,
-	forRange bool,
 ) (bool, error) {
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
@@ -2694,60 +2688,7 @@ func mvccResolveWriteIntent(
 	if err != nil {
 		return false, err
 	}
-	// For cases where there's no value corresponding to the key we're
-	// resolving, and this is a committed transaction, log a warning if
-	// the intent txn is epoch=0. For non-zero epoch transactions, this
-	// is a common occurrence for intents written only be earlier epochs
-	// which were resolved by concurrent actors, and does not benefit
-	// from a warning. See #9399 for details.
-	expVal := intent.Status == roachpb.COMMITTED && intent.Txn.Epoch == 0
-	if !ok {
-		if expVal {
-			log.Warningf(ctx, "unable to find value for %s (%+v)",
-				intent.Key, intent.Txn)
-		}
-		return false, nil
-	}
-	if meta.Txn == nil || intent.Txn.ID != meta.Txn.ID {
-		// For the ranged case, this key isn't within our remit. Bail early.
-		if forRange {
-			return false, nil
-		}
-		if expVal {
-			// The intent is being committed. Verify that it was already committed by
-			// looking for a value at the transaction timestamp. Note that this check
-			// has false positives due to MVCC GC, but such false positives should be
-			// very rare.
-			//
-			// Note that we hit this code path relatively frequently when doing end
-			// transaction processing for locally resolved intents. In those cases,
-			// meta.Txn == nil but the subsequent call to mvccGetInternal will avoid
-			// any additional seeks because the iterator is already positioned
-			// correctly.
-			gbuf := newGetBuffer()
-			defer gbuf.release()
-			gbuf.meta = buf.meta
-
-			v, _, _, err := mvccGetInternal(ctx, iter, metaKey,
-				intent.Txn.WriteTimestamp, false, unsafeValue, nil, gbuf)
-			if err != nil {
-				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
-					intent.Key, intent.Txn.WriteTimestamp, err)
-			} else if v == nil {
-				// This can happen if the committed value was already GCed.
-				log.Warningf(ctx, "unable to find value for %s @ %s (%+v vs %+v)",
-					intent.Key, intent.Txn.WriteTimestamp, meta, intent.Txn)
-			} else if v.Timestamp != intent.Txn.WriteTimestamp {
-				// This should never happen. If we find a value when seeking
-				// to the intent's commit timestamp then that value should
-				// always have the correct timestamp. Finding a value without
-				// a matching timestamp rules out the possibility that our
-				// committed value was already GCed, because we now found a
-				// version with an even lower timestamp.
-				log.Warningf(ctx, "unable to find value for %s @ %s: %s (txn=%+v)",
-					intent.Key, intent.Txn.WriteTimestamp, v.Timestamp, intent.Txn)
-			}
-		}
+	if !ok || meta.Txn == nil || intent.Txn.ID != meta.Txn.ID {
 		return false, nil
 	}
 
@@ -3130,9 +3071,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 		var ok bool
 		if !key.IsValue() {
 			intent.Key = key.Key
-			ok, err = mvccResolveWriteIntent(
-				ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf, true, /* forRange */
-			)
+			ok, err = mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", key.Key, err)

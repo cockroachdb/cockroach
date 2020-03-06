@@ -12,8 +12,8 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "roachpb/metadata.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
+import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -472,10 +472,10 @@ message Transaction {
   // refresh is less likely to succeed than in other cases where
   // ReadTimestamp != WriteTimestamp.
   bool write_too_old = 12;
-  // Set of spans that the transaction has written intents into. These
-  // are spans which must be resolved on txn completion. Note that these
-  // spans may be condensed to cover aggregate spans if the keys written
-  // by the transaction exceeded a size threshold.
+  // Set of spans that the transaction has acquired locks within. These are
+  // spans which must be resolved on txn completion. Note that these spans
+  // may be condensed to cover aggregate spans if the keys locked by the
+  // transaction exceeded a size threshold.
   //
   // The set logically extends to include the keys of all writes in the
   // in-flight write set. However, those keys are not stored in this set
@@ -486,7 +486,7 @@ message Transaction {
   // merged such that no two spans here overlap each other. It should be
   // treated as immutable and all updates should be performed on a copy
   // of the slice.
-  repeated Span intent_spans = 11 [(gogoproto.nullable) = false];
+  repeated Span lock_spans = 11 [(gogoproto.nullable) = false];
   // Set of in-flight intent writes that have been issued by the transaction but
   // which may not have succeeded yet. If any in-flight writes are provided, a
   // committing EndTxn request will move a PENDING transaction to the STAGING
@@ -532,7 +532,7 @@ message TransactionRecord {
   storage.enginepb.TxnMeta meta     = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   TransactionStatus status                 = 4;
   util.hlc.Timestamp last_heartbeat        = 5  [(gogoproto.nullable) = false];
-  repeated Span intent_spans               = 11 [(gogoproto.nullable) = false];
+  repeated Span lock_spans                 = 11 [(gogoproto.nullable) = false];
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
     [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];

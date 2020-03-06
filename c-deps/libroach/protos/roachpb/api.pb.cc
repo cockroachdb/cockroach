@@ -7964,6 +7964,7 @@ void ScanRequest::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ScanRequest::kHeaderFieldNumber;
 const int ScanRequest::kScanFormatFieldNumber;
+const int ScanRequest::kKeyLockingFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ScanRequest::ScanRequest()
@@ -7982,14 +7983,16 @@ ScanRequest::ScanRequest(const ScanRequest& from)
   } else {
     header_ = NULL;
   }
-  scan_format_ = from.scan_format_;
+  ::memcpy(&scan_format_, &from.scan_format_,
+    static_cast<size_t>(reinterpret_cast<char*>(&key_locking_) -
+    reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ScanRequest)
 }
 
 void ScanRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&scan_format_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(scan_format_));
+      reinterpret_cast<char*>(&key_locking_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(key_locking_));
 }
 
 ScanRequest::~ScanRequest() {
@@ -8020,7 +8023,9 @@ void ScanRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
-  scan_format_ = 0;
+  ::memset(&scan_format_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&key_locking_) -
+      reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
   _internal_metadata_.Clear();
 }
 
@@ -8066,6 +8071,21 @@ bool ScanRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.kv.kvserver.concurrency.lock.Strength key_locking = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(40u /* 40 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_key_locking(static_cast< ::cockroach::kv::kvserver::concurrency::lock::Strength >(value));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -8103,6 +8123,12 @@ void ScanRequest::SerializeWithCachedSizes(
       4, this->scan_format(), output);
   }
 
+  // .cockroach.kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  if (this->key_locking() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      5, this->key_locking(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ScanRequest)
@@ -8124,6 +8150,12 @@ size_t ScanRequest::ByteSizeLong() const {
   if (this->scan_format() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->scan_format());
+  }
+
+  // .cockroach.kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  if (this->key_locking() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->key_locking());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -8149,6 +8181,9 @@ void ScanRequest::MergeFrom(const ScanRequest& from) {
   if (from.scan_format() != 0) {
     set_scan_format(from.scan_format());
   }
+  if (from.key_locking() != 0) {
+    set_key_locking(from.key_locking());
+  }
 }
 
 void ScanRequest::CopyFrom(const ScanRequest& from) {
@@ -8170,6 +8205,7 @@ void ScanRequest::InternalSwap(ScanRequest* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(scan_format_, other->scan_format_);
+  swap(key_locking_, other->key_locking_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -8479,6 +8515,7 @@ void ReverseScanRequest::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReverseScanRequest::kHeaderFieldNumber;
 const int ReverseScanRequest::kScanFormatFieldNumber;
+const int ReverseScanRequest::kKeyLockingFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ReverseScanRequest::ReverseScanRequest()
@@ -8497,14 +8534,16 @@ ReverseScanRequest::ReverseScanRequest(const ReverseScanRequest& from)
   } else {
     header_ = NULL;
   }
-  scan_format_ = from.scan_format_;
+  ::memcpy(&scan_format_, &from.scan_format_,
+    static_cast<size_t>(reinterpret_cast<char*>(&key_locking_) -
+    reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ReverseScanRequest)
 }
 
 void ReverseScanRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&scan_format_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(scan_format_));
+      reinterpret_cast<char*>(&key_locking_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(key_locking_));
 }
 
 ReverseScanRequest::~ReverseScanRequest() {
@@ -8535,7 +8574,9 @@ void ReverseScanRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
-  scan_format_ = 0;
+  ::memset(&scan_format_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&key_locking_) -
+      reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
   _internal_metadata_.Clear();
 }
 
@@ -8581,6 +8622,21 @@ bool ReverseScanRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.kv.kvserver.concurrency.lock.Strength key_locking = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(40u /* 40 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_key_locking(static_cast< ::cockroach::kv::kvserver::concurrency::lock::Strength >(value));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -8618,6 +8674,12 @@ void ReverseScanRequest::SerializeWithCachedSizes(
       4, this->scan_format(), output);
   }
 
+  // .cockroach.kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  if (this->key_locking() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      5, this->key_locking(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ReverseScanRequest)
@@ -8639,6 +8701,12 @@ size_t ReverseScanRequest::ByteSizeLong() const {
   if (this->scan_format() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->scan_format());
+  }
+
+  // .cockroach.kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  if (this->key_locking() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->key_locking());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -8664,6 +8732,9 @@ void ReverseScanRequest::MergeFrom(const ReverseScanRequest& from) {
   if (from.scan_format() != 0) {
     set_scan_format(from.scan_format());
   }
+  if (from.key_locking() != 0) {
+    set_key_locking(from.key_locking());
+  }
 }
 
 void ReverseScanRequest::CopyFrom(const ReverseScanRequest& from) {
@@ -8685,6 +8756,7 @@ void ReverseScanRequest::InternalSwap(ReverseScanRequest* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(scan_format_, other->scan_format_);
+  swap(key_locking_, other->key_locking_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -10306,8 +10378,8 @@ void EndTxnRequest::clear_internal_commit_trigger() {
   }
   internal_commit_trigger_ = NULL;
 }
-void EndTxnRequest::clear_intent_spans() {
-  intent_spans_.Clear();
+void EndTxnRequest::clear_lock_spans() {
+  lock_spans_.Clear();
 }
 void EndTxnRequest::clear_in_flight_writes() {
   in_flight_writes_.Clear();
@@ -10317,7 +10389,7 @@ const int EndTxnRequest::kHeaderFieldNumber;
 const int EndTxnRequest::kCommitFieldNumber;
 const int EndTxnRequest::kDeadlineFieldNumber;
 const int EndTxnRequest::kInternalCommitTriggerFieldNumber;
-const int EndTxnRequest::kIntentSpansFieldNumber;
+const int EndTxnRequest::kLockSpansFieldNumber;
 const int EndTxnRequest::kInFlightWritesFieldNumber;
 const int EndTxnRequest::kRequire1PcFieldNumber;
 const int EndTxnRequest::kCanCommitAtHigherTimestampFieldNumber;
@@ -10334,7 +10406,7 @@ EndTxnRequest::EndTxnRequest()
 EndTxnRequest::EndTxnRequest(const EndTxnRequest& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      intent_spans_(from.intent_spans_),
+      lock_spans_(from.lock_spans_),
       in_flight_writes_(from.in_flight_writes_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
@@ -10390,7 +10462,7 @@ void EndTxnRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  intent_spans_.Clear();
+  lock_spans_.Clear();
   in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
@@ -10479,7 +10551,7 @@ bool EndTxnRequest::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intent_spans()));
+                input, add_lock_spans()));
         } else {
           goto handle_unusual;
         }
@@ -10587,10 +10659,10 @@ void EndTxnRequest::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intent_spans_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->lock_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       5,
-      this->intent_spans(static_cast<int>(i)),
+      this->lock_spans(static_cast<int>(i)),
       output);
   }
 
@@ -10628,12 +10700,12 @@ size_t EndTxnRequest::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->intent_spans_size());
+    unsigned int count = static_cast<unsigned int>(this->lock_spans_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intent_spans(static_cast<int>(i)));
+          this->lock_spans(static_cast<int>(i)));
     }
   }
 
@@ -10703,7 +10775,7 @@ void EndTxnRequest::MergeFrom(const EndTxnRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  intent_spans_.MergeFrom(from.intent_spans_);
+  lock_spans_.MergeFrom(from.lock_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
@@ -10745,7 +10817,7 @@ void EndTxnRequest::Swap(EndTxnRequest* other) {
 }
 void EndTxnRequest::InternalSwap(EndTxnRequest* other) {
   using std::swap;
-  CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
+  CastToBase(&lock_spans_)->InternalSwap(CastToBase(&other->lock_spans_));
   CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
   swap(header_, other->header_);
   swap(deadline_, other->deadline_);

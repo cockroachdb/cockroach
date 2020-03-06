@@ -1229,6 +1229,10 @@ func (ef *execFactory) ConstructInsert(
 	tabDesc := table.(*optTable).desc
 	colDescs := makeColDescList(table, insertColOrdSet)
 
+	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
+		return nil, err
+	}
+
 	var fkTables row.FkTableMetadata
 	checkFKs := row.SkipFKs
 	if !skipFKChecks {
@@ -1300,6 +1304,10 @@ func (ef *execFactory) ConstructInsertFastPath(
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 	colDescs := makeColDescList(table, insertColOrdSet)
+
+	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
+		return nil, err
+	}
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
@@ -1377,6 +1385,10 @@ func (ef *execFactory) ConstructUpdate(
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
+
+	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
+		return nil, err
+	}
 
 	// Add each column to update as a sourceSlot. The CBO only uses scalarSlot,
 	// since it compiles tuples and subqueries into a simple sequence of target
@@ -1530,6 +1542,10 @@ func (ef *execFactory) ConstructUpsert(
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
 	updateColDescs := makeColDescList(table, updateColOrdSet)
 
+	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
+		return nil, err
+	}
+
 	var fkTables row.FkTableMetadata
 	checkFKs := row.SkipFKs
 	if !skipFKChecks {
@@ -1643,6 +1659,10 @@ func (ef *execFactory) ConstructDelete(
 	tabDesc := table.(*optTable).desc
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
 
+	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
+		return nil, err
+	}
+
 	// Determine the foreign key tables involved in the delete.
 	// This will include all the interleaved child tables as we need them
 	// to see if we can execute the fast path delete.
@@ -1729,6 +1749,10 @@ func (ef *execFactory) ConstructDeleteRange(
 	tabDesc := table.(*optTable).desc
 	indexDesc := &tabDesc.PrimaryIndex
 	sb := span.MakeBuilder(tabDesc.TableDesc(), indexDesc)
+
+	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
+		return nil, err
+	}
 
 	// Setting the "forDelete" flag includes all column families in case where a
 	// single record is deleted.

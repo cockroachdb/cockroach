@@ -940,7 +940,7 @@ func (t *Transaction) Restart(
 	t.Sequence = 0
 	t.WriteTooOld = false
 	t.CommitTimestampFixed = false
-	t.IntentSpans = nil
+	t.LockSpans = nil
 	t.InFlightWrites = nil
 	t.IgnoredSeqNums = nil
 }
@@ -979,7 +979,7 @@ func (t *Transaction) Update(o *Transaction) {
 		t.WriteTooOld = o.WriteTooOld
 		t.CommitTimestampFixed = o.CommitTimestampFixed
 		t.Sequence = o.Sequence
-		t.IntentSpans = o.IntentSpans
+		t.LockSpans = o.LockSpans
 		t.InFlightWrites = o.InFlightWrites
 		t.IgnoredSeqNums = o.IgnoredSeqNums
 	} else if t.Epoch == o.Epoch {
@@ -1019,8 +1019,8 @@ func (t *Transaction) Update(o *Transaction) {
 		if t.Sequence < o.Sequence {
 			t.Sequence = o.Sequence
 		}
-		if len(o.IntentSpans) > 0 {
-			t.IntentSpans = o.IntentSpans
+		if len(o.LockSpans) > 0 {
+			t.LockSpans = o.LockSpans
 		}
 		if len(o.InFlightWrites) > 0 {
 			t.InFlightWrites = o.InFlightWrites
@@ -1093,7 +1093,7 @@ func (t Transaction) String() string {
 	}
 	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t max=%s",
 		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
-	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
+	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
@@ -1116,7 +1116,7 @@ func (t Transaction) SafeMessage() string {
 	}
 	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t max=%s",
 		t.TxnMeta.SafeMessage(), t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
-	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
+	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
@@ -1217,7 +1217,7 @@ func (t *Transaction) AsRecord() TransactionRecord {
 	tr.TxnMeta = t.TxnMeta
 	tr.Status = t.Status
 	tr.LastHeartbeat = t.LastHeartbeat
-	tr.IntentSpans = t.IntentSpans
+	tr.LockSpans = t.LockSpans
 	tr.InFlightWrites = t.InFlightWrites
 	tr.IgnoredSeqNums = t.IgnoredSeqNums
 	return tr
@@ -1231,7 +1231,7 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 	t.TxnMeta = tr.TxnMeta
 	t.Status = tr.Status
 	t.LastHeartbeat = tr.LastHeartbeat
-	t.IntentSpans = tr.IntentSpans
+	t.LockSpans = tr.LockSpans
 	t.InFlightWrites = tr.InFlightWrites
 	t.IgnoredSeqNums = tr.IgnoredSeqNums
 	return t

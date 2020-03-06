@@ -2286,7 +2286,7 @@ func TestStoreScanIntents(t *testing.T) {
 				// Commit the unpushable txn so the read can finish.
 				etArgs, h := endTxnArgs(txn, true)
 				for _, key := range keys {
-					etArgs.IntentSpans = append(etArgs.IntentSpans, roachpb.Span{Key: key})
+					etArgs.LockSpans = append(etArgs.LockSpans, roachpb.Span{Key: key})
 				}
 				assignSeqNumsForReqs(txn, &etArgs)
 				if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs); pErr != nil {

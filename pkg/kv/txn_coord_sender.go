@@ -71,8 +71,8 @@ const (
 // - Heartbeating of the transaction record. Note that heartbeating is done only
 // from the root transaction coordinator, in the event that multiple
 // coordinators are active (i.e. in a distributed SQL flow).
-// - Accumulating intent spans.
-// - Attaching intent spans to EndTxn requests, for intent cleanup.
+// - Accumulating lock spans.
+// - Attaching lock spans to EndTxn requests, for cleanup.
 // - Handles retriable errors by either bumping the transaction's epoch or, in
 // case of TransactionAbortedErrors, cleaning up the transaction (in this case,
 // the client.Txn is expected to create a new TxnCoordSender instance
@@ -462,7 +462,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.haveWrites() {
+	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
 		return nil, tc.commitReadOnlyTxnLocked(ctx, ba)
 	}
 

@@ -952,8 +952,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 			// OpRequiresTxnError. We set the local clock to the timestamp of
 			// just above the first key to verify it's used to read only key "a".
 			for i, request := range []roachpb.Request{
-				roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c")),
-				roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c")),
+				roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), false),
+				roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), false),
 			} {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
 				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)

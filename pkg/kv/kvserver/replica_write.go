@@ -461,18 +461,15 @@ func (r *Replica) evaluate1PC(
 	// it is finalized and than any unreplicated locks that it has acquired can
 	// be released.
 	res.Local.UpdatedTxns = []*roachpb.Transaction{clonedTxn}
-	// TODO(nvanbenschoten): do something like the following once unreplicated
-	// lock spans are added to EndTxn request.
-	// res.Local.ResolvedIntents = make([]roachpb.LockUpdate, len(etArg.IntentSpans))
-	// for i, sp := range etArg.IntentSpans {
-	// 	res.Local.ResolvedIntents[i] = roachpb.LockUpdate{
-	// 		Span:           sp,
-	// 		Txn:            clonedTxn.TxnMeta,
-	// 		Status:         clonedTxn.Status,
-	// 		IgnoredSeqNums: clonedTxn.IgnoredSeqNums,
-	// 		Durability:     lock.Unreplicated,
-	// 	}
-	// }
+	res.Local.ResolvedLocks = make([]roachpb.LockUpdate, len(etArg.LockSpans))
+	for i, sp := range etArg.LockSpans {
+		res.Local.ResolvedLocks[i] = roachpb.LockUpdate{
+			Span:           sp,
+			Txn:            clonedTxn.TxnMeta,
+			Status:         clonedTxn.Status,
+			IgnoredSeqNums: clonedTxn.IgnoredSeqNums,
+		}
+	}
 
 	// Add placeholder responses for end transaction requests.
 	br.Add(&roachpb.EndTxnResponse{OnePhaseCommit: true})

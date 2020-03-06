@@ -81,15 +81,15 @@ func declareKeysEndTxn(
 	// If the request is intending to finalize the transaction record then it
 	// needs to declare a few extra keys.
 	if !et.IsParallelCommit() {
-		// All requests that intent on resolving local intents need to depend on
-		// the range descriptor because they need to determine which intents are
+		// All requests that intend on resolving local locks need to depend on
+		// the range descriptor because they need to determine which locks are
 		// within the local range.
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
 		// The spans may extend beyond this Range, but it's ok for the
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
-		for _, span := range et.IntentSpans {
+		for _, span := range et.LockSpans {
 			latchSpans.AddMVCC(spanset.SpanReadWrite, span, minTxnTS)
 		}
 
@@ -181,7 +181,7 @@ func EndTxn(
 	if args.Require1PC {
 		// If a 1PC txn was required and we're in EndTxn, we've failed to evaluate
 		// the batch as a 1PC. We're returning early instead of preferring a
-		// possible retriable error because we might want to leave intents behind in
+		// possible retriable error because we might want to leave locks behind in
 		// case of retriable errors - which Require1PC does not want.
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
 	}
@@ -231,19 +231,19 @@ func EndTxn(
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				desc := cArgs.EvalCtx.Desc()
-				resolvedIntents, externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 				if err != nil {
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, readWriter, ms, key, args, reply.Txn, externalIntents,
+					ctx, readWriter, ms, key, args, reply.Txn, externalLocks,
 				); err != nil {
 					return result.Result{}, err
 				}
 				// Use alwaysReturn==true because the transaction is definitely
 				// aborted, no matter what happens to this command.
 				res := result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison)
-				res.Local.ResolvedIntents = resolvedIntents
+				res.Local.ResolvedLocks = resolvedLocks
 				return res, nil
 			}
 			// If the transaction was previously aborted by a concurrent writer's
@@ -252,9 +252,9 @@ func EndTxn(
 			// currently not able to write on error, but see #1989).
 			//
 			// Similarly to above, use alwaysReturn==true. The caller isn't trying
-			// to abort, but the transaction is definitely aborted and its intents
+			// to abort, but the transaction is definitely aborted and its locks
 			// can go.
-			reply.Txn.IntentSpans = args.IntentSpans
+			reply.Txn.LockSpans = args.LockSpans
 			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
 				roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
@@ -288,7 +288,7 @@ func EndTxn(
 		// If the transaction needs to be staged as part of an implicit commit
 		// before being explicitly committed, write the staged transaction
 		// record and return without running commit triggers or resolving local
-		// intents.
+		// locks.
 		if args.IsParallelCommit() {
 			// It's not clear how to combine transaction recovery with commit
 			// triggers, so for now we don't allow them to mix. This shouldn't
@@ -309,13 +309,13 @@ func EndTxn(
 		// Else, the transaction can be explicitly committed.
 		reply.Txn.Status = roachpb.COMMITTED
 
-		// Merge triggers must run before intent resolution as the merge trigger
+		// Merge triggers must run before lock resolution as the merge trigger
 		// itself contains intents, in the RightData snapshot, that will be owned
 		// and thus resolved by the new range.
 		//
-		// While it might seem cleaner to simply rely on asynchronous intent
-		// resolution here, these intents must be resolved synchronously. We
-		// maintain the invariant that there are no intents on local range
+		// While it might seem cleaner to simply rely on asynchronous lock
+		// resolution here, these locks must be resolved synchronously. We
+		// maintain the invariant that there are no locks on local range
 		// descriptors that belong to committed transactions. This allows nodes,
 		// during startup, to infer that any lingering intents belong to in-progress
 		// transactions and thus the pre-intent value can safely be used.
@@ -333,17 +333,17 @@ func EndTxn(
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
-	// Resolve intents on the local range synchronously so that their resolution
+	// Resolve locks on the local range synchronously so that their resolution
 	// ends up in the same Raft entry. There should always be at least one because
 	// we position the transaction record next to the first write of a transaction.
 	// This avoids the need for the intentResolver to have to return to this range
-	// to resolve intents for this transaction in the future.
+	// to resolve locks for this transaction in the future.
 	desc := cArgs.EvalCtx.Desc()
-	resolvedIntents, externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
 		return result.Result{}, err
 	}
-	if err := updateFinalizedTxn(ctx, readWriter, ms, key, args, reply.Txn, externalIntents); err != nil {
+	if err := updateFinalizedTxn(ctx, readWriter, ms, key, args, reply.Txn, externalLocks); err != nil {
 		return result.Result{}, err
 	}
 
@@ -379,12 +379,12 @@ func EndTxn(
 	// will be GC'd on the slow path.
 	//
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
-	// don't want the intents to be up for resolution. That should happen only
-	// if the commit actually happens; otherwise, we risk losing writes.
-	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
-	intentsResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
-	intentsResult.Local.ResolvedIntents = resolvedIntents
-	if err := pd.MergeAndDestroy(intentsResult); err != nil {
+	// don't want the locks to be up for resolution. That should happen only if
+	// the commit actually happens; otherwise, we risk losing writes.
+	txnResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
+	txnResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
+	txnResult.Local.ResolvedLocks = resolvedLocks
+	if err := pd.MergeAndDestroy(txnResult); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil
@@ -444,16 +444,16 @@ func CanForwardCommitTimestampWithoutRefresh(
 	return !txn.CommitTimestampFixed && args.CanCommitAtHigherTimestamp
 }
 
-const intentResolutionBatchSize = 500
+const lockResolutionBatchSize = 500
 
-// resolveLocalIntents synchronously resolves any intents that are local to this
-// range in the same batch and returns those intent spans. The remainder are
+// resolveLocalLocks synchronously resolves any locks that are local to this
+// range in the same batch and returns those lock spans. The remainder are
 // collected and returned so that they can be handed off to asynchronous
-// processing. Note that there is a maximum intent resolution allowance of
-// intentResolutionBatchSize meant to avoid creating a batch which is too large
-// for Raft. Any local intents which exceed the allowance are treated as
-// external and are resolved asynchronously with the external intents.
-func resolveLocalIntents(
+// processing. Note that there is a maximum lock resolution allowance of
+// lockResolutionBatchSize meant to avoid creating a batch which is too large
+// for Raft. Any local locks which exceed the allowance are treated as
+// external and are resolved asynchronously with the external locks.
+func resolveLocalLocks(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	readWriter storage.ReadWriter,
@@ -461,10 +461,10 @@ func resolveLocalIntents(
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
-) (resolvedIntents []roachpb.LockUpdate, externalIntents []roachpb.Span, _ error) {
+) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
-		// which intents are local (note that for a split, we want to use the
+		// which locks are local (note that for a split, we want to use the
 		// pre-split one instead because it's larger).
 		desc = &mergeTrigger.LeftDesc
 	}
@@ -475,45 +475,45 @@ func resolveLocalIntents(
 	iterAndBuf := storage.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
-	var resolveAllowance int64 = intentResolutionBatchSize
+	var resolveAllowance int64 = lockResolutionBatchSize
 	if args.InternalCommitTrigger != nil {
 		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
-		// These transactions rely on having their intents resolved synchronously.
+		// These transactions rely on having their locks resolved synchronously.
 		resolveAllowance = math.MaxInt64
 	}
-	for _, span := range args.IntentSpans {
+	for _, span := range args.LockSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
-				externalIntents = append(externalIntents, span)
+				externalLocks = append(externalLocks, span)
 				return nil
 			}
-			intent := roachpb.MakeLockUpdateWithDur(txn, span, lock.Replicated)
+			update := roachpb.MakeLockUpdateWithDur(txn, span, lock.Replicated)
 			if len(span.EndKey) == 0 {
-				// For single-key intents, do a KeyAddress-aware check of
+				// For single-key lock updates, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
 				if !storagebase.ContainsKey(desc, span.Key) {
-					externalIntents = append(externalIntents, span)
+					externalLocks = append(externalLocks, span)
 					return nil
 				}
 				resolveMS := ms
-				ok, err := storage.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
+				ok, err := storage.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, update)
 				if err != nil {
 					return err
 				}
 				if ok {
 					resolveAllowance--
 				}
-				resolvedIntents = append(resolvedIntents, intent)
+				resolvedLocks = append(resolvedLocks, update)
 				return nil
 			}
-			// For intent ranges, cut into parts inside and outside our key
+			// For update ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
-			// an intent range for range-local data is correctly considered local.
+			// an update range for range-local data is correctly considered local.
 			inSpan, outSpans := storagebase.IntersectSpan(span, desc)
-			externalIntents = append(externalIntents, outSpans...)
+			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
-				intent.Span = *inSpan
-				num, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance)
+				update.Span = *inSpan
+				num, resumeSpan, err := storage.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, update, resolveAllowance)
 				if err != nil {
 					return err
 				}
@@ -523,33 +523,33 @@ func resolveLocalIntents(
 				resolveAllowance -= num
 				if resumeSpan != nil {
 					if resolveAllowance != 0 {
-						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", intent.Span, resolveAllowance)
+						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", update.Span, resolveAllowance)
 					}
-					intent.EndKey = resumeSpan.Key
-					externalIntents = append(externalIntents, *resumeSpan)
+					update.EndKey = resumeSpan.Key
+					externalLocks = append(externalLocks, *resumeSpan)
 				}
-				resolvedIntents = append(resolvedIntents, intent)
+				resolvedLocks = append(resolvedLocks, update)
 				return nil
 			}
 			return nil
 		}(); err != nil {
-			return nil, nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
+			return nil, nil, errors.Wrapf(err, "resolving lock at %s on end transaction [%s]", span, txn.Status)
 		}
 	}
 
-	removedAny := resolveAllowance != intentResolutionBatchSize
+	removedAny := resolveAllowance != lockResolutionBatchSize
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
 		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
 			return nil, nil, err
 		}
 	}
-	return resolvedIntents, externalIntents, nil
+	return resolvedLocks, externalLocks, nil
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status
 // (and possibly timestamp). It persists the record with the EndTxn request's
 // declared in-flight writes along with all of the transaction's (local and
-// remote) intents.
+// remote) locks.
 func updateStagingTxn(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
@@ -558,16 +558,16 @@ func updateStagingTxn(
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) error {
-	txn.IntentSpans = args.IntentSpans
+	txn.LockSpans = args.LockSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
 }
 
 // updateFinalizedTxn persists the COMMITTED or ABORTED transaction record with
-// updated status (and possibly timestamp). If we've already resolved all
-// intents locally, we actually delete the record right away - no use in keeping
-// it around.
+// updated status (and possibly timestamp). If we've already resolved all locks
+// locally, we actually delete the record right away - no use in keeping it
+// around.
 func updateFinalizedTxn(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
@@ -575,15 +575,15 @@ func updateFinalizedTxn(
 	key []byte,
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
-	externalIntents []roachpb.Span,
+	externalLocks []roachpb.Span,
 ) error {
-	if txnAutoGC && len(externalIntents) == 0 {
+	if txnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
-			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
+			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
 		}
 		return storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
-	txn.IntentSpans = externalIntents
+	txn.LockSpans = externalLocks
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
@@ -658,7 +658,7 @@ func RunCommitTrigger(
 		return pd, nil
 	}
 	if ct.GetMergeTrigger() != nil {
-		// Merge triggers were handled earlier, before intent resolution.
+		// Merge triggers were handled earlier, before lock resolution.
 		return result.Result{}, nil
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
@@ -922,7 +922,7 @@ func splitTriggerHelper(
 	// Note: we don't copy the queue last processed times. This means
 	// we'll process the RHS range in consistency and time series
 	// maintenance queues again possibly sooner than if we copied. The
-	// intent is to limit post-raft logic.
+	// lock is to limit post-raft logic.
 
 	// Now that we've computed the stats for the RHS so far, we persist them.
 	// This looks a bit more complicated than it really is: updating the stats
@@ -1144,7 +1144,7 @@ func changeReplicasTrigger(
 }
 
 // txnAutoGC controls whether Transaction entries are automatically gc'ed upon
-// EndTxn if they only have local intents (which can be resolved synchronously
+// EndTxn if they only have local locks (which can be resolved synchronously
 // with EndTxn). Certain tests become simpler with this being turned off.
 var txnAutoGC = true
 

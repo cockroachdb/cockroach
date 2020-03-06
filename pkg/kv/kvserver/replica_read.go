@@ -109,12 +109,12 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		lResult.MaybeWatchForMerge = false
 	}
 
-	if lResult.WrittenIntents != nil {
+	if lResult.AcquiredLocks != nil {
 		// These will all be unreplicated locks.
-		for i := range lResult.WrittenIntents {
-			r.concMgr.OnLockAcquired(ctx, &lResult.WrittenIntents[i])
+		for i := range lResult.AcquiredLocks {
+			r.concMgr.OnLockAcquired(ctx, &lResult.AcquiredLocks[i])
 		}
-		lResult.WrittenIntents = nil
+		lResult.AcquiredLocks = nil
 	}
 
 	if intents := lResult.DetachEncounteredIntents(); len(intents) > 0 {
