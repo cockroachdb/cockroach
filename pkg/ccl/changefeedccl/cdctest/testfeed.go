@@ -374,6 +374,14 @@ type TableFeed struct {
 	seen map[string]struct{}
 }
 
+// ResetSeen is useful when manually pausing and resuming a TableFeed.
+// We want to be able to assert that rows are not re-emitted in some cases.
+func (c *TableFeed) ResetSeen() {
+	for k := range c.seen {
+		delete(c.seen, k)
+	}
+}
+
 // Partitions implements the TestFeed interface.
 func (c *TableFeed) Partitions() []string {
 	// The sqlSink hardcodes these.
