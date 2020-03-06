@@ -207,7 +207,7 @@ func (a *avroConsumer) FillDatums(
 	// Set any nil datums to DNull (in case native
 	// record didn't have the value set at all)
 	for i := range conv.Datums {
-		if conv.Datums[i] == nil {
+		if _, isTargetCol := conv.IsTargetCol[i]; isTargetCol && conv.Datums[i] == nil {
 			if a.strict {
 				return fmt.Errorf("field %s was not set in the avro import", conv.VisibleCols[i].Name)
 			}
