@@ -624,6 +624,12 @@ func NewColOperator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
 					aggSpec.GroupCols, aggCols,
 				)
+				// Auto mode is enable for hashAggregator since it performs online
+				// aggregation. This limits a large part of memory used by the
+				// aggregator to a constant amount. However, hashAggregator does not
+				// implement disk spilling, but neither is the hashAggregator in the row
+				// execution engine.
+				result.CanRunInAutoMode = true
 			} else {
 				result.Op, err = NewOrderedAggregator(
 					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
@@ -660,6 +666,12 @@ func NewColOperator(
 					NewAllocator(ctx, distinctMemAccount), inputs[0],
 					core.Distinct.DistinctColumns, typs, hashTableNumBuckets,
 				)
+				// Auto mode is enabled for unordered distinct since it only buffers the
+				// distinct tuples into memory. This limits the memory consumption
+				// proportionally to the number of distinct tuples in the table. Disk
+				// spilling is not implemented for this operator, but neither is the
+				// equivalent processor in the row execution engine.
+				result.CanRunInAutoMode = true
 			}
 
 		case core.Ordinality != nil:
