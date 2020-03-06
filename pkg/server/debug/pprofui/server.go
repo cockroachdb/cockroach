@@ -139,6 +139,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.URL.Query().Get("download") != "" {
+			// TODO(tbg): this has zero discoverability.
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s_%s.pb.gz", profileName, id))
+			w.Header().Set("Content-Type", "application/octet-stream")
+			if err := s.storage.Get(id, func(r io.Reader) error {
+				_, err := io.Copy(w, r)
+				return err
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
 		server := func(args *driver.HTTPServerArgs) error {
 			handler, ok := args.Handlers[remainingPath]
 			if !ok {
