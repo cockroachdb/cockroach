@@ -138,7 +138,7 @@ func testStartFollowing(
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			for idx := wfr.RowIdx; idx <= wfr.PartitionSize(); idx++ {
+			for idx := 0; idx <= wfr.PartitionSize(); idx++ {
 				if idx == wfr.PartitionSize() {
 					if idx != frameStartIdx {
 						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
@@ -197,7 +197,7 @@ func testEndPreceding(
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			for idx := wfr.RowIdx; idx >= 0; idx-- {
+			for idx := wfr.PartitionSize() - 1; idx >= 0; idx-- {
 				valueAt, err := wfr.valueAt(evalCtx.Ctx(), idx)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
@@ -378,4 +378,8 @@ func (ir indexedRow) GetDatum(colIdx int) (Datum, error) {
 // GetDatums implements IndexedRow interface.
 func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (Datums, error) {
 	return ir.row[firstColIdx:lastColIdx], nil
+}
+
+func (ir indexedRow) String() string {
+	return fmt.Sprintf("%d: %s", ir.idx, ir.row.String())
 }

@@ -99,6 +99,9 @@ func (wfr *WindowFrameRun) getValueByOffset(
 	if err != nil {
 		return nil, err
 	}
+	if value == DNull {
+		return DNull, nil
+	}
 	return binOp.Fn(evalCtx, value, offset)
 }
 
@@ -156,13 +159,13 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 				return 0, err
 			}
 			if wfr.OrdDirection == encoding.Descending {
-				// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
-				// to find the first row whose value is smaller or equal to 'value'.
-				return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+				// We use binary search on [0, wfr.PartitionSize()) interval to find
+				// the first row whose value is smaller or equal to 'value'.
+				return sort.Search(wfr.PartitionSize(), func(i int) bool {
 					if wfr.err != nil {
 						return false
 					}
-					valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
+					valueAt, err := wfr.valueAt(ctx, i)
 					if err != nil {
 						wfr.err = err
 						return false
@@ -170,13 +173,13 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 					return valueAt.Compare(evalCtx, value) <= 0
 				}), wfr.err
 			}
-			// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
-			// to find the first row whose value is greater or equal to 'value'.
-			return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+			// We use binary search on [0, wfr.PartitionSize()) interval to find the
+			// first row whose value is greater or equal to 'value'.
+			return sort.Search(wfr.PartitionSize(), func(i int) bool {
 				if wfr.err != nil {
 					return false
 				}
-				valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
+				valueAt, err := wfr.valueAt(ctx, i)
 				if err != nil {
 					wfr.err = err
 					return false
@@ -284,10 +287,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 				return 0, err
 			}
 			if wfr.OrdDirection == encoding.Descending {
-				// We use binary search on [0, wfr.RowIdx] interval to find the first row
-				// whose value is smaller than 'value'. If such row is not found,
-				// then Search will correctly return wfr.RowIdx+1.
-				return sort.Search(wfr.RowIdx+1, func(i int) bool {
+				// We use binary search on [0, wfr.PartitionSize()) interval to find
+				// the first row whose value is smaller than 'value'. If such row is
+				// not found, then Search will correctly return wfr.PartitionSize().
+				// Note that searching up to wfr.RowIdx is not correct in case of a
+				// zero offset (we need to include all peers of the current row).
+				return sort.Search(wfr.PartitionSize(), func(i int) bool {
 					if wfr.err != nil {
 						return false
 					}
@@ -299,10 +304,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 					return valueAt.Compare(evalCtx, value) < 0
 				}), wfr.err
 			}
-			// We use binary search on [0, wfr.RowIdx] interval to find the first row
-			// whose value is greater than 'value'. If such row is not found,
-			// then Search will correctly return wfr.RowIdx+1.
-			return sort.Search(wfr.RowIdx+1, func(i int) bool {
+			// We use binary search on [0, wfr.PartitionSize()) interval to find
+			// the first row whose value is smaller than 'value'. If such row is
+			// not found, then Search will correctly return wfr.PartitionSize().
+			// Note that searching up to wfr.RowIdx is not correct in case of a
+			// zero offset (we need to include all peers of the current row).
+			return sort.Search(wfr.PartitionSize(), func(i int) bool {
 				if wfr.err != nil {
 					return false
 				}
@@ -322,13 +329,13 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 				return 0, err
 			}
 			if wfr.OrdDirection == encoding.Descending {
-				// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
-				// to find the first row whose value is smaller than 'value'.
-				return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+				// We use binary search on [0, wfr.PartitionSize()) interval to find
+				// the first row whose value is smaller than 'value'.
+				return sort.Search(wfr.PartitionSize(), func(i int) bool {
 					if wfr.err != nil {
 						return false
 					}
-					valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
+					valueAt, err := wfr.valueAt(ctx, i)
 					if err != nil {
 						wfr.err = err
 						return false
@@ -336,13 +343,13 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 					return valueAt.Compare(evalCtx, value) < 0
 				}), wfr.err
 			}
-			// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
-			// to find the first row whose value is greater than 'value'.
-			return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+			// We use binary search on [0, wfr.PartitionSize()) interval to find
+			// the first row whose value is smaller than 'value'.
+			return sort.Search(wfr.PartitionSize(), func(i int) bool {
 				if wfr.err != nil {
 					return false
 				}
-				valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
+				valueAt, err := wfr.valueAt(ctx, i)
 				if err != nil {
 					wfr.err = err
 					return false

@@ -1715,6 +1715,9 @@ func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowF
 		if err != nil {
 			return nil, err
 		}
+		if offset == tree.DNull {
+			return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "frame starting offset must not be null")
+		}
 		newDef.Bounds.StartBound.OffsetExpr = offset
 	}
 
@@ -1725,6 +1728,9 @@ func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowF
 		offset, err := b.buildScalar(&scalarCtx, boundExpr)
 		if err != nil {
 			return nil, err
+		}
+		if offset == tree.DNull {
+			return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "frame ending offset must not be null")
 		}
 		newDef.Bounds.EndBound.OffsetExpr = offset
 	}
@@ -1866,14 +1872,20 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		outputIdxs[i] = windowStart + i
 	}
 
+	var rangeOffsetColumn exec.ColumnOrdinal
+	if ord.Empty() {
+		idx, _ := input.outputCols.Get(int(w.RangeOffsetColumn))
+		rangeOffsetColumn = exec.ColumnOrdinal(idx)
+	}
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
-		Cols:       resultCols,
-		Exprs:      exprs,
-		OutputIdxs: outputIdxs,
-		ArgIdxs:    argIdxs,
-		FilterIdxs: filterIdxs,
-		Partition:  partitionIdxs,
-		Ordering:   input.sqlOrdering(ord),
+		Cols:              resultCols,
+		Exprs:             exprs,
+		OutputIdxs:        outputIdxs,
+		ArgIdxs:           argIdxs,
+		FilterIdxs:        filterIdxs,
+		Partition:         partitionIdxs,
+		Ordering:          input.sqlOrdering(ord),
+		RangeOffsetColumn: rangeOffsetColumn,
 	})
 	if err != nil {
 		return execPlan{}, err
