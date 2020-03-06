@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -64,6 +65,8 @@ func TestNumTuples(t *testing.T) {
 // expected.
 func TestVectorizedStatsCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 	for nBatches := 1; nBatches < 5; nBatches++ {
 		timeSource := timeutil.NewTestTimeSource()
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
@@ -83,12 +86,9 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput.SetOutputWatch(mjInputWatch)
 
 		mergeJoiner, err := NewMergeJoinOp(
-			testAllocator,
-			sqlbase.InnerJoin,
-			leftInput,
-			rightInput,
-			[]coltypes.T{coltypes.Int64},
-			[]coltypes.T{coltypes.Int64},
+			testAllocator, defaultMemoryLimit, queueCfg, NewTestingSemaphore(4),
+			sqlbase.InnerJoin, leftInput, rightInput,
+			[]coltypes.T{coltypes.Int64}, []coltypes.T{coltypes.Int64},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 		)
