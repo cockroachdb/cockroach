@@ -187,18 +187,18 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
       std.stddev > 0 && latency > std.stddevPlus2,
   });
   const type: any = classNames({
-    "green":
-      std.stddev > 0 && latency < std.stddevMinus2,
-    "lightgreen":
-      std.stddev > 0 && latency < std.stddevMinus1 && latency >= std.stddevMinus2,
-    "grey":
-      std.stddev > 0 && latency >= std.stddevMinus1 && latency <= std.stddevPlus1,
-    "lightblue":
-      std.stddev > 0 && latency > std.stddevPlus1 && latency <= std.stddevPlus2,
-    "blue":
-      std.stddev > 0 && latency > std.stddevPlus2,
     "yellow":
       latency === -2,
+    "green":
+      latency > 0 && std.stddev > 0 && latency < std.stddevMinus2,
+    "lightgreen":
+      latency > 0 && std.stddev > 0 && latency < std.stddevMinus1 && latency >= std.stddevMinus2,
+    "grey":
+      latency > 0 && std.stddev > 0 && latency >= std.stddevMinus1 && latency <= std.stddevPlus1,
+    "lightblue":
+      latency > 0 && std.stddev > 0 && latency > std.stddevPlus1 && latency <= std.stddevPlus2,
+    "blue":
+      latency > 0 && std.stddev > 0 && latency > std.stddevPlus2,
   });
   const renderDescription = (data: string) => _.map(data.split(","), (identity, index) => <p key={index} className="Chip--tooltip__nodes--item-description">{`${identity},`}</p>);
   return (
