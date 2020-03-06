@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Divider, Icon, Row } from "antd";
+import { Col, Divider, Row } from "antd";
 import _ from "lodash";
 import { TimestampToMoment } from "oss/src/util/convert";
 import React from "react";
@@ -33,6 +33,7 @@ import {
 } from "src/views/jobs/jobStatusOptions";
 import {Duration} from "oss/src/views/jobs/duration";
 import {Progress} from "oss/src/views/jobs/progress";
+import { Button, BackIcon } from "oss/src/components/button";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -126,9 +127,16 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
       <div className="job-details">
         <Helmet title={ "Details | Job" } />
         <div className="section page--header">
-          <div className="page--header__back-btn">
-            <Icon type="arrow-left" /> <a onClick={this.prevPage}>Jobs</a>
-          </div>
+          <Button
+            onClick={this.prevPage}
+            type="flat"
+            size="small"
+            className="crl-button--link-to"
+            icon={BackIcon}
+            iconPosition="left"
+          >
+            Jobs
+          </Button>
           <h1 className="page--header__title">{`Job ID: ${String(getMatchParamByName(match, "id"))}`}</h1>
         </div>
         <section className="section section--container">

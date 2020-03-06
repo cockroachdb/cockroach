@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Icon, Row, Tabs } from "antd";
+import { Col, Row, Tabs } from "antd";
 import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
@@ -43,6 +43,7 @@ import { approximify, latencyBreakdown, longToInt, rowsBreakdown } from "./barCh
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
 import classNames from "classnames";
+import { Button, BackIcon } from "oss/src/components/button";
 
 const { TabPane } = Tabs;
 
@@ -174,9 +175,16 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
       <div>
         <Helmet title={`Details | ${(app ? `${app} App |` : "")} Statements`} />
         <div className="section page--header">
-          <div className="page--header__back-btn">
-            <Icon type="arrow-left" /> <a onClick={this.prevPage}>Statements</a>
-          </div>
+          <Button
+            onClick={this.prevPage}
+            type="flat"
+            size="small"
+            className="crl-button--link-to"
+            icon={BackIcon}
+            iconPosition="left"
+          >
+            Statements
+          </Button>
           <h1 className="base-heading page--header__title">Statement Details</h1>
         </div>
         <section className="section section--container">

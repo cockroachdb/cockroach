@@ -13,6 +13,8 @@
 // numerous !important statements necessary.
 // @stylint off
 
+@require "../src/components/core/index.styl"
+
 .Select-option
   padding 10px 25px !important
   &.is-selected
@@ -460,24 +462,9 @@
 .page--header
   padding 0
   &__title
-    font-family SourceSansPro-Regular
+    font-family $font-family--base
     font-size 20px
     line-height 1.6
     letter-spacing -0.2px
-    color #242a35
+    color $colors--neutral-8
     margin-bottom 25px
-  &__back-btn
-    margin-bottom 17px
-    font-family RobotoMono-Regular
-    font-size 12px
-    line-height 1.67
-    letter-spacing 0.3px
-    color $popover-color
-    a
-      text-decoration underline
-      text-transform none
-      font-family RobotoMono-Regular
-      font-size 12px
-      line-height 1.67
-      letter-spacing 0.3px
-      color $popover-color
