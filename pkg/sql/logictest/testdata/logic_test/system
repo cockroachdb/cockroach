@@ -419,20 +419,19 @@ ALTER DATABASE system RENAME TO not_system
 statement error user root does not have DROP privilege on database system
 DROP DATABASE system
 
-# Users cannot exceed allowed privileges on system objects.
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on database system
 GRANT ALL ON DATABASE system TO testuser
 
-statement error user testuser must not have INSERT privileges on system object with ID=.*
+statement error user root does not have INSERT privilege on database system
 GRANT GRANT, SELECT, INSERT ON DATABASE system TO testuser
 
 statement ok
 GRANT GRANT, SELECT ON DATABASE system TO testuser
 
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation namespace
 GRANT ALL ON system.namespace TO testuser
 
-statement error user testuser must not have INSERT privileges on system object with ID=.*
+statement error user root does not have INSERT privilege on relation namespace
 GRANT GRANT, SELECT, INSERT ON system.namespace TO testuser
 
 statement ok
@@ -442,19 +441,19 @@ statement ok
 GRANT SELECT ON system.descriptor TO testuser
 
 # Superusers must have exactly the allowed privileges.
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on database system
 GRANT ALL ON DATABASE system TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have DELETE privilege on database system
 GRANT DELETE, INSERT ON DATABASE system TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation namespace
 GRANT ALL ON system.namespace TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have DELETE privilege on relation descriptor
 GRANT DELETE, INSERT ON system.descriptor TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation descriptor
 GRANT ALL ON system.descriptor TO root
 
 statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
@@ -463,23 +462,32 @@ REVOKE GRANT ON DATABASE system FROM root
 statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 REVOKE GRANT ON system.namespace FROM root
 
-statement error user root does not have privileges
+statement error user root does not have ALL privilege on relation namespace
 REVOKE ALL ON system.namespace FROM root
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have privileges over system object with ID=.*
+REVOKE GRANT,SELECT ON system.namespace FROM root
+
+statement error user root does not have ALL privilege on database system
 GRANT ALL ON DATABASE system TO admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have DELETE privilege on database system
 GRANT DELETE, INSERT ON DATABASE system TO admin
 
 statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+REVOKE GRANT ON DATABASE system FROM admin
+
+statement error user root does not have ALL privilege on relation namespace
 GRANT ALL ON system.namespace TO admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have DELETE privilege on relation descriptor
 GRANT DELETE, INSERT ON system.descriptor TO admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation descriptor
 GRANT ALL ON system.descriptor TO admin
+
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
+REVOKE GRANT ON system.descriptor FROM admin
 
 statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 REVOKE GRANT ON DATABASE system FROM admin
@@ -487,31 +495,34 @@ REVOKE GRANT ON DATABASE system FROM admin
 statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 REVOKE GRANT ON system.namespace FROM admin
 
-statement error user admin does not have privileges
+statement error user root does not have ALL privilege on relation namespace
 REVOKE ALL ON system.namespace FROM admin
+
+statement error user admin does not have privileges over system object with ID=.*
+REVOKE GRANT,SELECT ON system.namespace FROM admin
 
 # Some tables (we test system.lease here) used to allow multiple privilege sets for
 # backwards compatibility, and superusers were allowed very wide privileges.
 # We make sure this is no longer the case.
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO testuser
 
-statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have CREATE privilege on relation lease
 GRANT CREATE on system.lease to root
 
-statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have CREATE privilege on relation lease
 GRANT CREATE on system.lease to admin
 
-statement error user testuser must not have CREATE privileges on system object with ID=.*
+statement error user root does not have CREATE privilege on relation lease
 GRANT CREATE on system.lease to testuser
 
-statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO root
 
-statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO admin
 
-statement error user testuser must not have ALL privileges on system object with ID=.*
+statement error user root does not have ALL privilege on relation lease
 GRANT ALL ON system.lease TO testuser
 
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
