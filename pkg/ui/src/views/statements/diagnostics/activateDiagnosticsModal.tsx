@@ -16,6 +16,7 @@ import { Anchor, Modal, Text } from "src/components";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { AdminUIState } from "src/redux/state";
 import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
+import { statementDiagnostics } from "src/util/docs";
 
 export type ActivateDiagnosticsModalProps = MapDispatchToProps;
 
@@ -64,7 +65,7 @@ const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: Rea
       <p/>
       <Text>
         A download button will appear on the statement list and detail pages when the query is ready.
-        The download will include EXPLAIN plans, table statistics, and traces. <Anchor href="">Learn more</Anchor>
+        The download will include EXPLAIN plans, table statistics, and traces. <Anchor href={statementDiagnostics}>Learn more</Anchor>
       </Text>
     </Modal>
   );
