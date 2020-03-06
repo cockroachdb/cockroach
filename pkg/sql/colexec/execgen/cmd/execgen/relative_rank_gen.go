@@ -24,8 +24,10 @@ type relativeRankTmplInfo struct {
 	String        string
 }
 
+const relativeRankTmpl = "pkg/sql/colexec/relative_rank_tmpl.go"
+
 func genRelativeRankOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/relative_rank_tmpl.go")
+	d, err := ioutil.ReadFile(relativeRankTmpl)
 	if err != nil {
 		return err
 	}
@@ -55,5 +57,5 @@ func genRelativeRankOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRelativeRankOps, "relative_rank.eg.go")
+	registerGenerator(genRelativeRankOps, "relative_rank.eg.go", relativeRankTmpl)
 }

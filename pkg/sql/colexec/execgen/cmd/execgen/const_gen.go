@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
+const constTmpl = "pkg/sql/colexec/const_tmpl.go"
+
 func genConstOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/const_tmpl.go")
+	d, err := ioutil.ReadFile(constTmpl)
 	if err != nil {
 		return err
 	}
@@ -43,5 +45,5 @@ func genConstOps(wr io.Writer) error {
 	return tmpl.Execute(wr, coltypes.AllTypes)
 }
 func init() {
-	registerGenerator(genConstOps, "const.eg.go")
+	registerGenerator(genConstOps, "const.eg.go", constTmpl)
 }

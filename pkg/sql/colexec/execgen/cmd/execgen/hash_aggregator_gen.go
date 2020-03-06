@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const hashAggTmpl = "pkg/sql/colexec/hash_aggregator_tmpl.go"
+
 func genHashAggregator(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/hash_aggregator_tmpl.go")
+	t, err := ioutil.ReadFile(hashAggTmpl)
 	if err != nil {
 		return err
 	}
@@ -47,5 +49,5 @@ func genHashAggregator(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genHashAggregator, "hash_aggregator.eg.go")
+	registerGenerator(genHashAggregator, "hash_aggregator.eg.go", hashAggTmpl)
 }

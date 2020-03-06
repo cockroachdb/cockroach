@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const vecTmpl = "pkg/col/coldata/vec_tmpl.go"
+
 func genVec(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/col/coldata/vec_tmpl.go")
+	d, err := ioutil.ReadFile(vecTmpl)
 	if err != nil {
 		return err
 	}
@@ -45,5 +47,5 @@ func genVec(wr io.Writer) error {
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genVec, "vec.eg.go")
+	registerGenerator(genVec, "vec.eg.go", vecTmpl)
 }

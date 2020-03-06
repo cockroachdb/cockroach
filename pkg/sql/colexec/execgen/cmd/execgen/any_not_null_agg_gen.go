@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const anyNotNullAggTmpl = "pkg/sql/colexec/any_not_null_agg_tmpl.go"
+
 func genAnyNotNullAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/any_not_null_agg_tmpl.go")
+	t, err := ioutil.ReadFile(anyNotNullAggTmpl)
 	if err != nil {
 		return err
 	}
@@ -47,5 +49,5 @@ func genAnyNotNullAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genAnyNotNullAgg, "any_not_null_agg.eg.go")
+	registerGenerator(genAnyNotNullAgg, "any_not_null_agg.eg.go", anyNotNullAggTmpl)
 }

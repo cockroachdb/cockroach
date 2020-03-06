@@ -24,8 +24,10 @@ type logicalOperation struct {
 	IsOr bool
 }
 
+const andOrProjTmpl = "pkg/sql/colexec/and_or_projection_tmpl.go"
+
 func genAndOrProjectionOps(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/and_or_projection_tmpl.go")
+	t, err := ioutil.ReadFile(andOrProjTmpl)
 	if err != nil {
 		return err
 	}
@@ -66,5 +68,5 @@ func genAndOrProjectionOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genAndOrProjectionOps, "and_or_projection.eg.go")
+	registerGenerator(genAndOrProjectionOps, "and_or_projection.eg.go", andOrProjTmpl)
 }

@@ -46,8 +46,10 @@ type columnConversion struct {
 	ExecType coltypes.T
 }
 
+const rowsToVecTmpl = "pkg/sql/colexec/rowstovec_tmpl.go"
+
 func genRowsToVec(wr io.Writer) error {
-	f, err := ioutil.ReadFile("pkg/sql/colexec/rowstovec_tmpl.go")
+	f, err := ioutil.ReadFile(rowsToVecTmpl)
 	if err != nil {
 		return err
 	}
@@ -111,5 +113,5 @@ func genRowsToVec(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRowsToVec, "rowstovec.eg.go")
+	registerGenerator(genRowsToVec, "rowstovec.eg.go", rowsToVecTmpl)
 }

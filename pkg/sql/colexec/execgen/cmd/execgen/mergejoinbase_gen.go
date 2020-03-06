@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const mergeJoinBaseTmpl = "pkg/sql/colexec/mergejoinbase_tmpl.go"
+
 func genMergeJoinBase(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/mergejoinbase_tmpl.go")
+	d, err := ioutil.ReadFile(mergeJoinBaseTmpl)
 	if err != nil {
 		return err
 	}
@@ -46,5 +48,5 @@ func genMergeJoinBase(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genMergeJoinBase, "mergejoinbase.eg.go")
+	registerGenerator(genMergeJoinBase, "mergejoinbase.eg.go", mergeJoinBaseTmpl)
 }
