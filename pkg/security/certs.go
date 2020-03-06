@@ -265,7 +265,8 @@ func CreateNodePair(
 		return errors.Errorf("could not generate new node key: %v", err)
 	}
 
-	nodeCert, err := GenerateServerCert(caCert, caPrivateKey, nodeKey.Public(), lifetime, hosts)
+	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
+		nodeKey.Public(), lifetime, NodeUser, hosts)
 	if err != nil {
 		return errors.Errorf("error creating node server certificate and key: %s", err)
 	}

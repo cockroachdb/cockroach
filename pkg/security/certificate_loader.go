@@ -447,7 +447,9 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 	cert := ci.ParsedCertificates[0]
 
 	// Check Subject Common Name.
-	if a, e := cert.Subject.CommonName, NodeUser; a != e {
+	//
+	// TODO(peter): Test this function when a certPrincipalMap is present.
+	if a, e := transformPrincipal(cert.Subject.CommonName), NodeUser; a != e {
 		return errors.Errorf("client/server node certificate has Subject \"CN=%s\", expected \"CN=%s\"", a, e)
 	}
 
@@ -464,7 +466,9 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 		// This is done in validateDualPurposeNodeCert.
 	case ClientPem:
 		// Check that CommonName matches the username extracted from the filename.
-		if a, e := cert.Subject.CommonName, ci.Name; a != e {
+		//
+		// TODO(peter): Test this function when a certPrincipalMap is present.
+		if a, e := transformPrincipal(cert.Subject.CommonName), ci.Name; a != e {
 			return errors.Errorf("client certificate has Subject \"CN=%s\", expected \"CN=%s\" (must match filename)", a, e)
 		}
 	}

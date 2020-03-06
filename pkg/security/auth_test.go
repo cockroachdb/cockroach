@@ -15,10 +15,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // Construct a fake tls.ConnectionState object with one peer certificate
@@ -42,37 +45,89 @@ func makeFakeTLSState(commonNames []string, chainLengths []int) *tls.ConnectionS
 	return tls
 }
 
-func TestGetCertificateUser(t *testing.T) {
+func TestGetCertificateUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Nil TLS state.
-	if _, err := security.GetCertificateUser(nil); err == nil {
+	if _, err := security.GetCertificateUsers(nil); err == nil {
 		t.Error("unexpected success")
 	}
 
 	// No certificates.
-	if _, err := security.GetCertificateUser(makeFakeTLSState(nil, nil)); err == nil {
+	if _, err := security.GetCertificateUsers(makeFakeTLSState(nil, nil)); err == nil {
 		t.Error("unexpected success")
 	}
 
 	// Good request: single certificate.
-	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo"}, []int{2})); err != nil {
+	if names, err := security.GetCertificateUsers(makeFakeTLSState([]string{"foo"}, []int{2})); err != nil {
 		t.Error(err)
-	} else if name != "foo" {
-		t.Errorf("expected name: foo, got: %s", name)
+	} else {
+		require.EqualValues(t, names, []string{"foo"})
 	}
 
 	// Request with multiple certs, but only one chain (eg: origin certs are client and CA).
-	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo", "CA"}, []int{2})); err != nil {
+	if names, err := security.GetCertificateUsers(makeFakeTLSState([]string{"foo", "CA"}, []int{2})); err != nil {
 		t.Error(err)
-	} else if name != "foo" {
-		t.Errorf("expected name: foo, got: %s", name)
+	} else {
+		require.EqualValues(t, names, []string{"foo"})
 	}
 
 	// Always use the first certificate.
-	if name, err := security.GetCertificateUser(makeFakeTLSState([]string{"foo", "bar"}, []int{2, 1})); err != nil {
+	if names, err := security.GetCertificateUsers(makeFakeTLSState([]string{"foo", "bar"}, []int{2, 1})); err != nil {
 		t.Error(err)
-	} else if name != "foo" {
-		t.Errorf("expected name: foo, got: %s", name)
+	} else {
+		require.EqualValues(t, names, []string{"foo"})
+	}
+}
+
+func TestSetCertPrincipalMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		vals     []string
+		expected string
+	}{
+		{[]string{}, ""},
+		{[]string{"foo"}, "invalid <cert-principal>:<db-principal> mapping:"},
+		{[]string{"foo:bar"}, ""},
+		{[]string{"foo:bar", "blah:blah"}, ""},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			err := security.SetCertPrincipalMap(c.vals)
+			if !testutils.IsError(err, c.expected) {
+				t.Fatalf("expected %q, but found %v", c.expected, err)
+			}
+		})
+	}
+}
+
+func TestGetCertificateUsersMapped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		user     string
+		val      string
+		expected string
+	}{
+		{"foo", "", "foo"},
+		{"foo", "foo:foo", "foo"},
+		{"foo", "foo:bar", "bar"},
+		{"foo", "bar:bar", "foo"},
+		{"foo", "foo:bar,foo:blah", "blah"},
+		{"node.cockroachlabs.com", "node.cockroachlabs.com:node", "node"},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			vals := strings.Split(c.val, ",")
+			if err := security.SetCertPrincipalMap(vals); err != nil {
+				t.Fatal(err)
+			}
+			names, err := security.GetCertificateUsers(makeFakeTLSState([]string{c.user}, []int{2}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.EqualValues(t, names, []string{c.expected})
+		})
 	}
 }
 
