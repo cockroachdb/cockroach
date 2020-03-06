@@ -815,6 +815,7 @@ var specs = []stmtSpec{
 		inline: []string{"string_or_placeholder_list", "opt_with_options"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'IMPORT' import_format"),
+			regexp.MustCompile("'IMPORT' 'INTO'"),
 			regexp.MustCompile("'FROM' import_format"),
 			regexp.MustCompile("'WITH' 'OPTIONS'"),
 		},
@@ -825,7 +826,7 @@ var specs = []stmtSpec{
 		unlink: []string{"file_location"},
 	},
 	{
-		name:   "import_into",
+		name:   "import_into2",
 		stmt:   "import_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("INTO")},
 		inline: []string{"insert_column_list", "string_or_placeholder_list", "opt_with_options", "kv_option_list"},
