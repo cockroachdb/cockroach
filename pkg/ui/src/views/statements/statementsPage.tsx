@@ -41,6 +41,7 @@ import "./statements.styl";
 import {
   selectLastDiagnosticsReportPerStatement,
 } from "src/redux/statements/statementsSelectors";
+import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -52,6 +53,7 @@ interface StatementsPageProps {
   lastReset: string;
   refreshStatements: typeof refreshStatements;
   refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
+  dismissAlertMessage: () => void;
 }
 
 interface StatementsPageState {
@@ -97,6 +99,10 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
   componentWillReceiveProps() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
+  }
+
+  componentWillUnmount() {
+    this.props.dismissAlertMessage();
   }
 
   onChangePage = (current: number) => {
@@ -392,6 +398,7 @@ const StatementsPageConnected = withRouter(connect(
   {
     refreshStatements,
     refreshStatementDiagnosticsRequests,
+    dismissAlertMessage: () => createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
   },
 )(StatementsPage));
 

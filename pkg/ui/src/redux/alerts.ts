@@ -269,6 +269,49 @@ export const emailSubscriptionAlertSelector = createSelector(
   },
 );
 
+type CreateStatementDiagnosticsAlertPayload = {
+  show: boolean;
+  status?: "SUCCESS" | "FAILED";
+};
+
+export const createStatementDiagnosticsAlertLocalSetting = new LocalSetting<AdminUIState, CreateStatementDiagnosticsAlertPayload>(
+  "create_stmnt_diagnostics_alert", localSettingsSelector, { show: false },
+);
+
+export const createStatementDiagnosticsAlertSelector = createSelector(
+  createStatementDiagnosticsAlertLocalSetting.selector,
+  ( createStatementDiagnosticsAlert): Alert => {
+    if (!createStatementDiagnosticsAlert || !createStatementDiagnosticsAlert.show) {
+      return undefined;
+    }
+    const { status } = createStatementDiagnosticsAlert;
+
+    if (status === "FAILED") {
+      return {
+        level: AlertLevel.CRITICAL,
+        title: "There was an error activating statement diagnostics",
+        text: "Please try activating again. If the problem continues please reach out to customer support.",
+        showAsAlert: true,
+        dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+          dispatch(createStatementDiagnosticsAlertLocalSetting.set({ show: false }));
+          return Promise.resolve();
+        },
+      };
+    }
+    return {
+      level: AlertLevel.SUCCESS,
+      title: "Statement diagnostics were successfully activated",
+      showAsAlert: true,
+      autoClose: true,
+      closable: false,
+      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+        dispatch(createStatementDiagnosticsAlertLocalSetting.set({ show: false }));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed in the alerts panel, which is embedded within the cluster overview
@@ -291,6 +334,7 @@ export const panelAlertsSelector = createSelector(
 export const bannerAlertsSelector = createSelector(
   disconnectedAlertSelector,
   emailSubscriptionAlertSelector,
+  createStatementDiagnosticsAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
