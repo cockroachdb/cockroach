@@ -839,9 +839,11 @@ EXECGEN_TARGETS = \
 
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
-$(info Cleaning old generated files.)
-$(shell find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) -delete)
-$(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -delete 2>/dev/null)
+$(shell for obsolete in $$(find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) 2>/dev/null) \
+			$$(find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) 2>/dev/null); do \
+	  echo "Removing obsolete file $$obsolete..."; \
+	  rm -f $$obsolete; \
+	done)
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1494,50 +1496,47 @@ settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),
 $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
-pkg/col/coldata/vec.eg.go: pkg/col/coldata/vec_tmpl.go
-pkg/sql/colexec/and_or_projection.eg.go: pkg/sql/colexec/and_or_projection_tmpl.go
-pkg/sql/colexec/any_not_null_agg.eg.go: pkg/sql/colexec/any_not_null_agg_tmpl.go
-pkg/sql/colexec/avg_agg.eg.go: pkg/sql/colexec/avg_agg_tmpl.go
-pkg/sql/colexec/bool_and_or_agg.eg.go: pkg/sql/colexec/bool_and_or_agg_tmpl.go
-pkg/sql/colexec/cast.eg.go: pkg/sql/colexec/cast_tmpl.go
-pkg/sql/colexec/const.eg.go: pkg/sql/colexec/const_tmpl.go
-pkg/sql/colexec/count_agg.eg.go: pkg/sql/colexec/count_agg_tmpl.go
-pkg/sql/colexec/distinct.eg.go: pkg/sql/colexec/distinct_tmpl.go
-pkg/sql/colexec/hash_aggregator.eg.go: pkg/sql/colexec/hash_aggregator_tmpl.go
-pkg/sql/colexec/hashjoiner.eg.go: pkg/sql/colexec/hashjoiner_tmpl.go
-pkg/sql/colexec/hashtable.eg.go: pkg/sql/colexec/hashtable_tmpl.go
-pkg/sql/colexec/hash_utils.eg.go: pkg/sql/colexec/hash_utils_tmpl.go
-pkg/sql/colexec/like_ops.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
-pkg/sql/colexec/mergejoinbase.eg.go: pkg/sql/colexec/mergejoinbase_tmpl.go
-pkg/sql/colexec/mergejoiner_fullouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_inner.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_leftanti.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_leftouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_leftsemi.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_rightouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/min_max_agg.eg.go: pkg/sql/colexec/min_max_agg_tmpl.go
-pkg/sql/colexec/orderedsynchronizer.eg.go: pkg/sql/colexec/orderedsynchronizer_tmpl.go
-pkg/sql/colexec/overloads_test_utils.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
-pkg/sql/colexec/proj_const_left_ops.eg.go: pkg/sql/colexec/proj_const_ops_tmpl.go
-pkg/sql/colexec/proj_const_right_ops.eg.go: pkg/sql/colexec/proj_const_ops_tmpl.go
-pkg/sql/colexec/proj_non_const_ops.eg.go: pkg/sql/colexec/proj_non_const_ops_tmpl.go
-pkg/sql/colexec/quicksort.eg.go: pkg/sql/colexec/quicksort_tmpl.go
-pkg/sql/colexec/rank.eg.go: pkg/sql/colexec/rank_tmpl.go
-pkg/sql/colexec/relative_rank.eg.go: pkg/sql/colexec/relative_rank_tmpl.go
-pkg/sql/colexec/row_number.eg.go: pkg/sql/colexec/row_number_tmpl.go
-pkg/sql/colexec/rowstovec.eg.go: pkg/sql/colexec/rowstovec_tmpl.go
-pkg/sql/colexec/select_in.eg.go: pkg/sql/colexec/select_in_tmpl.go
-pkg/sql/colexec/selection_ops.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
-pkg/sql/colexec/sort.eg.go: pkg/sql/colexec/sort_tmpl.go
-pkg/sql/colexec/substring.eg.go: pkg/sql/colexec/substring_tmpl.go
-pkg/sql/colexec/sum_agg.eg.go: pkg/sql/colexec/sum_agg_tmpl.go
-pkg/sql/colexec/values_differ.eg.go: pkg/sql/colexec/values_differ_tmpl.go
-pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
-pkg/sql/colexec/window_peer_grouper.eg.go: pkg/sql/colexec/window_peer_grouper_tmpl.go
+# Produce the dependency list for all the .eg.go files, to make them
+# depend on the right template. We use the -M flag to execgen which
+# produces the dependencies, then include them below.
+bin/execgen_out.d: bin/execgen
+	@echo EXECGEN $@; execgen -M $(EXECGEN_TARGETS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	@mv -f $@.tmp $@
 
-$(EXECGEN_TARGETS): bin/execgen
-	execgen $@ > $@.tmp; cmp $@.tmp $@ && rm -f $@.tmp || mv $@.tmp $@
+include bin/execgen_out.d
 
+# Generate the colexec files.
+#
+# Note how the dependency work is complete after the cmp/rm/mv
+# dance to write to the output.
+# However, because it does not always change the timestamp of the
+# target file, it is possible to get a situation where the target is
+# older than both bin/execgen and the _tmpl.go file, but does not get
+# changed by this rule. This happens e.g. after a 'git checkout' to a
+# different branch, when the execgen binary and templates do not
+# change across branches.
+#
+# In order to prevent the rule from kicking again in every
+# make invocation, we tweak the timestamp of the output file
+# to be the latest of either bin/execgen or the input template.
+# This makes it just new enough that 'make' will be satisfied
+# that it does not need an update any more.
+#
+# Note that we don't want to ratchet the timestamp all the way
+# to the present, because then it will becomes newer
+# than all the other produced artifacts downstream and force
+# them to rebuild too.
+%.eg.go: bin/execgen
+	@echo EXECGEN $@
+	@execgen $@ > $@.tmp || { rm -f $@.tmp; exit 1; }
+	@cmp $@.tmp $@ 2>/dev/null && rm -f $@.tmp || mv -f $@.tmp $@
+	@set -e; \
+	  depfile=$$(execgen -M $@ | cut -d: -f2); \
+	  target_timestamp_file=$${depfile:-bin/execgen}; \
+	  if test bin/execgen -nt $$target_timestamp_file; then \
+	    target_timestamp_file=bin/execgen; \
+	  fi; \
+	  touch -r $$target_timestamp_file $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt

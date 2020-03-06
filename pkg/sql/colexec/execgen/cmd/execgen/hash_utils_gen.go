@@ -17,8 +17,10 @@ import (
 	"text/template"
 )
 
+const hashUtilsTmpl = "pkg/sql/colexec/hash_utils_tmpl.go"
+
 func genHashUtils(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/hash_utils_tmpl.go")
+	t, err := ioutil.ReadFile(hashUtilsTmpl)
 	if err != nil {
 		return err
 	}
@@ -46,5 +48,5 @@ func genHashUtils(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genHashUtils, "hash_utils.eg.go")
+	registerGenerator(genHashUtils, "hash_utils.eg.go", hashUtilsTmpl)
 }

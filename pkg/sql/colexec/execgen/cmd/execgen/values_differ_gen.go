@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const valuesDifferTmpl = "pkg/sql/colexec/values_differ_tmpl.go"
+
 func genValuesDiffer(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/values_differ_tmpl.go")
+	d, err := ioutil.ReadFile(valuesDifferTmpl)
 	if err != nil {
 		return err
 	}
@@ -47,5 +49,5 @@ func genValuesDiffer(wr io.Writer) error {
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genValuesDiffer, "values_differ.eg.go")
+	registerGenerator(genValuesDiffer, "values_differ.eg.go", valuesDifferTmpl)
 }

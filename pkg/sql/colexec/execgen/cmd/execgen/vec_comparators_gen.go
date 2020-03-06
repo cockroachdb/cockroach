@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const vecCmpTmpl = "pkg/sql/colexec/vec_comparators_tmpl.go"
+
 func genVecComparators(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/vec_comparators_tmpl.go")
+	d, err := ioutil.ReadFile(vecCmpTmpl)
 	if err != nil {
 		return err
 	}
@@ -41,5 +43,5 @@ func genVecComparators(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genVecComparators, "vec_comparators.eg.go")
+	registerGenerator(genVecComparators, "vec_comparators.eg.go", vecCmpTmpl)
 }

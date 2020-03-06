@@ -38,8 +38,10 @@ func (a aggOverloads) AggNameTitle() string {
 var _ = aggOverloads{}.AggNameLower()
 var _ = aggOverloads{}.AggNameTitle()
 
+const minMaxAggTmpl = "pkg/sql/colexec/min_max_agg_tmpl.go"
+
 func genMinMaxAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/min_max_agg_tmpl.go")
+	t, err := ioutil.ReadFile(minMaxAggTmpl)
 	if err != nil {
 		return err
 	}
@@ -79,5 +81,5 @@ func genMinMaxAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genMinMaxAgg, "min_max_agg.eg.go")
+	registerGenerator(genMinMaxAgg, "min_max_agg.eg.go", minMaxAggTmpl)
 }

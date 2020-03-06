@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const sumAggTmpl = "pkg/sql/colexec/sum_agg_tmpl.go"
+
 func genSumAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/sum_agg_tmpl.go")
+	t, err := ioutil.ReadFile(sumAggTmpl)
 	if err != nil {
 		return err
 	}
@@ -47,5 +49,5 @@ func genSumAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSumAgg, "sum_agg.eg.go")
+	registerGenerator(genSumAgg, "sum_agg.eg.go", sumAggTmpl)
 }
