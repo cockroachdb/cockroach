@@ -13,10 +13,12 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import moment from "moment";
 import { Action, Dispatch } from "redux";
+import Long from "long";
 
-import { Button, ColumnsConfig, Table, Text, TextTypes } from "src/components";
+import { Button, ColumnsConfig, DownloadFile, DownloadFileRef, Table, Text, TextTypes } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
+import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
@@ -30,6 +32,7 @@ import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnost
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 import {
   getDiagnosticsStatus,
   sortByCompletedField,
@@ -83,6 +86,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
           return (
             <div className="crl-statements-diagnostics-view__actions-column cell--show-on-hover nodes-table__link">
               <Button
+                onClick={() => this.getStatementDiagnostics(record.statement_diagnostics_id)}
                 size="small"
                 type="flat"
                 iconPosition="left"
@@ -104,6 +108,8 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
   ];
 
   tablePageSize = 16;
+
+  downloadRef = React.createRef<DownloadFileRef>();
 
   constructor(props: StatementDiagnosticsHistoryViewProps) {
     super(props);
@@ -133,6 +139,13 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
     );
   }
 
+  getStatementDiagnostics = async (diagnosticsId: Long) => {
+    const request = new StatementDiagnosticsRequest({ statement_diagnostics_id: diagnosticsId });
+    const response = await getStatementDiagnostics(request);
+    const trace = response.diagnostics?.trace;
+    this.downloadRef.current?.download("statement-diagnostics.json", "application/json", trace);
+  }
+
   render() {
     const { diagnosticsReports } = this.props;
     const dataSource = diagnosticsReports.map((diagnosticsReport, idx) => ({
@@ -158,6 +171,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
             columns={this.columns}
           />
         </div>
+        <DownloadFile ref={this.downloadRef}/>
       </section>
     );
   }
