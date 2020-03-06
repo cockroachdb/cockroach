@@ -13,7 +13,6 @@ package jobs
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -36,7 +35,12 @@ type FakeResumer struct {
 
 func (d FakeResumer) Resume(ctx context.Context, _ interface{}, _ chan<- tree.Datums) error {
 	if d.OnResume != nil {
-		return d.OnResume(ctx)
+		if err := d.OnResume(ctx); err != nil {
+			return err
+		}
+	}
+	if d.Success != nil {
+		return d.Success()
 	}
 	return nil
 }
@@ -44,13 +48,6 @@ func (d FakeResumer) Resume(ctx context.Context, _ interface{}, _ chan<- tree.Da
 func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
 	if d.FailOrCancel != nil {
 		return d.FailOrCancel(ctx)
-	}
-	return nil
-}
-
-func (d FakeResumer) OnSuccess(_ context.Context, _ *client.Txn) error {
-	if d.Success != nil {
-		return d.Success()
 	}
 	return nil
 }

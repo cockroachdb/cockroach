@@ -668,36 +668,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.check(t, jobs.StatusFailed)
 	})
 
-	// Attempt to mark success, but fail.
-	t.Run("fail marking success", func(t *testing.T) {
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-
-		// Make marking success fail.
-		rts.successErr = errors.New("marking success failed")
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rts.job = j
-
-		rts.mu.e.ResumeStart = true
-		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-
-		rts.resumeCh <- nil
-		rts.mu.e.ResumeExit++
-
-		rts.mu.e.Success = true
-		rts.mu.e.OnFailOrCancelStart = true
-		rts.failOrCancelCheckCh <- struct{}{}
-		rts.failOrCancelCh <- nil
-		rts.mu.e.OnFailOrCancelExit++
-		rts.mu.e.Terminal++
-		rts.check(t, jobs.StatusFailed)
-	})
-
 	// Attempt to mark success, but fail, but fail that also. Thus it should not
 	// trigger OnTerminal.
 	t.Run("fail marking success and fail OnFailOrCancel", func(t *testing.T) {

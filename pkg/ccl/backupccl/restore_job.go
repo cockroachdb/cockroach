@@ -1162,11 +1162,6 @@ func (r *restoreResumer) dropTables(ctx context.Context, txn *client.Txn) error 
 	return nil
 }
 
-// OnSuccess is part of the jobs.Resumer interface.
-func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
-	return nil
-}
-
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
 func (r *restoreResumer) restoreSystemTables(ctx context.Context) error {

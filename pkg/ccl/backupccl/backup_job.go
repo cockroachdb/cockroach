@@ -531,9 +531,6 @@ func (b *backupResumer) OnFailOrCancel(context.Context, interface{}) error {
 	return nil
 }
 
-// OnSuccess is part of the jobs.Resumer interface.
-func (b *backupResumer) OnSuccess(context.Context, *client.Txn) error { return nil }
-
 // OnTerminal is part of the jobs.Resumer interface.
 func (b *backupResumer) OnTerminal(
 	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
