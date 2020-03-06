@@ -23,8 +23,10 @@ type windowPeerGrouperTmplInfo struct {
 	String       string
 }
 
+const windowPeerGrouperOpsTmpl = "pkg/sql/colexec/window_peer_grouper_tmpl.go"
+
 func genWindowPeerGrouperOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/window_peer_grouper_tmpl.go")
+	d, err := ioutil.ReadFile(windowPeerGrouperOpsTmpl)
 	if err != nil {
 		return err
 	}
@@ -48,5 +50,5 @@ func genWindowPeerGrouperOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genWindowPeerGrouperOps, "window_peer_grouper.eg.go")
+	registerGenerator(genWindowPeerGrouperOps, "window_peer_grouper.eg.go", windowPeerGrouperOpsTmpl)
 }

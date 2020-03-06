@@ -20,8 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const hashTableTmpl = "pkg/sql/colexec/hashtable_tmpl.go"
+
 func genHashTable(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/hashtable_tmpl.go")
+	t, err := ioutil.ReadFile(hashTableTmpl)
 	if err != nil {
 		return err
 	}
@@ -79,5 +81,5 @@ func genHashTable(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genHashTable, "hashtable.eg.go")
+	registerGenerator(genHashTable, "hashtable.eg.go", hashTableTmpl)
 }

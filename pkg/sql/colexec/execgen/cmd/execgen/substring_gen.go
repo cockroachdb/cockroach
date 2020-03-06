@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
+const substringTmpl = "pkg/sql/colexec/substring_tmpl.go"
+
 func genSubstring(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/substring_tmpl.go")
+	t, err := ioutil.ReadFile(substringTmpl)
 	if err != nil {
 		return err
 	}
@@ -45,5 +47,5 @@ func genSubstring(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSubstring, "substring.eg.go")
+	registerGenerator(genSubstring, "substring.eg.go", substringTmpl)
 }

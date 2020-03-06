@@ -16,8 +16,10 @@ import (
 	"text/template"
 )
 
+const hashJoinerTmpl = "pkg/sql/colexec/hashjoiner_tmpl.go"
+
 func genHashJoiner(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/hashjoiner_tmpl.go")
+	t, err := ioutil.ReadFile(hashJoinerTmpl)
 	if err != nil {
 		return err
 	}
@@ -48,5 +50,5 @@ func genHashJoiner(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genHashJoiner, "hashjoiner.eg.go")
+	registerGenerator(genHashJoiner, "hashjoiner.eg.go", hashJoinerTmpl)
 }

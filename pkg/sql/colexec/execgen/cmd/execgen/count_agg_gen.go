@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const countAggTmpl = "pkg/sql/colexec/count_agg_tmpl.go"
+
 func genCountAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/count_agg_tmpl.go")
+	t, err := ioutil.ReadFile(countAggTmpl)
 	if err != nil {
 		return err
 	}
@@ -38,5 +40,5 @@ func genCountAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genCountAgg, "count_agg.eg.go")
+	registerGenerator(genCountAgg, "count_agg.eg.go", countAggTmpl)
 }
