@@ -152,14 +152,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
-	var initialHighWater hlc.Timestamp
-	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
-	for _, watch := range ca.spec.Watches {
-		spans = append(spans, watch.Span)
-		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
-	}
+	initialHighWater, spans, needsInitialScan := getInitialScan(ca.spec)
 
 	// This SpanFrontier only tracks the spans being watched on this node.
 	// There is a different SpanFrontier elsewhere for the entire changefeed.
@@ -230,26 +223,9 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		MM:                 ca.kvFeedMemMon,
 		InitialHighWater:   initialHighWater,
 		WithDiff:           withDiff,
+		NeedsInitialScan:   needsInitialScan,
 		SchemaChangeEvents: changefeedbase.SchemaChangeEventClass(ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents]),
 		SchemaChangePolicy: changefeedbase.SchemaChangePolicy(ca.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy]),
-	}
-
-	{
-		noCursor := kvfeedCfg.InitialHighWater.IsEmpty()
-		if noCursor {
-			kvfeedCfg.InitialHighWater = ca.spec.Feed.StatementTime
-		}
-
-		// The initial scan semantics are default to whether this is the first run
-		// of a changefeed which did not specify a cursor. This can be overridden
-		// with additional options.
-		needsInitialScan := noCursor
-		if _, initialScanOpt := ca.spec.Feed.Opts[changefeedbase.OptInitialScan]; initialScanOpt {
-			needsInitialScan = true
-		} else if _, noInitialScanOpt := ca.spec.Feed.Opts[changefeedbase.OptNoInitialScan]; noInitialScanOpt {
-			needsInitialScan = false
-		}
-		kvfeedCfg.NeedsInitialScan = needsInitialScan
 	}
 
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
@@ -277,6 +253,31 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	}
 
 	return ctx
+}
+
+// initialHighWater here is tricky. If we have a cursor then we set up the
+// watches, if we don't then we don't. If we have a cursor, we'll set the
+// statement time to be equal to the cursor timestamp. This loop over watches
+// is exists for a feature which is no longer in use - the checkpointing of
+// individual spans.
+func getInitialScan(
+	spec execinfrapb.ChangeAggregatorSpec,
+) (initialHighWater hlc.Timestamp, spans []roachpb.Span, needsInitialScan bool) {
+	spans = make([]roachpb.Span, 0, len(spec.Watches))
+	for _, watch := range spec.Watches {
+		spans = append(spans, watch.Span)
+		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
+			initialHighWater = watch.InitialResolved
+		}
+	}
+	// This will be true in the case where we have no cursor and we've never
+	// checkpointed a resolved timestamp or we have a cursor but we want an
+	// initial scan. The higher levels will coordinate that we only have empty
+	// watches when we need an initial scan.
+	if needsInitialScan = initialHighWater.IsEmpty(); needsInitialScan {
+		initialHighWater = spec.Feed.StatementTime
+	}
+	return initialHighWater, spans, needsInitialScan
 }
 
 // close has two purposes: to synchronize on the completion of the helper
