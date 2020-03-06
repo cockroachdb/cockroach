@@ -12,13 +12,16 @@ package execerror
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 const panicLineSubstring = "runtime/panic.go"
@@ -28,65 +31,66 @@ const panicLineSubstring = "runtime/panic.go"
 // related to the vectorized engine occurs, it is not recovered from.
 func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 	defer func() {
-		if err := recover(); err != nil {
-			stackTrace := string(debug.Stack())
-			scanner := bufio.NewScanner(strings.NewReader(stackTrace))
-			panicLineFound := false
-			for scanner.Scan() {
-				if strings.Contains(scanner.Text(), panicLineSubstring) {
-					panicLineFound = true
-					break
-				}
-			}
-			if !panicLineFound {
-				panic(fmt.Sprintf("panic line %q not found in the stack trace\n%s", panicLineSubstring, stackTrace))
-			}
-			if scanner.Scan() {
-				panicEmittedFrom := strings.TrimSpace(scanner.Text())
-				if isPanicFromVectorizedEngine(panicEmittedFrom) {
-					// We only want to catch runtime errors coming from the vectorized
-					// engine.
-					if e, ok := err.(error); ok {
-						if _, ok := err.(*StorageError); ok {
-							// A StorageError was caused by something below SQL, and represents
-							// an error that we'd simply like to propagate along.
-							// Do nothing.
-						} else {
-							doNotAnnotate := false
-							if nvie, ok := e.(*notVectorizedInternalError); ok {
-								// A notVectorizedInternalError was not caused by the
-								// vectorized engine and represents an error that we don't
-								// want to annotate in case it doesn't have a valid PG code.
-								doNotAnnotate = true
-								// We want to unwrap notVectorizedInternalError so that in case
-								// the original error does have a valid PG code, the code is
-								// correctly propagated.
-								e = nvie.error
-							}
-							if code := pgerror.GetPGCode(e); !doNotAnnotate && code == pgcode.Uncategorized {
-								// Any error without a code already is "surprising" and
-								// needs to be annotated to indicate that it was
-								// unexpected.
-								e = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", e)
-							}
-						}
-						retErr = e
-					} else {
-						// Not an error object. Definitely unexpected.
-						surprisingObject := err
-						retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", surprisingObject)
-					}
-				} else {
-					// Do not recover from the panic not related to the vectorized
-					// engine.
-					panic(err)
-				}
-			} else {
-				panic(fmt.Sprintf("unexpectedly there is no line below the panic line in the stack trace\n%s", stackTrace))
+		panicObj := recover()
+		if panicObj == nil {
+			// No panic happened, so the operation must have been executed
+			// successfully.
+			return
+		}
+
+		// Find where the panic came from and only proceed if it is related to the
+		// vectorized engine.
+		stackTrace := string(debug.Stack())
+		scanner := bufio.NewScanner(strings.NewReader(stackTrace))
+		panicLineFound := false
+		for scanner.Scan() {
+			if strings.Contains(scanner.Text(), panicLineSubstring) {
+				panicLineFound = true
+				break
 			}
 		}
-		// No panic happened, so the operation must have been executed
-		// successfully.
+		if !panicLineFound {
+			panic(fmt.Sprintf("panic line %q not found in the stack trace\n%s", panicLineSubstring, stackTrace))
+		}
+		if !scanner.Scan() {
+			panic(fmt.Sprintf("unexpectedly there is no line below the panic line in the stack trace\n%s", stackTrace))
+		}
+		panicEmittedFrom := strings.TrimSpace(scanner.Text())
+		if !isPanicFromVectorizedEngine(panicEmittedFrom) {
+			// Do not recover from the panic not related to the vectorized
+			// engine.
+			panic(panicObj)
+		}
+
+		err, ok := panicObj.(error)
+		if !ok {
+			// Not an error object. Definitely unexpected.
+			retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", panicObj)
+			return
+		}
+		retErr = err
+
+		if _, ok := panicObj.(*StorageError); ok {
+			// A StorageError was caused by something below SQL, and represents
+			// an error that we'd simply like to propagate along.
+			// Do nothing.
+			return
+		}
+
+		annotateErrorWithoutCode := true
+		var nvie *notVectorizedInternalError
+		if errors.As(err, &nvie) {
+			// A notVectorizedInternalError was not caused by the
+			// vectorized engine and represents an error that we don't
+			// want to annotate in case it doesn't have a valid PG code.
+			annotateErrorWithoutCode = false
+		}
+		if code := pgerror.GetPGCode(err); annotateErrorWithoutCode && code == pgcode.Uncategorized {
+			// Any error without a code already is "surprising" and
+			// needs to be annotated to indicate that it was
+			// unexpected.
+			retErr = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from the vectorized runtime")
+		}
 	}()
 	operation()
 	return retErr
@@ -144,11 +148,38 @@ func NewStorageError(err error) *StorageError {
 // notVectorizedInternalError will be returned to the client not as an
 // "internal error" and without the stack trace.
 type notVectorizedInternalError struct {
-	error
+	cause error
 }
 
 func newNotVectorizedInternalError(err error) *notVectorizedInternalError {
-	return &notVectorizedInternalError{error: err}
+	return &notVectorizedInternalError{cause: err}
+}
+
+var (
+	_ causer.Causer  = &notVectorizedInternalError{}
+	_ errors.Wrapper = &notVectorizedInternalError{}
+)
+
+func (e *notVectorizedInternalError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *notVectorizedInternalError) Cause() error {
+	return e.cause
+}
+
+func (e *notVectorizedInternalError) Unwrap() error {
+	return e.Cause()
+}
+
+func decodeNotVectorizedInternalError(
+	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
+) error {
+	return newNotVectorizedInternalError(cause)
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notVectorizedInternalError)(nil)), decodeNotVectorizedInternalError)
 }
 
 // VectorizedInternalPanic simply panics with the provided object. It will
