@@ -30,7 +30,12 @@ import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnost
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-import { getDiagnosticsStatus } from "src/views/statements/diagnostics";
+import {
+  getDiagnosticsStatus,
+  sortByCompletedField,
+  sortByRequestedAtField,
+  sortByStatementFingerprintField,
+} from "src/views/statements/diagnostics";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps & MapDispatchToProps;
 
@@ -39,7 +44,8 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
     {
       key: "activatedOn",
       title: "Activated on",
-      sorter: true,
+      sorter: sortByRequestedAtField,
+      defaultSortOrder: "descend",
       width: "240px",
       render: (_text, record) => {
         const timestamp = record.requested_at.seconds.toNumber() * 1000;
@@ -49,7 +55,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
     {
       key: "statement",
       title: "statement",
-      sorter: true,
+      sorter: sortByStatementFingerprintField,
       render: (_text, record) => (
         <Text textType={TextTypes.Code}>{record.statement_fingerprint}</Text>
       ),
@@ -57,7 +63,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
     {
       key: "status",
       title: "status",
-      sorter: true,
+      sorter: sortByCompletedField,
       width: "160px",
       render: (_text, record) => (
         <Text>

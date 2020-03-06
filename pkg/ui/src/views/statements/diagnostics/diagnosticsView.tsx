@@ -40,7 +40,7 @@ import "./diagnosticsView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
-import { getDiagnosticsStatus } from "./diagnosticsUtils";
+import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
 
 interface DiagnosticsViewOwnProps {
@@ -60,7 +60,8 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     {
       key: "activatedOn",
       title: "Activated on",
-      sorter: true,
+      sorter: sortByRequestedAtField,
+      defaultSortOrder: "descend",
       render: (_text, record) => {
         const timestamp = record.requested_at.seconds.toNumber() * 1000;
         return moment(timestamp).format("LL[ at ]h:mm a");
@@ -69,8 +70,8 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     {
       key: "status",
       title: "status",
-      sorter: true,
-      width: "60px",
+      sorter: sortByCompletedField,
+      width: "160px",
       render: (_text, record) => {
         const status = getDiagnosticsStatus(record);
         return (
