@@ -14,7 +14,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -68,6 +71,8 @@ environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 const demoOrg = "Cockroach Demo"
 
 const defaultGeneratorName = "movr"
+
+const defaultRootPassword = "admin"
 
 var defaultGenerator workload.Generator
 
@@ -167,10 +172,12 @@ var GetAndApplyLicense func(dbConn *gosql.DB, clusterID uuid.UUID, org string) (
 
 type transientCluster struct {
 	connURL string
-	stopper *stop.Stopper
-	s       *server.TestServer
-	servers []*server.TestServer
-	cleanup func()
+	// certsDir is only set when demoCtx.insecure is false.
+	certsDir string
+	stopper  *stop.Stopper
+	s        *server.TestServer
+	servers  []*server.TestServer
+	cleanup  func()
 }
 
 // DrainNode will gracefully attempt to drain a node in the cluster.
@@ -287,7 +294,6 @@ func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) b
 
 	args := base.TestServerArgs{
 		PartOfCluster: true,
-		Insecure:      true,
 		Stopper: initBacktrace(
 			fmt.Sprintf("%s/demo-node%d", startCtx.backtraceOutputDir, nodeID),
 		),
@@ -324,6 +330,56 @@ This server is running at increased risk of memory-related failures.`,
 			)
 		}
 	}
+}
+
+// generateCerts generates some temporary certificates for cockroach demo.
+func generateCerts() (certsDir string, cleanup func(), err error) {
+	certsDir, err = ioutil.TempDir("", "demo_certs")
+	if err != nil {
+		return "", nil, err
+	}
+	caKeyPath := filepath.Join(certsDir, security.EmbeddedCAKey)
+	// Create a CA-Key.
+	if err := security.CreateCAPair(
+		certsDir,
+		caKeyPath,
+		defaultKeySize,
+		defaultCALifetime,
+		false, /* allowKeyReuse */
+		false, /*overwrite */
+	); err != nil {
+		return "", nil, err
+	}
+	// Generate a certificate for the demo nodes.
+	if err := security.CreateNodePair(
+		certsDir,
+		caKeyPath,
+		defaultKeySize,
+		defaultCertLifetime,
+		false, /* overwrite */
+		[]string{"127.0.0.1"},
+	); err != nil {
+		return "", nil, err
+	}
+	// Create a certificate for the root user.
+	if err := security.CreateClientPair(
+		certsDir,
+		caKeyPath,
+		defaultKeySize,
+		defaultCertLifetime,
+		false, /* overwrite */
+		security.RootUser,
+		false, /* generatePKCS8Key */
+	); err != nil {
+		return "", nil, err
+	}
+	cleanup = func() {
+		if err := checkAndMaybeShout(os.RemoveAll(certsDir)); err != nil {
+			// There's nothing to do here anymore if err != nil.
+			_ = err
+		}
+	}
+	return certsDir, cleanup, nil
 }
 
 func setupTransientCluster(
@@ -368,6 +424,16 @@ func setupTransientCluster(
 		c.stopper.Stop(ctx)
 	}
 
+	if !demoCtx.insecure {
+		certs, cleanup, err := generateCerts()
+		if err != nil {
+			return c, err
+		}
+		c.certsDir = certs
+		_ = cleanup
+		c.stopper.AddCloser(stop.CloserFn(cleanup))
+	}
+
 	serverFactory := server.TestServerFactory
 	var servers []*server.TestServer
 
@@ -401,6 +467,12 @@ func setupTransientCluster(
 					},
 				},
 			}
+		}
+		if demoCtx.insecure {
+			args.Insecure = true
+		} else {
+			args.Insecure = false
+			args.SSLCertsDir = c.certsDir
 		}
 
 		serv := serverFactory.New(args).(*server.TestServer)
@@ -524,7 +596,10 @@ func setupTransientCluster(
 	// Prepare the URL for use by the SQL shell.
 	// TODO (rohany): there should be a way that the user can request a specific node
 	//  to connect to to see the effects of the artificial latency.
-	c.connURL = makeURLForServer(c.s, gen)
+	c.connURL, err = makeURLForServer(c.s, gen, c.certsDir)
+	if err != nil {
+		return c, err
+	}
 
 	// Start up the update check loop.
 	// We don't do this in (*server.Server).Start() because we don't want it
@@ -616,7 +691,11 @@ func (c *transientCluster) setupWorkload(ctx context.Context, gen workload.Gener
 		if demoCtx.runWorkload {
 			var sqlURLs []string
 			for i := range c.servers {
-				sqlURLs = append(sqlURLs, makeURLForServer(c.servers[i], gen))
+				sqlURL, err := makeURLForServer(c.servers[i], gen, c.certsDir)
+				if err != nil {
+					return err
+				}
+				sqlURLs = append(sqlURLs, sqlURL)
 			}
 			if err := c.runWorkload(ctx, gen, sqlURLs); err != nil {
 				return errors.Wrapf(err, "starting background workload")
@@ -675,9 +754,18 @@ func (c *transientCluster) runWorkload(
 	return nil
 }
 
-func makeURLForServer(s *server.TestServer, gen workload.Generator) string {
+func makeURLForServer(
+	s *server.TestServer, gen workload.Generator, certPath string,
+) (string, error) {
 	options := url.Values{}
-	options.Add("sslmode", "disable")
+	cfg := base.Config{
+		SSLCertsDir: certPath,
+		User:        security.RootUser,
+		Insecure:    demoCtx.insecure,
+	}
+	if err := cfg.LoadSecurityOptions(options, security.RootUser); err != nil {
+		return "", err
+	}
 	options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
 	sqlURL := url.URL{
 		Scheme:   "postgres",
@@ -688,7 +776,23 @@ func makeURLForServer(s *server.TestServer, gen workload.Generator) string {
 	if gen != nil {
 		sqlURL.Path = gen.Meta().Name
 	}
-	return sqlURL.String()
+	return sqlURL.String(), nil
+}
+
+func (c *transientCluster) setupUserAuth(ctx context.Context) error {
+	db, err := gosql.Open("postgres", c.connURL)
+	if err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(
+		ctx,
+		`ALTER USER $1 WITH PASSWORD $2`,
+		security.RootUser,
+		defaultRootPassword,
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func incrementTelemetryCounters(cmd *cobra.Command) {
@@ -822,7 +926,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	}
 
 	if err := c.setupWorkload(ctx, gen); err != nil {
-		return err
+		return checkAndMaybeShout(err)
+	}
+
+	if !demoCtx.insecure {
+		if err := c.setupUserAuth(ctx); err != nil {
+			return checkAndMaybeShout(err)
+		}
 	}
 
 	if cliCtx.isInteractive {
@@ -837,6 +947,14 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 # Web UI: %s
 #
 `, c.s.AdminURL())
+
+		if !demoCtx.insecure {
+			fmt.Printf(
+				"# The user %q with password %q has been created. Use it to access the Web UI!\n#\n",
+				security.RootUser,
+				defaultRootPassword,
+			)
+		}
 	}
 
 	conn := makeSQLConn(c.connURL)
