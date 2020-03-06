@@ -594,6 +594,12 @@ func NewColOperator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
 					aggSpec.GroupCols, aggCols,
 				)
+				// Auto mode is enabled for hashAggregator since it performs online
+				// aggregation. This limits memory growth in the aggregator to be
+				// proportional to the number of distinct groups. hashAggregator does
+				// not spill to disk, but neither does the hashAggregator in the row
+				// execution engine.
+				result.CanRunInAutoMode = true
 			} else {
 				result.Op, err = NewOrderedAggregator(
 					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
@@ -635,6 +641,12 @@ func NewColOperator(
 					NewAllocator(ctx, distinctMemAccount), inputs[0],
 					core.Distinct.DistinctColumns, typs, hashTableNumBuckets,
 				)
+				// Auto mode is enabled for unordered distinct since it only buffers the
+				// distinct tuples into memory. This limits the memory consumption
+				// proportionally to the number of distinct tuples in the table.
+				// Unordered distinct operator does not spill to disk, but neither does
+				// the equivalent processor in row execution engine.
+				result.CanRunInAutoMode = true
 			}
 
 		case core.Ordinality != nil:
