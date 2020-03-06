@@ -114,10 +114,11 @@ func GenerateServerCert(
 	caPrivateKey crypto.PrivateKey,
 	nodePublicKey crypto.PublicKey,
 	lifetime time.Duration,
+	user string,
 	hosts []string,
 ) ([]byte, error) {
-	// Create template for user "NodeUser".
-	template, err := newTemplate(NodeUser, lifetime)
+	// Create template for user.
+	template, err := newTemplate(user, lifetime)
 	if err != nil {
 		return nil, err
 	}
