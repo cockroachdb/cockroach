@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const distinctOpsTmpl = "pkg/sql/colexec/distinct_tmpl.go"
+
 func genDistinctOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/distinct_tmpl.go")
+	d, err := ioutil.ReadFile(distinctOpsTmpl)
 	if err != nil {
 		return err
 	}
@@ -53,5 +55,5 @@ func genDistinctOps(wr io.Writer) error {
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genDistinctOps, "distinct.eg.go")
+	registerGenerator(genDistinctOps, "distinct.eg.go", distinctOpsTmpl)
 }

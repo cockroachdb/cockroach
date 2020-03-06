@@ -58,8 +58,10 @@ var (
 	_ = booleanAggTmplInfo{}.DefaultVal
 )
 
+const boolAggTmpl = "pkg/sql/colexec/bool_and_or_agg_tmpl.go"
+
 func genBooleanAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/bool_and_or_agg_tmpl.go")
+	t, err := ioutil.ReadFile(boolAggTmpl)
 	if err != nil {
 		return err
 	}
@@ -84,5 +86,5 @@ func genBooleanAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genBooleanAgg, "bool_and_or_agg.eg.go")
+	registerGenerator(genBooleanAgg, "bool_and_or_agg.eg.go", boolAggTmpl)
 }

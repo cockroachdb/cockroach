@@ -50,8 +50,10 @@ type joinTypeInfo struct {
 	String string
 }
 
+const mergeJoinerTmpl = "pkg/sql/colexec/mergejoiner_tmpl.go"
+
 func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/mergejoiner_tmpl.go")
+	d, err := ioutil.ReadFile(mergeJoinerTmpl)
 	if err != nil {
 		return err
 	}
@@ -212,6 +214,6 @@ func init() {
 	}
 
 	for _, join := range joinTypeInfos {
-		registerGenerator(mergeJoinGenerator(join), fmt.Sprintf("mergejoiner_%s.eg.go", strings.ToLower(join.String)))
+		registerGenerator(mergeJoinGenerator(join), fmt.Sprintf("mergejoiner_%s.eg.go", strings.ToLower(join.String)), mergeJoinerTmpl)
 	}
 }

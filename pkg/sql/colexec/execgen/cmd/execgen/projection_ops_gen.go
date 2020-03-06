@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
+const projConstOpsTmpl = "pkg/sql/colexec/proj_const_ops_tmpl.go"
+
 // getProjConstOpTmplString returns a "projConstOp" template with isConstLeft
 // determining whether the constant is on the left or on the right.
 func getProjConstOpTmplString(isConstLeft bool) (string, error) {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/proj_const_ops_tmpl.go")
+	t, err := ioutil.ReadFile(projConstOpsTmpl)
 	if err != nil {
 		return "", err
 	}
@@ -87,9 +89,11 @@ func replaceProjConstTmplVariables(tmpl string, isConstLeft bool) string {
 	return replaceProjTmplVariables(tmpl)
 }
 
+const projNonConstOpsTmpl = "pkg/sql/colexec/proj_non_const_ops_tmpl.go"
+
 // genProjNonConstOps is the generator for projection operators on two vectors.
 func genProjNonConstOps(wr io.Writer) error {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/proj_non_const_ops_tmpl.go")
+	t, err := ioutil.ReadFile(projNonConstOpsTmpl)
 	if err != nil {
 		return err
 	}
@@ -139,7 +143,7 @@ func init() {
 		}
 	}
 
-	registerGenerator(projConstOpsGenerator(true /* isConstLeft */), "proj_const_left_ops.eg.go")
-	registerGenerator(projConstOpsGenerator(false /* isConstLeft */), "proj_const_right_ops.eg.go")
-	registerGenerator(genProjNonConstOps, "proj_non_const_ops.eg.go")
+	registerGenerator(projConstOpsGenerator(true /* isConstLeft */), "proj_const_left_ops.eg.go", projConstOpsTmpl)
+	registerGenerator(projConstOpsGenerator(false /* isConstLeft */), "proj_const_right_ops.eg.go", projConstOpsTmpl)
+	registerGenerator(genProjNonConstOps, "proj_non_const_ops.eg.go", projNonConstOpsTmpl)
 }

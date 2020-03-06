@@ -1494,46 +1494,14 @@ settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),
 $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
-pkg/col/coldata/vec.eg.go: pkg/col/coldata/vec_tmpl.go
-pkg/sql/colexec/and_or_projection.eg.go: pkg/sql/colexec/and_or_projection_tmpl.go
-pkg/sql/colexec/any_not_null_agg.eg.go: pkg/sql/colexec/any_not_null_agg_tmpl.go
-pkg/sql/colexec/avg_agg.eg.go: pkg/sql/colexec/avg_agg_tmpl.go
-pkg/sql/colexec/bool_and_or_agg.eg.go: pkg/sql/colexec/bool_and_or_agg_tmpl.go
-pkg/sql/colexec/cast.eg.go: pkg/sql/colexec/cast_tmpl.go
-pkg/sql/colexec/const.eg.go: pkg/sql/colexec/const_tmpl.go
-pkg/sql/colexec/count_agg.eg.go: pkg/sql/colexec/count_agg_tmpl.go
-pkg/sql/colexec/distinct.eg.go: pkg/sql/colexec/distinct_tmpl.go
-pkg/sql/colexec/hash_aggregator.eg.go: pkg/sql/colexec/hash_aggregator_tmpl.go
-pkg/sql/colexec/hashjoiner.eg.go: pkg/sql/colexec/hashjoiner_tmpl.go
-pkg/sql/colexec/hashtable.eg.go: pkg/sql/colexec/hashtable_tmpl.go
-pkg/sql/colexec/hash_utils.eg.go: pkg/sql/colexec/hash_utils_tmpl.go
-pkg/sql/colexec/like_ops.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
-pkg/sql/colexec/mergejoinbase.eg.go: pkg/sql/colexec/mergejoinbase_tmpl.go
-pkg/sql/colexec/mergejoiner_fullouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_inner.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_leftanti.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_leftouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_leftsemi.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/mergejoiner_rightouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
-pkg/sql/colexec/min_max_agg.eg.go: pkg/sql/colexec/min_max_agg_tmpl.go
-pkg/sql/colexec/orderedsynchronizer.eg.go: pkg/sql/colexec/orderedsynchronizer_tmpl.go
-pkg/sql/colexec/overloads_test_utils.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
-pkg/sql/colexec/proj_const_left_ops.eg.go: pkg/sql/colexec/proj_const_ops_tmpl.go
-pkg/sql/colexec/proj_const_right_ops.eg.go: pkg/sql/colexec/proj_const_ops_tmpl.go
-pkg/sql/colexec/proj_non_const_ops.eg.go: pkg/sql/colexec/proj_non_const_ops_tmpl.go
-pkg/sql/colexec/quicksort.eg.go: pkg/sql/colexec/quicksort_tmpl.go
-pkg/sql/colexec/rank.eg.go: pkg/sql/colexec/rank_tmpl.go
-pkg/sql/colexec/relative_rank.eg.go: pkg/sql/colexec/relative_rank_tmpl.go
-pkg/sql/colexec/row_number.eg.go: pkg/sql/colexec/row_number_tmpl.go
-pkg/sql/colexec/rowstovec.eg.go: pkg/sql/colexec/rowstovec_tmpl.go
-pkg/sql/colexec/select_in.eg.go: pkg/sql/colexec/select_in_tmpl.go
-pkg/sql/colexec/selection_ops.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
-pkg/sql/colexec/sort.eg.go: pkg/sql/colexec/sort_tmpl.go
-pkg/sql/colexec/substring.eg.go: pkg/sql/colexec/substring_tmpl.go
-pkg/sql/colexec/sum_agg.eg.go: pkg/sql/colexec/sum_agg_tmpl.go
-pkg/sql/colexec/values_differ.eg.go: pkg/sql/colexec/values_differ_tmpl.go
-pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
-pkg/sql/colexec/window_peer_grouper.eg.go: pkg/sql/colexec/window_peer_grouper_tmpl.go
+# Produce the dependency list for all the .eg.go files, to make them
+# depend on the right template. We use the -M flag to execgen which
+# produces the dependencies, then include them below.
+bin/execgen_out.d: bin/execgen
+	@echo EXECGEN $@; execgen -M $(EXECGEN_TARGETS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	@mv -f $@.tmp $@
+
+include bin/execgen_out.d
 
 %.eg.go: bin/execgen
 	@echo EXECGEN $@; execgen $@ > $@.tmp || { rm -f $@.tmp; exit 1; }

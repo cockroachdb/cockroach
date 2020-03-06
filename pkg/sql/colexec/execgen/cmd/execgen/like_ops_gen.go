@@ -117,5 +117,5 @@ func genLikeOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genLikeOps, "like_ops.eg.go")
+	registerGenerator(genLikeOps, "like_ops.eg.go", selectionOpsTmpl)
 }

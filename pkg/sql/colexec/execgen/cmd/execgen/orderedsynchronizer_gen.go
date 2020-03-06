@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const ordSyncTmpl = "pkg/sql/colexec/orderedsynchronizer_tmpl.go"
+
 func genOrderedSynchronizer(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/orderedsynchronizer_tmpl.go")
+	d, err := ioutil.ReadFile(ordSyncTmpl)
 	if err != nil {
 		return err
 	}
@@ -43,5 +45,5 @@ func genOrderedSynchronizer(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genOrderedSynchronizer, "orderedsynchronizer.eg.go")
+	registerGenerator(genOrderedSynchronizer, "orderedsynchronizer.eg.go", ordSyncTmpl)
 }

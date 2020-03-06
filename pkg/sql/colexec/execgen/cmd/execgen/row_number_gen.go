@@ -22,8 +22,10 @@ type rowNumberTmplInfo struct {
 	String       string
 }
 
+const rowNumberTmpl = "pkg/sql/colexec/row_number_tmpl.go"
+
 func genRowNumberOp(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/row_number_tmpl.go")
+	d, err := ioutil.ReadFile(rowNumberTmpl)
 	if err != nil {
 		return err
 	}
@@ -46,5 +48,5 @@ func genRowNumberOp(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRowNumberOp, "row_number.eg.go")
+	registerGenerator(genRowNumberOp, "row_number.eg.go", rowNumberTmpl)
 }

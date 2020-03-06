@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
+const selectionOpsTmpl = "pkg/sql/colexec/selection_ops_tmpl.go"
+
 func getSelectionOpsTmpl() (*template.Template, error) {
-	t, err := ioutil.ReadFile("pkg/sql/colexec/selection_ops_tmpl.go")
+	t, err := ioutil.ReadFile(selectionOpsTmpl)
 	if err != nil {
 		return nil, err
 	}
@@ -72,5 +74,5 @@ func genSelectionOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSelectionOps, "selection_ops.eg.go")
+	registerGenerator(genSelectionOps, "selection_ops.eg.go", selectionOpsTmpl)
 }
