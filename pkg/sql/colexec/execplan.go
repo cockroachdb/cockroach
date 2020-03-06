@@ -594,6 +594,12 @@ func NewColOperator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
 					aggSpec.GroupCols, aggCols,
 				)
+				// Auto mode is enabled for hashAggregator since it performs online
+				// aggregation. This limits memory growth in the aggregator to be
+				// proportional to the number of distinct groups. hashAggregator does
+				// not spill to disk, but neither does the hashAggregator in the row
+				// execution engine.
+				result.CanRunInAutoMode = true
 			} else {
 				result.Op, err = NewOrderedAggregator(
 					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,

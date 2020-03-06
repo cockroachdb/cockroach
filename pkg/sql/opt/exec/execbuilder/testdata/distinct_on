@@ -302,7 +302,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
 ·               distributed  false        ·         ·
-·               vectorized   false        ·         ·
+·               vectorized   true         ·         ·
 render          ·            ·            (min)     ·
  │              render 0     min          ·         ·
  └── group      ·            ·            (y, min)  ·
@@ -317,7 +317,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
 ·                         distributed  false        ·         ·
-·                         vectorized   false        ·         ·
+·                         vectorized   true         ·         ·
 render                    ·            ·            (min)     ·
  │                        render 0     min          ·         ·
  └── limit                ·            ·            (y, min)  ·
