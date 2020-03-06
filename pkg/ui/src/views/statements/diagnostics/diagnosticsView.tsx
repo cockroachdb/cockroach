@@ -120,7 +120,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     const request = new StatementDiagnosticsRequest({ statement_diagnostics_id: diagnosticsId });
     const response = await getStatementDiagnostics(request);
     const trace = response.diagnostics?.trace;
-    this.downloadRef.current?.download("trace.json", "application/json", trace);
+    this.downloadRef.current?.download("statement-diagnostics.json", "application/json", trace);
   }
 
   onActivateButtonClick = () => {
