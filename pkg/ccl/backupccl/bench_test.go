@@ -90,7 +90,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	b.SetBytes(backup.Desc.EntryCounts.DataSize / int64(b.N))
 
 	b.ResetTimer()
-	sqlDB.Exec(b, `RESTORE data.* FROM 'nodelocal:///foo'`)
+	sqlDB.Exec(b, `RESTORE data.* FROM 'nodelocal://0/foo'`)
 	b.StopTimer()
 }
 

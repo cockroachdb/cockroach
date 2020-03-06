@@ -1377,17 +1377,17 @@ func TestParse(t *testing.T) {
 		{`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
 		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
 
-		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
-		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
-		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' DELIMITED DATA ('path/to/some/file', $1)`},
+		{`IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
+		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
+		{`IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' DELIMITED DATA ('path/to/some/file', $1)`},
 		{`IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
-		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
+		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`},
 		{`IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 
-		{`IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
-		{`EXPLAIN IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
+		{`IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`},
+		{`EXPLAIN IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`},
 
 		{`EXPORT INTO CSV 'a' FROM TABLE a`}, // TODO(knz): Make this explainable.
 		{`EXPORT INTO CSV 'a' FROM SELECT * FROM a`},
@@ -2070,11 +2070,11 @@ $function$`,
 			`DROP ROLE IF EXISTS 'foo', 'bar'`},
 
 		// Backward-compat, deprecated IMPORT syntax
-		{`IMPORT PGDUMP ('nodelocal:///foo/bar') WITH temp = 'path/to/temp'`,
-			`IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`,
+		{`IMPORT PGDUMP ('nodelocal://0/foo/bar') WITH temp = 'path/to/temp'`,
+			`IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`,
 		},
-		{`IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal:///foo/bar') WITH temp = 'path/to/temp'`,
-			`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`,
+		{`IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal://0/foo/bar') WITH temp = 'path/to/temp'`,
+			`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`,
 		},
 
 		// Clarify the ambiguity between "ON ROLE" (RBAC) and "ON ROLE"

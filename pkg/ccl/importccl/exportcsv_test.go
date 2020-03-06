@@ -89,7 +89,7 @@ func TestExportImportBank(t *testing.T) {
 			db.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&asOf)
 
 			for _, row := range db.QueryStr(t,
-				fmt.Sprintf(`EXPORT INTO CSV 'nodelocal:///t'
+				fmt.Sprintf(`EXPORT INTO CSV 'nodelocal://0/t'
 					WITH chunk_rows = $1, delimiter = '|' %s
 					FROM SELECT * FROM bank AS OF SYSTEM TIME %s`, nullAs, asOf), chunkSize,
 			) {
@@ -102,7 +102,7 @@ func TestExportImportBank(t *testing.T) {
 			}
 
 			schema := bank.FromRows(1).Tables()[0].Schema
-			fileList := "'nodelocal:///t/" + strings.Join(files, "', 'nodelocal:///t/") + "'"
+			fileList := "'nodelocal://0/t/" + strings.Join(files, "', 'nodelocal://0/t/") + "'"
 			db.Exec(t, fmt.Sprintf(`IMPORT TABLE bank2 %s CSV DATA (%s) WITH delimiter = '|'%s`, schema, fileList, nullIf))
 
 			db.CheckQueryResults(t,
@@ -129,7 +129,7 @@ func TestMultiNodeExportStmt(t *testing.T) {
 	for tries := 0; tries < maxTries; tries++ {
 		chunkSize := 13
 		rows := db.Query(t,
-			`EXPORT INTO CSV 'nodelocal:///t' WITH chunk_rows = $3 FROM SELECT * FROM bank WHERE id >= $1 and id < $2`,
+			`EXPORT INTO CSV 'nodelocal://0/t' WITH chunk_rows = $3 FROM SELECT * FROM bank WHERE id >= $1 and id < $2`,
 			10, 10+exportRows, chunkSize,
 		)
 
@@ -175,7 +175,7 @@ func TestExportJoin(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE TABLE t AS VALUES (1, 2)`)
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///join' FROM SELECT * FROM t, t as u`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/join' FROM SELECT * FROM t, t as u`)
 }
 
 func TestExportOrder(t *testing.T) {
@@ -190,7 +190,7 @@ func TestExportOrder(t *testing.T) {
 	sqlDB.Exec(t, `create table foo (i int primary key, x int, y int, z int, index (y))`)
 	sqlDB.Exec(t, `insert into foo values (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///order' from select * from foo order by y asc limit 2`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' from select * from foo order by y asc limit 2`)
 	content, err := ioutil.ReadFile(filepath.Join(dir, "order", "n1.0.csv"))
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestExportShow(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
 	content, err := ioutil.ReadFile(filepath.Join(dir, "show", "n1.0.csv"))
 	if err != nil {
 		t.Fatal(err)
