@@ -2270,7 +2270,8 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 // ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
-	return t.Family() == types.JsonFamily
+	family := t.Family()
+	return family == types.JsonFamily || family == types.ArrayFamily
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {

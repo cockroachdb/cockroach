@@ -190,8 +190,8 @@ export class SortableTable extends React.Component<TableProps> {
       output.push(
         // Add a zero-height empty row so that the expanded area will have the same background
         // color as the row it's expanded from, since the CSS causes row colors to alternate.
-        <tr className={classes} />,
-        <tr className={expandedAreaClasses}>
+        <tr className={classes} key={output.length + 1} />,
+        <tr className={expandedAreaClasses} key={output.length + 2} >
           <td />
           <td
             className="sort-table__cell"

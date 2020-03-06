@@ -201,7 +201,7 @@ export class CustomChart extends React.Component<CustomChartProps & RouteCompone
                   } else {
                     return (
                       <Metric
-                        key={i}
+                        key={`${index}${i}`}
                         title={`${m.metric} (${i}) `}
                         name={m.metric}
                         aggregator={m.aggregator}
@@ -247,6 +247,7 @@ export class CustomChart extends React.Component<CustomChartProps & RouteCompone
               metricOptions={ this.metricOptions(nodesSummary, metricsMetadata) }
               nodeOptions={ this.nodeOptions(nodesSummary) }
               index={ i }
+              key={ i }
               chartState={ chart }
               onChange={ this.updateChartRow }
               onDelete={ this.removeChart }

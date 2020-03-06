@@ -48,7 +48,7 @@ type Index interface {
 	// IsUnique returns true if this index is declared as UNIQUE in the schema.
 	IsUnique() bool
 
-	// IsInverted returns true if this is a JSON inverted index.
+	// IsInverted returns true if this is an inverted index.
 	IsInverted() bool
 
 	// ColumnCount returns the number of columns in the index. This includes
