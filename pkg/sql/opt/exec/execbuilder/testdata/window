@@ -197,7 +197,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY variance(d) OVER (PARTITION BY v, 100)
 ----
 ·                                   distributed  false                                                                                                               ·                                                              ·
-·                                   vectorized   false                                                                                                               ·                                                              ·
+·                                   vectorized   true                                                                                                                ·                                                              ·
 render                              ·            ·                                                                                                                   (max int, "?column?" decimal)                                  ·
  │                                  render 0     (max)[int]                                                                                                          ·                                                              ·
  │                                  render 1     ("?column?")[decimal]                                                                                               ·                                                              ·
@@ -226,7 +226,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
 ----
 ·                         distributed  false                                                                                                             ·                                            ·
-·                         vectorized   false                                                                                                             ·                                            ·
+·                         vectorized   true                                                                                                              ·                                            ·
 sort                      ·            ·                                                                                                                 (max int, stddev decimal)                    +max
  │                        order        +max                                                                                                              ·                                            ·
  └── render               ·            ·                                                                                                                 (max int, stddev decimal)                    ·
