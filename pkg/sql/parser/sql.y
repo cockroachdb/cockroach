@@ -3828,7 +3828,6 @@ show_syntax_stmt:
 show_savepoint_stmt:
   SHOW SAVEPOINT STATUS
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowSavepointStatus{}
   }
 | SHOW SAVEPOINT error // SHOW HELP: SHOW SAVEPOINT
