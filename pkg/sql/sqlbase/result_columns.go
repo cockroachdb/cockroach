@@ -126,6 +126,11 @@ var ExplainVecColumns = ResultColumns{
 	{Name: "text", Typ: types.String},
 }
 
+// ExplainBundleColumns are the result columns of an EXPLAIN BUNDLE statement.
+var ExplainBundleColumns = ResultColumns{
+	{Name: "text", Typ: types.String},
+}
+
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
 var ShowTraceColumns = ResultColumns{
 	{Name: "timestamp", Typ: types.TimestampTZ},

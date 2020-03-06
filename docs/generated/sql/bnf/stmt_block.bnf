@@ -125,6 +125,7 @@ explain_stmt ::=
 	| 'EXPLAIN' 'ANALYSE' preparable_stmt
 	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' preparable_stmt
 	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' preparable_stmt
+	| 'EXPLAIN' 'BUNDLE' preparable_stmt
 
 import_stmt ::=
 	'IMPORT' import_format string_or_placeholder opt_with_options
@@ -637,6 +638,7 @@ unreserved_keyword ::=
 	| 'BLOB'
 	| 'BOOL'
 	| 'BUCKET_COUNT'
+	| 'BUNDLE'
 	| 'BY'
 	| 'BYTEA'
 	| 'BYTES'

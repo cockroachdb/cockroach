@@ -171,6 +171,8 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	result := plan.(*planTop)
+	result.mem = execMemo
+	result.catalog = &opc.catalog
 	result.stmt = stmt
 	result.flags = opc.flags
 	if bld.IsDDL {

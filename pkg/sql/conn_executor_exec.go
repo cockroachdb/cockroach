@@ -252,7 +252,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 	}
 
-	var discardRows bool
+	var discardRows, explainBundle bool
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is always an error when in the Open state. It's legitimate only in
@@ -348,6 +348,17 @@ func (ex *connExecutor) execStmtInOpenState(
 		res.ResetStmtType(ps.AST)
 
 		discardRows = s.DiscardRows
+
+	case *tree.ExplainBundle:
+		stmt.AST = s.Statement
+		// TODO(radu): should we trim the "EXPLAIN BUNDLE" part from stmt.SQL?
+		explainBundle = true
+
+		// EXPLAIN BUNDLE does not return the rows for the given query; instead it
+		// returns some text which includes a URL.
+		// TODO(radu): maybe capture some of the rows and include them in the
+		// bundle.
+		discardRows = true
 	}
 
 	// For regular statements (the ones that get to this point), we
@@ -452,6 +463,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.discardRows = discardRows
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+	p.collectBundle = explainBundle
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
 	}
@@ -480,6 +492,17 @@ func (ex *connExecutor) execStmtInOpenState(
 				rewCap: rc,
 			}
 			return ev, payload, nil
+		}
+	}
+	if explainBundle {
+		// Note that we don't get this far if we hit an execution error. In that
+		// case, the statement will get retried or will return the error to the
+		// user.
+		// TODO(radu): investigate writing out the bundle and returning the text
+		// with the URL together with the error.
+		if err := handleExplainBundle(ctx, res, &p.curPlan, p.ExecCfg()); err != nil {
+			res.SetError(err)
+			return makeErrEvent(err)
 		}
 	}
 	// No event was generated.
@@ -768,6 +791,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // either the optimizer or the heuristic planner.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
 	planner.curPlan.init(planner.stmt, ex.appStats)
+	if planner.collectBundle {
+		planner.curPlan.instrumentation.savePlanString = true
+	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)

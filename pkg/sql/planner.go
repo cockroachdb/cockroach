@@ -164,6 +164,10 @@ type planner struct {
 	// query.
 	cancelChecker *sqlbase.CancelChecker
 
+	// collectBundle is set when we are collecting a diagnostics bundle for a
+	// statement; it triggers saving of extra information like the plan string.
+	collectBundle bool
+
 	// isPreparing is true if this planner is currently preparing.
 	isPreparing bool
 

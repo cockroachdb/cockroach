@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -114,6 +115,9 @@ type planNode interface {
 	// This method must not be called during execution - the planNode
 	// tree must remain "live" and readable via walk() even after
 	// execution completes.
+	//
+	// The node must not be used again after this method is called. Some nodes put
+	// themselves back into memory pools on Close.
 	Close(ctx context.Context)
 }
 
@@ -275,6 +279,11 @@ type planTop struct {
 	// plan is the top-level node of the logical plan.
 	plan planNode
 
+	// mem/catalog retains the memo and catalog that were used to create the
+	// plan.
+	mem     *memo.Memo
+	catalog *optCatalog
+
 	// deps, if non-nil, collects the table/view dependencies for this query.
 	// Any planNode constructors that resolves a table name or reference in the query
 	// to a descriptor must register this descriptor into planDeps.
@@ -342,6 +351,17 @@ func (p *planTop) close(ctx context.Context) {
 			p.postqueryPlans[i].plan = nil
 		}
 	}
+}
+
+// formatOptPlan returns a visual representation of the optimizer plan that was
+// used.
+func (p *planTop) formatOptPlan(flags memo.ExprFmtFlags) string {
+	if p.mem == nil {
+		return "No optimizer plan; this happens if an error occurred during planning."
+	}
+	f := memo.MakeExprFmtCtx(flags, p.mem, p.catalog)
+	f.FormatExpr(p.mem.RootExpr())
+	return f.Buffer.String()
 }
 
 // startExec calls startExec() on each planNode using a depth-first, post-order
@@ -460,6 +480,11 @@ func (pf *planFlags) Set(flag planFlags) {
 type planInstrumentation struct {
 	appStats          *appStats
 	savedPlanForStats *roachpb.ExplainTreePlanNode
+
+	// If savePlanString is set to true, an EXPLAIN (VERBOSE)-style plan string
+	// will be saved in planString.
+	savePlanString bool
+	planString     string
 }
 
 func (pi *planInstrumentation) init(appStats *appStats) {
@@ -478,5 +503,9 @@ func (pi *planInstrumentation) savePlanInfo(ctx context.Context, curPlan *planTo
 		curPlan.execErr,
 	) {
 		pi.savedPlanForStats = planToTree(ctx, curPlan)
+	}
+
+	if pi.savePlanString {
+		pi.planString = planToString(ctx, curPlan.plan, curPlan.subqueryPlans, curPlan.postqueryPlans)
 	}
 }
