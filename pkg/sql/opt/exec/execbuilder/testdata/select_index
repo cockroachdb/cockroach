@@ -196,7 +196,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
 ·                     distributed     false                ·                         ·
-·                     vectorized      false                ·                         ·
+·                     vectorized      true                 ·                         ·
 render                ·               ·                    (b, a, c, d, a, c, d)     ·
  │                    render 0        b                    ·                         ·
  │                    render 1        a                    ·                         ·

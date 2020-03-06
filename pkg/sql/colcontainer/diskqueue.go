@@ -706,6 +706,9 @@ func (d *diskQueue) Rewind() error {
 	if err := d.closeFileDeserializer(); err != nil {
 		return err
 	}
+	if err := d.CloseRead(); err != nil {
+		return err
+	}
 	d.deserializerState.curBatch = 0
 	d.readFile = nil
 	d.readFileIdx = 0
