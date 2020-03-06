@@ -12,7 +12,10 @@ package security
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -23,32 +26,76 @@ const (
 	RootUser = "root"
 )
 
+var certPrincipalMap struct {
+	syncutil.RWMutex
+	m map[string]string
+}
+
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster.
 type UserAuthHook func(string, bool) error
 
-// GetCertificateUser extract the username from a client certificate.
-func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
+// SetCertPrincipalMap TODO(peter)
+func SetCertPrincipalMap(vals []string) error {
+	m := make(map[string]string, len(vals))
+	for _, v := range vals {
+		if v == "" {
+			continue
+		}
+		parts := strings.Split(v, ":")
+		if len(parts) != 2 {
+			return errors.Errorf("invalid <cert-principal>:<db-principal> mapping: %q", v)
+		}
+		m[parts[0]] = parts[1]
+	}
+	certPrincipalMap.Lock()
+	certPrincipalMap.m = m
+	certPrincipalMap.Unlock()
+	return nil
+}
+
+func transformPrincipal(commonName string) string {
+	certPrincipalMap.RLock()
+	mappedName, ok := certPrincipalMap.m[commonName]
+	certPrincipalMap.RUnlock()
+	if !ok {
+		return commonName
+	}
+	return mappedName
+}
+
+func getCertificatePrincipals(cert *x509.Certificate) []string {
+	results := make([]string, 0, 1+len(cert.DNSNames))
+	results = append(results, transformPrincipal(cert.Subject.CommonName))
+	for _, name := range cert.DNSNames {
+		results = append(results, transformPrincipal(name))
+	}
+	return results
+}
+
+// GetCertificateUsers extract the users from a client certificate.
+func GetCertificateUsers(tlsState *tls.ConnectionState) ([]string, error) {
 	if tlsState == nil {
-		return "", errors.Errorf("request is not using TLS")
+		return nil, errors.Errorf("request is not using TLS")
 	}
 	if len(tlsState.PeerCertificates) == 0 {
-		return "", errors.Errorf("no client certificates in request")
+		return nil, errors.Errorf("no client certificates in request")
 	}
 	// The go server handshake code verifies the first certificate, using
 	// any following certificates as intermediates. See:
 	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
-	return tlsState.PeerCertificates[0].Subject.CommonName, nil
+	peerCert := tlsState.PeerCertificates[0]
+	return getCertificatePrincipals(peerCert), nil
 }
 
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
 func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
-	var certUser string
+	var certUsers []string
 
 	if !insecureMode {
 		var err error
-		certUser, err = GetCertificateUser(tlsState)
+		certUsers, err = GetCertificateUsers(tlsState)
 		if err != nil {
 			return nil, err
 		}
@@ -72,8 +119,15 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		// The client certificate user must match the requested user,
 		// except if the certificate user is NodeUser, which is allowed to
 		// act on behalf of all other users.
-		if !(certUser == NodeUser || certUser == requestedUser) {
-			return errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
+		var ok bool
+		for _, certUser := range certUsers {
+			if certUser == NodeUser || certUser == requestedUser {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
 		}
 
 		return nil
