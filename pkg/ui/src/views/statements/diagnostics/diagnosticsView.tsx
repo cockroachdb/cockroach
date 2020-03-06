@@ -41,6 +41,7 @@ import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 import { getDiagnosticsStatus } from "./diagnosticsUtils";
+import { statementDiagnostics } from "src/util/docs";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -194,9 +195,8 @@ export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> 
               When you activate statement diagnostics, CockroachDB will wait for the next query that matches
               this statement fingerprint. A download button will appear on the statement list and detail pages
               when the query is ready. The statement diagnostic will include EXPLAIN plans,
-              table statistics, and traces. <Anchor href="https://www.cockroachlabs.com/docs/stable">Learn more</Anchor>
+              table statistics, and traces. <Anchor href={statementDiagnostics}>Learn more</Anchor>
             </Text>
-          {/*  TODO (koorosh): change Learn more link to something meaningful ^^^. */}
           </main>
           <footer className="crl-statements-diagnostics-view__footer">
             <Button
