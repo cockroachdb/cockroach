@@ -9,20 +9,21 @@
 // licenses/APL.txt.
 
 @require '~styl/base/palette.styl'
+@require '~src/components/core/index.styl'
 
 $table-cell-border = 1px solid $table-border-color
 
 $stats-table-td--fg = $body-color
 
-$stats-table-th--bg     = white
-$stats-table-tr--bg     = white
-$stats-table-tr--bg-alt = $background-color
+$stats-table-th--bg     = $colors--neutral-0
+$stats-table-tr--bg     = $colors--neutral-0
 
 $table-base
   width 100%
   border-collapse collapse
   font-family SourceSansPro-Regular
   font-weight 300
+  line-height 22px
   font-size 14px
   vertical-align top
   color $stats-table-td--fg

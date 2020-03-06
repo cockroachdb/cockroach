@@ -77,6 +77,12 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
       ),
       sort: (stmt) => stmt.label,
     },
+    {
+      title: "Txn Type",
+      className: "statements-table__col-time",
+      cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
+      sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
+    },
   ];
 
   return original.concat(makeCommonColumns(statements));
