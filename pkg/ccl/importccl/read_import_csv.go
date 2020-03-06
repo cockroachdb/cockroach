@@ -66,12 +66,7 @@ func (c *csvInputReader) readFiles(
 }
 
 func (c *csvInputReader) readFile(
-	ctx context.Context,
-	input *fileReader,
-	inputIdx int32,
-	inputName string, // TODO(bartem): seems like this is unused field might need refactoring/cleanup to remove it
-	resumePos int64,
-	rejected chan string,
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
 	producer, consumer := newCSVPipeline(c, input)
 

@@ -91,12 +91,7 @@ func (m *mysqldumpReader) readFiles(
 }
 
 func (m *mysqldumpReader) readFile(
-	ctx context.Context,
-	input *fileReader,
-	inputIdx int32,
-	inputName string,
-	resumePos int64,
-	rejected chan string,
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
