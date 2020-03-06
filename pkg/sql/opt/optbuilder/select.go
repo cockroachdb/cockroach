@@ -446,39 +446,42 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
-		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
-		cols := cteScope.cols
 		name := ctes[i].Name.Alias
 
 		if _, ok := outScope.ctes[name.String()]; ok {
 			panic(builderError{
-				fmt.Errorf("WITH query name %s specified more than once", ctes[i].Name.Alias),
+				fmt.Errorf("WITH query name %s specified more than once", name),
 			})
+		}
+
+		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
+		cols := make([]scopeColumn, len(cteScope.cols))
+		copy(cols, cteScope.cols)
+		if len(cols) == 0 {
+			panic(pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"WITH clause %q does not have a RETURNING clause", tree.ErrString(&name)))
+		}
+
+		// Set the table name for all columns.
+		tableName := tree.MakeUnqualifiedTableName(name)
+		for j := range cols {
+			cols[j].table = tableName
 		}
 
 		// Names for the output columns can optionally be specified.
 		if ctes[i].Name.Cols != nil {
-			if len(cteScope.cols) != len(ctes[i].Name.Cols) {
+			if len(cols) != len(ctes[i].Name.Cols) {
 				panic(builderError{
 					fmt.Errorf(
 						"source %q has %d columns available but %d columns specified",
-						name, len(cteScope.cols), len(ctes[i].Name.Cols),
+						name, len(cols), len(ctes[i].Name.Cols),
 					),
 				})
 			}
 
-			cols = make([]scopeColumn, len(cteScope.cols))
-			tableName := tree.MakeUnqualifiedTableName(ctes[i].Name.Alias)
-			copy(cols, cteScope.cols)
 			for j := range cols {
 				cols[j].name = ctes[i].Name.Cols[j]
-				cols[j].table = tableName
 			}
-		}
-
-		if len(cols) == 0 {
-			panic(pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
-				"WITH clause %q does not have a RETURNING clause", tree.ErrString(&name)))
 		}
 
 		projectionsScope := cteScope.replace()
