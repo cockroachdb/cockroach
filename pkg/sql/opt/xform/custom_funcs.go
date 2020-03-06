@@ -88,6 +88,13 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 			continue
 		}
 
+		// If we have a partial index, we're not allowed to do a full index scan,
+		// because no matter what, we'll never be able to satisfy the partial index
+		// predicate since we don't have a filter we're looking at.
+		if iter.index.IsPartialIndex() {
+			continue
+		}
+
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if iter.isCovering() {
@@ -926,8 +933,12 @@ func (c *CustomFuncs) tryConstrainIndex(
 	tabID opt.TableID,
 	indexOrd int,
 	isInverted bool,
-) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+) (outConstraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
+
+	md := c.e.mem.Metadata()
+	index := md.Table(tabID).Index(indexOrd)
+
 	if !isInverted &&
 		!c.canMaybeConstrainIndex(requiredFilters, tabID, indexOrd) &&
 		!c.canMaybeConstrainIndex(optionalFilters, tabID, indexOrd) {
@@ -935,16 +946,43 @@ func (c *CustomFuncs) tryConstrainIndex(
 	}
 
 	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, isInverted)
-	constraint = ic.Constraint()
-	if constraint.IsUnconstrained() {
+	outConstraint = ic.Constraint()
+	if outConstraint.IsUnconstrained() {
 		return nil, nil, false
+	}
+
+	// Check for partial index containment. Does the set of index constraints
+	// contain the partial index predicate's constraints? If not, we have to
+	// bail out, because we weren't at all able to use the partial index to
+	// constrain our scan.
+
+	if index.IsPartialIndex() {
+		partialIndexPredicate, ok := md.TableMeta(tabID).PartialIndexPredicates[indexOrd]
+		if !ok {
+			panic("found partial index without preprocessed predicate")
+		}
+
+		// TODO(jordan): figure out whether I need to pay attention to the "tight"
+		// return value
+		partialPredicateConstraints, _ := memo.BuildConstraintsFromExpr(
+			partialIndexPredicate, md, c.e.evalCtx)
+		keyCtx := constraint.MakeKeyContext(&outConstraint.Columns, c.e.evalCtx)
+
+		set := constraint.SingleConstraint(outConstraint)
+		partialIndexUsable := partialPredicateConstraints.Contains(c.e.evalCtx, &keyCtx, set)
+
+		fmt.Println("Partial index usable is ", partialIndexUsable, partialPredicateConstraints)
+
+		if !partialIndexUsable {
+			return nil, nil, false
+		}
 	}
 
 	// Return 0 if no remaining filter.
 	remaining := ic.RemainingFilters()
 
 	// Make copy of constraint so that idxconstraint instance is not referenced.
-	copy := *constraint
+	copy := *outConstraint
 	return &copy, remaining, true
 }
 

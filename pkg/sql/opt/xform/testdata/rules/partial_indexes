@@ -1,0 +1,101 @@
+exec-ddl
+CREATE TABLE simplest (a INT PRIMARY KEY, id INT, INDEX foo(id) WHERE id = 5)
+----
+
+opt
+SELECT * FROM simplest WHERE id = 5
+----
+scan simplest@foo
+ ├── columns: a:1!null id:2!null
+ ├── constraint: /2/1: [/5 - /5]
+ ├── key: (1)
+ └── fd: ()-->(2)
+
+exec-ddl
+CREATE TABLE simple (a INT PRIMARY KEY, id INT, INDEX foo(id) WHERE id < 10 AND id > 0)
+----
+
+opt
+SELECT * FROM simple WHERE id = 5
+----
+scan simple@foo
+ ├── columns: a:1!null id:2!null
+ ├── constraint: /2/1: [/5 - /5]
+ ├── key: (1)
+ └── fd: ()-->(2)
+
+opt
+SELECT * FROM simple WHERE id = 15
+----
+select
+ ├── columns: a:1!null id:2!null
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── scan simple
+ │    ├── columns: a:1!null id:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── id:2 = 15 [outer=(2), constraints=(/2: [/15 - /15]; tight), fd=()-->(2)]
+
+exec-ddl
+CREATE TABLE users (id INT PRIMARY KEY, active BOOL, INDEX(id) WHERE active IS true)
+----
+
+#opt
+#SELECT * FROM users WHERE active IS true
+#----
+#select
+# ├── columns: id:1!null active:2!null
+# ├── key: (1)
+# ├── fd: ()-->(2)
+# ├── scan users
+# │    ├── columns: id:1!null active:2
+# │    ├── key: (1)
+# │    └── fd: (1)-->(2)
+# └── filters
+#      └── active:2 IS true [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+#
+#opt
+#SELECT * FROM users WHERE id = 10 AND active IS true
+#----
+#select
+# ├── columns: id:1!null active:2!null
+# ├── cardinality: [0 - 1]
+# ├── key: ()
+# ├── fd: ()-->(1,2)
+# ├── scan users
+# │    ├── columns: id:1!null active:2
+# │    ├── constraint: /1: [/10 - /10]
+# │    ├── cardinality: [0 - 1]
+# │    ├── key: ()
+# │    └── fd: ()-->(1,2)
+# └── filters
+#      └── active:2 IS true [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+#
+#opt
+#SELECT * FROM users WHERE id = 10 AND active IS false
+#----
+#select
+# ├── columns: id:1!null active:2!null
+# ├── cardinality: [0 - 1]
+# ├── key: ()
+# ├── fd: ()-->(1,2)
+# ├── scan users
+# │    ├── columns: id:1!null active:2
+# │    ├── constraint: /1: [/10 - /10]
+# │    ├── cardinality: [0 - 1]
+# │    ├── key: ()
+# │    └── fd: ()-->(1,2)
+# └── filters
+#      └── active:2 IS false [outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+#
+#opt
+#SELECT * FROM users WHERE id = 10
+#----
+#scan users
+# ├── columns: id:1!null active:2
+# ├── constraint: /1: [/10 - /10]
+# ├── cardinality: [0 - 1]
+# ├── key: ()
+# └── fd: ()-->(1,2)

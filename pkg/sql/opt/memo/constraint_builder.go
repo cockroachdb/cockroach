@@ -405,6 +405,15 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	return constraint.SingleSpanConstraint(&keyCtx, &span), true
 }
 
+// BuildConstraintsFromExpr takes an opt.ScalarExpr and turns it into a set of
+// constraints.
+func BuildConstraintsFromExpr(
+	e opt.ScalarExpr, md *opt.Metadata, evalCtx *tree.EvalContext,
+) (_ *constraint.Set, tight bool) {
+	cb := &constraintsBuilder{evalCtx: evalCtx, md: md}
+	return cb.buildConstraints(e)
+}
+
 func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.Set, tight bool) {
 	switch t := e.(type) {
 	case *NullExpr:

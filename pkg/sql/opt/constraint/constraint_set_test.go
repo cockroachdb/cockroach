@@ -43,6 +43,15 @@ func TestConstraintSetIntersect(t *testing.T) {
 	le40 := SingleSpanConstraint(kc1, &data.spLe40)
 	test(le40, "/1: [ - /40]")
 
+	// partial index predicate @1 > 20 AND @1 < 100
+	// actual table filter @1 > 30 AND @1 < 90
+	// actual table filter *implies* partial index predicate
+
+	// actual table filter @1 > 10 AND @1 < 90
+	// *does not imply*
+
+	// a implies b is the same as b contains a
+
 	// @1 > 20 AND @1 <= 40
 	range2040 := gt20.Intersect(evalCtx, le40)
 	test(range2040, "/1: (/20 - /40]")

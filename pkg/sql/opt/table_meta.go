@@ -149,6 +149,11 @@ type TableMeta struct {
 	// more detail.
 	ComputedCols map[ColumnID]ScalarExpr
 
+	// PartialIndexPredicates is a map from index ordinal on the table to
+	// ScalarExpr, the partial index predicate if it exists for that particular
+	// index.
+	PartialIndexPredicates map[int]ScalarExpr
+
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
@@ -200,6 +205,14 @@ func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
 		tm.ComputedCols = make(map[ColumnID]ScalarExpr)
 	}
 	tm.ComputedCols[colID] = computedCol
+}
+
+// AddPartialIndexPredicate adds a partial index predicate to the table's metadata.
+func (tm *TableMeta) AddPartialIndexPredicate(indexID int, partialIndexPredicate ScalarExpr) {
+	if tm.PartialIndexPredicates == nil {
+		tm.PartialIndexPredicates = make(map[int]ScalarExpr)
+	}
+	tm.PartialIndexPredicates[indexID] = partialIndexPredicate
 }
 
 // TableAnnotation returns the given annotation that is associated with the

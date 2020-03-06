@@ -358,6 +358,15 @@ func (s *Set) String() string {
 	return b.String()
 }
 
+func (s *Set) Contains(evalCtx *tree.EvalContext, keyCtx *KeyContext, other *Set) bool {
+	if s.length > 1 || other.length > 1 {
+		panic("Sorry, can't check containment between constraint sets with more than one constraint yet")
+	}
+	c := s.firstConstraint
+	return c.Contains(evalCtx, keyCtx, &other.firstConstraint)
+
+}
+
 // compareConstraintsByCols orders constraints by the indexes of their columns,
 // with column position determining significance in the sort key (most
 // significant first).

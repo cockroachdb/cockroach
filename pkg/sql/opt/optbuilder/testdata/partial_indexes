@@ -1,0 +1,37 @@
+exec-ddl
+CREATE TABLE users (id INT PRIMARY KEY, active BOOL, INDEX(id) WHERE active IS true)
+----
+
+build
+SELECT * FROM users WHERE active IS true
+----
+
+build
+SELECT * FROM users WHERE id = 10 AND active IS true
+----
+select
+ ├── columns: id:1!null active:2!null
+ ├── scan users
+ │    └── columns: id:1!null active:2
+ └── filters
+      └── (id:1 = 10) AND (active:2 IS true)
+
+build
+SELECT * FROM users WHERE id = 10 AND active IS false
+----
+select
+ ├── columns: id:1!null active:2!null
+ ├── scan users
+ │    └── columns: id:1!null active:2
+ └── filters
+      └── (id:1 = 10) AND (active:2 IS false)
+
+build
+SELECT * FROM users WHERE id = 10
+----
+select
+ ├── columns: id:1!null active:2
+ ├── scan users
+ │    └── columns: id:1!null active:2
+ └── filters
+      └── id:1 = 10

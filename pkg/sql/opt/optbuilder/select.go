@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -525,6 +527,7 @@ func (b *Builder) buildScan(
 
 		b.addCheckConstraintsForTable(tabMeta)
 		b.addComputedColsForTable(tabMeta)
+		b.addPartialIndexPredicatesForTable(tabMeta)
 
 		outScope.expr = b.factory.ConstructScan(&private)
 
@@ -584,16 +587,13 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 		if !checkConstraint.Validated {
 			continue
 		}
-		expr, err := parser.ParseExpr(checkConstraint.Constraint)
-		if err != nil {
-			panic(err)
-		}
+		condition := b.initializeScopedExprFromString(checkConstraint.Constraint,
+			types.Bool, tableScope, tabMeta)
 
-		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
-		condition := b.buildScalar(texpr, tableScope, nil, nil, nil)
 		// Check constraints that are guaranteed to not evaluate to NULL
 		// are the only ones converted into filters. This is because a NULL
 		// constraint is interpreted as passing, whereas a NULL filter is not.
+
 		if memo.ExprIsNeverNull(condition, notNullCols) {
 			filters = append(filters, b.factory.ConstructFiltersItem(condition))
 		}
@@ -613,22 +613,62 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 		if !tabCol.IsComputed() {
 			continue
 		}
-		expr, err := parser.ParseExpr(tabCol.ComputedExprStr())
-		if err != nil {
-			continue
-		}
+		scalar := b.initializeScopedExprFromString(tabCol.ComputedExprStr(),
+			types.Any, tableScope, tabMeta)
+		colID := tabMeta.MetaID.ColumnID(i)
+		tabMeta.AddComputedCol(colID, scalar)
+	}
+}
 
-		if tableScope == nil {
-			tableScope = b.allocScope()
-			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
-		}
+func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
+	tab := tabMeta.Table
 
-		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
-			colID := tabMeta.MetaID.ColumnID(i)
-			scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
-			tabMeta.AddComputedCol(colID, scalar)
+	if tab.PartialIndexCount() == 0 {
+		return
+	}
+
+	tableScope := scope{builder: b}
+
+	for i := 0; i < tab.IndexCount(); i++ {
+		index := tab.Index(i)
+		if index.IsPartialIndex() {
+			scalar := b.initializeScopedExprFromString(index.PartialIndexPredicate().Predicate,
+				types.Bool, &tableScope, tabMeta)
+			tabMeta.AddPartialIndexPredicate(i, scalar)
 		}
 	}
+}
+
+// initializeScopedExprFromString takes the string form of an expression, parses
+// and type checks it according to the required type parameter, and inflates it
+// into an opt.ScalarExpr using the provided table scope and table metadata.
+// This should be used to turn special scalar expressions on tables (like
+// check expressions, computed columns, and partial index predicates) into a
+// form that's useful for the optimizer to consume.
+func (b *Builder) initializeScopedExprFromString(
+	exprString string, requiredType *types.T, tableScope *scope, tabMeta *opt.TableMeta,
+) opt.ScalarExpr {
+	expr, err := parser.ParseExpr(exprString)
+	if err != nil {
+		panic(err)
+	}
+
+	if tableScope == nil {
+		tableScope = b.allocScope()
+		tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+	}
+
+	texpr := tableScope.resolveAndRequireType(expr, requiredType)
+	if texpr == nil {
+		// Something is deeply wrong. We have been passed an exprString that is
+		// not of the expected type - this should never happen because the
+		// exprString is an expression on a table, like a check or computed column,
+		// that should have been validated at some earlier time.
+		panic(fmt.Sprintf("unexpected type for expression %s, expected %s",
+			exprString, requiredType))
+	}
+	scalarExpr := b.buildScalar(texpr, tableScope, nil, nil, nil)
+	return scalarExpr
 }
 
 func (b *Builder) buildSequenceSelect(

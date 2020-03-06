@@ -32,6 +32,9 @@ import (
 // in a constraint set, which is a conjunction of constraints. See the
 // Set struct comment for more details.
 //
+// A Constraint is a *disjunction* of conjunctions. The conjunctions are over
+// each of the columns in the constraint.
+//
 // A few examples:
 //  - a constraint on @1 > 1: a single span             /@1: (/1 - ]
 //  - a constraint on @1 = 1 AND @2 >= 1: a single span /@1/@2: [/1/1 - /1]
@@ -649,4 +652,32 @@ func (c *Constraint) CalculateMaxResults(
 		distinctVals = uint64(c.Spans.Count())
 	}
 	return distinctVals
+}
+
+func (c *Constraint) Contains(
+	evalCtx *tree.EvalContext, keyCtx *KeyContext, other *Constraint,
+) bool {
+	/*
+		if !c.Columns.Equals(&other.Columns) {
+			// If our constraint isn't even on the same set of columns as the other
+			// constraint, we know that... something, but let's just skip it for now
+			return false
+		}
+	*/
+
+	// CREATE INDEX ON t(a) WHERE (a > 4 and a < 7) OR (a >= 7 and a < 17)
+	// SELECT * FROM t WHERE a > 7 AND a <
+
+	// CREATE INDEX ON t(a) WHERE a = 5 OR a = 10
+	// SELECT * FROM t WHERE a = 5 OR a = 12
+
+	// CREATE INDEX ON t(a) WHERE a = 5 OR a = 10
+	// SELECT * FROM t WHERE a = 5 OR a = 12
+
+	for i := 0; i < other.Spans.Count(); i++ {
+		if !c.ContainsSpan(evalCtx, other.Spans.Get(i)) {
+			return false
+		}
+	}
+	return true
 }
