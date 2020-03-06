@@ -308,7 +308,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sortChunksMemAccount = streamingMemAccount
 		} else {
-			sortChunksMemAccount = r.createBufferingMemAccount(
+			sortChunksMemAccount = r.createMemAccountForSpillStrategy(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
@@ -325,7 +325,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			topKSorterMemAccount = streamingMemAccount
 		} else {
-			topKSorterMemAccount = r.createBufferingMemAccount(
+			topKSorterMemAccount = r.createMemAccountForSpillStrategy(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
@@ -341,7 +341,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sorterMemAccount = streamingMemAccount
 		} else {
-			sorterMemAccount = r.createBufferingMemAccount(
+			sorterMemAccount = r.createMemAccountForSpillStrategy(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
@@ -648,9 +648,14 @@ func NewColOperator(
 			} else {
 				distinctMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					distinctMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, "distinct",
-					)
+					// Create an unlimited mem account explicitly even though there is no
+					// disk spilling because the memory usage of an unordered distinct
+					// operator is proportional to the number of distinct tuples, not the
+					// number of input tuples.
+					// The row execution engine also gives an unlimited amount (that still
+					// needs to be approved by the upstream monitor, so not really
+					// "unlimited") amount of memory to the unordered distinct operator.
+					distinctMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "distinct")
 				}
 				// TODO(yuzefovich): we have an implementation of partially ordered
 				// distinct, and we should plan it when we have non-empty ordered
@@ -690,7 +695,7 @@ func NewColOperator(
 			if useStreamingMemAccountForBuffering {
 				hashJoinerMemAccount = streamingMemAccount
 			} else {
-				hashJoinerMemAccount = result.createBufferingMemAccount(
+				hashJoinerMemAccount = result.createMemAccountForSpillStrategy(
 					ctx, flowCtx, hashJoinerMemMonitorName,
 				)
 			}
@@ -922,7 +927,12 @@ func NewColOperator(
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
 					memAccount := streamingMemAccount
 					if !useStreamingMemAccountForBuffering {
-						memAccount = result.createBufferingMemAccount(ctx, flowCtx, memMonitorsPrefix+"relative-rank")
+						// TODO(asubiotto): Once we support spilling to disk in these window
+						//  functions, make this a limited account. Done this way so that we
+						//  can still run plans that include these window functions with a
+						//  low memory limit to test disk spilling of other components for
+						//  the time being.
+						memAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, memMonitorsPrefix+"relative-rank")
 					}
 					result.Op, err = NewRelativeRankOperator(
 						NewAllocator(ctx, memAccount), input, typs, windowFn, wf.Ordering.Columns,
@@ -1040,10 +1050,11 @@ func (r *NewColOperatorResult) createBufferingUnlimitedMemMonitor(
 	return bufferingOpUnlimitedMemMonitor
 }
 
-// createBufferingMemAccount instantiates a memory monitor and a memory account
-// to be used with a buffering Operator with the default memory limit. The
-// receiver is updated to have references to both objects.
-func (r *NewColOperatorResult) createBufferingMemAccount(
+// createMemAccountForSpillStrategy instantiates a memory monitor and a memory
+// account to be used with a buffering Operator that can fall back to disk.
+// The default memory limit is used, if flowCtx.Cfg.ForceDiskSpill is used, this
+// will be 1. The receiver is updated to have references to both objects.
+func (r *NewColOperatorResult) createMemAccountForSpillStrategy(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
 	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
@@ -1057,7 +1068,9 @@ func (r *NewColOperatorResult) createBufferingMemAccount(
 
 // createBufferingUnlimitedMemAccount instantiates an unlimited memory monitor
 // and a memory account to be used with a buffering disk-backed Operator. The
-// receiver is updated to have references to both objects.
+// receiver is updated to have references to both objects. Note that the
+// returned account is only "unlimited" in that it does not have a hard limit
+// that it enforces, but a limit might be enforced by a root monitor.
 func (r *NewColOperatorResult) createBufferingUnlimitedMemAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
