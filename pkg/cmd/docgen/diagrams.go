@@ -826,7 +826,7 @@ var specs = []stmtSpec{
 		unlink: []string{"file_location"},
 	},
 	{
-		name:   "import_into2",
+		name:   "import_into",
 		stmt:   "import_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("INTO")},
 		inline: []string{"insert_column_list", "string_or_placeholder_list", "opt_with_options", "kv_option_list"},
