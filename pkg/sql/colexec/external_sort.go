@@ -106,6 +106,7 @@ type externalSorter struct {
 	OneInputNode
 	NonExplainable
 
+	usageMode          externalOperatorUsageMode
 	closed             bool
 	unlimitedAllocator *Allocator
 	memoryLimit        int64
@@ -123,7 +124,7 @@ type externalSorter struct {
 	emitter Operator
 }
 
-var _ Operator = &externalSorter{}
+var _ resettableOperator = &externalSorter{}
 
 // newExternalSorter returns a disk-backed general sort operator.
 // - ctx is the same context that standaloneMemAccount was created with.
@@ -137,15 +138,13 @@ var _ Operator = &externalSorter{}
 // limit. The budget *must* be standalone because we don't want to double
 // count the memory (the memory under the batches will be accounted for with
 // the unlimitedAllocator).
-// - diskQueuesUnlimitedAllocator is a (temporary) unlimited allocator that
-// will be used to create dummy queues and will be removed once we have actual
-// disk-backed queues.
 // - maxNumberPartitions (when non-zero) overrides the semi-dynamically
 // computed maximum number of partitions to have at once. It should be
 // non-zero only in tests.
 func newExternalSorter(
 	ctx context.Context,
 	unlimitedAllocator *Allocator,
+	usageMode externalOperatorUsageMode,
 	standaloneMemAccount *mon.BoundAccount,
 	input Operator,
 	inputTypes []coltypes.T,
@@ -171,7 +170,7 @@ func newExternalSorter(
 		// it almost all of the available memory (except for a single output batch
 		// that mergers will use).
 		batchMemSize := estimateBatchSizeBytes(inputTypes, coldata.BatchSize())
-		maxNumberPartitions = (int(memoryLimit) - batchMemSize) / (diskQueueCfg.BufferSizeBytes + batchMemSize)
+		maxNumberPartitions = (int(memoryLimit) - batchMemSize) / diskQueueCfg.BufferSizeBytes
 	}
 	// In order to make progress when merging we have to merge at least two
 	// partitions.
@@ -181,6 +180,7 @@ func newExternalSorter(
 	return &externalSorter{
 		OneInputNode:        NewOneInputNode(inMemSorter),
 		unlimitedAllocator:  unlimitedAllocator,
+		usageMode:           usageMode,
 		memoryLimit:         memoryLimit,
 		inMemSorter:         inMemSorter,
 		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition),
@@ -280,14 +280,25 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return b
 		case externalSorterFinished:
-			if err := s.Close(); err != nil {
-				execerror.VectorizedInternalPanic(err)
+			if s.usageMode == externalOperatorUsageModeDefault {
+				if err := s.Close(); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
 			}
 			return coldata.ZeroBatch
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected externalSorterState %d", s.state))
 		}
 	}
+}
+
+func (s *externalSorter) reset() {
+	if r, ok := s.input.(resetter); ok {
+		r.reset()
+	}
+	s.state = externalSorterNewPartition
+	s.firstPartitionIdx += s.numPartitions
+	s.numPartitions = 0
 }
 
 func (s *externalSorter) Close() error {
@@ -383,5 +394,8 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 func (o *inputPartitioningOperator) reset() {
+	if r, ok := o.input.(resetter); ok {
+		r.reset()
+	}
 	o.standaloneMemAccount.Shrink(o.ctx, o.standaloneMemAccount.Used())
 }
