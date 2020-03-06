@@ -11,9 +11,12 @@
 package resolver
 
 import (
+	"errors"
+	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseResolverAddress(t *testing.T) {
@@ -80,5 +83,65 @@ func TestGetAddress(t *testing.T) {
 		if address.String() != tc.addressValue {
 			t.Errorf("#%d: expected address value=%s, got %+v", tcNum, tc.addressValue, address)
 		}
+	}
+}
+
+func TestNewSRVResolvers(t *testing.T) {
+	type lookupFunc func(service, proto, name string) (string, []*net.SRV, error)
+
+	lookupWithErr := func(err error) lookupFunc {
+		return func(service, proto, name string) (string, []*net.SRV, error) {
+			if service != "" || proto != "" {
+				t.Errorf("unexpected params in erroring LookupSRV() call")
+			}
+			return "", nil, err
+		}
+	}
+
+	dnsErr := &net.DNSError{Err: "no such host", Name: "", Server: "", IsTimeout: false}
+
+	lookupSuccess := func(service, proto, name string) (string, []*net.SRV, error) {
+		if service != "" || proto != "" {
+			t.Errorf("unexpected params in successful LookupSRV() call")
+		}
+
+		srvs := []*net.SRV{
+			{"node1", 26222, 0, 0},
+			{"node2", 35222, 0, 0},
+		}
+
+		return "cluster", srvs, nil
+	}
+
+	expectedResolvers := []Resolver{
+		&socketResolver{typ: "tcp", addr: "node1:26222"},
+		&socketResolver{typ: "tcp", addr: "node2:35222"},
+	}
+
+	testCases := []struct {
+		address  string
+		success  bool
+		lookuper lookupFunc
+		want     []Resolver
+	}{
+		{"some.host:26222", true, nil, nil},
+		{":26222", true, nil, nil},
+		{"some.host", true, lookupWithErr(dnsErr), nil},
+		{"some.host", false, lookupWithErr(errors.New("another error")), nil},
+		{"some.host", true, lookupSuccess, expectedResolvers},
+	}
+
+	for tcNum, tc := range testCases {
+		lookupSRV = tc.lookuper
+
+		resolvers, err := NewSRVResolvers(tc.address)
+
+		if (err == nil) != tc.success {
+			t.Errorf("#%d: expected success=%t, got err=%v", tcNum, tc.success, err)
+		}
+
+		require.Equal(t, tc.want, resolvers)
+
+		lookupSRV = net.LookupSRV
 	}
 }
