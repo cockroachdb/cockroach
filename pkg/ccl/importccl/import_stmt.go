@@ -1053,9 +1053,7 @@ func (r *importResumer) Resume(
 	}
 	// TODO(ajwerner): Should this actually return the error? At this point we've
 	// successfully finished the import but failed to drop the protected
-	// timestamp. The reconciliation loop ought to pick it up. Ideally we'd do
-	// this in OnSuccess but we don't have access to the protectedts.Storage
-	// there.
+	// timestamp. The reconciliation loop ought to pick it up.
 	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
@@ -1263,11 +1261,6 @@ func (r *importResumer) dropTables(ctx context.Context, txn *client.Txn) error {
 			existingDesc)
 	}
 	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
-}
-
-// OnSuccess is part of the jobs.Resumer interface.
-func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
-	return nil
 }
 
 // OnTerminal is part of the jobs.Resumer interface.

@@ -665,16 +665,6 @@ type Resumer interface {
 	// is a sql.PlanHookState.
 	Resume(ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums) error
 
-	// OnSuccess is called when a job has completed successfully, and is called
-	// with the same txn that will mark the job as successful. The txn will
-	// only be committed if this doesn't return an error and the job state was
-	// successfully changed to successful. If OnSuccess returns an error, the
-	// job will be marked as failed.
-	//
-	// Any work this function does must still be correct if the txn is aborted at
-	// a later time.
-	OnSuccess(ctx context.Context, txn *client.Txn) error
-
 	// OnTerminal is called after a job has successfully been marked as
 	// terminal. It should be used to perform optional cleanup and return final
 	// results to the user. There is no guarantee that this function is ever run
@@ -791,7 +781,7 @@ func (r *Registry) stepThroughStateMachine(
 			errorMsg := fmt.Sprintf("job %d: successful bu unexpected error provided", *job.ID())
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
-		if err := job.Succeeded(ctx, resumer.OnSuccess); err != nil {
+		if err := job.Succeeded(ctx, nil); err != nil {
 			// If it didn't succeed, we consider the job as failed and need to go
 			// through reverting state first.
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
