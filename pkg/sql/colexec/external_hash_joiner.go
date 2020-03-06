@@ -13,14 +13,16 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
 	"github.com/marusama/semaphore"
 )
 
@@ -46,16 +48,19 @@ const (
 	// so we fall back to using a combination of sort and merge join to process
 	// such partition. After repartitioning, the operator transitions to
 	// externalHJJoinNewPartition state.
-	// TODO(yuzefovich): implement the fallback to sort + merge join.
 	externalHJRecursivePartitioning
 	// externalHJJoinNewPartition indicates that the operator should choose a
-	// partition index and join the corresponding partitions from both sides. We
-	// will only join the partitions if the right side partition fits into memory
-	// (because in-memory hash joiner will fully buffer the right side but will
-	// process left side in the streaming fashion). If there are no partition
-	// indices that the operator can join, it transitions into
-	// externalHJRecursivePartitioning state. If there are no partition indices
-	// left at all to join, the operator transitions to externalHJFinished state.
+	// partition index and join the corresponding partitions from both sides
+	// using the in-memory hash joiner. We will only join the partitions if the
+	// right side partition fits into memory (because in-memory hash joiner will
+	// fully buffer the right side but will process left side in the streaming
+	// fashion). If there are no partition indices that the operator can join, it
+	// transitions into externalHJRecursivePartitioning state. If there are no
+	// partition indices to join using in-memory hash joiner, but there are
+	// indices to join using sort + merge join strategy, the operator transitions
+	// to externalHJSortMergeNewPartition state. If there are no partition
+	// indices left at all to join, the operator transitions to
+	// externalHJFinished state.
 	externalHJJoinNewPartition
 	// externalHJJoining indicates that the operator is currently joining tuples
 	// from the corresponding partitions from both sides. An in-memory hash join
@@ -64,6 +69,18 @@ const (
 	// partitions has been emitted), the external hash joiner transitions to
 	// externalHJJoinNewPartition state.
 	externalHJJoining
+	// externalHJSortMergeNewPartition indicates that the operator should choose
+	// a partition index to join using sort + merge join strategy. If there are
+	// no partition indices for this strategy left, the operator transitions to
+	// externalHJFinished state.
+	externalHJSortMergeNewPartition
+	// externalHJSortMergeJoining indicates that the operator is currently
+	// joining tuples from the corresponding partitions from both sides using
+	// (disk-backed) sort + merge join strategy. Once the in-memory merge joiner
+	// returns a zero-length batch (indicating that full output for the current
+	// partitions has been emitted), the external hash joiner transitions to
+	// externalHJSortMergeNewPartition state.
+	externalHJSortMergeJoining
 	// externalHJFinished indicates that the external hash joiner has emitted all
 	// tuples already and only zero-length batch will be emitted from now on.
 	externalHJFinished
@@ -73,14 +90,13 @@ const (
 	// externalHJRecursivePartitioningSizeDecreaseThreshold determines by how
 	// much the newly-created partitions in the recursive partitioning stage
 	// should be smaller than the "parent" partition in order to consider the
-	// repartitioning "successful". If this threshold is not met, then we fall
-	// back to sort + merge join (which, in a sense, serves as the base case
-	// for "recursion").
+	// repartitioning "successful". If this threshold is not met, then this newly
+	// created partition will be added to sort + merge join list (which, in a
+	// sense, serves as the base case for "recursion").
 	externalHJRecursivePartitioningSizeDecreaseThreshold = 0.05
 	// externalHJDiskQueuesMemFraction determines the fraction of the available
 	// RAM that is allocated for the in-memory cache of disk queues.
-	externalHJDiskQueuesMemFraction      = 0.5
-	externalHJFallbackToSortMergeJoinMsg = "recursive partitioning didn't sufficiently decrease the size of the partition"
+	externalHJDiskQueuesMemFraction = 0.5
 )
 
 // externalHashJoiner is an operator that performs Grace hash join algorithm
@@ -112,7 +128,9 @@ const (
 //
 // If one of the partitions itself runs out of memory, we can recursively apply
 // this algorithm. The partition will be divided into sub-partitions by a new
-// hash function, spilled to disk, and so on.
+// hash function, spilled to disk, and so on. If repartitioning doesn't reduce
+// size of the partitions sufficiently, then such partitions will be handled
+// using the combination of disk-backed sort and merge join operators.
 type externalHashJoiner struct {
 	twoInputNode
 	NonExplainable
@@ -133,9 +151,17 @@ type externalHashJoiner struct {
 	maxNumberActivePartitions int
 	// numBuckets is the number of buckets that a partition is divided into.
 	numBuckets int
-	// partitionsToJoin is a map from partitionIdx to a utility struct. This map
-	// contains all partition indices that need to be joined.
-	partitionsToJoin map[int]*externalHJPartitionInfo
+	// partitionsToJoinUsingInMemHash is a map from partitionIdx to a utility
+	// struct. This map contains all partition indices that need to be joined
+	// using the in-memory hash joiner. If the partition is too big, it will be
+	// tried to be repartitioned; if during repartitioning the size doesn't
+	// decrease enough, it will be added to partitionsToJoinUsingSortMerge.
+	partitionsToJoinUsingInMemHash map[int]*externalHJPartitionInfo
+	// partitionsToJoinUsingSortMerge contains all partition indices that need to
+	// be joined using sort + merge join strategy. Partition indices will be
+	// added into this map if recursive partitioning doesn't seem to make
+	// progress on partition' size reduction.
+	partitionsToJoinUsingSortMerge []int
 	// partitionIdxOffset stores the first "available" partition index to use.
 	// During the partitioning step, all tuples will go into one of the buckets
 	// in [partitionIdxOffset, partitionIdxOffset + numBuckets) range.
@@ -156,8 +182,11 @@ type externalHashJoiner struct {
 	}
 
 	// Join phase variables.
-	leftInMemHashJoinerInput, rightInMemHashJoinerInput *partitionerToOperator
-	inMemHashJoiner                                     *hashJoiner
+	leftJoinerInput, rightJoinerInput *partitionerToOperator
+	inMemHashJoiner                   *hashJoiner
+	// diskBackedSortMerge is a side chain of disk-backed sorters that feed into
+	// disk-backed merge joiner which the external hash joiner can fall back to.
+	diskBackedSortMerge resettableOperator
 
 	memState struct {
 		// maxRightPartitionSizeToJoin indicates the maximum memory size of a
@@ -173,13 +202,6 @@ type externalHashJoiner struct {
 		// is forced to recursively repartition (even if it is otherwise not
 		// needed) before it proceeds to actual join partitions.
 		numForcedRepartitions int
-		// repartitionForced is a (temporary) knob that indicates to the external
-		// hash joiner that the last repartition was forced artificially. If it is
-		// true, then we skip the check whether there was a reasonable decrease
-		// in size.
-		// TODO(yuzefovich): remove this once we have fallback to sort + merge
-		// join.
-		repartitionForced bool
 	}
 }
 
@@ -205,9 +227,6 @@ const (
 // - numForcedRepartitions is a number of times that the external hash joiner
 // is forced to recursively repartition (even if it is otherwise not needed).
 // This should be non-zero only in tests.
-// - diskQueuesUnlimitedAllocator is a (temporary) unlimited allocator that
-// will be used to create dummy queues and will be removed once we have actual
-// disk-backed queues.
 func newExternalHashJoiner(
 	unlimitedAllocator *Allocator,
 	spec hashJoinerSpec,
@@ -215,17 +234,18 @@ func newExternalHashJoiner(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
+	createReusableDiskBackedSorter func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (Operator, error),
 	numForcedRepartitions int,
 ) Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeClearAndReuseCache {
 		execerror.VectorizedInternalPanic(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
-	leftInMemHashJoinerInput := newPartitionerToOperator(
+	leftJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
 	)
 	rightPartitioner := colcontainer.NewPartitionedDiskQueue(spec.right.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
-	rightInMemHashJoinerInput := newPartitionerToOperator(
+	rightJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
 	)
 	diskQueuesTotalMemLimit := int(float64(memoryLimit) * externalHJDiskQueuesMemFraction)
@@ -245,6 +265,39 @@ func newExternalHashJoiner(
 		// We need at least two buckets per side to make progress.
 		maxNumberActivePartitions = 4
 	}
+	makeOrderingCols := func(eqCols []uint32) []execinfrapb.Ordering_Column {
+		res := make([]execinfrapb.Ordering_Column, len(eqCols))
+		for i, colIdx := range eqCols {
+			res[i].ColIdx = colIdx
+		}
+		return res
+	}
+	// We need to allocate 2 FDs for the merge joiner plus 2 FDs for reading
+	// the partitions that we need to join using sort + merge join strategy, and
+	// all others are divided between the two inputs.
+	externalSorterMaxNumberPartitions := (maxNumberActivePartitions - 4) / 2
+	leftOrdering := makeOrderingCols(spec.left.eqCols)
+	leftPartitionSorter, err := createReusableDiskBackedSorter(
+		leftJoinerInput, spec.left.sourceTypes, leftOrdering, externalSorterMaxNumberPartitions,
+	)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	rightOrdering := makeOrderingCols(spec.right.eqCols)
+	rightPartitionSorter, err := createReusableDiskBackedSorter(
+		rightJoinerInput, spec.right.sourceTypes, rightOrdering, externalSorterMaxNumberPartitions,
+	)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	diskBackedSortMerge, err := newMergeJoinOp(
+		unlimitedAllocator, memoryLimit, diskQueueCfg,
+		fdSemaphore, spec.joinType, leftPartitionSorter, rightPartitionSorter,
+		spec.left.sourceTypes, spec.right.sourceTypes, leftOrdering, rightOrdering,
+	)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	ehj := &externalHashJoiner{
 		twoInputNode:              newTwoInputNode(leftInput, rightInput),
 		unlimitedAllocator:        unlimitedAllocator,
@@ -258,13 +311,15 @@ func newExternalHashJoiner(
 		// half for the right side.
 		// TODO(yuzefovich): figure out whether we should care about
 		// hj.numBuckets being a power of two (finalizeHash step is faster if so).
-		numBuckets:                maxNumberActivePartitions / 2,
-		partitionsToJoin:          make(map[int]*externalHJPartitionInfo),
-		leftInMemHashJoinerInput:  leftInMemHashJoinerInput,
-		rightInMemHashJoinerInput: rightInMemHashJoinerInput,
+		numBuckets:                     maxNumberActivePartitions / 2,
+		partitionsToJoinUsingInMemHash: make(map[int]*externalHJPartitionInfo),
+		partitionsToJoinUsingSortMerge: make([]int, 0),
+		leftJoinerInput:                leftJoinerInput,
+		rightJoinerInput:               rightJoinerInput,
 		inMemHashJoiner: newHashJoiner(
-			unlimitedAllocator, spec, leftInMemHashJoinerInput, rightInMemHashJoinerInput,
+			unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
 		).(*hashJoiner),
+		diskBackedSortMerge: diskBackedSortMerge,
 	}
 	// To simplify the accounting, we will assume that the in-memory hash
 	// joiner's memory usage is equal to the size of the right partition to be
@@ -348,10 +403,10 @@ func (hj *externalHashJoiner) partitionBatch(
 			if err := partitioner.Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
-			partitionInfo, ok := hj.partitionsToJoin[partitionIdx]
+			partitionInfo, ok := hj.partitionsToJoinUsingInMemHash[partitionIdx]
 			if !ok {
 				partitionInfo = &externalHJPartitionInfo{}
-				hj.partitionsToJoin[partitionIdx] = partitionInfo
+				hj.partitionsToJoinUsingInMemHash[partitionIdx] = partitionInfo
 			}
 			if side == rightSide {
 				partitionInfo.rightParentMemSize = parentMemSize
@@ -418,7 +473,7 @@ StateChanged:
 			// hj.numBuckets being a power of two (finalizeHash step is faster if so).
 			hj.numBuckets = hj.maxNumberActivePartitions - 1
 			hj.tupleDistributor.resetNumOutputs(hj.numBuckets)
-			for parentPartitionIdx, parentPartitionInfo := range hj.partitionsToJoin {
+			for parentPartitionIdx, parentPartitionInfo := range hj.partitionsToJoinUsingInMemHash {
 				for _, side := range []joinSide{leftSide, rightSide} {
 					batch := hj.recursiveScratch.leftBatch
 					partitioner := hj.leftPartitioner
@@ -444,67 +499,76 @@ StateChanged:
 					}
 					// We're done writing to the newly created partitions.
 					// TODO(yuzefovich): we should not release the descriptors here. The
-					// invariant should be: we're enteringexternalHJRecursivePartitioning,
-					// at that stage we have at most numBuckets*2 file descriptors open. At
-					// the top of the state transition, close all open write file
-					// descriptors, which should reduce the open descriptors to 0. Now we
-					// open the two read partitions for 2 file descriptors and whatever
-					// number of write partitions we want. This'll allow us to remove the
-					// call to CloseAllOpen... in the first state as well.
+					// invariant should be: we're entering
+					// externalHJRecursivePartitioning, at that stage we have at most
+					// numBuckets*2 file descriptors open. At the top of the state
+					// transition, close all open write file descriptors, which should
+					// reduce the open descriptors to 0. Now we open the two read'
+					// partitions for 2 file descriptors and whatever number of write
+					// partitions we want. This'll allow us to remove the call to
+					// CloseAllOpen... in the first state as well.
 					if err := partitioner.CloseAllOpenWriteFileDescriptors(); err != nil {
 						execerror.VectorizedInternalPanic(err)
 					}
 				}
-				if !hj.testingKnobs.repartitionForced {
-					// If the repartition was forced, then it is possible that there is
-					// no reduction in size, and we don't want to error out in such case.
-					for idx := 0; idx < hj.numBuckets; idx++ {
-						if partitionInfo, ok := hj.partitionsToJoin[hj.partitionIdxOffset+idx]; ok {
-							before, after := partitionInfo.rightParentMemSize, partitionInfo.rightMemSize
-							if before > 0 {
-								sizeDecrease := 1.0 - float64(after)/float64(before)
-								if sizeDecrease < externalHJRecursivePartitioningSizeDecreaseThreshold {
-									// TODO(yuzefovich): support this case by falling back to
-									// sort + merge join.
-									execerror.VectorizedInternalPanic(errors.Errorf(
-										"%s: before %s, after %s", externalHJFallbackToSortMergeJoinMsg,
-										humanize.Bytes(uint64(before)), humanize.Bytes(uint64(after))))
-								}
+				for idx := 0; idx < hj.numBuckets; idx++ {
+					newPartitionIdx := hj.partitionIdxOffset + idx
+					if partitionInfo, ok := hj.partitionsToJoinUsingInMemHash[newPartitionIdx]; ok {
+						before, after := partitionInfo.rightParentMemSize, partitionInfo.rightMemSize
+						if before > 0 {
+							sizeDecrease := 1.0 - float64(after)/float64(before)
+							if sizeDecrease < externalHJRecursivePartitioningSizeDecreaseThreshold {
+								// We will need to join this partition using sort + merge
+								// join strategy.
+								hj.partitionsToJoinUsingSortMerge = append(hj.partitionsToJoinUsingSortMerge, newPartitionIdx)
+								delete(hj.partitionsToJoinUsingInMemHash, newPartitionIdx)
 							}
 						}
 					}
 				}
-				hj.testingKnobs.repartitionForced = false
 				// We have successfully repartitioned the partitions with index
 				// 'parentPartitionIdx' on both sides, so we delete that index from the
 				// map and proceed on joining the newly created partitions.
-				delete(hj.partitionsToJoin, parentPartitionIdx)
+				delete(hj.partitionsToJoinUsingInMemHash, parentPartitionIdx)
 				hj.partitionIdxOffset += hj.numBuckets
 				hj.state = externalHJJoinNewPartition
 				continue StateChanged
 			}
 
 		case externalHJJoinNewPartition:
-			if hj.testingKnobs.numForcedRepartitions > 0 {
+			if hj.testingKnobs.numForcedRepartitions > 0 && len(hj.partitionsToJoinUsingInMemHash) > 0 {
 				hj.testingKnobs.numForcedRepartitions--
-				hj.testingKnobs.repartitionForced = true
 				hj.state = externalHJRecursivePartitioning
 				continue
 			}
 			// Find next partition that we can join without having to recursively
 			// repartition.
-			for partitionIdx, partitionInfo := range hj.partitionsToJoin {
+			for partitionIdx, partitionInfo := range hj.partitionsToJoinUsingInMemHash {
 				if partitionInfo.rightMemSize <= hj.memState.maxRightPartitionSizeToJoin {
 					// Update the inputs to in-memory hash joiner and reset the latter.
-					hj.leftInMemHashJoinerInput.partitionIdx = partitionIdx
-					hj.rightInMemHashJoinerInput.partitionIdx = partitionIdx
+					hj.leftJoinerInput.partitionIdx = partitionIdx
+					hj.rightJoinerInput.partitionIdx = partitionIdx
 					hj.inMemHashJoiner.reset()
+					delete(hj.partitionsToJoinUsingInMemHash, partitionIdx)
 					hj.state = externalHJJoining
-					delete(hj.partitionsToJoin, partitionIdx)
 					continue StateChanged
 				}
 			}
-			if len(hj.partitionsToJoin) == 0 {
+			if len(hj.partitionsToJoinUsingInMemHash) == 0 {
+				// All partitions to join using the hash joiner have been processed.
+				if len(hj.partitionsToJoinUsingSortMerge) > 0 {
+					// But there are still some partitions to join using sort + merge
+					// join strategy.
+					hj.diskBackedSortMerge.Init()
+					if log.V(2) {
+						log.Info(ctx, fmt.Sprintf(
+							"external hash joiner will join %d partitions using sort + merge join",
+							len(hj.partitionsToJoinUsingSortMerge),
+						))
+					}
+					hj.state = externalHJSortMergeNewPartition
+					continue
+				}
 				// All partitions have been processed, so we transition to finished
 				// state.
 				hj.state = externalHJFinished
@@ -513,6 +577,7 @@ StateChanged:
 			// We have partitions that we cannot join without recursively
 			// repartitioning first, so we transition to the corresponding state.
 			hj.state = externalHJRecursivePartitioning
+			continue
 
 		case externalHJJoining:
 			b := hj.inMemHashJoiner.Next(ctx)
@@ -529,6 +594,39 @@ StateChanged:
 				continue
 			}
 			return b
+
+		case externalHJSortMergeNewPartition:
+			if len(hj.partitionsToJoinUsingSortMerge) == 0 {
+				// All partitions have been processed, so we transition to finished
+				// state.
+				hj.state = externalHJFinished
+				continue
+			}
+			partitionIdx := hj.partitionsToJoinUsingSortMerge[0]
+			hj.partitionsToJoinUsingSortMerge = hj.partitionsToJoinUsingSortMerge[1:]
+			// Update the inputs to sort + merge joiner and reset that chain.
+			hj.leftJoinerInput.partitionIdx = partitionIdx
+			hj.rightJoinerInput.partitionIdx = partitionIdx
+			hj.diskBackedSortMerge.reset()
+			hj.state = externalHJSortMergeJoining
+			continue
+
+		case externalHJSortMergeJoining:
+			b := hj.diskBackedSortMerge.Next(ctx)
+			if b.Length() == 0 {
+				// We're done joining these partitions, so we close them and transition
+				// to joining new ones.
+				if err := hj.leftPartitioner.CloseInactiveReadPartitions(); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
+				if err := hj.rightPartitioner.CloseInactiveReadPartitions(); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
+				hj.state = externalHJSortMergeNewPartition
+				continue
+			}
+			return b
+
 		case externalHJFinished:
 			if err := hj.Close(); err != nil {
 				execerror.VectorizedInternalPanic(err)
@@ -550,6 +648,11 @@ func (hj *externalHashJoiner) Close() error {
 	}
 	if err := hj.rightPartitioner.Close(); err != nil && retErr == nil {
 		retErr = err
+	}
+	if c, ok := hj.diskBackedSortMerge.(io.Closer); ok {
+		if err := c.Close(); err != nil && retErr == nil {
+			retErr = err
+		}
 	}
 	hj.closed = true
 	return retErr
