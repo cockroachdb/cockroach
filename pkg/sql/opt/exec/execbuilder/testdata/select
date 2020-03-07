@@ -830,7 +830,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)
 ----
 ·     distributed  false                        ·            ·
-·     vectorized   false                        ·            ·
+·     vectorized   true                         ·            ·
 scan  ·            ·                            (d decimal)  ·
 ·     table        dec2@primary                 ·            ·
 ·     spans        ALL                          ·            ·
@@ -870,7 +870,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
 ----
 ·     distributed  false                      ·          ·
-·     vectorized   false                      ·          ·
+·     vectorized   true                       ·          ·
 scan  ·            ·                          (f float)  ·
 ·     table        flt@primary                ·          ·
 ·     spans        ALL                        ·          ·

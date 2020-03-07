@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -178,6 +179,11 @@ func TestEval(t *testing.T) {
 			defer acc.Close(ctx)
 			expr, err := parser.ParseExpr(d.Input)
 			require.NoError(t, err)
+			if _, ok := expr.(*tree.RangeCond); ok {
+				// RangeCond gets normalized to comparison expressions and its Eval
+				// method returns an error, so skip it for execution.
+				return strings.TrimSpace(d.Expected)
+			}
 			typedExpr, err := expr.TypeCheck(nil, types.Any)
 			if err != nil {
 				// Skip this test as it's testing an expected error which would be
@@ -221,10 +227,13 @@ func TestEval(t *testing.T) {
 					},
 				},
 				StreamingMemAccount: &acc,
+				// Unsupported post processing specs are wrapped and run through the
+				// row execution engine.
+				ProcessorConstructor: rowexec.NewProcessor,
 			}
 			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 			result, err := colexec.NewColOperator(ctx, flowCtx, args)
-			if testutils.IsError(err, "unable to columnarize") {
+			if testutils.IsError(err, "unsupported type") {
 				// Skip this test as execution is not supported by the vectorized
 				// engine.
 				return strings.TrimSpace(d.Expected)
@@ -249,6 +258,7 @@ func TestEval(t *testing.T) {
 				row  sqlbase.EncDatumRow
 				meta *execinfrapb.ProducerMetadata
 			)
+			ctx = mat.Start(ctx)
 			row, meta = mat.Next()
 			if meta != nil {
 				if meta.Err != nil {
@@ -257,6 +267,10 @@ func TestEval(t *testing.T) {
 				t.Fatalf("unexpected metadata: %+v", meta)
 			}
 			if row == nil {
+				// Might be some metadata.
+				if meta := mat.DrainHelper(); meta.Err != nil {
+					t.Fatalf("unexpected error: %s", meta.Err)
+				}
 				t.Fatal("unexpected end of input")
 			}
 			return row[0].Datum.String()
