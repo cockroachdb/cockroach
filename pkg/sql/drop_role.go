@@ -227,15 +227,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	if numRoleOptionsDeleted > 0 {
-		// Some role options have been deleted, bump role_options table version to
-		// force a refresh of role membership.
-		if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
-			return err
-		}
-	}
-
 	n.run.numDeleted = numUsersDeleted
+	n.run.numDeleted += numRoleOptionsDeleted
 
 	return nil
 }

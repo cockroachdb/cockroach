@@ -562,12 +562,12 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
-%token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOOKUP LOW LSHIFT
+%token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
-%token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NO_INDEX_JOIN NONE NORMAL
-%token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NOLOGIN NO_INDEX_JOIN
+%token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
@@ -598,7 +598,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
-%token <str> UPDATE UPSERT USE USER USERS USING UUID
+%token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIRTUAL
 
@@ -836,7 +836,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> name opt_name opt_name_parens
 %type <str> privilege savepoint_name
-%type <tree.KVOption> role_option password_clause
+%type <tree.KVOption> role_option password_clause valid_until_clause
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name
 %type <str> opt_collate
@@ -5206,11 +5206,20 @@ role_option:
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
-  | NOCREATEROLE
-  {
-    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-  }
-  | password_clause
+| NOCREATEROLE
+	{
+		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+	}
+| LOGIN
+	{
+		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+	}
+| NOLOGIN
+	{
+		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+	}
+| password_clause
+| valid_until_clause
 
 role_options:
   role_option
@@ -5230,6 +5239,16 @@ opt_role_options:
 | /* EMPTY */
 	{
 		$$.val = nil
+	}
+
+valid_until_clause:
+  VALID UNTIL string_or_placeholder
+  {
+		$$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: $3.expr()}
+  }
+| VALID UNTIL NULL
+  {
+		$$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: tree.DNull}
 	}
 
 opt_view_recursive:
@@ -9827,6 +9846,7 @@ unreserved_keyword:
 | LIST
 | LOCAL
 | LOCKED
+| LOGIN
 | LOOKUP
 | LOW
 | MATCH
@@ -9844,6 +9864,7 @@ unreserved_keyword:
 | NORMAL
 | NO_INDEX_JOIN
 | NOCREATEROLE
+| NOLOGIN
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
@@ -9960,6 +9981,7 @@ unreserved_keyword:
 | UNKNOWN
 | UNLOGGED
 | UNSPLIT
+| UNTIL
 | UPDATE
 | UPSERT
 | UUID
