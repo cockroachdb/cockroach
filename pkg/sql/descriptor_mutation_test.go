@@ -158,16 +158,14 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 // Regression test for #29436.
 func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// NB: This test manually adds mutations to a table descriptor to test that
-	// other schema changes work in the presence of those mutations. Since there's
-	// no job associated with the added mutations, those mutations stay on the
-	// table descriptor but don't do anything, which is what we want.
-
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
+	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
@@ -215,16 +213,14 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 // change.
 func TestOperationsWithColumnMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// NB: This test manually adds mutations to a table descriptor to test that
-	// other schema changes work in the presence of those mutations. Since there's
-	// no job associated with the added mutations, those mutations stay on the
-	// table descriptor but don't do anything, which is what we want.
-
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
+	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
@@ -487,15 +483,13 @@ func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMuta
 // change.
 func TestOperationsWithIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// NB: This test manually adds mutations to a table descriptor to test that
-	// other schema changes work in the presence of those mutations. Since there's
-	// no job associated with the added mutations, those mutations stay on the
-	// table descriptor but don't do anything, which is what we want.
-
 	// The descriptor changes made must have an immediate effect.
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
+	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
@@ -633,15 +627,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 // and DELETE operations while an index mutation refers to a column mutation.
 func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// NB: This test manually adds mutations to a table descriptor to test that
-	// other schema changes work in the presence of those mutations. Since there's
-	// no job associated with the added mutations, those mutations stay on the
-	// table descriptor but don't do anything, which is what we want.
-
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer sql.TestDisableTableLeases()()
+	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
+	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
@@ -822,9 +815,8 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
-				return true
-			},
+			SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1029,9 +1021,10 @@ func TestTableMutationQueue(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
-				return true
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
 			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)

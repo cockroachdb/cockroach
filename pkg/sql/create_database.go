@@ -78,8 +78,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreate("database"))
 	desc := makeDatabaseDesc(n.n)
 
-	created, err := params.p.createDatabase(
-		params.ctx, &desc, n.n.IfNotExists, tree.AsStringWithFQNames(n.n, params.Ann()))
+	created, err := params.p.createDatabase(params.ctx, &desc, n.n.IfNotExists)
 	if err != nil {
 		return err
 	}

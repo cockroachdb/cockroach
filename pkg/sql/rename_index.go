@@ -100,8 +100,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
 
 func (n *renameIndexNode) Next(runParams) (bool, error) { return false, nil }

@@ -350,10 +350,7 @@ func removeSequenceOwnerIfExists(
 		return errors.AssertionFailedf("couldn't find reference from column to this sequence")
 	}
 	col.OwnsSequenceIds = append(col.OwnsSequenceIds[:refIdx], col.OwnsSequenceIds[refIdx+1:]...)
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
-	if err := p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, "removing sequence owner",
-	); err != nil {
+	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
 		return err
 	}
 	// Reset the SequenceOwner to empty
@@ -392,10 +389,7 @@ func addSequenceOwner(
 
 	opts.SequenceOwner.OwnerColumnID = col.ID
 	opts.SequenceOwner.OwnerTableID = tableDesc.GetID()
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
-	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, "adding sequence owner",
-	)
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
 
 // maybeAddSequenceDependencies adds references between the column and sequence descriptors,
@@ -473,10 +467,7 @@ func (p *planner) dropSequencesOwnedByCol(
 		if err != nil {
 			return err
 		}
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
-		if err := p.dropSequenceImpl(
-			ctx, seqDesc, true /* queueJob */, "dropping dependent sequence", tree.DropRestrict,
-		); err != nil {
+		if err := p.dropSequenceImpl(ctx, seqDesc, tree.DropRestrict); err != nil {
 			return err
 		}
 	}
@@ -535,10 +526,7 @@ func (p *planner) removeSequenceDependencies(
 				seqDesc.DependedOnBy[refTableIdx+1:]...)
 		}
 
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
-		if err := p.writeSchemaChange(
-			ctx, seqDesc, sqlbase.InvalidMutationID, "removing sequence dependency",
-		); err != nil {
+		if err := p.writeSchemaChange(ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}

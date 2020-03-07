@@ -521,12 +521,14 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				mu.Lock()
 				defer mu.Unlock()
-				return clearSchemaChangers
+				if clearSchemaChangers {
+					tscc.ClearSchemaChangers()
+				}
 			},
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 
@@ -611,12 +613,14 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			},
 		},
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				mu.Lock()
 				defer mu.Unlock()
-				return clearSchemaChangers
+				if clearSchemaChangers {
+					tscc.ClearSchemaChangers()
+				}
 			},
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
@@ -910,7 +914,7 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Un-skip this test when the GC job is implemented.
+			AsyncExecQuickly: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1086,7 +1090,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	tableSpan := tableDesc.TableSpan()
 	tests.CheckKeyCount(t, kvDB, tableSpan, 4)
 
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Allow async schema change waiting for GC to complete (when dropping an
 	// index) and clear the index keys.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
@@ -1404,8 +1407,8 @@ func TestIncrementTableVersion(t *testing.T) {
 		// transaction until the new version has been published to the
 		// entire cluster.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
-				return true
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
 			},
 			TwoVersionLeaseViolation: func() {
 				atomic.AddInt64(&violations, 1)
@@ -1506,8 +1509,8 @@ func TestTwoVersionInvariantRetryError(t *testing.T) {
 		// transaction until the new version has been published to the
 		// entire cluster.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
-				return true
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
 			},
 			TwoVersionLeaseViolation: func() {
 				atomic.AddInt64(&violations, 1)

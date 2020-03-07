@@ -91,6 +91,9 @@ type txnState struct {
 	// planNode in the midst of performing a computation.
 	mon *mon.BytesMonitor
 
+	// The schema change closures to run when this txn is done.
+	schemaChangers schemaChangerCollection
+
 	// adv is overwritten after every transition. It represents instructions for
 	// for moving the cursor over the stream of input statements to the next
 	// statement to be executed.
@@ -211,6 +214,9 @@ func (ts *txnState) resetForNewSQLTxn(
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
 	}
+
+	// Discard the old schemaChangers, if any.
+	ts.schemaChangers = schemaChangerCollection{}
 }
 
 // finishSQLTxn finalizes a transaction's results and closes the root span for

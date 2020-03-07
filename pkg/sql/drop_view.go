@@ -86,9 +86,7 @@ func (n *dropViewNode) startExec(params runParams) error {
 			continue
 		}
 
-		cascadeDroppedViews, err := params.p.dropViewImpl(
-			ctx, droppedDesc, true /* queueJob */, tree.AsStringWithFQNames(n.n, params.Ann()), n.n.DropBehavior,
-		)
+		cascadeDroppedViews, err := params.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err
 		}
@@ -170,19 +168,14 @@ func (p *planner) removeDependentView(
 	// that refer to the view that's being removed.
 	tableDesc.DependedOnBy = removeMatchingReferences(tableDesc.DependedOnBy, viewDesc.ID)
 	// Then proceed to actually drop the view and log an event for it.
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
-	return p.dropViewImpl(ctx, viewDesc, true /* queueJob */, "dropping dependent view", tree.DropCascade)
+	return p.dropViewImpl(ctx, viewDesc, tree.DropCascade)
 }
 
 // dropViewImpl does the work of dropping a view (and views that depend on it
 // if `cascade is specified`). Returns the names of any additional views that
 // were also dropped due to `cascade` behavior.
 func (p *planner) dropViewImpl(
-	ctx context.Context,
-	viewDesc *sqlbase.MutableTableDescriptor,
-	queueJob bool,
-	jobDesc string,
-	behavior tree.DropBehavior,
+	ctx context.Context, viewDesc *sqlbase.MutableTableDescriptor, behavior tree.DropBehavior,
 ) ([]string, error) {
 	var cascadeDroppedViews []string
 
@@ -199,10 +192,7 @@ func (p *planner) dropViewImpl(
 			continue
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
-		if err := p.writeSchemaChange(
-			ctx, dependencyDesc, sqlbase.InvalidMutationID, "removing references for view",
-		); err != nil {
+		if err := p.writeSchemaChange(ctx, dependencyDesc, sqlbase.InvalidMutationID); err != nil {
 			return cascadeDroppedViews, err
 		}
 	}
@@ -216,8 +206,7 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
-			// TODO (lucy): Have more consistent/informative names for dependent jobs.
-			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
+			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, behavior)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
@@ -226,7 +215,7 @@ func (p *planner) dropViewImpl(
 		}
 	}
 
-	if err := p.initiateDropTable(ctx, viewDesc, queueJob, jobDesc, true /* drainName */); err != nil {
+	if err := p.initiateDropTable(ctx, viewDesc, true /* drainName */); err != nil {
 		return cascadeDroppedViews, err
 	}
 

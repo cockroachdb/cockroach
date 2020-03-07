@@ -73,8 +73,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) renameColumn(

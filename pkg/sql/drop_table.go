@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -113,7 +114,18 @@ func (n *dropTableNode) startExec(params runParams) error {
 			continue
 		}
 
-		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc, true /* queueJob */, tree.AsStringWithFQNames(n.n, params.Ann()))
+		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
+		if _, err := params.p.createDropTablesJob(
+			ctx,
+			[]*sqlbase.MutableTableDescriptor{droppedDesc},
+			[]jobspb.DroppedTableDetails{droppedDetails},
+			tree.AsStringWithFQNames(n.n, params.Ann()),
+			true, /* drainNames */
+			sqlbase.InvalidID /* droppedDatabaseID */); err != nil {
+			return err
+		}
+
+		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc)
 		if err != nil {
 			return err
 		}
@@ -224,15 +236,14 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 		return err
 	}
 	idx.Interleave.Ancestors = nil
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID, "")
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
 func (p *planner) dropTableImpl(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, queueJob bool, jobDesc string,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
 ) ([]string, error) {
 	var droppedViews []string
 
@@ -297,8 +308,7 @@ func (p *planner) dropTableImpl(
 		if viewDesc.Dropped() {
 			continue
 		}
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
-		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, queueJob, "dropping dependent view", tree.DropCascade)
+		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, tree.DropCascade)
 		if err != nil {
 			return droppedViews, err
 		}
@@ -311,7 +321,7 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	err = p.initiateDropTable(ctx, tableDesc, queueJob, jobDesc, true /* drain name */)
+	err = p.initiateDropTable(ctx, tableDesc, true /* drain name */)
 	return droppedViews, err
 }
 
@@ -320,11 +330,7 @@ func (p *planner) dropTableImpl(
 // TRUNCATE which directly deletes the old name to id map and doesn't need
 // drain the old map.
 func (p *planner) initiateDropTable(
-	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
-	queueJob bool,
-	jobDesc string,
-	drainName bool,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, drainName bool,
 ) error {
 	if tableDesc.Dropped() {
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
@@ -397,6 +403,9 @@ func (p *planner) initiateDropTable(
 			jobIDs[jobID] = struct{}{}
 		}
 	}
+	for _, gcm := range tableDesc.GCMutations {
+		jobIDs[gcm.JobID] = struct{}{}
+	}
 	for jobID := range jobIDs {
 		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
 		if err != nil {
@@ -414,7 +423,7 @@ func (p *planner) initiateDropTable(
 	// change manager, which is notified via a system config gossip.
 	// The schema change manager will properly schedule deletion of
 	// the underlying data when the GC deadline expires.
-	return p.writeDropTable(ctx, tableDesc, queueJob, jobDesc)
+	return p.writeDropTable(ctx, tableDesc)
 }
 
 func (p *planner) removeFKForBackReference(
@@ -439,8 +448,7 @@ func (p *planner) removeFKForBackReference(
 	if err := removeFKForBackReferenceFromTable(originTableDesc, ref, tableDesc.TableDesc()); err != nil {
 		return err
 	}
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, originTableDesc, sqlbase.InvalidMutationID, "")
+	return p.writeSchemaChange(ctx, originTableDesc, sqlbase.InvalidMutationID)
 }
 
 // removeFKBackReferenceFromTable edits the supplied originTableDesc to
@@ -497,8 +505,7 @@ func (p *planner) removeFKBackReference(
 	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref.Name, tableDesc.TableDesc()); err != nil {
 		return err
 	}
-	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID, "")
+	return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID)
 }
 
 // removeFKBackReferenceFromTable edits the supplied referencedTableDesc to
@@ -566,10 +573,7 @@ func (p *planner) removeInterleaveBackReference(
 		}
 	}
 	if t != tableDesc {
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
-		return p.writeSchemaChange(
-			ctx, t, sqlbase.InvalidMutationID, "removing reference for interleaved table",
-		)
+		return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 	}
 	return nil
 }
@@ -620,4 +624,19 @@ func (p *planner) removeTableComment(
 	}
 
 	return err
+}
+
+// dropObject drops a descriptor based its type. Returns the names of any
+// additional views that were also dropped due to `cascade` behavior.
+func (p *planner) dropObject(
+	ctx context.Context, desc *MutableTableDescriptor, behavior tree.DropBehavior,
+) ([]string, error) {
+	if desc.IsView() {
+		// TODO(knz): dependent dropped views should be qualified here.
+		return p.dropViewImpl(ctx, desc, behavior)
+	} else if desc.IsSequence() {
+		return nil, p.dropSequenceImpl(ctx, desc, behavior)
+	}
+	// TODO(knz): dependent dropped table names should be qualified here.
+	return p.dropTableImpl(ctx, desc)
 }
