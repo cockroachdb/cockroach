@@ -646,6 +646,25 @@ func (cfg *Config) readEnvironmentVariables() {
 func (cfg *Config) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
 	for _, address := range cfg.JoinList {
+		srvAddrs, err := resolver.SRV(address)
+		if err != nil {
+			return nil, err
+		}
+
+		// setup resolvers with SRV results if there were any
+		if len(srvAddrs) > 0 {
+			for _, sa := range srvAddrs {
+				resolver, err := resolver.NewResolver(sa)
+				if err != nil {
+					return nil, err
+				}
+				bootstrapResolvers = append(bootstrapResolvers, resolver)
+			}
+
+			continue
+		}
+
+		// otherwise use the address
 		resolver, err := resolver.NewResolver(address)
 		if err != nil {
 			return nil, err
