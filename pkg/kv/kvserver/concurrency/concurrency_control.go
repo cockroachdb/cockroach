@@ -261,7 +261,7 @@ type RangeStateListener interface {
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's
 	// replica is the leaseholder going forward.
-	OnRangeLeaseUpdated(isleaseholder bool)
+	OnRangeLeaseUpdated(isLeaseholder bool)
 
 	// OnRangeSplit informs the concurrency manager that its range has split off
 	// a new range to its RHS.
@@ -439,6 +439,8 @@ type latchGuard interface{}
 //    R2 could slip past R1 and evaluate.
 //
 type lockTable interface {
+	requestQueuer
+
 	// ScanAndEnqueue scans over the spans that the request will access and
 	// enqueues the request in the lock wait-queue of any conflicting locks
 	// encountered.
@@ -544,9 +546,6 @@ type lockTable interface {
 	//   - the remaining locks are changed to timestamp equal to
 	//     txn.WriteTimestamp.
 	UpdateLocks(*roachpb.LockUpdate) error
-
-	// Clear removes all locks and lock wait-queues from the lockTable.
-	Clear()
 
 	// String returns a debug string representing the state of the lockTable.
 	String() string
@@ -732,6 +731,8 @@ type lockTableWaiter interface {
 // stronger guarantees around cleaning up enqueued txns when there are no
 // waiters.
 type txnWaitQueue interface {
+	requestQueuer
+
 	// EnqueueTxn creates a queue associated with the provided transaction. Once
 	// a queue is established, pushers of this transaction can wait in the queue
 	// and will be informed of state transitions that the transaction undergoes.
@@ -763,15 +764,17 @@ type txnWaitQueue interface {
 	// updates to the target transaction.
 	MaybeWaitForQuery(context.Context, *roachpb.QueryTxnRequest) *Error
 
-	// Enable allows transactions to be enqueued and waiting pushers added.
-	// The method is idempotent.
-	Enable()
-
-	// Clear empties all queues and causes all waiters to return. If disable is
-	// true, future transactions may not be enqueued or waiting pushers added.
-	Clear(disable bool)
-
 	// OnRangeDescUpdated informs the Queue that its range's descriptor has been
 	// updated.
 	OnRangeDescUpdated(*roachpb.RangeDescriptor)
+}
+
+// requestQueuer queues requests until some condition is met.
+type requestQueuer interface {
+	// Enable allows requests to be queued. The method is idempotent.
+	Enable()
+
+	// Clear empties the queue(s) and causes all waiting requests to
+	// return. If disable is true, future requests must not be enqueued.
+	Clear(disable bool)
 }

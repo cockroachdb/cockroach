@@ -312,12 +312,16 @@ func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 }
 
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnRangeLeaseUpdated(iAmTheLeaseHolder bool) {
-	if iAmTheLeaseHolder {
+func (m *managerImpl) OnRangeLeaseUpdated(isLeaseholder bool) {
+	if isLeaseholder {
+		m.lt.Enable()
 		m.twq.Enable()
 	} else {
-		m.lt.Clear()
-		m.twq.Clear(true /* disable */)
+		// Disable all queues - the concurrency manager will no longer be
+		// informed about all state transitions to locks and transactions.
+		const disable = true
+		m.lt.Clear(disable)
+		m.twq.Clear(disable)
 	}
 }
 
@@ -326,14 +330,19 @@ func (m *managerImpl) OnRangeSplit() {
 	// TODO(nvanbenschoten): it only essential that we clear the half of the
 	// lockTable which contains locks in the key range that is being split off
 	// from the current range. For now though, we clear it all.
-	m.lt.Clear()
-	m.twq.Clear(false /* disable */)
+	const disable = false
+	m.lt.Clear(disable)
+	m.twq.Clear(disable)
 }
 
 // OnRangeMerge implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeMerge() {
-	m.lt.Clear()
-	m.twq.Clear(true /* disable */)
+	// Disable all queues - the range is being merged into its LHS neighbor.
+	// It will no longer be informed about all state transitions to locks and
+	// transactions.
+	const disable = true
+	m.lt.Clear(disable)
+	m.twq.Clear(disable)
 }
 
 // OnReplicaSnapshotApplied implements the RangeStateListener interface.
@@ -350,7 +359,8 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 	// this, we expect it to be very rare that this actually clears any locks.
 	// Still, it is possible for the leaseholder replica to receive a snapshot
 	// when it is not also the raft leader.
-	m.lt.Clear()
+	const disable = false
+	m.lt.Clear(disable)
 }
 
 // LatchMetrics implements the MetricExporter interface.
