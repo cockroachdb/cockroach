@@ -1700,23 +1700,6 @@ func (s *Server) Start(ctx context.Context) error {
 		s.ClusterSettings(),
 	)
 
-	var bootstrapVersion roachpb.Version
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
-	}); err != nil {
-		return err
-	}
-	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-		select {
-		case <-s.stopper.ShouldQuiesce():
-			// Avoid turning an early shutdown into a fatal error. See #19579.
-			return errors.New("server is shutting down")
-		default:
-			log.Fatalf(ctx, "%+v", err)
-		}
-	}
-	log.Infof(ctx, "done ensuring all necessary migrations have run")
-
 	// Start garbage collecting system events.
 	s.startSystemLogsGC(ctx)
 
@@ -1758,6 +1741,37 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
+	// Start the jobs subsystem.
+	{
+		var regLiveness jobs.NodeLiveness = s.nodeLiveness
+		if testingLiveness := s.cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
+			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
+		}
+		if err := s.jobRegistry.Start(
+			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
+		); err != nil {
+			return err
+		}
+	}
+
+	// Run startup migrations (note: these depend on jobs subsystem running).
+	var bootstrapVersion roachpb.Version
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+	}); err != nil {
+		return err
+	}
+	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
+		select {
+		case <-s.stopper.ShouldQuiesce():
+			// Avoid turning an early shutdown into a fatal error. See #19579.
+			return errors.New("server is shutting down")
+		default:
+			log.Fatalf(ctx, "%+v", err)
+		}
+	}
+	log.Infof(ctx, "done ensuring all necessary migrations have run")
+
 	// Attempt to upgrade cluster version.
 	s.startAttemptUpgrade(ctx)
 
@@ -1793,18 +1807,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(timeThreshold)
-
-	{
-		var regLiveness jobs.NodeLiveness = s.nodeLiveness
-		if testingLiveness := s.cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
-			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
-		}
-		if err := s.jobRegistry.Start(
-			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
-		); err != nil {
-			return err
-		}
-	}
 
 	log.Event(ctx, "server ready")
 

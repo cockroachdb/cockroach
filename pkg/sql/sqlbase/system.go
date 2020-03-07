@@ -149,8 +149,10 @@ CREATE TABLE system.jobs (
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
 	payload           BYTES     NOT NULL,
+	progress          BYTES,
 	INDEX (status, created),
-	FAMILY (id, status, created, payload)
+	FAMILY (id, status, created, payload),
+	FAMILY progress (progress)
 );`
 
 	// web_sessions are used to track authenticated user actions over stateless
@@ -717,8 +719,9 @@ var (
 			{Name: "status", ID: 2, Type: *types.String},
 			{Name: "created", ID: 3, Type: *types.Timestamp, DefaultExpr: &nowString},
 			{Name: "payload", ID: 4, Type: *types.Bytes},
+			{Name: "progress", ID: 5, Type: *types.Bytes, Nullable: true},
 		},
-		NextColumnID: 5,
+		NextColumnID: 6,
 		Families: []ColumnFamilyDescriptor{
 			{
 				Name:        "fam_0_id_status_created_payload",
@@ -726,8 +729,15 @@ var (
 				ColumnNames: []string{"id", "status", "created", "payload"},
 				ColumnIDs:   []ColumnID{1, 2, 3, 4},
 			},
+			{
+				Name:            "progress",
+				ID:              1,
+				ColumnNames:     []string{"progress"},
+				ColumnIDs:       []ColumnID{5},
+				DefaultColumnID: 5,
+			},
 		},
-		NextFamilyID: 1,
+		NextFamilyID: 2,
 		PrimaryIndex: pk("id"),
 		Indexes: []IndexDescriptor{
 			{
