@@ -79,7 +79,7 @@ func TryDelegate(
 		return d.delegateShowRoleGrants(t)
 
 	case *tree.ShowRoles:
-		return d.delegateShowRoles(t)
+		return d.delegateShowRoles()
 
 	case *tree.ShowSchemas:
 		return d.delegateShowSchemas(t)
@@ -97,7 +97,7 @@ func TryDelegate(
 		return d.delegateShowTables(t)
 
 	case *tree.ShowUsers:
-		return d.delegateShowUsers(t)
+		return d.delegateShowRoles()
 
 	case *tree.ShowVar:
 		return d.delegateShowVar(t)

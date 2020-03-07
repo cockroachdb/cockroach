@@ -319,12 +319,13 @@ table_name  create_statement
 v           CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
 
 
-query T colnames
+query TTT colnames
 SELECT * FROM [SHOW USERS]
 ----
-user_name
-root
-testuser
+username  options     member_of
+admin     CREATEROLE  {}
+testuser  ·           {}
+root      CREATEROLE  {admin}
 
 
 query TTTI colnames
