@@ -3,44 +3,48 @@
 statement ok
 CREATE USER user1
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
-user1
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
+user1     ·           {}
 
 statement ok
 DROP USER user1
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 statement ok
 CREATE USER user1
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
-user1
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
+user1     ·           {}
 
 statement ok
 DROP USER USEr1
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 statement error user user1 does not exist
 DROP USER user1
@@ -69,40 +73,43 @@ CREATE USER user3
 statement ok
 CREATE USER user4
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
-user1
-user2
-user3
-user4
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
+user1     ·           {}
+user2     ·           {}
+user3     ·           {}
+user4     ·           {}
 
 statement ok
 DROP USER user1,user2
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
-user3
-user4
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
+user3     ·           {}
+user4     ·           {}
 
 statement error user user1 does not exist
 DROP USER user1,user3
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
-user3
-user4
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
+user3     ·           {}
+user4     ·           {}
 
 statement ok
 CREATE USER user1
@@ -127,12 +134,13 @@ statement ok
 PREPARE du AS DROP USER $1;
  EXECUTE du('user4')
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 user testuser
 
