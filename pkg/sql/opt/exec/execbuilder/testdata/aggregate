@@ -39,7 +39,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
 ·                    distributed  false                        ·                                                                                                                                                    ·
-·                    vectorized   false                        ·                                                                                                                                                    ·
+·                    vectorized   true                         ·                                                                                                                                                    ·
 render               ·            ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
  │                   render 0     (min)[int]                   ·                                                                                                                                                    ·
  │                   render 1     (max)[int]                   ·                                                                                                                                                    ·
@@ -1179,7 +1179,7 @@ EXPLAIN (VERBOSE)
         company_id
 ----
 ·                    distributed  false                         ·                               ·
-·                    vectorized   false                         ·                               ·
+·                    vectorized   true                          ·                               ·
 sort                 ·            ·                             (company_id, string_agg)        +company_id
  │                   order        +company_id                   ·                               ·
  └── group           ·            ·                             (company_id, string_agg)        ·
