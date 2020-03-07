@@ -251,17 +251,12 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
-		params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
+		params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
 	for _, updated := range affected {
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
-		if err := params.p.writeSchemaChange(
-			params.ctx, updated, sqlbase.InvalidMutationID, "updating referenced table",
-		); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, updated, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
@@ -489,11 +484,7 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 			return err
 		}
 		if didUpgrade {
-			// TODO (lucy): Have more consistent/informative names for dependent jobs.
-			err := p.writeSchemaChange(
-				ctx, sqlbase.NewMutableExistingTableDescriptor(*tbl), sqlbase.InvalidMutationID,
-				"updating foreign key references on table",
-			)
+			err := p.writeSchemaChange(ctx, sqlbase.NewMutableExistingTableDescriptor(*tbl), sqlbase.InvalidMutationID)
 			if err != nil {
 				return err
 			}
@@ -936,20 +927,14 @@ func (p *planner) finalizeInterleave(
 	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
 		sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
-	if err := p.writeSchemaChange(
-		ctx, ancestorTable, sqlbase.InvalidMutationID, "updating ancestor table",
-	); err != nil {
+	if err := p.writeSchemaChange(ctx, ancestorTable, sqlbase.InvalidMutationID); err != nil {
 		return err
 	}
 
 	if desc.State == sqlbase.TableDescriptor_ADD {
 		desc.State = sqlbase.TableDescriptor_PUBLIC
 
-		// No job description, since this is presumably part of some larger schema change.
-		if err := p.writeSchemaChange(
-			ctx, desc, sqlbase.InvalidMutationID, "",
-		); err != nil {
+		if err := p.writeSchemaChange(ctx, desc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
@@ -1661,7 +1646,6 @@ func makeTableDesc(
 		if err != nil {
 			return ret, err
 		}
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if seqName != nil {
 			if err := doCreateSequence(
 				params,
@@ -1671,7 +1655,6 @@ func makeTableDesc(
 				seqName,
 				temporary,
 				seqOpts,
-				"creating sequence",
 			); err != nil {
 				return ret, err
 			}
