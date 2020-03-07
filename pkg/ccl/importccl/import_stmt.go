@@ -1061,6 +1061,19 @@ func (r *importResumer) Resume(
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
 	}
+
+	telemetry.CountBucketed("import.rows", r.res.Rows)
+	const mb = 1 << 20
+	telemetry.CountBucketed("import.size-mb", r.res.DataSize/mb)
+	resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(r.res.Rows)),
+		tree.NewDInt(tree.DInt(r.res.IndexEntries)),
+		tree.NewDInt(tree.DInt(r.res.DataSize)),
+	}
+
 	return nil
 }
 
@@ -1261,26 +1274,6 @@ func (r *importResumer) dropTables(ctx context.Context, txn *client.Txn) error {
 			existingDesc)
 	}
 	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
-}
-
-// OnTerminal is part of the jobs.Resumer interface.
-func (r *importResumer) OnTerminal(
-	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
-) {
-	if status == jobs.StatusSucceeded {
-		telemetry.CountBucketed("import.rows", r.res.Rows)
-		const mb = 1 << 20
-		telemetry.CountBucketed("import.size-mb", r.res.DataSize/mb)
-
-		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*r.job.ID())),
-			tree.NewDString(string(jobs.StatusSucceeded)),
-			tree.NewDFloat(tree.DFloat(1.0)),
-			tree.NewDInt(tree.DInt(r.res.Rows)),
-			tree.NewDInt(tree.DInt(r.res.IndexEntries)),
-			tree.NewDInt(tree.DInt(r.res.DataSize)),
-		}
-	}
 }
 
 var _ jobs.Resumer = &importResumer{}

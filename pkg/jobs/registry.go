@@ -665,12 +665,6 @@ type Resumer interface {
 	// is a sql.PlanHookState.
 	Resume(ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums) error
 
-	// OnTerminal is called after a job has successfully been marked as
-	// terminal. It should be used to perform optional cleanup and return final
-	// results to the user. There is no guarantee that this function is ever run
-	// (for example, if a node died immediately after Success commits).
-	OnTerminal(ctx context.Context, status Status, resultsCh chan<- tree.Datums)
-
 	// OnFailOrCancel is called when a job fails or is cancel-requested.
 	//
 	// This method will be called when a registry notices the cancel request,
@@ -774,7 +768,6 @@ func (r *Registry) stepThroughStateMachine(
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as canceled: %s", *job.ID(), jobErr)
 		}
-		resumer.OnTerminal(ctx, status, resultsCh)
 		return errors.Errorf("job %s", status)
 	case StatusSucceeded:
 		if jobErr != nil {
@@ -789,7 +782,6 @@ func (r *Registry) stepThroughStateMachine(
 			// better.
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
 		}
-		resumer.OnTerminal(ctx, status, resultsCh)
 		return nil
 	case StatusReverting:
 		if err := job.Reverted(ctx, jobErr, nil); err != nil {
@@ -834,7 +826,6 @@ func (r *Registry) stepThroughStateMachine(
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", *job.ID(), jobErr)
 		}
-		resumer.OnTerminal(ctx, status, resultsCh)
 		return jobErr
 	default:
 		return errors.AssertionFailedf("job %d: has unsupported status %s", *job.ID(), status)

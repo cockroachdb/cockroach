@@ -488,12 +488,6 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
 
-// OnTerminal is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnTerminal(
-	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
-) {
-}
-
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &createStatsResumer{job: job}

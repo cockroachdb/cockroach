@@ -1010,6 +1010,15 @@ func (r *restoreResumer) Resume(
 		}
 	}
 
+	resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(r.res.Rows)),
+		tree.NewDInt(tree.DInt(r.res.IndexEntries)),
+		tree.NewDInt(tree.DInt(r.res.DataSize)),
+	}
+
 	return nil
 }
 
@@ -1199,27 +1208,6 @@ func (r *restoreResumer) restoreSystemTables(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// OnTerminal is part of the jobs.Resumer interface.
-func (r *restoreResumer) OnTerminal(
-	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
-) {
-	if status == jobs.StatusSucceeded {
-		// TODO(benesch): emit periodic progress updates.
-
-		// TODO(mjibson): if a restore was resumed, then these counts will only have
-		// the current coordinator's counts.
-
-		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*r.job.ID())),
-			tree.NewDString(string(jobs.StatusSucceeded)),
-			tree.NewDFloat(tree.DFloat(1.0)),
-			tree.NewDInt(tree.DInt(r.res.Rows)),
-			tree.NewDInt(tree.DInt(r.res.IndexEntries)),
-			tree.NewDInt(tree.DInt(r.res.DataSize)),
-		}
-	}
 }
 
 var _ jobs.Resumer = &restoreResumer{}
