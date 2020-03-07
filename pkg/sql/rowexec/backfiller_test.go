@@ -38,8 +38,11 @@ func TestWriteResumeSpan(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			// Disable all schema change execution.
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				SchemaChangeJobNoOp: func() bool {
-					return true
+				SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+					tscc.ClearSchemaChangers()
+				},
+				AsyncExecNotification: func() error {
+					return errors.New("async schema changer disabled")
 				},
 			},
 			// Disable backfill migrations, we still need the jobs table migration.

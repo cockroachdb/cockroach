@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -58,12 +59,128 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSchemaChangeProcess adds mutations manually to a table descriptor and
-// ensures that RunStateMachineBeforeBackfill processes the mutation.
-// TODO (lucy): This is the only test that creates its own schema changer and
-// calls methods on it. Now that every schema changer "belongs" to a single
-// instance of a job resumer there's less of a reason to test this way. Should
-// this test still even exist?
+// asyncSchemaChangerDisabled can be used to disable asynchronous processing
+// of schema changes.
+func asyncSchemaChangerDisabled() error {
+	return errors.New("async schema changer disabled")
+}
+
+func TestSchemaChangeLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	jobRegistry := s.JobRegistry().(*jobs.Registry)
+
+	const dbDescID = keys.MinNonPredefinedUserDescID
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	var leaseDurationString string
+	sqlRun.QueryRow(t, `SHOW CLUSTER SETTING schemachanger.lease.duration`).Scan(&leaseDurationString)
+	leaseInterval, err := tree.ParseDInterval(leaseDurationString)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseDuration := time.Duration(leaseInterval.Duration.Nanos())
+	sqlRun.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`)
+
+	var lease sqlbase.TableDescriptor_SchemaChangeLease
+	var id = sqlbase.ID(dbDescID + 1)
+	var node = roachpb.NodeID(2)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	cs := cluster.MakeTestingClusterSettings()
+	u := cs.MakeUpdater()
+	// Set to always expire the lease.
+	if err := u.Set("schemachanger.lease.renew_fraction", "2.0", "f"); err != nil {
+		t.Fatal(err)
+	}
+	changer := sql.NewSchemaChangerForTesting(
+		id, 0, node, *kvDB, nil, jobRegistry,
+		&execCfg, cs)
+
+	ctx := context.TODO()
+
+	// Acquire a lease.
+	lease, err = changer.AcquireLease(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !validExpirationTime(lease.ExpirationTime, leaseDuration) {
+		t.Fatalf("invalid expiration time: %s. now: %s",
+			timeutil.Unix(0, lease.ExpirationTime), timeutil.Now())
+	}
+
+	// Acquiring another lease will fail.
+	if _, err := changer.AcquireLease(ctx); !testutils.IsError(
+		err, "an outstanding schema change lease exists",
+	) {
+		t.Fatal(err)
+	}
+
+	// Extend the lease.
+	oldLease := lease
+	if err := changer.ExtendLease(ctx, &lease); err != nil {
+		t.Fatal(err)
+	}
+
+	if !validExpirationTime(lease.ExpirationTime, leaseDuration) {
+		t.Fatalf("invalid expiration time: %s", timeutil.Unix(0, lease.ExpirationTime))
+	}
+
+	// The new lease is a brand new lease.
+	if oldLease == lease {
+		t.Fatalf("lease was not extended: %v", lease)
+	}
+
+	// Extending an old lease fails.
+	if err := changer.ExtendLease(ctx, &oldLease); !testutils.IsError(
+		err, "the schema change lease has expired") {
+		t.Fatal(err)
+	}
+
+	// Releasing an old lease fails.
+	if err := changer.ReleaseLease(ctx, oldLease); err == nil {
+		t.Fatal("releasing a old lease succeeded")
+	}
+
+	// Release lease.
+	if err := changer.ReleaseLease(ctx, lease); err != nil {
+		t.Fatal(err)
+	}
+
+	// Extending the lease fails.
+	if err := changer.ExtendLease(ctx, &lease); err == nil {
+		t.Fatalf("was able to extend an already released lease: %d, %v", id, lease)
+	}
+
+	// acquiring the lease succeeds
+	lease, err = changer.AcquireLease(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Reset to not expire the lease.
+	if err := u.Set("schemachanger.lease.renew_fraction", "0.4", "f"); err != nil {
+		t.Fatal(err)
+	}
+	oldLease = lease
+	if err := changer.ExtendLease(ctx, &lease); err != nil {
+		t.Fatal(err)
+	}
+	// The old lease is renewed.
+	if oldLease != lease {
+		t.Fatalf("acquired new lease: %v, old lease: %v", lease, oldLease)
+	}
+}
+
+func validExpirationTime(expirationTime int64, leaseDuration time.Duration) bool {
+	now := timeutil.Now()
+	return expirationTime > now.Add(leaseDuration/2).UnixNano() && expirationTime < now.Add(leaseDuration*3/2).UnixNano()
+}
+
 func TestSchemaChangeProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
@@ -71,6 +188,10 @@ func TestSchemaChangeProcess(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 
 	params, _ := tests.CreateTestServerParams()
+	// Disable external processing of mutations.
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -179,9 +300,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 }
 
-// TODO (lucy): In the current state of the code it doesn't make sense to try to
-// test the "async" path separately. This test doesn't have any special
-// settings. Should it even still exist?
 func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
@@ -190,6 +308,14 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecQuickly: true,
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -311,12 +437,17 @@ func runSchemaChangeWithOperations(
 	t *testing.T,
 	sqlDB *gosql.DB,
 	kvDB *client.DB,
+	jobRegistry *jobs.Registry,
 	schemaChange string,
 	maxValue int,
 	keyMultiple int,
 	backfillNotification chan struct{},
+	execCfg *sql.ExecutorConfig,
 	useUpsert bool,
 ) {
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Run the schema change in a separate goroutine.
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -334,6 +465,13 @@ func runSchemaChangeWithOperations(
 
 	// Run a variety of operations during the backfill.
 	ctx := context.TODO()
+
+	// Grabbing a schema change lease on the table will fail, disallowing
+	// another schema change from being simultaneously executed.
+	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry, execCfg, cluster.MakeTestingClusterSettings())
+	if l, err := sc.AcquireLease(ctx); err == nil {
+		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
+	}
 
 	// Update some rows.
 	var updatedKeys []int
@@ -452,10 +590,11 @@ func TestRaceWithBackfill(t *testing.T) {
 			backfillNotification = nil
 		}
 	}
+	// Disable asynchronous schema change execution.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -473,6 +612,8 @@ func TestRaceWithBackfill(t *testing.T) {
 	defer tc.Stopper().Stop(context.TODO())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -513,10 +654,12 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0)",
 		maxValue,
 		2,
 		initBackfillNotification(),
+		&execCfg,
 		true,
 	)
 
@@ -525,10 +668,12 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
 		2,
 		initBackfillNotification(),
+		&execCfg,
 		true,
 	)
 
@@ -537,10 +682,12 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		3,
 		initBackfillNotification(),
+		&execCfg,
 		true,
 	)
 
@@ -549,10 +696,12 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t,
 		sqlDB,
 		kvDB,
+		jobRegistry,
 		"CREATE INDEX bar ON t.test(k) STORING (v)",
 		maxValue,
 		4,
 		initBackfillNotification(),
+		&execCfg,
 		true,
 	)
 
@@ -617,10 +766,12 @@ func TestDropWhileBackfill(t *testing.T) {
 			backfillNotification = nil
 		}
 	}
+	// Disable asynchronous schema change execution to allow synchronous path
+	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -732,8 +883,8 @@ func TestBackfillErrors(t *testing.T) {
 
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 	}
 
@@ -844,8 +995,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Stress this test. This test used to require fast GC, but
-			// it passes without it.
+			AsyncExecQuickly:  true,
 			BackfillChunkSize: maxValue,
 		},
 		DistSQL: &execinfra.TestingKnobs{
@@ -1198,6 +1348,9 @@ func TestSchemaChangeRetry(t *testing.T) {
 
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Disable asynchronous schema change execution to allow
+			// synchronous path to run schema changes.
+			AsyncExecNotification:   asyncSchemaChangerDisabled,
 			WriteCheckpointInterval: time.Nanosecond,
 		},
 		DistSQL: &execinfra.TestingKnobs{RunBeforeBackfillChunk: checkSpan},
@@ -1254,6 +1407,9 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				atomic.AddUint32(&numBackfills, 1)
 				return nil
 			},
+			// Disable asynchronous schema change execution to allow
+			// synchronous path to run schema changes.
+			AsyncExecNotification:   asyncSchemaChangerDisabled,
 			WriteCheckpointInterval: time.Nanosecond,
 			BackfillChunkSize:       maxValue / 10,
 		},
@@ -1342,11 +1498,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // Test schema change purge failure doesn't leave DB in a bad state.
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("")
-	// TODO (lucy): This test needs more complicated schema changer knobs than
-	// currently implemented. Previously this test disabled the async schema
-	// changer so that we don't retry the cleanup of the failed schema change
-	// until a certain point in the test.
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	var enableAsyncSchemaChanges uint32
@@ -1358,6 +1509,15 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	var expectedAttempts int32 = 3
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
+			// Speed up evaluation of async schema changes so that it
+			// processes a purged schema change quickly.
+			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
 		},
 		DistSQL: &execinfra.TestingKnobs{
@@ -1422,7 +1582,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Allow async schema change purge to attempt backfill and error.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// deal with schema change knob
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -1496,8 +1655,8 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	expectedAttempts := 3
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 			// Aggressively checkpoint, so that a schema change
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
@@ -1574,15 +1733,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // correctly when one of them violates a constraint.
 func TestSchemaChangeReverseMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// TODO (lucy): This test needs more complicated schema changer knobs than
-	// currently implemented. What this test should be doing is starting a schema
-	// change, and, before it hits a violation that requires a rollback, starting
-	// another schema change that depends on the successful completion of the
-	// first. At the end, all the dependent schema change jobs should have been
-	// rolled back. Right now we're just testing that schema changes fail
-	// correctly when run sequentially, which is not as interesting. The previous
-	// comments are kept around to describe the intended results of the test, but
-	// they don't reflect what's happening now.
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	// Disable synchronous schema change processing so that the mutations get
@@ -1590,6 +1740,16 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
+			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
@@ -1617,60 +1777,55 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	testCases := []struct {
-		sql       string
-		errString string
+		sql    string
+		status jobs.Status
 	}{
 		// Create a column that is not NULL. This schema change doesn't return an
 		// error only because we've turned off the synchronous execution path; it
 		// will eventually fail when run by the asynchronous path.
 		{`ALTER TABLE t.public.test ADD COLUMN a INT8 UNIQUE DEFAULT 0, ADD COLUMN c INT8`,
-			"violates unique constraint"},
+			jobs.StatusFailed},
 		// Add an index over a column that will be purged. This index will
 		// eventually not get added. The column aa will also be dropped as
 		// a result.
 		{`ALTER TABLE t.public.test ADD COLUMN aa INT8, ADD CONSTRAINT foo UNIQUE (a)`,
-			"contains unknown column"},
+			jobs.StatusFailed},
 
 		// The purge of column 'a' doesn't influence these schema changes.
 
 		// Drop column 'v' moves along just fine.
 		{`ALTER TABLE t.public.test DROP COLUMN v`,
-			""},
+			jobs.StatusSucceeded},
 		// Add unique column 'b' moves along creating column b and the index on
 		// it.
 		{`ALTER TABLE t.public.test ADD COLUMN b INT8 UNIQUE`,
-			""},
+			jobs.StatusSucceeded},
 		// #27033: Add a column followed by an index on the column.
 		{`ALTER TABLE t.public.test ADD COLUMN d STRING NOT NULL DEFAULT 'something'`,
-			""},
+			jobs.StatusSucceeded},
 
 		{`CREATE INDEX ON t.public.test (d)`,
-			""},
+			jobs.StatusSucceeded},
 
 		// Add an index over a column 'c' that will be purged. This index will
 		// eventually not get added. The column bb will also be dropped as
 		// a result.
-		{`ALTER TABLE t.public.test ADD COLUMN bb INT8, ADD CONSTRAINT bar UNIQUE (never_existed)`,
-			"contains unknown column"},
+		{`ALTER TABLE t.public.test ADD COLUMN bb INT8, ADD CONSTRAINT bar UNIQUE (c)`,
+			jobs.StatusFailed},
 		// Cascading of purges. column 'c' -> column 'bb' -> constraint 'idx_bb'.
 		{`ALTER TABLE t.public.test ADD CONSTRAINT idx_bb UNIQUE (bb)`,
-			"contains unknown column"},
+			jobs.StatusFailed},
 	}
 
 	for _, tc := range testCases {
-		_, err := sqlDB.Exec(tc.sql)
-		if tc.errString == "" {
-			if err != nil {
-				t.Fatal(err)
-			}
-		} else {
-			if err == nil {
-				t.Fatal("expected error")
-			}
-			if !strings.Contains(err.Error(), tc.errString) {
-				t.Fatal(err)
-			}
+		if _, err := sqlDB.Exec(tc.sql); err != nil {
+			t.Fatal(err)
 		}
+	}
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if e := 13; e != len(tableDesc.Mutations) {
+		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
 	}
 
 	// Enable async schema change processing for purged schema changes.
@@ -1779,7 +1934,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		t.Fatal(err)
 	}
 
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Add immediate GC TTL to allow index creation purge to complete.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
@@ -1803,11 +1957,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	// State of jobs table
 	runner := sqlutils.SQLRunner{DB: sqlDB}
 	for i, tc := range testCases {
-		status := jobs.StatusSucceeded
-		if tc.errString != "" {
-			status = jobs.StatusFailed
-		}
-		if err := jobutils.VerifySystemJob(t, &runner, i, jobspb.TypeSchemaChange, status, jobs.Record{
+		if err := jobutils.VerifySystemJob(t, &runner, i, jobspb.TypeSchemaChange, tc.status, jobs.Record{
 			Username:    security.RootUser,
 			Description: tc.sql,
 			DescriptorIDs: sqlbase.IDs{
@@ -2035,8 +2185,8 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	const maxValue = (expectedColumnBackfillAttempts/2+1)*chunkSize + 1
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 			// Aggressively checkpoint, so that a schema change
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
@@ -2224,6 +2374,7 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
+			AsyncExecQuickly:  true,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
@@ -2268,7 +2419,6 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 
 		wg.Wait()
 
-		t.Skip("skipping last portion of job until schema change GC job is implemented")
 		// There should be 4 k/v pairs per row:
 		// * the original rowid index.
 		// * the old index on v.
@@ -2323,7 +2473,6 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 			t.Fatal(err)
 		}
 
-		t.Skip("skipping last portion of job until schema change GC job is implemented")
 		// There should be 4 k/v pairs per row:
 		// * the original rowid index.
 		// * the new primary index on v2.
@@ -2428,7 +2577,8 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -2438,6 +2588,7 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -2454,10 +2605,12 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		t,
 		sqlDB,
 		kvDB,
+		s.JobRegistry().(*jobs.Registry),
 		"ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)",
 		maxValue,
 		2,
 		initBackfillNotification(),
+		&execCfg,
 		// We don't let runSchemaChangeWithOperations use UPSERT statements, because
 		// way in which runSchemaChangeWithOperations uses them assumes that k is already
 		// the primary key of the table, leading to some errors during the UPSERT
@@ -2637,7 +2790,7 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Un-skip this test when the GC job is implemented.
+			AsyncExecQuickly: true,
 		},
 	}
 
@@ -2651,7 +2804,6 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
 `); err != nil {
 		t.Fatal(err)
 	}
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Wait for the async schema changer to run.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
@@ -2680,6 +2832,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
 		},
 		DistSQL: &execinfra.TestingKnobs{
@@ -2746,22 +2899,17 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	})
 }
 
-// TestMultiplePrimaryKeyChanges ensures that we can run many primary key
-// changes back to back. We cannot run this in a logic test because we need the
-// job that drops old indexes to finish so that the following primary key change
-// occurs quickly.
+// TestMultiplePrimaryKeyChanges ensures that we can run many primary key changes back to back.
+// We cannot run this in a logic test because we need the async schema changer to run so that
+// the following primary key change occurs quickly.
 func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Adopt the job to drop old indexes quickly.
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
-
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly: true,
+		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -3355,7 +3503,8 @@ func TestSchemaChangeEvalContext(t *testing.T) {
 	// Disable asynchronous schema change execution.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 	}
 
@@ -3428,14 +3577,22 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // gets to run before the first schema change.
 func TestSchemaChangeCompletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("")
-	// TODO (lucy): This test needs more complicated schema changer knobs than is
-	// currently implemented.
 	params, _ := tests.CreateTestServerParams()
 	var notifySchemaChange chan struct{}
 	var restartSchemaChange chan struct{}
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				notify := notifySchemaChange
+				restart := restartSchemaChange
+				if notify != nil {
+					close(notify)
+					<-restart
+				}
+			},
+			// Turn off asynchronous schema change manager.
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.TODO()
@@ -3518,8 +3675,9 @@ func TestTruncateInternals(t *testing.T) {
 	// Disable schema changes.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
-				return true
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
 			},
 		},
 	}
@@ -3604,9 +3762,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if !droppedDesc.Dropped() {
 		t.Fatalf("bad state = %s", droppedDesc.State)
 	}
-	// TODO (lucy): Test that the GC job is correctly queued, once it's
-	// implemented. This test should actually just disable GC instead of disabling
-	// the initial schema change.
+
+	// Job still running, waiting for GC.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
+		Username:    security.RootUser,
+		Description: "TRUNCATE TABLE t.public.test",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Test that a table truncation completes properly.
@@ -3616,7 +3783,7 @@ func TestTruncateCompletion(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Un-skip this test when the GC job is implemented.
+			AsyncExecQuickly: true,
 		},
 	}
 
@@ -3650,7 +3817,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Add a zone config.
 	var cfg zonepb.ZoneConfig
 	cfg, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
@@ -3760,8 +3926,10 @@ func TestTruncateWhileColumnBackfill(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		// Runs schema changes asynchronously.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): if/when this test gets reinstated, figure out what knobs are
-			// needed.
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecQuickly: true,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -4142,7 +4310,14 @@ func TestCancelSchemaChange(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			WriteCheckpointInterval: time.Nanosecond, // checkpoint after every chunk.
-			BackfillChunkSize:       10,
+			AsyncExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
+			AsyncExecQuickly:  true,
+			BackfillChunkSize: 10,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -4295,7 +4470,6 @@ func TestCancelSchemaChange(t *testing.T) {
 
 	// Verify that the data from the canceled CREATE INDEX is cleaned up.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
-	// TODO (lucy): when this test is no longer canceled, have it correctly handle doing GC immediately
 	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -4382,6 +4556,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 	cancelSessionDone := make(chan struct{})
 
 	params, _ := tests.CreateTestServerParams()
+	seenContextCancel := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -4392,10 +4567,13 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 				}
 				return nil
 			},
-			// TODO (lucy): We need an OnError knob so we can verify that we got a
-			// context cancellation error, but it should be for jobs, not for schema
-			// changes. For now, don't try to intercept the error. It's sufficient to
-			// test that the schema change terminates.
+			OnError: func(err error) {
+				if err == context.Canceled && !seenContextCancel {
+					seenContextCancel = true
+					return
+				}
+				t.Errorf("saw unexpected error: %+v", err)
+			},
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
@@ -4451,6 +4629,10 @@ CANCEL SESSIONS (SELECT session_id FROM [SHOW SESSIONS] WHERE last_active_query 
 	close(cancelSessionDone)
 
 	wg.Wait()
+
+	if !seenContextCancel {
+		t.Fatal("didnt see context cancel error")
+	}
 }
 
 func TestSchemaChangeGRPCError(t *testing.T) {
@@ -5110,6 +5292,127 @@ CREATE TABLE t.test (
 	}
 }
 
+func TestSchemaChangeJobRunningStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	var scNotification chan struct{}
+	var runBeforeBackfill func() error
+	var runBeforeBackfillChunk func() error
+	var runBeforeIndexValidation func() error
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(_ sql.TestingSchemaChangerCollection) {
+				if scNotification != nil {
+					notify := scNotification
+					scNotification = nil
+					// Notify that the schema change is about to run and
+					// so the job has been created in the jobs table.
+					close(notify)
+				}
+			},
+			RunBeforeBackfill: func() error {
+				return runBeforeBackfill()
+			},
+			RunBeforeIndexValidation: func() error {
+				return runBeforeIndexValidation()
+			},
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				return runBeforeBackfillChunk()
+			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Acquire a lease on the table to block the schema changer.
+	if _, err := tx.Exec("SELECT count(*) FROM t.test"); err != nil {
+		t.Fatal(err)
+	}
+
+	scNotification = make(chan struct{})
+	notify := scNotification
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if _, err := sqlDB.Exec("CREATE INDEX idx_v ON t.test(v)"); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	<-notify
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	testutils.SucceedsSoon(t, func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusDeleteOnly, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	})
+
+	runBeforeBackfill = func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusDeleteAndWriteOnly, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	}
+
+	runBeforeBackfillChunk = func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusBackfill, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	}
+
+	runBeforeIndexValidation = func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	}
+
+	// release the lease on the table to allow the schema change to move forward.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	wg.Wait()
+}
+
 // Test schema change backfills are not affected by various operations
 // that run simultaneously.
 func TestIntentRaceWithIndexBackfill(t *testing.T) {
@@ -5355,8 +5658,6 @@ ALTER TABLE t.test2 ADD FOREIGN KEY (k) REFERENCES t.test;
 // was backed up right after an index deletion.
 func TestOrphanedGCMutationsRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// TODO (lucy): get rid of this test once GCMutations goes away
-	t.Skip("")
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	// Disable synchronous schema change processing so that the mutations get
@@ -5364,6 +5665,13 @@ func TestOrphanedGCMutationsRemoved(t *testing.T) {
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
+			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
 		},
 	}
@@ -5427,7 +5735,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
 	// Add immediate GC TTL to allow index creation purge to complete.
-	// TODO (lucy): if this test were't skipped we'd need to GC quickly here
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}

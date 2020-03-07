@@ -94,17 +94,21 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	}
 
 	addedMutations := len(n.tableDesc.Mutations) > origNumMutations
-	if !addedMutations && !descriptorChanged {
+	mutationID := sqlbase.InvalidMutationID
+	var err error
+	if addedMutations {
+		mutationID, err = params.p.createOrUpdateSchemaChangeJob(
+			params.ctx, n.tableDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
+	} else if !descriptorChanged {
 		// Nothing to be done
 		return nil
 	}
-	mutationID := sqlbase.InvalidMutationID
-	if addedMutations {
-		mutationID = n.tableDesc.ClusterVersion.NextMutationID
+	if err != nil {
+		return err
 	}
-	if err := params.p.writeSchemaChange(
-		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
+
+	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
 		return err
 	}
 

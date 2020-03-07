@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -113,12 +112,8 @@ func (n *createViewNode) startExec(params runParams) error {
 		desc.DependsOn = append(desc.DependsOn, backrefID)
 	}
 
-	// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
-	// do some basic string formatting (not accurate in the general case).
 	if err = params.p.createDescriptorWithID(
-		params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings,
-		fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
-	); err != nil {
+		params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
@@ -134,10 +129,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			dep.ID = desc.ID
 			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 		}
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
-		if err := params.p.writeSchemaChange(
-			params.ctx, backRefMutable, sqlbase.InvalidMutationID, "updating view reference",
-		); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, backRefMutable, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}

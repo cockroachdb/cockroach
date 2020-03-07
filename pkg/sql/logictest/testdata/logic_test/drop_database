@@ -34,11 +34,10 @@ postgres
 system
 test
 
-# TODO (lucy): Update this once we have GC jobs
 query TT
 SELECT status, running_status FROM [SHOW JOBS]
 ----
-succeeded  NULL
+running  waiting for GC TTL
 
 statement ok
 CREATE DATABASE "foo bar"

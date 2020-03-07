@@ -2669,8 +2669,9 @@ func TestImportControlJob(t *testing.T) {
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
 	serverArgs.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		// TODO (lucy): if/when this test gets reinstated, figure out what knobs are
-		// needed.
+		AsyncExecNotification: func() error {
+			return errors.New("async schema changer disabled")
+		},
 	}
 
 	var allowResponse chan struct{}
