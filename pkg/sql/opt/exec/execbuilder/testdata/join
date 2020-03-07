@@ -189,7 +189,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
 ----
 ·                    distributed  false              ·                   ·
-·                    vectorized   false              ·                   ·
+·                    vectorized   true               ·                   ·
 render               ·            ·                  (x, two, plus1)     ·
  │                   render 0     COALESCE(x, x)     ·                   ·
  │                   render 1     two                ·                   ·
@@ -530,7 +530,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
 ·                         distributed  false                ·                       ·
-·                         vectorized   false                ·                       ·
+·                         vectorized   true                 ·                       ·
 render                    ·            ·                    (a, b, n, sq)           ·
  │                        render 0     a                    ·                       ·
  │                        render 1     b                    ·                       ·
@@ -928,7 +928,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 ·                     distributed     false              ·                   ·
-·                     vectorized      false              ·                   ·
+·                     vectorized      true               ·                   ·
 filter                ·               ·                  (x, y, u, v)        ·
  │                    filter          x > 2              ·                   ·
  └── render           ·               ·                  (x, y, u, v)        ·
@@ -1068,7 +1068,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 ·                     distributed     false              ·                   ·
-·                     vectorized      false              ·                   ·
+·                     vectorized      true               ·                   ·
 filter                ·               ·                  (x, y, u, v)        ·
  │                    filter          x > 2              ·                   ·
  └── render           ·               ·                  (x, y, u, v)        ·
@@ -1262,7 +1262,7 @@ query TTT
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
 ·                distributed         false
-·                vectorized          false
+·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
       │          type                inner
