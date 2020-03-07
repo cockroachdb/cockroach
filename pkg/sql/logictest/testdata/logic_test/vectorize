@@ -1137,3 +1137,41 @@ SELECT b, d, e, f, g, sum(a) FROM t45481 GROUP BY b, d, e, f, g ORDER BY b, d, e
 7  5  5  5  55555555-5555-5555-5555-555555555555  196
 7  6  6  6  66666666-6666-6666-6666-666666666666  196
 7  7  7  7  77777777-7777-7777-7777-777777777777  196
+
+# Test that unsupported post process specs get wrapped in the vectorized engine.
+statement ok
+CREATE TABLE mixed_type_a (a INT, b TIMESTAMPTZ)
+
+statement ok
+CREATE TABLE mixed_type_b (a INT, b INTERVAL, c TIMESTAMP)
+
+statement ok
+INSERT INTO mixed_type_a VALUES (0, 0::TIMESTAMPTZ)
+
+statement ok
+INSERT INTO mixed_type_b VALUES (0, INTERVAL '0 days', 0::TIMESTAMP)
+
+# Set vectorize to experimental_always to ensure that no error occurs when
+# planning these mixed-type operations.
+statement ok
+SET vectorize=experimental_always
+
+query B
+SELECT b > now() - interval '1 day'  FROM mixed_type_a
+----
+false
+
+# Merge join ON expressions also get wrapped.
+query ITITT
+SELECT * FROM mixed_type_a AS a INNER MERGE JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
+----
+0  1970-01-01 00:00:00 +0000 UTC  0  00:00:00  1970-01-01 00:00:00 +0000 +0000
+
+# So do hash inner hash join ON expressions.
+query ITITT
+SELECT * FROM mixed_type_a AS a JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
+----
+0  1970-01-01 00:00:00 +0000 UTC  0  00:00:00  1970-01-01 00:00:00 +0000 +0000
+
+statement ok
+RESET vectorize

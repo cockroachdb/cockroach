@@ -81,7 +81,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
 ·                distributed         true                 ·            ·
-·                vectorized          false                ·            ·
+·                vectorized          true                 ·            ·
 render           ·                   ·                    (x, str)     ·
  │               render 0            x                    ·            ·
  │               render 1            str                  ·            ·

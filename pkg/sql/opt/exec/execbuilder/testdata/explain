@@ -465,7 +465,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
 ·     distributed  false        ·       ·
-·     vectorized   false        ·       ·
+·     vectorized   true         ·       ·
 scan  ·            ·            (k, v)  ·
 ·     table        t@primary    ·       ·
 ·     spans        ALL          ·       ·

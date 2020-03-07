@@ -46,7 +46,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
 ·                            distributed   false                                                                        ·               ·
-·                            vectorized    false                                                                        ·               ·
+·                            vectorized    true                                                                         ·               ·
 root                         ·             ·                                                                            (a, b, c)       ·
  ├── scan                    ·             ·                                                                            (a, b, c)       ·
  │                           table         abc@primary                                                                  ·               ·
@@ -140,7 +140,7 @@ WHERE
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 ·               distributed   false                                                                                                       ·                   ·
-·               vectorized    false                                                                                                       ·                   ·
+·               vectorized    true                                                                                                        ·                   ·
 root            ·             ·                                                                                                           (col0)              ·
  ├── render     ·             ·                                                                                                           (col0)              ·
  │    │         render 0      col0                                                                                                        ·                   ·
