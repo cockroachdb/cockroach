@@ -47,6 +47,7 @@ func authGSS(
 	c pgwire.AuthConn,
 	tlsState tls.ConnectionState,
 	_ pgwire.PasswordRetrievalFn,
+	_ pgwire.PasswordValidUntilFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {

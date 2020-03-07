@@ -463,7 +463,7 @@ func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
-// To also allow NULLs to be returned, use typeAsStringOrNull() instead.
+// To also allow NULLs to be returned, use TypeAsStringOrNull() instead.
 func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
 	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
 	if err != nil {
@@ -480,6 +480,15 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 		}
 		return str, nil
 	}, nil
+}
+
+// TypeAsStringOrNull is like TypeAsString but allows NULLs.
+func (p *planner) TypeAsStringOrNull(e tree.Expr, op string) (func() (bool, string, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
+	if err != nil {
+		return nil, err
+	}
+	return p.makeStringEvalFn(typedE), nil
 }
 
 func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {

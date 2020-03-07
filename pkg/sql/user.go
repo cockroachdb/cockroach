@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,7 +54,9 @@ func GetUserHashedPassword(
 	ctx context.Context, ie *InternalExecutor, username string,
 ) (
 	exists bool,
+	canLogin bool,
 	pwRetrieveFn func(ctx context.Context) (hashedPassword []byte, err error),
+	validUntilFn func(ctx context.Context) (timestamp *tree.DTimestamp, err error),
 	err error,
 ) {
 	normalizedUsername := tree.Name(username).Normalize()
@@ -64,21 +67,29 @@ func GetUserHashedPassword(
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
 		rootFn := func(ctx context.Context) ([]byte, error) {
-			_, hashedPassword, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+			_, _, hashedPassword, _, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
 			return hashedPassword, err
 		}
-		return true, rootFn, nil
+
+		// Root user cannot have password expiry and must have login.
+		validUntilFn := func(ctx context.Context) (*tree.DTimestamp, error) {
+			return nil, nil
+		}
+		return true, true, rootFn, validUntilFn, nil
 	}
 
 	// Other users must reach for system.users no matter what, because
 	// only that contains the truth about whether the user exists.
-	exists, hashedPassword, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
-	return exists, func(ctx context.Context) ([]byte, error) { return hashedPassword, nil }, err
+	exists, canLogin, hashedPassword, validUntil, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+	return exists, canLogin,
+		func(ctx context.Context) ([]byte, error) { return hashedPassword, nil },
+		func(ctx context.Context) (*tree.DTimestamp, error) { return validUntil, nil },
+		err
 }
 
 func retrieveUserAndPassword(
 	ctx context.Context, ie *InternalExecutor, isRoot bool, normalizedUsername string,
-) (exists bool, hashedPassword []byte, err error) {
+) (exists bool, canLogin bool, hashedPassword []byte, validUntil *tree.DTimestamp, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
@@ -94,10 +105,10 @@ func retrieveUserAndPassword(
 			return contextutil.RunWithTimeout(ctx, "get-user-timeout", timeout, fn)
 		}
 	}
-
+	var isRole bool
 	// Perform the lookup with a timeout.
 	err = runFn(func(ctx context.Context) error {
-		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
+		const getHashedPassword = `SELECT "hashedPassword", "isRole" FROM system.users ` +
 			`WHERE username=$1`
 		values, err := ie.QueryRowEx(
 			ctx, "get-hashed-pwd", nil, /* txn */
@@ -109,7 +120,54 @@ func retrieveUserAndPassword(
 		if values != nil {
 			exists = true
 			hashedPassword = []byte(*(values[0].(*tree.DBytes)))
+			isRole = bool(*(values[1].(*tree.DBool)))
 		}
+
+		if !exists {
+			return nil
+		}
+
+		getLoginDependencies := `SELECT option, value FROM system.role_options ` +
+			`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL')`
+
+		loginDependencies, err := ie.QueryEx(
+			ctx, "get-login-dependencies", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			getLoginDependencies,
+			normalizedUsername,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		}
+
+		// To support users created before 20.1, allow all USERS to login
+		// if NOLOGIN is not found. Only allow roles to LOGIN if login is found.
+		var noLoginFound = false
+		for _, row := range loginDependencies {
+			option := string(tree.MustBeDString(row[0]))
+
+			if option == "NOLOGIN" {
+				noLoginFound = true
+			}
+
+			if option == "VALID UNTIL" {
+				if tree.DNull.Compare(nil, row[1]) != 0 {
+					ts := string(tree.MustBeDString(row[1]))
+					// This is okay because the VALID UNTIL is stored as a string
+					// representation of a TimestampTZ which has the same underlying
+					// representation in the table as a Timestamp (UTC time).
+					timeCtx := tree.NewParseTimeContext(timeutil.Now())
+					validUntil, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
+					if err != nil {
+						return errors.Wrap(err,
+							"error trying to parse timestamp while retrieving password valid until value")
+					}
+				}
+			}
+		}
+
+		canLogin = !noLoginFound && !isRole
+
 		return nil
 	})
 
@@ -118,7 +176,7 @@ func retrieveUserAndPassword(
 		log.Warningf(ctx, "user lookup for %q failed: %v", normalizedUsername, err)
 		err = errors.HandledWithMessage(err, "internal error while retrieving user account")
 	}
-	return exists, hashedPassword, err
+	return exists, canLogin, hashedPassword, validUntil, err
 }
 
 var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
@@ -129,7 +187,7 @@ var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
 func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
-	query := `SELECT username,"isRole"  FROM system.users`
+	query := `SELECT username FROM system.users`
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx, "read-users", p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
@@ -152,17 +210,6 @@ var roleMembersTableName = tree.MakeTableName("system", "role_members")
 // role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, ResolveAnyDescType)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
-}
-
-// BumpRoleOptionsTableVersion increases the table version for the
-// role options table.
-func (p *planner) BumpRoleOptionsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, RoleOptionsTableName, true, ResolveAnyDescType)
 	if err != nil {
 		return err
 	}
