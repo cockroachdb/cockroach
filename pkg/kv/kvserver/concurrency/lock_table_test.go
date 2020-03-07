@@ -45,7 +45,7 @@ test uses the following format:
 new-lock-table maxlocks=<int>
 ----
 
-  Creates a lockTable.
+  Creates a lockTable. The lockTable is initially enabled.
 
 new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 ----
@@ -108,11 +108,16 @@ should-wait r=<name>
 
  Calls lockTableGuard.ShouldWait.
 
-clear
+enable
+----
+
+ Calls lockTable.Enable.
+
+clear [disable]
 ----
 <state of lock table>
 
- Calls lockTable.Clear.
+ Calls lockTable.Clear. Optionally disables the lockTable.
 
 print
 ----
@@ -136,6 +141,7 @@ func TestLockTableBasic(t *testing.T) {
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
 				lt = &lockTableImpl{maxLocks: int64(maxLocks)}
+				lt.Enable()
 				return ""
 
 			case "new-txn":
@@ -366,8 +372,12 @@ func TestLockTableBasic(t *testing.T) {
 				return fmt.Sprintf("%sstate=%s txn=%s ts=%s key=%s held=%t guard-access=%s",
 					str, typeStr, txnS, tsS, state.key, state.held, state.guardAccess)
 
+			case "enable":
+				lt.Enable()
+				return ""
+
 			case "clear":
-				lt.Clear()
+				lt.Clear(d.HasArg("disable"))
 				return lt.(*lockTableImpl).String()
 
 			case "print":
@@ -615,8 +625,11 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	return &workloadExecutor{
-		lm:           spanlatch.Manager{},
-		lt:           &lockTableImpl{maxLocks: 1000},
+		lm: spanlatch.Manager{},
+		lt: &lockTableImpl{
+			enabled:  true,
+			maxLocks: 100000,
+		},
 		items:        items,
 		transactions: make(map[uuid.UUID]*transactionState),
 		doneWork:     make(chan *workItem),
@@ -1173,8 +1186,11 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						env := benchEnv{
-							lm:                &spanlatch.Manager{},
-							lt:                &lockTableImpl{maxLocks: 100000},
+							lm: &spanlatch.Manager{},
+							lt: &lockTableImpl{
+								enabled:  true,
+								maxLocks: 100000,
+							},
 							numRequestsWaited: &numRequestsWaited,
 							numScanCalls:      &numScanCalls,
 						}

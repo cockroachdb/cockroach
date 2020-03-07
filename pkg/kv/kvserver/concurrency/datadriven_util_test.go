@@ -105,3 +105,19 @@ func scanSingleRequest(t *testing.T, d *datadriven.TestData, line string) roachp
 		return nil
 	}
 }
+
+func scanTxnStatus(t *testing.T, d *datadriven.TestData) (roachpb.TransactionStatus, string) {
+	var statusStr string
+	d.ScanArgs(t, "status", &statusStr)
+	switch statusStr {
+	case "committed":
+		return roachpb.COMMITTED, "committing"
+	case "aborted":
+		return roachpb.ABORTED, "aborting"
+	case "pending":
+		return roachpb.PENDING, "increasing timestamp of"
+	default:
+		d.Fatalf(t, "unknown txn statusStr: %s", statusStr)
+		return 0, ""
+	}
+}

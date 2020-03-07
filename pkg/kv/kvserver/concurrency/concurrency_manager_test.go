@@ -61,15 +61,17 @@ import (
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
 // on-lock-acquired  txn=<txn-name> key=<key>
+// on-lock-updated   txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts<int>[,<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts<int>[,<int>]]
 //
-// on-desc-updated   TODO(nvanbenschoten): implement this
-// on-lease-updated  TODO(nvanbenschoten): implement this
-// on-split          TODO(nvanbenschoten): implement this
-// on-merge          TODO(nvanbenschoten): implement this
+// on-lease-updated  leaseholder=<bool>
+// on-split
+// on-merge
+// on-snapshot-applied
 //
 // debug-latch-manager
 // debug-lock-table
+// debug-disable-txn-pushes
 // reset
 //
 func TestConcurrencyManagerBasic(t *testing.T) {
@@ -77,7 +79,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
 		c := newCluster()
+		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
+		m.OnRangeLeaseUpdated(true /* isLeaseholder */) // enable
 		c.m = m
 		mon := newMonitor()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -103,6 +107,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						Epoch:          enginepb.TxnEpoch(epoch),
 						WriteTimestamp: ts,
 						MinTimestamp:   ts,
+						Priority:       1, // not min or max
 					},
 					ReadTimestamp: ts,
 				}
@@ -254,6 +259,35 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
+			case "on-lock-updated":
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				txn, ok := c.txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+
+				var key string
+				d.ScanArgs(t, "key", &key)
+
+				status, verb := scanTxnStatus(t, d)
+				var ts hlc.Timestamp
+				if d.HasArg("ts") {
+					ts = scanTimestamp(t, d)
+				}
+
+				txnUpdate := txn.Clone()
+				txnUpdate.Status = status
+				txnUpdate.WriteTimestamp.Forward(ts)
+
+				mon.runSync("update lock", func(ctx context.Context) {
+					log.Eventf(ctx, "%s %s @ %s", verb, txnName, key)
+					span := roachpb.Span{Key: roachpb.Key(key)}
+					up := roachpb.MakeLockUpdate(txnUpdate, span)
+					m.OnLockUpdated(ctx, &up)
+				})
+				return c.waitAndCollect(t, mon)
+
 			case "on-txn-updated":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
@@ -262,23 +296,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 
-				var statusStr, verb string
-				var status roachpb.TransactionStatus
-				d.ScanArgs(t, "status", &statusStr)
-				switch statusStr {
-				case "committed":
-					verb = "committing"
-					status = roachpb.COMMITTED
-				case "aborted":
-					verb = "aborting"
-					status = roachpb.ABORTED
-				case "pending":
-					verb = "increasing timestamp of"
-					status = roachpb.PENDING
-				default:
-					d.Fatalf(t, "unknown txn statusStr: %s", status)
-				}
-
+				status, verb := scanTxnStatus(t, d)
 				var ts hlc.Timestamp
 				if d.HasArg("ts") {
 					ts = scanTimestamp(t, d)
@@ -292,6 +310,41 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
+			case "on-lease-updated":
+				var isLeaseholder bool
+				d.ScanArgs(t, "leaseholder", &isLeaseholder)
+
+				mon.runSync("transfer lease", func(ctx context.Context) {
+					if isLeaseholder {
+						log.Event(ctx, "acquired")
+					} else {
+						log.Event(ctx, "released")
+					}
+					m.OnRangeLeaseUpdated(isLeaseholder)
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-split":
+				mon.runSync("split range", func(ctx context.Context) {
+					log.Event(ctx, "complete")
+					m.OnRangeSplit()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-merge":
+				mon.runSync("merge range", func(ctx context.Context) {
+					log.Event(ctx, "complete")
+					m.OnRangeMerge()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-snapshot-applied":
+				mon.runSync("snapshot replica", func(ctx context.Context) {
+					log.Event(ctx, "applied")
+					m.OnReplicaSnapshotApplied()
+				})
+				return c.waitAndCollect(t, mon)
+
 			case "debug-latch-manager":
 				global, local := m.LatchMetrics()
 				output := []string{
@@ -302,6 +355,10 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 			case "debug-lock-table":
 				return m.LockTableDebug()
+
+			case "debug-disable-txn-pushes":
+				c.disableTxnPushes()
+				return ""
 
 			case "reset":
 				if n := mon.numMonitored(); n > 0 {
@@ -332,6 +389,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 type cluster struct {
 	nodeDesc  *roachpb.NodeDescriptor
 	rangeDesc *roachpb.RangeDescriptor
+	st        *clustersettings.Settings
 	m         concurrency.Manager
 
 	// Definitions.
@@ -361,6 +419,7 @@ type txnPush struct {
 
 func newCluster() *cluster {
 	return &cluster{
+		st:        clustersettings.MakeTestingClusterSettings(),
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
 
@@ -373,13 +432,10 @@ func newCluster() *cluster {
 }
 
 func (c *cluster) makeConfig() concurrency.Config {
-	st := clustersettings.MakeTestingClusterSettings()
-	concurrency.LockTableLivenessPushDelay.Override(&st.SV, 0*time.Millisecond)
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0*time.Millisecond)
 	return concurrency.Config{
 		NodeDesc:       c.nodeDesc,
 		RangeDesc:      c.rangeDesc,
-		Settings:       st,
+		Settings:       c.st,
 		IntentResolver: c,
 		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
 	}
@@ -575,6 +631,16 @@ func (c *cluster) detectDeadlocks() {
 	}
 }
 
+func (c *cluster) enableTxnPushes() {
+	concurrency.LockTableLivenessPushDelay.Override(&c.st.SV, 0*time.Millisecond)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(&c.st.SV, 0*time.Millisecond)
+}
+
+func (c *cluster) disableTxnPushes() {
+	concurrency.LockTableLivenessPushDelay.Override(&c.st.SV, time.Hour)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(&c.st.SV, time.Hour)
+}
+
 // reset clears all request state in the cluster. This avoids portions of tests
 // leaking into one another and also serves as an assertion that a sequence of
 // commands has completed without leaking any requests.
@@ -599,8 +665,9 @@ func (c *cluster) reset() error {
 		local.ReadCount > 0 || local.WriteCount > 0 {
 		return errors.Errorf("outstanding latches")
 	}
-	// Clear the lock table by marking the range as merged.
-	c.m.OnRangeMerge()
+	// Clear the lock table by transferring the lease away and reacquiring it.
+	c.m.OnRangeLeaseUpdated(false /* isLeaseholder */)
+	c.m.OnRangeLeaseUpdated(true /* isLeaseholder */)
 	return nil
 }
 
