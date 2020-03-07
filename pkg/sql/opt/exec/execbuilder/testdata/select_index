@@ -782,7 +782,7 @@ GROUP BY resource_key
 ORDER BY total DESC
 ----
 ·                    distributed  false
-·                    vectorized   false
+·                    vectorized   true
 sort                 ·            ·
  │                   order        -total
  └── group           ·            ·

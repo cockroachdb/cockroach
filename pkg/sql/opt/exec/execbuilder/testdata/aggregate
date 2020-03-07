@@ -132,7 +132,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 ·                    distributed  false                       ·                              ·
-·                    vectorized   false                       ·                              ·
+·                    vectorized   true                        ·                              ·
 render               ·            ·                           (count int, r int)             ·
  │                   render 0     (count_rows)[int]           ·                              ·
  │                   render 1     (column6)[int]              ·                              ·
@@ -233,7 +233,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
 ·                     distributed  false
-·                     vectorized   false
+·                     vectorized   true
 render                ·            ·
  │                    render 0     min
  └── group            ·            ·
@@ -255,7 +255,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
 ·                     distributed  false
-·                     vectorized   false
+·                     vectorized   true
 render                ·            ·
  │                    render 0     min
  └── group            ·            ·
@@ -278,7 +278,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
 ·                     distributed  false
-·                     vectorized   false
+·                     vectorized   true
 render                ·            ·
  │                    render 0     min
  └── group            ·            ·
@@ -582,7 +582,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
 ·               distributed  false       ·                   ·
-·               vectorized   false       ·                   ·
+·               vectorized   true        ·                   ·
 sort            ·            ·           (v int, count int)  +count
  │              order        +count      ·                   ·
  └── group      ·            ·           (v int, count int)  ·
@@ -597,7 +597,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ----
 ·               distributed  false         ·                   ·
-·               vectorized   false         ·                   ·
+·               vectorized   true          ·                   ·
 sort            ·            ·             (v int, count int)  +count
  │              order        +count        ·                   ·
  └── group      ·            ·             (v int, count int)  ·
@@ -612,7 +612,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ----
 ·                    distributed  false           ·                     ·
-·                    vectorized   false           ·                     ·
+·                    vectorized   true            ·                     ·
 sort                 ·            ·               (v int, count int)    +count
  │                   order        +count          ·                     ·
  └── group           ·            ·               (v int, count int)    ·
@@ -631,7 +631,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
 ----
 ·               distributed  false           ·             ·
-·               vectorized   false           ·             ·
+·               vectorized   true            ·             ·
 group           ·            ·               (v, count)    ·
  │              aggregate 0  v               ·             ·
  │              aggregate 1  count(column5)  ·             ·
@@ -710,7 +710,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
 ·                     distributed  false                             ·                     ·
-·                     vectorized   false                             ·                     ·
+·                     vectorized   true                              ·                     ·
 render                ·            ·                                 (sum decimal)         ·
  │                    render 0     (sum)[decimal]                    ·                     ·
  └── group            ·            ·                                 (k int, sum decimal)  ·
@@ -976,7 +976,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
 ·                    distributed  false        ·               ·
-·                    vectorized   false        ·               ·
+·                    vectorized   true         ·               ·
 render               ·            ·            (m)             ·
  │                   render 0     min          ·               ·
  └── group           ·            ·            (column5, min)  ·
@@ -994,7 +994,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
 ·                    distributed  false        ·               ·
-·                    vectorized   false        ·               ·
+·                    vectorized   true         ·               ·
 render               ·            ·            (m)             ·
  │                   render 0     min          ·               ·
  └── group           ·            ·            (column5, min)  ·
