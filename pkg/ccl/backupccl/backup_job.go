@@ -505,6 +505,16 @@ func (b *backupResumer) Resume(
 	if err != nil {
 		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
 	}
+	b.deleteCheckpoint(ctx)
+
+	resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*b.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(b.res.Rows)),
+		tree.NewDInt(tree.DInt(b.res.IndexEntries)),
+		tree.NewDInt(tree.DInt(b.res.DataSize)),
+	}
 	return nil
 }
 
@@ -527,17 +537,12 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *client.DB) error {
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(context.Context, interface{}) error {
+func (b *backupResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+	b.deleteCheckpoint(ctx)
 	return nil
 }
 
-// OnSuccess is part of the jobs.Resumer interface.
-func (b *backupResumer) OnSuccess(context.Context, *client.Txn) error { return nil }
-
-// OnTerminal is part of the jobs.Resumer interface.
-func (b *backupResumer) OnTerminal(
-	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
-) {
+func (b *backupResumer) deleteCheckpoint(ctx context.Context) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {
 		details := b.job.Details().(jobspb.BackupDetails)
@@ -554,22 +559,6 @@ func (b *backupResumer) OnTerminal(
 		return exportStore.Delete(ctx, BackupManifestCheckpointName)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
-	}
-
-	if status == jobs.StatusSucceeded {
-		// TODO(benesch): emit periodic progress updates.
-
-		// TODO(mjibson): if a restore was resumed, then these counts will only have
-		// the current coordinator's counts.
-
-		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*b.job.ID())),
-			tree.NewDString(string(jobs.StatusSucceeded)),
-			tree.NewDFloat(tree.DFloat(1.0)),
-			tree.NewDInt(tree.DInt(b.res.Rows)),
-			tree.NewDInt(tree.DInt(b.res.IndexEntries)),
-			tree.NewDInt(tree.DInt(b.res.DataSize)),
-		}
 	}
 }
 

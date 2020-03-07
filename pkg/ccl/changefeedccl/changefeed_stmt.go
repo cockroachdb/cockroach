@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -547,9 +546,3 @@ func (b *changefeedResumer) Resume(
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *changefeedResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
-
-// OnSuccess is part of the jobs.Resumer interface.
-func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn) error { return nil }
-
-// OnTerminal is part of the jobs.Resumer interface.
-func (b *changefeedResumer) OnTerminal(context.Context, jobs.Status, chan<- tree.Datums) {}
