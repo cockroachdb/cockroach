@@ -30,7 +30,6 @@ type FakeResumer struct {
 	OnResume     func(context.Context) error
 	FailOrCancel func(context.Context) error
 	Success      func() error
-	Terminal     func()
 }
 
 func (d FakeResumer) Resume(ctx context.Context, _ interface{}, _ chan<- tree.Datums) error {
@@ -50,12 +49,6 @@ func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
 		return d.FailOrCancel(ctx)
 	}
 	return nil
-}
-
-func (d FakeResumer) OnTerminal(_ context.Context, _ Status, _ chan<- tree.Datums) {
-	if d.Terminal != nil {
-		d.Terminal()
-	}
 }
 
 var _ Resumer = FakeResumer{}

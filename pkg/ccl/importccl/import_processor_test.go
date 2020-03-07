@@ -489,12 +489,6 @@ func (r *cancellableImportResumer) Resume(
 	return errors.New("job succeed, but we're forcing it to be paused")
 }
 
-func (r *cancellableImportResumer) OnTerminal(
-	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
-) {
-	r.wrapped.OnTerminal(ctx, status, resultsCh)
-}
-
 func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
 	// This callback is invoked when an error or cancellation occurs
 	// during the import. Since our Resume handler returned an
