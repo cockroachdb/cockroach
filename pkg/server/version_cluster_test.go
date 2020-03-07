@@ -390,14 +390,6 @@ func v0v1() (roachpb.Version, roachpb.Version) {
 
 func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// TODO (lucy): This doesn't work because the "change reports fields from
-	// timestamp to timestamptz" migration tries to run when the cluster version
-	// is old, but gets stuck because it requires a schema change, and migrations
-	// run before the job registry gets initialized. AFAIK this does not reflect a
-	// problem that can happen in reality because all nodes should already be
-	// running 19.2, with all migrations complete (or baked in), before we upgrade
-	// to 20.1, but we still need to bring this test back.
-	t.Skip("")
 	ctx := context.Background()
 
 	// Prevent node crashes from generating several megabytes of stacks when
