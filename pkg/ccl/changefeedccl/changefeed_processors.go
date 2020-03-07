@@ -152,17 +152,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
-	initialHighWater, spans, needsInitialScan := getInitialScan(ca.spec)
-
-	// This SpanFrontier only tracks the spans being watched on this node.
-	// There is a different SpanFrontier elsewhere for the entire changefeed.
-	// This object is used to filter out some previously emitted rows, and
-	// by the cloudStorageSink to name its output files in lexicographically
-	// monotonic fashion.
-	sf := span.MakeFrontier(spans...)
-	for _, watch := range ca.spec.Watches {
-		sf.Forward(watch.Span, watch.InitialResolved)
-	}
+	spans, sf := ca.setupSpans()
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
 	nodeID := ca.flowCtx.EvalCtx.NodeID
 	var err error
@@ -199,43 +189,31 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// for the poller, but there is a race between the flow's MemoryMonitor
 	// getting Stopped and `changeAggregator.Close`, which causes panics. Not sure
 	// what to do about this yet.
-	pollerMemMonCapacity := kvfeed.MemBufferDefaultCapacity
+	kvFeedMemMonCapacity := kvfeed.MemBufferDefaultCapacity
 	if knobs.MemBufferCapacity != 0 {
-		pollerMemMonCapacity = knobs.MemBufferCapacity
+		kvFeedMemMonCapacity = knobs.MemBufferCapacity
 	}
-	pollerMemMon := mon.MakeMonitorInheritWithLimit("poller", math.MaxInt64, ca.ProcessorBase.MemMonitor)
-	pollerMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(pollerMemMonCapacity))
-	ca.kvFeedMemMon = &pollerMemMon
+	kvFeedMemMon := mon.MakeMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
+	kvFeedMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(kvFeedMemMonCapacity))
+	ca.kvFeedMemMon = &kvFeedMemMon
 
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*sql.LeaseManager)
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
-	kvfeedCfg := kvfeed.Config{
-		Sink:               buf,
-		Settings:           ca.flowCtx.Cfg.Settings,
-		DB:                 ca.flowCtx.Cfg.DB,
-		Clock:              ca.flowCtx.Cfg.DB.Clock(),
-		Gossip:             ca.flowCtx.Cfg.Gossip,
-		Spans:              spans,
-		Targets:            ca.spec.Feed.Targets,
-		LeaseMgr:           leaseMgr,
-		Metrics:            &metrics.KVFeedMetrics,
-		MM:                 ca.kvFeedMemMon,
-		InitialHighWater:   initialHighWater,
-		WithDiff:           withDiff,
-		NeedsInitialScan:   needsInitialScan,
-		SchemaChangeEvents: changefeedbase.SchemaChangeEventClass(ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents]),
-		SchemaChangePolicy: changefeedbase.SchemaChangePolicy(ca.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy]),
-	}
-
+	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
+		spans, withDiff, buf, metrics)
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
-	ca.tickFn = emitEntries(ca.flowCtx.Cfg.Settings, ca.spec.Feed, initialHighWater,
-		sf, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+	ca.tickFn = emitEntries(ca.flowCtx.Cfg.Settings, ca.spec.Feed,
+		kvfeedCfg.InitialHighWater, sf, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+	ca.startKVFeed(ctx, kvfeedCfg)
 
+	return ctx
+}
+
+func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Config) {
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
 	ca.errCh = make(chan error, 2)
-
 	ca.kvFeedDoneCh = make(chan struct{})
 	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
 		defer close(ca.kvFeedDoneCh)
@@ -251,25 +229,56 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		ca.errCh <- err
 		ca.cancel()
 	}
-
-	return ctx
 }
 
-// initialHighWater here is tricky. If we have a cursor then we set up the
-// watches, if we don't then we don't. If we have a cursor, we'll set the
-// statement time to be equal to the cursor timestamp. This loop over watches
-// exists for a feature which is no longer in use - the checkpointing of
-// individual spans.
+func makeKVFeedCfg(
+	cfg *execinfra.ServerConfig,
+	leaseMgr *sql.LeaseManager,
+	mm *mon.BytesMonitor,
+	spec execinfrapb.ChangeAggregatorSpec,
+	spans []roachpb.Span,
+	withDiff bool,
+	buf kvfeed.EventBuffer,
+	metrics *Metrics,
+) kvfeed.Config {
+	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
+		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
+	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
+		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
+	kvfeedCfg := kvfeed.Config{
+		Sink:               buf,
+		Settings:           cfg.Settings,
+		DB:                 cfg.DB,
+		Clock:              cfg.DB.Clock(),
+		Gossip:             cfg.Gossip,
+		Spans:              spans,
+		Targets:            spec.Feed.Targets,
+		LeaseMgr:           leaseMgr,
+		Metrics:            &metrics.KVFeedMetrics,
+		MM:                 mm,
+		InitialHighWater:   initialHighWater,
+		WithDiff:           withDiff,
+		NeedsInitialScan:   needsInitialScan,
+		SchemaChangeEvents: schemaChangeEvents,
+		SchemaChangePolicy: schemaChangePolicy,
+	}
+	return kvfeedCfg
+}
+
+// getKVFeedInitialParameters determines the starting timestamp for the kv and
+// whether or not an initial scan is needed. The need for an initial scan is
+// determined by whether the watched in the spec have a resolved timestamp. The
+// higher layers mark each watch with the checkpointed resolved timestamp if no
+// initial scan is needed.
 //
 // TODO(ajwerner): Utilize this partial checkpointing, especially in the face of
 // of logical backfills of a single table while progress is made on others or
 // get rid of it. See https://github.com/cockroachdb/cockroach/issues/43896.
-func getInitialScan(
+func getKVFeedInitialParameters(
 	spec execinfrapb.ChangeAggregatorSpec,
-) (initialHighWater hlc.Timestamp, spans []roachpb.Span, needsInitialScan bool) {
-	spans = make([]roachpb.Span, 0, len(spec.Watches))
+) (initialHighWater hlc.Timestamp, needsInitialScan bool) {
 	for _, watch := range spec.Watches {
-		spans = append(spans, watch.Span)
 		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
 			initialHighWater = watch.InitialResolved
 		}
@@ -281,7 +290,25 @@ func getInitialScan(
 	if needsInitialScan = initialHighWater.IsEmpty(); needsInitialScan {
 		initialHighWater = spec.Feed.StatementTime
 	}
-	return initialHighWater, spans, needsInitialScan
+	return initialHighWater, needsInitialScan
+}
+
+// setupSpans is called on start to extract the spans for this changefeed as a
+// slice and creates a span frontier with the initial resolved timestampsc. This
+// SpanFrontier only tracks the spans being watched on this node. There is a
+// different SpanFrontier elsewhere for the entire changefeed. This object is
+// used to filter out some previously emitted rows, and by the cloudStorageSink
+// to name its output files in lexicographically monotonic fashion.
+func (ca *changeAggregator) setupSpans() ([]roachpb.Span, *span.Frontier) {
+	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+	}
+	sf := span.MakeFrontier(spans...)
+	for _, watch := range ca.spec.Watches {
+		sf.Forward(watch.Span, watch.InitialResolved)
+	}
+	return spans, sf
 }
 
 // close has two purposes: to synchronize on the completion of the helper
