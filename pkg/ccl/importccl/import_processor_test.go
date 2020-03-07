@@ -480,25 +480,18 @@ func (r *cancellableImportResumer) Resume(
 ) error {
 	r.jobID = *r.wrapped.job.ID()
 	r.jobIDCh <- r.jobID
-	return r.wrapped.Resume(r.ctx, phs, resultsCh)
-}
-
-func (r *cancellableImportResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
+	if err := r.wrapped.Resume(r.ctx, phs, resultsCh); err != nil {
+		return err
+	}
 	if r.onSuccessBarrier != nil {
 		defer r.onSuccessBarrier.Enter()()
 	}
 	return errors.New("job succeed, but we're forcing it to be paused")
 }
 
-func (r *cancellableImportResumer) OnTerminal(
-	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
-) {
-	r.wrapped.OnTerminal(ctx, status, resultsCh)
-}
-
 func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
 	// This callback is invoked when an error or cancellation occurs
-	// during the import. Since our OnSuccess handler returned an
+	// during the import. Since our Resume handler returned an
 	// error (after pausing the job), we need to short-circuits
 	// jobs machinery so that this job is not marked as failed.
 	return errors.New("bail out")

@@ -136,7 +136,7 @@ func TestJobsTableProgressFamily(t *testing.T) {
 }
 
 type counters struct {
-	ResumeExit, OnFailOrCancelExit, Terminal int
+	ResumeExit, OnFailOrCancelExit int
 	// These sometimes retry so just use bool.
 	ResumeStart, OnFailOrCancelStart, Success bool
 }
@@ -247,14 +247,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				rts.mu.a.Success = true
 				return rts.successErr
 			},
-
-			Terminal: func() {
-				t.Log("Starting terminal")
-				rts.mu.Lock()
-				rts.mu.a.Terminal++
-				rts.mu.Unlock()
-				t.Log("Exiting terminal")
-			},
 		}
 	})
 }
@@ -320,7 +312,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
@@ -342,7 +333,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
@@ -377,7 +367,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeExit++
 
 		rts.mu.e.Success = true
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
@@ -415,7 +404,6 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusFailed)
 	})
 
@@ -440,7 +428,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.failOrCancelCheckCh <- struct{}{}
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
-		rts.mu.e.Terminal++
 
 		rts.check(t, jobs.StatusCanceled)
 	})
@@ -492,7 +479,6 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusCanceled)
 	})
 
@@ -530,7 +516,6 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusFailed)
 	})
 
@@ -637,7 +622,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusSucceeded)
 	})
 
@@ -664,42 +648,10 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit++
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusFailed)
 	})
 
-	// Attempt to mark success, but fail.
-	t.Run("fail marking success", func(t *testing.T) {
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-
-		// Make marking success fail.
-		rts.successErr = errors.New("marking success failed")
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rts.job = j
-
-		rts.mu.e.ResumeStart = true
-		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-
-		rts.resumeCh <- nil
-		rts.mu.e.ResumeExit++
-
-		rts.mu.e.Success = true
-		rts.mu.e.OnFailOrCancelStart = true
-		rts.failOrCancelCheckCh <- struct{}{}
-		rts.failOrCancelCh <- nil
-		rts.mu.e.OnFailOrCancelExit++
-		rts.mu.e.Terminal++
-		rts.check(t, jobs.StatusFailed)
-	})
-
-	// Attempt to mark success, but fail, but fail that also. Thus it should not
-	// trigger OnTerminal.
+	// Attempt to mark success, but fail, but fail that also.
 	t.Run("fail marking success and fail OnFailOrCancel", func(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
@@ -728,11 +680,10 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.failOrCancelCheckCh <- struct{}{}
 		rts.mu.e.OnFailOrCancelExit++
 		rts.failOrCancelCh <- errors.New("reverting failed")
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusFailed)
 	})
 
-	// Fail the job, but also fail to mark it failed. No OnTerminal.
+	// Fail the job, but also fail to mark it failed.
 	t.Run("fail marking failed", func(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
@@ -760,7 +711,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		// But let it fail.
 		rts.mu.e.OnFailOrCancelExit++
 		rts.failOrCancelCh <- errors.New("resume failed")
-		rts.mu.e.Terminal++
 		rts.check(t, jobs.StatusFailed)
 	})
 
@@ -1886,12 +1836,12 @@ func TestJobInTxn(t *testing.T) {
 		return jobs.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				t.Logf("Resuming job: %+v", job.Payload())
+				atomic.AddInt32(&hasRun, 1)
 				return nil
 			},
-			Terminal: func() {
-				t.Logf("Finished job: %+v", job.Payload())
-				// Inc instead of just storing 1 to count how many jobs ran.
+			FailOrCancel: func(ctx context.Context) error {
 				atomic.AddInt32(&hasRun, 1)
+				return nil
 			},
 		}
 	})

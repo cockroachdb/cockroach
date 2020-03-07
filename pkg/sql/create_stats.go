@@ -333,13 +333,10 @@ func (n *createStatsNode) makePlanForExplainDistSQL(
 }
 
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
-// jobs. A new instance is created for each job. evalCtx is populated inside
-// createStatsResumer.Resume so it can be used in createStatsResumer.OnSuccess
-// (if the job is successful).
+// jobs. A new instance is created for each job.
 type createStatsResumer struct {
 	job     *jobs.Job
 	tableID sqlbase.ID
-	evalCtx *extendedEvalContext
 }
 
 var _ jobs.Resumer = &createStatsResumer{}
@@ -359,10 +356,10 @@ func (r *createStatsResumer) Resume(
 	}
 
 	r.tableID = details.Table.ID
-	r.evalCtx = p.ExtendedEvalContext()
+	evalCtx := p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]types.T{})
-	rows := rowcontainer.NewRowContainer(r.evalCtx.Mon.MakeBoundAccount(), ci, 0)
+	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
 	defer func() {
 		if rows != nil {
 			rows.Close(ctx)
@@ -370,17 +367,17 @@ func (r *createStatsResumer) Resume(
 	}()
 
 	dsp := p.DistSQLPlanner()
-	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if details.AsOf != nil {
 			p.semaCtx.AsOfTimestamp = details.AsOf
 			p.extendedEvalCtx.SetTxnTimestamp(details.AsOf.GoTime())
 			txn.SetFixedTimestamp(ctx, *details.AsOf)
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, r.evalCtx, txn)
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
 		planCtx.planner = p
 		if err := dsp.planAndRunCreateStats(
-			ctx, r.evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
+			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
@@ -409,6 +406,38 @@ func (r *createStatsResumer) Resume(
 		}
 
 		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Invalidate the local cache synchronously; this guarantees that the next
+	// statement in the same session won't use a stale cache (whereas the gossip
+	// update is handled asynchronously).
+	evalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(ctx, r.tableID)
+
+	// Record this statistics creation in the event log.
+	if !createStatsPostEvents.Get(&evalCtx.Settings.SV) {
+		return nil
+	}
+
+	// TODO(rytaft): This creates a new transaction for the CREATE STATISTICS
+	// event. It must be different from the CREATE STATISTICS transaction,
+	// because that transaction must be read-only. In the future we may want
+	// to use the transaction that inserted the new stats into the
+	// system.table_statistics table, but that would require calling
+	// MakeEventLogger from the distsqlrun package.
+	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return MakeEventLogger(evalCtx.ExecCfg).InsertEventRecord(
+			ctx,
+			txn,
+			EventLogCreateStatistics,
+			int32(details.Table.ID),
+			int32(evalCtx.NodeID),
+			struct {
+				TableName string
+				Statement string
+			}{details.FQTableName, details.Statement},
+		)
 	})
 }
 
@@ -458,47 +487,6 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
-
-// OnSuccess is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn) error {
-	details := r.job.Details().(jobspb.CreateStatsDetails)
-
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (whereas the gossip
-	// update is handled asynchronously).
-	r.evalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(ctx, r.tableID)
-
-	// Record this statistics creation in the event log.
-	if !createStatsPostEvents.Get(&r.evalCtx.Settings.SV) {
-		return nil
-	}
-
-	// TODO(rytaft): This creates a new transaction for the CREATE STATISTICS
-	// event. It must be different from the CREATE STATISTICS transaction,
-	// because that transaction must be read-only. In the future we may want
-	// to use the transaction that inserted the new stats into the
-	// system.table_statistics table, but that would require calling
-	// MakeEventLogger from the distsqlrun package.
-	return r.evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		return MakeEventLogger(r.evalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			txn,
-			EventLogCreateStatistics,
-			int32(details.Table.ID),
-			int32(r.evalCtx.NodeID),
-			struct {
-				TableName string
-				Statement string
-			}{details.FQTableName, details.Statement},
-		)
-	})
-}
-
-// OnTerminal is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnTerminal(
-	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
-) {
-}
 
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
