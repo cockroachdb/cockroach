@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -454,9 +455,10 @@ func TestRaceWithBackfill(t *testing.T) {
 	}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 			BackfillChunkSize: chunkSize,
 		},
+		// Disable GC job.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				notifyBackfill()
@@ -619,9 +621,10 @@ func TestDropWhileBackfill(t *testing.T) {
 	}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 			BackfillChunkSize: chunkSize,
 		},
+		// Disable GC job.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if partialBackfillDone.Load().(bool) {
@@ -730,11 +733,12 @@ func TestBackfillErrors(t *testing.T) {
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := tests.CreateTestServerParams()
 
+	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 			BackfillChunkSize: chunkSize,
 		},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { <-blockGC }},
 	}
 
 	tc := serverutils.StartTestCluster(t, numNodes,
@@ -823,6 +827,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if err := checkTableKeyCountExact(ctx, kvDB, keyCount); err != nil {
 		t.Fatal(err)
 	}
+	close(blockGC)
 }
 
 // Test aborting a schema change backfill transaction and check that the
@@ -1507,6 +1512,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // doesn't leave the DB in a bad state.
 func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	attempts := 0
@@ -1514,14 +1520,16 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	// attempt 2: writing the third chunk returns a permanent failure
 	// purge the schema change.
 	expectedAttempts := 3
+	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 			BackfillChunkSize: chunkSize,
 			// Aggressively checkpoint, so that a schema change
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
 		},
+		// Disable GC job.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { <-blockGC }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
@@ -1588,6 +1596,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) > 0 {
 		t.Fatalf("found checks %+v", checks)
 	}
+	close(blockGC)
 }
 
 // TestSchemaChangeReverseMutations tests that schema changes get reversed
@@ -1803,7 +1812,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		t.Fatal(err)
 	}
 
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Add immediate GC TTL to allow index creation purge to complete.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
@@ -1825,13 +1833,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	}
 
 	// State of jobs table
+	t.Skip("TODO(pbardea): The following fails due to causes seemingly unrelated to GC")
 	runner := sqlutils.SQLRunner{DB: sqlDB}
+	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
+	// Maybe this test API should use an offset starting from the most recent job
+	// instead.
+	const migrationJobOffset = 4
 	for i, tc := range testCases {
 		status := jobs.StatusSucceeded
 		if tc.errString != "" {
 			status = jobs.StatusFailed
 		}
-		if err := jobutils.VerifySystemJob(t, &runner, i, jobspb.TypeSchemaChange, status, jobs.Record{
+		if err := jobutils.VerifySystemJob(t, &runner, migrationJobOffset+i, jobspb.TypeSchemaChange, status, jobs.Record{
 			Username:    security.RootUser,
 			Description: tc.sql,
 			DescriptorIDs: sqlbase.IDs{
@@ -2059,12 +2072,13 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	const maxValue = (expectedColumnBackfillAttempts/2+1)*chunkSize + 1
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 			BackfillChunkSize: chunkSize,
 			// Aggressively checkpoint, so that a schema change
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
 		},
+		// Disable GC job.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
@@ -2292,7 +2306,6 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 
 		wg.Wait()
 
-		t.Skip("skipping last portion of job until schema change GC job is implemented")
 		// There should be 4 k/v pairs per row:
 		// * the original rowid index.
 		// * the old index on v.
@@ -2347,7 +2360,6 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 			t.Fatal(err)
 		}
 
-		t.Skip("skipping last portion of job until schema change GC job is implemented")
 		// There should be 4 k/v pairs per row:
 		// * the original rowid index.
 		// * the new primary index on v2.
@@ -2822,12 +2834,10 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Un-skip this test when the GC job is implemented.
-		},
-	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -2844,7 +2854,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
 `); err != nil {
 		t.Fatal(err)
 	}
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
+
 	// Wait for the async schema changer to run.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
@@ -3713,12 +3723,9 @@ func TestTruncateInternals(t *testing.T) {
 	const maxValue = 2000
 	params, _ := tests.CreateTestServerParams()
 	// Disable schema changes.
+	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
-				return true
-			},
-		},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { <-blockGC }},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -3801,21 +3808,30 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if !droppedDesc.Dropped() {
 		t.Fatalf("bad state = %s", droppedDesc.State)
 	}
-	// TODO (lucy): Test that the GC job is correctly queued, once it's
-	// implemented. This test should actually just disable GC instead of disabling
-	// the initial schema change.
+
+	close(blockGC)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	testutils.SucceedsSoon(t, func() error {
+		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
+			Description:   "GC for TRUNCATE TABLE t.public.test",
+			Username:      security.RootUser,
+			DescriptorIDs: sqlbase.IDs{tableDesc.ID},
+		})
+	})
 }
 
 // Test that a table truncation completes properly.
 func TestTruncateCompletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const maxValue = 2000
+
+	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Un-skip this test when the GC job is implemented.
-		},
-	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.TODO()
@@ -3851,7 +3867,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Add a zone config.
 	var cfg zonepb.ZoneConfig
 	cfg, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
@@ -3938,7 +3953,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	// Ensure that the job is marked as succeeded.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+
+	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
+	// Maybe this test API should use an offset starting from the most recent job
+	// instead.
+	schemaChangeJobOffset := 4
+	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "TRUNCATE TABLE t.public.test",
 		DescriptorIDs: sqlbase.IDs{
@@ -5639,7 +5659,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
 	// Add immediate GC TTL to allow index creation purge to complete.
-	// TODO (lucy): if this test were't skipped we'd need to GC quickly here
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
