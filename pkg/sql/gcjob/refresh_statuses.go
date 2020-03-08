@@ -143,7 +143,6 @@ func updateTableStatus(
 	progress *jobspb.SchemaChangeGCProgress,
 ) time.Time {
 	deadline := timeutil.Unix(0, int64(math.MaxInt64))
-	lifetime := ttlSeconds * time.Second.Nanoseconds()
 	sp := table.TableSpan()
 
 	for i, t := range progress.Tables {
@@ -152,7 +151,7 @@ func updateTableStatus(
 			continue
 		}
 
-		deadlineNanos := tableDropTimes[t.ID] + lifetime
+		deadlineNanos := tableDropTimes[t.ID] + ttlSeconds*time.Second.Nanoseconds()
 		deadline = timeutil.Unix(0, deadlineNanos)
 		if isProtected(ctx, protectedtsCache, tableDropTimes[t.ID], sp) {
 			log.Infof(ctx, "a timestamp protection delayed GC of table %d", t.ID)

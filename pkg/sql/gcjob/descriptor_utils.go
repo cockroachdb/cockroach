@@ -59,6 +59,9 @@ func dropTableDesc(ctx context.Context, db *kv.DB, tableDesc *sqlbase.TableDescr
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
 
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		b := &kv.Batch{}
 		// Delete the descriptor.
 		b.Del(descKey)
@@ -75,6 +78,9 @@ func dropTableDesc(ctx context.Context, db *kv.DB, tableDesc *sqlbase.TableDescr
 // deleteDatabaseZoneConfig removes the zone config for a given database ID.
 func deleteDatabaseZoneConfig(ctx context.Context, db *kv.DB, databaseID sqlbase.ID) error {
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		b := &kv.Batch{}
 
 		// Delete the zone config entry for the dropped database associated with the

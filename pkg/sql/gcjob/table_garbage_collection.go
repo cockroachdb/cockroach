@@ -137,7 +137,7 @@ func clearTableData(
 			})
 			log.VEventf(ctx, 2, "ClearRange %s - %s", lastKey, endKey)
 			if err := db.Run(ctx, &b); err != nil {
-				return err
+				return errors.Wrapf(err, "clear range %s - %s", lastKey, endKey)
 			}
 			n = 0
 			lastKey = endKey

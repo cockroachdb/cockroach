@@ -38,7 +38,6 @@ type schemaChangeGCResumer struct {
 func performGC(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID int64,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
@@ -58,8 +57,6 @@ func performGC(
 			}
 		}
 	}
-
-	persistProgress(ctx, execCfg, jobID, progress)
 	return nil
 }
 
@@ -70,6 +67,9 @@ func (r schemaChangeGCResumer) Resume(
 	p := phs.(sql.PlanHookState)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
+	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
+		fn()
+	}
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func (r schemaChangeGCResumer) Resume(
 
 	allTables := getAllTablesWaitingForGC(details, progress)
 	expired, earliestDeadline := refreshTables(ctx, execCfg, allTables, tableDropTimes, indexDropTimes, r.jobID, progress)
-	timerDuration := time.Until(earliestDeadline)
+	timerDuration := timeutil.Until(earliestDeadline)
 	if expired {
 		timerDuration = 0
 	} else if timerDuration > MaxSQLGCInterval {
@@ -118,9 +118,11 @@ func (r schemaChangeGCResumer) Resume(
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			_, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
 
-			if err := performGC(ctx, execCfg, r.jobID, details, progress); err != nil {
+			if err := performGC(ctx, execCfg, details, progress); err != nil {
 				return err
 			}
+
+			persistProgress(ctx, execCfg, r.jobID, progress)
 			if isDoneGC(progress) {
 				return nil
 			}
