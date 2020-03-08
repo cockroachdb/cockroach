@@ -81,13 +81,14 @@ func showBackupPlanHook(
 			return err
 		}
 
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str)
+		if err != nil {
+			return errors.Wrapf(err, "make storage")
+		}
+		defer store.Close()
+
 		var encryption *roachpb.FileEncryptionOptions
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str)
-			if err != nil {
-				return errors.Wrapf(err, "make storage")
-			}
-			defer store.Close()
 			opts, err := readEncryptionOptions(ctx, store)
 			if err != nil {
 				return err
@@ -96,21 +97,38 @@ func showBackupPlanHook(
 			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
 		}
 
-		desc, err := ReadBackupManifestFromURI(
-			ctx, str, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
-		)
+		incPaths, err := findPriorBackups(ctx, store)
 		if err != nil {
 			return err
 		}
+
+		manifests := make([]BackupManifest, len(incPaths)+1)
+		manifests[0], err = readBackupManifestFromStore(ctx, store, encryption)
+		if err != nil {
+			return err
+		}
+
+		for i := range incPaths {
+			m, err := readBackupManifest(ctx, store, incPaths[i], encryption)
+			if err != nil {
+				return err
+			}
+			// Blank the stats to prevent memory blowup.
+			m.Statistics = nil
+			manifests[i+1] = m
+		}
+
 		// If we are restoring a backup with old-style foreign keys, skip over the
 		// FKs for which we can't resolve the cross-table references. We can't
 		// display them anyway, because we don't have the referenced table names,
 		// etc.
-		if err := maybeUpgradeTableDescsInBackupManifests(ctx, []BackupManifest{desc}, true /*skipFKsWithNoMatchingTable*/); err != nil {
+		if err := maybeUpgradeTableDescsInBackupManifests(
+			ctx, manifests, true, /*skipFKsWithNoMatchingTable*/
+		); err != nil {
 			return err
 		}
 
-		for _, row := range shower.fn(desc) {
+		for _, row := range shower.fn(manifests) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -125,7 +143,7 @@ func showBackupPlanHook(
 
 type backupShower struct {
 	header sqlbase.ResultColumns
-	fn     func(BackupManifest) []tree.Datums
+	fn     func([]BackupManifest) []tree.Datums
 }
 
 func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
@@ -146,55 +164,57 @@ func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
 func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas bool) backupShower {
 	return backupShower{
 		header: backupShowerHeaders(showSchemas),
-		fn: func(desc BackupManifest) []tree.Datums {
-			descs := make(map[sqlbase.ID]string)
-			for _, descriptor := range desc.Descriptors {
-				if database := descriptor.GetDatabase(); database != nil {
-					if _, ok := descs[database.ID]; !ok {
-						descs[database.ID] = database.Name
-					}
-				}
-			}
-			descSizes := make(map[sqlbase.ID]RowCount)
-			for _, file := range desc.Files {
-				// TODO(dan): This assumes each file in the backup only contains
-				// data from a single table, which is usually but not always
-				// correct. It does not account for interleaved tables or if a
-				// BACKUP happened to catch a newly created table that hadn't yet
-				// been split into its own range.
-				_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
-				if err != nil {
-					continue
-				}
-				s := descSizes[sqlbase.ID(tableID)]
-				s.add(file.EntryCounts)
-				descSizes[sqlbase.ID(tableID)] = s
-			}
-			start := tree.DNull
-			if desc.StartTime.WallTime != 0 {
-				start = tree.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
-			}
+		fn: func(manifests []BackupManifest) []tree.Datums {
 			var rows []tree.Datums
-			var row tree.Datums
-			for _, descriptor := range desc.Descriptors {
-				if table := descriptor.Table(hlc.Timestamp{}); table != nil {
-					dbName := descs[table.ParentID]
-					row = tree.Datums{
-						tree.NewDString(dbName),
-						tree.NewDString(table.Name),
-						start,
-						tree.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
-						tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
-						tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
-					}
-					if showSchemas {
-						schema, err := p.ShowCreate(ctx, dbName, desc.Descriptors, table, sql.OmitMissingFKClausesFromCreate)
-						if err != nil {
-							continue
+			for _, manifest := range manifests {
+				descs := make(map[sqlbase.ID]string)
+				for _, descriptor := range manifest.Descriptors {
+					if database := descriptor.GetDatabase(); database != nil {
+						if _, ok := descs[database.ID]; !ok {
+							descs[database.ID] = database.Name
 						}
-						row = append(row, tree.NewDString(schema))
 					}
-					rows = append(rows, row)
+				}
+				descSizes := make(map[sqlbase.ID]RowCount)
+				for _, file := range manifest.Files {
+					// TODO(dan): This assumes each file in the backup only contains
+					// data from a single table, which is usually but not always
+					// correct. It does not account for interleaved tables or if a
+					// BACKUP happened to catch a newly created table that hadn't yet
+					// been split into its own range.
+					_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
+					if err != nil {
+						continue
+					}
+					s := descSizes[sqlbase.ID(tableID)]
+					s.add(file.EntryCounts)
+					descSizes[sqlbase.ID(tableID)] = s
+				}
+				start := tree.DNull
+				if manifest.StartTime.WallTime != 0 {
+					start = tree.MakeDTimestamp(timeutil.Unix(0, manifest.StartTime.WallTime), time.Nanosecond)
+				}
+				var row tree.Datums
+				for _, descriptor := range manifest.Descriptors {
+					if table := descriptor.Table(hlc.Timestamp{}); table != nil {
+						dbName := descs[table.ParentID]
+						row = tree.Datums{
+							tree.NewDString(dbName),
+							tree.NewDString(table.Name),
+							start,
+							tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond),
+							tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
+							tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
+						}
+						if showSchemas {
+							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors, table, sql.OmitMissingFKClausesFromCreate)
+							if err != nil {
+								continue
+							}
+							row = append(row, tree.NewDString(schema))
+						}
+						rows = append(rows, row)
+					}
 				}
 			}
 			return rows
@@ -210,14 +230,16 @@ var backupShowerRanges = backupShower{
 		{Name: "end_key", Typ: types.Bytes},
 	},
 
-	fn: func(desc BackupManifest) (rows []tree.Datums) {
-		for _, span := range desc.Spans {
-			rows = append(rows, tree.Datums{
-				tree.NewDString(span.Key.String()),
-				tree.NewDString(span.EndKey.String()),
-				tree.NewDBytes(tree.DBytes(span.Key)),
-				tree.NewDBytes(tree.DBytes(span.EndKey)),
-			})
+	fn: func(manifests []BackupManifest) (rows []tree.Datums) {
+		for _, manifest := range manifests {
+			for _, span := range manifest.Spans {
+				rows = append(rows, tree.Datums{
+					tree.NewDString(span.Key.String()),
+					tree.NewDString(span.EndKey.String()),
+					tree.NewDBytes(tree.DBytes(span.Key)),
+					tree.NewDBytes(tree.DBytes(span.EndKey)),
+				})
+			}
 		}
 		return rows
 	},
@@ -234,17 +256,19 @@ var backupShowerFiles = backupShower{
 		{Name: "rows", Typ: types.Int},
 	},
 
-	fn: func(desc BackupManifest) (rows []tree.Datums) {
-		for _, file := range desc.Files {
-			rows = append(rows, tree.Datums{
-				tree.NewDString(file.Path),
-				tree.NewDString(file.Span.Key.String()),
-				tree.NewDString(file.Span.EndKey.String()),
-				tree.NewDBytes(tree.DBytes(file.Span.Key)),
-				tree.NewDBytes(tree.DBytes(file.Span.EndKey)),
-				tree.NewDInt(tree.DInt(file.EntryCounts.DataSize)),
-				tree.NewDInt(tree.DInt(file.EntryCounts.Rows)),
-			})
+	fn: func(manifests []BackupManifest) (rows []tree.Datums) {
+		for _, manifest := range manifests {
+			for _, file := range manifest.Files {
+				rows = append(rows, tree.Datums{
+					tree.NewDString(file.Path),
+					tree.NewDString(file.Span.Key.String()),
+					tree.NewDString(file.Span.EndKey.String()),
+					tree.NewDBytes(tree.DBytes(file.Span.Key)),
+					tree.NewDBytes(tree.DBytes(file.Span.EndKey)),
+					tree.NewDInt(tree.DInt(file.EntryCounts.DataSize)),
+					tree.NewDInt(tree.DInt(file.EntryCounts.Rows)),
+				})
+			}
 		}
 		return rows
 	},

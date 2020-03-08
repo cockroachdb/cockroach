@@ -9,17 +9,16 @@
 package backupccl_test
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShowBackup(t *testing.T) {
@@ -29,55 +28,70 @@ func TestShowBackup(t *testing.T) {
 	_, tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	full, inc, details := localFoo+"/full", localFoo+"/inc", localFoo+"/details"
+	const full, inc, inc2 = localFoo + "/full", localFoo + "/inc", localFoo + "/inc2"
 
-	beforeFull := timeutil.Now()
-	sqlDB.Exec(t, `BACKUP data.bank TO $1`, full)
+	beforeTS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 
-	var unused driver.Value
-	var start, end *time.Time
-	var dataSize, rows uint64
-	sqlDB.QueryRow(t, `SELECT * FROM [SHOW BACKUP $1] WHERE table_name = 'bank'`, full).Scan(
-		&unused, &unused, &start, &end, &dataSize, &rows,
-	)
-	if start != nil {
-		t.Errorf("expected null start time on full backup, got %v", *start)
-	}
-	if !(*end).After(beforeFull) {
-		t.Errorf("expected now (%s) to be in (%s, %s)", beforeFull, start, end)
-	}
-	if rows != numAccounts {
-		t.Errorf("expected %d got: %d", numAccounts, rows)
-	}
+	res := sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, full)
+	require.Equal(t, [][]string{{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)}}, res)
 
 	// Mess with half the rows.
 	affectedRows, err := sqlDB.Exec(t,
 		`UPDATE data.bank SET id = -1 * id WHERE id > $1`, numAccounts/2,
 	).RowsAffected()
-	if err != nil {
-		t.Fatal(err)
-	} else if affectedRows != numAccounts/2 {
-		t.Fatalf("expected to update %d rows, got %d", numAccounts/2, affectedRows)
-	}
+	require.NoError(t, err)
+	require.Equal(t, numAccounts/2, int(affectedRows))
 
-	beforeInc := timeutil.Now()
-	sqlDB.Exec(t, `BACKUP data.bank TO $1 INCREMENTAL FROM $2`, inc, full)
+	// Backup the changes by appending to the base and by making a separate
+	// inc backup.
+	incTS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, incTS), full)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2`, incTS), inc, full)
 
-	sqlDB.QueryRow(t, `SELECT * FROM [SHOW BACKUP $1] WHERE table_name = 'bank'`, inc).Scan(
-		&unused, &unused, &start, &end, &dataSize, &rows,
-	)
-	if start == nil {
-		t.Errorf("expected start time on inc backup, got %v", *start)
-	}
-	if !(*end).After(beforeInc) {
-		t.Errorf("expected now (%s) to be in (%s, %s)", beforeInc, start, end)
-	}
-	// We added affectedRows and removed affectedRows, so there should be 2*
-	// affectedRows in the backup.
-	if expected := affectedRows * 2; rows != uint64(expected) {
-		t.Errorf("expected %d got: %d", expected, rows)
-	}
+	// Check the appended base backup.
+	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, full)
+	require.Equal(t, [][]string{
+		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)},
+		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
+	}, res)
 
+	// Check the separate inc backup.
+	res = sqlDB.QueryStr(t, `SELECT start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, inc)
+	require.Equal(t, [][]string{
+		{beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
+	}, res)
+
+	// Create two new tables, alphabetically on either side of bank.
+	sqlDB.Exec(t, `CREATE TABLE data.auth (id INT PRIMARY KEY, name STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE data.users (id INT PRIMARY KEY, name STRING)`)
+	sqlDB.Exec(t, `INSERT INTO data.users VALUES (1, 'one'), (2, 'two'), (3, 'three')`)
+
+	// Backup the changes again, by appending to the base and by making a
+	// separate inc backup.
+	inc2TS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, inc2TS), full)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2, $3`, inc2TS), inc2, full, inc)
+
+	// Check the appended base backup.
+	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, full)
+	require.Equal(t, [][]string{
+		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)},
+		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
+		{"bank", incTS, inc2TS, "0"},
+		{"auth", incTS, inc2TS, "0"},
+		{"users", incTS, inc2TS, "3"},
+	}, res)
+
+	// Check the separate inc backup.
+	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, inc2)
+	require.Equal(t, [][]string{
+		{"bank", incTS, inc2TS, "0"},
+		{"auth", incTS, inc2TS, "0"},
+		{"users", incTS, inc2TS, "3"},
+	}, res)
+
+	const details = localFoo + "/details"
 	sqlDB.Exec(t, `CREATE TABLE data.details1 (c INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO data.details1 (SELECT generate_series(1, 100))`)
 	sqlDB.Exec(t, `ALTER TABLE data.details1 SPLIT AT VALUES (1), (42)`)
@@ -90,15 +104,15 @@ func TestShowBackup(t *testing.T) {
 	details2Key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(details2Desc, details2Desc.PrimaryIndex.ID))
 
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES '%s'`, details), [][]string{
-		{"/Table/54/1", "/Table/54/2", string(details1Key), string(details1Key.PrefixEnd())},
-		{"/Table/55/1", "/Table/55/2", string(details2Key), string(details2Key.PrefixEnd())},
+		{"/Table/56/1", "/Table/56/2", string(details1Key), string(details1Key.PrefixEnd())},
+		{"/Table/57/1", "/Table/57/2", string(details2Key), string(details2Key.PrefixEnd())},
 	})
 
 	var showFiles = fmt.Sprintf(`SELECT start_pretty, end_pretty, size_bytes, rows
 		FROM [SHOW BACKUP FILES '%s']`, details)
 	sqlDB.CheckQueryResults(t, showFiles, [][]string{
-		{"/Table/54/1/1", "/Table/54/1/42", "369", "41"},
-		{"/Table/54/1/42", "/Table/54/2", "531", "59"},
+		{"/Table/56/1/1", "/Table/56/1/42", "369", "41"},
+		{"/Table/56/1/42", "/Table/56/2", "531", "59"},
 	})
 	sstMatcher := regexp.MustCompile(`\d+\.sst`)
 	pathRows := sqlDB.QueryStr(t, `SELECT path FROM [SHOW BACKUP FILES $1]`, details)
@@ -213,6 +227,7 @@ COMMENT ON INDEX tablea_b_idx IS 'index'`
 			t.Fatalf("mismatched create statement: %s, want %s", createStmt, want)
 		}
 	}
+
 }
 
 func eqWhitespace(a, b string) bool {
