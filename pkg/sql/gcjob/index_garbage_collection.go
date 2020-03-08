@@ -30,7 +30,8 @@ func gcIndexes(
 	execCfg *sql.ExecutorConfig,
 	parentID sqlbase.ID,
 	progress *jobspb.SchemaChangeGCProgress,
-) error {
+) (bool, error) {
+	didGC := false
 	droppedIndexes := progress.Indexes
 	if log.V(2) {
 		log.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
@@ -42,7 +43,7 @@ func gcIndexes(
 		parentTable, err = sqlbase.GetTableDescFromID(ctx, txn, parentID)
 		return err
 	}); err != nil {
-		return errors.Wrapf(err, "fetching parent table %d", parentID)
+		return false, errors.Wrapf(err, "fetching parent table %d", parentID)
 	}
 
 	for _, index := range droppedIndexes {
@@ -52,7 +53,7 @@ func gcIndexes(
 
 		indexDesc := sqlbase.IndexDescriptor{ID: index.IndexID}
 		if err := clearIndex(ctx, execCfg.DB, parentTable, indexDesc); err != nil {
-			return errors.Wrapf(err, "clearing index %d", indexDesc.ID)
+			return false, errors.Wrapf(err, "clearing index %d", indexDesc.ID)
 		}
 
 		// All the data chunks have been removed. Now also removed the
@@ -60,15 +61,17 @@ func gcIndexes(
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, parentTable.GetID(), []sqlbase.IndexDescriptor{indexDesc})
 		}); err != nil {
-			return errors.Wrapf(err, "removing index %d zone configs", indexDesc.ID)
+			return false, errors.Wrapf(err, "removing index %d zone configs", indexDesc.ID)
 		}
 
 		if err := completeDroppedIndex(ctx, execCfg, parentTable, index.IndexID, progress); err != nil {
-			return err
+			return false, err
 		}
+
+		didGC = true
 	}
 
-	return nil
+	return didGC, nil
 }
 
 // clearIndexes issues Clear Range requests over all specified indexes.

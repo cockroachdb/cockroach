@@ -24,6 +24,7 @@ type TestingKnobs struct {
 	SQLExecutor         ModuleTestingKnobs
 	SQLLeaseManager     ModuleTestingKnobs
 	SQLSchemaChanger    ModuleTestingKnobs
+	GCJob               ModuleTestingKnobs
 	PGWireTestingKnobs  ModuleTestingKnobs
 	SQLMigrationManager ModuleTestingKnobs
 	DistSQL             ModuleTestingKnobs
