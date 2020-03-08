@@ -1347,12 +1347,10 @@ func TestRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params := base.TestServerArgs{}
-	// Disable external processing of mutations so that the final check of
-	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
-	// was never observed by a stress test, it is here for safety.
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-	}
+	// Disable GC job so that the final check of crdb_internal.tables is
+	// guaranteed to not be cleaned up. Although this was never observed by a
+	// stress test, it is here for safety.
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} /* blocks forever */ }}
 
 	const numAccounts = 1000
 	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
@@ -1395,9 +1393,8 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 	// Disable external processing of mutations so that the final check of
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-	}
+	blockGC := make(chan struct{})
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func() { <-blockGC }}
 
 	const numAccounts = 1000
 	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
@@ -1428,6 +1425,7 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 		t, `database "data" does not exist`,
 		`DROP DATABASE data`,
 	)
+	close(blockGC)
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {

@@ -33,9 +33,7 @@ func TestAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
-	}
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

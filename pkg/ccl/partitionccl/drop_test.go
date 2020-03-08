@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,15 +41,16 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 
 	const numRows = 100
 
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+
 	asyncNotification := make(chan struct{})
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Currently there's no index GC job implemented. Eventually
-			// the GC job needs to block until the asyncNotification channel is
-			// closed, which will probably need to be controlled in a schema change
-			// knob.
+		GCJob: &sql.GCJobTestingKnobs{
+			RunBeforeResume: func() {
+				<-asyncNotification
+			},
 		},
 	}
 	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
@@ -116,7 +118,6 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	}
 	close(asyncNotification)
 
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Wait for index drop to complete so zone configs are updated.
 	testutils.SucceedsSoon(t, func() error {
 		if kvs, err := kvDB.Scan(context.TODO(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {
