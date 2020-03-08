@@ -26,7 +26,7 @@ func Example_nodelocal() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	file, cleanUp := createTestFile()
+	file, cleanUp := createTestFile("test.csv", "content")
 	defer cleanUp()
 
 	c.Run(fmt.Sprintf("nodelocal upload %s /test/file1.csv", file))
@@ -49,6 +49,28 @@ func Example_nodelocal() {
 	// ERROR: open notexist.csv: no such file or directory
 }
 
+func Example_nodelocal_disabled() {
+	c := newCLITest(cliTestParams{noNodelocal: true})
+	defer c.cleanup()
+
+	file, cleanUp := createTestFile("test.csv", "non-empty-file")
+	defer cleanUp()
+
+	empty, cleanUpEmpty := createTestFile("empty.csv", "")
+	defer cleanUpEmpty()
+
+	c.Run(fmt.Sprintf("nodelocal upload %s /test/file1.csv", empty))
+	c.Run(fmt.Sprintf("nodelocal upload %s /test/file1.csv", file))
+
+	// Output:
+	// nodelocal upload empty.csv /test/file1.csv
+	// ERROR: current transaction is aborted, commands ignored until end of transaction block
+	// SQLSTATE: 25P02
+	// nodelocal upload test.csv /test/file1.csv
+	// ERROR: current transaction is aborted, commands ignored until end of transaction block
+	// SQLSTATE: 25P02
+}
+
 func TestNodeLocalFileUpload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -62,6 +84,10 @@ func TestNodeLocalFileUpload(t *testing.T) {
 		name        string
 		fileContent []byte
 	}{
+		{
+			"empty",
+			[]byte{},
+		},
 		{
 			"exactly-one-chunk",
 			make([]byte, chunkSize),
@@ -102,13 +128,12 @@ func TestNodeLocalFileUpload(t *testing.T) {
 	}
 }
 
-func createTestFile() (string, func()) {
-	filePath := "test.csv"
-	err := ioutil.WriteFile(filePath, []byte("file content"), 0666)
+func createTestFile(name, content string) (string, func()) {
+	err := ioutil.WriteFile(name, []byte(content), 0666)
 	if err != nil {
 		return "", func() {}
 	}
-	return filePath, func() {
-		_ = os.Remove(filePath)
+	return name, func() {
+		_ = os.Remove(name)
 	}
 }

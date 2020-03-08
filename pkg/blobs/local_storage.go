@@ -31,6 +31,14 @@ type LocalStorage struct {
 // NewLocalStorage creates a new LocalStorage object and returns
 // an error when we cannot take the absolute path of `externalIODir`.
 func NewLocalStorage(externalIODir string) (*LocalStorage, error) {
+	// An empty externalIODir indicates external IO is completely disabled.
+	// Returning a nil *LocalStorage in this case and then hanldling `nil` in the
+	// prependExternalIODir helper ensures that that is respected throughout the
+	// implementation (as a failure to do so would likely fail loudly with a
+	// nil-pointer dereference).
+	if externalIODir == "" {
+		return nil, nil
+	}
 	absPath, err := filepath.Abs(externalIODir)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating LocalStorage object")
@@ -46,6 +54,9 @@ func NewLocalStorage(externalIODir string) (*LocalStorage, error) {
 // operators to "open up" their I/O directory via symlinks. Therefore,
 // a full check via filepath.Abs() would be inadequate.
 func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
+	if l == nil {
+		return "", errors.Errorf("local file access is disabled")
+	}
 	localBase := filepath.Join(l.externalIODir, path)
 	if !strings.HasPrefix(localBase, l.externalIODir) {
 		return "", errors.Errorf("local file access to paths outside of external-io-dir is not allowed: %s", path)
@@ -55,8 +66,7 @@ func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 
 // WriteFile prepends IO dir to filename and writes the content to that local file.
 func (l *LocalStorage) WriteFile(filename string, content io.Reader) (err error) {
-	var fullPath string
-	fullPath, err = l.prependExternalIODir(filename)
+	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return err
 	}
