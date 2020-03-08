@@ -33,8 +33,8 @@ func TestShowBackup(t *testing.T) {
 	beforeTS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 
-	res := sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, full)
-	require.Equal(t, [][]string{{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)}}, res)
+	res := sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
+	require.Equal(t, [][]string{{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"}}, res)
 
 	// Mess with half the rows.
 	affectedRows, err := sqlDB.Exec(t,
@@ -50,10 +50,10 @@ func TestShowBackup(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2`, incTS), inc, full)
 
 	// Check the appended base backup.
-	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, full)
+	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
 	require.Equal(t, [][]string{
-		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)},
-		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
+		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
 	}, res)
 
 	// Check the separate inc backup.
@@ -161,7 +161,7 @@ COMMENT ON INDEX tablea_b_idx IS 'index'`
 			expectedCreateSeq,
 		}
 		for i, row := range showBackupRows {
-			createStmt := row[6]
+			createStmt := row[7]
 			if !eqWhitespace(createStmt, expected[i]) {
 				t.Fatalf("mismatched create statement: %s, want %s", createStmt, expected[i])
 			}
@@ -196,12 +196,12 @@ COMMENT ON INDEX tablea_b_idx IS 'index'`
 			)`
 
 		showBackupRows = sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, includedFK))
-		createStmtSameDB := showBackupRows[1][6]
+		createStmtSameDB := showBackupRows[1][7]
 		if !eqWhitespace(createStmtSameDB, wantSameDB) {
 			t.Fatalf("mismatched create statement: %s, want %s", createStmtSameDB, wantSameDB)
 		}
 
-		createStmtDiffDB := showBackupRows[2][6]
+		createStmtDiffDB := showBackupRows[2][7]
 		if !eqWhitespace(createStmtDiffDB, wantDiffDB) {
 			t.Fatalf("mismatched create statement: %s, want %s", createStmtDiffDB, wantDiffDB)
 		}
@@ -222,9 +222,29 @@ COMMENT ON INDEX tablea_b_idx IS 'index'`
 			)`
 
 		showBackupRows = sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, missingFK))
-		createStmt := showBackupRows[0][6]
+		createStmt := showBackupRows[0][7]
 		if !eqWhitespace(createStmt, want) {
 			t.Fatalf("mismatched create statement: %s, want %s", createStmt, want)
+		}
+	}
+
+	{
+		full_cluster := localFoo + "/full_cluster"
+		sqlDB.Exec(t, `BACKUP TO $1;`, full_cluster)
+
+		showBackupRows = sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
+		is_full_cluster := showBackupRows[0][6]
+		if !eqWhitespace(is_full_cluster, "true") {
+			t.Fatal("expected show backup to indicate that backup was full cluster")
+		}
+
+		full_cluster_inc := localFoo + "/full_cluster_inc"
+		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, full_cluster_inc, full_cluster)
+
+		showBackupRows = sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
+		is_full_cluster = showBackupRows[0][6]
+		if !eqWhitespace(is_full_cluster, "true") {
+			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
 	}
 

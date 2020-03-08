@@ -154,6 +154,7 @@ func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
 		{Name: "end_time", Typ: types.Timestamp},
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
+		{Name: "is_full_cluster", Typ: types.Bool},
 	}
 	if showSchemas {
 		baseHeaders = append(baseHeaders, sqlbase.ResultColumn{Name: "create_statement", Typ: types.String})
@@ -205,6 +206,7 @@ func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas b
 							tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond),
 							tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
 							tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
+							tree.MakeDBool(manifest.DescriptorCoverage == tree.AllDescriptors),
 						}
 						if showSchemas {
 							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors, table, sql.OmitMissingFKClausesFromCreate)
