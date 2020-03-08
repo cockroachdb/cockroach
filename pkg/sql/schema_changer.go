@@ -17,10 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,15 +44,9 @@ import (
 )
 
 const (
-	// RunningStatusDrainingNames is for jobs that are currently in progress and
-	// are draining names.
-	RunningStatusDrainingNames jobs.RunningStatus = "draining names"
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
 	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
-	// RunningStatusCompaction is for jobs that are currently in progress and
-	// undergoing RocksDB compaction
-	RunningStatusCompaction jobs.RunningStatus = "RocksDB compaction"
 	// RunningStatusDeleteOnly is for jobs that are currently waiting on
 	// the cluster to converge to seeing the schema element in the DELETE_ONLY
 	// state.
@@ -71,28 +63,14 @@ const (
 	RunningStatusValidation jobs.RunningStatus = "validating schema"
 )
 
-// TODO (lucy): After refactoring MaybeGCMutations to be in its own job, this
-// will probably go away. For now, preserve it the way it is even though nothing
-// is using it.
-type droppedIndex struct {
-	indexID sqlbase.IndexID
-	//lint:ignore U1001 see above comment
-	dropTime int64
-	deadline int64
-}
-
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
-	tableID    sqlbase.ID
-	mutationID sqlbase.MutationID
-	nodeID     roachpb.NodeID
-	db         *kv.DB
-	leaseMgr   *LeaseManager
-
-	// TODO (lucy): Replace this with job state once we have a GC job. This is
-	// only still here because the (currently unused) MaybeGCMutations depends on
-	// it.
-	dropIndexTimes []droppedIndex
+	tableID           sqlbase.ID
+	mutationID        sqlbase.MutationID
+	droppedDatabaseID sqlbase.ID
+	nodeID            roachpb.NodeID
+	db                *kv.DB
+	leaseMgr          *LeaseManager
 
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
@@ -210,171 +188,6 @@ func makeErrTableVersionMismatch(version, expected sqlbase.DescriptorVersion) er
 
 func (e errTableVersionMismatch) Error() string {
 	return fmt.Sprintf("table version mismatch: %d, expected: %d", e.version, e.expected)
-}
-
-// DropTableDesc removes a descriptor from the KV database.
-func (sc *SchemaChanger) DropTableDesc(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, traceKV bool,
-) error {
-	descKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
-
-	// Finished deleting all the table data, now delete the table meta data.
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Delete table descriptor
-		b := &kv.Batch{}
-		if traceKV {
-			log.VEventf(ctx, 2, "Del %s", descKey)
-			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
-		}
-		// Delete the descriptor.
-		b.Del(descKey)
-		// Delete the zone config entry for this table.
-		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
-
-		if tableDesc.GetDropJobID() != 0 {
-			if err := sc.updateDropTableJob(
-				ctx,
-				txn,
-				tableDesc.GetDropJobID(),
-				tableDesc.ID,
-				jobspb.Status_DONE,
-				func(ctx context.Context, txn *kv.Txn, job *jobs.Job) error {
-					// Delete the zone config entry for the dropped database associated
-					// with the job, if it exists.
-					details := job.Details().(jobspb.SchemaChangeDetails)
-					if details.DroppedDatabaseID == sqlbase.InvalidID {
-						return nil
-					}
-					dbZoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(details.DroppedDatabaseID))
-					if traceKV {
-						log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
-					}
-					b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-					return nil
-				}); err != nil {
-				log.Warningf(ctx, "failed to update job status: %+v", err)
-			}
-		}
-		return txn.Run(ctx, b)
-	})
-}
-
-// truncateTable deletes all of the data in the specified table.
-func (sc *SchemaChanger) truncateTable(ctx context.Context, table *sqlbase.TableDescriptor) error {
-	// If DropTime isn't set, assume this drop request is from a version
-	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
-	if table.DropTime == 0 {
-		return ClearTableDataInChunks(ctx, table, sc.db, false /* traceKV */)
-	}
-
-	tableKey := roachpb.RKey(keys.MakeTablePrefix(uint32(table.ID)))
-	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
-
-	// ClearRange requests lays down RocksDB range deletion tombstones that have
-	// serious performance implications (#24029). The logic below attempts to
-	// bound the number of tombstones in one store by sending the ClearRange
-	// requests to each range in the table in small, sequential batches rather
-	// than letting DistSender send them all in parallel, to hopefully give the
-	// compaction queue time to compact the range tombstones away in between
-	// requests.
-	//
-	// As written, this approach has several deficiencies. It does not actually
-	// wait for the compaction queue to compact the tombstones away before
-	// sending the next request. It is likely insufficient if multiple DROP
-	// TABLEs are in flight at once. It does not save its progress in case the
-	// coordinator goes down. These deficiences could be addressed, but this code
-	// was originally a stopgap to avoid the range tombstone performance hit. The
-	// RocksDB range tombstone implementation has since been improved and the
-	// performance implications of many range tombstones has been reduced
-	// dramatically making this simplistic throttling sufficient.
-
-	// These numbers were chosen empirically for the clearrange roachtest and
-	// could certainly use more tuning.
-	const batchSize = 100
-	const waitTime = 500 * time.Millisecond
-
-	var n int
-	lastKey := tableSpan.Key
-	ri := kvcoord.NewRangeIterator(sc.execCfg.DistSender)
-	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
-		if !ri.Valid() {
-			return ri.Error().GoError()
-		}
-
-		if n++; n >= batchSize || !ri.NeedAnother(tableSpan) {
-			endKey := ri.Desc().EndKey
-			if tableSpan.EndKey.Less(endKey) {
-				endKey = tableSpan.EndKey
-			}
-			var b kv.Batch
-			b.AddRawRequest(&roachpb.ClearRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key:    lastKey.AsRawKey(),
-					EndKey: endKey.AsRawKey(),
-				},
-			})
-			log.VEventf(ctx, 2, "ClearRange %s - %s", lastKey, endKey)
-			if err := sc.db.Run(ctx, &b); err != nil {
-				return err
-			}
-			n = 0
-			lastKey = endKey
-			time.Sleep(waitTime)
-		}
-
-		if !ri.NeedAnother(tableSpan) {
-			break
-		}
-	}
-
-	return nil
-}
-
-// Silence unused warning.
-var _ = (*SchemaChanger).maybeDropTable
-
-// maybe Drop a table. Return nil if successfully dropped.
-func (sc *SchemaChanger) maybeDropTable(ctx context.Context, table *sqlbase.TableDescriptor) error {
-	if !table.Dropped() {
-		return nil
-	}
-
-	// This can happen if a change other than the drop originally
-	// scheduled the changer for this table. If that's the case,
-	// we still need to wait for the deadline to expire.
-	if table.DropTime != 0 {
-		var timeRemaining time.Duration
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			timeRemaining = 0
-			_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
-				&sqlbase.IndexDescriptor{}, "", false /* getInheritedDefault */)
-			if err != nil {
-				return err
-			}
-			deadline := table.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
-			timeRemaining = timeutil.Since(timeutil.Unix(0, deadline))
-			return nil
-		}); err != nil {
-			return err
-		}
-		if timeRemaining < 0 {
-			return errNotHitGCTTLDeadline
-		}
-	}
-
-	// Do all the hard work of deleting the table data and the table ID.
-	if err := sc.truncateTable(ctx, table); err != nil {
-		return err
-	}
-
-	if err := sc.DropTableDesc(ctx, table, false /* traceKV */); err != nil {
-		return err
-	}
-	return nil
 }
 
 // maybe backfill a created table by executing the AS query. Return nil if
@@ -513,133 +326,6 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	return nil
 }
 
-// Silence unused warning.
-var _ = (*SchemaChanger).maybeGCMutations
-
-func (sc *SchemaChanger) maybeGCMutations(
-	ctx context.Context, table *sqlbase.TableDescriptor,
-) error {
-	if len(table.GCMutations) == 0 || len(sc.dropIndexTimes) == 0 {
-		return nil
-	}
-
-	// Don't perform GC work if there are non-GC mutations waiting.
-	if len(table.Mutations) > 0 {
-		return nil
-	}
-
-	// Find dropped index with earliest GC deadline.
-	dropped := sc.dropIndexTimes[0]
-	for i := 1; i < len(sc.dropIndexTimes); i++ {
-		if other := sc.dropIndexTimes[i]; other.deadline < dropped.deadline {
-			dropped = other
-		}
-	}
-
-	var mutation sqlbase.TableDescriptor_GCDescriptorMutation
-	found := false
-	for _, gcm := range table.GCMutations {
-		if gcm.IndexID == sc.dropIndexTimes[0].indexID {
-			found = true
-			mutation = gcm
-			break
-		}
-	}
-	if !found {
-		return errors.AssertionFailedf("no GC mutation for index %d", errors.Safe(sc.dropIndexTimes[0].indexID))
-	}
-
-	// Check if the deadline for GC'd dropped index expired because
-	// a change other than the drop could have scheduled the changer
-	// for this table.
-	timeRemaining := timeutil.Since(timeutil.Unix(0, dropped.deadline))
-	if timeRemaining < 0 {
-		// Return nil to allow other any mutations to make progress.
-		return nil
-	}
-	if err := sc.truncateIndexes(ctx, table.Version, []sqlbase.IndexDescriptor{{ID: mutation.IndexID}}); err != nil {
-		return err
-	}
-
-	_, err := sc.leaseMgr.Publish(
-		ctx,
-		table.ID,
-		func(tbl *sqlbase.MutableTableDescriptor) error {
-			found := false
-			for i := 0; i < len(tbl.GCMutations); i++ {
-				if other := tbl.GCMutations[i]; other.IndexID == mutation.IndexID {
-					tbl.GCMutations = append(tbl.GCMutations[:i], tbl.GCMutations[i+1:]...)
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				return errDidntUpdateDescriptor
-			}
-
-			return nil
-		},
-		nil,
-	)
-
-	return err
-}
-
-func (sc *SchemaChanger) updateDropTableJob(
-	ctx context.Context,
-	txn *kv.Txn,
-	jobID int64,
-	tableID sqlbase.ID,
-	status jobspb.Status,
-	onSuccess func(context.Context, *kv.Txn, *jobs.Job) error,
-) error {
-	job, err := sc.jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
-	if err != nil {
-		return err
-	}
-
-	schemaDetails, ok := job.Details().(jobspb.SchemaChangeDetails)
-	if !ok {
-		return errors.AssertionFailedf("unexpected details for job: %T", job.Details())
-	}
-
-	lowestStatus := jobspb.Status_DONE
-	for i := range schemaDetails.DroppedTables {
-		if tableID == schemaDetails.DroppedTables[i].ID {
-			schemaDetails.DroppedTables[i].Status = status
-		}
-
-		if lowestStatus > schemaDetails.DroppedTables[i].Status {
-			lowestStatus = schemaDetails.DroppedTables[i].Status
-		}
-	}
-
-	var runningStatus jobs.RunningStatus
-	switch lowestStatus {
-	case jobspb.Status_DRAINING_NAMES:
-		runningStatus = RunningStatusDrainingNames
-	case jobspb.Status_WAIT_FOR_GC_INTERVAL:
-		runningStatus = RunningStatusWaitingGC
-	case jobspb.Status_ROCKSDB_COMPACTION:
-		runningStatus = RunningStatusCompaction
-	case jobspb.Status_DONE:
-		return job.WithTxn(txn).Succeeded(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return onSuccess(ctx, txn, job)
-		})
-	default:
-		return errors.AssertionFailedf("unexpected dropped table status %d", errors.Safe(lowestStatus))
-	}
-
-	if err := job.WithTxn(txn).SetDetails(ctx, schemaDetails); err != nil {
-		return err
-	}
-
-	return job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-		return runningStatus, nil
-	})
-}
-
 // Drain old names from the cluster.
 func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 	// Publish a new version with all the names drained after everyone
@@ -672,6 +358,62 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 		},
 	)
 	return err
+}
+
+func startGCJob(
+	ctx context.Context,
+	db *kv.DB,
+	jobRegistry *jobs.Registry,
+	username string,
+	schemaChangeDescription string,
+	details jobspb.SchemaChangeGCDetails,
+) error {
+	var sj *jobs.StartableJob
+	descriptorIDs := make([]sqlbase.ID, 0)
+	if len(details.Indexes) > 0 {
+		if len(descriptorIDs) == 0 {
+			descriptorIDs = []sqlbase.ID{details.ParentID}
+		}
+	} else if len(details.Tables) > 0 {
+		for _, table := range details.Tables {
+			descriptorIDs = append(descriptorIDs, table.ID)
+		}
+	} else {
+		// Nothing to GC.
+		return nil
+	}
+
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		jobRecord := jobs.Record{
+			Description:   fmt.Sprintf("GC for %s", schemaChangeDescription),
+			Username:      username,
+			DescriptorIDs: descriptorIDs,
+			Details:       details,
+			Progress:      jobspb.SchemaChangeGCProgress{},
+			NonCancelable: true,
+		}
+		var err error
+		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultCh */); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if _, err := sj.Start(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (sc *SchemaChanger) startGCJob(
+	ctx context.Context, details jobspb.SchemaChangeGCDetails, isRollback bool,
+) error {
+	description := sc.job.Payload().Description
+	if isRollback {
+		description = "ROLLBACK of " + description
+	}
+	return startGCJob(ctx, sc.db, sc.jobRegistry, sc.job.Payload().Username, description, details)
 }
 
 // Execute the entire schema change in steps.
@@ -711,9 +453,24 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 
-	// TODO (lucy): Skip table GC for now so we can return results to the client
-	// immediately after draining names when a table is dropped. Eventually we
-	// will queue a separate job to do this.
+	if tableDesc.Dropped() && sc.droppedDatabaseID == sqlbase.InvalidID {
+		// We've dropped this table, let's kick off a GC job.
+		dropTime := timeutil.Now().UnixNano()
+		if tableDesc.DropTime > 0 {
+			dropTime = tableDesc.DropTime
+		}
+		gcDetails := jobspb.SchemaChangeGCDetails{
+			Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
+				{
+					ID:       tableDesc.ID,
+					DropTime: dropTime,
+				},
+			},
+		}
+		if err := sc.startGCJob(ctx, gcDetails, false /* isRollback */); err != nil {
+			return err
+		}
+	}
 
 	if err := sc.maybeBackfillCreateTableAs(ctx, tableDesc); err != nil {
 		return err
@@ -722,8 +479,6 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	if err := sc.maybeMakeAddTablePublic(ctx, tableDesc); err != nil {
 		return err
 	}
-
-	// TODO (lucy): Skip index GC for now, see above
 
 	// Wait for the schema change to propagate to all nodes after this function
 	// returns, so that the new schema is live everywhere. This is not needed for
@@ -762,6 +517,9 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	// Run through mutation state machine and backfill.
 	err = sc.runStateMachineAndBackfill(ctx)
+	if err != nil {
+		return err
+	}
 
 	defer func() {
 		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && !errors.Is(err, sqlbase.ErrDescriptorNotFound) {
@@ -997,6 +755,7 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of the
 // schema.
+// It also kicks off GC jobs as needed.
 // Returns the updated descriptor.
 func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescriptor, error) {
 	isRollback := false
@@ -1080,7 +839,6 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			if indexDesc := mutation.GetIndex(); mutation.Direction == sqlbase.DescriptorMutation_DROP &&
 				indexDesc != nil {
 				if canClearRangeForDrop(indexDesc) {
-					// We continue adding dropped indexes to GCMutations because that's
 					// how we keep track of dropped index names (for, e.g., zone config
 					// lookups), even though in the absence of a GC job there's nothing to
 					// clean them up.
@@ -1089,6 +847,20 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						sqlbase.TableDescriptor_GCDescriptorMutation{
 							IndexID: indexDesc.ID,
 						})
+
+					dropTime := timeutil.Now().UnixNano()
+					indexGCDetails := jobspb.SchemaChangeGCDetails{
+						Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
+							{
+								IndexID:  indexDesc.ID,
+								DropTime: dropTime,
+							},
+						},
+						ParentID: sc.tableID,
+					}
+					if err := sc.startGCJob(ctx, indexGCDetails, isRollback); err != nil {
+						return err
+					}
 				}
 			}
 			if constraint := mutation.GetConstraint(); constraint != nil &&
@@ -1625,6 +1397,16 @@ func (sc *SchemaChanger) reverseMutation(
 	return mutation, columns
 }
 
+// GCJobTestingKnobs is for testing the Schema Changer GC job.
+// Note that this is defined here for testing purposes to avoid cyclic
+// dependencies.
+type GCJobTestingKnobs struct {
+	RunBeforeResume func()
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*GCJobTestingKnobs) ModuleTestingKnobs() {}
+
 // SchemaChangerTestingKnobs for testing the schema change execution path
 // through both the synchronous and asynchronous paths.
 type SchemaChangerTestingKnobs struct {
@@ -1740,7 +1522,6 @@ type schemaChangeResumer struct {
 	job *jobs.Job
 }
 
-// Resume is part of the jobs.Resumer interface.
 func (r schemaChangeResumer) Resume(
 	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
@@ -1751,10 +1532,11 @@ func (r schemaChangeResumer) Resume(
 		return nil
 	}
 
-	execSchemaChange := func(tableID sqlbase.ID, mutationID sqlbase.MutationID) error {
+	execSchemaChange := func(tableID sqlbase.ID, mutationID sqlbase.MutationID, droppedDatabaseID sqlbase.ID) error {
 		sc := SchemaChanger{
 			tableID:              tableID,
 			mutationID:           mutationID,
+			droppedDatabaseID:    droppedDatabaseID,
 			nodeID:               p.ExecCfg().NodeID.Get(),
 			db:                   p.ExecCfg().DB,
 			leaseMgr:             p.ExecCfg().LeaseManager,
@@ -1807,16 +1589,25 @@ func (r schemaChangeResumer) Resume(
 	if details.DroppedDatabaseID != sqlbase.InvalidID {
 		for i := range details.DroppedTables {
 			droppedTable := &details.DroppedTables[i]
-			if err := execSchemaChange(droppedTable.ID, sqlbase.InvalidMutationID); err != nil {
+			if err := execSchemaChange(droppedTable.ID, sqlbase.InvalidMutationID, details.DroppedDatabaseID); err != nil {
 				return err
 			}
 		}
-		return nil
+		dropTime := timeutil.Now().UnixNano()
+		tablesToGC := make([]jobspb.SchemaChangeGCDetails_DroppedID, len(details.DroppedTables))
+		for i, table := range details.DroppedTables {
+			tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
+		}
+		databaseGCDetails := jobspb.SchemaChangeGCDetails{
+			Tables:   tablesToGC,
+			ParentID: details.DroppedDatabaseID,
+		}
+		return startGCJob(ctx, p.ExecCfg().DB, p.ExecCfg().JobRegistry, r.job.Payload().Username, r.job.Payload().Description, databaseGCDetails)
 	}
 	if details.TableID == sqlbase.InvalidID {
 		return errors.AssertionFailedf("job has no database ID or table ID")
 	}
-	return execSchemaChange(details.TableID, details.MutationID)
+	return execSchemaChange(details.TableID, details.MutationID, details.DroppedDatabaseID)
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
