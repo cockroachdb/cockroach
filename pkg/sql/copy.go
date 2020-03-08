@@ -271,7 +271,7 @@ func (c *copyMachine) processCopyData(
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
-	if ln := len(c.rows); ln == 0 || (ln < copyBatchRowSize && !final) {
+	if ln := len(c.rows); !final && (ln == 0 || ln < copyBatchRowSize) {
 		return nil
 	}
 	return c.processRows(ctx)
@@ -317,6 +317,9 @@ func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, 
 
 // insertRows transforms the buffered rows into an insertNode and executes it.
 func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
+	if len(c.rows) == 0 {
+		return nil
+	}
 	cleanup := c.preparePlanner(ctx)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
