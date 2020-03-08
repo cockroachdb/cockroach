@@ -1416,7 +1416,7 @@ ORDER BY numwait DESC, s_name
    LIMIT 100;
 ----
 ·                                                   distributed            true
-·                                                   vectorized             false
+·                                                   vectorized             true
 limit                                               ·                      ·
  │                                                  count                  100
  └── sort                                           ·                      ·
