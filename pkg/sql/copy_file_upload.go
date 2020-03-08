@@ -135,9 +135,18 @@ func (f *fileUploadMachine) writeFile(ctx context.Context) error {
 	for _, r := range f.c.rows {
 		b := []byte(*r[0].(*tree.DBytes))
 		n, err := f.writeToFile.Write(b)
-		if err != nil || n < len(b) {
+		if err != nil {
 			return err
 		}
+		if n < len(b) {
+			return io.ErrShortWrite
+		}
+	}
+
+	// Issue a final zero-byte write to ensure we observe any errors in the pipe.
+	_, err := f.writeToFile.Write(nil)
+	if err != nil {
+		return err
 	}
 	f.c.insertedRows += len(f.c.rows)
 	f.c.rows = f.c.rows[:0]

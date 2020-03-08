@@ -271,7 +271,7 @@ func (c *copyMachine) processCopyData(
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
-	if ln := len(c.rows); ln == 0 || (ln < copyBatchRowSize && !final) {
+	if ln := len(c.rows); !final && (ln == 0 || ln < copyBatchRowSize) {
 		return nil
 	}
 	return c.processRows(ctx)
