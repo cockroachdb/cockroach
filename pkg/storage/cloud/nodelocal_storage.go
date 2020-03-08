@@ -55,13 +55,6 @@ func makeLocalStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blob client")
 	}
-
-	// In non-server execution we have no settings and no restriction on local IO.
-	if settings != nil {
-		if settings.ExternalIODir == "" {
-			return nil, errors.Errorf("local file access is disabled")
-		}
-	}
 	return &localFileStorage{base: cfg.Path, cfg: cfg, blobClient: client}, nil
 }
 
