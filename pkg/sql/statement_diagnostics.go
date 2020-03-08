@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -35,9 +36,7 @@ type StmtDiagnosticsRequester interface {
 	// tracing a query with the given fingerprint. Once this returns, calling
 	// shouldCollectDiagnostics() on the current node will return true for the given
 	// fingerprint.
-	//
-	// It returns the ID of the new row.
-	InsertRequest(ctx context.Context, fprint string) (int, error)
+	InsertRequest(ctx context.Context, fprint string) error
 }
 
 // stmtDiagnosticsRequestRegistry maintains a view on the statement fingerprints
@@ -50,9 +49,9 @@ type stmtDiagnosticsRequestRegistry struct {
 		// internally; it'd deadlock.
 		syncutil.Mutex
 		// requests waiting for the right query to come along.
-		requests []stmtDiagRequest
+		requestFingerprints map[stmtDiagRequestID]string
 		// ids of requests that this node is in the process of servicing.
-		ongoing []int
+		ongoing map[stmtDiagRequestID]struct{}
 
 		// epoch is observed before reading system.statement_diagnostics_requests, and then
 		// checked again before loading the tables contents. If the value changed in
@@ -81,42 +80,45 @@ func newStmtDiagnosticsRequestRegistry(
 	return r
 }
 
-type stmtDiagRequest struct {
-	id               int
-	queryFingerprint string
-}
+// stmtDiagRequestID is the ID of a diagnostics request, corresponding to the id
+// column in statement_diagnostics_requests.
+// A zero ID is invalid.
+type stmtDiagRequestID int
 
 // addRequestInternalLocked adds a request to r.mu.requests. If the request is
 // already present, the call is a noop.
 func (r *stmtDiagnosticsRequestRegistry) addRequestInternalLocked(
-	ctx context.Context, req stmtDiagRequest,
+	ctx context.Context, id stmtDiagRequestID, queryFingerprint string,
 ) {
-	if r.findRequestLocked(req.id) {
+	if r.findRequestLocked(id) {
 		// Request already exists.
 		return
 	}
-	r.mu.requests = append(r.mu.requests, req)
+	if r.mu.requestFingerprints == nil {
+		r.mu.requestFingerprints = make(map[stmtDiagRequestID]string)
+	}
+	r.mu.requestFingerprints[id] = queryFingerprint
 }
 
-func (r *stmtDiagnosticsRequestRegistry) findRequestLocked(requestID int) bool {
-	for _, er := range r.mu.requests {
-		if er.id == requestID {
-			return true
-		}
+func (r *stmtDiagnosticsRequestRegistry) findRequestLocked(requestID stmtDiagRequestID) bool {
+	_, ok := r.mu.requestFingerprints[requestID]
+	if ok {
+		return true
 	}
-	for _, id := range r.mu.ongoing {
-		if id == requestID {
-			return true
-		}
-	}
-	return false
+	_, ok = r.mu.ongoing[requestID]
+	return ok
 }
 
 // InsertRequest is part of the StmtDiagnosticsRequester interface.
-func (r *stmtDiagnosticsRequestRegistry) InsertRequest(
+func (r *stmtDiagnosticsRequestRegistry) InsertRequest(ctx context.Context, fprint string) error {
+	_, err := r.insertRequestInternal(ctx, fprint)
+	return err
+}
+
+func (r *stmtDiagnosticsRequestRegistry) insertRequestInternal(
 	ctx context.Context, fprint string,
-) (int, error) {
-	var requestID int
+) (stmtDiagRequestID, error) {
+	var requestID stmtDiagRequestID
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
@@ -144,7 +146,7 @@ func (r *stmtDiagnosticsRequestRegistry) InsertRequest(
 		if err != nil {
 			return err
 		}
-		requestID = int(*row[0].(*tree.DInt))
+		requestID = stmtDiagRequestID(*row[0].(*tree.DInt))
 		return nil
 	})
 	if err != nil {
@@ -157,11 +159,7 @@ func (r *stmtDiagnosticsRequestRegistry) InsertRequest(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.epoch++
-	req := stmtDiagRequest{
-		id:               requestID,
-		queryFingerprint: fprint,
-	}
-	r.addRequestInternalLocked(ctx, req)
+	r.addRequestInternalLocked(ctx, requestID, fprint)
 
 	// Notify all the other nodes that they have to poll.
 	buf := make([]byte, 8)
@@ -171,28 +169,6 @@ func (r *stmtDiagnosticsRequestRegistry) InsertRequest(
 	}
 
 	return requestID, nil
-}
-
-// removeExtraLocked removes all the requests not in ids.
-func (r *stmtDiagnosticsRequestRegistry) removeExtraLocked(ids []int) {
-	valid := func(req stmtDiagRequest) bool {
-		for _, id := range ids {
-			if req.id == id {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Compact the valid requests in the beginning of r.mu.requests.
-	i := 0 // index of valid requests
-	for _, req := range r.mu.requests {
-		if valid(req) {
-			r.mu.requests[i] = req
-			i++
-		}
-	}
-	r.mu.requests = r.mu.requests[:i]
 }
 
 // shouldCollectDiagnostics checks whether any data should be collected for the
@@ -208,47 +184,40 @@ func (r *stmtDiagnosticsRequestRegistry) shouldCollectDiagnostics(
 	defer r.mu.Unlock()
 
 	// Return quickly if we have no requests to trace.
-	if len(r.mu.requests) == 0 {
+	if len(r.mu.requestFingerprints) == 0 {
 		return false, nil
 	}
 
 	fprint := tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 
-	var req stmtDiagRequest
-	idx := -1
-	for i, er := range r.mu.requests {
-		if er.queryFingerprint == fprint {
-			req = er
-			idx = i
+	var reqID stmtDiagRequestID
+	for id, fingerprint := range r.mu.requestFingerprints {
+		if fingerprint == fprint {
+			reqID = id
 			break
 		}
 	}
-	if idx == -1 {
+	if reqID == 0 {
 		return false, nil
 	}
 
 	// Remove the request.
-	l := len(r.mu.requests)
-	r.mu.requests[idx] = r.mu.requests[l-1]
-	r.mu.requests = r.mu.requests[:l-1]
+	delete(r.mu.requestFingerprints, reqID)
+	if r.mu.ongoing == nil {
+		r.mu.ongoing = make(map[stmtDiagRequestID]struct{})
+	}
 
-	r.mu.ongoing = append(r.mu.ongoing, req.id)
+	r.mu.ongoing[reqID] = struct{}{}
 
 	return true, func(ctx context.Context, trace tracing.Recording) {
 		defer func() {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			// Remove the request from r.mu.ongoing.
-			for i, id := range r.mu.ongoing {
-				if id == req.id {
-					l := len(r.mu.ongoing)
-					r.mu.ongoing[i] = r.mu.ongoing[l-1]
-					r.mu.ongoing = r.mu.ongoing[:l-1]
-				}
-			}
+			delete(r.mu.ongoing, reqID)
 		}()
 
-		if err := r.insertDiagnostics(ctx, req, tree.AsString(ast), trace); err != nil {
+		if err := r.insertDiagnostics(ctx, reqID, fprint, tree.AsString(ast), trace); err != nil {
 			log.Warningf(ctx, "failed to insert trace: %s", err)
 		}
 	}
@@ -258,14 +227,18 @@ func (r *stmtDiagnosticsRequestRegistry) shouldCollectDiagnostics(
 // the corresponding request as completed in
 // system.statement_diagnostics_requests.
 func (r *stmtDiagnosticsRequestRegistry) insertDiagnostics(
-	ctx context.Context, req stmtDiagRequest, stmt string, trace tracing.Recording,
+	ctx context.Context,
+	reqID stmtDiagRequestID,
+	stmtFingerprint string,
+	stmt string,
+	trace tracing.Recording,
 ) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		{
 			row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-completed", txn,
 				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 				"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
-				req.id)
+				reqID)
 			if err != nil {
 				return err
 			}
@@ -285,7 +258,7 @@ func (r *stmtDiagnosticsRequestRegistry) insertDiagnostics(
 				"INSERT INTO system.statement_diagnostics "+
 					"(statement_fingerprint, statement, collected_at, error) "+
 					"VALUES ($1, $2, $3, $4) RETURNING id",
-				req.queryFingerprint, stmt, timeutil.Now(), err.Error())
+				stmtFingerprint, stmt, timeutil.Now(), err.Error())
 			if err != nil {
 				return err
 			}
@@ -297,7 +270,7 @@ func (r *stmtDiagnosticsRequestRegistry) insertDiagnostics(
 				"INSERT INTO system.statement_diagnostics "+
 					"(statement_fingerprint, statement, collected_at, trace) "+
 					"VALUES ($1, $2, $3, $4) RETURNING id",
-				req.queryFingerprint, stmt, timeutil.Now(), json)
+				stmtFingerprint, stmt, timeutil.Now(), json)
 			if err != nil {
 				return err
 			}
@@ -309,7 +282,7 @@ func (r *stmtDiagnosticsRequestRegistry) insertDiagnostics(
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"UPDATE system.statement_diagnostics_requests "+
 				"SET completed = true, statement_diagnostics_id = $1 WHERE id = $2",
-			traceID, req.id)
+			traceID, reqID)
 		return err
 	})
 }
@@ -347,18 +320,20 @@ func (r *stmtDiagnosticsRequestRegistry) pollRequests(ctx context.Context) error
 	}
 	defer r.mu.Unlock()
 
-	ids := make([]int, 0, len(rows))
+	var ids util.FastIntSet
 	for _, row := range rows {
-		id := int(*row[0].(*tree.DInt))
-		ids = append(ids, id)
+		id := stmtDiagRequestID(*row[0].(*tree.DInt))
 		fprint := string(*row[1].(*tree.DString))
 
-		req := stmtDiagRequest{
-			id:               id,
-			queryFingerprint: fprint,
+		ids.Add(int(id))
+		r.addRequestInternalLocked(ctx, id, fprint)
+	}
+
+	// Remove all other requests.
+	for id := range r.mu.requestFingerprints {
+		if !ids.Contains(int(id)) {
+			delete(r.mu.requestFingerprints, id)
 		}
-		r.addRequestInternalLocked(ctx, req)
-		r.removeExtraLocked(ids)
 	}
 	return nil
 }
@@ -371,7 +346,7 @@ func (r *stmtDiagnosticsRequestRegistry) gossipNotification(s string, value roac
 		// added other keys with the same prefix.
 		return
 	}
-	requestID := int(binary.LittleEndian.Uint64(value.RawBytes))
+	requestID := stmtDiagRequestID(binary.LittleEndian.Uint64(value.RawBytes))
 	r.mu.Lock()
 	if r.findRequestLocked(requestID) {
 		r.mu.Unlock()

@@ -74,7 +74,7 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		Report: &serverpb.StatementDiagnosticsReport{},
 	}
 
-	_, err := s.stmtDiagnosticsRequester.InsertRequest(ctx, req.StatementFingerprint)
+	err := s.stmtDiagnosticsRequester.InsertRequest(ctx, req.StatementFingerprint)
 	if err != nil {
 		return nil, err
 	}
