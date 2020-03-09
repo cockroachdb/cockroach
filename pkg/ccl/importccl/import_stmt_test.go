@@ -2647,7 +2647,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 
 	delimited := &fileReader{Reader: producer}
 	b.ResetTimer()
-	require.NoError(b, r.readFile(ctx, delimited, 0, "benchmark", 0, nil))
+	require.NoError(b, r.readFile(ctx, delimited, 0, 0, nil))
 	close(kvCh)
 	b.ReportAllocs()
 }

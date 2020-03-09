@@ -255,12 +255,7 @@ func (c copyData) String() string {
 }
 
 func (d *pgCopyReader) readFile(
-	ctx context.Context,
-	input *fileReader,
-	inputIdx int32,
-	inputName string,
-	resumePos int64,
-	rejected chan string,
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
 	s := bufio.NewScanner(input)
 	s.Split(bufio.ScanLines)
@@ -283,7 +278,7 @@ func (d *pgCopyReader) readFile(
 			break
 		}
 		if err != nil {
-			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
+			return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 		}
 
 		if count <= resumePos {
@@ -291,7 +286,7 @@ func (d *pgCopyReader) readFile(
 		}
 
 		if len(row) != len(d.conv.VisibleColTypes) {
-			return makeRowErr(inputName, count, pgcode.Syntax,
+			return makeRowErr("", count, pgcode.Syntax,
 				"expected %d values, got %d", len(d.conv.VisibleColTypes), len(row))
 		}
 		for i, s := range row {
@@ -301,14 +296,14 @@ func (d *pgCopyReader) readFile(
 				d.conv.Datums[i], err = sqlbase.ParseDatumStringAs(d.conv.VisibleColTypes[i], *s, d.conv.EvalCtx)
 				if err != nil {
 					col := d.conv.VisibleCols[i]
-					return wrapRowErr(err, inputName, count, pgcode.Syntax,
+					return wrapRowErr(err, "", count, pgcode.Syntax,
 						"parse %q as %s", col.Name, col.Type.SQLString())
 				}
 			}
 		}
 
 		if err := d.conv.Row(ctx, inputIdx, count); err != nil {
-			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
+			return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 		}
 	}
 

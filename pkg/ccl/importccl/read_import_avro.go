@@ -478,12 +478,7 @@ func (a *avroInputReader) readFiles(
 }
 
 func (a *avroInputReader) readFile(
-	ctx context.Context,
-	input *fileReader,
-	inputIdx int32,
-	inputName string,
-	resumePos int64,
-	rejected chan string,
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
 	producer, consumer, err := newImportAvroPipeline(a, input)
 	if err != nil {
