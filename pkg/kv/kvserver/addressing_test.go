@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -133,13 +133,13 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		// transaction id). Also, we need the TxnCoordSender to clean up the
 		// intents, otherwise the MVCCScan that the test does below fails.
 		actx := testutils.MakeAmbientCtx()
-		tcsf := kv.NewTxnCoordSenderFactory(
-			kv.TxnCoordSenderFactoryConfig{
+		tcsf := kvcoord.NewTxnCoordSenderFactory(
+			kvcoord.TxnCoordSenderFactoryConfig{
 				AmbientCtx: actx,
 				Settings:   store.cfg.Settings,
 				Clock:      store.cfg.Clock,
 				Stopper:    stopper,
-				Metrics:    kv.MakeTxnMetrics(time.Second),
+				Metrics:    kvcoord.MakeTxnMetrics(time.Second),
 			},
 			store.TestSender(),
 		)

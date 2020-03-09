@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kv_test
+package kvcoord_test
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -87,8 +87,8 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
 	ambient := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
-	ds := kv.NewDistSender(
-		kv.DistSenderConfig{
+	ds := kvcoord.NewDistSender(
+		kvcoord.DistSenderConfig{
 			AmbientCtx: ambient,
 			Clock:      s.Clock(),
 			RPCContext: s.RPCContext(),
@@ -97,8 +97,8 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		},
 		s.(*server.TestServer).Gossip(),
 	)
-	tsf := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      s.Clock(),
 			Stopper:    s.Stopper(),
@@ -957,8 +957,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 			} {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
 				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-				ds := kv.NewDistSender(
-					kv.DistSenderConfig{
+				ds := kvcoord.NewDistSender(
+					kvcoord.DistSenderConfig{
 						AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
 						Clock:      clock,
 						RPCContext: s.RPCContext(),
@@ -1014,7 +1014,7 @@ func TestParallelSender(t *testing.T) {
 	}
 
 	getPSCount := func() int64 {
-		return s.DistSenderI().(*kv.DistSender).Metrics().AsyncSentCount.Count()
+		return s.DistSenderI().(*kvcoord.DistSender).Metrics().AsyncSentCount.Count()
 	}
 	psCount := getPSCount()
 
@@ -1163,8 +1163,8 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
-	ds := kv.NewDistSender(
-		kv.DistSenderConfig{
+	ds := kvcoord.NewDistSender(
+		kvcoord.DistSenderConfig{
 			AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
 			Clock:      s.Clock(),
 			RPCContext: s.RPCContext(),
@@ -1686,7 +1686,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				// This is not an issue because we refresh before tracking their
 				// spans.
 				keybase := strings.Repeat("a", 1024)
-				maxRefreshBytes := kv.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
+				maxRefreshBytes := kvcoord.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
 				scanToExceed := int(maxRefreshBytes) / len(keybase)
 				b := txn.NewBatch()
 				// Hit the uncertainty error at the beginning of the batch.
@@ -1722,7 +1722,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				// account for them. The txn has no refresh spans, so it can
 				// forward its timestamp while committing.
 				keybase := strings.Repeat("a", 1024)
-				maxRefreshBytes := kv.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
+				maxRefreshBytes := kvcoord.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
 				scanToExceed := int(maxRefreshBytes) / len(keybase)
 				b := txn.NewBatch()
 				for i := 0; i < scanToExceed; i++ {
@@ -1756,7 +1756,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				// account for them until the final batch, at which time we
 				// perform a span refresh and successfully commit.
 				keybase := strings.Repeat("a", 1024)
-				maxRefreshBytes := kv.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
+				maxRefreshBytes := kvcoord.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
 				scanToExceed := int(maxRefreshBytes) / len(keybase)
 				b := txn.NewBatch()
 				for i := 0; i < scanToExceed; i++ {
@@ -2418,7 +2418,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				defer filterFn.Store((func(storagebase.FilterArgs) *roachpb.Error)(nil))
 			}
 
-			var metrics kv.TxnMetrics
+			var metrics kvcoord.TxnMetrics
 			var lastAutoRetries int64
 			var hadClientRetry bool
 			epoch := 0
@@ -2444,7 +2444,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					}
 				}
 
-				metrics = txn.Sender().(*kv.TxnCoordSender).TxnCoordSenderFactory.Metrics()
+				metrics = txn.Sender().(*kvcoord.TxnCoordSender).TxnCoordSenderFactory.Metrics()
 				lastAutoRetries = metrics.AutoRetries.Count()
 
 				return tc.retryable(ctx, txn)

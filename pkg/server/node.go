@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -157,7 +157,7 @@ type Node struct {
 	startedAt   int64
 	lastUp      int64
 	initialBoot bool // True if this is the first time this node has started.
-	txnMetrics  kv.TxnMetrics
+	txnMetrics  kvcoord.TxnMetrics
 
 	perReplicaServer kvserver.Server
 }
@@ -257,7 +257,7 @@ func NewNode(
 	recorder *status.MetricsRecorder,
 	reg *metric.Registry,
 	stopper *stop.Stopper,
-	txnMetrics kv.TxnMetrics,
+	txnMetrics kvcoord.TxnMetrics,
 	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
 ) *Node {

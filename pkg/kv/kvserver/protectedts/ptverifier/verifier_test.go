@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
@@ -46,9 +46,9 @@ func TestVerifier(t *testing.T) {
 	s := tc.Server(0)
 	var senderFunc atomic.Value
 	senderFunc.Store(client.SenderFunc(nil))
-	ds := s.DistSenderI().(*kv.DistSender)
-	tsf := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	ds := s.DistSenderI().(*kvcoord.DistSender)
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx:        s.DB().AmbientContext,
 			HeartbeatInterval: time.Second,
 			Settings:          s.ClusterSettings(),

@@ -20,4 +20,4 @@ Package kv implements the logic necessary to locate appropriate nodes
 based on keys being read or written. In some cases, requests may span
 a range of keys, in which case multiple RPCs may be sent out.
 */
-package kv
+package kvcoord

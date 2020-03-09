@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -162,12 +162,12 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			// splits to exercise that codepath, but we also want to make sure we
 			// still handle an unexpected split, so we make our own range cache and
 			// only populate it with one of our two splits.
-			mockCache := kv.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 })
+			mockCache := kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 })
 			addr, err := keys.Addr(key(0))
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, _, err := s.DistSenderI().(*kv.DistSender).RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(
+			r, _, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(
 				ctx, addr, nil, false)
 			if err != nil {
 				t.Fatal(err)

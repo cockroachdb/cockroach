@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -2980,7 +2980,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 
 	// Clear the range descriptor cache so that any future requests will first
 	// need to perform a RangeLookup.
-	store.DB().NonTransactionalSender().(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender).RangeDescriptorCache().Clear()
+	store.DB().NonTransactionalSender().(*client.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
 
 	// Now send a request, forcing the RangeLookup. Since the lookup is
 	// inconsistent, there's no WriteIntentError, but we'll try to resolve any

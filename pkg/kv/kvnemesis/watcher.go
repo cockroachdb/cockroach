@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -65,10 +65,10 @@ func Watch(
 	ctx, w.cancel = context.WithCancel(ctx)
 	w.g = ctxgroup.WithContext(ctx)
 
-	dss := make([]*kv.DistSender, len(dbs))
+	dss := make([]*kvcoord.DistSender, len(dbs))
 	for i := range dbs {
 		sender := dbs[i].NonTransactionalSender()
-		dss[i] = sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+		dss[i] = sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 	}
 
 	startTs := firstDB.Clock().Now()
