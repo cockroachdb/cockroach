@@ -10,6 +10,8 @@
 
 package sqlbase
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+
 // InternalExecutorSessionDataOverride is used by the InternalExecutor interface
 // to allow control over some of the session data.
 type InternalExecutorSessionDataOverride struct {
@@ -19,4 +21,6 @@ type InternalExecutorSessionDataOverride struct {
 	Database string
 	// ApplicationName represents the application that the query runs under.
 	ApplicationName string
+	// SearchPath represents the namespaces to search in.
+	SearchPath *sessiondata.SearchPath
 }

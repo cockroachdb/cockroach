@@ -44,6 +44,12 @@ var (
 	CreateTempViewCounter = telemetry.GetCounterOnce("sql.schema.create_temp_view")
 )
 
+var (
+	// TempObjectCleanerDeletionCounter is to be incremented every time a temporary schema
+	// has been deleted by the temporary object cleaner.
+	TempObjectCleanerDeletionCounter = telemetry.GetCounterOnce("sql.schema.temp_object_cleaner.num_cleaned")
+)
+
 // SchemaChangeCreate is to be incremented every time a CREATE
 // schema change was made.
 func SchemaChangeCreate(typ string) telemetry.Counter {

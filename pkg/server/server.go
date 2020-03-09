@@ -200,13 +200,14 @@ type Server struct {
 	debug            *debug.Server
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
-	sessionRegistry     *sql.SessionRegistry
-	jobRegistry         *jobs.Registry
-	statsRefresher      *stats.Refresher
-	replicationReporter *reports.Reporter
-	engines             Engines
-	internalMemMetrics  sql.MemoryMetrics
-	adminMemMetrics     sql.MemoryMetrics
+	sessionRegistry        *sql.SessionRegistry
+	jobRegistry            *jobs.Registry
+	statsRefresher         *stats.Refresher
+	replicationReporter    *reports.Reporter
+	temporaryObjectCleaner *sql.TemporaryObjectCleaner
+	engines                Engines
+	internalMemMetrics     sql.MemoryMetrics
+	adminMemMetrics        sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics         sql.MemoryMetrics
 	protectedtsProvider   protectedts.Provider
@@ -890,6 +891,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.debug = debug.NewServer(s.ClusterSettings(), s.pgServer.HBADebugFn())
 
+	s.temporaryObjectCleaner = sql.NewTemporaryObjectCleaner(
+		s.st,
+		s.db,
+		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
+		s.status,
+		s.node.stores.IsMeta1Leaseholder,
+		sqlExecutorTestingKnobs,
+	)
+
 	return s, nil
 }
 
@@ -1571,6 +1581,7 @@ func (s *Server) Start(ctx context.Context) error {
 		time.NewTicker,
 	)
 	s.replicationReporter.Start(ctx, s.stopper)
+	s.temporaryObjectCleaner.Start(ctx, s.stopper)
 
 	// Cluster ID should have been determined by this point.
 	if s.rpcContext.ClusterID.Get() == uuid.Nil {

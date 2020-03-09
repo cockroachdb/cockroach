@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -133,14 +132,7 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 }
 
 func (r *Reconciler) isMeta1Leaseholder(ctx context.Context, now hlc.Timestamp) (bool, error) {
-	repl, _, err := r.localStores.GetReplicaForRangeID(1)
-	if roachpb.IsRangeNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return repl.OwnsValidLease(now), nil
+	return r.localStores.IsMeta1Leaseholder(now)
 }
 
 func (r *Reconciler) reconcile(ctx context.Context) {
