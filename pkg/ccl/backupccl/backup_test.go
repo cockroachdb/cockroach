@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,6 +62,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -3563,4 +3565,131 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 			{"bank_stats", "{balance}", "3", "3", "0"},
 			{"bank_stats", "{payload}", "3", "2", "2"},
 		})
+}
+
+// TestProtectedTimestampsDuringBackup ensures that the timestamp at which a
+// table is taken offline is protected during a BACKUP job to ensure that if
+// data can be read for a period longer than the default GC interval.
+func TestProtectedTimestampsDuringBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// A sketch of the test is as follows:
+	//
+	//  * Create a table foo to backup.
+	//  * Set a 1 second gcttl for foo.
+	//  * Start a BACKUP which blocks after setup (after time of backup is
+	//    decided), until it is signaled.
+	//  * Manually enqueue the ranges for GC and ensure that at least one
+	//    range ran the GC.
+	//  * Unblock the backup.
+	//  * Ensure the backup has succeeded.
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	allowResponse := make(chan struct{})
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			for _, ru := range br.Responses {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportResponse, *roachpb.ImportResponse:
+					<-allowResponse
+				}
+			}
+			return nil
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
+	runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+	rRand, _ := randutil.NewPseudoRand()
+	writeGarbage := func(from, to int) {
+		for i := from; i < to; i++ {
+			runner.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, randutil.RandBytes(rRand, 1<<10))
+		}
+	}
+	writeGarbage(3, 10)
+	rowCount := runner.QueryStr(t, "SELECT * FROM foo")
+
+	go func() {
+		runner.Exec(t, `BACKUP TABLE FOO TO 'nodelocal://1/foo'`)
+	}()
+
+	var jobID string
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+		return row.Scan(&jobID)
+	})
+
+	time.Sleep(3 * time.Second) // Wait for the data to definitely be expired and GC to run.
+	gcTable := func(skipShouldQueue bool) (traceStr string) {
+		rows := runner.Query(t, "SELECT start_key"+
+			" FROM crdb_internal.ranges_no_leases"+
+			" WHERE table_name = $1"+
+			" AND database_name = current_database()"+
+			" ORDER BY start_key ASC", "foo")
+		var traceBuf strings.Builder
+		for rows.Next() {
+			var startKey roachpb.Key
+			require.NoError(t, rows.Scan(&startKey))
+			r := tc.LookupRangeOrFatal(t, startKey)
+			l, _, err := tc.FindRangeLease(r, nil)
+			require.NoError(t, err)
+			lhServer := tc.Server(int(l.Replica.NodeID) - 1)
+			s, repl := getFirstStoreReplica(t, lhServer, startKey)
+			trace, _, err := s.ManuallyEnqueue(ctx, "gc", repl, skipShouldQueue)
+			require.NoError(t, err)
+			fmt.Fprintf(&traceBuf, "%s\n", trace.String())
+		}
+		require.NoError(t, rows.Err())
+		return traceBuf.String()
+	}
+
+	// We should have refused to GC over the timestamp which we needed to protect.
+	gcTable(true /* skipShouldQueue */)
+
+	// Unblock the blocked backup request.
+	close(allowResponse)
+
+	runner.CheckQueryResultsRetry(t, "SELECT * FROM foo", rowCount)
+
+	// Wait for the ranges to learn about the removed record and ensure that we
+	// can GC from the range soon.
+	gcRanRE := regexp.MustCompile("(?s)shouldQueue=true.*processing replica.*GC score after GC")
+	testutils.SucceedsSoon(t, func() error {
+		writeGarbage(3, 10)
+		if trace := gcTable(false /* skipShouldQueue */); !gcRanRE.MatchString(trace) {
+			return fmt.Errorf("expected %v in trace: %v", gcRanRE, trace)
+		}
+		return nil
+	})
+}
+
+func getFirstStoreReplica(
+	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
+) (*kvserver.Store, *kvserver.Replica) {
+	t.Helper()
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	var repl *kvserver.Replica
+	testutils.SucceedsSoon(t, func() error {
+		repl = store.LookupReplica(roachpb.RKey(key))
+		if repl == nil {
+			return errors.New(`could not find replica`)
+		}
+		return nil
+	})
+	return store, repl
 }

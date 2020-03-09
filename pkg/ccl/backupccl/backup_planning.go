@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -32,8 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -646,7 +650,20 @@ func backupPlanHook(
 			return err
 		}
 
-		_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
+		backupDetails := jobspb.BackupDetails{
+			StartTime:        startTime,
+			EndTime:          endTime,
+			URI:              defaultURI,
+			URIsByLocalityKV: urisByLocalityKV,
+			BackupManifest:   descBytes,
+			Encryption:       encryption,
+		}
+		if len(spans) > 0 {
+			protectedtsID := uuid.MakeV4()
+			backupDetails.ProtectedTimestampRecord = &protectedtsID
+		}
+
+		jr := jobs.Record{
 			Description: description,
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
@@ -655,16 +672,30 @@ func backupPlanHook(
 				}
 				return sqlDescIDs
 			}(),
-			Details: jobspb.BackupDetails{
-				StartTime:        startTime,
-				EndTime:          endTime,
-				URI:              defaultURI,
-				URIsByLocalityKV: urisByLocalityKV,
-				BackupManifest:   descBytes,
-				Encryption:       encryption,
-			},
+			Details:  backupDetails,
 			Progress: jobspb.BackupProgress{},
-		})
+		}
+		var sj *jobs.StartableJob
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+			if err != nil {
+				return err
+			}
+			if len(spans) > 0 {
+				tsToProtect := endTime
+				rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, *sj.ID(), tsToProtect, spans)
+				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+			}
+			return nil
+		}); err != nil {
+			if sj != nil {
+				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+				}
+			}
+		}
+
+		errCh, err := sj.Start(ctx)
 		if err != nil {
 			return err
 		}
