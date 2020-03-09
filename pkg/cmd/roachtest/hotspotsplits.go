@@ -89,9 +89,13 @@ func registerHotSpotSplits(r *testRegistry) {
 	concurrency := 128
 
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(numNodes),
+		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
+		Owner: OwnerKV,
+		// Test OOMs below this version because of scans over the large rows.
+		// No problem in 20.1 thanks to:
+		// https://github.com/cockroachdb/cockroach/pull/45323.
+		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32
