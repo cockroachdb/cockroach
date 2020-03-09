@@ -103,17 +103,71 @@ func TestDistinct(t *testing.T) {
 				{2.0, 3, "40", 4},
 			},
 		},
+		{
+			distinctCols: []uint32{0},
+			colTypes:     []coltypes.T{coltypes.Int64, coltypes.Bytes},
+			tuples: tuples{
+				{1, "a"},
+				{2, "b"},
+				{3, "c"},
+				{nil, "d"},
+				{5, "e"},
+				{6, "f"},
+				{1, "1"},
+				{2, "2"},
+				{3, "3"},
+			},
+			expected: tuples{
+				{1, "a"},
+				{2, "b"},
+				{3, "c"},
+				{nil, "d"},
+				{5, "e"},
+				{6, "f"},
+			},
+		},
+		{
+			// This is to test hashTable deduplication with various batch size
+			// boundaries and ensure it always emits the first tuple it encountered.
+			distinctCols: []uint32{0},
+			colTypes:     []coltypes.T{coltypes.Int64, coltypes.Bytes},
+			tuples: tuples{
+				{1, "1"},
+				{1, "2"},
+				{1, "3"},
+				{1, "4"},
+				{1, "5"},
+				{2, "6"},
+				{2, "7"},
+				{2, "8"},
+				{2, "9"},
+				{2, "10"},
+				{0, "11"},
+				{0, "12"},
+				{0, "13"},
+				{1, "14"},
+				{1, "15"},
+				{1, "16"},
+			},
+			expected: tuples{
+				{1, "1"},
+				{2, "6"},
+				{0, "11"},
+			},
+		},
 	}
 
 	for _, tc := range tcs {
-		t.Run("unordered", func(t *testing.T) {
-			runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
-				func(input []Operator) (Operator, error) {
-					return NewUnorderedDistinct(
-						testAllocator, input[0], tc.distinctCols, tc.colTypes,
-						hashTableNumBuckets), nil
-				})
-		})
+		for _, numOfBuckets := range []uint64{1, 3, 5, hashTableNumBuckets} {
+			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
+				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
+					func(input []Operator) (Operator, error) {
+						return NewUnorderedDistinct(
+							testAllocator, input[0], tc.distinctCols, tc.colTypes,
+							numOfBuckets), nil
+					})
+			})
+		}
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
 				t.Run(fmt.Sprintf("partiallyOrdered/ordCols=%d", numOrderedCols), func(t *testing.T) {
