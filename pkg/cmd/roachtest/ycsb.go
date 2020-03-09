@@ -27,12 +27,13 @@ func registerYCSB(r *testRegistry) {
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
+			sfu := fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
 			ramp := " --ramp=" + ifLocal("0s", "1m")
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --insert-count=1000000 --splits=100"+
 					" --workload=%s --concurrency=64 --histograms="+perfArtifactsDir+"/stats.json"+
-					ramp+duration+" {pgurl:1-%d}",
+					sfu+ramp+duration+" {pgurl:1-%d}",
 				wl, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
