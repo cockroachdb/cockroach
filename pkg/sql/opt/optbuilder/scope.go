@@ -1223,7 +1223,7 @@ func (s *scope) replaceCount(
 			// TypeCheck()).  Replace the function with COUNT_ROWS (which doesn't
 			// take any arguments).
 			e := &tree.FuncExpr{
-				Func: tree.ResolvableFunctionReference{
+				Func: &tree.ResolvableFunctionReference{
 					FunctionReference: &tree.UnresolvedName{
 						NumParts: 1, Parts: tree.NameParts{"count_rows"},
 					},

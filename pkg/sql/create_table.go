@@ -1755,8 +1755,8 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 			Parts:    tree.NameParts{name},
 		}
 	}
-	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
-		return tree.ResolvableFunctionReference{
+	unresolvedFunc := func(funcName string) *tree.ResolvableFunctionReference {
+		return &tree.ResolvableFunctionReference{
 			FunctionReference: unresolvedName(funcName),
 		}
 	}

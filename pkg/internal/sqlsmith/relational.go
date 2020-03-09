@@ -651,7 +651,7 @@ var countStar = func() tree.TypedExpr {
 	fn := tree.FunDefs["count"]
 	typ := types.Int
 	return tree.NewTypedFuncExpr(
-		tree.ResolvableFunctionReference{FunctionReference: fn},
+		fn,
 		0, /* aggQualifier */
 		tree.TypedExprs{tree.UnqualifiedStar{}},
 		nil, /* filter */

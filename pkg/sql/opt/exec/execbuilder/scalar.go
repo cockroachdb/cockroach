@@ -262,9 +262,8 @@ func (b *Builder) buildFunction(
 			return nil, err
 		}
 	}
-	funcRef := tree.WrapFunction(fn.Name)
 	return tree.NewTypedFuncExpr(
-		funcRef,
+		tree.FunctionReferenceFromString(fn.Name),
 		0, /* aggQualifier */
 		exprs,
 		nil, /* filter */

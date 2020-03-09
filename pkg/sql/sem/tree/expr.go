@@ -1218,7 +1218,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ *types.T) *UnaryExp
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Func  ResolvableFunctionReference
+	Func  *ResolvableFunctionReference
 	Type  funcType
 	Exprs Exprs
 	// Filter is used for filters on aggregates: SUM(k) FILTER (WHERE k > 0)
@@ -1235,7 +1235,7 @@ type FuncExpr struct {
 
 // NewTypedFuncExpr returns a FuncExpr that is already well-typed and resolved.
 func NewTypedFuncExpr(
-	ref ResolvableFunctionReference,
+	ref FunctionReference,
 	aggQualifier funcType,
 	exprs TypedExprs,
 	filter TypedExpr,
@@ -1245,7 +1245,7 @@ func NewTypedFuncExpr(
 	overload *Overload,
 ) *FuncExpr {
 	f := &FuncExpr{
-		Func:           ref,
+		Func:           &ResolvableFunctionReference{FunctionReference: ref},
 		Type:           aggQualifier,
 		Exprs:          make(Exprs, len(exprs)),
 		Filter:         filter,
@@ -1338,7 +1338,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	// We need to remove name anonymization for the function name in
 	// particular. Do this by overriding the flags.
 	ctx.WithFlags(ctx.flags&^FmtAnonymize, func() {
-		ctx.FormatNode(&node.Func)
+		ctx.FormatNode(node.Func)
 	})
 
 	ctx.WriteByte('(')
