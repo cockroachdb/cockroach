@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 /*
-Package kv provides a key-value API to an underlying cockroach
+Package kvcoord provides a key-value API to an underlying cockroach
 datastore. Cockroach itself provides a single, monolithic, sorted key
 value map, distributed over multiple nodes. Each node holds a set of
 key ranges. Package kv translates between the monolithic, logical map
