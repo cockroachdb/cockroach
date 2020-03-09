@@ -15,37 +15,42 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
-// handleExplainBundle creates the bundle and returns the result for an
-// EXPLAIN BUNDLE statement. The result is text containing a URL for the bundle.
-func handleExplainBundle(
-	ctx context.Context, res RestrictedCommandResult, plan *planTop, execCfg *ExecutorConfig,
+// setExplainBundleResult returns the bundle information for an EXPLAIN BUNDLE
+// statement. Returns an error if information rows couldn't be added to the
+// result.
+func setExplainBundleResult(
+	ctx context.Context, res RestrictedCommandResult, diagID stmtDiagID, execCfg *ExecutorConfig,
 ) error {
-	res.ResetStmtType(&tree.ExplainBundle{})
-	res.SetColumns(ctx, sqlbase.ExplainBundleColumns)
-
-	id, err := buildStatementBundle(ctx, plan, execCfg)
-	if err != nil {
-		return err
+	url := fmt.Sprintf("  %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), diagID)
+	text := []string{
+		"Download the bundle from:",
+		url,
+		"or from the Admin UI (Advanced Debug -> Statement Diagnostics).",
 	}
 
-	url := fmt.Sprintf("%s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), id)
-	text := fmt.Sprintf(""+
-		"Download the bundle from:\n"+
-		"  %s\n"+
-		"or from the Admin UI (Advanced Debug -> Statement Diagnostics).",
-		url,
-	)
-	return res.AddRow(ctx, tree.Datums{tree.NewDString(text)})
+	if err := res.Err(); err != nil {
+		// Add the bundle information as a detail to the query error.
+		res.SetError(errors.WithDetail(err, strings.Join(text, "\n")))
+		return nil
+	}
+
+	res.ResetStmtType(&tree.ExplainBundle{})
+	res.SetColumns(ctx, sqlbase.ExplainBundleColumns)
+	for _, line := range text {
+		if err := res.AddRow(ctx, tree.Datums{tree.NewDString(line)}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // buildStatementBundle collects metadata related the planning and execution of
@@ -55,72 +60,32 @@ func handleExplainBundle(
 //
 // Returns the bundle ID, which is the key for the row added in
 // statement_diagnostics.
-func buildStatementBundle(
-	ctx context.Context, plan *planTop, execCfg *ExecutorConfig,
-) (bundleID int64, _ error) {
-	b := makeStmtBundleBuilder(plan)
+func buildStatementBundle(ctx context.Context, plan *planTop, trace string) (*bytes.Buffer, error) {
+	if plan == nil {
+		return nil, errors.AssertionFailedf("execution terminated early")
+	}
+	b := makeStmtBundleBuilder(plan, trace)
 
 	b.addStatement()
 	b.addOptPlans()
 	b.addExecPlan()
+	b.addTrace()
 
-	buf, err := b.finalize()
-	if err != nil {
-		return 0, err
-	}
-
-	db, ie := execCfg.DB, execCfg.InternalExecutor
-	fingerprint := tree.AsStringWithFlags(plan.stmt.AST, tree.FmtHideConstants)
-	statement := tree.AsString(plan.stmt.AST)
-	description := "query support bundle"
-
-	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Insert the bundle into system.statement_bundle_chunks.
-		// TODO(radu): split in chunks.
-		row, err := ie.QueryRowEx(
-			ctx, "statement-bundle-chunks-insert", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
-			description,
-			tree.NewDBytes(tree.DBytes(buf.String())),
-		)
-		if err != nil {
-			return err
-		}
-		chunkID := row[0].(*tree.DInt)
-		chunks := tree.NewDArray(types.Int)
-		if err := chunks.Append(chunkID); err != nil {
-			return err
-		}
-
-		row, err = ie.QueryRowEx(
-			ctx, "statement-bundle-info-insert", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			`INSERT INTO
-			  system.statement_diagnostics(statement_fingerprint, statement, collected_at, bundle_chunks)
-			  VALUES ($1, $2, $3, $4)
-				RETURNING id
-				`,
-			fingerprint, statement, timeutil.Now(), chunks,
-		)
-		if err != nil {
-			return err
-		}
-		bundleID = int64(*row[0].(*tree.DInt))
-		return err
-	})
-	return bundleID, err
+	return b.finalize()
 }
 
 // stmtBundleBuilder is a helper for building a statement bundle.
 type stmtBundleBuilder struct {
 	plan *planTop
 
+	// trace is the recorded trace (formatted as JSON).
+	trace string
+
 	z memZipper
 }
 
-func makeStmtBundleBuilder(plan *planTop) stmtBundleBuilder {
-	b := stmtBundleBuilder{plan: plan}
+func makeStmtBundleBuilder(plan *planTop, trace string) stmtBundleBuilder {
+	b := stmtBundleBuilder{plan: plan, trace: trace}
 	b.z.Init()
 	return b
 }
@@ -141,6 +106,11 @@ func (b *stmtBundleBuilder) addStatement() {
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
 func (b *stmtBundleBuilder) addOptPlans() {
+	if b.plan.mem == nil {
+		// No optimizer plans; an error must have occurred during planning.
+		return
+	}
+
 	b.z.AddFile("opt.txt", b.plan.formatOptPlan(memo.ExprFmtHideAll))
 	b.z.AddFile("opt-v.txt", b.plan.formatOptPlan(
 		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
@@ -150,7 +120,15 @@ func (b *stmtBundleBuilder) addOptPlans() {
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan() {
-	b.z.AddFile("plan.txt", b.plan.instrumentation.planString)
+	if plan := b.plan.instrumentation.planString; plan != "" {
+		b.z.AddFile("plan.txt", plan)
+	}
+}
+
+func (b *stmtBundleBuilder) addTrace() {
+	if b.trace != "" {
+		b.z.AddFile("trace.json", b.trace)
+	}
 }
 
 // finalize generates the zipped bundle and returns it as a buffer.
