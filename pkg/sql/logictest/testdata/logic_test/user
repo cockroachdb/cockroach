@@ -128,3 +128,31 @@ query T
 SHOW session_user
 ----
 root
+
+# Test CREATEROLE privilege.
+
+statement ok
+ALTER USER testuser CREATEROLE
+
+statement ok
+GRANT SELECT ON system.role_options to testuser
+
+user testuser
+
+statement ok
+CREATE USER user4 CREATEROLE
+
+statement ok
+ALTER USER user4 NOLOGIN
+
+query TTT
+SELECT * FROM system.role_options
+----
+admin     CREATEROLE  NULL
+root      CREATEROLE  NULL
+testuser  CREATEROLE  NULL
+user4     CREATEROLE  NULL
+user4     NOLOGIN     NULL
+
+statement ok
+DROP USER user4
