@@ -1280,22 +1280,6 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-
-	t.Run("cannot pause or resume schema changes", func(t *testing.T) {
-		job, _ := createJob(jobs.Record{
-			Details:  jobspb.SchemaChangeDetails{},
-			Progress: jobspb.SchemaChangeProgress{},
-		})
-		if err := registry.PauseRequested(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
-			t.Fatalf("unexpected %v", err)
-		}
-		if err := registry.Resume(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
-			t.Fatalf("unexpected %v", err)
-		}
-		if err := registry.CancelRequested(ctx, nil, *job.ID()); err != nil {
-			t.Fatalf("unexpected %v", err)
-		}
-	})
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the
@@ -1544,24 +1528,52 @@ func TestShowJobsWithError(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	// Create at least 4 row, ensuring the last 3 rows are corrupted.
+	// Create at least 6 rows, ensuring 3 rows are corrupted.
+	// Ensure there is at least one row in system.jobs.
 	if _, err := sqlDB.Exec(`
-     -- Ensure there is at least one row in system.jobs.
      CREATE TABLE foo(x INT); ALTER TABLE foo ADD COLUMN y INT;
-     -- Create a corrupted payload field from the first row.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, '\xaaaa'::BYTES, progress FROM system.jobs ORDER BY id LIMIT 1;
-     -- Create a corrupted progress field.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
-     -- Corrupt both fields.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
-     -- Test what happens with a NULL progress field (which is a valid value).
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+5, status, '\xaaaa'::BYTES, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
 	`); err != nil {
 		t.Fatal(err)
 	}
+	// Get the id of the ADD COLUMN job to use later.
+	var jobID int64
+	if err := sqlDB.QueryRow(`SELECT id FROM system.jobs ORDER BY id DESC LIMIT 1`).Scan(&jobID); err != nil {
+		t.Fatal(err)
+	}
 
-	// Extract the last 4 rows from the query.
+	// Now insert more rows based on the valid row, some of which are corrupted.
+	if _, err := sqlDB.Exec(`
+     -- Create a corrupted payload field from the most recent row.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, '\xaaaa'::BYTES, progress FROM system.jobs WHERE id = $1;
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+     -- Create a corrupted progress field.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1; 
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+     -- Corrupt both fields.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1;
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+     -- Test what happens with a NULL progress field (which is a valid value).
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs WHERE id = $1;
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+     -- Test what happens with a NULL progress field (which is a valid value).
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+5, status, '\xaaaa'::BYTES, NULL::BYTES FROM system.jobs WHERE id = $1;
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Extract the last 6 rows from the query.
 	rows, err := sqlDB.Query(`
   WITH a AS (SELECT job_id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 6)
   SELECT ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY job_id ASC`)

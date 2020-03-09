@@ -45,11 +45,10 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecNotification: func() error {
-				<-asyncNotification
-				return nil
-			},
-			AsyncExecQuickly: true,
+			// TODO (lucy): Currently there's no index GC job implemented. Eventually
+			// the GC job needs to block until the asyncNotification channel is
+			// closed, which will probably need to be controlled in a schema change
+			// knob.
 		},
 	}
 	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
@@ -117,6 +116,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	}
 	close(asyncNotification)
 
+	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Wait for index drop to complete so zone configs are updated.
 	testutils.SucceedsSoon(t, func() error {
 		if kvs, err := kvDB.Scan(context.TODO(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {

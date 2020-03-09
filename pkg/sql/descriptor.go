@@ -71,7 +71,7 @@ func GenerateUniqueDescID(ctx context.Context, db *kv.DB) (sqlbase.ID, error) {
 // state should be an error (false) or a no-op (true).
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
-	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
+	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool, jobDesc string,
 ) (bool, error) {
 	shouldCreatePublicSchema := true
 	dKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, desc.Name)
@@ -97,7 +97,7 @@ func (p *planner) createDatabase(
 		return false, err
 	}
 
-	if err := p.createDescriptorWithID(ctx, dKey.Key(), id, desc, nil); err != nil {
+	if err := p.createDescriptorWithID(ctx, dKey.Key(), id, desc, nil, jobDesc); err != nil {
 		return true, err
 	}
 
@@ -119,6 +119,7 @@ func (p *planner) createDescriptorWithID(
 	id sqlbase.ID,
 	descriptor sqlbase.DescriptorProto,
 	st *cluster.Settings,
+	jobDesc string,
 ) error {
 	descriptor.SetID(id)
 	// TODO(pmattis): The error currently returned below is likely going to be
@@ -155,7 +156,14 @@ func (p *planner) createDescriptorWithID(
 		return err
 	}
 	if isTable && mutDesc.Adding() {
-		p.queueSchemaChange(mutDesc.TableDesc(), sqlbase.InvalidMutationID)
+		// Queue a schema change job to eventually make the table public.
+		if err := p.createOrUpdateSchemaChangeJob(
+			ctx,
+			mutDesc,
+			jobDesc,
+			sqlbase.InvalidMutationID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

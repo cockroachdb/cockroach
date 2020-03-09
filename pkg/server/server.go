@@ -856,20 +856,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
-	// SessionBoundInternalExecutorFactory.
-	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory =
-		func(
-			ctx context.Context, sessionData *sessiondata.SessionData,
-		) sqlutil.InternalExecutor {
-			ie := sql.MakeInternalExecutor(
-				ctx,
-				s.pgServer.SQLServer,
-				s.sqlMemMetrics,
-				s.st,
-			)
-			ie.SetSessionData(sessionData)
-			return &ie
-		}
+	// SessionBoundInternalExecutorFactory. The same applies for setting a
+	// SessionBoundInternalExecutor on the the job registry.
+	ieFactory := func(
+		ctx context.Context, sessionData *sessiondata.SessionData,
+	) sqlutil.InternalExecutor {
+		ie := sql.MakeInternalExecutor(
+			ctx,
+			s.pgServer.SQLServer,
+			s.sqlMemMetrics,
+			s.st,
+		)
+		ie.SetSessionData(sessionData)
+		return &ie
+	}
+	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
+	s.jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 
 	for _, m := range s.pgServer.Metrics() {
 		s.registry.AddMetricStruct(m)
@@ -1615,26 +1617,6 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		}
 	})
-
-	// Create and start the schema change manager only after a NodeID
-	// has been assigned.
-	var testingKnobs *sql.SchemaChangerTestingKnobs
-	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
-		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
-	} else {
-		testingKnobs = new(sql.SchemaChangerTestingKnobs)
-	}
-
-	sql.NewSchemaChangeManager(
-		s.cfg.AmbientCtx,
-		s.execCfg,
-		testingKnobs,
-		*s.db,
-		s.node.Descriptor,
-		s.execCfg.DistSQLPlanner,
-		// We're reusing the ieFactory from the distSQLServer.
-		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
-	).Start(s.stopper)
 
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, s.stopper)

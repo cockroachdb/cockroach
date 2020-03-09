@@ -133,29 +133,33 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	tableDescs := make([]*sqlbase.MutableTableDescriptor, 0, len(n.td))
 
 	for _, toDel := range n.td {
-		if toDel.desc.IsView() {
-			continue
-		}
 		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
 			Name: toDel.tn.FQString(),
 			ID:   toDel.desc.ID,
 		})
 		tableDescs = append(tableDescs, toDel.desc)
 	}
-
-	jobID, err := p.createDropTablesJob(
-		ctx,
-		tableDescs,
-		droppedTableDetails,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
-		true, /* drainNames */
-		n.dbDesc.ID)
-	if err != nil {
+	if err := p.createDropDatabaseJob(
+		ctx, n.dbDesc.ID, droppedTableDetails, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
 		return err
 	}
 
+	// When views, sequences, and tables are dropped, don't queue a separate job
+	// for each of them, since the single DROP DATABASE job will cover them all.
 	for _, toDel := range n.td {
-		cascadedObjects, err := p.dropObject(ctx, toDel.desc, tree.DropCascade)
+		desc := toDel.desc
+		var cascadedObjects []string
+		var err error
+		if desc.IsView() {
+			// TODO(knz): dependent dropped views should be qualified here.
+			cascadedObjects, err = p.dropViewImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
+		} else if desc.IsSequence() {
+			err = p.dropSequenceImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
+		} else {
+			// TODO(knz): dependent dropped table names should be qualified here.
+			cascadedObjects, err = p.dropTableImpl(ctx, desc, false /* queueJob */, "")
+		}
 		if err != nil {
 			return err
 		}
@@ -171,7 +175,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 	b.Del(descKey)
 
-	err = sqlbase.RemoveDatabaseNamespaceEntry(
+	err := sqlbase.RemoveDatabaseNamespaceEntry(
 		ctx, p.txn, n.dbDesc.Name, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
@@ -180,7 +184,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	// No job was created because no tables were dropped, so zone config can be
 	// immediately removed.
-	if jobID == 0 {
+	if len(tableDescs) == 0 {
 		zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)

@@ -49,8 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -59,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1154,81 +1151,7 @@ func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterf
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
 
-type schemaChangerCollection struct {
-	schemaChangers []SchemaChanger
-}
-
 type jobsCollection []int64
-
-func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChanger) {
-	scc.schemaChangers = append(scc.schemaChangers, schemaChanger)
-}
-
-func (scc *schemaChangerCollection) reset() {
-	scc.schemaChangers = nil
-}
-
-// execSchemaChanges releases schema leases and runs the queued
-// schema changers. This needs to be run after the transaction
-// scheduling the schema change has finished.
-//
-// The list of closures is cleared after (attempting) execution.
-func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context,
-	cfg *ExecutorConfig,
-	tracing *SessionTracing,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
-) error {
-	if len(scc.schemaChangers) == 0 {
-		return nil
-	}
-	if fn := cfg.SchemaChangerTestingKnobs.SyncFilter; fn != nil {
-		fn(TestingSchemaChangerCollection{scc})
-	}
-	// Execute any schema changes that were scheduled, in the order of the
-	// statements that scheduled them.
-	var firstError error
-	for _, sc := range scc.schemaChangers {
-		sc.db = cfg.DB
-		sc.testingKnobs = cfg.SchemaChangerTestingKnobs
-		sc.distSQLPlanner = cfg.DistSQLPlanner
-		sc.settings = cfg.Settings
-		sc.ieFactory = ieFactory
-		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			if err := sc.exec(ctx, true /* inSession */); err != nil {
-				if onError := cfg.SchemaChangerTestingKnobs.OnError; onError != nil {
-					onError(err)
-				}
-				if shouldLogSchemaChangeError(err) {
-					log.Warningf(ctx, "error executing schema change: %s", err)
-				}
-
-				if err == sqlbase.ErrDescriptorNotFound || err == ctx.Err() {
-					// 1. If the descriptor is dropped while the schema change
-					// is executing, the schema change is considered completed.
-					// 2. If the context is canceled the schema changer quits here
-					// letting the asynchronous code path complete the schema
-					// change.
-				} else if isPermanentSchemaChangeError(err) {
-					// All constraint violations can be reported; we report it as the result
-					// corresponding to the statement that enqueued this changer.
-					// There's some sketchiness here: we assume there's a single result
-					// per statement and we clobber the result/error of the corresponding
-					// statement.
-					if firstError == nil {
-						firstError = err
-					}
-				} else {
-					// retryable error.
-					continue
-				}
-			}
-			break
-		}
-	}
-	scc.schemaChangers = nil
-	return firstError
-}
 
 const panicLogOutputCutoffChars = 10000
 

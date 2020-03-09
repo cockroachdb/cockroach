@@ -58,7 +58,9 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := params.p.writeSchemaChange(params.ctx, n.seqDesc, sqlbase.InvalidMutationID); err != nil {
+	if err := params.p.writeSchemaChange(
+		params.ctx, n.seqDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
 		return err
 	}
 
