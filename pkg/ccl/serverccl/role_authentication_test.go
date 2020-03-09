@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -72,7 +72,6 @@ func TestVerifyPassword(t *testing.T) {
 			[]interface{}{timeutil.Now().Add(-10 * time.Minute)}},
 		{"timelord", "12345", "", "VALID UNTIL $1",
 			[]interface{}{timeutil.Now().Add(59 * time.Minute).In(shanghaiLoc)}},
-		{"role1", "12345", "", "VALID UNTIL NULL", nil},
 	} {
 		cmd := fmt.Sprintf(
 			"CREATE ROLE %s WITH PASSWORD '%s' %s %s",
@@ -132,6 +131,15 @@ func TestVerifyPassword(t *testing.T) {
 			}
 
 			hashedPassword, err := pwRetrieveFn(ctx)
+			if err != nil {
+				t.Errorf(
+					"credentials %s/%s failed with error %s, wanted no error",
+					tc.username,
+					tc.password,
+					err,
+				)
+			}
+
 			err = security.CompareHashAndPassword(hashedPassword, tc.password)
 			if err != nil {
 				valid = false
