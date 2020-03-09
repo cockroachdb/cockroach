@@ -30,19 +30,19 @@ export interface AggregateStatistics {
   firstCellBordered?: boolean;
 }
 
-export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
+export class StatementsSortedTable extends SortedTable<AggregateStatistics> { }
 
 function StatementLink(props: { statement: string, app: string, implicitTxn: boolean, search: string }) {
   const summary = summarize(props.statement);
   const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
-    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
+    <Link to={`${base}/${encodeURIComponent(props.statement)}`}>
       <div className="cl-table-link__tooltip">
         <Tooltip overlayClassName="preset-black" placement="bottom" title={
-          <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{getHighlightedText(props.statement, props.search)}</pre>
         }>
           <div className="cl-table-link__tooltip-hover-area">
-            { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }
+            {getHighlightedText(shortStatement(summary, props.statement), props.search, true)}
           </div>
         </Tooltip>
       </div>
@@ -62,17 +62,17 @@ export function shortStatement(summary: StatementSummary, original: string) {
   }
 }
 export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string, search?: string)
-    : ColumnDescriptor<AggregateStatistics>[] {
+  : ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
       className: "cl-table__col-query-text",
       cell: (stmt) => (
         <StatementLink
-          statement={ stmt.label }
-          implicitTxn={ stmt.implicitTxn }
+          statement={stmt.label}
+          implicitTxn={stmt.implicitTxn}
           search={search}
-          app={ selectedApp }
+          app={selectedApp}
         />
       ),
       sort: (stmt) => stmt.label,
@@ -90,18 +90,18 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
 
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
   return (
-    <Link to={ `/node/${props.nodeId}` }>
+    <Link to={`/node/${props.nodeId}`}>
       <div className="node-name-tooltip__info-icon">{props.nodeNames[props.nodeId]}</div>
     </Link>
   );
 }
 
 export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: { [nodeId: string]: string })
-    : ColumnDescriptor<AggregateStatistics>[] {
+  : ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: null,
-      cell: (stmt) => <NodeLink nodeId={stmt.label} nodeNames={ nodeNames } />,
+      cell: (stmt) => <NodeLink nodeId={stmt.label} nodeNames={nodeNames} />,
       // sort: (stmt) => stmt.label,
     },
   ];
@@ -110,7 +110,7 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
 }
 
 function makeCommonColumns(statements: AggregateStatistics[])
-    : ColumnDescriptor<AggregateStatistics>[] {
+  : ColumnDescriptor<AggregateStatistics>[] {
   const countBar = countBarChart(statements);
   const retryBar = retryBarChart(statements);
   const rowsBar = rowsBarChart(statements);
