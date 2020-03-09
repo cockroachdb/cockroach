@@ -448,7 +448,8 @@ type lockHolderInfo struct {
 	// acquire/update the lock by this transaction. For a given transaction if
 	// the lock is continuously held by a succession of different TxnMetas, the
 	// epoch must be monotonic and the ts (derived from txn.WriteTimestamp for
-	// some calls, and request.ts for other calls) must be monotonic.
+	// some calls, and request.ts for other calls) must be monotonic. After ts
+	// is intialized, the timestamps inside txn are not used.
 	txn *enginepb.TxnMeta
 
 	// All the TxnSeqs in the current epoch at which this lock has been
@@ -695,31 +696,53 @@ func (l *lockState) Format(buf *strings.Builder) {
 		fmt.Fprintln(buf, "  empty")
 		return
 	}
-	waitingOnStr := func(txn *enginepb.TxnMeta, ts hlc.Timestamp) string {
+	writeResInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
 		// TODO(sbhola): strip the leading 0 bytes from the UUID string since tests are assigning
 		// UUIDs using a counter and makes this output more readable.
-		var seqStr string
-		if txn.Sequence != 0 {
-			seqStr = fmt.Sprintf(", seq: %v", txn.Sequence)
+		fmt.Fprintf(b, "txn: %v, ts: %v, seq: %v\n", txn.ID, ts, txn.Sequence)
+	}
+	writeHolderInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
+		fmt.Fprintf(b, "  holder: txn: %v, ts: %v, info: ", txn.ID, ts)
+		first := true
+		for i := range l.holder.holder {
+			h := &l.holder.holder[i]
+			if h.txn == nil {
+				continue
+			}
+			if !first {
+				fmt.Fprintf(b, ", ")
+			}
+			first = false
+			if lock.Durability(i) == lock.Replicated {
+				fmt.Fprintf(b, "repl ")
+			} else {
+				fmt.Fprintf(b, "unrepl ")
+			}
+			fmt.Fprintf(b, "epoch: %d, seqs: [%d", h.txn.Epoch, h.seqs[0])
+			for j := 1; j < len(h.seqs); j++ {
+				fmt.Fprintf(b, ", %d", h.seqs[j])
+			}
+			fmt.Fprintf(b, "]")
 		}
-		return fmt.Sprintf("txn: %v, ts: %v%s", txn.ID, ts, seqStr)
+		fmt.Fprintln(b, "")
 	}
 	txn, ts, _ := l.getLockerInfo()
 	if txn == nil {
-		fmt.Fprintf(buf, "  res: req: %d, %s\n",
-			l.reservation.seqNum, waitingOnStr(l.reservation.txn, l.reservation.writeTS))
+		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
+		writeResInfo(buf, l.reservation.txn, l.reservation.writeTS)
 	} else {
-		fmt.Fprintf(buf, "  holder: %s\n", waitingOnStr(txn, ts))
+		writeHolderInfo(buf, txn, ts)
 	}
 	if l.waitingReaders.Len() > 0 {
 		fmt.Fprintln(buf, "   waiting readers:")
 		for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 			g := e.Value.(*lockTableGuardImpl)
-			txnStr := "none"
-			if g.txn != nil {
-				txnStr = fmt.Sprintf("%v", g.txn.ID)
+			fmt.Fprintf(buf, "    req: %d, txn: ", g.seqNum)
+			if g.txn == nil {
+				fmt.Fprintln(buf, "none")
+			} else {
+				fmt.Fprintf(buf, "%v\n", g.txn.ID)
 			}
-			fmt.Fprintf(buf, "    req: %d, txn: %s\n", g.seqNum, txnStr)
 		}
 	}
 	if l.queuedWriters.Len() > 0 {
@@ -727,12 +750,13 @@ func (l *lockState) Format(buf *strings.Builder) {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
 			g := qg.guard
-			txnStr := "none"
-			if g.txn != nil {
-				txnStr = fmt.Sprintf("%v", g.txn.ID)
+			fmt.Fprintf(buf, "    active: %t req: %d, txn: ",
+				qg.active, qg.guard.seqNum)
+			if g.txn == nil {
+				fmt.Fprintln(buf, "none")
+			} else {
+				fmt.Fprintf(buf, "%v\n", g.txn.ID)
 			}
-			fmt.Fprintf(buf, "    active: %t req: %d, txn: %s\n",
-				qg.active, qg.guard.seqNum, txnStr)
 		}
 	}
 	if l.distinguishedWaiter != nil {
@@ -1191,14 +1215,14 @@ func (l *lockState) discoveredLock(
 		if !l.isLockedBy(txn.ID) {
 			panic("bug in caller or lockTable")
 		}
-		if l.holder.holder[lock.Replicated].txn == nil {
-			l.holder.holder[lock.Replicated].txn = txn
-			l.holder.holder[lock.Replicated].ts = ts
-		}
 	} else {
 		l.holder.locked = true
-		l.holder.holder[lock.Replicated].txn = txn
-		l.holder.holder[lock.Replicated].ts = ts
+	}
+	holder := &l.holder.holder[lock.Replicated]
+	if holder.txn == nil {
+		holder.txn = txn
+		holder.ts = ts
+		holder.seqs = append(holder.seqs, txn.Sequence)
 	}
 
 	// Queue the existing reservation holder. Note that this reservation
@@ -1365,7 +1389,7 @@ func removeIgnored(
 	held := heldSeqNums[:0]
 	for _, n := range heldSeqNums {
 		i := sort.Search(len(ignoredSeqNums), func(i int) bool { return ignoredSeqNums[i].End >= n })
-		if ignoredSeqNums[i].Start > n {
+		if i == len(ignoredSeqNums) || ignoredSeqNums[i].Start > n {
 			held = append(held, n)
 		}
 	}
@@ -1391,28 +1415,56 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 		return gc, nil
 	}
 
-	ts := up.Txn.WriteTimestamp
 	txn := &up.Txn
+	ts := up.Txn.WriteTimestamp
 	_, beforeTs, _ := l.getLockerInfo()
+	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	for i := range l.holder.holder {
-		holderTxn := l.holder.holder[i].txn
-		if holderTxn == nil {
+		holder := &l.holder.holder[i]
+		if holder.txn == nil {
 			continue
 		}
-		if lock.Durability(i) == lock.Replicated || txn.Epoch > holderTxn.Epoch {
-			l.holder.holder[i].txn = nil
-			l.holder.holder[i].seqs = nil
+		// Note that mvccResolveWriteIntent() has special handling of the case
+		// where the pusher is using an epoch lower than the epoch of the intent
+		// (replicated lock), but is trying to push to a higher timestamp. The
+		// replicated lock gets written with the newer epoch (not the epoch known
+		// to the pusher) but a higher timestamp. Then the pusher will call into
+		// this function with that lower epoch. Instead of trying to be consistent
+		// with mvccResolveWriteIntent() in the current state of the replicated
+		// lock we simply forget the replicated lock since it is no longer in the
+		// way of this request. Eventually, once we have segregated locks, the
+		// lock table will be the source of truth for replicated locks too, and
+		// this forgetting behavior will go away.
+		//
+		// For unreplicated locks the lock table is the source of truth, so we
+		// best-effort mirror the behavior of mvccResolveWriteIntent() by updating
+		// the timestamp.
+		if lock.Durability(i) == lock.Replicated || txn.Epoch > holder.txn.Epoch {
+			holder.txn = nil
+			holder.seqs = nil
 			continue
 		}
-		// Held in same epoch.
-		l.holder.holder[i].seqs = removeIgnored(l.holder.holder[i].seqs, up.IgnoredSeqNums)
-		if len(l.holder.holder[i].seqs) == 0 {
-			l.holder.holder[i].txn = nil
-			continue
+		// Unreplicated lock held in same epoch or a higher epoch.
+		if advancedTs {
+			// We may advance ts here but not update the holder.txn object below
+			// for the reason stated in the comment about mvccResolveWriteIntent().
+			// The lockHolderInfo.ts is the source of truth regarding the timestamp
+			// of the lock, and not TxnMeta.WriteTimestamp.
+			holder.ts = ts
 		}
-		l.holder.holder[i].txn = txn
-		l.holder.holder[i].ts = ts
+		if txn.Epoch == holder.txn.Epoch {
+			holder.seqs = removeIgnored(holder.seqs, up.IgnoredSeqNums)
+			if len(holder.seqs) == 0 {
+				holder.txn = nil
+				continue
+			}
+			if advancedTs {
+				holder.txn = txn
+			}
+		}
+		// Else txn.Epoch < holderTxn.Epoch, so only the timestamp has been
+		// potentially updated.
 		isLocked = true
 	}
 
@@ -1422,11 +1474,12 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 		return gc, nil
 	}
 
-	if ts.Less(beforeTs) {
-		return false, errors.Errorf("caller violated contract")
-	} else if beforeTs.Less(ts) {
+	if advancedTs {
 		l.increasedLockTs(ts)
 	}
+	// Else no change for waiters. This can happen due to a race between different
+	// callers of UpdateLocks().
+
 	return false, nil
 }
 

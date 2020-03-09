@@ -58,7 +58,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 finish req=req2
@@ -69,7 +69,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000012,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 reset

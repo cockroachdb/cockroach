@@ -1,0 +1,122 @@
+# Misc tests where there is a change in state made or attempted for a lock.
+
+new-lock-table maxlocks=10000
+----
+
+# ---------------------------------------------------------------------------------
+# Lock being released is held by a different transaction.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=0 seq=2
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+local: num=0
+
+release txn=txn2 span=a,c
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Lock is reacquired at a different epoch. The old sequence numbers are discarded.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=1 seq=0
+----
+
+new-request r=req2 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req2 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [0]
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Reader waits until the timestamp of the lock is updated.
+# ---------------------------------------------------------------------------------
+
+new-request r=req3 txn=txn2 ts=12 spans=r@a
+----
+
+scan r=req3
+----
+start-waiting: true
+
+guard-state r=req3
+----
+new: state=waitForDistinguished txn=txn1 ts=10 key="a" held=true guard-access=read
+
+print
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [0]
+   waiting readers:
+    req: 1, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 1
+local: num=0
+
+new-txn txn=txn1 ts=14 epoch=1 seq=1
+----
+
+new-request r=req4 txn=txn1 ts=14 spans=w@a
+----
+
+acquire r=req4 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, info: unrepl epoch: 1, seqs: [0, 1]
+local: num=0
+
+guard-state r=req3
+----
+new: state=doneWaiting
+
+
+# ---------------------------------------------------------------------------------
+# Discovery of replicated lock that was already held as unreplicated. The waiters
+# should be informed. It is unclear whether this can actually happen in the context
+# that the lock table is used.
+# ---------------------------------------------------------------------------------
+
+new-request r=req5 txn=txn2 ts=17 spans=r@a
+----
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req5
+----
+new: state=waitForDistinguished txn=txn1 ts=14 key="a" held=true guard-access=read
+
+add-discovered r=req5 k=a txn=txn1
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
+   waiting readers:
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 2
+local: num=0
+
+guard-state r=req5
+----
+new: state=waitForDistinguished txn=txn1 ts=14 key="a" held=true guard-access=read
