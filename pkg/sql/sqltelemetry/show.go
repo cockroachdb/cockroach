@@ -32,6 +32,14 @@ const (
 	Create
 	// RangeForRow represents the SHOW RANGE FOR ROW command.
 	RangeForRow
+	// Queries represents the SHOW QUERIES command.
+	Queries
+	// Indexes represents the SHOW INDEXES command.
+	Indexes
+	// Constraints represents the SHOW CONSTRAINTS command.
+	Constraints
+	// Jobs represents the SHOW JOBS command.
+	Jobs
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
@@ -40,6 +48,10 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	Locality:    "locality",
 	Create:      "create",
 	RangeForRow: "rangeforrow",
+	Queries:     "queries",
+	Indexes:     "indexes",
+	Constraints: "constraints",
+	Jobs:        "jobs",
 }
 
 func (s ShowTelemetryType) String() string {
