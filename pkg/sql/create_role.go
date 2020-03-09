@@ -234,7 +234,7 @@ func (n *CreateRoleNode) FastPathResults() (int, bool) { return n.run.rowsAffect
 const usernameHelp = "Usernames are case insensitive, must start with a letter, " +
 	"digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters."
 
-var usernameRE = regexp.MustCompile(`^[\p{Ll}0-9_][---\p{Ll}0-9_.]+$`)
+var usernameRE = regexp.MustCompile(`^[\p{Ll}0-9_][---\p{Ll}0-9_.]*$`)
 
 var blacklistedUsernames = map[string]struct{}{
 	security.NodeUser: {},

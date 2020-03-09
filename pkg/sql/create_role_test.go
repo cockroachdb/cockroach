@@ -42,6 +42,8 @@ func TestUserName(t *testing.T) {
 		{".ABC", "", `username ".abc" invalid`, pgcode.InvalidName},
 		{"*.wildcard", "", `username "\*.wildcard" invalid`, pgcode.InvalidName},
 		{"foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof", "", `username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" is too long`, pgcode.NameTooLong},
+		{"M", "m", "", ""},
+		{".", "", `username "." invalid`, pgcode.InvalidName},
 	}
 
 	for _, tc := range testCases {
