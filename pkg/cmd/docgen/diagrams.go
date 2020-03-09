@@ -1153,8 +1153,12 @@ var specs = []stmtSpec{
 		name:    "show_backup",
 		stmt:    "show_backup_stmt",
 		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'BACKUP'")},
+		inline:  []string{"opt_with_options"},
 		replace: map[string]string{"string_or_placeholder": "location"},
 		unlink:  []string{"location"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'OPTIONS'"),
+		},
 	},
 	{
 		name:    "show_jobs",
