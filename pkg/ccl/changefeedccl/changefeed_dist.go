@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -116,7 +117,7 @@ func distChangefeedFlow(
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn, true /* distribute */)
 
 	var spanPartitions []sql.SpanPartition
-	if details.SinkURI == `` {
+	if details.SinkURI == `` || evalCtx.SessionData.DistSQLMode == sessiondata.DistSQLOff {
 		// Sinkless feeds get one ChangeAggregator on the gateway.
 		spanPartitions = []sql.SpanPartition{{Node: gatewayNodeID, Spans: trackedSpans}}
 	} else {
