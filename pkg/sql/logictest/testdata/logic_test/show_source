@@ -416,3 +416,40 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.locality' AND usage_count > 0
 ----
 sql.show.locality
+
+# Test SHOW INDEXES telemetry.
+statement ok
+CREATE TABLE show_test (x INT PRIMARY KEY);
+SHOW INDEXES FROM show_test
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.indexes' AND usage_count > 0
+----
+sql.show.indexes
+
+# Test SHOW CONSTRAINTS telemetry.
+statement ok
+SHOW CONSTRAINTS FROM show_test
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.constraints' AND usage_count > 0
+----
+sql.show.constraints
+
+# Test SHOW QUERIES telemetry.
+statement ok
+SHOW QUERIES
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.queries' AND usage_count > 0
+----
+sql.show.queries
+
+# Test SHOW JOBS telemetry.
+statement ok
+SHOW JOBS
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.jobs' AND usage_count > 0
+----
+sql.show.jobs
