@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -52,10 +52,10 @@ func InitFactoryForLocalTestCluster(
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,
 	latency time.Duration,
-	stores client.Sender,
+	stores kv.Sender,
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
-) client.TxnSenderFactory {
+) kv.TxnSenderFactory {
 	return NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
@@ -74,7 +74,7 @@ func NewDistSenderForLocalTestCluster(
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,
 	latency time.Duration,
-	stores client.Sender,
+	stores kv.Sender,
 	stopper *stop.Stopper,
 	g *gossip.Gossip,
 ) *DistSender {

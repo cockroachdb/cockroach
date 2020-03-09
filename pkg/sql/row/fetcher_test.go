@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -165,7 +165,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(ctx, kvDB, 0),
+				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -285,7 +285,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(ctx, kvDB, 0),
+				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
 				true,  /*limitBatches*/
 				10,    /*limitHint*/
@@ -413,7 +413,7 @@ INDEX(c)
 
 	if err := rf.StartScan(
 		context.TODO(),
-		client.NewTxn(ctx, kvDB, 0),
+		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{indexSpan,
 			roachpb.Span{Key: midKey, EndKey: endKey},
 		},
@@ -577,7 +577,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(ctx, kvDB, 0),
+				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.Indexes[0].ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -938,7 +938,7 @@ func TestNextRowInterleaved(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(ctx, kvDB, 0),
+				kv.NewTxn(ctx, kvDB, 0),
 				lookupSpans,
 				false, /*limitBatches*/
 				0,     /*limitHint*/

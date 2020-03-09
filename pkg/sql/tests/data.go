@@ -17,13 +17,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // CheckKeyCount checks that the number of keys in the provided span matches
 // numKeys.
-func CheckKeyCount(t *testing.T, kvDB *client.DB, span roachpb.Span, numKeys int) {
+func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 	t.Helper()
 	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
 		t.Fatal(err)

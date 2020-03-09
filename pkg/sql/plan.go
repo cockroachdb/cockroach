@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -389,7 +389,7 @@ func startExec(params runParams, plan planNode) error {
 		},
 		leaveNode: func(_ string, n planNode) (err error) {
 			if _, ok := n.(planNodeReadingOwnWrites); ok {
-				prevMode := params.p.Txn().ConfigureStepping(params.ctx, client.SteppingDisabled)
+				prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingDisabled)
 				defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
 			}
 			return n.startExec(params)

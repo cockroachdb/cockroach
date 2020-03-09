@@ -25,7 +25,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -47,7 +47,7 @@ import (
 // This file contains utility functions for tests (in other packages).
 
 // GetTableDescriptor retrieves a table descriptor directly from the KV layer.
-func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDescriptor {
+func GetTableDescriptor(kvDB *kv.DB, database string, table string) *TableDescriptor {
 	// log.VEventf(context.TODO(), 2, "GetTableDescriptor %q %q", database, table)
 	// testutil, so we pass settings as nil for both database and table name keys.
 	dKey := NewDatabaseKey(database)
@@ -89,7 +89,7 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 // GetImmutableTableDescriptor retrieves an immutable table descriptor directly from the KV layer.
 func GetImmutableTableDescriptor(
-	kvDB *client.DB, database string, table string,
+	kvDB *kv.DB, database string, table string,
 ) *ImmutableTableDescriptor {
 	return NewImmutableTableDescriptor(*GetTableDescriptor(kvDB, database, table))
 }

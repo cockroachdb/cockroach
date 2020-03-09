@@ -22,8 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -232,7 +232,7 @@ func (r *Replica) CheckConsistency(
 			// so ContainsEstimates should have been strictly positive.
 
 			var v roachpb.Version
-			if err := r.store.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := r.store.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
 			}); err != nil {
 				log.Infof(ctx, "while retrieving cluster bootstrap version: %s", err)
@@ -258,7 +258,7 @@ func (r *Replica) CheckConsistency(
 			RequestHeader: roachpb.RequestHeader{Key: startKey},
 		}
 
-		var b client.Batch
+		var b kv.Batch
 		b.AddRawRequest(&req)
 
 		err := r.store.db.Run(ctx, &b)
@@ -338,7 +338,7 @@ func (r *Replica) RunConsistencyCheck(
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
 	// all replicas.
-	res, pErr := client.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
+	res, pErr := kv.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}

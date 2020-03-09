@@ -34,10 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -178,7 +178,7 @@ type Server struct {
 	storePool        *kvserver.StorePool
 	tcsFactory       *kvcoord.TxnCoordSenderFactory
 	distSender       *kvcoord.DistSender
-	db               *client.DB
+	db               *kv.DB
 	pgServer         *pgwire.Server
 	distSQLServer    *distsql.ServerImpl
 	node             *Node
@@ -355,10 +355,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.tcsFactory = kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)
 
-	dbCtx := client.DefaultDBContext()
+	dbCtx := kv.DefaultDBContext()
 	dbCtx.NodeID = &s.nodeIDContainer
 	dbCtx.Stopper = s.stopper
-	s.db = client.NewDBWithContext(s.cfg.AmbientCtx, s.tcsFactory, s.clock, dbCtx)
+	s.db = kv.NewDBWithContext(s.cfg.AmbientCtx, s.tcsFactory, s.clock, dbCtx)
 
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
@@ -629,7 +629,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RuntimeStats:   s.runtime,
 		DB:             s.db,
 		Executor:       internalExecutor,
-		FlowDB:         client.NewDB(s.cfg.AmbientCtx, s.tcsFactory, s.clock),
+		FlowDB:         kv.NewDB(s.cfg.AmbientCtx, s.tcsFactory, s.clock),
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,
@@ -648,7 +648,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		BulkAdder: func(
-			ctx context.Context, db *client.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
+			ctx context.Context, db *kv.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
 		) (storagebase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
@@ -1756,7 +1756,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Run startup migrations (note: these depend on jobs subsystem running).
 	var bootstrapVersion roachpb.Version
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
 	}); err != nil {
 		return err
@@ -2177,7 +2177,7 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 			// update, this would force a 2PC and potentially leave write intents in
 			// the node liveness range. Better to make the event logging best effort
 			// than to slow down future node liveness transactions.
-			if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return eventLogger.InsertEventRecord(
 					ctx, txn, eventType, int32(nodeID), int32(s.NodeID()), struct{}{},
 				)

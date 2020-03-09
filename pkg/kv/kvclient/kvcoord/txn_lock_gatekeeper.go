@@ -14,7 +14,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -39,7 +39,7 @@ type lockedSender interface {
 // receiving a response. It allows the entire txnInterceptor stack to operate
 // under lock without needing to worry about unlocking at the correct time.
 type txnLockGatekeeper struct {
-	wrapped client.Sender
+	wrapped kv.Sender
 	mu      sync.Locker // shared with TxnCoordSender
 
 	// If set, concurrent requests are allowed. If not set, concurrent requests

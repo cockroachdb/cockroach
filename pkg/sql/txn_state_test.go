@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +39,7 @@ var noRewindExpected = CmdPos(-1)
 type testContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
-	mockDB      *client.DB
+	mockDB      *kv.DB
 	mon         mon.BytesMonitor
 	tracer      opentracing.Tracer
 	// ctx is mimicking the spirit of a client connection's context
@@ -50,7 +50,7 @@ type testContext struct {
 func makeTestContext() testContext {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	factory := client.MakeMockTxnSenderFactory(
+	factory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, nil
@@ -61,7 +61,7 @@ func makeTestContext() testContext {
 	return testContext{
 		manualClock: manual,
 		clock:       clock,
-		mockDB:      client.NewDB(ambient, factory, clock),
+		mockDB:      kv.NewDB(ambient, factory, clock),
 		mon: mon.MakeMonitor(
 			"test root mon",
 			mon.MemoryResource,
@@ -103,7 +103,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		mon:           &txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
-	ts.mu.txn = client.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
+	ts.mu.txn = kv.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
 
 	state := stateOpen{
 		ImplicitTxn: fsm.FromBool(typ == implicitTxn),
@@ -174,7 +174,7 @@ type expKVTxn struct {
 	maxTSNanos  *int64
 }
 
-func checkTxn(txn *client.Txn, exp expKVTxn) error {
+func checkTxn(txn *kv.Txn, exp expKVTxn) error {
 	if txn == nil {
 		return errors.Errorf("expected a KV txn but found an uninitialized txn")
 	}

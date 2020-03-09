@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -35,7 +35,7 @@ func runProcessorTest(
 	inputRows sqlbase.EncDatumRows,
 	outputTypes []types.T,
 	expected sqlbase.EncDatumRows,
-	txn *client.Txn,
+	txn *kv.Txn,
 ) {
 	in := distsqlutils.NewRowBuffer(inputTypes, inputRows, distsqlutils.RowBufferArgs{})
 	out := &distsqlutils.RowBuffer{}

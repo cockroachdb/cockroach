@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -205,7 +205,7 @@ func BenchmarkImport(b *testing.B) {
 					Files:         files,
 					Rekeys:        rekeys,
 				}
-				res, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
+				res, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 				if pErr != nil {
 					b.Fatalf("%+v", pErr.GoError())
 				}

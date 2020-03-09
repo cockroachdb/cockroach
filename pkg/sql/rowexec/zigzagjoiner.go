@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -729,7 +729,7 @@ func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
 // sides until a match is found then emits the results of the match one result
 // at a time.
 func (z *zigzagJoiner) nextRow(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *kv.Txn,
 ) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {

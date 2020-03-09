@@ -13,7 +13,7 @@ package rowexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -87,7 +87,7 @@ func (cb *columnBackfiller) runChunk(
 	readAsOf hlc.Timestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
-	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
 			if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err

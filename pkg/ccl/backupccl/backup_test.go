@@ -35,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2475,7 +2475,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 		},
 		Threshold: tc.Server(0).Clock().Now(),
 	}
-	if _, err := client.SendWrapped(
+	if _, err := kv.SendWrapped(
 		ctx, tc.Server(0).DistSenderI().(*kvcoord.DistSender), &gcr,
 	); err != nil {
 		t.Fatal(err)

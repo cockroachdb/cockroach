@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -54,7 +54,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 
 			internalPlanner, cleanup := NewInternalPlanner(
 				"test",
-				client.NewTxn(ctx, db, s.NodeID()),
+				kv.NewTxn(ctx, db, s.NodeID()),
 				security.RootUser,
 				&MemoryMetrics{},
 				&execCfg,

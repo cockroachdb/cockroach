@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -171,7 +171,7 @@ func createTestStoreWithOpts(
 		},
 		distSender,
 	)
-	storeCfg.DB = client.NewDB(ac, tcsFactory, storeCfg.Clock)
+	storeCfg.DB = kv.NewDB(ac, tcsFactory, storeCfg.Clock)
 	storeCfg.StorePool = kvserver.NewTestStorePool(storeCfg)
 	storeCfg.Transport = kvserver.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -280,7 +280,7 @@ type multiTestContext struct {
 	engines     []storage.Engine
 	grpcServers []*grpc.Server
 	distSenders []*kvcoord.DistSender
-	dbs         []*client.DB
+	dbs         []*kv.DB
 	gossips     []*gossip.Gossip
 	storePools  []*kvserver.StorePool
 	// We use multiple stoppers so we can restart different parts of the
@@ -335,7 +335,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	m.stores = make([]*kvserver.Store, numStores)
 	m.storePools = make([]*kvserver.StorePool, numStores)
 	m.distSenders = make([]*kvcoord.DistSender, numStores)
-	m.dbs = make([]*client.DB, numStores)
+	m.dbs = make([]*kv.DB, numStores)
 	m.stoppers = make([]*stop.Stopper, numStores)
 	m.senders = make([]*kvserver.Stores, numStores)
 	m.idents = make([]roachpb.StoreIdent, numStores)
@@ -767,7 +767,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 		},
 		m.distSenders[idx],
 	)
-	m.dbs[idx] = client.NewDB(ambient, tcsFactory, m.clocks[idx])
+	m.dbs[idx] = kv.NewDB(ambient, tcsFactory, m.clocks[idx])
 }
 
 func (m *multiTestContext) populateStorePool(

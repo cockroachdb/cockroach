@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -77,7 +77,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	go func() {
 		put := putArgs(keyA, []byte("value"))
 		assignSeqNumsForReqs(txn1, &put)
-		if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &put); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &put); pErr != nil {
 			txnCh1 <- pErr.GoError()
 			return
 		}
@@ -85,7 +85,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 		et.LockSpans = []roachpb.Span{spanA, spanB}
 		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn1, &et)
-		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et)
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et)
 		txnCh1 <- pErr.GoError()
 	}()
 
@@ -95,7 +95,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	readCh1 := make(chan error, 1)
 	go func() {
 		get := getArgs(keyB)
-		_, pErr := client.SendWrapped(ctx, store.TestSender(), &get)
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), &get)
 		readCh1 <- pErr.GoError()
 	}()
 
@@ -104,7 +104,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	go func() {
 		put := putArgs(keyB, []byte("value"))
 		assignSeqNumsForReqs(txn2, &put)
-		repl, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &put)
+		repl, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &put)
 		if pErr != nil {
 			txnCh2 <- pErr.GoError()
 			return
@@ -115,7 +115,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 		et.LockSpans = []roachpb.Span{spanB}
 		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn2, &et)
-		_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et)
+		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et)
 		txnCh2 <- pErr.GoError()
 	}()
 
@@ -125,7 +125,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	readCh2 := make(chan error, 1)
 	go func() {
 		get := getArgs(keyB)
-		_, pErr := client.SendWrapped(ctx, store.TestSender(), &get)
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), &get)
 		readCh2 <- pErr.GoError()
 	}()
 
@@ -137,7 +137,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	go func() {
 		put := putArgs(keyB, []byte("value"))
 		assignSeqNumsForReqs(txn3, &put)
-		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn3}, &put)
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn3}, &put)
 		txnCh3 <- pErr.GoError()
 	}()
 

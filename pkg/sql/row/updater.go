@@ -14,8 +14,8 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -73,7 +73,7 @@ const (
 // passed in requestedCols will be included in FetchCols at the beginning.
 func MakeUpdater(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
@@ -110,7 +110,7 @@ var returnTruePseudoError error = returnTrue{}
 // create a cascader.
 func makeUpdaterWithoutCascader(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
@@ -296,7 +296,7 @@ func makeUpdaterWithoutCascader(
 // The return value is only good until the next call to UpdateRow.
 func (ru *Updater) UpdateRow(
 	ctx context.Context,
-	batch *client.Batch,
+	batch *kv.Batch,
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
 	checkFKs checkFKConstraints,

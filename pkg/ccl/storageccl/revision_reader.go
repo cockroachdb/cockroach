@@ -11,7 +11,7 @@ package storageccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,10 +29,7 @@ type VersionedValues struct {
 // revisions between startTime and endTime.
 // TODO(dt): if/when client gets a ScanRevisionsRequest or similar, use that.
 func GetAllRevisions(
-	ctx context.Context,
-	db *client.DB,
-	startKey, endKey roachpb.Key,
-	startTime, endTime hlc.Timestamp,
+	ctx context.Context, db *kv.DB, startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
 ) ([]VersionedValues, error) {
 	// TODO(dt): version check.
 	header := roachpb.Header{Timestamp: endTime}
@@ -43,7 +40,7 @@ func GetAllRevisions(
 		ReturnSST:     true,
 		OmitChecksum:  true,
 	}
-	resp, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+	resp, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}

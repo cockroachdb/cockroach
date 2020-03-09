@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
@@ -186,7 +186,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 
 			defer b.Close(ctx)
 
-			var expected []client.KeyValue
+			var expected []kv.KeyValue
 
 			// Since the batcher automatically handles any retries due to spanning the
 			// range-bounds internally, it can be difficult to observe from outside if
@@ -215,7 +215,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 					if err := b.Add(addCtx, k, v.RawBytes); err != nil {
 						t.Fatal(err)
 					}
-					expected = append(expected, client.KeyValue{Key: k, Value: &v})
+					expected = append(expected, kv.KeyValue{Key: k, Value: &v})
 				}
 				if err := b.Flush(addCtx); err != nil {
 					t.Fatal(err)

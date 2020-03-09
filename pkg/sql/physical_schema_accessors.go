@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -46,7 +46,7 @@ var _ SchemaAccessor = UncachedPhysicalAccessor{}
 
 // GetDatabaseDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetDatabaseDesc(
-	ctx context.Context, txn *client.Txn, name string, flags tree.DatabaseLookupFlags,
+	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (desc *DatabaseDescriptor, err error) {
 	if name == sqlbase.SystemDB.Name {
 		// We can't return a direct reference to SystemDB, because the
@@ -75,7 +75,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 
 // IsValidSchema implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) IsValidSchema(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
 	return resolveSchemaID(ctx, txn, dbID, scName)
 }
@@ -83,7 +83,7 @@ func (a UncachedPhysicalAccessor) IsValidSchema(
 // GetObjectNames implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetObjectNames(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	dbDesc *DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
@@ -167,7 +167,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	settings *cluster.Settings,
 	name *ObjectName,
 	flags tree.ObjectLookupFlags,
@@ -255,7 +255,7 @@ var _ SchemaAccessor = &CachedPhysicalAccessor{}
 
 // GetDatabaseDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetDatabaseDesc(
-	ctx context.Context, txn *client.Txn, name string, flags tree.DatabaseLookupFlags,
+	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (desc *DatabaseDescriptor, err error) {
 	isSystemDB := name == sqlbase.SystemDB.Name
 	if !(flags.AvoidCached || isSystemDB || testDisableTableLeases) {
@@ -285,7 +285,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 // IsValidSchema implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) IsValidSchema(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
 	return a.tc.resolveSchemaID(ctx, txn, dbID, scName)
 }
@@ -293,7 +293,7 @@ func (a *CachedPhysicalAccessor) IsValidSchema(
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	settings *cluster.Settings,
 	name *ObjectName,
 	flags tree.ObjectLookupFlags,

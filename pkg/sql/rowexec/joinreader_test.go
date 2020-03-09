@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -413,7 +413,7 @@ func TestJoinReader(t *testing.T) {
 						TempStorage: tempEngine,
 						DiskMonitor: &diskMonitor,
 					},
-					Txn: client.NewTxn(ctx, s.DB(), s.NodeID()),
+					Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				}
 				encRows := make(sqlbase.EncDatumRows, len(c.input))
 				for rowIdx, row := range c.input {
@@ -524,7 +524,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID()),
+		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 	// Set the memory limit to the minimum allocation size so that the row
 	// container can buffer some rows in memory before spilling to disk. This
@@ -618,9 +618,9 @@ func TestJoinReaderDrain(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	rootTxn := client.NewTxn(ctx, s.DB(), s.NodeID())
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
-	leafTxn := client.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
 
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -726,7 +726,7 @@ func BenchmarkJoinReader(b *testing.B) {
 			DiskMonitor: diskMonitor,
 			Settings:    st,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID()),
+		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 
 	const numCols = 2

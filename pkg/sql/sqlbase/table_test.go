@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -221,7 +221,7 @@ func TestIndexKey(t *testing.T) {
 			t.Fatal(err)
 		}
 		primaryValue := roachpb.MakeValueFromBytes(nil)
-		primaryIndexKV := client.KeyValue{Key: primaryKey, Value: &primaryValue}
+		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
 			&tableDesc, &tableDesc.Indexes[0], colMap, testValues, true /* includeEmpty */)
@@ -231,12 +231,12 @@ func TestIndexKey(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		secondaryIndexKV := client.KeyValue{
+		secondaryIndexKV := kv.KeyValue{
 			Key:   secondaryIndexEntry[0].Key,
 			Value: &secondaryIndexEntry[0].Value,
 		}
 
-		checkEntry := func(index *IndexDescriptor, entry client.KeyValue) {
+		checkEntry := func(index *IndexDescriptor, entry kv.KeyValue) {
 			values, err := decodeIndex(&tableDesc, index, entry.Key)
 			if err != nil {
 				t.Fatal(err)

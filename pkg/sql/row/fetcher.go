@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -458,7 +458,7 @@ func (rf *Fetcher) Init(
 // times.
 func (rf *Fetcher) StartScan(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	spans roachpb.Spans,
 	limitBatches bool,
 	limitHint int64,
@@ -495,7 +495,7 @@ func (rf *Fetcher) StartScan(
 // Can be used multiple times.
 func (rf *Fetcher) StartInconsistentScan(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
@@ -515,7 +515,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			maxTimestampAge,
 		)
 	}
-	txn := client.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
+	txn := kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
 	txn.SetFixedTimestamp(ctx, txnTimestamp)
 	if log.V(1) {
 		log.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
@@ -530,7 +530,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			// Advance the timestamp by the time that passed.
 			txnTimestamp = txnTimestamp.Add(now.Sub(txnStartTime).Nanoseconds(), 0 /* logical */)
 			txnStartTime = now
-			txn = client.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
+			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
 			txn.SetFixedTimestamp(ctx, txnTimestamp)
 
 			if log.V(1) {

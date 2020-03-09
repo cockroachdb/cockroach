@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,12 +41,12 @@ func TestClusterTimestampConversion(t *testing.T) {
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	senderFactory := client.MakeMockTxnSenderFactory(
+	senderFactory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			panic("unused")
 		})
-	db := client.NewDB(
+	db := kv.NewDB(
 		testutils.MakeAmbientCtx(),
 		senderFactory,
 		clock)
@@ -62,12 +62,12 @@ func TestClusterTimestampConversion(t *testing.T) {
 		)
 
 		ctx := tree.EvalContext{
-			Txn: client.NewTxnFromProto(
+			Txn: kv.NewTxnFromProto(
 				context.Background(),
 				db,
 				1, /* gatewayNodeID */
 				ts,
-				client.RootTxn,
+				kv.RootTxn,
 				&txnProto,
 			),
 		}

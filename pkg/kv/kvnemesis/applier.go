@@ -13,7 +13,7 @@ package kvnemesis
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,20 +24,20 @@ import (
 
 // Applier executes Steps.
 type Applier struct {
-	dbs []*client.DB
+	dbs []*kv.DB
 	mu  struct {
 		dbIdx int
 		syncutil.Mutex
-		txns map[string]*client.Txn
+		txns map[string]*kv.Txn
 	}
 }
 
 // MakeApplier constructs an Applier that executes against the given DB.
-func MakeApplier(dbs ...*client.DB) *Applier {
+func MakeApplier(dbs ...*kv.DB) *Applier {
 	a := &Applier{
 		dbs: dbs,
 	}
-	a.mu.txns = make(map[string]*client.Txn)
+	a.mu.txns = make(map[string]*kv.Txn)
 	return a
 }
 
@@ -45,7 +45,7 @@ func MakeApplier(dbs ...*client.DB) *Applier {
 // error is only returned from Apply if there is an internal coding error within
 // Applier, errors from a Step execution are saved in the Step itself.
 func (a *Applier) Apply(ctx context.Context, step *Step) (retErr error) {
-	var db *client.DB
+	var db *kv.DB
 	db, step.DBID = a.getNextDBRoundRobin()
 
 	step.Before = db.Clock().Now()
@@ -59,7 +59,7 @@ func (a *Applier) Apply(ctx context.Context, step *Step) (retErr error) {
 	return nil
 }
 
-func (a *Applier) getNextDBRoundRobin() (*client.DB, int32) {
+func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 	a.mu.Lock()
 	dbIdx := a.mu.dbIdx
 	a.mu.dbIdx = (a.mu.dbIdx + 1) % len(a.dbs)
@@ -67,7 +67,7 @@ func (a *Applier) getNextDBRoundRobin() (*client.DB, int32) {
 	return a.dbs[dbIdx], int32(dbIdx)
 }
 
-func applyOp(ctx context.Context, db *client.DB, op *Operation) {
+func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation, *PutOperation, *BatchOperation:
 		applyClientOp(ctx, db, op)
@@ -78,13 +78,13 @@ func applyOp(ctx context.Context, db *client.DB, op *Operation) {
 		err := db.AdminMerge(ctx, o.Key)
 		o.Result = resultError(ctx, err)
 	case *ChangeReplicasOperation:
-		ctx = client.ChangeReplicasCanMixAddAndRemoveContext(ctx)
+		ctx = kv.ChangeReplicasCanMixAddAndRemoveContext(ctx)
 		desc := getRangeDesc(ctx, o.Key, db)
 		_, err := db.AdminChangeReplicas(ctx, o.Key, desc, o.Changes)
 		// TODO(dan): Save returned desc?
 		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
-		txnErr := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			for i := range o.Ops {
 				op := &o.Ops[i]
 				applyClientOp(ctx, txn, op)
@@ -117,9 +117,9 @@ func applyOp(ctx context.Context, db *client.DB, op *Operation) {
 }
 
 type clientI interface {
-	Get(context.Context, interface{}) (client.KeyValue, error)
+	Get(context.Context, interface{}) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
-	Run(context.Context, *client.Batch) error
+	Run(context.Context, *kv.Batch) error
 }
 
 func applyClientOp(ctx context.Context, db clientI, op *Operation) {
@@ -142,7 +142,7 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 		err := db.Put(ctx, o.Key, o.Value)
 		o.Result = resultError(ctx, err)
 	case *BatchOperation:
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
@@ -150,10 +150,7 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 }
 
 func applyBatchOp(
-	ctx context.Context,
-	b *client.Batch,
-	runFn func(context.Context, *client.Batch) error,
-	o *BatchOperation,
+	ctx context.Context, b *kv.Batch, runFn func(context.Context, *kv.Batch) error, o *BatchOperation,
 ) {
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
@@ -203,12 +200,12 @@ func resultError(ctx context.Context, err error) Result {
 	}
 }
 
-func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*client.DB) roachpb.RangeDescriptor {
+func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.RangeDescriptor {
 	var dbIdx int
 	var opts = retry.Options{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); dbIdx = (dbIdx + 1) % len(dbs) {
 		sender := dbs[dbIdx].NonTransactionalSender()
-		descs, _, err := client.RangeLookup(ctx, sender, key, roachpb.CONSISTENT, 0, false)
+		descs, _, err := kv.RangeLookup(ctx, sender, key, roachpb.CONSISTENT, 0, false)
 		if err != nil {
 			log.Infof(ctx, "looking up descriptor for %s: %+v", key, err)
 			continue
@@ -222,7 +219,7 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*client.DB) roach
 	panic(`unreachable`)
 }
 
-func newGetReplicasFn(dbs ...*client.DB) GetReplicasFn {
+func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
 	ctx := context.Background()
 	return func(key roachpb.Key) []roachpb.ReplicationTarget {
 		desc := getRangeDesc(ctx, key, dbs...)

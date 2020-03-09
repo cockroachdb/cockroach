@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -27,7 +27,7 @@ import (
 func InsertNewStats(
 	ctx context.Context,
 	executor sqlutil.InternalExecutor,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableStats []*TableStatisticProto,
 ) error {
 	var err error
@@ -57,7 +57,7 @@ func InsertNewStats(
 func InsertNewStat(
 	ctx context.Context,
 	executor sqlutil.InternalExecutor,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableID sqlbase.ID,
 	name string,
 	columnIDs []sqlbase.ColumnID,

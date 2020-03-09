@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package client_test
+package kv_test
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,7 +27,7 @@ func strToValue(s string) *roachpb.Value {
 	return &v
 }
 
-func setup(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
+func setup(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	return s, kvDB
 }
@@ -44,7 +44,7 @@ func checkResult(t *testing.T, expected, result []byte) {
 	}
 }
 
-func checkResults(t *testing.T, expected map[string][]byte, results []client.Result) {
+func checkResults(t *testing.T, expected map[string][]byte, results []kv.Result) {
 	count := 0
 	for _, result := range results {
 		checkRows(t, expected, result.Rows)
@@ -53,7 +53,7 @@ func checkResults(t *testing.T, expected map[string][]byte, results []client.Res
 	checkLen(t, len(expected), count)
 }
 
-func checkRows(t *testing.T, expected map[string][]byte, rows []client.KeyValue) {
+func checkRows(t *testing.T, expected map[string][]byte, rows []kv.KeyValue) {
 	for i, row := range rows {
 		if !bytes.Equal(expected[string(row.Key)], row.ValueBytes()) {
 			t.Errorf("expected %d: %s=\"%s\", got %s=\"%s\"",
@@ -198,7 +198,7 @@ func TestBatch(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Get("aa")
 	b.Put("bb", "2")
 	if err := db.Run(context.TODO(), b); err != nil {
@@ -217,7 +217,7 @@ func TestDB_Scan(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
@@ -242,7 +242,7 @@ func TestDB_ScanForUpdate(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
@@ -267,7 +267,7 @@ func TestDB_ReverseScan(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
@@ -292,7 +292,7 @@ func TestDB_ReverseScanForUpdate(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
@@ -317,7 +317,7 @@ func TestDB_TxnIterate(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
@@ -329,14 +329,14 @@ func TestDB_TxnIterate(t *testing.T) {
 		{1, 2},
 		{2, 1},
 	}
-	var rows []client.KeyValue = nil
+	var rows []kv.KeyValue = nil
 	var p int
 	for _, c := range tc {
-		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			p = 0
-			rows = make([]client.KeyValue, 0)
+			rows = make([]kv.KeyValue, 0)
 			return txn.Iterate(context.TODO(), "a", "b", c.pageSize,
-				func(rs []client.KeyValue) error {
+				func(rs []kv.KeyValue) error {
 					p++
 					rows = append(rows, rs...)
 					return nil
@@ -362,7 +362,7 @@ func TestDB_Del(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("ac", "3")
@@ -389,7 +389,7 @@ func TestTxn_Commit(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.TODO())
 
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
@@ -399,7 +399,7 @@ func TestTxn_Commit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Get("aa")
 	b.Get("ab")
 	if err := db.Run(context.TODO(), b); err != nil {

@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -147,7 +147,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	// we'll assert that the txn wait queue is told that the transaction
 	// aborted, and we also check that the reader got a nil value.
 
-	txn := client.NewTxn(ctx, db, s.NodeID())
+	txn := kv.NewTxn(ctx, db, s.NodeID())
 	keyLeft, keyRight := "a", "c"
 	for _, key := range []string{keyLeft, keyRight} {
 		if err := txn.Put(ctx, key, "val"); err != nil {

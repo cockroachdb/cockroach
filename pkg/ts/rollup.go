@@ -16,7 +16,7 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -206,7 +206,7 @@ func (db *DB) queryAndComputeRollupsForSpan(
 	rollupDataMap map[string]rollupData,
 	qmc QueryMemoryContext,
 ) (roachpb.Span, error) {
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Header.MaxSpanRequestKeys = qmc.GetMaxRollupSlabs(series.Resolution)
 	b.Scan(span.Key, span.EndKey)
 	if err := db.db.Run(ctx, b); err != nil {

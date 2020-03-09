@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -367,7 +367,7 @@ func (r *createStatsResumer) Resume(
 	}()
 
 	dsp := p.DistSQLPlanner()
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if details.AsOf != nil {
 			p.semaCtx.AsOfTimestamp = details.AsOf
 			p.extendedEvalCtx.SetTxnTimestamp(details.AsOf.GoTime())
@@ -426,7 +426,7 @@ func (r *createStatsResumer) Resume(
 	// to use the transaction that inserted the new stats into the
 	// system.table_statistics table, but that would require calling
 	// MakeEventLogger from the distsqlrun package.
-	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return MakeEventLogger(evalCtx.ExecCfg).InsertEventRecord(
 			ctx,
 			txn,

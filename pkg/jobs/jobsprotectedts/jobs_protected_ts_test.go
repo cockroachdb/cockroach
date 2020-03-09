@@ -17,11 +17,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -71,7 +71,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	}
 	mkJobAndRecord := func() (j *jobs.Job, rec *ptpb.Record) {
 		ts := s0.Clock().Now()
-		require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			if j, err = jr.CreateJobWithTxn(ctx, mkJobRec(), txn); err != nil {
 				return err
 			}
@@ -81,15 +81,15 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 		return j, rec
 	}
 	jMovedToFailed, recMovedToFailed := mkJobAndRecord()
-	require.NoError(t, jMovedToFailed.Failed(ctx, io.ErrUnexpectedEOF, func(ctx context.Context, txn *client.Txn) error {
+	require.NoError(t, jMovedToFailed.Failed(ctx, io.ErrUnexpectedEOF, func(ctx context.Context, txn *kv.Txn) error {
 		return nil
 	}))
 	jFinished, recFinished := mkJobAndRecord()
-	require.NoError(t, jFinished.Succeeded(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.NoError(t, jFinished.Succeeded(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return nil
 	}))
 	_, recRemains := mkJobAndRecord()
-	ensureNotExists := func(ctx context.Context, txn *client.Txn, ptsID uuid.UUID) (err error) {
+	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
 		_, err = ptp.GetRecord(ctx, txn, ptsID)
 		if err == protectedts.ErrNotExists {
 			return nil
@@ -97,7 +97,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 		return fmt.Errorf("waiting for %v, got %v", protectedts.ErrNotExists, err)
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
-		return s0.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if err := ensureNotExists(ctx, txn, recMovedToFailed.ID); err != nil {
 				return err
 			}

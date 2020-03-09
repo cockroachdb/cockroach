@@ -18,7 +18,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -70,7 +70,7 @@ type Oracle interface {
 
 // OracleFactory creates an oracle for a Txn.
 type OracleFactory interface {
-	Oracle(*client.Txn) Oracle
+	Oracle(*kv.Txn) Oracle
 }
 
 // OracleFactoryFunc creates an OracleFactory from a Config.
@@ -126,7 +126,7 @@ func newRandomOracleFactory(cfg Config) OracleFactory {
 	return &randomOracle{gossip: cfg.Gossip}
 }
 
-func (o *randomOracle) Oracle(_ *client.Txn) Oracle {
+func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 	return o
 }
 
@@ -156,7 +156,7 @@ func newClosestOracleFactory(cfg Config) OracleFactory {
 	}
 }
 
-func (o *closestOracle) Oracle(_ *client.Txn) Oracle {
+func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 	return o
 }
 
@@ -208,7 +208,7 @@ func newBinPackingOracleFactory(cfg Config) OracleFactory {
 
 var _ OracleFactory = &binPackingOracle{}
 
-func (o *binPackingOracle) Oracle(_ *client.Txn) Oracle {
+func (o *binPackingOracle) Oracle(_ *kv.Txn) Oracle {
 	return o
 }
 

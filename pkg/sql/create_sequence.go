@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -119,7 +119,7 @@ func doCreateSequence(
 
 	// Initialize the sequence value.
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
 	if err := params.p.txn.Run(params.ctx, b); err != nil {
 		return err

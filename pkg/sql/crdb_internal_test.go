@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -50,7 +50,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 	s, _ /* sqlDB */, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 		batch.Put(sqlbase.NewTableKey(999, 444, "bob").Key(), 9999)
 		batch.Put(sqlbase.NewDeprecatedTableKey(1000, "alice").Key(), 10000)
@@ -211,7 +211,7 @@ CREATE TABLE t.test (k INT);
 	tableDesc.Columns = append(tableDesc.Columns, *col)
 
 	// Write the modified descriptor.
-	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}

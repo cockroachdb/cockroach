@@ -11,7 +11,7 @@
 /* Package client_test tests clients against a fully-instantiated
 cockroach cluster (a single node, but bootstrapped, gossiped, etc.).
 */
-package client_test
+package kv_test
 
 import (
 	"bytes"
@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -50,7 +50,7 @@ var errInfo = testutils.MakeCaller(3, 2)
 // values. The values can be either integers or strings; the expected results
 // are passed as alternating keys and values, e.g:
 //   checkScanResult(t, result, key1, val1, key2, val2)
-func checkKVs(t *testing.T, kvs []client.KeyValue, expected ...interface{}) {
+func checkKVs(t *testing.T, kvs []kv.KeyValue, expected ...interface{}) {
 	expLen := len(expected) / 2
 	if expLen != len(kvs) {
 		t.Errorf("%s: expected %d scan results, got %d", errInfo(), expLen, len(kvs))
@@ -80,7 +80,7 @@ func checkKVs(t *testing.T, kvs []client.KeyValue, expected ...interface{}) {
 	}
 }
 
-func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
+func createTestClient(t *testing.T, s serverutils.TestServerInterface) *kv.DB {
 	return s.DB()
 }
 
@@ -143,7 +143,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan error)
 		count := 0 // keeps track of retries
-		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			if test.canPush {
 				if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
 					t.Fatal(err)
@@ -241,13 +241,13 @@ func TestClientRunTransaction(t *testing.T) {
 		value := []byte("value")
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
-		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			// Put transactional value.
 			if err := txn.Put(ctx, key, value); err != nil {
 				return err
 			}
 			// Attempt to read in another txn.
-			conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+			conflictTxn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 			conflictTxn.TestingSetPriority(enginepb.MaxTxnPriority)
 			if gr, err := conflictTxn.Get(ctx, key); err != nil {
 				return err
@@ -404,7 +404,7 @@ func TestClientBatch(t *testing.T) {
 
 	keys := []roachpb.Key{}
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		for i := 0; i < 10; i++ {
 			key := roachpb.Key(fmt.Sprintf("%s/key %02d", testUser, i))
 			keys = append(keys, key)
@@ -424,7 +424,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Now try 2 scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(ctx, b); err != nil {
@@ -436,7 +436,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = 7
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
@@ -449,7 +449,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = 7
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
@@ -462,7 +462,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = 3
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
@@ -475,7 +475,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Try 2 reverse scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		if err := db.Run(ctx, b); err != nil {
@@ -487,7 +487,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 reverse scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = 7
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
@@ -500,7 +500,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 reverse scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = 7
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
@@ -513,7 +513,7 @@ func TestClientBatch(t *testing.T) {
 
 	// Try a limited batch of 2 reverse scans.
 	{
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = 3
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
@@ -531,7 +531,7 @@ func TestClientBatch(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
 		if err := db.Run(ctx, b); err == nil {
 			t.Error("unexpected success")
@@ -556,9 +556,9 @@ func TestClientBatch(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return txn.Run(ctx, b)
 		}); err == nil {
 			t.Error("unexpected success")
@@ -581,7 +581,7 @@ func TestClientBatch(t *testing.T) {
 // read the integers stored at the other's key and add it onto their own.
 // It is checked that the outcome is serializable, i.e. exactly one of the
 // two Goroutines (the later write) sees the previous write by the other.
-func concurrentIncrements(db *client.DB, t *testing.T) {
+func concurrentIncrements(db *kv.DB, t *testing.T) {
 	// wgStart waits for all transactions to line up, wgEnd has the main
 	// function wait for them to finish.
 	var wgStart, wgEnd sync.WaitGroup
@@ -598,7 +598,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 				txn.SetDebugName(fmt.Sprintf("test-%d", i))
 
 				// Retrieve the other key.
@@ -681,7 +681,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 		t.Run(rc.String(), func(t *testing.T) {
 			// Mock out DistSender's sender function to check the read consistency for
 			// outgoing BatchRequests and return an empty reply.
-			factory := client.NonTransactionalFactoryFunc(
+			factory := kv.NonTransactionalFactoryFunc(
 				func(_ context.Context, ba roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					if ba.ReadConsistency != rc {
@@ -691,11 +691,11 @@ func TestReadConsistencyTypes(t *testing.T) {
 				})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 			ctx := context.TODO()
 
-			prepWithRC := func() *client.Batch {
-				b := &client.Batch{}
+			prepWithRC := func() *kv.Batch {
+				b := &kv.Batch{}
 				b.Header.ReadConsistency = rc
 				return b
 			}
@@ -722,7 +722,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 
 			{
 				key := roachpb.Key([]byte("key"))
-				b := &client.Batch{}
+				b := &kv.Batch{}
 				b.Header.ReadConsistency = rc
 				b.Get(key)
 				if err := db.Run(ctx, b); err != nil {
@@ -741,7 +741,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	db := createTestClient(t, s)
 
 	keys := []roachpb.Key{}
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	for i := 0; i < 10; i++ {
 		key := roachpb.Key(fmt.Sprintf("%s/key/%02d", testUser, i))
 		keys = append(keys, key)
@@ -752,7 +752,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	}
 
 	// Try reverse scans for all keys.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
 		if err != nil {
 			return err
@@ -766,7 +766,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	}
 
 	// Try reverse scans for half of the keys.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
 		if err != nil {
 			return err
@@ -778,7 +778,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	}
 
 	// Try limit maximum rows.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
 		if err != nil {
 			return err
@@ -790,7 +790,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	}
 
 	// Try reverse scan with the same start and end key.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
 		if len(rows) > 0 {
 			t.Errorf("expected empty, got %v", rows)
@@ -803,7 +803,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	}
 
 	// Try reverse scan with non-existent key.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
 		if err != nil {
 			return err
@@ -822,33 +822,33 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
-	factory := client.MakeMockTxnSenderFactory(
+	factory := kv.MakeMockTxnSenderFactory(
 		func(_ context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			return ba.CreateReply(), nil
 		})
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	dbCtx := client.DefaultDBContext()
+	dbCtx := kv.DefaultDBContext()
 	dbCtx.NodeID = &base.NodeIDContainer{}
-	db := client.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
+	db := kv.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
 	ctx := context.Background()
 
 	// Verify direct creation of Txns.
 	directCases := []struct {
-		typ         client.TxnType
+		typ         kv.TxnType
 		nodeID      roachpb.NodeID
 		expObserved bool
 	}{
-		{typ: client.RootTxn, nodeID: 0, expObserved: false},
-		{typ: client.RootTxn, nodeID: 1, expObserved: true},
-		{typ: client.LeafTxn, nodeID: 0, expObserved: false},
-		{typ: client.LeafTxn, nodeID: 1, expObserved: false},
+		{typ: kv.RootTxn, nodeID: 0, expObserved: false},
+		{typ: kv.RootTxn, nodeID: 1, expObserved: true},
+		{typ: kv.LeafTxn, nodeID: 0, expObserved: false},
+		{typ: kv.LeafTxn, nodeID: 1, expObserved: false},
 	}
 	for i, test := range directCases {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
 			now := db.Clock().Now()
 			kvTxn := roachpb.MakeTransaction("unnamed", nil /*baseKey*/, roachpb.NormalUserPriority, now, db.Clock().MaxOffset().Nanoseconds())
-			txn := client.NewTxnFromProto(ctx, db, test.nodeID, now, test.typ, &kvTxn)
+			txn := kv.NewTxnFromProto(ctx, db, test.nodeID, now, test.typ, &kvTxn)
 			ots := txn.TestingCloneTxn().ObservedTimestamps
 			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 				t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
@@ -870,7 +870,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 				dbCtx.NodeID.Set(ctx, test.nodeID)
 			}
 			if err := db.Txn(
-				ctx, func(_ context.Context, txn *client.Txn) error {
+				ctx, func(_ context.Context, txn *kv.Txn) error {
 					ots := txn.TestingCloneTxn().ObservedTimestamps
 					if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 						t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
@@ -910,7 +910,7 @@ func TestIntentCleanupUnblocksReaders(t *testing.T) {
 			close(done)
 		}()
 
-		err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.Put(ctx, key, "txn-value"); err != nil {
 				close(block)
 				return err
@@ -948,7 +948,7 @@ func TestRollbackWithCanceledContextBasic(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	key := roachpb.Key("a")
-	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.Put(ctx, key, "txn-value"); err != nil {
 			return err
 		}
@@ -1007,7 +1007,7 @@ func TestRollbackWithCanceledContextInsidious(t *testing.T) {
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 	defer s.Stopper().Stop(context.Background())
 
-	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.Put(ctx, key, "txn-value"); err != nil {
 			return err
 		}

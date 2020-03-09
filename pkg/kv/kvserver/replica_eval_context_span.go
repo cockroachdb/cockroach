@@ -13,8 +13,8 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -70,7 +70,7 @@ func (rec *SpanSetReplicaEvalContext) Clock() *hlc.Clock {
 }
 
 // DB returns the Replica's client DB.
-func (rec *SpanSetReplicaEvalContext) DB() *client.DB {
+func (rec *SpanSetReplicaEvalContext) DB() *kv.DB {
 	return rec.i.DB()
 }
 

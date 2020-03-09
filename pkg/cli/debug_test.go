@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -226,7 +226,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					// we restart the cluster, so just write a setting.
 					s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
 
-					txn := client.NewTxn(ctx, tc.Servers[0].DB(), 1)
+					txn := kv.NewTxn(ctx, tc.Servers[0].DB(), 1)
 					var desc roachpb.RangeDescriptor
 					// Pick one of the predefined split points.
 					rdKey := keys.RangeDescriptorKey(roachpb.RKey(keys.TimeseriesPrefix))

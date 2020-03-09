@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,7 +68,7 @@ func TestSingleKey(t *testing.T) {
 			var r result
 			for timeutil.Now().Before(deadline) {
 				start := timeutil.Now()
-				err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					minExp := atomic.LoadInt64(&expected)
 					r, err := txn.Get(ctx, key)
 					if err != nil {

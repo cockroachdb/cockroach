@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,8 +56,8 @@ type LocalTestCluster struct {
 	Eng               storage.Engine
 	Store             *kvserver.Store
 	StoreTestingKnobs *kvserver.StoreTestingKnobs
-	DBContext         *client.DBContext
-	DB                *client.DB
+	DBContext         *kv.DBContext
+	DB                *kv.DB
 	Stores            *kvserver.Stores
 	Stopper           *stop.Stopper
 	Latency           time.Duration // sleep for each RPC sent
@@ -87,10 +87,10 @@ type InitFactoryFn func(
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,
 	latency time.Duration,
-	stores client.Sender,
+	stores kv.Sender,
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
-) client.TxnSenderFactory
+) kv.TxnSenderFactory
 
 // Start starts the test cluster by bootstrapping an in-memory store
 // (defaults to maximum of 50M). The server is started, launching the
@@ -126,12 +126,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
 	if ltc.DBContext == nil {
-		dbCtx := client.DefaultDBContext()
+		dbCtx := kv.DefaultDBContext()
 		dbCtx.Stopper = ltc.Stopper
 		ltc.DBContext = &dbCtx
 	}
 	ltc.DBContext.NodeID.Set(context.Background(), nodeID)
-	ltc.DB = client.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.DBContext)
+	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.DBContext)
 	transport := kvserver.NewDummyRaftTransport(cfg.Settings)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.

@@ -14,7 +14,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -49,7 +49,7 @@ type Config struct {
 	RangeDesc *roachpb.RangeDescriptor
 	// Components.
 	Settings       *cluster.Settings
-	DB             *client.DB
+	DB             *kv.DB
 	Clock          *hlc.Clock
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver

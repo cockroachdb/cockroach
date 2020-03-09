@@ -14,8 +14,8 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,7 +33,7 @@ const MetaType = "jobs"
 // MakeStatusFunc returns a function which determines whether the job implied
 // with this value of meta should be removed by the reconciler.
 func MakeStatusFunc(jr *jobs.Registry) ptreconcile.StatusFunc {
-	return func(ctx context.Context, txn *client.Txn, meta []byte) (shouldRemove bool, _ error) {
+	return func(ctx context.Context, txn *kv.Txn, meta []byte) (shouldRemove bool, _ error) {
 		jobID, err := decodeJobID(meta)
 		if err != nil {
 			return false, err

@@ -14,8 +14,8 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -50,7 +50,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		val = int64(rowid)
 	} else {
 		seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-		val, err = client.IncrementValRetryable(
+		val, err = kv.IncrementValRetryable(
 			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
 		if err != nil {
 			switch err.(type) {

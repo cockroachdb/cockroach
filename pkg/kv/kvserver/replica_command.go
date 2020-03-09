@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -164,7 +164,7 @@ func setStickyBit(desc *roachpb.RangeDescriptor, expiration hlc.Timestamp) {
 func splitTxnAttempt(
 	ctx context.Context,
 	store *Store,
-	txn *client.Txn,
+	txn *kv.Txn,
 	rightRangeID roachpb.RangeID,
 	splitKey roachpb.RKey,
 	expiration hlc.Timestamp,
@@ -241,7 +241,7 @@ func splitTxnAttempt(
 }
 
 func splitTxnStickyUpdateAttempt(
-	ctx context.Context, txn *client.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
+	ctx context.Context, txn *kv.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
 ) error {
 	_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
 	if err != nil {
@@ -364,7 +364,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		// Even if the range is already split, we should still update the sticky
 		// bit if it has a later expiration time.
 		if desc.GetStickyBit().Less(args.ExpirationTime) {
-			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return splitTxnStickyUpdateAttempt(ctx, txn, desc, args.ExpirationTime)
 			})
 			// The ConditionFailedError can occur because the descriptors acting as
@@ -397,7 +397,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
 		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightRangeID, reason, extra)
 
-	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
@@ -449,7 +449,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		return reply, nil
 	}
 
-	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
 		if err != nil {
 			return err
@@ -566,7 +566,7 @@ func (r *Replica) AdminMerge(
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
-	runMergeTxn := func(txn *client.Txn) error {
+	runMergeTxn := func(txn *kv.Txn) error {
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
 
@@ -715,7 +715,7 @@ func (r *Replica) AdminMerge(
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
-		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
+		br, pErr := kv.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
 			&roachpb.SubsumeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
 				LeftDesc:      *origLeftDesc,
@@ -767,7 +767,7 @@ func (r *Replica) AdminMerge(
 	// Note that client.DB.Txn performs retries using the same transaction, so we
 	// have to use our own retry loop.
 	for {
-		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID())
+		txn := kv.NewTxn(ctx, r.store.DB(), r.NodeID())
 		err := runMergeTxn(txn)
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
@@ -1581,7 +1581,7 @@ func execChangeReplicasTxn(
 		return checkDescsEqual(referenceDesc)(kvDesc)
 	}
 
-	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
 		desc, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, referenceDesc.StartKey, check)
@@ -1956,7 +1956,7 @@ func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescripto
 // the same thing, but also correctly handles proto equality. See #38308.
 func conditionalGetDescValueFromDB(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	startKey roachpb.RKey,
 	check func(*roachpb.RangeDescriptor) bool,
 ) (*roachpb.RangeDescriptor, *roachpb.Value, error) {
@@ -1993,7 +1993,7 @@ func conditionalGetDescValueFromDB(
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
 func updateRangeDescriptor(
-	b *client.Batch, descKey roachpb.Key, oldValue *roachpb.Value, newDesc *roachpb.RangeDescriptor,
+	b *kv.Batch, descKey roachpb.Key, oldValue *roachpb.Value, newDesc *roachpb.RangeDescriptor,
 ) error {
 	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
 	// an empty value. An interface{}(nil) refers to a non-existent value. So
@@ -2035,7 +2035,7 @@ func (s *Store) AdminRelocateRange(
 		// with this hack for a few weeks.
 		//
 		// TODO(tbg): remove in 20.1.
-		ctx = client.ChangeReplicasCanMixAddAndRemoveContext(ctx)
+		ctx = kv.ChangeReplicasCanMixAddAndRemoveContext(ctx)
 	}
 
 	// Step 0: Remove everything that's not a full voter so we don't have to think
@@ -2124,7 +2124,7 @@ func (s *Store) AdminRelocateRange(
 			// 19.2+ (in which the AdminChangeReplicas RPC was extended to support
 			// mixing additions and removals), don't send such requests but unroll
 			// the ops here, running them one by one; see for details:
-			_ = client.ChangeReplicasCanMixAddAndRemoveContext
+			_ = kv.ChangeReplicasCanMixAddAndRemoveContext
 
 			// Make sure we don't issue anything but singles and swaps before
 			// this migration is gone (for it doesn't support anything else).
@@ -2138,7 +2138,7 @@ func (s *Store) AdminRelocateRange(
 			success := true
 			for _, ops := range opss {
 				newDesc, err := s.DB().AdminChangeReplicas(
-					client.ChangeReplicasCanMixAddAndRemoveContext(ctx),
+					kv.ChangeReplicasCanMixAddAndRemoveContext(ctx),
 					startKey,
 					rangeDesc,
 					ops,
@@ -2309,7 +2309,7 @@ func (s *Store) relocateOne(
 		// that, we need to first move the lease elsewhere. This is not possible
 		// if there is no other replica available at that point, i.e. if the
 		// existing descriptor is a single replica that's being replaced.
-		var b client.Batch
+		var b kv.Batch
 		liReq := &roachpb.LeaseInfoRequest{}
 		liReq.Key = desc.StartKey.AsRawKey()
 		b.AddRawRequest(liReq)
