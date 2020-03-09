@@ -8,15 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon } from "antd";
+import { Icon, Pagination } from "antd";
 import _ from "lodash";
 import moment from "moment";
+import { DATE_FORMAT } from "src/util/format";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { PaginationComponent, PaginationSettings } from "src/components/pagination/pagination";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+
 import * as protos from "src/js/protos";
 import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -25,9 +26,7 @@ import { StatementsResponseMessage } from "src/util/api";
 import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, flattenStatementStats, StatementStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
-import { DATE_FORMAT } from "src/util/format";
 import { Pick } from "src/util/pick";
-import { getMatchParamByName } from "src/util/query";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
@@ -42,6 +41,9 @@ import {
   selectLastDiagnosticsReportPerStatement,
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import { getMatchParamByName } from "src/util/query";
+
+import "./statements.styl";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -55,6 +57,10 @@ interface StatementsPageProps {
   refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
   dismissAlertMessage: () => void;
 }
+type PaginationSettings = {
+  pageSize: number;
+  current: number;
+};
 
 interface StatementsPageState {
   sortSetting: SortSetting;
@@ -234,8 +240,12 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
             </div>
           )}
         </section>
-        <PaginationComponent
-          pagination={{ ...pagination, total: this.filteredStatementsData().length }}
+        <Pagination
+          size="small"
+          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+          pageSize={pagination.pageSize}
+          current={pagination.current}
+          total={this.filteredStatementsData().length}
           onChange={this.onChangePage}
           hideOnSinglePage={data.length === 0}
         />

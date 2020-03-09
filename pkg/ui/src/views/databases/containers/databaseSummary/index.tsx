@@ -10,11 +10,15 @@
 
 import _ from "lodash";
 import React from "react";
+
 import * as protos from "src/js/protos";
-import { generateTableID, refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
+
 import { AdminUIState } from "src/redux/state";
-import { TableInfo } from "src/views/databases/data/tableInfo";
+import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID} from "src/redux/apiReducers";
+
 import { SortSetting } from "src/views/shared/components/sortabletable";
+
+import { TableInfo } from "src/views/databases/data/tableInfo";
 
 // DatabaseSummaryImplicitData describes properties which must be explicitly set
 // on a DatabaseSummary component.
@@ -48,14 +52,12 @@ type DatabaseSummaryProps = DatabaseSummaryExplicitData & DatabaseSummaryConnect
 // "refresh-on-mount-or-receiveProps" we have in many of our connected
 // components; that would allow us to avoid this inheritance.
 export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {}> {
-  getDatabaseSummaryData: (data: TableInfo[]) => TableInfo[];
   // loadTableDetails loads data for each table which have no info in the store.
   // TODO(mrtracy): Should this be refreshing data always? Not sure if there
   // is a performance concern with invalidation periods.
   loadTableDetails(props = this.props) {
     if (props.tableInfos && props.tableInfos.length > 0) {
-      const data: TableInfo[] = this.getDatabaseSummaryData(props.tableInfos);
-      _.each(data, (tblInfo) => {
+      _.each(props.tableInfos, (tblInfo) => {
         if (_.isUndefined(tblInfo.numColumns)) {
           props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
             database: props.name,
@@ -75,6 +77,7 @@ export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {
   // Refresh when the component is mounted.
   componentWillMount() {
     this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.name }));
+    this.loadTableDetails();
   }
 
   // Refresh when the component receives properties.
@@ -83,7 +86,7 @@ export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {
   }
 
   render(): React.ReactElement<any> {
-    throw new Error("DatabaseSummaryBase should never be instantiated directly. ");
+      throw new Error("DatabaseSummaryBase should never be instantiated directly. ");
   }
 }
 
