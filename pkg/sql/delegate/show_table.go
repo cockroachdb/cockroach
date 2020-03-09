@@ -44,6 +44,7 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 }
 
 func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Indexes)
 	getIndexesQuery := `
 SELECT
 	table_name,
@@ -127,6 +128,7 @@ ORDER BY ordinal_position`
 }
 
 func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Constraints)
 	const getConstraintsQuery = `
     SELECT
         t.relname AS table_name,

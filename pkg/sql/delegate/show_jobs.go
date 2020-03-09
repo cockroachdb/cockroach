@@ -15,9 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Jobs)
 	const (
 		selectClause = `SELECT job_id, job_type, description, statement, user_name, status,
 				       running_status, created, started, finished, modified,
