@@ -431,10 +431,10 @@ var specs = []stmtSpec{
 	{
 		name:   "backup",
 		stmt:   "backup_stmt",
-		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options"},
+		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "as_of_clause", "opt_incremental", "opt_with_options"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP'")},
 		replace: map[string]string{
-			"non_reserved_word_or_sconst":                     "destination",
+			"partitioned_backup":                              "destination",
 			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr":                "'AS OF SYSTEM TIME' timestamp",
 			"'INCREMENTAL' 'FROM' string_or_placeholder_list": "'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* )",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'":         "",
