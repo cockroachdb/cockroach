@@ -203,8 +203,28 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}()
 
-	shouldCollectInfo, recordStmtInfoFn := ex.stmtInfoRegistry.shouldCollectDiagnostics(ctx, stmt.AST)
-	if shouldCollectInfo {
+	var discardRows bool
+	var stmtDiagPlan *planTop
+	var shouldCollectDiagnostics bool
+	var diagHelper *stmtDiagnosticsHelper
+
+	if explainBundle, ok := stmt.AST.(*tree.ExplainBundle); ok {
+		// Always collect diagnostics for EXPLAIN BUNDLE.
+		shouldCollectDiagnostics = true
+		// Strip off EXPLAIN BUNDLE to execute the inner statement.
+		stmt.AST = explainBundle.Statement
+		// TODO(radu): should we trim the "EXPLAIN BUNDLE" part from stmt.SQL?
+
+		// EXPLAIN BUNDLE does not return the rows for the given query; instead it
+		// returns some text which includes a URL.
+		// TODO(radu): maybe capture some of the rows and include them in the
+		// bundle.
+		discardRows = true
+	} else {
+		shouldCollectDiagnostics, diagHelper = ex.stmtInfoRegistry.shouldCollectDiagnostics(ctx, stmt.AST)
+	}
+
+	if shouldCollectDiagnostics {
 		tr := ex.server.cfg.AmbientCtx.Tracer
 		origCtx := ctx
 		var sp opentracing.Span
@@ -214,7 +234,18 @@ func (ex *connExecutor) execStmtInOpenState(
 			// Note that in case of implicit transactions, the trace contains the auto-commit too.
 			sp.Finish()
 			trace := tracing.GetRecording(sp)
-			recordStmtInfoFn(origCtx, trace)
+
+			if diagHelper != nil {
+				diagHelper.Finish(origCtx, trace, stmtDiagPlan)
+			} else {
+				// Handle EXPLAIN BUNDLE.
+				// If there was a communication error, no point in setting any results.
+				if retErr == nil {
+					retErr = setExplainBundleResult(
+						origCtx, res, stmt.AST, trace, stmtDiagPlan, ex.server.cfg,
+					)
+				}
+			}
 		}()
 	}
 
@@ -252,7 +283,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 	}
 
-	var discardRows, explainBundle bool
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is always an error when in the Open state. It's legitimate only in
@@ -347,18 +377,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.AST)
 
-		discardRows = s.DiscardRows
-
-	case *tree.ExplainBundle:
-		stmt.AST = s.Statement
-		// TODO(radu): should we trim the "EXPLAIN BUNDLE" part from stmt.SQL?
-		explainBundle = true
-
-		// EXPLAIN BUNDLE does not return the rows for the given query; instead it
-		// returns some text which includes a URL.
-		// TODO(radu): maybe capture some of the rows and include them in the
-		// bundle.
-		discardRows = true
+		discardRows = discardRows || s.DiscardRows
 	}
 
 	// For regular statements (the ones that get to this point), we
@@ -370,6 +389,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
 	p.sessionDataMutator.paramStatusUpdater = res
 	p.noticeSender = &gatedNoticeSender{noticeSender: res, sv: &ex.server.cfg.Settings.SV}
+	stmtDiagPlan = &p.curPlan
 
 	if os.ImplicitTxn.Get() {
 		asOfTs, err := p.isAsOf(stmt.AST)
@@ -463,7 +483,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.discardRows = discardRows
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
-	p.collectBundle = explainBundle
+	p.collectBundle = shouldCollectDiagnostics
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
 	}
@@ -492,17 +512,6 @@ func (ex *connExecutor) execStmtInOpenState(
 				rewCap: rc,
 			}
 			return ev, payload, nil
-		}
-	}
-	if explainBundle {
-		// Note that we don't get this far if we hit an execution error. In that
-		// case, the statement will get retried or will return the error to the
-		// user.
-		// TODO(radu): investigate writing out the bundle and returning the text
-		// with the URL together with the error.
-		if err := handleExplainBundle(ctx, res, &p.curPlan, p.ExecCfg()); err != nil {
-			res.SetError(err)
-			return makeErrEvent(err)
 		}
 	}
 	// No event was generated.
