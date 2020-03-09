@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -65,7 +65,7 @@ type TestServerInterface interface {
 	SQLAddr() string
 
 	// DB returns a *client.DB instance for talking to this KV server.
-	DB() *client.DB
+	DB() *kv.DB
 
 	// RPCContext returns the rpc context used by the test server.
 	RPCContext() *rpc.Context
@@ -192,7 +192,7 @@ func InitTestServerFactory(impl TestServerFactory) {
 // The server should be stopped by calling server.Stopper().Stop().
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
-) (TestServerInterface, *gosql.DB, *client.DB) {
+) (TestServerInterface, *gosql.DB, *kv.DB) {
 	server, err := StartServerRaw(params)
 	if err != nil {
 		t.Fatal(err)

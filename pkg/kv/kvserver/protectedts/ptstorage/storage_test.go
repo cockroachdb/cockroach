@@ -23,8 +23,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
@@ -70,7 +70,7 @@ var testCases = []testCase{
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(hlc.Timestamp{}, "", nil, tableSpan(42))
-				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					return tCtx.pts.Protect(ctx, txn, &rec)
 				})
 				require.Regexp(t, "invalid zero value timestamp", err.Error())
@@ -83,7 +83,7 @@ var testCases = []testCase{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx.tc.Server(0).Clock().Now(), "", nil, tableSpan(42))
 				rec.Verified = true
-				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					return tCtx.pts.Protect(ctx, txn, &rec)
 				})
 				require.Regexp(t, "cannot create a verified record", err.Error())
@@ -97,7 +97,7 @@ var testCases = []testCase{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx.tc.Server(0).Clock().Now(), "", nil, tableSpan(42))
 				rec.ID = pickOneRecord(tCtx)
-				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					return tCtx.pts.Protect(ctx, txn, &rec)
 				})
 				require.EqualError(t, err, protectedts.ErrExists.Error())
@@ -161,7 +161,7 @@ var testCases = []testCase{
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				var rec *ptpb.Record
-				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 					rec, err = tCtx.pts.GetRecord(ctx, txn, randomID(tCtx))
 					return err
 				})
@@ -216,7 +216,7 @@ var testCases = []testCase{
 type testContext struct {
 	pts protectedts.Storage
 	tc  *testcluster.TestCluster
-	db  *client.DB
+	db  *kv.DB
 
 	state ptpb.State
 }
@@ -238,7 +238,7 @@ type releaseOp struct {
 
 func (r releaseOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	id := r.idFunc(tCtx)
-	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return tCtx.pts.Release(ctx, txn, id)
 	})
 	if !testutils.IsError(err, r.expErr) {
@@ -269,7 +269,7 @@ type markVerifiedOp struct {
 
 func (mv markVerifiedOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	id := mv.idFunc(tCtx)
-	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return tCtx.pts.MarkVerified(ctx, txn, id)
 	})
 	if !testutils.IsError(err, mv.expErr) {
@@ -296,7 +296,7 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	if p.idFunc != nil {
 		rec.ID = p.idFunc(tCtx)
 	}
-	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return tCtx.pts.Protect(ctx, txn, &rec)
 	})
 	if !testutils.IsError(err, p.expErr) {
@@ -339,12 +339,12 @@ func (test testCase) run(t *testing.T) {
 	}
 	verify := func(t *testing.T) {
 		var state ptpb.State
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			state, err = pts.GetState(ctx, txn)
 			return err
 		}))
 		var md ptpb.Metadata
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			md, err = pts.GetMetadata(ctx, txn)
 			return err
 		}))
@@ -352,7 +352,7 @@ func (test testCase) run(t *testing.T) {
 		require.EqualValues(t, tCtx.state.Metadata, md)
 		for _, r := range tCtx.state.Records {
 			var rec *ptpb.Record
-			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				rec, err = pts.GetRecord(ctx, txn, r.ID)
 				return err
 			}))
@@ -436,7 +436,7 @@ func TestCorruptData(t *testing.T) {
 			s.InternalExecutor().(*sql.InternalExecutor))
 
 		rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableSpan(42))
-		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return pts.Protect(ctx, txn, &rec)
 		}))
 		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
@@ -455,12 +455,12 @@ func TestCorruptData(t *testing.T) {
 		var got *ptpb.Record
 		msg := regexp.MustCompile("failed to unmarshal spans for " + rec.ID.String() + ": ")
 		require.Regexp(t, msg,
-			s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+			s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				got, err = pts.GetRecord(ctx, txn, rec.ID)
 				return err
 			}).Error())
 		require.Nil(t, got)
-		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			_, err = pts.GetState(ctx, txn)
 			return err
 		}))
@@ -481,7 +481,7 @@ func TestCorruptData(t *testing.T) {
 			s.InternalExecutor().(*sql.InternalExecutor))
 
 		rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableSpan(42))
-		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return pts.Protect(ctx, txn, &rec)
 		}))
 
@@ -505,12 +505,12 @@ func TestCorruptData(t *testing.T) {
 		msg := regexp.MustCompile("failed to parse timestamp for " + rec.ID.String() +
 			": logical part has too many digits")
 		require.Regexp(t, msg,
-			s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+			s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				got, err = pts.GetRecord(ctx, txn, rec.ID)
 				return err
 			}))
 		require.Nil(t, got)
-		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			_, err = pts.GetState(ctx, txn)
 			return err
 		}))
@@ -541,24 +541,24 @@ func TestErrorsFromSQL(t *testing.T) {
 		return errors.New("boom")
 	})
 	rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableSpan(42))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return pts.Protect(ctx, txn, &rec)
 	}), fmt.Sprintf("failed to write record %v: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := pts.GetRecord(ctx, txn, rec.ID)
 		return err
 	}), fmt.Sprintf("failed to read record %v: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return pts.MarkVerified(ctx, txn, rec.ID)
 	}), fmt.Sprintf("failed to mark record %v as verified: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return pts.Release(ctx, txn, rec.ID)
 	}), fmt.Sprintf("failed to release record %v: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := pts.GetMetadata(ctx, txn)
 		return err
 	}), "failed to read metadata: boom")
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := pts.GetState(ctx, txn)
 		return err
 	}), "failed to read metadata: boom")
@@ -573,7 +573,7 @@ func TestErrorsFromSQL(t *testing.T) {
 		}
 		return errors.New("boom")
 	})
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := pts.GetState(ctx, txn)
 		return err
 	}), "failed to read records: boom")
@@ -592,7 +592,7 @@ type wrappedInternalExecutor struct {
 var _ sqlutil.InternalExecutor = &wrappedInternalExecutor{}
 
 func (ie *wrappedInternalExecutor) Exec(
-	ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
+	ctx context.Context, opName string, txn *kv.Txn, statement string, params ...interface{},
 ) (int, error) {
 	panic("unimplemented")
 }
@@ -600,7 +600,7 @@ func (ie *wrappedInternalExecutor) Exec(
 func (ie *wrappedInternalExecutor) ExecEx(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	o sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -611,7 +611,7 @@ func (ie *wrappedInternalExecutor) ExecEx(
 func (ie *wrappedInternalExecutor) QueryEx(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -627,7 +627,7 @@ func (ie *wrappedInternalExecutor) QueryEx(
 func (ie *wrappedInternalExecutor) QueryWithCols(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	o sqlbase.InternalExecutorSessionDataOverride,
 	statement string,
 	qargs ...interface{},
@@ -638,7 +638,7 @@ func (ie *wrappedInternalExecutor) QueryWithCols(
 func (ie *wrappedInternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -652,13 +652,13 @@ func (ie *wrappedInternalExecutor) QueryRowEx(
 }
 
 func (ie *wrappedInternalExecutor) Query(
-	ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
+	ctx context.Context, opName string, txn *kv.Txn, statement string, params ...interface{},
 ) ([]tree.Datums, error) {
 	panic("not implemented")
 }
 
 func (ie *wrappedInternalExecutor) QueryRow(
-	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+	ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
 	panic("not implemented")
 }

@@ -18,9 +18,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -96,7 +96,7 @@ type DistSQLPlanner struct {
 	nodeHealth distSQLNodeHealth
 
 	// distSender is used to construct the spanResolver upon SetNodeDesc.
-	distSender *kv.DistSender
+	distSender *kvcoord.DistSender
 	// rpcCtx is used to construct the spanResolver upon SetNodeDesc.
 	rpcCtx *rpc.Context
 }
@@ -145,7 +145,7 @@ func NewDistSQLPlanner(
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsql.ServerImpl,
-	distSender *kv.DistSender,
+	distSender *kvcoord.DistSender,
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
 	liveness livenessProvider,
@@ -753,7 +753,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 		// We break up rspan into its individual ranges (which may or
 		// may not be on separate nodes). We then create "partitioned
 		// spans" using the end keys of these individual ranges.
-		for it.Seek(ctx, span, kv.Ascending); ; it.Next(ctx) {
+		for it.Seek(ctx, span, kvcoord.Ascending); ; it.Next(ctx) {
 			if !it.Valid() {
 				return nil, it.Error()
 			}
@@ -1021,9 +1021,9 @@ func (dsp *DistSQLPlanner) getNodeIDForScan(
 	// Determine the node ID for the first range to be scanned.
 	it := planCtx.spanIter
 	if reverse {
-		it.Seek(planCtx.ctx, spans[len(spans)-1], kv.Descending)
+		it.Seek(planCtx.ctx, spans[len(spans)-1], kvcoord.Descending)
 	} else {
-		it.Seek(planCtx.ctx, spans[0], kv.Ascending)
+		it.Seek(planCtx.ctx, spans[0], kvcoord.Ascending)
 	}
 	if !it.Valid() {
 		return 0, it.Error()
@@ -3241,7 +3241,7 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 
 // NewPlanningCtx returns a new PlanningCtx.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
-	ctx context.Context, evalCtx *extendedEvalContext, txn *client.Txn,
+	ctx context.Context, evalCtx *extendedEvalContext, txn *kv.Txn,
 ) *PlanningCtx {
 	planCtx := dsp.newLocalPlanningCtx(ctx, evalCtx)
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)

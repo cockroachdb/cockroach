@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
@@ -45,18 +45,18 @@ func TestVerifier(t *testing.T) {
 
 	s := tc.Server(0)
 	var senderFunc atomic.Value
-	senderFunc.Store(client.SenderFunc(nil))
-	ds := s.DistSenderI().(*kv.DistSender)
-	tsf := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	senderFunc.Store(kv.SenderFunc(nil))
+	ds := s.DistSenderI().(*kvcoord.DistSender)
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx:        s.DB().AmbientContext,
 			HeartbeatInterval: time.Second,
 			Settings:          s.ClusterSettings(),
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		client.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			if f := senderFunc.Load().(client.SenderFunc); f != nil {
+		kv.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if f := senderFunc.Load().(kv.SenderFunc); f != nil {
 				return f(ctx, ba)
 			}
 			return ds.Send(ctx, ba)
@@ -65,7 +65,7 @@ func TestVerifier(t *testing.T) {
 
 	pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor))
 	withDB := ptstorage.WithDatabase(pts, s.DB())
-	db := client.NewDB(s.DB().AmbientContext, tsf, s.Clock())
+	db := kv.NewDB(s.DB().AmbientContext, tsf, s.Clock())
 	ptv := ptverifier.New(db, pts)
 	makeTableSpan := func(tableID uint32) roachpb.Span {
 		k := roachpb.Key(keys.MakeTablePrefix(tableID))
@@ -83,7 +83,7 @@ func TestVerifier(t *testing.T) {
 			Mode:      ptpb.PROTECT_AFTER,
 			Spans:     spans,
 		}
-		require.Nil(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		require.Nil(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return pts.Protect(ctx, txn, &r)
 		}))
 		return &r
@@ -112,7 +112,7 @@ func TestVerifier(t *testing.T) {
 			test: func(t *testing.T) {
 				defer senderFunc.Store(senderFunc.Load())
 				r := createRecord(t, 42)
-				senderFunc.Store(client.SenderFunc(func(
+				senderFunc.Store(kv.SenderFunc(func(
 					ctx context.Context, ba roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
@@ -130,7 +130,7 @@ func TestVerifier(t *testing.T) {
 			test: func(t *testing.T) {
 				defer senderFunc.Store(senderFunc.Load())
 				r := createRecord(t, 42)
-				senderFunc.Store(client.SenderFunc(func(
+				senderFunc.Store(kv.SenderFunc(func(
 					ctx context.Context, ba roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
@@ -156,7 +156,7 @@ func TestVerifier(t *testing.T) {
 			test: func(t *testing.T) {
 				defer senderFunc.Store(senderFunc.Load())
 				r := createRecord(t, 42, 12)
-				senderFunc.Store(client.SenderFunc(func(
+				senderFunc.Store(kv.SenderFunc(func(
 					ctx context.Context, ba roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
@@ -189,7 +189,7 @@ func TestVerifier(t *testing.T) {
 			test: func(t *testing.T) {
 				defer senderFunc.Store(senderFunc.Load())
 				r := createRecord(t, 42)
-				senderFunc.Store(client.SenderFunc(func(
+				senderFunc.Store(kv.SenderFunc(func(
 					ctx context.Context, ba roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
@@ -203,7 +203,7 @@ func TestVerifier(t *testing.T) {
 				ensureVerified(t, r.ID, true)
 				// Show that we don't send again once we've already verified.
 				sawVerification := false
-				senderFunc.Store(client.SenderFunc(func(
+				senderFunc.Store(kv.SenderFunc(func(
 					ctx context.Context, ba roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					if _, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {

@@ -15,7 +15,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -26,7 +26,7 @@ import (
 )
 
 func (s *Store) insertRangeLogEvent(
-	ctx context.Context, txn *client.Txn, event storagepb.RangeLogEvent,
+	ctx context.Context, txn *kv.Txn, event storagepb.RangeLogEvent,
 ) error {
 	// Record range log event to console log.
 	var info string
@@ -98,7 +98,7 @@ func (s *Store) insertRangeLogEvent(
 // TODO(mrtracy): There are several different reasons that a range split
 // could occur, and that information should be logged.
 func (s *Store) logSplit(
-	ctx context.Context, txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor,
+	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor,
 ) error {
 	if !s.cfg.LogRangeEvents {
 		return nil
@@ -122,7 +122,7 @@ func (s *Store) logSplit(
 // TODO(benesch): There are several different reasons that a range merge
 // could occur, and that information should be logged.
 func (s *Store) logMerge(
-	ctx context.Context, txn *client.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
+	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
 ) error {
 	if !s.cfg.LogRangeEvents {
 		return nil
@@ -146,7 +146,7 @@ func (s *Store) logMerge(
 // could occur, and that information should be logged.
 func (s *Store) logChange(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,

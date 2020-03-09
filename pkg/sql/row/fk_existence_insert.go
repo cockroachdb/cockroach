@@ -13,7 +13,7 @@ package row
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -44,7 +44,7 @@ type fkExistenceCheckForInsert struct {
 // makeFkExistenceCheckHelperForInsert instantiates an insert helper.
 func makeFkExistenceCheckHelperForInsert(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
 	colMap map[sqlbase.ColumnID]int,
@@ -105,7 +105,7 @@ func makeFkExistenceCheckHelperForInsert(
 		// it will also enable any interleaved read part to observe the
 		// mutation, and thus introduce the risk of a Halloween problem for
 		// any mutation that uses FK relationships.
-		_ = txn.ConfigureStepping(ctx, client.SteppingDisabled)
+		_ = txn.ConfigureStepping(ctx, kv.SteppingDisabled)
 	}
 
 	return h, nil

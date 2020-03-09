@@ -18,11 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -658,7 +658,7 @@ func importPlanHook(
 			Progress:    jobspb.ImportProgress{},
 		}
 		var sj *jobs.StartableJob
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
 			if err != nil {
 				return err
@@ -784,7 +784,7 @@ type importResumer struct {
 // Prepares descriptors for newly created tables being imported into.
 func prepareNewTableDescsForIngestion(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	p sql.PlanHookState,
 	tables []jobspb.ImportDetails_Table,
 	parentID sqlbase.ID,
@@ -850,7 +850,7 @@ func prepareNewTableDescsForIngestion(
 
 // Prepares descriptors for existing tables being imported into.
 func prepareExistingTableDescForIngestion(
-	ctx context.Context, txn *client.Txn, desc *sqlbase.TableDescriptor, p sql.PlanHookState,
+	ctx context.Context, txn *kv.Txn, desc *sqlbase.TableDescriptor, p sql.PlanHookState,
 ) (*sqlbase.TableDescriptor, error) {
 	if len(desc.Mutations) > 0 {
 		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
@@ -900,7 +900,7 @@ func prepareExistingTableDescForIngestion(
 func (r *importResumer) prepareTableDescsForIngestion(
 	ctx context.Context, p sql.PlanHookState, details jobspb.ImportDetails,
 ) error {
-	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 
 		importDetails := details
 		importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
@@ -1055,7 +1055,7 @@ func (r *importResumer) Resume(
 	// successfully finished the import but failed to drop the protected
 	// timestamp. The reconciliation loop ought to pick it up.
 	if ptsID != nil && !r.testingKnobs.ignoreProtectedTimestamps {
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
 		}); err != nil {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
@@ -1087,7 +1087,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 	log.Event(ctx, "making tables live")
 
 	// Needed to trigger the schema change manager.
-	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
@@ -1170,7 +1170,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
 	cfg := phs.(sql.PlanHookState).ExecCfg()
-	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := r.dropTables(ctx, txn); err != nil {
 			return err
 		}
@@ -1179,7 +1179,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 }
 
 func (r *importResumer) releaseProtectedTimestamp(
-	ctx context.Context, txn *client.Txn, pts protectedts.Storage,
+	ctx context.Context, txn *kv.Txn, pts protectedts.Storage,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	ptsID := details.ProtectedTimestampRecord
@@ -1198,7 +1198,7 @@ func (r *importResumer) releaseProtectedTimestamp(
 }
 
 // dropTables implements the OnFailOrCancel logic.
-func (r *importResumer) dropTables(ctx context.Context, txn *client.Txn) error {
+func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
 	// Needed to trigger the schema change manager.

@@ -17,10 +17,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
@@ -183,7 +183,7 @@ func isSupportedSchemaName(n tree.Name) bool {
 // return a nil descriptor and no error if the table does not exist.
 //
 func (tc *TableCollection) getMutableTableDescriptor(
-	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
@@ -240,7 +240,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 // resolveSchemaID attempts to lookup the schema from the schemaCache if it exists,
 // otherwise falling back to a database lookup.
 func (tc *TableCollection) resolveSchemaID(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, schemaName string,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, schemaName string,
 ) (bool, sqlbase.ID, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
@@ -279,7 +279,7 @@ func (tc *TableCollection) resolveSchemaID(
 // the validity window of the table descriptor version returned.
 //
 func (tc *TableCollection) getTableVersion(
-	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
@@ -401,7 +401,7 @@ func (tc *TableCollection) getTableVersion(
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
 func (tc *TableCollection) getTableVersionByID(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, tableID sqlbase.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
@@ -467,7 +467,7 @@ func (tc *TableCollection) getTableVersionByID(
 // getMutableTableVersionByID is a variant of sqlbase.GetTableDescFromID which returns a mutable
 // table descriptor of the table modified in the same transaction.
 func (tc *TableCollection) getMutableTableVersionByID(
-	ctx context.Context, tableID sqlbase.ID, txn *client.Txn,
+	ctx context.Context, tableID sqlbase.ID, txn *kv.Txn,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting mutable table on table ID %d", tableID)
 
@@ -715,7 +715,7 @@ func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) uncommittedTab
 // first checking the TableCollection's cached descriptors for validity
 // before defaulting to a key-value scan, if necessary.
 func (tc *TableCollection) getAllDescriptors(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *kv.Txn,
 ) ([]sqlbase.DescriptorProto, error) {
 	if tc.allDescriptors == nil {
 		descs, err := GetAllDescriptors(ctx, txn)
@@ -732,7 +732,7 @@ func (tc *TableCollection) getAllDescriptors(
 // validity before scanning system.namespace and looking up the descriptors
 // in the database cache, if necessary.
 func (tc *TableCollection) getAllDatabaseDescriptors(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *kv.Txn,
 ) ([]*sqlbase.DatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn)
@@ -756,7 +756,7 @@ func (tc *TableCollection) getAllDatabaseDescriptors(
 // visible by the transaction. This uses the schema cache locally
 // if possible, or else performs a scan on kv.
 func (tc *TableCollection) getSchemasForDatabase(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID,
 ) (map[sqlbase.ID]string, error) {
 	if tc.allSchemasForDatabase == nil {
 		tc.allSchemasForDatabase = make(map[sqlbase.ID]map[sqlbase.ID]string)
@@ -992,7 +992,7 @@ func (p *planner) writeSchemaChangeToBatch(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	mutationID sqlbase.MutationID,
-	b *client.Batch,
+	b *kv.Batch,
 ) error {
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
@@ -1021,7 +1021,7 @@ func (p *planner) writeTableDescToBatch(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	mutationID sqlbase.MutationID,
-	b *client.Batch,
+	b *kv.Batch,
 ) error {
 	if tableDesc.IsVirtualTable() {
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)

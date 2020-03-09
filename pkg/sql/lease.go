@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -139,7 +139,7 @@ func storedLeaseExpiration(expiration hlc.Timestamp) tree.DTimestamp {
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
 	nodeIDContainer  *base.NodeIDContainer
-	db               *client.DB
+	db               *kv.DB
 	clock            *hlc.Clock
 	internalExecutor sqlutil.InternalExecutor
 	settings         *cluster.Settings
@@ -180,7 +180,7 @@ func (s LeaseStore) acquire(
 	ctx context.Context, minExpiration hlc.Timestamp, tableID sqlbase.ID,
 ) (*tableVersionState, error) {
 	var table *tableVersionState
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		expiration := txn.ReadTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
 		if expiration.LessEq(minExpiration) {
@@ -350,7 +350,7 @@ func (s LeaseStore) PublishMultiple(
 	ctx context.Context,
 	tableIDs []sqlbase.ID,
 	update func(map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error,
-	logEvent func(*client.Txn) error,
+	logEvent func(*kv.Txn) error,
 ) (map[sqlbase.ID]*sqlbase.ImmutableTableDescriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
@@ -369,7 +369,7 @@ func (s LeaseStore) PublishMultiple(
 		tableDescs := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			versions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
 			descsToUpdate := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 			for _, id := range tableIDs {
@@ -476,7 +476,7 @@ func (s LeaseStore) Publish(
 	ctx context.Context,
 	tableID sqlbase.ID,
 	update func(*sqlbase.MutableTableDescriptor) error,
-	logEvent func(*client.Txn) error,
+	logEvent func(*kv.Txn) error,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	tableIDs := []sqlbase.ID{tableID}
 	updates := func(descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
@@ -549,7 +549,7 @@ func (s LeaseStore) getForExpiration(
 	ctx context.Context, expiration hlc.Timestamp, id sqlbase.ID,
 ) (*tableVersionState, error) {
 	var table *tableVersionState
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		descKey := sqlbase.MakeDescMetadataKey(id)
 		prevTimestamp := expiration.Prev()
 		txn.SetFixedTimestamp(ctx, prevTimestamp)
@@ -1106,7 +1106,7 @@ func releaseLease(lease *storedTableLease, m *LeaseManager) {
 // If t has no active leases, nothing is done.
 func purgeOldVersions(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	id sqlbase.ID,
 	takenOffline bool,
 	minVersion sqlbase.DescriptorVersion,
@@ -1409,7 +1409,7 @@ const leaseConcurrencyLimit = 5
 func NewLeaseManager(
 	ambientCtx log.AmbientContext,
 	nodeIDContainer *base.NodeIDContainer,
-	db *client.DB,
+	db *kv.DB,
 	clock *hlc.Clock,
 	internalExecutor sqlutil.InternalExecutor,
 	settings *cluster.Settings,
@@ -1597,7 +1597,7 @@ func (m *LeaseManager) resolveName(
 	tableName string,
 ) (sqlbase.ID, error) {
 	id := sqlbase.InvalidID
-	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := m.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, timestamp)
 		var found bool
 		var err error
@@ -1740,7 +1740,7 @@ func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableSta
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
-func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.Gossip) {
+func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *kv.DB, g *gossip.Gossip) {
 	ctx := context.TODO()
 	s.RunWorker(ctx, func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))

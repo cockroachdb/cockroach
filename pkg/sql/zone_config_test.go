@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,7 +50,7 @@ func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
-	if err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
@@ -131,7 +131,7 @@ func TestGetZoneConfig(t *testing.T) {
 			}
 
 			// Verify sql.GetZoneConfigInTxn.
-			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
 					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
 				if err != nil {
@@ -367,7 +367,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 			}
 
 			// Verify sql.GetZoneConfigInTxn.
-			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
 					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
 				if err != nil {

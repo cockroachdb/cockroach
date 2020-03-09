@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -41,12 +41,12 @@ func TestBinPackingOracleIsConsistent(t *testing.T) {
 
 	rng := roachpb.RangeDescriptor{RangeID: 99}
 	queryState := MakeQueryState()
-	expRepl := kv.ReplicaInfo{
+	expRepl := kvcoord.ReplicaInfo{
 		ReplicaDescriptor: roachpb.ReplicaDescriptor{
 			NodeID: 99, StoreID: 99, ReplicaID: 99}}
 	queryState.AssignedRanges[rng.RangeID] = expRepl
 	of := NewOracleFactory(BinPackingChoice, Config{
-		LeaseHolderCache: kv.NewLeaseHolderCache(func() int64 { return 1 }),
+		LeaseHolderCache: kvcoord.NewLeaseHolderCache(func() int64 { return 1 }),
 	})
 	// For our purposes, an uninitialized binPackingOracle will do.
 	bp := of.Oracle(nil)

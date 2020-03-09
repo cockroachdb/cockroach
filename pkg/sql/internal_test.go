@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -79,7 +79,7 @@ func TestInternalExecutor(t *testing.T) {
 	// Test the auto-retries work inside an external transaction too. In this
 	// case, the executor cannot retry internally.
 	cnt := 0
-	err = s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err = s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		cnt++
 		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
@@ -247,10 +247,10 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 
 type testInternalExecutor interface {
 	Query(
-		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) ([]tree.Datums, error)
 	Exec(
-		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (int, error)
 }
 

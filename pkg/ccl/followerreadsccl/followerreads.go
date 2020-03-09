@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -131,7 +131,7 @@ func newOracleFactory(cfg replicaoracle.Config) replicaoracle.OracleFactory {
 	}
 }
 
-func (f oracleFactory) Oracle(txn *client.Txn) replicaoracle.Oracle {
+func (f oracleFactory) Oracle(txn *kv.Txn) replicaoracle.Oracle {
 	if txn != nil && canUseFollowerRead(f.clusterID.Get(), f.st, txn.ReadTimestamp()) {
 		return f.closest.Oracle(txn)
 	}
@@ -145,5 +145,5 @@ var followerReadAwareChoice = replicaoracle.RegisterPolicy(newOracleFactory)
 func init() {
 	sql.ReplicaOraclePolicy = followerReadAwareChoice
 	builtins.EvalFollowerReadOffset = evalFollowerReadOffset
-	kv.CanSendToFollower = canSendToFollower
+	kvcoord.CanSendToFollower = canSendToFollower
 }

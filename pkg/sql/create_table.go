@@ -21,8 +21,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -296,7 +296,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		err = func() error {
 			// The data fill portion of CREATE AS must operate on a read snapshot,
 			// so that it doesn't end up observing its own writes.
-			prevMode := params.p.Txn().ConfigureStepping(params.ctx, client.SteppingEnabled)
+			prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingEnabled)
 			defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
 
 			// This is a very simplified version of the INSERT logic: no CHECK
@@ -436,7 +436,7 @@ func (p *planner) resolveFK(
 }
 
 func qualifyFKColErrorWithDB(
-	ctx context.Context, txn *client.Txn, tbl *sqlbase.TableDescriptor, col string,
+	ctx context.Context, txn *kv.Txn, tbl *sqlbase.TableDescriptor, col string,
 ) string {
 	if txn == nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
@@ -531,7 +531,7 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 // This only applies for existing tables, not new tables.
 func ResolveFK(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	sc SchemaResolver,
 	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
@@ -810,7 +810,7 @@ func (p *planner) addInterleave(
 // according to the given definition.
 func addInterleave(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	vt SchemaResolver,
 	desc *sqlbase.MutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -1141,7 +1141,7 @@ func dequalifyColumnRefs(
 // the necessary sequences in KV before calling MakeTableDesc().
 func MakeTableDesc(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	vt SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,

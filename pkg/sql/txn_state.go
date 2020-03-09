@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,7 +49,7 @@ type txnState struct {
 	mu struct {
 		syncutil.RWMutex
 
-		txn *client.Txn
+		txn *kv.Txn
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
@@ -141,7 +141,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	historicalTimestamp *hlc.Timestamp,
 	priority roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tranCtx transitionCtx,
 ) {
 	// Reset state vars to defaults.
@@ -199,7 +199,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 	ts.mu.Lock()
 	if txn == nil {
-		ts.mu.txn = client.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeID)
+		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeID)
 		ts.mu.txn.SetDebugName(opName)
 	} else {
 		ts.mu.txn = txn
@@ -400,7 +400,7 @@ type advanceInfo struct {
 
 // transitionCtx is a bag of fields needed by some state machine events.
 type transitionCtx struct {
-	db     *client.DB
+	db     *kv.DB
 	nodeID roachpb.NodeID
 	clock  *hlc.Clock
 	// connMon is the connExecutor's monitor. New transactions will create a child

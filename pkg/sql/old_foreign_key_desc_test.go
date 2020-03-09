@@ -15,7 +15,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -104,7 +104,7 @@ CREATE INDEX ON t.t1 (x);
 		tbl.InboundFKs = nil
 		return tbl
 	}
-	err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		newDesc := downgradeForeignKey(desc)
 		if err := writeDescToBatch(ctx, false, s.ClusterSettings(), b, desc.ID, newDesc); err != nil {

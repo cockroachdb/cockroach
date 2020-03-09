@@ -20,11 +20,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -118,7 +118,7 @@ type SchemaChanger struct {
 	tableID    sqlbase.ID
 	mutationID sqlbase.MutationID
 	nodeID     roachpb.NodeID
-	db         *client.DB
+	db         *kv.DB
 	leaseMgr   *LeaseManager
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
@@ -139,8 +139,8 @@ type SchemaChanger struct {
 	// rollback job for the rollback of the schema change.
 	job *jobs.Job
 	// Caches updated by DistSQL.
-	rangeDescriptorCache *kv.RangeDescriptorCache
-	leaseHolderCache     *kv.LeaseHolderCache
+	rangeDescriptorCache *kvcoord.RangeDescriptorCache
+	leaseHolderCache     *kvcoord.LeaseHolderCache
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
@@ -152,7 +152,7 @@ func NewSchemaChangerForTesting(
 	tableID sqlbase.ID,
 	mutationID sqlbase.MutationID,
 	nodeID roachpb.NodeID,
-	db client.DB,
+	db kv.DB,
 	leaseMgr *LeaseManager,
 	jobRegistry *jobs.Registry,
 	execCfg *ExecutorConfig,
@@ -272,7 +272,7 @@ func (sc *SchemaChanger) AcquireLease(
 	ctx context.Context,
 ) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
@@ -306,7 +306,7 @@ func (sc *SchemaChanger) AcquireLease(
 }
 
 func (sc *SchemaChanger) findTableWithLease(
-	ctx context.Context, txn *client.Txn, lease sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, txn *kv.Txn, lease sqlbase.TableDescriptor_SchemaChangeLease,
 ) (*sqlbase.TableDescriptor, error) {
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 	if err != nil {
@@ -327,7 +327,7 @@ func (sc *SchemaChanger) findTableWithLease(
 func (sc *SchemaChanger) ReleaseLease(
 	ctx context.Context, lease sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		tableDesc, err := sc.findTableWithLease(ctx, txn, lease)
 		if err != nil {
 			return err
@@ -359,7 +359,7 @@ func (sc *SchemaChanger) ExtendLease(
 	}
 	// Update lease.
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		tableDesc, err := sc.findTableWithLease(ctx, txn, *existingLease)
 		if err != nil {
 			return err
@@ -394,9 +394,9 @@ func (sc *SchemaChanger) DropTableDesc(
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
 
 	// Finished deleting all the table data, now delete the table meta data.
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Delete table descriptor
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", descKey)
 			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
@@ -416,7 +416,7 @@ func (sc *SchemaChanger) DropTableDesc(
 				tableDesc.GetDropJobID(),
 				tableDesc.ID,
 				jobspb.Status_DONE,
-				func(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+				func(ctx context.Context, txn *kv.Txn, job *jobs.Job) error {
 					// Delete the zone config entry for the dropped database associated
 					// with the job, if it exists.
 					details := job.Details().(jobspb.SchemaChangeDetails)
@@ -477,8 +477,8 @@ func (sc *SchemaChanger) truncateTable(
 
 	var n int
 	lastKey := tableSpan.Key
-	ri := kv.NewRangeIterator(sc.execCfg.DistSender)
-	for ri.Seek(ctx, tableSpan.Key, kv.Ascending); ; ri.Next(ctx) {
+	ri := kvcoord.NewRangeIterator(sc.execCfg.DistSender)
+	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
 		if !ri.Valid() {
 			return ri.Error().GoError()
 		}
@@ -493,7 +493,7 @@ func (sc *SchemaChanger) truncateTable(
 			if tableSpan.EndKey.Less(endKey) {
 				endKey = tableSpan.EndKey
 			}
-			var b client.Batch
+			var b kv.Batch
 			b.AddRawRequest(&roachpb.ClearRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    lastKey.AsRawKey(),
@@ -530,7 +530,7 @@ func (sc *SchemaChanger) maybeDropTable(
 	// we still need to wait for the deadline to expire.
 	if table.DropTime != 0 {
 		var timeRemaining time.Duration
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			timeRemaining = 0
 			_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
 				&sqlbase.IndexDescriptor{}, "", false /* getInheritedDefault */)
@@ -626,7 +626,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(maintainLease)
-			return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				txn.SetFixedTimestamp(ctx, table.CreateAsOfTime)
 
 				// Create an internal planner as the planner used to serve the user query
@@ -743,7 +743,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 				tbl.State = sqlbase.TableDescriptor_PUBLIC
 				return nil
 			},
-			func(txn *client.Txn) error { return nil },
+			func(txn *kv.Txn) error { return nil },
 		); err != nil {
 			return err
 		}
@@ -829,7 +829,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 
 			return nil
 		},
-		func(txn *client.Txn) error {
+		func(txn *kv.Txn) error {
 			job, err := sc.jobRegistry.LoadJobWithTxn(ctx, mutation.JobID, txn)
 			if err != nil {
 				log.Warningf(ctx, "ignoring error during logEvent while GCing mutations: %+v", err)
@@ -844,11 +844,11 @@ func (sc *SchemaChanger) maybeGCMutations(
 
 func (sc *SchemaChanger) updateDropTableJob(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	jobID int64,
 	tableID sqlbase.ID,
 	status jobspb.Status,
-	onSuccess func(context.Context, *client.Txn, *jobs.Job) error,
+	onSuccess func(context.Context, *kv.Txn, *jobs.Job) error,
 ) error {
 	job, err := sc.jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
@@ -880,7 +880,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 	case jobspb.Status_ROCKSDB_COMPACTION:
 		runningStatus = RunningStatusCompaction
 	case jobspb.Status_DONE:
-		return job.WithTxn(txn).Succeeded(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return job.WithTxn(txn).Succeeded(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return onSuccess(ctx, txn, job)
 		})
 	default:
@@ -917,7 +917,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 			return nil
 		},
 		// Reclaim all the old names.
-		func(txn *client.Txn) error {
+		func(txn *kv.Txn) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
 				err := sqlbase.RemoveObjectNamespaceEntry(ctx, txn, drain.ParentID, drain.ParentSchemaID,
@@ -930,7 +930,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 			if dropJobID != 0 {
 				if err := sc.updateDropTableJob(
 					ctx, txn, dropJobID, sc.tableID, jobspb.Status_WAIT_FOR_GC_INTERVAL,
-					func(context.Context, *client.Txn, *jobs.Job) error {
+					func(context.Context, *kv.Txn, *jobs.Job) error {
 						return nil
 					}); err != nil {
 					return err
@@ -1104,7 +1104,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, inSession bool) error {
 
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
 			return err
@@ -1232,7 +1232,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			return errDidntUpdateDescriptor
 		}
 		return nil
-	}, func(txn *client.Txn) error {
+	}, func(txn *kv.Txn) error {
 		if sc.job != nil {
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return runStatus, nil
@@ -1279,7 +1279,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	// We make a call to PublishMultiple to handle the situation to add Foreign Key backreferences.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
 	var interleaveParents map[sqlbase.ID]struct{}
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 		interleaveParents = make(map[sqlbase.ID]struct{})
 
@@ -1466,7 +1466,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		return nil
 	}
 
-	descs, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *client.Txn) error {
+	descs, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *kv.Txn) error {
 		// If the job already has a terminal status, we shouldn't need to update
 		// its status again. One way this may happen is when a table is dropped
 		// all jobs that mutate that table are marked successful. So if is a job
@@ -1521,7 +1521,7 @@ func (sc *SchemaChanger) notFirstInLine(
 ) (*sqlbase.TableDescriptor, bool, error) {
 	var notFirst bool
 	var desc *sqlbase.TableDescriptor
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		notFirst = false
 		var err error
 		desc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
@@ -1579,7 +1579,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 
 	// Get the other tables whose foreign key backreferences need to be removed.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 		var err error
 		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
@@ -1679,7 +1679,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		return nil
 	}
 
-	_, err = sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *client.Txn) error {
+	_, err = sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *kv.Txn) error {
 		// Read the table descriptor from the store. The Version of the
 		// descriptor has already been incremented in the transaction and
 		// this descriptor can be modified without incrementing the version.
@@ -1742,7 +1742,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 // Mark the job associated with the mutation as failed.
 func markJobFailed(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	mutationID sqlbase.MutationID,
 	jobRegistry *jobs.Registry,
@@ -1764,7 +1764,7 @@ func markJobFailed(
 // Mark the current schema change job as failed and create a new rollback job
 // representing the schema change and return it.
 func (sc *SchemaChanger) createRollbackJob(
-	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.TableDescriptor, causingError error,
+	ctx context.Context, txn *kv.Txn, tableDesc *sqlbase.TableDescriptor, causingError error,
 ) (*jobs.Job, error) {
 
 	// Mark job as failed.
@@ -2063,7 +2063,7 @@ func NewSchemaChangeManager(
 	ambientCtx log.AmbientContext,
 	execCfg *ExecutorConfig,
 	testingKnobs *SchemaChangerTestingKnobs,
-	db client.DB,
+	db kv.DB,
 	nodeDesc roachpb.NodeDescriptor,
 	dsp *DistSQLPlanner,
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,

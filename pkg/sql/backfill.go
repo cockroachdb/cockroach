@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -106,7 +106,7 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 }
 
 // scTxnFn is the type of functions that operates using transactions in the backfiller.
-type scTxnFn func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalContext) error
+type scTxnFn func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error
 
 // historicalTxnRunner is the type of the callback used by the various
 // helper functions to run checks at a fixed timestamp (logically, at
@@ -116,7 +116,7 @@ type historicalTxnRunner func(ctx context.Context, fn scTxnFn) error
 // makeFixedTimestampRunner creates a historicalTxnRunner suitable for use by the helpers.
 func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) historicalTxnRunner {
 	runner := func(ctx context.Context, retryable scTxnFn) error {
-		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *client.Txn) error {
+		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 			// We need to re-create the evalCtx since the txn may retry.
 			evalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, sc.ieFactory)
 			return retryable(ctx, txn, &evalCtx)
@@ -128,9 +128,9 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 func (sc *SchemaChanger) fixedTimestampTxn(
 	ctx context.Context,
 	readAsOf hlc.Timestamp,
-	retryable func(ctx context.Context, txn *client.Txn) error,
+	retryable func(ctx context.Context, txn *kv.Txn) error,
 ) error {
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
 		return retryable(ctx, txn)
 	})
@@ -506,7 +506,7 @@ func (sc *SchemaChanger) validateConstraints(
 	readAsOf := sc.clock.Now()
 	var tableDesc *sqlbase.TableDescriptor
 
-	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *client.Txn) error {
+	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		return err
 	}); err != nil {
@@ -542,7 +542,7 @@ func (sc *SchemaChanger) validateConstraints(
 				return err
 			}
 			// Each check operates at the historical timestamp.
-			return runHistoricalTxn(ctx, func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalContext) error {
+			return runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
 					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
@@ -605,7 +605,7 @@ func (sc *SchemaChanger) validateConstraints(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
 func (sc *SchemaChanger) getTableVersion(
-	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
+	ctx context.Context, txn *kv.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
 	if err != nil {
@@ -656,7 +656,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			}
 
 			// Make a new txn just to drop this chunk.
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
 					if err := fn(resume); err != nil {
 						return err
@@ -707,7 +707,7 @@ func (sc *SchemaChanger) truncateIndexes(
 
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return removeIndexZoneConfigs(ctx, txn, sc.execCfg, sc.tableID, dropped)
 		}); err != nil {
 			return err
@@ -744,14 +744,14 @@ func getJobIDForMutationWithDescriptor(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
 func (sc *SchemaChanger) nRanges(
-	ctx context.Context, txn *client.Txn, spans []roachpb.Span,
+	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
 ) (int, error) {
 	spanResolver := sc.distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
 	rangeIds := make(map[int64]struct{})
 	for _, span := range spans {
 		// For each span, iterate the spanResolver until it's exhausted, storing
 		// the found range ids in the map to de-duplicate them.
-		spanResolver.Seek(ctx, span, kv.Ascending)
+		spanResolver.Seek(ctx, span, kvcoord.Ascending)
 		for {
 			if !spanResolver.Valid() {
 				return 0, spanResolver.Error()
@@ -837,8 +837,8 @@ func (sc *SchemaChanger) distBackfill(
 		// cheap scan.
 		if backfillType == indexBackfill {
 			const pageSize = 10000
-			noop := func(_ []client.KeyValue) error { return nil }
-			if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *client.Txn) error {
+			noop := func(_ []kv.KeyValue) error { return nil }
+			if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 				for _, span := range targetSpans {
 					// TODO(dt): a Count() request would be nice here if the target isn't
 					// empty, since we don't need to drag all the results back just to
@@ -856,7 +856,7 @@ func (sc *SchemaChanger) distBackfill(
 		// Gather the initial resume spans for the table.
 		var todoSpans []roachpb.Span
 		var mutationIdx int
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
 				ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
@@ -867,7 +867,7 @@ func (sc *SchemaChanger) distBackfill(
 
 		for len(todoSpans) > 0 {
 			log.VEventf(ctx, 2, "backfill: process %+v spans", todoSpans)
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				// Report schema change progress. We define progress at this point
 				// as the the fraction of fully-backfilled ranges of the primary index of
 				// the table being scanned. Since we may have already modified the
@@ -972,7 +972,7 @@ func (sc *SchemaChanger) distBackfill(
 				// its done work by writing to the jobs table.
 				// In this case we intersect todoSpans with what the old node(s)
 				// have set in the jobs table not to overwrite their done work.
-				if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					var err error
 					resumeSpans, _, _, err = rowexec.GetResumeSpans(
 						ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
@@ -986,7 +986,7 @@ func (sc *SchemaChanger) distBackfill(
 			}
 			// Record what is left to do for the job.
 			// TODO(spaskob): Execute this at a regular cadence.
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return rowexec.SetResumeSpansInJob(ctx, todoSpans, mutationIdx, txn, sc.job)
 			}); err != nil {
 				return err
@@ -1006,7 +1006,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 	ctx context.Context, status jobs.RunningStatus,
 ) (*sqlbase.TableDescriptor, error) {
 	var tableDesc *sqlbase.TableDescriptor
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
@@ -1072,7 +1072,7 @@ func (sc *SchemaChanger) validateIndexes(
 
 	readAsOf := sc.clock.Now()
 	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *client.Txn) error {
+	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		return err
 	}); err != nil {
@@ -1194,7 +1194,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			var idxLen int64
 			key := tableDesc.IndexSpan(idx.ID).Key
 			endKey := tableDesc.IndexSpan(idx.ID).EndKey
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *client.Txn, _ *extendedEvalContext) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ *extendedEvalContext) error {
 				for {
 					kvs, err := txn.Scan(ctx, key, endKey, 1000000)
 					if err != nil {
@@ -1238,7 +1238,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			}
 			col := idx.ColumnNames[0]
 
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalContext) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				ie := evalCtx.InternalExecutor.(*InternalExecutor)
 				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
 					sqlbase.InternalExecutorSessionDataOverride{},
@@ -1309,7 +1309,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 			// Retrieve the row count in the index.
 			var idxLen int64
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalContext) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				// TODO(vivek): This is not a great API. Leaving #34304 open.
 				ie := evalCtx.InternalExecutor.(*InternalExecutor)
 				ie.tcModifier = tc
@@ -1358,7 +1358,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		start := timeutil.Now()
 
 		// Count the number of rows in the table.
-		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalContext) error {
+		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 			ie := evalCtx.InternalExecutor.(*InternalExecutor)
 			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn,
 				sqlbase.InternalExecutorSessionDataOverride{},
@@ -1630,7 +1630,7 @@ func validateCheckInTxn(
 	leaseMgr *LeaseManager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
-	txn *client.Txn,
+	txn *kv.Txn,
 	checkName string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
@@ -1674,7 +1674,7 @@ func validateFkInTxn(
 	leaseMgr *LeaseManager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
-	txn *client.Txn,
+	txn *kv.Txn,
 	fkName string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
@@ -1716,7 +1716,7 @@ func validateFkInTxn(
 // reuse an existing client.Txn safely.
 func columnBackfillInTxn(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tc *TableCollection,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
@@ -1774,7 +1774,7 @@ func columnBackfillInTxn(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
 func indexBackfillInTxn(
-	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.ImmutableTableDescriptor, traceKV bool,
+	ctx context.Context, txn *kv.Txn, tableDesc *sqlbase.ImmutableTableDescriptor, traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
 	if err := backfiller.Init(tableDesc); err != nil {
@@ -1797,7 +1797,7 @@ func indexBackfillInTxn(
 // reuse an existing client.Txn safely.
 func indexTruncateInTxn(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,

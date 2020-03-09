@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,7 +56,7 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	aliceDesc := &sqlbase.DatabaseDescriptor{Name: "alice"}
 	bobDesc := &sqlbase.DatabaseDescriptor{Name: "bob"}
 
-	err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 		batch.Put(sqlbase.NewDatabaseKey("bob").Key(), 9999)
 		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(), 10000)

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -245,12 +245,12 @@ func startConnExecutor(
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
-	factory := client.MakeMockTxnSenderFactory(
+	factory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, nil
 		})
-	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := &base.NodeIDContainer{}
 	nodeID.Set(ctx, 1)

@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -37,7 +37,7 @@ type kvScanner interface {
 type scanRequestScanner struct {
 	settings *cluster.Settings
 	gossip   *gossip.Gossip
-	db       *client.DB
+	db       *kv.DB
 }
 
 var _ kvScanner = (*scanRequestScanner)(nil)
@@ -143,10 +143,10 @@ func (p *scanRequestScanner) exportSpan(
 }
 
 func getSpansToProcess(
-	ctx context.Context, db *client.DB, targetSpans []roachpb.Span,
+	ctx context.Context, db *kv.DB, targetSpans []roachpb.Span,
 ) ([]roachpb.Span, error) {
 	var ranges []roachpb.RangeDescriptor
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		ranges, err = allRangeDescriptors(ctx, txn)
 		return err
@@ -223,7 +223,7 @@ func slurpScanResponse(
 	return nil
 }
 
-func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
+func allRangeDescriptors(ctx context.Context, txn *kv.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
 		return nil, err

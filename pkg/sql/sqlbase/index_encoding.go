@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -715,7 +715,7 @@ func DecodeKeyVals(
 //
 // Don't use this function in the scan "hot path".
 func ExtractIndexKey(
-	a *DatumAlloc, tableDesc *TableDescriptor, entry client.KeyValue,
+	a *DatumAlloc, tableDesc *TableDescriptor, entry kv.KeyValue,
 ) (roachpb.Key, error) {
 	indexID, key, err := DecodeIndexKeyPrefix(tableDesc, entry.Key)
 	if err != nil {

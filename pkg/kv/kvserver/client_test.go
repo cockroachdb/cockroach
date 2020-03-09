@@ -37,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -151,19 +151,19 @@ func createTestStoreWithOpts(
 
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	distSender := kv.NewDistSender(kv.DistSenderConfig{
+	distSender := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx: ac,
 		Clock:      storeCfg.Clock,
 		Settings:   storeCfg.Settings,
 		RPCContext: rpcContext,
-		TestingKnobs: kv.ClientTestingKnobs{
-			TransportFactory: kv.SenderTransportFactory(tracer, stores),
+		TestingKnobs: kvcoord.ClientTestingKnobs{
+			TransportFactory: kvcoord.SenderTransportFactory(tracer, stores),
 		},
 		RPCRetryOptions: &retryOpts,
 	}, storeCfg.Gossip)
 
-	tcsFactory := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ac,
 			Settings:   storeCfg.Settings,
 			Clock:      storeCfg.Clock,
@@ -171,7 +171,7 @@ func createTestStoreWithOpts(
 		},
 		distSender,
 	)
-	storeCfg.DB = client.NewDB(ac, tcsFactory, storeCfg.Clock)
+	storeCfg.DB = kv.NewDB(ac, tcsFactory, storeCfg.Clock)
 	storeCfg.StorePool = kvserver.NewTestStorePool(storeCfg)
 	storeCfg.Transport = kvserver.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -279,8 +279,8 @@ type multiTestContext struct {
 	clocks      []*hlc.Clock
 	engines     []storage.Engine
 	grpcServers []*grpc.Server
-	distSenders []*kv.DistSender
-	dbs         []*client.DB
+	distSenders []*kvcoord.DistSender
+	dbs         []*kv.DB
 	gossips     []*gossip.Gossip
 	storePools  []*kvserver.StorePool
 	// We use multiple stoppers so we can restart different parts of the
@@ -334,8 +334,8 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	m.mu = &syncutil.RWMutex{}
 	m.stores = make([]*kvserver.Store, numStores)
 	m.storePools = make([]*kvserver.StorePool, numStores)
-	m.distSenders = make([]*kv.DistSender, numStores)
-	m.dbs = make([]*client.DB, numStores)
+	m.distSenders = make([]*kvcoord.DistSender, numStores)
+	m.dbs = make([]*kv.DB, numStores)
 	m.stoppers = make([]*stop.Stopper, numStores)
 	m.senders = make([]*kvserver.Stores, numStores)
 	m.idents = make([]roachpb.StoreIdent, numStores)
@@ -510,7 +510,7 @@ func (m *multiTestContext) initGossipNetwork() {
 type multiTestContextKVTransport struct {
 	mtc      *multiTestContext
 	idx      int
-	replicas kv.ReplicaSlice
+	replicas kvcoord.ReplicaSlice
 	mu       struct {
 		syncutil.Mutex
 		pending map[roachpb.ReplicaID]struct{}
@@ -518,8 +518,8 @@ type multiTestContextKVTransport struct {
 }
 
 func (m *multiTestContext) kvTransportFactory(
-	_ kv.SendOptions, _ *nodedialer.Dialer, replicas kv.ReplicaSlice,
-) (kv.Transport, error) {
+	_ kvcoord.SendOptions, _ *nodedialer.Dialer, replicas kvcoord.ReplicaSlice,
+) (kvcoord.Transport, error) {
 	t := &multiTestContextKVTransport{
 		mtc:      m,
 		replicas: replicas,
@@ -727,11 +727,11 @@ func (m *multiTestContext) makeStoreConfig(i int) kvserver.StoreConfig {
 	return cfg
 }
 
-var _ kv.RangeDescriptorDB = mtcRangeDescriptorDB{}
+var _ kvcoord.RangeDescriptorDB = mtcRangeDescriptorDB{}
 
 type mtcRangeDescriptorDB struct {
 	*multiTestContext
-	ds **kv.DistSender
+	ds **kvcoord.DistSender
 }
 
 func (mrdb mtcRangeDescriptorDB) RangeLookup(
@@ -744,7 +744,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	ambient := m.storeConfig.AmbientCtx
-	m.distSenders[idx] = kv.NewDistSender(kv.DistSenderConfig{
+	m.distSenders[idx] = kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx: ambient,
 		Clock:      m.clocks[idx],
 		RPCContext: m.rpcContext,
@@ -753,13 +753,13 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 			ds:               &m.distSenders[idx],
 		},
 		Settings: st,
-		TestingKnobs: kv.ClientTestingKnobs{
+		TestingKnobs: kvcoord.ClientTestingKnobs{
 			TransportFactory: m.kvTransportFactory,
 		},
 		RPCRetryOptions: &retryOpts,
 	}, m.gossips[idx])
-	tcsFactory := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Settings:   m.storeConfig.Settings,
 			Clock:      m.clocks[idx],
@@ -767,7 +767,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 		},
 		m.distSenders[idx],
 	)
-	m.dbs[idx] = client.NewDB(ambient, tcsFactory, m.clocks[idx])
+	m.dbs[idx] = kv.NewDB(ambient, tcsFactory, m.clocks[idx])
 }
 
 func (m *multiTestContext) populateStorePool(

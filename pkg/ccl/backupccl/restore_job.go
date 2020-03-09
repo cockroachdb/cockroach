@@ -19,11 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -291,7 +291,7 @@ rangeLoop:
 func splitAndScatter(
 	restoreCtx context.Context,
 	settings *cluster.Settings,
-	db *client.DB,
+	db *kv.DB,
 	kr *storageccl.KeyRewriter,
 	numClusterNodes int,
 	importSpans []importEntry,
@@ -353,7 +353,7 @@ func splitAndScatter(
 				// span being restored into.
 				RandomizeLeases: true,
 			}
-			if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
+			if _, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 				// TODO(dan): Unfortunately, Scatter is still too unreliable to
 				// fail the RESTORE when Scatter fails. I'm uncomfortable that
 				// this could break entirely and not start failing the tests,
@@ -397,7 +397,7 @@ func splitAndScatter(
 					scatterReq := &roachpb.AdminScatterRequest{
 						RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{Key: newSpanKey, EndKey: newSpanKey.Next()}),
 					}
-					if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
+					if _, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 						// TODO(dan): Unfortunately, Scatter is still too unreliable to
 						// fail the RESTORE when Scatter fails. I'm uncomfortable that
 						// this could break entirely and not start failing the tests,
@@ -427,7 +427,7 @@ func splitAndScatter(
 // on that database at the time this function is called.
 func WriteTableDescs(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	databases []*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
 	descCoverage tree.DescriptorCoverage,
@@ -557,7 +557,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 // files.
 func restore(
 	restoreCtx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
 	backupManifests []BackupManifest,
@@ -710,7 +710,7 @@ func restore(
 				defer tracing.FinishSpan(importSpan)
 				defer func() { <-importsSem }()
 
-				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
+				importRes, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 				if pErr != nil {
 					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
 
@@ -834,14 +834,14 @@ func remapRelevantStatistics(
 // after the other.
 func isDatabaseEmpty(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	dbDesc *sql.DatabaseDescriptor,
 	ignoredTables map[sqlbase.ID]struct{},
 ) (bool, error) {
 	var allDescs []sqlbase.Descriptor
 	if err := db.Txn(
 		ctx,
-		func(ctx context.Context, txn *client.Txn) error {
+		func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			allDescs, err = allSQLDescriptors(ctx, txn)
 			return err
@@ -923,7 +923,7 @@ func createImportingTables(
 	}
 
 	if !details.PrepareCompleted {
-		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
 			if err := WriteTableDescs(ctx, txn, databases, tables, details.DescriptorCoverage, r.job.Payload().Username, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
@@ -1029,7 +1029,7 @@ func (r *restoreResumer) insertStats(ctx context.Context) error {
 		return nil
 	}
 
-	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := stats.InsertNewStats(ctx, r.execCfg.InternalExecutor, txn, r.latestStats); err != nil {
 			return errors.Wrapf(err, "inserting stats from backup")
 		}
@@ -1053,7 +1053,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 	}
 	log.Event(ctx, "making tables live")
 
-	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Write the new TableDescriptors and flip state over to public so they can be
 		// accessed.
 		b := txn.NewBatch()
@@ -1107,7 +1107,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 }
 
 // dropTables implements the OnFailOrCancel logic.
-func (r *restoreResumer) dropTables(ctx context.Context, txn *client.Txn) error {
+func (r *restoreResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	// No need to mark the tables as dropped if they were not even created in the

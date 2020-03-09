@@ -15,7 +15,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -108,7 +108,7 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 // sd will constitute the executor's session state.
 func (ie *InternalExecutor) initConnEx(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	sd *sessiondata.SessionData,
 	sdMut sessionDataMutator,
 	syncCallback func([]resWithPos),
@@ -178,7 +178,7 @@ func (ie *InternalExecutor) initConnEx(
 // Query is deprecated because it may transparently execute a query as root. Use
 // QueryEx instead.
 func (ie *InternalExecutor) Query(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, error) {
 	return ie.QueryEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
 }
@@ -191,7 +191,7 @@ func (ie *InternalExecutor) Query(
 func (ie *InternalExecutor) QueryEx(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -205,7 +205,7 @@ func (ie *InternalExecutor) QueryEx(
 func (ie *InternalExecutor) QueryWithCols(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -216,7 +216,7 @@ func (ie *InternalExecutor) QueryWithCols(
 func (ie *InternalExecutor) queryInternal(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -233,7 +233,7 @@ func (ie *InternalExecutor) queryInternal(
 //
 // QueryRow is deprecated (like Query). Use QueryRowEx() instead.
 func (ie *InternalExecutor) QueryRow(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (tree.Datums, error) {
 	return ie.QueryRowEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
 }
@@ -246,7 +246,7 @@ func (ie *InternalExecutor) QueryRow(
 func (ie *InternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -274,7 +274,7 @@ func (ie *InternalExecutor) QueryRowEx(
 // Exec is deprecated because it may transparently execute a query as root. Use
 // ExecEx instead.
 func (ie *InternalExecutor) Exec(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (int, error) {
 	return ie.ExecEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
 }
@@ -287,7 +287,7 @@ func (ie *InternalExecutor) Exec(
 func (ie *InternalExecutor) ExecEx(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -346,7 +346,7 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 func (ie *InternalExecutor) execInternal(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},

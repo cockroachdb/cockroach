@@ -16,7 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -74,7 +74,7 @@ func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 // getDatabaseID resolves a database name into a database ID.
 // Returns InvalidID on failure.
 func getDatabaseID(
-	ctx context.Context, txn *client.Txn, name string, required bool,
+	ctx context.Context, txn *kv.Txn, name string, required bool,
 ) (sqlbase.ID, error) {
 	if name == sqlbase.SystemDB.Name {
 		return sqlbase.SystemDB.ID, nil
@@ -93,7 +93,7 @@ func getDatabaseID(
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func getDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc := &sqlbase.DatabaseDescriptor{}
 	if err := getDescriptorByID(ctx, txn, id, desc); err != nil {
@@ -105,7 +105,7 @@ func getDatabaseDescByID(
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc, err := getDatabaseDescByID(ctx, txn, id)
 	if err != nil {
@@ -164,7 +164,7 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *databaseCache) getDatabaseDesc(
 	ctx context.Context,
-	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
+	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
 	name string,
 	required bool,
 ) (*sqlbase.DatabaseDescriptor, error) {
@@ -177,7 +177,7 @@ func (dc *databaseCache) getDatabaseDesc(
 		return nil, err
 	}
 	if desc == nil {
-		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txnRunner(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			a := UncachedPhysicalAccessor{}
 			desc, err = a.GetDatabaseDesc(ctx, txn, name,
 				tree.DatabaseLookupFlags{Required: required})
@@ -195,7 +195,7 @@ func (dc *databaseCache) getDatabaseDesc(
 // getDatabaseDescByID returns the database descriptor given its ID
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *databaseCache) getDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc, err := dc.getCachedDatabaseDescByID(id)
 	if desc == nil || err != nil {
@@ -212,7 +212,7 @@ func (dc *databaseCache) getDatabaseDescByID(
 // operations.
 func (dc *databaseCache) getDatabaseID(
 	ctx context.Context,
-	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
+	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
 	name string,
 	required bool,
 ) (sqlbase.ID, error) {
@@ -221,7 +221,7 @@ func (dc *databaseCache) getDatabaseID(
 		return dbID, err
 	}
 	if dbID == sqlbase.InvalidID {
-		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txnRunner(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			dbID, err = getDatabaseID(ctx, txn, name, required)
 			return err
@@ -285,7 +285,7 @@ func (p *planner) renameDatabase(
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(oldDesc)
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)

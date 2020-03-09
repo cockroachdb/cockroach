@@ -20,12 +20,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -519,7 +519,7 @@ type KeyRange interface {
 
 var _ KeyRange = &Replica{}
 
-var _ client.Sender = &Replica{}
+var _ kv.Sender = &Replica{}
 
 // String returns the string representation of the replica using an
 // inconsistent copy of the range descriptor. Therefore, String does not
@@ -637,7 +637,7 @@ func (r *Replica) Clock() *hlc.Clock {
 }
 
 // DB returns the Replica's client DB.
-func (r *Replica) DB() *client.DB {
+func (r *Replica) DB() *kv.DB {
 	return r.store.DB()
 }
 
@@ -1210,7 +1210,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			// roachpb.PUSH_TOUCH, though it might appear more semantically correct,
 			// returns immediately and causes us to spin hot, whereas
 			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
-			b := &client.Batch{}
+			b := &kv.Batch{}
 			b.Header.Timestamp = r.Clock().Now()
 			b.AddRawRequest(&roachpb.PushTxnRequest{
 				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
@@ -1255,7 +1255,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			var getRes *roachpb.GetResponse
 			for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
 				metaKey := keys.RangeMetaKey(desc.EndKey)
-				res, pErr := client.SendWrappedWith(ctx, r.DB().NonTransactionalSender(), roachpb.Header{
+				res, pErr := kv.SendWrappedWith(ctx, r.DB().NonTransactionalSender(), roachpb.Header{
 					// Use READ_UNCOMMITTED to avoid trying to resolve intents, since
 					// resolving those intents might involve sending requests to this
 					// range, and that could deadlock. See the comment on

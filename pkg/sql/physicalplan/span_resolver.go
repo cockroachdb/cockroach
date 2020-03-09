@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -63,7 +63,7 @@ import (
 type SpanResolver interface {
 	// NewSpanResolverIterator creates a new SpanResolverIterator.
 	// Txn is used for testing and for determining if follower reads are possible.
-	NewSpanResolverIterator(txn *client.Txn) SpanResolverIterator
+	NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator
 }
 
 // SpanResolverIterator is used to iterate over the ranges composing a key span.
@@ -86,7 +86,7 @@ type SpanResolverIterator interface {
 	// Seek()ed first).
 	//
 	// scanDir changes the direction in which Next() will advance the iterator.
-	Seek(ctx context.Context, span roachpb.Span, scanDir kv.ScanDirection)
+	Seek(ctx context.Context, span roachpb.Span, scanDir kvcoord.ScanDirection)
 
 	// NeedAnother returns true if the current range is not the last for the span
 	// that was last Seek()ed.
@@ -111,14 +111,14 @@ type SpanResolverIterator interface {
 	// the current range.
 	// A RangeUnavailableError is returned if there's no information in gossip
 	// about any of the replicas.
-	ReplicaInfo(ctx context.Context) (kv.ReplicaInfo, error)
+	ReplicaInfo(ctx context.Context) (kvcoord.ReplicaInfo, error)
 }
 
 // spanResolver implements SpanResolver.
 type spanResolver struct {
 	st            *cluster.Settings
 	gossip        *gossip.Gossip
-	distSender    *kv.DistSender
+	distSender    *kvcoord.DistSender
 	nodeDesc      roachpb.NodeDescriptor
 	oracleFactory replicaoracle.OracleFactory
 }
@@ -128,7 +128,7 @@ var _ SpanResolver = &spanResolver{}
 // NewSpanResolver creates a new spanResolver.
 func NewSpanResolver(
 	st *cluster.Settings,
-	distSender *kv.DistSender,
+	distSender *kvcoord.DistSender,
 	gossip *gossip.Gossip,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
@@ -152,7 +152,7 @@ func NewSpanResolver(
 // spanResolverIterator implements the SpanResolverIterator interface.
 type spanResolverIterator struct {
 	// it is a wrapper RangeIterator.
-	it *kv.RangeIterator
+	it *kvcoord.RangeIterator
 	// gossip is used to resolve NodeIds to addresses and node attributes, used to
 	// giving preference to close-by replicas.
 	gossip *gossip.Gossip
@@ -162,7 +162,7 @@ type spanResolverIterator struct {
 
 	curSpan roachpb.RSpan
 	// dir is the direction set by the last Seek()
-	dir kv.ScanDirection
+	dir kvcoord.ScanDirection
 
 	queryState replicaoracle.QueryState
 
@@ -172,10 +172,10 @@ type spanResolverIterator struct {
 var _ SpanResolverIterator = &spanResolverIterator{}
 
 // NewSpanResolverIterator creates a new SpanResolverIterator.
-func (sr *spanResolver) NewSpanResolverIterator(txn *client.Txn) SpanResolverIterator {
+func (sr *spanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
 	return &spanResolverIterator{
 		gossip:     sr.gossip,
-		it:         kv.NewRangeIterator(sr.distSender),
+		it:         kvcoord.NewRangeIterator(sr.distSender),
 		oracle:     sr.oracleFactory.Oracle(txn),
 		queryState: replicaoracle.MakeQueryState(),
 	}
@@ -197,7 +197,7 @@ func (it *spanResolverIterator) Error() error {
 
 // Seek is part of the SpanResolverIterator interface.
 func (it *spanResolverIterator) Seek(
-	ctx context.Context, span roachpb.Span, scanDir kv.ScanDirection,
+	ctx context.Context, span roachpb.Span, scanDir kvcoord.ScanDirection,
 ) {
 	var key, endKey roachpb.RKey
 	var err error
@@ -217,7 +217,7 @@ func (it *spanResolverIterator) Seek(
 	it.dir = scanDir
 
 	var seekKey roachpb.RKey
-	if scanDir == kv.Ascending {
+	if scanDir == kvcoord.Ascending {
 		seekKey = it.curSpan.Key
 	} else {
 		seekKey = it.curSpan.EndKey
@@ -227,7 +227,7 @@ func (it *spanResolverIterator) Seek(
 	// already positioned. If so, and if the direction also corresponds, there's
 	// no need to change the underlying iterator's state.
 	if it.dir == oldDir && it.it.Valid() {
-		reverse := (it.dir == kv.Descending)
+		reverse := (it.dir == kvcoord.Descending)
 		desc := it.it.Desc()
 		if (reverse && desc.ContainsKeyInverted(seekKey)) ||
 			(!reverse && desc.ContainsKey(seekKey)) {
@@ -262,7 +262,7 @@ func (it *spanResolverIterator) Desc() roachpb.RangeDescriptor {
 }
 
 // ReplicaInfo is part of the SpanResolverIterator interface.
-func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo, error) {
+func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kvcoord.ReplicaInfo, error) {
 	if !it.Valid() {
 		panic(it.Error())
 	}
@@ -270,7 +270,7 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo
 	repl, err := it.oracle.ChoosePreferredReplica(
 		ctx, *it.it.Desc(), it.queryState)
 	if err != nil {
-		return kv.ReplicaInfo{}, err
+		return kvcoord.ReplicaInfo{}, err
 	}
 	it.queryState.RangesPerNode[repl.NodeID]++
 	it.queryState.AssignedRanges[it.it.Desc().RangeID] = repl

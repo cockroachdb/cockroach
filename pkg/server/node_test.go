@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -78,7 +78,7 @@ func createTestNode(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	cfg.AmbientCtx.Tracer = st.Tracer
-	distSender := kv.NewDistSender(kv.DistSenderConfig{
+	distSender := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:      cfg.AmbientCtx,
 		Settings:        st,
 		Clock:           cfg.Clock,
@@ -86,8 +86,8 @@ func createTestNode(
 		RPCRetryOptions: &retryOpts,
 		NodeDialer:      nodedialer.New(nodeRPCContext, gossip.AddressResolver(cfg.Gossip)),
 	}, cfg.Gossip)
-	tsf := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: cfg.AmbientCtx,
 			Settings:   st,
 			Clock:      cfg.Clock,
@@ -95,7 +95,7 @@ func createTestNode(
 		},
 		distSender,
 	)
-	cfg.DB = client.NewDB(cfg.AmbientCtx, tsf, cfg.Clock)
+	cfg.DB = kv.NewDB(cfg.AmbientCtx, tsf, cfg.Clock)
 	cfg.Transport = kvserver.NewDummyRaftTransport(st)
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
@@ -123,7 +123,7 @@ func createTestNode(
 	)
 	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness, nodeRPCContext, cfg.Gossip, st)
 	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval), nil, /* execCfg */
+		kvcoord.MakeTxnMetrics(metric.TestSampleInterval), nil, /* execCfg */
 		&nodeRPCContext.ClusterID)
 	roachpb.RegisterInternalServer(grpcServer, node)
 	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer)

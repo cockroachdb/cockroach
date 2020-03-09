@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,11 +26,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func makeManager(s *client.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
+func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
-	db := client.NewDB(ac, client.NonTransactionalFactoryFunc(func(
+	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(
 		ctx context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		return (*s).Send(ctx, ba)
@@ -81,7 +81,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "prevent", func(t *testing.T, prevent bool) {
-		var mockSender client.Sender
+		var mockSender kv.Sender
 		m, clock, stopper := makeManager(&mockSender)
 		defer stopper.Stop(context.Background())
 
@@ -91,7 +91,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 			{Key: roachpb.Key("b"), Sequence: 2},
 		}
 
-		mockSender = client.SenderFunc(func(
+		mockSender = kv.SenderFunc(func(
 			_ context.Context, ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			// Probing Phase.
@@ -111,7 +111,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 			br.Responses[1].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
 			br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = !prevent
 
-			mockSender = client.SenderFunc(func(
+			mockSender = kv.SenderFunc(func(
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Recovery Phase.
@@ -161,7 +161,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var mockSender client.Sender
+	var mockSender kv.Sender
 	m, clock, stopper := makeManager(&mockSender)
 	defer stopper.Stop(context.Background())
 
@@ -268,7 +268,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			mockSender = client.SenderFunc(func(
+			mockSender = kv.SenderFunc(func(
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Probing Phase.
@@ -292,7 +292,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				br.Responses[1].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
 				br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = false
 
-				mockSender = client.SenderFunc(func(
+				mockSender = kv.SenderFunc(func(
 					_ context.Context, ba roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					// Recovery Phase.
@@ -335,14 +335,14 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 func TestResolveIndeterminateCommitTxnWithoutInFlightWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var mockSender client.Sender
+	var mockSender kv.Sender
 	m, clock, stopper := makeManager(&mockSender)
 	defer stopper.Stop(context.Background())
 
 	// Create STAGING txn without any in-flight writes.
 	txn := makeStagingTransaction(clock)
 
-	mockSender = client.SenderFunc(func(
+	mockSender = kv.SenderFunc(func(
 		_ context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		// Recovery Phase. Probing phase skipped.

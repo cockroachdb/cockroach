@@ -15,7 +15,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -47,7 +47,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		pArgs := putArgs(keyA, keyAVal)
 		pArgs.Sequence = 1
 		h := roachpb.Header{Txn: txn}
-		if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), h, &pArgs); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -56,14 +56,14 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		// at its desired timestamp. This prevents an implicit commit state.
 		if !commit {
 			gArgs := getArgs(keyB)
-			if _, pErr := client.SendWrapped(ctx, store.TestSender(), &gArgs); pErr != nil {
+			if _, pErr := kv.SendWrapped(ctx, store.TestSender(), &gArgs); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
 
 		pArgs = putArgs(keyB, []byte("value2"))
 		pArgs.Sequence = 2
-		if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), h, &pArgs); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -74,7 +74,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			{Key: keyA, Sequence: 1},
 			{Key: keyB, Sequence: 2},
 		}
-		etReply, pErr := client.SendWrappedWith(ctx, store.TestSender(), etH, &et)
+		etReply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), etH, &et)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -90,7 +90,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
 
 		gArgs := getArgs(keyA)
-		gReply, pErr := client.SendWrapped(ctx, store.TestSender(), &gArgs)
+		gReply, pErr := kv.SendWrapped(ctx, store.TestSender(), &gArgs)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -110,7 +110,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 
 		// Query the transaction and verify that it has the right status.
 		qtArgs := queryTxnArgs(txn.TxnMeta, false /* waitForUpdate */)
-		qtReply, pErr := client.SendWrapped(ctx, store.TestSender(), &qtArgs)
+		qtReply, pErr := kv.SendWrapped(ctx, store.TestSender(), &qtArgs)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}

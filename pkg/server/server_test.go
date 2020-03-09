@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -172,7 +172,7 @@ func TestServerStartClock(t *testing.T) {
 	get := &roachpb.GetRequest{
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
 	}
-	if _, err := client.SendWrapped(
+	if _, err := kv.SendWrapped(
 		context.Background(), s.DB().NonTransactionalSender(), get,
 	); err != nil {
 		t.Fatal(err)
@@ -350,17 +350,17 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := client.SendWrapped(ctx, tds, get); err == nil {
+	if _, err := kv.SendWrapped(ctx, tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		if _, err := client.SendWrapped(ctx, tds, put); err != nil {
+		if _, err := kv.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
-		reply, err := client.SendWrapped(ctx, tds, scan)
+		reply, err := kv.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -382,7 +382,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		ReturnKeys: true,
 	}
-	reply, err := client.SendWrappedWith(ctx, tds, roachpb.Header{Timestamp: delTS}, del)
+	reply, err := kv.SendWrappedWith(ctx, tds, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +396,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	now := s.Clock().Now()
 	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, now, 0)
-	txn := client.NewTxnFromProto(ctx, db, s.NodeID(), now, client.RootTxn, &txnProto)
+	txn := kv.NewTxnFromProto(ctx, db, s.NodeID(), now, kv.RootTxn, &txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
 	ba := roachpb.BatchRequest{}
@@ -448,7 +448,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 
 			for _, k := range tc.keys {
 				put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-				if _, err := client.SendWrapped(ctx, tds, put); err != nil {
+				if _, err := kv.SendWrapped(ctx, tds, put); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -459,7 +459,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			var maxTargetBytes int64
 			{
 				scan := roachpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next(), false)
-				resp, pErr := client.SendWrapped(ctx, tds, scan)
+				resp, pErr := kv.SendWrapped(ctx, tds, scan)
 				require.Nil(t, pErr)
 				maxTargetBytes = resp.Header().NumBytes
 			}
@@ -564,7 +564,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Write a system key with the transaction marked as having a Gossip trigger.
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}

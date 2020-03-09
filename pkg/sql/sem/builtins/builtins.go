@@ -33,7 +33,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -3433,7 +3433,7 @@ may increase either contention or retry errors, or both.`,
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				key := []byte(tree.MustBeDBytes(args[0]))
-				b := &client.Batch{}
+				b := &kv.Batch{}
 				b.AddRawRequest(&roachpb.LeaseInfoRequest{
 					RequestHeader: roachpb.RequestHeader{
 						Key: key,
@@ -3500,7 +3500,7 @@ may increase either contention or retry errors, or both.`,
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				key := []byte(tree.MustBeDBytes(args[0]))
-				b := &client.Batch{}
+				b := &kv.Batch{}
 				b.AddRawRequest(&roachpb.RangeStatsRequest{
 					RequestHeader: roachpb.RequestHeader{
 						Key: key,

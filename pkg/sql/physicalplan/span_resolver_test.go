@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -84,7 +84,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	lr := physicalplan.NewSpanResolver(
 		s3.Cfg.Settings,
-		s3.DistSenderI().(*kv.DistSender), s3.Gossip(), s3.GetNode().Descriptor, nil,
+		s3.DistSenderI().(*kvcoord.DistSender), s3.Gossip(), s3.GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
 	var spans []spanWithDir
@@ -96,7 +96,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 					Key:    rowRanges[i].StartKey.AsRawKey(),
 					EndKey: rowRanges[i].EndKey.AsRawKey(),
 				},
-				dir: kv.Ascending,
+				dir: kvcoord.Ascending,
 			})
 	}
 
@@ -190,7 +190,7 @@ func TestSpanResolver(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
+		s.DistSenderI().(*kvcoord.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -250,13 +250,13 @@ func TestSpanResolver(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		for _, dir := range []kv.ScanDirection{kv.Ascending, kv.Descending} {
+		for _, dir := range []kvcoord.ScanDirection{kvcoord.Ascending, kvcoord.Descending} {
 			t.Run(fmt.Sprintf("%d-direction:%d", i, dir), func(t *testing.T) {
 				replicas, err := resolveSpans(ctx, it, orient(dir, tc.spans...)...)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if dir == kv.Descending {
+				if dir == kvcoord.Descending {
 					// When testing Descending resolving, reverse the expected results.
 					for i, j := 0, len(tc.expected)-1; i <= j; i, j = i+1, j-1 {
 						reverse(tc.expected[i])
@@ -284,7 +284,7 @@ func TestMixedDirections(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
+		s.DistSenderI().(*kvcoord.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
 		nil,
 		replicaoracle.BinPackingChoice)
@@ -293,8 +293,8 @@ func TestMixedDirections(t *testing.T) {
 	it := lr.NewSpanResolverIterator(nil)
 
 	spans := []spanWithDir{
-		orient(kv.Ascending, makeSpan(tableDesc, 11, 15))[0],
-		orient(kv.Descending, makeSpan(tableDesc, 1, 14))[0],
+		orient(kvcoord.Ascending, makeSpan(tableDesc, 11, 15))[0],
+		orient(kvcoord.Descending, makeSpan(tableDesc, 1, 14))[0],
 	}
 	replicas, err := resolveSpans(ctx, it, spans...)
 	if err != nil {
@@ -310,7 +310,7 @@ func TestMixedDirections(t *testing.T) {
 }
 
 func setupRanges(
-	db *gosql.DB, s *server.TestServer, cdb *client.DB, t *testing.T,
+	db *gosql.DB, s *server.TestServer, cdb *kv.DB, t *testing.T,
 ) ([]roachpb.RangeDescriptor, *sqlbase.TableDescriptor) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
@@ -358,15 +358,15 @@ func setupRanges(
 
 type spanWithDir struct {
 	roachpb.Span
-	dir kv.ScanDirection
+	dir kvcoord.ScanDirection
 }
 
-func orient(dir kv.ScanDirection, spans ...roachpb.Span) []spanWithDir {
+func orient(dir kvcoord.ScanDirection, spans ...roachpb.Span) []spanWithDir {
 	res := make([]spanWithDir, 0, len(spans))
 	for _, span := range spans {
 		res = append(res, spanWithDir{span, dir})
 	}
-	if dir == kv.Descending {
+	if dir == kvcoord.Descending {
 		for i, j := 0, len(res)-1; i < j; i, j = i+1, j-1 {
 			res[i], res[j] = res[j], res[i]
 		}

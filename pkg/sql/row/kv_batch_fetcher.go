@@ -15,7 +15,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -172,7 +172,7 @@ func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
 //
 // Batch limits can only be used if the spans are ordered.
 func makeKVBatchFetcher(
-	txn *client.Txn,
+	txn *kv.Txn,
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,

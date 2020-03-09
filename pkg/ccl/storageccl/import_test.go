@@ -21,15 +21,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -114,7 +114,7 @@ func slurpSSTablesLatestKey(
 	return kvs
 }
 
-func clientKVsToEngineKVs(kvs []client.KeyValue) []storage.MVCCKeyValue {
+func clientKVsToEngineKVs(kvs []kv.KeyValue) []storage.MVCCKeyValue {
 	var ret []storage.MVCCKeyValue
 	for _, kv := range kvs {
 		if kv.Value == nil {
@@ -341,7 +341,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			// Import may be retried by DistSender if it takes too long to return, so
 			// make sure it's idempotent.
 			for j := 0; j < 2; j++ {
-				b := &client.Batch{}
+				b := &kv.Batch{}
 				b.AddRawRequest(req)
 				if err := kvDB.Run(ctx, b); err != nil {
 					t.Fatalf("%+v", err)

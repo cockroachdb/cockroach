@@ -14,7 +14,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,7 +60,7 @@ type manager struct {
 	log.AmbientContext
 
 	clock   *hlc.Clock
-	db      *client.DB
+	db      *kv.DB
 	stopper *stop.Stopper
 	metrics Metrics
 	txns    singleflight.Group
@@ -68,9 +68,7 @@ type manager struct {
 }
 
 // NewManager returns an implementation of a transaction recovery Manager.
-func NewManager(
-	ac log.AmbientContext, clock *hlc.Clock, db *client.DB, stopper *stop.Stopper,
-) Manager {
+func NewManager(ac log.AmbientContext, clock *hlc.Clock, db *kv.DB, stopper *stop.Stopper) Manager {
 	ac.AddLogTag("txn-recovery", nil)
 	return &manager{
 		AmbientContext: ac,
@@ -237,7 +235,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	// Loop until either the transaction is observed to change, an in-flight
 	// write is prevented, or we run out of in-flight writes to query.
 	for len(queryIntentReqs) > 0 {
-		var b client.Batch
+		var b kv.Batch
 		b.Header.Timestamp = m.clock.Now()
 		b.AddRawRequest(&queryTxnReq)
 		for i := 0; i < defaultBatchSize && len(queryIntentReqs) > 0; i++ {
@@ -290,7 +288,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 func (m *manager) resolveIndeterminateCommitForTxnRecover(
 	ctx context.Context, txn *roachpb.Transaction, preventedIntent bool,
 ) (*roachpb.Transaction, error) {
-	var b client.Batch
+	var b kv.Batch
 	b.Header.Timestamp = m.clock.Now()
 	b.AddRawRequest(&roachpb.RecoverTxnRequest{
 		RequestHeader: roachpb.RequestHeader{

@@ -14,7 +14,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -320,7 +320,7 @@ func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) 
 	}
 
 	for span != nil {
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = dumpBatchSize
 		b.Scan(span.Key, span.EndKey)
 		err := s.db.db.Run(ctx, b)

@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -85,11 +85,11 @@ var MergeQueueInterval = settings.RegisterNonNegativeDurationSetting(
 // initiated.
 type mergeQueue struct {
 	*baseQueue
-	db       *client.DB
+	db       *kv.DB
 	purgChan <-chan time.Time
 }
 
-func newMergeQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *mergeQueue {
+func newMergeQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *mergeQueue {
 	mq := &mergeQueue{
 		db:       db,
 		purgChan: time.NewTicker(mergeQueuePurgatoryCheckInterval).C,
@@ -197,7 +197,7 @@ var _ purgatoryError = rangeMergePurgatoryError{}
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
 ) (*roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
-	res, pErr := client.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{
+	res, pErr := kv.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{
 		ReturnRangeInfo: true,
 	}, &roachpb.RangeStatsRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},

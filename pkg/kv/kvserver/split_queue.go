@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -49,7 +49,7 @@ const (
 // or along intersecting zone config boundaries.
 type splitQueue struct {
 	*baseQueue
-	db       *client.DB
+	db       *kv.DB
 	purgChan <-chan time.Time
 
 	// loadBasedCount counts the load-based splits performed by the queue.
@@ -57,7 +57,7 @@ type splitQueue struct {
 }
 
 // newSplitQueue returns a new instance of splitQueue.
-func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQueue {
+func newSplitQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *splitQueue {
 	var purgChan <-chan time.Time
 	if c := store.TestingKnobs().SplitQueuePurgatoryChan; c != nil {
 		purgChan = c

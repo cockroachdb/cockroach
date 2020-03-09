@@ -14,8 +14,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -49,7 +49,7 @@ type Watcher struct {
 
 // Watch starts a new Watcher over the given span of kvs. See Watcher.
 func Watch(
-	ctx context.Context, dbs []*client.DB, ct ClosedTimestampTargetInterval, dataSpan roachpb.Span,
+	ctx context.Context, dbs []*kv.DB, ct ClosedTimestampTargetInterval, dataSpan roachpb.Span,
 ) (*Watcher, error) {
 	if len(dbs) < 1 {
 		return nil, errors.New(`at least one db must be given`)
@@ -65,10 +65,10 @@ func Watch(
 	ctx, w.cancel = context.WithCancel(ctx)
 	w.g = ctxgroup.WithContext(ctx)
 
-	dss := make([]*kv.DistSender, len(dbs))
+	dss := make([]*kvcoord.DistSender, len(dbs))
 	for i := range dbs {
 		sender := dbs[i].NonTransactionalSender()
-		dss[i] = sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+		dss[i] = sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 	}
 
 	startTs := firstDB.Clock().Now()

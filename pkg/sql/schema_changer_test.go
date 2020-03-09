@@ -24,11 +24,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -408,7 +408,7 @@ CREATE INDEX foo ON t.test (v)
 	}
 }
 
-func getTableKeyCount(ctx context.Context, kvDB *client.DB) (int, error) {
+func getTableKeyCount(ctx context.Context, kvDB *kv.DB) (int, error) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
@@ -416,7 +416,7 @@ func getTableKeyCount(ctx context.Context, kvDB *client.DB) (int, error) {
 	return len(kvs), err
 }
 
-func checkTableKeyCountExact(ctx context.Context, kvDB *client.DB, e int) error {
+func checkTableKeyCountExact(ctx context.Context, kvDB *kv.DB, e int) error {
 	if count, err := getTableKeyCount(ctx, kvDB); err != nil {
 		return err
 	} else if count != e {
@@ -427,7 +427,7 @@ func checkTableKeyCountExact(ctx context.Context, kvDB *client.DB, e int) error 
 
 // checkTableKeyCount returns the number of KVs in the DB, the multiple should be the
 // number of columns.
-func checkTableKeyCount(ctx context.Context, kvDB *client.DB, multiple int, maxValue int) error {
+func checkTableKeyCount(ctx context.Context, kvDB *kv.DB, multiple int, maxValue int) error {
 	return checkTableKeyCountExact(ctx, kvDB, multiple*(maxValue+1))
 }
 
@@ -436,7 +436,7 @@ func checkTableKeyCount(ctx context.Context, kvDB *client.DB, multiple int, maxV
 func runSchemaChangeWithOperations(
 	t *testing.T,
 	sqlDB *gosql.DB,
-	kvDB *client.DB,
+	kvDB *kv.DB,
 	jobRegistry *jobs.Registry,
 	schemaChange string,
 	maxValue int,
@@ -1145,7 +1145,7 @@ COMMIT;
 
 // Add an index and check that it succeeds.
 func addIndexSchemaChange(
-	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int,
 ) {
 	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
 		t.Fatal(err)
@@ -1186,7 +1186,7 @@ func addIndexSchemaChange(
 
 // Add a column with a check constraint and check that it succeeds.
 func addColumnSchemaChange(
-	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int,
 ) {
 	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0)"); err != nil {
 		t.Fatal(err)
@@ -1223,7 +1223,7 @@ func addColumnSchemaChange(
 
 // Drop a column and check that it succeeds.
 func dropColumnSchemaChange(
-	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int,
 ) {
 	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP x"); err != nil {
 		t.Fatal(err)
@@ -1239,7 +1239,7 @@ func dropColumnSchemaChange(
 
 // Drop an index and check that it succeeds.
 func dropIndexSchemaChange(
-	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int,
 ) {
 	if _, err := sqlDB.Exec("DROP INDEX t.test@foo CASCADE"); err != nil {
 		t.Fatal(err)
@@ -3749,7 +3749,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	// Check that the table descriptor exists so we know the data will
 	// eventually be deleted.
 	var droppedDesc *sqlbase.TableDescriptor
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		droppedDesc, err = sqlbase.GetTableDescFromID(ctx, txn, tableDesc.ID)
 		return err
@@ -3866,7 +3866,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	// Wait until the older descriptor has been deleted.
 	testutils.SucceedsSoon(t, func() error {
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			_, err = sqlbase.GetTableDescFromID(ctx, txn, tableDesc.ID)
 			return err
@@ -4090,7 +4090,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
 			Threshold:     tc.Server(0).Clock().Now(),
 		}
-		_, err := client.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kv.DistSender), &gcr)
+		_, err := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kvcoord.DistSender), &gcr)
 		if err != nil {
 			panic(err)
 		}
@@ -4757,7 +4757,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	const maxValue = 1000
 	backfillCount := int64(0)
-	var db *client.DB
+	var db *kv.DB
 	var tableDesc *sqlbase.TableDescriptor
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -4827,7 +4827,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	const maxValue = 1000
 	backfillCount := int64(0)
-	var db *client.DB
+	var db *kv.DB
 	var tableDesc *sqlbase.TableDescriptor
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{

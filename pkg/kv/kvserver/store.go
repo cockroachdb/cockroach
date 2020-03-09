@@ -30,13 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/compactor"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -52,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -365,7 +365,7 @@ func (rs *storeReplicaVisitor) EstimatedCount() int {
 type Store struct {
 	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                StoreConfig
-	db                 *client.DB
+	db                 *kv.DB
 	engine             storage.Engine       // The underlying key-value store
 	compactor          *compactor.Compactor // Schedules compaction of the engine
 	tsCache            tscache.Cache        // Most recent timestamps for keys / key ranges
@@ -591,7 +591,7 @@ type Store struct {
 	computeInitialMetrics sync.Once
 }
 
-var _ client.Sender = &Store{}
+var _ kv.Sender = &Store{}
 
 // A StoreConfig encompasses the auxiliary objects and configuration
 // required to create a store.
@@ -605,7 +605,7 @@ type StoreConfig struct {
 	DefaultSystemZoneConfig *zonepb.ZoneConfig
 	Settings                *cluster.Settings
 	Clock                   *hlc.Clock
-	DB                      *client.DB
+	DB                      *kv.DB
 	Gossip                  *gossip.Gossip
 	NodeLiveness            *NodeLiveness
 	StorePool               *StorePool
@@ -2047,7 +2047,7 @@ func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 func (s *Store) Engine() storage.Engine { return s.engine }
 
 // DB accessor.
-func (s *Store) DB() *client.DB { return s.cfg.DB }
+func (s *Store) DB() *kv.DB { return s.cfg.DB }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }

@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -42,7 +42,7 @@ var tableNames = map[string]bool{
 //    - 'd' first byte - decimal (ascending)
 //    - NULLASC, NULLDESC, NOTNULLASC, NOTNULLDESC
 //    - PrefixEnd
-func EncodeTestKey(tb testing.TB, kvDB *client.DB, keyStr string) roachpb.Key {
+func EncodeTestKey(tb testing.TB, kvDB *kv.DB, keyStr string) roachpb.Key {
 	var key []byte
 	tokens := strings.Split(keyStr, "/")
 	if tokens[0] != "" {

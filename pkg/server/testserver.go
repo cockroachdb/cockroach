@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -317,7 +317,7 @@ func (ts *TestServer) TsDB() *ts.DB {
 }
 
 // DB returns the client.DB instance used by the TestServer.
-func (ts *TestServer) DB() *client.DB {
+func (ts *TestServer) DB() *kv.DB {
 	if ts != nil {
 		return ts.db
 	}
@@ -395,7 +395,7 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after bootstrap.
 func ExpectedInitialRangeCount(
-	db *client.DB, defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
+	db *kv.DB, defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (int, error) {
 	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db, defaultZoneConfig, defaultSystemZoneConfig)
 	if err != nil {
@@ -645,8 +645,8 @@ func (ts *TestServer) DistSenderI() interface{} {
 
 // DistSender is like DistSenderI(), but returns the real type instead of
 // interface{}.
-func (ts *TestServer) DistSender() *kv.DistSender {
-	return ts.DistSenderI().(*kv.DistSender)
+func (ts *TestServer) DistSender() *kvcoord.DistSender {
+	return ts.DistSenderI().(*kvcoord.DistSender)
 }
 
 // SQLServer is part of TestServerInterface.
@@ -681,7 +681,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	rs, _, err := client.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
+	rs, _, err := kv.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
 		key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Errorf(
@@ -699,7 +699,7 @@ func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor,
 			Key: leftKey,
 		},
 	}
-	_, pErr := client.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &mergeReq)
+	_, pErr := kv.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &mergeReq)
 	if pErr != nil {
 		return roachpb.RangeDescriptor{},
 			errors.Errorf(
@@ -730,7 +730,7 @@ func (ts *TestServer) SplitRange(
 		SplitKey:       splitKey,
 		ExpirationTime: hlc.MaxTimestamp,
 	}
-	_, pErr := client.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
+	_, pErr := kv.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
 	if pErr != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Errorf(
@@ -750,9 +750,9 @@ func (ts *TestServer) SplitRange(
 	// be retried. Instead, the message to wrap is stored in case of
 	// non-retryable failures and then wrapped when the full transaction fails.
 	var wrappedMsg string
-	if err := ts.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := ts.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		scanMeta := func(key roachpb.RKey, reverse bool) (desc roachpb.RangeDescriptor, err error) {
-			var kvs []client.KeyValue
+			var kvs []kv.KeyValue
 			if reverse {
 				// Find the last range that ends at or before key.
 				kvs, err = txn.ReverseScan(
@@ -814,7 +814,7 @@ func (ts *TestServer) GetRangeLease(
 			Key: key,
 		},
 	}
-	leaseResp, pErr := client.SendWrappedWith(
+	leaseResp, pErr := kv.SendWrappedWith(
 		ctx,
 		ts.DB().NonTransactionalSender(),
 		roachpb.Header{
@@ -882,7 +882,7 @@ func (ts *TestServer) ForceTableGC(
 		},
 		Threshold: timestamp,
 	}
-	_, pErr := client.SendWrapped(ctx, ts.distSender, &gcr)
+	_, pErr := kv.SendWrapped(ctx, ts.distSender, &gcr)
 	return pErr.GoError()
 }
 

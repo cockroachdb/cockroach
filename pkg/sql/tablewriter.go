@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,7 +45,7 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
-	init(context.Context, *client.Txn, *tree.EvalContext) error
+	init(context.Context, *kv.Txn, *tree.EvalContext) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -107,16 +107,16 @@ const (
 // the other tableWriters.
 type tableWriterBase struct {
 	// txn is the current KV transaction.
-	txn *client.Txn
+	txn *kv.Txn
 	// is autoCommit turned on.
 	autoCommit autoCommitOpt
 	// b is the current batch.
-	b *client.Batch
+	b *kv.Batch
 	// batchSize is the current batch size (when known).
 	batchSize int
 }
 
-func (tb *tableWriterBase) init(txn *client.Txn) {
+func (tb *tableWriterBase) init(txn *kv.Txn) {
 	tb.txn = txn
 	tb.b = txn.NewBatch()
 }

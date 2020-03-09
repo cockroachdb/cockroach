@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -74,7 +74,7 @@ func createSplitRanges(
 	ctx context.Context, store *kvserver.Store,
 ) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, error) {
 	args := adminSplitArgs(roachpb.Key("b"))
-	if _, err := client.SendWrapped(ctx, store.TestSender(), args); err != nil {
+	if _, err := kv.SendWrapped(ctx, store.TestSender(), args); err != nil {
 		return nil, nil, err.GoError()
 	}
 
@@ -108,7 +108,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 	// Merge the RHS back into the LHS.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -158,7 +158,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 
 	// Write some values left of the proposed split key.
 	pArgs := putArgs(roachpb.Key("aaa"), content)
-	if _, pErr := client.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -173,7 +173,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 
 	// Write some values right of the split key.
 	pArgs = putArgs(roachpb.Key("ccc"), content)
-	if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -181,7 +181,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -278,11 +278,11 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Write some values left and right of the proposed split key.
 	pArgs := putArgs(roachpb.Key("aaa"), content)
-	if _, pErr := client.SendWrapped(ctx, store1.TestSender(), pArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, store1.TestSender(), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	pArgs = putArgs(roachpb.Key("ccc"), content)
-	if _, pErr := client.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -290,7 +290,7 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Confirm the values are there.
 	gArgs := getArgs(roachpb.Key("aaa"))
-	if reply, pErr := client.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
+	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
 		t.Fatal(pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -298,7 +298,7 @@ func mergeWithData(t *testing.T, retries int64) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 	gArgs = getArgs(roachpb.Key("ccc"))
-	if reply, pErr := client.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
+	if reply, pErr := kv.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, gArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -310,7 +310,7 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := client.SendWrapped(ctx, store1.TestSender(), args); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, store1.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -339,7 +339,7 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Try to get values from after the merge.
 	gArgs = getArgs(roachpb.Key("aaa"))
-	if reply, pErr := client.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
+	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
 		t.Fatal(pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -347,7 +347,7 @@ func mergeWithData(t *testing.T, retries int64) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 	gArgs = getArgs(roachpb.Key("ccc"))
-	if reply, pErr := client.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
+	if reply, pErr := kv.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
 		RangeID: rhsRepl.RangeID,
 	}, gArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -359,11 +359,11 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Put new values after the merge on both sides.
 	pArgs = putArgs(roachpb.Key("aaaa"), content)
-	if _, pErr := client.SendWrapped(ctx, store1.TestSender(), pArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, store1.TestSender(), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	pArgs = putArgs(roachpb.Key("cccc"), content)
-	if _, pErr := client.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
 		RangeID: rhsRepl.RangeID,
 	}, pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -371,7 +371,7 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Try to get the newly placed values.
 	gArgs = getArgs(roachpb.Key("aaaa"))
-	if reply, pErr := client.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
+	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
 		t.Fatal(pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -379,7 +379,7 @@ func mergeWithData(t *testing.T, retries int64) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 	gArgs = getArgs(roachpb.Key("cccc"))
-	if reply, pErr := client.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
+	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
 		t.Fatal(pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -388,7 +388,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	}
 
 	gArgs = getArgs(roachpb.Key("cccc"))
-	if _, pErr := client.SendWrappedWith(ctx, store2, roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, store2, roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, gArgs); !testutils.IsPError(
 		pErr, `r2 was not found`,
@@ -447,7 +447,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 
 	// Write a key to the RHS.
 	rhsKey := roachpb.Key("c")
-	if _, pErr := client.SendWrappedWith(ctx, rhsStore, roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, rhsStore, roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, incrementArgs(rhsKey, 1)); pErr != nil {
 		t.Fatal(pErr)
@@ -487,7 +487,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 
 	// Merge the RHS back into the LHS.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := client.SendWrapped(ctx, lhsStore.TestSender(), args); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, lhsStore.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -599,7 +599,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	distSender := mtc.distSenders[0]
 
 	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
-		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -621,7 +621,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	// with our precise clock management on s2, s3, and s4.
 
 	// Write a key to [b, Max).
-	if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(rhsKey, 1)); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(rhsKey, 1)); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -632,7 +632,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	// Merge [a, b) and [b, Max). Our request filter above will intercept the
 	// merge and execute a read with a large timestamp immediately before the
 	// Subsume request executes.
-	if _, pErr := client.SendWrappedWith(ctx, mtc.Store(2), roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, mtc.Store(2), roachpb.Header{
 		RangeID: lhsRangeID,
 	}, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
 		t.Fatal(pErr)
@@ -683,7 +683,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	store := mtc.Store(0)
 
 	// Merge last range.
-	_, pErr := client.SendWrapped(ctx, store.TestSender(), adminMergeArgs(roachpb.KeyMin))
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), adminMergeArgs(roachpb.KeyMin))
 	if !testutils.IsPError(pErr, "cannot merge final range") {
 		t.Fatalf("expected 'cannot merge final range' error; got %s", pErr)
 	}
@@ -739,7 +739,7 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 			{lhsDesc.RangeID, roachpb.Key("aa")},
 			{rhsDesc.RangeID, roachpb.Key("cc")},
 		} {
-			if reply, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+			if reply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 				RangeID: tc.rangeID,
 			}, getArgs(tc.key)); pErr != nil {
 				t.Fatal(pErr)
@@ -754,7 +754,7 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	attemptMerge := func() {
 		t.Helper()
 		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-		_, pErr := client.SendWrapped(ctx, store.TestSender(), args)
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
 		if exp := "injected permafail"; !testutils.IsPError(pErr, exp) {
 			t.Fatalf("expected %q error, but got %q", exp, pErr)
 		}
@@ -890,22 +890,22 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// will leave a record on the RHS, and txn3 will leave a record on both. This
 	// tests whether the merge code properly accounts for merging abort span
 	// records for the same transaction.
-	txn1 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+	txn1 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 	if err := txn1.Put(ctx, "a-txn1", "val"); err != nil {
 		t.Fatal(err)
 	}
-	txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+	txn2 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 	if err := txn2.Put(ctx, "c-txn2", "val"); err != nil {
 		t.Fatal(err)
 	}
-	txn3 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+	txn3 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 	if err := txn3.Put(ctx, "a-txn3", "val"); err != nil {
 		t.Fatal(err)
 	}
 	if err := txn3.Put(ctx, "c-txn3", "val"); err != nil {
 		t.Fatal(err)
 	}
-	hiPriTxn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+	hiPriTxn := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 	hiPriTxn.TestingSetPriority(enginepb.MaxTxnPriority)
 	for _, key := range []string{"a-txn1", "c-txn2", "a-txn3", "c-txn3"} {
 		if err := hiPriTxn.Put(ctx, key, "val"); err != nil {
@@ -942,7 +942,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, err := client.SendWrapped(ctx, store.TestSender(), args); err != nil {
+	if _, err := kv.SendWrapped(ctx, store.TestSender(), args); err != nil {
 		t.Fatal(err)
 	}
 	replMerged := store.LookupReplica(lhsDesc.StartKey)
@@ -992,7 +992,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 		lhsKey, rhsKey := roachpb.Key("aa"), roachpb.Key("cc")
 
-		txn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+		txn := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 		// Put the key on the RHS side first so ownership of the transaction record
 		// will need to transfer to the LHS range during the merge.
 		if err := txn.Put(ctx, rhsKey, t.Name()); err != nil {
@@ -1002,7 +1002,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 			t.Fatal(err)
 		}
 		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-		if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 		if err := txn.Commit(ctx); err != nil {
@@ -1030,7 +1030,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 
 		// Create a transaction that will be aborted before the merge but won't
 		// realize until after the merge.
-		txn1 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+		txn1 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 		// Put the key on the RHS side so ownership of the transaction record and
 		// abort span records will need to transfer to the LHS during the merge.
 		if err := txn1.Put(ctx, rhsKey, t.Name()); err != nil {
@@ -1038,7 +1038,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 
 		// Create and commit a txn that aborts txn1.
-		txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+		txn2 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 		txn2.TestingSetPriority(enginepb.MaxTxnPriority)
 		if err := txn2.Put(ctx, rhsKey, "muhahahah"); err != nil {
 			t.Fatal(err)
@@ -1049,7 +1049,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 
 		// Complete the merge.
 		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-		if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 		expErr := "TransactionAbortedError(ABORT_REASON_ABORT_SPAN)"
@@ -1077,7 +1077,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		defer txnwait.TestingOverrideTxnLivenessThreshold(2 * testutils.DefaultSucceedsSoonDuration)
 
 		// Create a transaction that won't complete until after the merge.
-		txn1 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+		txn1 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 		// Put the key on the RHS side so ownership of the transaction record and
 		// abort span records will need to transfer to the LHS during the merge.
 		if err := txn1.Put(ctx, rhsKey, t.Name()); err != nil {
@@ -1085,7 +1085,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 
 		// Create a txn that will conflict with txn1.
-		txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+		txn2 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 		txn2ErrCh := make(chan error)
 		go func() {
 			// Get should block on txn1's intent until txn1 commits.
@@ -1118,7 +1118,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 
 		// Complete the merge.
 		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-		if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1202,12 +1202,12 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		splitArgs := adminSplitArgs(rhsDesc.StartKey.AsRawKey().Next())
-		_, pErr := client.SendWrapped(ctx, distSender, splitArgs)
+		_, pErr := kv.SendWrapped(ctx, distSender, splitArgs)
 		splitErrCh <- pErr.GoError()
 	}()
 
 	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := client.SendWrapped(ctx, distSender, mergeArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, distSender, mergeArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1271,7 +1271,7 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 
-	var distSender *kv.DistSender
+	var distSender *kvcoord.DistSender
 	var lhsDescKey atomic.Value
 	var launchSplit int64
 	var mergeRetries int64
@@ -1282,7 +1282,7 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 					// If this is the first merge attempt, launch the split
 					// before the merge's first write succeeds.
 					if atomic.CompareAndSwapInt64(&launchSplit, 1, 0) {
-						_, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("c")))
+						_, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("c")))
 						return pErr
 					}
 					// Otherwise, record that the merge retried and proceed.
@@ -1306,7 +1306,7 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	atomic.StoreInt64(&launchSplit, 1)
 
 	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := client.SendWrapped(ctx, distSender, mergeArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, distSender, mergeArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	if atomic.LoadInt64(&mergeRetries) == 0 {
@@ -1390,7 +1390,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	mergeErr := make(chan error)
 	go func() {
 		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-		_, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), args)
+		_, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), args)
 		mergeErr <- pErr.GoError()
 	}()
 
@@ -1411,7 +1411,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// which this test is not designed to handle. If the merge transaction did
 	// abort then the get requests could complete on r2 before the merge retried.
 	hb, hbH := heartbeatArgs(mergeTxn, mtc.clock.Now())
-	if _, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1464,7 +1464,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 			} else {
 				req = putArgs(rhsSentinel, []byte(fmt.Sprintf("val%d", i)))
 			}
-			_, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
+			_, pErr := kv.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
 				RangeID: rhsDesc.RangeID,
 			}, req)
 			reqErrs <- pErr.GoError()
@@ -1596,7 +1596,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 			t.Fatal(err)
 		}
 		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-		if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -1668,7 +1668,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	mtc.unreplicateRange(rhsDesc.RangeID, 1)
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1900,7 +1900,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1957,7 +1957,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	})
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2029,7 +2029,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2096,7 +2096,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	keys := []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b"), roachpb.RKey("c")}
 	for _, key := range keys {
 		splitArgs := adminSplitArgs(key.AsRawKey())
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -2122,7 +2122,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 
 	// Merge all three ranges together. store2 won't hear about this merge.
 	for i := 0; i < 2; i++ {
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], adminMergeArgs(roachpb.Key("a"))); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], adminMergeArgs(roachpb.Key("a"))); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -2222,7 +2222,7 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 	// goroutine will, however, notice the merge and mark the RHS replica as
 	// destroyed with reason destroyReasonMergePending.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2268,7 +2268,7 @@ func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {
 	mtc.stopStore(2)
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	expErr := "waiting for all left-hand replicas to initialize"
 	if !testutils.IsPError(pErr, expErr) {
 		t.Fatalf("expected %q error, but got %v", expErr, pErr)
@@ -2301,7 +2301,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 	}
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	expErr := "merge failed: waiting for all right-hand replicas to catch up"
 	if !testutils.IsPError(pErr, expErr) {
 		t.Fatalf("expected %q error, but got %v", expErr, pErr)
@@ -2351,7 +2351,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 		if withMerge {
 			// Merge the two ranges together.
 			args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-			_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+			_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -2463,7 +2463,7 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 
 	split := func(key roachpb.RKey) roachpb.RangeID {
 		t.Helper()
-		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key.AsRawKey())); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(key.AsRawKey())); pErr != nil {
 			t.Fatal(pErr)
 		}
 		return store0.LookupReplica(key).RangeID
@@ -2537,7 +2537,7 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// Launch the merge of A and B.
 	mergeErr := make(chan error)
 	go func() {
-		_, pErr := client.SendWrapped(ctx, distSender, adminMergeArgs(aKey.AsRawKey()))
+		_, pErr := kv.SendWrapped(ctx, distSender, adminMergeArgs(aKey.AsRawKey()))
 		mergeErr <- pErr.GoError()
 	}()
 
@@ -2667,7 +2667,7 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2679,7 +2679,7 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 	// and will notice that the merge has committed before the LHS does.
 	getErr := make(chan error)
 	go func() {
-		_, pErr = client.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
+		_, pErr = kv.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
 		}, getArgs(rhsDesc.StartKey.AsRawKey()))
 		getErr <- pErr.GoError()
@@ -2782,7 +2782,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	keys := []roachpb.RKey{aKey, bKey, cKey}
 	for _, key := range keys {
 		splitArgs := adminSplitArgs(key.AsRawKey())
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -2794,7 +2794,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	// to B while its blocked because of a stale DistSender cache.
 	for _, key := range keys {
 		for _, distSender := range mtc.distSenders {
-			if _, pErr := client.SendWrapped(ctx, distSender, getArgs(key.AsRawKey())); pErr != nil {
+			if _, pErr := kv.SendWrapped(ctx, distSender, getArgs(key.AsRawKey())); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
@@ -2809,27 +2809,27 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 
 	// Merge A <- B.
 	mergeArgs := adminMergeArgs(aKey.AsRawKey())
-	if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Immediately after the merge completes, send a request to B.
 	getErr := make(chan error)
 	go func() {
-		_, pErr := client.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
+		_, pErr := kv.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
 			RangeID: bRangeID,
 		}, getArgs(bKey.AsRawKey()))
 		getErr <- pErr.GoError()
 	}()
 
 	// Merge AB <- C.
-	if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Synchronously ensure that the intent on meta2CKey has been cleaned up.
 	// The merge committed, but the intent resolution happens asynchronously.
-	_, pErr := client.SendWrapped(ctx, mtc.distSenders[0], getArgs(meta2CKey))
+	_, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], getArgs(meta2CKey))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3038,7 +3038,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// Create three fully-caught-up, adjacent ranges on all three stores.
 	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
 	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")} {
-		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Manually send the request so we can store the timestamp.
@@ -3059,7 +3059,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// clear the keys in [d, /Max).
 	for i := 0; i < 10; i++ {
 		key := roachpb.Key("d" + strconv.Itoa(i))
-		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(key, []int64{1, 1, 1})
@@ -3068,7 +3068,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// Split [d, /Max) into [d, e) and [e, /Max) so we can predict the
 	// contents of [a, d) without having to worry about metadata keys that will
 	// now be in [e, /Max) instead.
-	if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("e"))); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("e"))); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -3082,14 +3082,14 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Merge [a, b) into [b, c), then [a, c) into [c, /Max).
 	for i := 0; i < 2; i++ {
-		if _, pErr := client.SendWrapped(ctx, distSender, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, distSender, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
 
 	// Split [a, /Max) into [a, d) and [d, /Max). This means the Raft snapshot
 	// will span both a merge and a split.
-	if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("d"))); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("d"))); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -3107,7 +3107,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			Index:         index,
 			RangeID:       repl.RangeID,
 		}
-		if _, err := client.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
+		if _, err := kv.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
 			t.Fatal(err)
 		}
 		return index
@@ -3241,7 +3241,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 
 	// Simulate a merge transaction by launching a transaction that lays down
 	// intents on the two copies of the RHS range descriptor.
-	txn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
+	txn := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 	if err := txn.Del(ctx, keys.RangeDescriptorKey(rhsDesc.StartKey)); err != nil {
 		t.Fatal(err)
 	}
@@ -3302,13 +3302,13 @@ func TestMergeQueue(t *testing.T) {
 		t.Helper()
 		args := adminSplitArgs(key)
 		args.ExpirationTime = expirationTime
-		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), args); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
 
 	clearRange := func(t *testing.T, start, end roachpb.RKey) {
-		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
+		if _, pErr := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
 			RequestHeader: roachpb.RequestHeader{Key: start.AsRawKey(), EndKey: end.AsRawKey()},
 		}); pErr != nil {
 			t.Fatal(pErr)
@@ -3443,7 +3443,7 @@ func TestMergeQueue(t *testing.T) {
 				Key: rhsStartKey.AsRawKey(),
 			},
 		}
-		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), unsplitArgs); err != nil {
+		if _, err := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), unsplitArgs); err != nil {
 			t.Fatal(err)
 		}
 		store.MustForceMergeScanAndProcess()
@@ -3506,7 +3506,7 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 		badRHSDesc.EndKey = badRHSDesc.EndKey.Next()
 		badArgs := getSnapArgs
 		badArgs.RightDesc = badRHSDesc
-		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
 		}, &badArgs)
 		if exp := "RHS range bounds do not match"; !testutils.IsPError(pErr, exp) {
@@ -3518,7 +3518,7 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 	{
 		badArgs := getSnapArgs
 		badArgs.LeftDesc.EndKey = badArgs.LeftDesc.EndKey.Next()
-		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
 		}, &badArgs)
 		if exp := "ranges are not adjacent"; !testutils.IsPError(pErr, exp) {
@@ -3527,7 +3527,7 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 	}
 
 	// Subsume without an intent on the local range descriptor should fail.
-	_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, &getSnapArgs)
 	if exp := "range missing intent on its local descriptor"; !testutils.IsPError(pErr, exp) {
@@ -3536,13 +3536,13 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 
 	// Subsume when a non-deletion intent is present on the
 	// local range descriptor should fail.
-	err = store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err = store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.Put(ctx, keys.RangeDescriptorKey(rhsDesc.StartKey), "garbage"); err != nil {
 			return err
 		}
 		// NB: Subsume intentionally takes place outside of the txn so
 		// that it sees an intent rather than the value the txn just wrote.
-		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
 		}, &getSnapArgs)
 		if exp := "non-deletion intent on local range descriptor"; !testutils.IsPError(pErr, exp) {
@@ -3578,7 +3578,7 @@ func BenchmarkStoreRangeMerge(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Merge the ranges.
 		b.StartTimer()
-		if _, err := client.SendWrapped(ctx, store.TestSender(), mArgs); err != nil {
+		if _, err := kv.SendWrapped(ctx, store.TestSender(), mArgs); err != nil {
 			b.Fatal(err)
 		}
 
