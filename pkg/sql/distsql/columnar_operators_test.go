@@ -239,12 +239,11 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						Core:  execinfrapb.ProcessorCoreUnion{Distinct: spec},
 					}
 					args := verifyColOperatorArgs{
-						anyOrder:       true,
-						colsForEqCheck: distinctCols,
-						inputTypes:     [][]types.T{inputTypes},
-						inputs:         []sqlbase.EncDatumRows{rows},
-						outputTypes:    inputTypes,
-						pspec:          pspec,
+						anyOrder:    false,
+						inputTypes:  [][]types.T{inputTypes},
+						inputs:      []sqlbase.EncDatumRows{rows},
+						outputTypes: inputTypes,
+						pspec:       pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
 						fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v ---\n",
