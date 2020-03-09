@@ -22,21 +22,39 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq"
 )
 
 func TestExplainBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
+
 	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
 	rows := r.QueryStr(t, "EXPLAIN BUNDLE SELECT * FROM abc WHERE c=1")
-	text := rows[0][0]
+	checkBundle(t, fmt.Sprint(rows), "statement.txt opt.txt opt-v.txt opt-vv.txt plan.txt trace.json")
+
+	// Even on query errors, we should still get a bundle.
+	_, err := godb.QueryContext(ctx, "EXPLAIN BUNDLE SELECT * FROM badtable")
+	if !testutils.IsError(err, "relation.*does not exist") {
+		t.Fatalf("unexpected error %v\n", err)
+	}
+	// The bundle url is inside the error detail.
+	checkBundle(t, fmt.Sprintf("%+v", err.(*pq.Error).Detail), "statement.txt trace.json")
+}
+
+// checkBundle searches text strings for a bundle URL and then verifies that the
+// bundle contains the expected files.
+func checkBundle(t *testing.T, text string, expectedFiles string) {
+	t.Helper()
 	reg := regexp.MustCompile("http://.*/_admin/v1/stmtbundle/[0-9]*")
 	url := reg.FindString(text)
 	if url == "" {
@@ -65,8 +83,7 @@ func TestExplainBundle(t *testing.T) {
 		}
 		files = append(files, f.Name)
 	}
-	expected := "statement.txt opt.txt opt-v.txt opt-vv.txt plan.txt"
-	expList := strings.Split(expected, " ")
+	expList := strings.Split(expectedFiles, " ")
 	sort.Strings(files)
 	sort.Strings(expList)
 	if fmt.Sprint(files) != fmt.Sprint(expList) {

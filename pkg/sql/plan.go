@@ -356,9 +356,6 @@ func (p *planTop) close(ctx context.Context) {
 // formatOptPlan returns a visual representation of the optimizer plan that was
 // used.
 func (p *planTop) formatOptPlan(flags memo.ExprFmtFlags) string {
-	if p.mem == nil {
-		return "No optimizer plan; this happens if an error occurred during planning."
-	}
 	f := memo.MakeExprFmtCtx(flags, p.mem, p.catalog)
 	f.FormatExpr(p.mem.RootExpr())
 	return f.Buffer.String()
