@@ -499,6 +499,8 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `unknownoption`, `-e`, `select 123 as "123"`})
+	// Check that partial results + error get reported together.
+	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-3) from generate_series(1,4)`})
 
 	// Output:
 	// sql -e show application_name
@@ -556,6 +558,13 @@ func Example_sql() {
 	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
 	// ERROR: invalid syntax
+	// sql -e select 1/(@1-3) from generate_series(1,4)
+	// ?column?
+	// -0.5
+	// -1
+	// (error encountered after some results were delivered)
+	// ERROR: division by zero
+	// SQLSTATE: 22012
 }
 
 func Example_sql_watch() {
