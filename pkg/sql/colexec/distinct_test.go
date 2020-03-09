@@ -110,7 +110,7 @@ func TestDistinct(t *testing.T) {
 				{1, "a"},
 				{2, "b"},
 				{3, "c"},
-				{4, "d"},
+				{nil, "d"},
 				{5, "e"},
 				{6, "f"},
 				{1, "1"},
@@ -121,7 +121,7 @@ func TestDistinct(t *testing.T) {
 				{1, "a"},
 				{2, "b"},
 				{3, "c"},
-				{4, "d"},
+				{nil, "d"},
 				{5, "e"},
 				{6, "f"},
 			},
@@ -156,14 +156,16 @@ func TestDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		t.Run("unordered", func(t *testing.T) {
-			runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
-				func(input []Operator) (Operator, error) {
-					return NewUnorderedDistinct(
-						testAllocator, input[0], tc.distinctCols, tc.colTypes,
-						hashTableNumBuckets), nil
-				})
-		})
+		for _, numOfBuckets := range []uint64{1, 3, 5, hashTableNumBuckets} {
+			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
+				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
+					func(input []Operator) (Operator, error) {
+						return NewUnorderedDistinct(
+							testAllocator, input[0], tc.distinctCols, tc.colTypes,
+							numOfBuckets), nil
+					})
+			})
+		}
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
 				t.Run(fmt.Sprintf("partiallyOrdered/ordCols=%d", numOrderedCols), func(t *testing.T) {

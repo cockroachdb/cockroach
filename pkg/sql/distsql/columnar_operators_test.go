@@ -240,7 +240,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 					}
 					args := verifyColOperatorArgs{
 						anyOrder:       true,
-						colsForEqCheck: distinctCols,
+						colsForEqCheck: nil,
 						inputTypes:     [][]types.T{inputTypes},
 						inputs:         []sqlbase.EncDatumRows{rows},
 						outputTypes:    inputTypes,

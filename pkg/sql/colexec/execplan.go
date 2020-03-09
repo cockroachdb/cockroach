@@ -698,6 +698,12 @@ func NewColOperator(
 					NewAllocator(ctx, distinctMemAccount), inputs[0],
 					core.Distinct.DistinctColumns, typs, hashTableNumBuckets,
 				)
+				// Auto mode is enabled for unordered distinct since it only buffers the
+				// distinct tuples into memory. This limits the memory consumption
+				// proportionally to the number of distinct tuples in the table.
+				// Unordered distinct operator does not spill to disk, but neither does
+				// the equivalent processor in row execution engine.
+				result.CanRunInAutoMode = true
 			}
 
 		case core.Ordinality != nil:
