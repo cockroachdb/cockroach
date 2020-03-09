@@ -20,6 +20,12 @@ import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
 
+interface TrackMessage {
+    event: string;
+    properties?: Object;
+    timestamp?: Date;
+    context?: Object;
+}
 /**
  * List of current redactions needed for pages tracked by the Admin UI.
  * TODO(mrtracy): It this list becomes more extensive, it might benefit from a
@@ -178,6 +184,14 @@ export class AnalyticsSync {
             },
         });
         this.identifyEventSent = true;
+    }
+
+    /** Analytics Track for Segment: https://segment.com/docs/connections/spec/track/ */
+    track(msg: TrackMessage) {
+      const cluster = this.getCluster();
+      const { cluster_id } = cluster;
+      const message = Object.assign({ userId: cluster_id }, msg);
+      this.analyticsService.track(message);
     }
 
     /**
