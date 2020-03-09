@@ -35,6 +35,7 @@
 #include "protos/roachpb/errors.pb.h"
 #include "row_counter.h"
 #include "snapshot.h"
+#include "stack_trace.h"
 #include "status.h"
 #include "table_props.h"
 #include "timestamp.h"
@@ -807,7 +808,9 @@ DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value
 
 // DBGetStats queries the given DBEngine for various operational stats and
 // write them to the provided DBStatsResult instance.
-DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) { return db->GetStats(stats); }
+DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
+  return db->GetStats(stats);
+}
 
 // `DBGetTickersAndHistograms` retrieves maps of all RocksDB tickers and histograms.
 // It differs from `DBGetStats` by getting _every_ ticker and histogram, and by not
@@ -1231,4 +1234,8 @@ DBListDirResults DBEnvListDir(DBEngine* db, DBSlice name) {
     result.names[i] = ToDBString(rocksdb::Slice(contents[i].data(), contents[i].size()));
   }
   return result;
+}
+
+DBString DBDumpThreadStacks() {
+  return ToDBString(DumpThreadStacks());
 }

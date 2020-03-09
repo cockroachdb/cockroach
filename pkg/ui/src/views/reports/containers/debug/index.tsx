@@ -215,6 +215,9 @@ export default function Debug() {
           <DebugTableLink name="UI (wait)" url="/debug/pprof/goroutineui?sort=wait" />
           <DebugTableLink name="Raw" url="/debug/pprof/goroutine?debug=2" />
         </DebugTableRow>
+        <DebugTableRow title="Threads">
+          <DebugTableLink name="Raw" url="/debug/threads" />
+        </DebugTableRow>
         <DebugTableRow title="Runtime Trace">
           <DebugTableLink name="Trace" url="/debug/pprof/trace?debug=1" />
         </DebugTableRow>

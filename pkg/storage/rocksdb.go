@@ -3533,3 +3533,10 @@ func (r *RocksDB) ListDir(name string) ([]string, error) {
 	C.free(unsafe.Pointer(names))
 	return result, err
 }
+
+// ThreadStacks returns the stacks for all threads. The stacks are raw
+// addresses, and do not contain symbols. Use addr2line (or atos on Darwin) to
+// symbolize.
+func ThreadStacks() string {
+	return cStringToGoString(C.DBDumpThreadStacks())
+}

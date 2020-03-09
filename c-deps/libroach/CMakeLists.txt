@@ -21,6 +21,10 @@ cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
 
 project(roachlib)
 
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  add_definitions(-DOS_LINUX)
+endif()
+
 add_library(roach
   batch.cc
   cache.cc
@@ -42,6 +46,7 @@ add_library(roach
   options.cc
   snapshot.cc
   sst_dump.cc
+  stack_trace.cc
   table_props.cc
   utils.cc
   protos/kv/kvserver/concurrency/lock/locking.pb.cc
