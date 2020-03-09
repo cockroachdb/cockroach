@@ -548,6 +548,12 @@ fi'`
 	}
 }
 
+func allStacks() []byte {
+	// Collect up to 5mb worth of stacks.
+	b := make([]byte, 5*(1<<20))
+	return b[:runtime.Stack(b, true /* all */)]
+}
+
 // An error is returned if the test is still running (on another goroutine) when
 // this returns. This happens when the test doesn't respond to cancellation.
 // Returns true if the test is considered to have passed, false otherwise.
@@ -744,6 +750,23 @@ func (r *testRunner) runTest(
 	select {
 	case <-done:
 	case <-time.After(timeout):
+		// Timeouts are often opaque. Improve our changes by dumping the stack
+		// so that at least we can piece together what the test is trying to
+		// do at this very moment.
+		// In large roachtest runs, this will dump everyone else's stack as well,
+		// but this is just hard to avoid. Moving to a worker model in which
+		// each roachtest is spawned off as a separate process would address
+		// this at the expense of ease of communication between the runner and
+		// the test.
+		//
+		// Do this before we cancel the context, which might (hopefully) unblock
+		// the test. We want to see where it got stuck.
+		const stacksFile = "__stacks"
+		if cl, err := t.l.ChildLogger(stacksFile, quietStderr, quietStdout); err == nil {
+			cl.PrintfCtx(ctx, "all stacks:\n\n%s\n", allStacks())
+			t.l.PrintfCtx(ctx, "dumped stacks to %s", stacksFile)
+		}
+
 		// We hit a timeout. We're going to mark the test as failed (which will also
 		// cancel its context). Then we'll wait up to 5 minutes in the hope
 		// that the test reacts either to the ctx cancelation or to the fact that it
