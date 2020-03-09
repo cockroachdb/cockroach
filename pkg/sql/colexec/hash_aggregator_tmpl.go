@@ -72,8 +72,11 @@ func _MATCH_LOOP(
 	for selIdx, rowIdx := range sel {
 		// {{if .LhsMaybeHasNulls}}
 		// {{if .RhsMaybeHasNulls}}
-		diffNull := (lhsNull != rhs.Nulls().NullAt(rowIdx))
-		if diffNull {
+		rhsNull := rhs.Nulls().NullAt(rowIdx)
+		if lhsNull && rhsNull {
+			// Both values are NULLs, and we do not consider them different.
+			continue
+		} else if lhsNull || rhsNull {
 			diff[selIdx] = true
 			continue
 		}
@@ -126,7 +129,6 @@ func (v hashAggFuncs) match(
 	for keyIdx, colIdx := range keyCols {
 		lhs := keyMapping.ColVec(keyIdx)
 		lhsHasNull := lhs.MaybeHasNulls()
-		lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 
 		rhs := b.ColVec(int(colIdx))
 		rhsHasNull := rhs.MaybeHasNulls()
@@ -138,14 +140,19 @@ func (v hashAggFuncs) match(
 		case _TYPES_T:
 			lhsCol := lhs._TemplateType()
 			rhsCol := rhs._TemplateType()
-			if lhsHasNull && rhsHasNull {
-				_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, true)
-			} else if lhsHasNull && !rhsHasNull {
-				_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, false)
-			} else if !lhsHasNull && rhsHasNull {
-				_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, true)
+			if lhsHasNull {
+				lhsNull := lhs.Nulls().NullAt(v.keyIdx)
+				if rhsHasNull {
+					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, true)
+				} else {
+					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, false)
+				}
 			} else {
-				_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, false)
+				if rhsHasNull {
+					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, true)
+				} else {
+					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, false)
+				}
 			}
 		// {{end}}
 		default:

@@ -34,12 +34,13 @@ var (
 type aggregatorTestCase struct {
 	// colTypes, aggFns, groupCols, and aggCols will be set to their default
 	// values before running a test if nil.
-	colTypes  []coltypes.T
-	aggFns    []execinfrapb.AggregatorSpec_Func
-	groupCols []uint32
-	aggCols   [][]uint32
-	input     tuples
-	expected  tuples
+	colTypes       []coltypes.T
+	aggFns         []execinfrapb.AggregatorSpec_Func
+	groupCols      []uint32
+	aggCols        [][]uint32
+	input          tuples
+	unorderedInput bool
+	expected       tuples
 	// {output}BatchSize() if not 0 are passed in to NewOrderedAggregator to
 	// divide input/output batches.
 	batchSize       int
@@ -271,6 +272,19 @@ func TestAggregatorOneFunc(t *testing.T) {
 			groupCols:       []uint32{1, 2},
 			aggCols:         [][]uint32{{0}},
 		},
+		{
+			input: tuples{
+				{nil, 1},
+				{4, 42},
+				{nil, 2},
+			},
+			expected: tuples{
+				{3},
+				{42},
+			},
+			name:           "UnorderedWithNullsInGroupingCol",
+			unorderedInput: true,
+		},
 	}
 
 	// Run tests with deliberate batch sizes and no selection vectors.
@@ -280,31 +294,38 @@ func TestAggregatorOneFunc(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			tupleSource := newOpTestInput(tc.batchSize, tc.input, nil /* typs */)
-			a, err := NewOrderedAggregator(
-				testAllocator,
-				tupleSource,
-				tc.colTypes,
-				tc.aggFns,
-				tc.groupCols,
-				tc.aggCols,
-				false, /* isScalar */
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
+			if !tc.unorderedInput {
+				tupleSource := newOpTestInput(tc.batchSize, tc.input, nil /* typs */)
+				a, err := NewOrderedAggregator(
+					testAllocator,
+					tupleSource,
+					tc.colTypes,
+					tc.aggFns,
+					tc.groupCols,
+					tc.aggCols,
+					false, /* isScalar */
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			out := newOpTestOutput(a, tc.expected)
-			// Explicitly reinitialize the aggregator with the given output batch
-			// size.
-			a.(*orderedAggregator).initWithInputAndOutputBatchSize(tc.batchSize, tc.outputBatchSize)
-			if err := out.VerifyAnyOrder(); err != nil {
-				t.Fatal(err)
+				out := newOpTestOutput(a, tc.expected)
+				// Explicitly reinitialize the aggregator with the given output batch
+				// size.
+				a.(*orderedAggregator).initWithInputAndOutputBatchSize(tc.batchSize, tc.outputBatchSize)
+				if err := out.VerifyAnyOrder(); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			// Run randomized tests on this test case.
 			t.Run(fmt.Sprintf("Randomized"), func(t *testing.T) {
 				for _, agg := range aggTypes {
+					if tc.unorderedInput && agg.name == "ordered" {
+						// This test case has unordered input, so we skip ordered
+						// aggregator.
+						continue
+					}
 					t.Run(agg.name, func(t *testing.T) {
 						runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
 							func(input []Operator) (Operator, error) {
