@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/pkg/errors"
 )
 
@@ -514,11 +515,14 @@ func (b *changefeedResumer) Resume(
 			return nil
 		}
 		if !IsRetryableError(err) {
-			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, crdberrors.Safe(err))
 			return err
 		}
 
-		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
+		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, crdberrors.Safe(err))
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)
 		}
@@ -526,9 +530,12 @@ func (b *changefeedResumer) Resume(
 		// been updated by the changeFrontier processor since the flow started.
 		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
 		if reloadErr != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress; `+
 				`continuing from last known high-water of %s: %v`,
-				jobID, progress.GetHighWater(), reloadErr)
+				jobID, progress.GetHighWater(), crdberrors.Safe(reloadErr))
 		} else {
 			progress = reloadedJob.Progress()
 		}
