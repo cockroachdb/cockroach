@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-//go:generate ../../../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
