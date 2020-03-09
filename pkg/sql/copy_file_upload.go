@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +50,7 @@ func newFileUploadMachine(
 	conn pgwirebase.Conn,
 	n *tree.CopyFrom,
 	execCfg *ExecutorConfig,
-	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time),
+	resetPlanner func(p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time),
 ) (f *fileUploadMachine, retErr error) {
 	if len(n.Columns) != 0 {
 		return nil, errors.New("expected 0 columns specified for file uploads")

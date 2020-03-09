@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -29,7 +29,7 @@ func RunNemesis(
 	rng *rand.Rand,
 	ct ClosedTimestampTargetInterval,
 	config GeneratorConfig,
-	dbs ...*client.DB,
+	dbs ...*kv.DB,
 ) ([]error, error) {
 	const concurrency, numSteps = 5, 30
 

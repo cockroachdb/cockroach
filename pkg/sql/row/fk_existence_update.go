@@ -13,7 +13,7 @@ package row
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -63,7 +63,7 @@ type fkExistenceCheckForUpdate struct {
 // makeFkExistenceCheckHelperForUpdate instantiates an update helper.
 func makeFkExistenceCheckHelperForUpdate(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,

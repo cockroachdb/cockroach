@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -153,7 +153,7 @@ func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 // Config contains the dependencies to construct a Queue.
 type Config struct {
 	RangeDesc *roachpb.RangeDescriptor
-	DB        *client.DB
+	DB        *kv.DB
 	Clock     *hlc.Clock
 	Stopper   *stop.Stopper
 	Metrics   *Metrics
@@ -861,7 +861,7 @@ func (q *Queue) queryTxnStatus(
 	dependents []uuid.UUID,
 	now hlc.Timestamp,
 ) (*roachpb.Transaction, []uuid.UUID, *roachpb.Error) {
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
 	b.AddRawRequest(&roachpb.QueryTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -917,7 +917,7 @@ func (q *Queue) forcePushAbort(
 	forcePush := *req
 	forcePush.Force = true
 	forcePush.PushType = roachpb.PUSH_ABORT
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
 	b.AddRawRequest(&forcePush)
 	if err := q.cfg.DB.Run(ctx, b); err != nil {

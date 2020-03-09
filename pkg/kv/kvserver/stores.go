@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,7 +52,7 @@ type Stores struct {
 	}
 }
 
-var _ client.Sender = &Stores{}  // Stores implements the client.Sender interface
+var _ kv.Sender = &Stores{}      // Stores implements the client.Sender interface
 var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interface
 
 // NewStores returns a local-only sender which directly accesses

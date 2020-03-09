@@ -34,15 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -72,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -176,9 +176,9 @@ type Server struct {
 	nodeDialer       *nodedialer.Dialer
 	nodeLiveness     *kvserver.NodeLiveness
 	storePool        *kvserver.StorePool
-	tcsFactory       *kv.TxnCoordSenderFactory
-	distSender       *kv.DistSender
-	db               *client.DB
+	tcsFactory       *kvcoord.TxnCoordSenderFactory
+	distSender       *kvcoord.DistSender
+	db               *kv.DB
 	pgServer         *pgwire.Server
 	distSQLServer    *distsql.ServerImpl
 	node             *Node
@@ -321,16 +321,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// However, on a single-node setup (such as a test), retries will never
 	// succeed because the only server has been shut down; thus, the
 	// DistSender needs to know that it should not retry in this situation.
-	var clientTestingKnobs kv.ClientTestingKnobs
+	var clientTestingKnobs kvcoord.ClientTestingKnobs
 	if kvKnobs := s.cfg.TestingKnobs.KVClient; kvKnobs != nil {
-		clientTestingKnobs = *kvKnobs.(*kv.ClientTestingKnobs)
+		clientTestingKnobs = *kvKnobs.(*kvcoord.ClientTestingKnobs)
 	}
 	retryOpts := s.cfg.RetryOptions
 	if retryOpts == (retry.Options{}) {
 		retryOpts = base.DefaultRetryOptions()
 	}
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
-	distSenderCfg := kv.DistSenderConfig{
+	distSenderCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:      s.cfg.AmbientCtx,
 		Settings:        st,
 		Clock:           s.clock,
@@ -339,12 +339,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TestingKnobs:    clientTestingKnobs,
 		NodeDialer:      s.nodeDialer,
 	}
-	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
+	s.distSender = kvcoord.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
 
-	txnMetrics := kv.MakeTxnMetrics(s.cfg.HistogramWindowInterval())
+	txnMetrics := kvcoord.MakeTxnMetrics(s.cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(txnMetrics)
-	txnCoordSenderFactoryCfg := kv.TxnCoordSenderFactoryConfig{
+	txnCoordSenderFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
 		AmbientCtx:   s.cfg.AmbientCtx,
 		Settings:     st,
 		Clock:        s.clock,
@@ -353,12 +353,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Metrics:      txnMetrics,
 		TestingKnobs: clientTestingKnobs,
 	}
-	s.tcsFactory = kv.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)
+	s.tcsFactory = kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)
 
-	dbCtx := client.DefaultDBContext()
+	dbCtx := kv.DefaultDBContext()
 	dbCtx.NodeID = &s.nodeIDContainer
 	dbCtx.Stopper = s.stopper
-	s.db = client.NewDBWithContext(s.cfg.AmbientCtx, s.tcsFactory, s.clock, dbCtx)
+	s.db = kv.NewDBWithContext(s.cfg.AmbientCtx, s.tcsFactory, s.clock, dbCtx)
 
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
@@ -629,7 +629,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RuntimeStats:   s.runtime,
 		DB:             s.db,
 		Executor:       internalExecutor,
-		FlowDB:         client.NewDB(s.cfg.AmbientCtx, s.tcsFactory, s.clock),
+		FlowDB:         kv.NewDB(s.cfg.AmbientCtx, s.tcsFactory, s.clock),
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,
@@ -648,7 +648,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		BulkAdder: func(
-			ctx context.Context, db *client.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
+			ctx context.Context, db *kv.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
 		) (storagebase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
@@ -1756,7 +1756,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Run startup migrations (note: these depend on jobs subsystem running).
 	var bootstrapVersion roachpb.Version
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
 	}); err != nil {
 		return err
@@ -2177,7 +2177,7 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 			// update, this would force a 2PC and potentially leave write intents in
 			// the node liveness range. Better to make the event logging best effort
 			// than to slow down future node liveness transactions.
-			if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return eventLogger.InsertEventRecord(
 					ctx, txn, eventType, int32(nodeID), int32(s.NodeID()), struct{}{},
 				)

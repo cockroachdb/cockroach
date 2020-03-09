@@ -15,9 +15,8 @@ package execinfra
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -103,7 +103,7 @@ type ServerConfig struct {
 	RuntimeStats RuntimeStats
 
 	// DB is a handle to the cluster.
-	DB *client.DB
+	DB *kv.DB
 	// Executor can be used to run "internal queries". Note that Flows also have
 	// access to an executor in the EvalContext. That one is "session bound"
 	// whereas this one isn't.
@@ -113,7 +113,7 @@ type ServerConfig struct {
 	// This DB has to be set such that it bypasses the local TxnCoordSender. We
 	// want only the TxnCoordSender on the gateway to be involved with requests
 	// performed by DistSQL.
-	FlowDB       *client.DB
+	FlowDB       *kv.DB
 	RPCContext   *rpc.Context
 	Stopper      *stop.Stopper
 	TestingKnobs TestingKnobs

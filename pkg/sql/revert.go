@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,7 +30,7 @@ const RevertTableDefaultBatchSize = 500000
 // RevertTables reverts the passed table to the target time.
 func RevertTables(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	tables []*sqlbase.TableDescriptor,
 	targetTime hlc.Timestamp,
 	batchSize int64,
@@ -77,7 +77,7 @@ func RevertTables(
 	// parallel (since we're passing a key limit, distsender won't do its usual
 	// splitting/parallel sending to separate ranges).
 	for len(spans) != 0 {
-		var b client.Batch
+		var b kv.Batch
 		for _, span := range spans {
 			b.AddRawRequest(&roachpb.RevertRangeRequest{
 				RequestHeader: roachpb.RequestHeader{

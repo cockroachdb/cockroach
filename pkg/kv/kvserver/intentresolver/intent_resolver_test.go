@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -787,14 +787,14 @@ func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.In
 type sendFunc func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 func newIntentResolverWithSendFuncs(c Config, sf *sendFuncs) *IntentResolver {
-	txnSenderFactory := client.NonTransactionalFactoryFunc(
+	txnSenderFactory := kv.NonTransactionalFactoryFunc(
 		func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			sf.mu.Lock()
 			defer sf.mu.Unlock()
 			f := sf.popLocked()
 			return f(ba)
 		})
-	db := client.NewDB(log.AmbientContext{
+	db := kv.NewDB(log.AmbientContext{
 		Tracer: tracing.NewTracer(),
 	}, txnSenderFactory, c.Clock)
 	c.DB = db

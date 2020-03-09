@@ -15,8 +15,8 @@ package schema
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,7 +28,7 @@ import (
 // Instead, we have to rely on a scan of the kv table.
 // TODO(sqlexec): this should probably be cached.
 func ResolveNameByID(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, schemaID sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, schemaID sqlbase.ID,
 ) (string, error) {
 	// Fast-path for public schema, to avoid hot lookups.
 	if schemaID == keys.PublicSchemaID {
@@ -47,7 +47,7 @@ func ResolveNameByID(
 // GetForDatabase looks up and returns all available
 // schema ids to names for a given database.
 func GetForDatabase(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID,
 ) (map[sqlbase.ID]string, error) {
 	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
 

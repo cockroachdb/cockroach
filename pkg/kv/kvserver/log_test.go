@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -258,7 +258,7 @@ func TestLogRebalances(t *testing.T) {
 	// Log several fake events using the store.
 	const details = "test"
 	logEvent := func(changeType roachpb.ReplicaChangeType, reason storagepb.RangeLogEventReason) {
-		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.InternalReplicas[0], *desc, reason, details)
 		}); err != nil {
 			t.Fatal(err)

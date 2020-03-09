@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -172,7 +172,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	}
 
 	insertStat := func(
-		txn *client.Txn, name string, columnIDs *tree.DArray, createdAt *tree.DTimestamp,
+		txn *kv.Txn, name string, columnIDs *tree.DArray, createdAt *tree.DTimestamp,
 	) error {
 		_, err := executor.Exec(
 			ctx, "insert-statistic", txn,
@@ -198,7 +198,7 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	// Add some stats on column k in table a with a name different from
 	// AutoStatsName, separated by three hours each, starting 7 hours ago.
-	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for i := 0; i < 10; i++ {
 			columnIDsVal := tree.NewDArray(types.Int)
 			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
@@ -228,7 +228,7 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	// Add some stats on column v in table a with name AutoStatsName, separated
 	// by three hours each, starting 6 hours ago.
-	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for i := 0; i < 10; i++ {
 			columnIDsVal := tree.NewDArray(types.Int)
 			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(2))); err != nil {
@@ -276,7 +276,7 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	// Add some stats on column k in table a with name AutoStatsName, separated
 	// by 1.5 hours each, starting 5 hours ago.
-	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for i := 0; i < 10; i++ {
 			columnIDsVal := tree.NewDArray(types.Int)
 			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {

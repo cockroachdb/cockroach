@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -816,7 +816,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		txn := client.NewTxn(ctx, kvDB, s.NodeID())
+		txn := kv.NewTxn(ctx, kvDB, s.NodeID())
 		if err := test.desc.validateCrossReferences(ctx, txn); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {

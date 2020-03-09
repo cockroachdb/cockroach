@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -216,7 +216,7 @@ func (p *planner) truncateTable(
 	nameKey := sqlbase.MakePublicTableNameKey(ctx, p.ExecCfg().Settings, tableDesc.ParentID, tableDesc.GetName()).Key()
 	key := sqlbase.MakePublicTableNameKey(ctx, p.ExecCfg().Settings, newTableDesc.ParentID, newTableDesc.Name).Key()
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.
 	if traceKV {
 		log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
@@ -288,7 +288,7 @@ func (p *planner) truncateTable(
 	}
 
 	// Copy the zone config.
-	b = &client.Batch{}
+	b = &kv.Batch{}
 	b.Get(zoneKey)
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
@@ -543,7 +543,7 @@ func reassignIndexComment(
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
 func truncateTableInChunks(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *kv.DB, traceKV bool,
 ) error {
 	const chunkSize = TableTruncateChunkSize
 	var resume roachpb.Span
@@ -553,7 +553,7 @@ func truncateTableInChunks(
 		if traceKV {
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.Name, rowIdx, resume)
 		}
-		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			rd, err := row.MakeDeleter(
 				ctx,
 				txn,

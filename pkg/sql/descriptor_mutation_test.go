@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -35,12 +35,12 @@ type mutationTest struct {
 	// SQLRunner embeds testing.TB
 	testing.TB
 	*sqlutils.SQLRunner
-	kvDB      *client.DB
+	kvDB      *kv.DB
 	tableDesc *sqlbase.TableDescriptor
 }
 
 func makeMutationTest(
-	t *testing.T, kvDB *client.DB, db *gosql.DB, tableDesc *sqlbase.TableDescriptor,
+	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *sqlbase.TableDescriptor,
 ) mutationTest {
 	return mutationTest{
 		TB:        t,

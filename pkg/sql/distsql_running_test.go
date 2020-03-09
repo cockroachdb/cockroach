@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -60,7 +60,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
-		client.NewTxn(ctx, db, s.NodeID()),
+		kv.NewTxn(ctx, db, s.NodeID()),
 		security.RootUser,
 		&MemoryMetrics{},
 		&execCfg,
@@ -75,7 +75,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	push := func(ctx context.Context, key roachpb.Key) error {
 		// Conflicting transaction that pushes another transaction.
-		conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		conflictTxn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		// We need to explicitly set a high priority for the push to happen.
 		if err := conflictTxn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
@@ -90,8 +90,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	// Make a db with a short heartbeat interval, so that the aborted txn finds
 	// out quickly.
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tsf := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			// Short heartbeat interval.
 			HeartbeatInterval: time.Millisecond,
@@ -99,15 +99,15 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		s.DistSenderI().(*kv.DistSender),
+		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := client.NewDB(ambient, tsf, s.Clock())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
 	runningCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
 	defer cancel()
-	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *client.Txn) error {
+	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *kv.Txn) error {
 		iter++
 		if iter == 1 {
 			// On the first iteration, abort the txn.
@@ -122,7 +122,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 			// Now wait until the heartbeat loop notices that the transaction is aborted.
 			testutils.SucceedsSoon(t, func() error {
-				if txn.Sender().(*kv.TxnCoordSender).IsTracking() {
+				if txn.Sender().(*kvcoord.TxnCoordSender).IsTracking() {
 					return fmt.Errorf("txn heartbeat loop running")
 				}
 				return nil
@@ -193,7 +193,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	txn := client.NewTxn(ctx, db, s.NodeID())
+	txn := kv.NewTxn(ctx, db, s.NodeID())
 
 	// We're going to use a rowResultWriter to which only errors will be passed.
 	rw := newCallbackResultWriter(nil /* fn */)

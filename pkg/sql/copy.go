@@ -18,7 +18,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -71,7 +71,7 @@ type copyMachine struct {
 
 	// resetPlanner is a function to be used to prepare the planner for inserting
 	// data.
-	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time)
+	resetPlanner func(p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
 
 	// execInsertPlan is a function to be used to execute the plan (stored in the
 	// planner) which performs an INSERT.
@@ -98,7 +98,7 @@ func newCopyMachine(
 	n *tree.CopyFrom,
 	txnOpt copyTxnOpt,
 	execCfg *ExecutorConfig,
-	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time),
+	resetPlanner func(p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time),
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
@@ -151,7 +151,7 @@ type copyTxnOpt struct {
 	// performed. Committing the txn is left to the higher layer.  If not set, the
 	// machine will split writes between multiple transactions that it will
 	// initiate.
-	txn           *client.Txn
+	txn           *kv.Txn
 	txnTimestamp  time.Time
 	stmtTimestamp time.Time
 }
@@ -292,7 +292,7 @@ func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, 
 	stmtTs := c.txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		txn = client.NewTxnWithSteppingEnabled(ctx, c.p.execCfg.DB, c.p.execCfg.NodeID.Get())
+		txn = kv.NewTxnWithSteppingEnabled(ctx, c.p.execCfg.DB, c.p.execCfg.NodeID.Get())
 		txnTs = c.p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true

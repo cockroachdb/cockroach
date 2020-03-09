@@ -16,7 +16,7 @@ import (
 	"errors"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,13 +60,13 @@ type stmtDiagnosticsRequestRegistry struct {
 		epoch int
 	}
 	ie     *InternalExecutor
-	db     *client.DB
+	db     *kv.DB
 	gossip *gossip.Gossip
 	nodeID roachpb.NodeID
 }
 
 func newStmtDiagnosticsRequestRegistry(
-	ie *InternalExecutor, db *client.DB, g *gossip.Gossip, nodeID roachpb.NodeID,
+	ie *InternalExecutor, db *kv.DB, g *gossip.Gossip, nodeID roachpb.NodeID,
 ) *stmtDiagnosticsRequestRegistry {
 	r := &stmtDiagnosticsRequestRegistry{
 		ie:     ie,
@@ -117,7 +117,7 @@ func (r *stmtDiagnosticsRequestRegistry) InsertRequest(
 	ctx context.Context, fprint string,
 ) (int, error) {
 	var requestID int
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
 			sqlbase.InternalExecutorSessionDataOverride{
@@ -260,7 +260,7 @@ func (r *stmtDiagnosticsRequestRegistry) shouldCollectDiagnostics(
 func (r *stmtDiagnosticsRequestRegistry) insertDiagnostics(
 	ctx context.Context, req stmtDiagRequest, stmt string, trace tracing.Recording,
 ) error {
-	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		{
 			row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-completed", txn,
 				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},

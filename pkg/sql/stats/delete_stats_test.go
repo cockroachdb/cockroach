@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -251,7 +251,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	checkDelete := func(
 		tableID sqlbase.ID, columnIDs []sqlbase.ColumnID, expectDeleted map[uint64]struct{},
 	) error {
-		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return DeleteOldStatsForColumns(ctx, ex, txn, tableID, columnIDs)
 		}); err != nil {
 			return err

@@ -13,7 +13,7 @@ package row
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -30,7 +30,7 @@ import (
 
 // cascader is used to handle all referential integrity cascading actions.
 type cascader struct {
-	txn      *client.Txn
+	txn      *kv.Txn
 	fkTables FkTableMetadata
 	alloc    *sqlbase.DatumAlloc
 	evalCtx  *tree.EvalContext
@@ -53,7 +53,7 @@ type cascader struct {
 // a possible cascade. It returns a cascader if one is required and nil if not.
 func makeDeleteCascader(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	tablesByID FkTableMetadata,
 	evalCtx *tree.EvalContext,
@@ -107,7 +107,7 @@ func makeDeleteCascader(
 	// it will also enable any interleaved read part to observe the
 	// mutation, and thus introduce the risk of a Halloween problem for
 	// any mutation that uses FK relationships.
-	_ = txn.ConfigureStepping(ctx, client.SteppingDisabled)
+	_ = txn.ConfigureStepping(ctx, kv.SteppingDisabled)
 
 	return &cascader{
 		txn:                txn,
@@ -129,7 +129,7 @@ func makeDeleteCascader(
 // a possible cascade. It returns a cascader if one is required and nil if not.
 func makeUpdateCascader(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	tablesByID FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
@@ -198,7 +198,7 @@ func makeUpdateCascader(
 	// it will also enable any interleaved read part to observe the
 	// mutation, and thus introduce the risk of a Halloween problem for
 	// any mutation that uses FK relationships.
-	_ = txn.ConfigureStepping(ctx, client.SteppingDisabled)
+	_ = txn.ConfigureStepping(ctx, kv.SteppingDisabled)
 
 	return &cascader{
 		txn:                txn,

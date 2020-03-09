@@ -21,7 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -688,7 +688,7 @@ func (s *Server) newConnExecutorWithTxn(
 	parentMon *mon.BytesMonitor,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tcModifier tableCollectionModifier,
 	resetOpt sdResetOption,
 ) (*connExecutor, error) {
@@ -1776,7 +1776,7 @@ func (ex *connExecutor) execCopyIn(
 	}
 	var cm copyMachineInterface
 	var err error
-	resetPlanner := func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
+	resetPlanner := func(p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 		// HACK: We're reaching inside ex.state and changing sqlTimestamp by hand.
 		// It is used by resetPlanner. Normally sqlTimestamp is updated by the
 		// state machine, but the copyMachine manages its own transactions without
@@ -2022,9 +2022,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 // return for statements executed with this evalCtx. Since generally each
 // statement is supposed to have a different timestamp, the evalCtx generally
 // shouldn't be reused across statements.
-func (ex *connExecutor) resetEvalCtx(
-	evalCtx *extendedEvalContext, txn *client.Txn, stmtTS time.Time,
-) {
+func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
@@ -2073,11 +2071,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 }
 
 func (ex *connExecutor) resetPlanner(
-	ctx context.Context,
-	p *planner,
-	txn *client.Txn,
-	stmtTS time.Time,
-	numAnnotations tree.AnnotationIdx,
+	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time, numAnnotations tree.AnnotationIdx,
 ) {
 	p.txn = txn
 	p.stmt = nil

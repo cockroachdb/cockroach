@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -96,7 +96,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Split the range so that the RHS uses epoch-based leases.
 	startKey := []byte("a")
 	splitArgs := adminSplitArgs(startKey)
-	if _, pErr := client.SendWrapped(ctx, db, splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, db, splitArgs); pErr != nil {
 		t.Fatalf("split saw unexpected error: %v", pErr)
 	}
 	rangeID := mtc.Store(0).LookupReplica(startKey).RangeID
@@ -106,7 +106,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	mtc.manualClock.Increment(1)
 	ts1 := mtc.clock.Now()
 	incArgs := incrementArgs(roachpb.Key("b"), 9)
-	_, pErr := client.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts1}, incArgs)
+	_, pErr := kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts1}, incArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -179,7 +179,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	mtc.manualClock.Increment(1)
 	ts2 := mtc.clock.Now()
 	pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
-	_, pErr = client.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts2}, pArgs)
+	_, pErr = kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts2}, pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -187,7 +187,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Insert a second key transactionally.
 	mtc.manualClock.Increment(1)
 	ts3 := mtc.clock.Now()
-	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, ts3)
 		return txn.Put(ctx, roachpb.Key("m"), []byte("val3"))
 	}); err != nil {
@@ -201,7 +201,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Update the originally incremented key non-transactionally.
 	mtc.manualClock.Increment(1)
 	ts4 := mtc.clock.Now()
-	_, pErr = client.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts4}, incArgs)
+	_, pErr = kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts4}, incArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -209,7 +209,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Update the originally incremented key transactionally.
 	mtc.manualClock.Increment(1)
 	ts5 := mtc.clock.Now()
-	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, ts5)
 		_, err := txn.Inc(ctx, incArgs.Key, 7)
 		return err
@@ -361,7 +361,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Split the range so that the RHS uses epoch-based leases.
 		splitArgs := adminSplitArgs(startKey)
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 			subT.Fatalf("split saw unexpected error: %v", pErr)
 		}
 		rangeID := mtc.Store(0).LookupReplica(startKey).RangeID
@@ -369,7 +369,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Write to the RHS of the split and wait for all replicas to process it.
 		// This ensures that all replicas have seen the split before we move on.
 		incArgs := incrementArgs(roachpb.Key("a"), 9)
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(roachpb.Key("a"), []int64{9, 9, 9})
@@ -482,7 +482,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Split the range.
 		args := adminSplitArgs([]byte("m"))
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], args); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], args); pErr != nil {
 			t.Fatalf("split saw unexpected error: %v", pErr)
 		}
 
@@ -497,7 +497,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Split the range.
 		splitKey := []byte("m")
 		splitArgs := adminSplitArgs(splitKey)
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 			t.Fatalf("split saw unexpected error: %v", pErr)
 		}
 		rightRangeID := mtc.Store(0).LookupReplica(splitKey).RangeID
@@ -505,7 +505,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Write to the RHS of the split and wait for all replicas to process it.
 		// This ensures that all replicas have seen the split before we move on.
 		incArgs := incrementArgs(roachpb.Key("n"), 9)
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(roachpb.Key("n"), []int64{9, 9, 9})
@@ -548,7 +548,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Merge the ranges back together
 		mergeArgs := adminMergeArgs(startKey)
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
 			t.Fatalf("merge saw unexpected error: %v", pErr)
 		}
 
@@ -612,7 +612,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Perform a write on the range.
 		pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], pArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -631,7 +631,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// replica rejoins the rest of the range.
 		truncArgs := truncateLogArgs(index+1, rangeID)
 		truncArgs.Key = startKey
-		if _, err := client.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
+		if _, err := kv.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
 			t.Fatal(err)
 		}
 
@@ -686,7 +686,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Perform a write on the range.
 		pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
-		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], pArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -739,7 +739,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	rangeFeedErrC := make(chan error, len(repls))
 	for i := range repls {
 		desc := repls[i].Desc()
-		ds := tc.Server(i).DistSenderI().(*kv.DistSender)
+		ds := tc.Server(i).DistSenderI().(*kvcoord.DistSender)
 		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
 		rangeFeedChs[i] = rangeFeedCh
 		go func() {
@@ -849,7 +849,7 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	rangeFeedChs := make([]chan *roachpb.RangeFeedEvent, len(repls))
 	rangeFeedErrC := make(chan error, len(repls))
 	for i := range repls {
-		ds := tc.Server(i).DistSenderI().(*kv.DistSender)
+		ds := tc.Server(i).DistSenderI().(*kvcoord.DistSender)
 		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
 		rangeFeedChs[i] = rangeFeedCh
 		go func() {

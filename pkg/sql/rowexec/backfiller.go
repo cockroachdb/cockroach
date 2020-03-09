@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -236,7 +236,7 @@ func (b *backfiller) mainLoop(
 func GetResumeSpans(
 	ctx context.Context,
 	jobsRegistry *jobs.Registry,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableID sqlbase.ID,
 	mutationID sqlbase.MutationID,
 	filter backfill.MutationFilter,
@@ -296,7 +296,7 @@ func GetResumeSpans(
 
 // SetResumeSpansInJob adds a list of resume spans into a job details field.
 func SetResumeSpansInJob(
-	ctx context.Context, spans []roachpb.Span, mutationIdx int, txn *client.Txn, job *jobs.Job,
+	ctx context.Context, spans []roachpb.Span, mutationIdx int, txn *kv.Txn, job *jobs.Job,
 ) error {
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
@@ -311,7 +311,7 @@ func SetResumeSpansInJob(
 // resume is the left over work from origSpan.
 func WriteResumeSpan(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	id sqlbase.ID,
 	mutationID sqlbase.MutationID,
 	filter backfill.MutationFilter,
@@ -321,7 +321,7 @@ func WriteResumeSpan(
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
 	defer tracing.FinishSpan(traceSpan)
 
-	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		resumeSpans, job, mutationIdx, error := GetResumeSpans(ctx, jobsRegistry, txn, id, mutationID, filter)
 		if error != nil {
 			return error

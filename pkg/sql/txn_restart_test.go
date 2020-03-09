@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1097,7 +1097,7 @@ func TestNonRetryableError(t *testing.T) {
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !client.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					hitError = true
 					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
 				}
@@ -1151,7 +1151,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 			// Hack to advance the transaction timestamp on a transaction restart.
 			for _, union := range ba.Requests {
 				if req, ok := union.GetInner().(*roachpb.ScanRequest); ok {
-					if bytes.Contains(req.Key, testKey) && !client.TestingIsRangeLookupRequest(req) {
+					if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 						atomic.AddInt32(&clockUpdate, 1)
 						now := c.Now()
 						now.WallTime += advancement.Nanoseconds()
@@ -1164,7 +1164,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	}
 
 	const refreshAttempts = 3
-	clientTestingKnobs := &kv.ClientTestingKnobs{
+	clientTestingKnobs := &kvcoord.ClientTestingKnobs{
 		MaxTxnRefreshAttempts: refreshAttempts,
 	}
 
@@ -1184,7 +1184,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 			}
 
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !client.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					atomic.AddInt32(&restartDone, 1)
 					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on retry.
 					txn := args.Hdr.Txn
@@ -1254,7 +1254,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 			}
 
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !client.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					atomic.AddInt32(&restartDone, 1)
 					// Return ReadWithinUncertaintyIntervalError.
 					txn := args.Hdr.Txn

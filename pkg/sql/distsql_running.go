@@ -17,8 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -282,7 +282,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 // resources.
 func (dsp *DistSQLPlanner) Run(
 	planCtx *PlanningCtx,
-	txn *client.Txn,
+	txn *kv.Txn,
 	plan *PhysicalPlan,
 	recv *DistSQLReceiver,
 	evalCtx *extendedEvalContext,
@@ -447,8 +447,8 @@ type DistSQLReceiver struct {
 	alloc  sqlbase.DatumAlloc
 	closed bool
 
-	rangeCache *kv.RangeDescriptorCache
-	leaseCache *kv.LeaseHolderCache
+	rangeCache *kvcoord.RangeDescriptorCache
+	leaseCache *kvcoord.LeaseHolderCache
 	tracing    *SessionTracing
 	cleanup    func()
 
@@ -458,7 +458,7 @@ type DistSQLReceiver struct {
 	// pass back LeafTxnFinalState objects via ProducerMetas. Nil if no
 	// transaction should be updated on errors (i.e. if the flow overall
 	// doesn't run in a transaction).
-	txn *client.Txn
+	txn *kv.Txn
 
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
@@ -541,9 +541,9 @@ func MakeDistSQLReceiver(
 	ctx context.Context,
 	resultWriter rowResultWriter,
 	stmtType tree.StatementType,
-	rangeCache *kv.RangeDescriptorCache,
-	leaseCache *kv.LeaseHolderCache,
-	txn *client.Txn,
+	rangeCache *kvcoord.RangeDescriptorCache,
+	leaseCache *kvcoord.LeaseHolderCache,
+	txn *kv.Txn,
 	updateClock func(observedTs hlc.Timestamp),
 	tracing *SessionTracing,
 ) *DistSQLReceiver {
@@ -972,7 +972,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
-	txn *client.Txn,
+	txn *kv.Txn,
 	plan planNode,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
@@ -998,7 +998,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
 ) bool {
-	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, client.SteppingEnabled)
+	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
 	defer func() { _ = planner.Txn().ConfigureStepping(ctx, prevSteppingMode) }()
 	for _, postqueryPlan := range postqueryPlans {
 		// We place a sequence point before every postquery, so

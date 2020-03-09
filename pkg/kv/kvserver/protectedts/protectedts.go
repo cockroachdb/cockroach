@@ -16,7 +16,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,7 +64,7 @@ type Storage interface {
 	//
 	// An error will be returned if the ID of the provided record already exists
 	// so callers should be sure to generate new IDs when creating records.
-	Protect(context.Context, *client.Txn, *ptpb.Record) error
+	Protect(context.Context, *kv.Txn, *ptpb.Record) error
 
 	// GetRecord retreives the record with the specified UUID as well as the MVCC
 	// timestamp at which it was written. If no corresponding record exists
@@ -75,26 +75,26 @@ type Storage interface {
 	// should be protected as well as the timestamp at which the Record providing
 	// that protection is known to be alive. The ReadTimestamp of the Txn used in
 	// this method can be used to provide such a timestamp.
-	GetRecord(context.Context, *client.Txn, uuid.UUID) (*ptpb.Record, error)
+	GetRecord(context.Context, *kv.Txn, uuid.UUID) (*ptpb.Record, error)
 
 	// MarkVerified will mark a protected timestamp as verified.
 	//
 	// This method is generally used by an implementation of Verifier.
-	MarkVerified(context.Context, *client.Txn, uuid.UUID) error
+	MarkVerified(context.Context, *kv.Txn, uuid.UUID) error
 
 	// Release allows spans which were previously protected to now be garbage
 	// collected.
 	//
 	// If the specified UUID does not exist ErrNotFound is returned but the
 	// passed txn remains safe for future use.
-	Release(context.Context, *client.Txn, uuid.UUID) error
+	Release(context.Context, *kv.Txn, uuid.UUID) error
 
 	// GetMetadata retreives the metadata with the provided Txn.
-	GetMetadata(context.Context, *client.Txn) (ptpb.Metadata, error)
+	GetMetadata(context.Context, *kv.Txn) (ptpb.Metadata, error)
 
 	// GetState retreives the entire state of protectedts.Storage with the
 	// provided Txn.
-	GetState(context.Context, *client.Txn) (ptpb.State, error)
+	GetState(context.Context, *kv.Txn) (ptpb.State, error)
 }
 
 // Iterator iterates records in a cache until wantMore is false or all Records

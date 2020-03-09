@@ -13,7 +13,7 @@ package sqlutil
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -33,7 +33,7 @@ type InternalExecutor interface {
 	// Exec is deprecated because it may transparently execute a query as root. Use
 	// ExecEx instead.
 	Exec(
-		ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
+		ctx context.Context, opName string, txn *kv.Txn, statement string, params ...interface{},
 	) (int, error)
 
 	// ExecEx is like Exec, but allows the caller to override some session data
@@ -44,7 +44,7 @@ type InternalExecutor interface {
 	ExecEx(
 		ctx context.Context,
 		opName string,
-		txn *client.Txn,
+		txn *kv.Txn,
 		o sqlbase.InternalExecutorSessionDataOverride,
 		stmt string,
 		qargs ...interface{},
@@ -59,7 +59,7 @@ type InternalExecutor interface {
 	// Query is deprecated because it may transparently execute a query as root. Use
 	// QueryEx instead.
 	Query(
-		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+		ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
 	) ([]tree.Datums, error)
 
 	// QueryEx is like Query, but allows the caller to override some session data
@@ -70,7 +70,7 @@ type InternalExecutor interface {
 	QueryEx(
 		ctx context.Context,
 		opName string,
-		txn *client.Txn,
+		txn *kv.Txn,
 		session sqlbase.InternalExecutorSessionDataOverride,
 		stmt string,
 		qargs ...interface{},
@@ -79,7 +79,7 @@ type InternalExecutor interface {
 	// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
 	// of the input query.
 	QueryWithCols(
-		ctx context.Context, opName string, txn *client.Txn,
+		ctx context.Context, opName string, txn *kv.Txn,
 		o sqlbase.InternalExecutorSessionDataOverride, statement string, qargs ...interface{},
 	) ([]tree.Datums, sqlbase.ResultColumns, error)
 
@@ -88,7 +88,7 @@ type InternalExecutor interface {
 	//
 	// QueryRow is deprecated (like Query). Use QueryRowEx() instead.
 	QueryRow(
-		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+		ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
 	) (tree.Datums, error)
 
 	// QueryRowEx is like QueryRow, but allows the caller to override some session data
@@ -99,7 +99,7 @@ type InternalExecutor interface {
 	QueryRowEx(
 		ctx context.Context,
 		opName string,
-		txn *client.Txn,
+		txn *kv.Txn,
 		session sqlbase.InternalExecutorSessionDataOverride,
 		stmt string,
 		qargs ...interface{},

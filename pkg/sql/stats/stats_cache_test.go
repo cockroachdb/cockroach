@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -34,7 +34,7 @@ import (
 )
 
 func insertTableStat(
-	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, stat *TableStatisticProto,
+	ctx context.Context, db *kv.DB, ex sqlutil.InternalExecutor, stat *TableStatisticProto,
 ) error {
 	insertStatStmt := `
 INSERT INTO system.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
@@ -134,7 +134,7 @@ func checkStats(actual []*TableStatistic, expected []*TableStatisticProto) bool 
 }
 
 func initTestData(
-	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor,
+	ctx context.Context, db *kv.DB, ex sqlutil.InternalExecutor,
 ) (map[sqlbase.ID][]*TableStatisticProto, error) {
 	// The expected stats must be ordered by TableID+, CreatedAt- so they can
 	// later be compared with the returned stats using reflect.DeepEqual.

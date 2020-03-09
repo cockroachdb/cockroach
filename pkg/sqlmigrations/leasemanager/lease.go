@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -43,7 +43,7 @@ func (e *LeaseNotAvailableError) Error() string {
 // LeaseManager provides functionality for acquiring and managing leases
 // via the kv api.
 type LeaseManager struct {
-	db            *client.DB
+	db            *kv.DB
 	clock         *hlc.Clock
 	clientID      string
 	leaseDuration time.Duration
@@ -67,7 +67,7 @@ type Options struct {
 }
 
 // New allocates a new LeaseManager.
-func New(db *client.DB, clock *hlc.Clock, options Options) *LeaseManager {
+func New(db *kv.DB, clock *hlc.Clock, options Options) *LeaseManager {
 	if options.ClientID == "" {
 		options.ClientID = uuid.MakeV4().String()
 	}
@@ -94,7 +94,7 @@ func (m *LeaseManager) AcquireLease(ctx context.Context, key roachpb.Key) (*Leas
 		key: key,
 	}
 	lease.val.sem = make(chan struct{}, 1)
-	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := m.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var val LeaseVal
 		err := txn.GetProto(ctx, key, &val)
 		if err != nil {

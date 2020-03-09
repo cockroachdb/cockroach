@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -46,7 +46,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {
 				planner, cleanup := sql.NewInternalPlanner(
 					"test",
-					client.NewTxn(ctx, s.DB(), s.NodeID()),
+					kv.NewTxn(ctx, s.DB(), s.NodeID()),
 					security.RootUser,
 					&sql.MemoryMetrics{},
 					&execCfg,

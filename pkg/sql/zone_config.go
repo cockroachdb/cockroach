@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -171,7 +171,7 @@ func ZoneConfigHook(
 // object ID, index, and partition.
 func GetZoneConfigInTxn(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	id uint32,
 	index *sqlbase.IndexDescriptor,
 	partition string,
@@ -259,7 +259,7 @@ func (p *planner) resolveTableForZone(
 // specifier points to a table, index or partition, the table part
 // must be properly normalized already. It is the caller's
 // responsibility to do this using e.g .resolveTableForZone().
-func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
+func resolveZone(ctx context.Context, txn *kv.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := zonepb.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
@@ -314,7 +314,7 @@ func resolveSubzone(
 
 func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	idxDesc *sqlbase.IndexDescriptor,
 	oldPartDesc *sqlbase.PartitioningDescriptor,

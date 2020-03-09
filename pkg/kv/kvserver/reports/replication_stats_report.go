@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -93,7 +93,7 @@ func (r *replicationStatsReportSaver) AddZoneRangeStatus(
 }
 
 func (r *replicationStatsReportSaver) loadPreviousVersion(
-	ctx context.Context, ex sqlutil.InternalExecutor, txn *client.Txn,
+	ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn,
 ) error {
 	// The data for the previous save needs to be loaded if:
 	// - this is the first time that we call this method and lastUpdatedAt has never been set
@@ -143,7 +143,7 @@ func (r *replicationStatsReportSaver) updatePreviousVersion() {
 }
 
 func (r *replicationStatsReportSaver) updateTimestamp(
-	ctx context.Context, ex sqlutil.InternalExecutor, txn *client.Txn, reportTS time.Time,
+	ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn, reportTS time.Time,
 ) error {
 	if !r.lastGenerated.IsZero() && reportTS == r.lastGenerated {
 		return errors.Errorf(
@@ -168,10 +168,10 @@ func (r *replicationStatsReportSaver) updateTimestamp(
 //
 // reportTS is the time that will be set in the updated_at column for every row.
 func (r *replicationStatsReportSaver) Save(
-	ctx context.Context, reportTS time.Time, db *client.DB, ex sqlutil.InternalExecutor,
+	ctx context.Context, reportTS time.Time, db *kv.DB, ex sqlutil.InternalExecutor,
 ) error {
 	r.lastUpdatedRowCount = 0
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		err := r.loadPreviousVersion(ctx, ex, txn)
 		if err != nil {
 			return err
@@ -226,10 +226,10 @@ func (r *replicationStatsReportSaver) Save(
 func (r *replicationStatsReportSaver) upsertStats(
 	ctx context.Context,
 	reportTS time.Time,
-	txn *client.Txn,
+	txn *kv.Txn,
 	key ZoneKey,
 	stats zoneRangeStatus,
-	db *client.DB,
+	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 ) error {
 	var err error

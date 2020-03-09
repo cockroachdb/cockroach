@@ -13,8 +13,8 @@ package row
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,7 +39,7 @@ type Deleter struct {
 // passed in requestedCols will be included in FetchCols.
 func MakeDeleter(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
 	requestedCols []sqlbase.ColumnDescriptor,
@@ -67,7 +67,7 @@ func MakeDeleter(
 // additional cascader.
 func makeRowDeleterWithoutCascader(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
 	requestedCols []sqlbase.ColumnDescriptor,
@@ -130,11 +130,7 @@ func makeRowDeleterWithoutCascader(
 // orphaned rows. The bytesMonitor is only used if cascading/fk checking and can
 // be nil if not.
 func (rd *Deleter) DeleteRow(
-	ctx context.Context,
-	b *client.Batch,
-	values []tree.Datum,
-	checkFKs checkFKConstraints,
-	traceKV bool,
+	ctx context.Context, b *kv.Batch, values []tree.Datum, checkFKs checkFKConstraints, traceKV bool,
 ) error {
 
 	// Delete the row from any secondary indices.
@@ -199,11 +195,7 @@ func (rd *Deleter) DeleteRow(
 // DeleteIndexRow adds to the batch the kv operations necessary to delete a
 // table row from the given index.
 func (rd *Deleter) DeleteIndexRow(
-	ctx context.Context,
-	b *client.Batch,
-	idx *sqlbase.IndexDescriptor,
-	values []tree.Datum,
-	traceKV bool,
+	ctx context.Context, b *kv.Batch, idx *sqlbase.IndexDescriptor, values []tree.Datum, traceKV bool,
 ) error {
 	if rd.Fks.checker != nil {
 		if err := rd.Fks.addAllIdxChecks(ctx, values, traceKV); err != nil {

@@ -23,10 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -38,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -227,7 +227,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
-				_ context.Context, _ *client.DB, _ hlc.Timestamp,
+				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				_ storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
 				return &doNothingKeyAdder{}, nil
 			},
@@ -325,7 +325,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
-				_ context.Context, _ *client.DB, _ hlc.Timestamp,
+				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				opts storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
 				if opts.Name == "pkAdder" {
 					return pkBulkAdder, nil

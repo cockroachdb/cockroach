@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -165,7 +165,7 @@ func (ex *connExecutor) prepare(
 	// TODO(andrei): Needing a transaction for preparing seems non-sensical, as
 	// the prepared statement outlives the txn. I hope that it's not used for
 	// anything other than getting a timestamp.
-	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get())
+	txn := kv.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get())
 
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
@@ -191,7 +191,7 @@ func (ex *connExecutor) prepare(
 // populatePrepared analyzes and type-checks the query and populates
 // stmt.Prepared.
 func (ex *connExecutor) populatePrepared(
-	ctx context.Context, txn *client.Txn, placeholderHints tree.PlaceholderTypes, p *planner,
+	ctx context.Context, txn *kv.Txn, placeholderHints tree.PlaceholderTypes, p *planner,
 ) (planFlags, error) {
 	stmt := p.stmt
 	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {

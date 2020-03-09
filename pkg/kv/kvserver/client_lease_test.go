@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
@@ -59,7 +59,7 @@ func TestStoreRangeLease(t *testing.T) {
 		}
 		for _, splitKey := range splitKeys {
 			splitArgs := adminSplitArgs(splitKey)
-			if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+			if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
@@ -101,7 +101,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 
 	splitKey := roachpb.Key("a")
 	splitArgs := adminSplitArgs(splitKey)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -167,7 +167,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 
 	splitKey := keys.SystemConfigSplitKey
 	splitArgs := adminSplitArgs(splitKey)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
@@ -373,7 +373,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err = tc.Server(0).DB().AdminChangeReplicas(
-				client.ChangeReplicasCanMixAddAndRemoveContext(ctx),
+				kv.ChangeReplicasCanMixAddAndRemoveContext(ctx),
 				scratchStartKey, desc, []roachpb.ReplicationChange{
 					{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
 					{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},

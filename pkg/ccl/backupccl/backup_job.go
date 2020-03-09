@@ -15,12 +15,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,7 +60,7 @@ func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]struct{}) RowCount {
 	return res
 }
 
-func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
+func allRangeDescriptors(ctx context.Context, txn *kv.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
 		return nil, errors.Wrapf(err,
@@ -161,7 +161,7 @@ type spanAndTime struct {
 //   file.
 func backup(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
@@ -186,7 +186,7 @@ func backup(
 	var checkpointMu syncutil.Mutex
 
 	var ranges []roachpb.RangeDescriptor
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		// TODO(benesch): limit the range descriptors we fetch to the ranges that
 		// are actually relevant in the backup to speed up small backups on large
@@ -306,7 +306,7 @@ func backup(
 					MVCCFilter:                          roachpb.MVCCFilter(backupManifest.MVCCFilter),
 					Encryption:                          encryption,
 				}
-				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+				rawRes, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {
 					return pErr.GoError()
 				}
@@ -518,7 +518,7 @@ func (b *backupResumer) Resume(
 	return nil
 }
 
-func (b *backupResumer) clearStats(ctx context.Context, DB *client.DB) error {
+func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	var backupManifest BackupManifest
 	if err := protoutil.Unmarshal(details.BackupManifest, &backupManifest); err != nil {
@@ -530,7 +530,7 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *client.DB) error {
 		return err
 	}
 	details.BackupManifest = descBytes
-	err = DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err = DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return b.job.WithTxn(txn).SetDetails(ctx, details)
 	})
 	return err

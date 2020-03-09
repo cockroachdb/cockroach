@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -80,11 +80,11 @@ var aclexplodeGeneratorType = types.MakeLabeledTuple(
 // aclExplodeGenerator supports the execution of aclexplode.
 type aclexplodeGenerator struct{}
 
-func (aclexplodeGenerator) ResolvedType() *types.T                       { return aclexplodeGeneratorType }
-func (aclexplodeGenerator) Start(_ context.Context, _ *client.Txn) error { return nil }
-func (aclexplodeGenerator) Close()                                       {}
-func (aclexplodeGenerator) Next(_ context.Context) (bool, error)         { return false, nil }
-func (aclexplodeGenerator) Values() tree.Datums                          { return nil }
+func (aclexplodeGenerator) ResolvedType() *types.T                   { return aclexplodeGeneratorType }
+func (aclexplodeGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (aclexplodeGenerator) Close()                                   {}
+func (aclexplodeGenerator) Next(_ context.Context) (bool, error)     { return false, nil }
+func (aclexplodeGenerator) Values() tree.Datums                      { return nil }
 
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
@@ -321,7 +321,7 @@ func (*keywordsValueGenerator) ResolvedType() *types.T { return keywordsValueGen
 func (*keywordsValueGenerator) Close() {}
 
 // Start implements the tree.ValueGenerator interface.
-func (k *keywordsValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	k.curKeyword = -1
 	return nil
 }
@@ -456,7 +456,7 @@ func (s *seriesValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (s *seriesValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.nextOK = true
 	s.start = s.origStart
 	s.value = s.origStart
@@ -509,7 +509,7 @@ func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.datums = make(tree.Datums, len(s.arrays))
 	s.nextIndex = -1
 	return nil
@@ -559,7 +559,7 @@ func (s *arrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (s *arrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.nextIndex = -1
 	return nil
 }
@@ -608,7 +608,7 @@ func (s *expandArrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (s *expandArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.avg.nextIndex = -1
 	return nil
 }
@@ -675,7 +675,7 @@ func (s *subscriptsValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (s *subscriptsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	if s.reverse {
 		s.avg.nextIndex = s.avg.array.Len()
 	} else {
@@ -726,7 +726,7 @@ func makeUnaryGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenera
 func (*unaryValueGenerator) ResolvedType() *types.T { return unaryValueGeneratorType }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *unaryValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (s *unaryValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	s.done = false
 	return nil
 }
@@ -827,7 +827,7 @@ func (g *jsonArrayGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (g *jsonArrayGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	g.nextIndex = -1
 	g.json.JSON = g.json.JSON.MaybeDecode()
 	g.buf[0] = nil
@@ -900,7 +900,7 @@ func (g *jsonObjectKeysGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Start(_ context.Context, _ *client.Txn) error { return nil }
+func (g *jsonObjectKeysGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
 
 // Close implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Close() {}
@@ -979,7 +979,7 @@ func (g *jsonEachGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) Start(_ context.Context, _ *client.Txn) error {
+func (g *jsonEachGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	iter, err := g.target.ObjectIter()
 	if err != nil {
 		return err
@@ -1023,7 +1023,7 @@ func (g *jsonEachGenerator) Values() tree.Datums {
 
 type checkConsistencyGenerator struct {
 	ctx      context.Context
-	db       *client.DB
+	db       *kv.DB
 	from, to roachpb.Key
 	mode     roachpb.ChecksumMode
 	// remainingRows is populated by Start(). Each Next() call peels of the first
@@ -1082,8 +1082,8 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the tree.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Start(_ context.Context, _ *client.Txn) error {
-	var b client.Batch
+func (c *checkConsistencyGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	var b kv.Batch
 	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    c.from,

@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
@@ -711,7 +711,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(context.Background(), tc.store.TestSender(), &args); err != nil {
+		if _, err := kv.SendWrapped(context.Background(), tc.store.TestSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1012,7 +1012,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		newFirstIndex := indexes[i] + 1
 		truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
 		log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
-		if _, pErr := client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		sideloadStrings := fmtSideloaded()

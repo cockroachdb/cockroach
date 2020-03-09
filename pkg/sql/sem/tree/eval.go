@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -2645,13 +2645,13 @@ type EvalSessionAccessor interface {
 type InternalExecutor interface {
 	// Query is part of the sqlutil.InternalExecutor interface.
 	Query(
-		ctx context.Context, opName string, txn *client.Txn,
+		ctx context.Context, opName string, txn *kv.Txn,
 		stmt string, qargs ...interface{},
 	) ([]Datums, error)
 
 	// QueryRow is part of the sqlutil.InternalExecutor interface.
 	QueryRow(
-		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (Datums, error)
 }
 
@@ -2808,9 +2808,9 @@ type EvalContext struct {
 	Sequence SequenceOperators
 
 	// The transaction in which the statement is executing.
-	Txn *client.Txn
+	Txn *kv.Txn
 	// A handle to the database.
-	DB *client.DB
+	DB *kv.DB
 
 	ReCache *RegexpCache
 	tmpDec  apd.Decimal
@@ -2850,7 +2850,7 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
-		Txn:         &client.Txn{},
+		Txn:         &kv.Txn{},
 		SessionData: &sessiondata.SessionData{},
 		Settings:    st,
 	}
@@ -5310,16 +5310,16 @@ type CallbackValueGenerator struct {
 	// as prev initially, and the value it previously returned for subsequent
 	// invocations. Once it returns -1 or an error, it will not be invoked any
 	// more.
-	cb  func(ctx context.Context, prev int, txn *client.Txn) (int, error)
+	cb  func(ctx context.Context, prev int, txn *kv.Txn) (int, error)
 	val int
-	txn *client.Txn
+	txn *kv.Txn
 }
 
 var _ ValueGenerator = &CallbackValueGenerator{}
 
 // NewCallbackValueGenerator creates a new CallbackValueGenerator.
 func NewCallbackValueGenerator(
-	cb func(ctx context.Context, prev int, txn *client.Txn) (int, error),
+	cb func(ctx context.Context, prev int, txn *kv.Txn) (int, error),
 ) *CallbackValueGenerator {
 	return &CallbackValueGenerator{
 		cb: cb,
@@ -5332,7 +5332,7 @@ func (c *CallbackValueGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Start(_ context.Context, txn *client.Txn) error {
+func (c *CallbackValueGenerator) Start(_ context.Context, txn *kv.Txn) error {
 	c.txn = txn
 	return nil
 }

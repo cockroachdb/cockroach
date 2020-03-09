@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -36,7 +36,7 @@ import (
 // Config configures a kvfeed.
 type Config struct {
 	Settings           *cluster.Settings
-	DB                 *client.DB
+	DB                 *kv.DB
 	Clock              *hlc.Clock
 	Gossip             *gossip.Gossip
 	Spans              []roachpb.Span
@@ -83,7 +83,7 @@ func Run(ctx context.Context, cfg Config) error {
 	var pff physicalFeedFactory
 	{
 		sender := cfg.DB.NonTransactionalSender()
-		distSender := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 		pff = rangefeedFactory(distSender.RangeFeed)
 	}
 	bf := func() EventBuffer {

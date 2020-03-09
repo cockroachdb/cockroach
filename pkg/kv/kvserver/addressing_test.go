@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -114,7 +114,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	for i, test := range testCases {
 		left := &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
 		right := &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		if test.split {
 			if err := splitRangeAddressing(b, left, right); err != nil {
 				t.Fatal(err)
@@ -133,19 +133,19 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		// transaction id). Also, we need the TxnCoordSender to clean up the
 		// intents, otherwise the MVCCScan that the test does below fails.
 		actx := testutils.MakeAmbientCtx()
-		tcsf := kv.NewTxnCoordSenderFactory(
-			kv.TxnCoordSenderFactoryConfig{
+		tcsf := kvcoord.NewTxnCoordSenderFactory(
+			kvcoord.TxnCoordSenderFactoryConfig{
 				AmbientCtx: actx,
 				Settings:   store.cfg.Settings,
 				Clock:      store.cfg.Clock,
 				Stopper:    stopper,
-				Metrics:    kv.MakeTxnMetrics(time.Second),
+				Metrics:    kvcoord.MakeTxnMetrics(time.Second),
 			},
 			store.TestSender(),
 		)
-		db := client.NewDB(actx, tcsf, store.cfg.Clock)
+		db := kv.NewDB(actx, tcsf, store.cfg.Clock)
 		ctx := context.Background()
-		txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		if err := txn.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
@@ -249,7 +249,7 @@ func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	left := &roachpb.RangeDescriptor{StartKey: roachpb.RKeyMin, EndKey: meta1Key(roachpb.RKey("a"))}
 	right := &roachpb.RangeDescriptor{StartKey: meta1Key(roachpb.RKey("a")), EndKey: roachpb.RKeyMax}
-	if err := splitRangeAddressing(&client.Batch{}, left, right); err == nil {
+	if err := splitRangeAddressing(&kv.Batch{}, left, right); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}
 }

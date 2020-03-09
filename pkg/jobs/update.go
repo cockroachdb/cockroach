@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,7 +32,7 @@ import (
 //
 // The function is free to modify contents of JobMetadata in place (but the
 // changes will be ignored unless JobUpdater is used).
-type UpdateFn func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error
+type UpdateFn func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error
 
 // JobMetadata groups the job metadata values passed to UpdateFn.
 type JobMetadata struct {
@@ -104,7 +104,7 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const selectStmt = "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
 			ctx, "log-job", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},

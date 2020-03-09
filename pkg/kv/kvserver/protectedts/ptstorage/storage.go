@@ -14,7 +14,7 @@ package ptstorage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -56,7 +56,7 @@ func New(settings *cluster.Settings, ex sqlutil.InternalExecutor) protectedts.St
 
 var errNoTxn = errors.New("must provide a non-nil transaction")
 
-func (p *storage) Protect(ctx context.Context, txn *client.Txn, r *ptpb.Record) error {
+func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
 	if err := validateRecordForProtect(r); err != nil {
 		return err
 	}
@@ -96,9 +96,7 @@ func (p *storage) Protect(ctx context.Context, txn *client.Txn, r *ptpb.Record) 
 	return nil
 }
 
-func (p *storage) GetRecord(
-	ctx context.Context, txn *client.Txn, id uuid.UUID,
-) (*ptpb.Record, error) {
+func (p *storage) GetRecord(ctx context.Context, txn *kv.Txn, id uuid.UUID) (*ptpb.Record, error) {
 	if txn == nil {
 		return nil, errNoTxn
 	}
@@ -118,7 +116,7 @@ func (p *storage) GetRecord(
 	return &r, nil
 }
 
-func (p *storage) MarkVerified(ctx context.Context, txn *client.Txn, id uuid.UUID) error {
+func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
 	if txn == nil {
 		return errNoTxn
 	}
@@ -134,7 +132,7 @@ func (p *storage) MarkVerified(ctx context.Context, txn *client.Txn, id uuid.UUI
 	return nil
 }
 
-func (p *storage) Release(ctx context.Context, txn *client.Txn, id uuid.UUID) error {
+func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
 	if txn == nil {
 		return errNoTxn
 	}
@@ -150,7 +148,7 @@ func (p *storage) Release(ctx context.Context, txn *client.Txn, id uuid.UUID) er
 	return nil
 }
 
-func (p *storage) GetMetadata(ctx context.Context, txn *client.Txn) (ptpb.Metadata, error) {
+func (p *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, error) {
 	if txn == nil {
 		return ptpb.Metadata{}, errNoTxn
 	}
@@ -168,7 +166,7 @@ func (p *storage) GetMetadata(ctx context.Context, txn *client.Txn) (ptpb.Metada
 	}, nil
 }
 
-func (p *storage) GetState(ctx context.Context, txn *client.Txn) (ptpb.State, error) {
+func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error) {
 	if txn == nil {
 		return ptpb.State{}, errNoTxn
 	}
@@ -186,7 +184,7 @@ func (p *storage) GetState(ctx context.Context, txn *client.Txn) (ptpb.State, er
 	}, nil
 }
 
-func (p *storage) getRecords(ctx context.Context, txn *client.Txn) ([]ptpb.Record, error) {
+func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
 	rows, err := p.ex.QueryEx(ctx, "protectedts-GetRecords", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		getRecordsQuery)

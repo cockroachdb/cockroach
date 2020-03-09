@@ -16,9 +16,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -94,7 +94,7 @@ const (
 // Config contains the dependencies to construct an IntentResolver.
 type Config struct {
 	Clock                *hlc.Clock
-	DB                   *client.DB
+	DB                   *kv.DB
 	Stopper              *stop.Stopper
 	AmbientCtx           log.AmbientContext
 	TestingKnobs         storagebase.IntentResolverTestingKnobs
@@ -113,7 +113,7 @@ type IntentResolver struct {
 	Metrics Metrics
 
 	clock        *hlc.Clock
-	db           *client.DB
+	db           *kv.DB
 	stopper      *stop.Stopper
 	testingKnobs storagebase.IntentResolverTestingKnobs
 	ambientCtx   log.AmbientContext
@@ -341,7 +341,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 	log.Eventf(ctx, "pushing %d transaction(s)", len(pushTxns))
 
 	// Attempt to push the transaction(s).
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Header.Timestamp = ir.clock.Now()
 	for _, pushTxn := range pushTxns {
 		b.AddRawRequest(&roachpb.PushTxnRequest{
@@ -603,7 +603,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					log.VErrEventf(ctx, 3, "cannot push a %s transaction which is not expired: %s", txn.Status, txn)
 					return
 				}
-				b := &client.Batch{}
+				b := &kv.Batch{}
 				b.Header.Timestamp = now
 				b.AddRawRequest(&roachpb.PushTxnRequest{
 					RequestHeader: roachpb.RequestHeader{Key: txn.Key},
@@ -841,7 +841,7 @@ func (ir *IntentResolver) ResolveIntents(
 	// requests to a maximum number of keys and resume as necessary.
 	for _, req := range resolveRangeReqs {
 		for {
-			b := &client.Batch{}
+			b := &kv.Batch{}
 			b.Header.MaxSpanRequestKeys = intentResolverBatchSize
 			b.AddRawRequest(req)
 			if err := ir.db.Run(ctx, b); err != nil {

@@ -35,8 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -132,7 +132,7 @@ type statusServer struct {
 	st                       *cluster.Settings
 	cfg                      *base.Config
 	admin                    *adminServer
-	db                       *client.DB
+	db                       *kv.DB
 	gossip                   *gossip.Gossip
 	metricSource             metricMarshaler
 	nodeLiveness             *kvserver.NodeLiveness
@@ -151,7 +151,7 @@ func newStatusServer(
 	st *cluster.Settings,
 	cfg *base.Config,
 	adminServer *adminServer,
-	db *client.DB,
+	db *kv.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
 	nodeLiveness *kvserver.NodeLiveness,
@@ -1027,7 +1027,7 @@ func (s *statusServer) Nodes(
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Scan(startKey, endKey)
 	if err := s.db.Run(ctx, b); err != nil {
 		log.Error(ctx, err)
@@ -1096,7 +1096,7 @@ func (s *statusServer) Node(
 	}
 
 	key := keys.NodeStatusKey(nodeID)
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.Get(key)
 	if err := s.db.Run(ctx, b); err != nil {
 		log.Error(ctx, err)

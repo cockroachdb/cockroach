@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -148,7 +148,7 @@ func (c *rowFetcherStatCollector) NextRow(
 // StartScan is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	spans roachpb.Spans,
 	limitBatches bool,
 	limitHint int64,
@@ -163,7 +163,7 @@ func (c *rowFetcherStatCollector) StartScan(
 // StartInconsistentScan is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) StartInconsistentScan(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,

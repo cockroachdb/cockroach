@@ -15,7 +15,7 @@ package backfill
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -134,7 +134,7 @@ func (cb *ColumnBackfiller) Init(
 // the span sp provided, for all updateCols.
 func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	otherTables []*sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
@@ -276,7 +276,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 
 // ConvertBackfillError returns a cleaner SQL error for a failed Batch.
 func ConvertBackfillError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *client.Batch,
+	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
 ) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
@@ -377,7 +377,7 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 // provided, and builds all the added indexes.
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
@@ -440,7 +440,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 // indexes.
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,

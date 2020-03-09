@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -550,9 +550,9 @@ type ExecutorConfig struct {
 	DefaultZoneConfig *zonepb.ZoneConfig
 	Locality          roachpb.Locality
 	AmbientCtx        log.AmbientContext
-	DB                *client.DB
+	DB                *kv.DB
 	Gossip            *gossip.Gossip
-	DistSender        *kv.DistSender
+	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
 	LeaseManager      *LeaseManager
 	Clock             *hlc.Clock
@@ -581,8 +581,8 @@ type ExecutorConfig struct {
 	HistogramWindowInterval time.Duration
 
 	// Caches updated by DistSQL.
-	RangeDescriptorCache *kv.RangeDescriptorCache
-	LeaseHolderCache     *kv.LeaseHolderCache
+	RangeDescriptorCache *kvcoord.RangeDescriptorCache
+	LeaseHolderCache     *kvcoord.LeaseHolderCache
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache

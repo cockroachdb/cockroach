@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -157,15 +157,15 @@ type Node struct {
 	startedAt   int64
 	lastUp      int64
 	initialBoot bool // True if this is the first time this node has started.
-	txnMetrics  kv.TxnMetrics
+	txnMetrics  kvcoord.TxnMetrics
 
 	perReplicaServer kvserver.Server
 }
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
-func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) {
-	val, err := client.IncrementValRetryable(ctx, db, keys.NodeIDGenerator, 1)
+func allocateNodeID(ctx context.Context, db *kv.DB) (roachpb.NodeID, error) {
+	val, err := kv.IncrementValRetryable(ctx, db, keys.NodeIDGenerator, 1)
 	if err != nil {
 		return 0, errors.Wrap(err, "unable to allocate node ID")
 	}
@@ -176,9 +176,9 @@ func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) 
 // specified node to allocate count new, unique store ids. The
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(
-	ctx context.Context, nodeID roachpb.NodeID, count int64, db *client.DB,
+	ctx context.Context, nodeID roachpb.NodeID, count int64, db *kv.DB,
 ) (roachpb.StoreID, error) {
-	val, err := client.IncrementValRetryable(ctx, db, keys.StoreIDGenerator, count)
+	val, err := kv.IncrementValRetryable(ctx, db, keys.StoreIDGenerator, count)
 	if err != nil {
 		return 0, errors.Wrapf(err, "unable to allocate %d store IDs for node %d", count, nodeID)
 	}
@@ -257,7 +257,7 @@ func NewNode(
 	recorder *status.MetricsRecorder,
 	reg *metric.Registry,
 	stopper *stop.Stopper,
-	txnMetrics kv.TxnMetrics,
+	txnMetrics kvcoord.TxnMetrics,
 	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
 ) *Node {
@@ -864,7 +864,7 @@ func (n *Node) recordJoinEvent() {
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldStop()
 		for r := retry.Start(retryOpts); r.Next(); {
-			if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return n.eventLogger.InsertEventRecord(
 					ctx,
 					txn,

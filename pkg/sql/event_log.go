@@ -14,7 +14,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -122,7 +122,7 @@ func MakeEventLogger(execCfg *ExecutorConfig) EventLogger {
 // provided transaction.
 func (ev EventLogger) InsertEventRecord(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	eventType EventLogType,
 	targetID, reportingID int32,
 	info interface{},

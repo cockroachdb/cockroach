@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -427,7 +427,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID()),
+				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID:  s.NodeID(),
 			}
 
@@ -498,7 +498,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
-		Txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID),
+		Txn:     kv.NewTxn(ctx, tc.Server(0).DB(), nodeID),
 		NodeID:  nodeID,
 	}
 	spec := execinfrapb.IndexSkipTableReaderSpec{
@@ -623,7 +623,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			flowCtxTableReader := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID()),
+				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID:  s.NodeID(),
 			}
 
@@ -660,7 +660,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			flowCtxIndexSkipTableReader := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID()),
+				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID:  s.NodeID(),
 			}
 

@@ -15,7 +15,7 @@ package ptprovider
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
@@ -31,7 +31,7 @@ import (
 // Config configures the Provider.
 type Config struct {
 	Settings             *cluster.Settings
-	DB                   *client.DB
+	DB                   *kv.DB
 	Stores               *kvserver.Stores
 	ReconcileStatusFuncs ptreconcile.StatusFuncs
 	InternalExecutor     sqlutil.InternalExecutor

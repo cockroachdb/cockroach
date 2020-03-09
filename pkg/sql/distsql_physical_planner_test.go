@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -253,8 +253,8 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
-	rangeCache := kv.NewRangeDescriptorCache(st, nil /* db */, size)
-	leaseCache := kv.NewLeaseHolderCache(size)
+	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size)
+	leaseCache := kvcoord.NewLeaseHolderCache(size)
 	r := MakeDistSQLReceiver(
 		context.TODO(), nil /* resultWriter */, tree.Rows,
 		rangeCache, leaseCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
@@ -347,7 +347,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	//
 	// TODO(andrei): This is super hacky. What this test really wants to do is to
 	// precisely control the contents of the range cache on node 4.
-	tc.Server(3).DistSenderI().(*kv.DistSender).DisableFirstRangeUpdates()
+	tc.Server(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
 	// Do a query on node 4 so that it populates the its cache with an initial
 	// descriptor containing all the SQL key space. If we don't do this, the state
@@ -605,9 +605,7 @@ type testSpanResolver struct {
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
-func (tsr *testSpanResolver) NewSpanResolverIterator(
-	_ *client.Txn,
-) physicalplan.SpanResolverIterator {
+func (tsr *testSpanResolver) NewSpanResolverIterator(_ *kv.Txn) physicalplan.SpanResolverIterator {
 	return &testSpanResolverIterator{tsr: tsr}
 }
 
@@ -621,9 +619,9 @@ var _ physicalplan.SpanResolverIterator = &testSpanResolverIterator{}
 
 // Seek is part of the SpanResolverIterator interface.
 func (it *testSpanResolverIterator) Seek(
-	ctx context.Context, span roachpb.Span, scanDir kv.ScanDirection,
+	ctx context.Context, span roachpb.Span, scanDir kvcoord.ScanDirection,
 ) {
-	if scanDir != kv.Ascending {
+	if scanDir != kvcoord.Ascending {
 		panic("descending not implemented")
 	}
 	it.endKey = string(span.EndKey)
@@ -674,9 +672,9 @@ func (it *testSpanResolverIterator) Desc() roachpb.RangeDescriptor {
 }
 
 // ReplicaInfo is part of the SpanResolverIterator interface.
-func (it *testSpanResolverIterator) ReplicaInfo(_ context.Context) (kv.ReplicaInfo, error) {
+func (it *testSpanResolverIterator) ReplicaInfo(_ context.Context) (kvcoord.ReplicaInfo, error) {
 	n := it.tsr.nodes[it.tsr.ranges[it.curRangeIdx].node-1]
-	return kv.ReplicaInfo{
+	return kvcoord.ReplicaInfo{
 		ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: n.NodeID},
 		NodeDesc:          n,
 	}, nil

@@ -93,19 +93,19 @@ func TestListFailures(t *testing.T) {
 			// A test run where there's a timeout, and the timed out test was the
 			// longest running test, so the issue assumes it's the culprit.
 			// To spice things up, the test run has another test failure too.
-			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/kv",
+			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
 			fileName: "timeout-culprit-found.json",
-			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv",
+			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
 			expIssues: []issue{
 				{
 					testName: "TestTxnCoordSenderPipelining",
-					title:    "kv: TestTxnCoordSenderPipelining failed",
+					title:    "kv/kvclient/kvcoord: TestTxnCoordSenderPipelining failed",
 					message:  `injected failure`,
 					author:   "nikhil.benesch@gmail.com",
 				},
 				{
 					testName: "TestAbortReadOnlyTransaction",
-					title:    "kv: TestAbortReadOnlyTransaction timed out",
+					title:    "kv/kvclient/kvcoord: TestAbortReadOnlyTransaction timed out",
 					message: `Slow failing tests:
 TestAbortReadOnlyTransaction - 3.99s
 TestTxnCoordSenderPipelining - 1.00s

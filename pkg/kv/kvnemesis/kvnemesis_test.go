@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,7 +61,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	dbs, sqlDBs := make([]*client.DB, numNodes), make([]*gosql.DB, numNodes)
+	dbs, sqlDBs := make([]*kv.DB, numNodes), make([]*gosql.DB, numNodes)
 	for i := 0; i < numNodes; i++ {
 		dbs[i] = tc.Server(i).DB()
 		sqlDBs[i] = tc.ServerConn(i)

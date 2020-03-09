@@ -13,8 +13,8 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -297,7 +297,7 @@ func descriptorsMatchingTargets(
 // a descriptor the the ID by which it was previously known (e.g pre-TRUNCATE).
 func getRelevantDescChanges(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	startTime, endTime hlc.Timestamp,
 	descs []sqlbase.Descriptor,
 	expanded []sqlbase.ID,
@@ -402,7 +402,7 @@ func getRelevantDescChanges(
 // nil content).
 func getAllDescChanges(
 	ctx context.Context,
-	db *client.DB,
+	db *kv.DB,
 	startTime, endTime hlc.Timestamp,
 	priorIDs map[sqlbase.ID]sqlbase.ID,
 ) ([]BackupManifest_DescriptorRevision, error) {
@@ -440,7 +440,7 @@ func getAllDescChanges(
 	return res, nil
 }
 
-func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
+func allSQLDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
 	rows, err := txn.Scan(ctx, startKey, endKey, 0)
@@ -492,12 +492,12 @@ func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
 }
 
 func loadAllDescs(
-	ctx context.Context, db *client.DB, asOf hlc.Timestamp,
+	ctx context.Context, db *kv.DB, asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, error) {
 	var allDescs []sqlbase.Descriptor
 	if err := db.Txn(
 		ctx,
-		func(ctx context.Context, txn *client.Txn) error {
+		func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			txn.SetFixedTimestamp(ctx, asOf)
 			allDescs, err = allSQLDescriptors(ctx, txn)
@@ -592,7 +592,7 @@ func fullClusterTargets(
 	return fullClusterDescs, fullClusterDBs, nil
 }
 
-func lookupDatabaseID(ctx context.Context, txn *client.Txn, name string) (sqlbase.ID, error) {
+func lookupDatabaseID(ctx context.Context, txn *kv.Txn, name string) (sqlbase.ID, error) {
 	found, id, err := sqlbase.LookupDatabaseID(ctx, txn, name)
 	if err != nil {
 		return sqlbase.InvalidID, err
@@ -605,9 +605,7 @@ func lookupDatabaseID(ctx context.Context, txn *client.Txn, name string) (sqlbas
 
 // CheckTableExists returns an error if a table already exists with given
 // parent and name.
-func CheckTableExists(
-	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
-) error {
+func CheckTableExists(ctx context.Context, txn *kv.Txn, parentID sqlbase.ID, name string) error {
 	found, _, err := sqlbase.LookupPublicTableID(ctx, txn, parentID, name)
 	if err != nil {
 		return err

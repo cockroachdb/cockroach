@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -96,7 +96,7 @@ type Config struct {
 	Name string
 
 	// Sender can round-trip a batch. Sender must not be nil.
-	Sender client.Sender
+	Sender kv.Sender
 
 	// Stopper controls the lifecycle of the Batcher. Stopper must not be nil.
 	Stopper *stop.Stopper

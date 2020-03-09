@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -59,7 +59,7 @@ type Reporter struct {
 	// Latest zone config
 	latestConfig *config.SystemConfig
 
-	db        *client.DB
+	db        *kv.DB
 	liveness  *kvserver.NodeLiveness
 	settings  *cluster.Settings
 	storePool *kvserver.StorePool
@@ -74,7 +74,7 @@ type Reporter struct {
 
 // NewReporter creates a Reporter.
 func NewReporter(
-	db *client.DB,
+	db *kv.DB,
 	localStores *kvserver.Stores,
 	storePool *kvserver.StorePool,
 	st *cluster.Settings,
@@ -699,14 +699,14 @@ type RangeIterator interface {
 // meta2RangeIter is an implementation of RangeIterator that scans meta2 in a
 // paginated way.
 type meta2RangeIter struct {
-	db *client.DB
+	db *kv.DB
 	// The size of the batches that descriptors will be read in. 0 for no limit.
 	batchSize int
 
-	txn *client.Txn
+	txn *kv.Txn
 	// buffer contains descriptors read in the first batch, but not yet returned
 	// to the client.
-	buffer []client.KeyValue
+	buffer []kv.KeyValue
 	// resumeSpan maintains the point where the meta2 scan stopped.
 	resumeSpan *roachpb.Span
 	// readingDone is set once we've scanned all of meta2. buffer may still
@@ -714,7 +714,7 @@ type meta2RangeIter struct {
 	readingDone bool
 }
 
-func makeMeta2RangeIter(db *client.DB, batchSize int) meta2RangeIter {
+func makeMeta2RangeIter(db *kv.DB, batchSize int) meta2RangeIter {
 	return meta2RangeIter{db: db, batchSize: batchSize}
 }
 
@@ -840,7 +840,7 @@ type reportID int
 // getReportGenerationTime returns the time at a particular report was last
 // generated. Returns time.Time{} if the report is not found.
 func getReportGenerationTime(
-	ctx context.Context, rid reportID, ex sqlutil.InternalExecutor, txn *client.Txn,
+	ctx context.Context, rid reportID, ex sqlutil.InternalExecutor, txn *kv.Txn,
 ) (time.Time, error) {
 	row, err := ex.QueryRowEx(
 		ctx,
