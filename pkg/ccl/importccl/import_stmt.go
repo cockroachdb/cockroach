@@ -504,16 +504,18 @@ func importPlanHook(
 			}
 
 			// Validate target columns.
-			var intoCols []string
-			var isTargetCol = make(map[string]bool)
+			var intoCols []uint32
+
+			var isTargetCol = make(map[sqlbase.ColumnID]bool)
 			for _, name := range importStmt.IntoCols {
 				var err error
-				if _, err = found.FindActiveColumnByName(name.String()); err != nil {
-					return errors.Wrap(err, "verifying target columns")
+				active, err := found.FindActiveColumnsByNames(tree.NameList{name})
+				if err != nil {
+					return errors.Wrapf(err, "verifying target columns: norm=%q str=%q", name.Normalize(), name.String())
 				}
 
-				isTargetCol[name.String()] = true
-				intoCols = append(intoCols, name.String())
+				isTargetCol[active[0].ID] = true
+				intoCols = append(intoCols, uint32(active[0].ID))
 			}
 
 			// IMPORT INTO does not support columns with DEFAULT expressions. Ensure
@@ -524,12 +526,12 @@ func importPlanHook(
 					return errors.Errorf("cannot IMPORT INTO a table with a DEFAULT expression for any of its columns")
 				}
 
-				if len(isTargetCol) != 0 && !isTargetCol[col.Name] && !col.IsNullable() {
+				if len(isTargetCol) != 0 && !isTargetCol[col.ID] && !col.IsNullable() {
 					return errors.Errorf("all non-target columns in IMPORT INTO must be nullable")
 				}
 			}
 
-			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
+			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetColIds: intoCols}}
 		} else {
 			var tableDescs []*sqlbase.TableDescriptor
 			seqVals := make(map[sqlbase.ID]int64)
@@ -916,10 +918,13 @@ func (r *importResumer) prepareTableDescsForIngestion(
 				if err != nil {
 					return err
 				}
-				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc, Name: table.Name,
-					SeqVal:     table.SeqVal,
-					IsNew:      table.IsNew,
-					TargetCols: table.TargetCols}
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{
+					Desc:         desc,
+					Name:         table.Name,
+					SeqVal:       table.SeqVal,
+					IsNew:        table.IsNew,
+					TargetColIds: table.TargetColIds,
+				}
 
 				hasExistingTables = true
 			} else {
@@ -942,11 +947,13 @@ func (r *importResumer) prepareTableDescsForIngestion(
 				return err
 			}
 			for i, table := range res {
-				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: table,
-					Name:       details.Tables[i].Name,
-					SeqVal:     details.Tables[i].SeqVal,
-					IsNew:      details.Tables[i].IsNew,
-					TargetCols: details.Tables[i].TargetCols}
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{
+					Desc:         table,
+					Name:         details.Tables[i].Name,
+					SeqVal:       details.Tables[i].SeqVal,
+					IsNew:        details.Tables[i].IsNew,
+					TargetColIds: details.Tables[i].TargetColIds,
+				}
 			}
 		}
 
@@ -1002,9 +1009,11 @@ func (r *importResumer) Resume(
 
 		for _, i := range details.Tables {
 			if i.Name != "" {
-				tables[i.Name] = &execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+				tables[i.Name] =
+					&execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetColIds: i.TargetColIds}
 			} else if i.Desc != nil {
-				tables[i.Desc.Name] = &execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+				tables[i.Desc.Name] =
+					&execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetColIds: i.TargetColIds}
 			} else {
 				return errors.Errorf("invalid table specification")
 			}

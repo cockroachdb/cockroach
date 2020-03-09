@@ -111,14 +111,11 @@ func makeInputConverter(
 ) (inputConverter, error) {
 
 	var singleTable *sqlbase.TableDescriptor
-	var singleTableTargetCols tree.NameList
+	var singleTableTargetColIds []uint32
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {
 			singleTable = table.Desc
-			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
-			for i, colName := range table.TargetCols {
-				singleTableTargetCols[i] = tree.Name(colName)
-			}
+			singleTableTargetColIds = table.TargetColIds
 		}
 	}
 
@@ -140,7 +137,7 @@ func makeInputConverter(
 		}
 		return newCSVInputReader(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
-			singleTable, singleTableTargetCols, evalCtx), nil
+			singleTable, singleTableTargetColIds, evalCtx), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos, int(spec.ReaderParallelism), singleTable, evalCtx)
