@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -300,7 +300,7 @@ func TestAsOfRetry(t *testing.T) {
 
 			switch req := args.Req.(type) {
 			case *roachpb.ScanRequest:
-				if client.TestingIsRangeLookupRequest(req) {
+				if kv.TestingIsRangeLookupRequest(req) {
 					return nil
 				}
 				for key, count := range magicVals.restartCounts {

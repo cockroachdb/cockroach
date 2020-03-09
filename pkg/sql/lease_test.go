@@ -24,8 +24,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -49,7 +49,7 @@ type leaseTest struct {
 	testing.TB
 	server                   serverutils.TestServerInterface
 	db                       *gosql.DB
-	kvDB                     *client.DB
+	kvDB                     *kv.DB
 	nodes                    map[uint32]*sql.LeaseManager
 	leaseManagerTestingKnobs sql.LeaseManagerTestingKnobs
 	cfg                      *base.LeaseManagerConfig
@@ -1662,7 +1662,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			// the transaction commit time (and that the txn commit time wasn't
 			// bumped past it).
 			log.Infof(ctx, "checking version %d", table.Version)
-			txn := client.NewTxn(ctx, t.kvDB, roachpb.NodeID(0))
+			txn := kv.NewTxn(ctx, t.kvDB, roachpb.NodeID(0))
 			// Make the txn look back at the known modification timestamp.
 			txn.SetFixedTimestamp(ctx, table.ModificationTime)
 

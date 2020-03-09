@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -605,9 +605,7 @@ type testSpanResolver struct {
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
-func (tsr *testSpanResolver) NewSpanResolverIterator(
-	_ *client.Txn,
-) physicalplan.SpanResolverIterator {
+func (tsr *testSpanResolver) NewSpanResolverIterator(_ *kv.Txn) physicalplan.SpanResolverIterator {
 	return &testSpanResolverIterator{tsr: tsr}
 }
 

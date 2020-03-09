@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -471,7 +471,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(context.Background(), store.TestSender(), &args); err != nil {
+		if _, err := kv.SendWrapped(context.Background(), store.TestSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -592,7 +592,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 			for i := 0; i < c.count; i++ {
 				key := roachpb.Key(fmt.Sprintf("key%02d", i))
 				args := putArgs(key, []byte(fmt.Sprintf("%s%02d", strings.Repeat("v", c.valueSize), i)))
-				if _, err := client.SendWrapped(ctx, store.TestSender(), &args); err != nil {
+				if _, err := kv.SendWrapped(ctx, store.TestSender(), &args); err != nil {
 					t.Fatal(err)
 				}
 			}

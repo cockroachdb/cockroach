@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -37,7 +37,7 @@ func validateCheckExpr(
 	exprStr string,
 	tableDesc *sqlbase.TableDescriptor,
 	ie *InternalExecutor,
-	txn *client.Txn,
+	txn *kv.Txn,
 ) error {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
@@ -236,7 +236,7 @@ func validateForeignKey(
 	srcTable *sqlbase.TableDescriptor,
 	fk *sqlbase.ForeignKeyConstraint,
 	ie *InternalExecutor,
-	txn *client.Txn,
+	txn *kv.Txn,
 ) error {
 	targetTable, err := sqlbase.GetTableDescFromID(ctx, txn, fk.ReferencedTableID)
 	if err != nil {

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -219,7 +219,7 @@ func (ds *ServerImpl) setupFlow(
 	)
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 
-	makeLeaf := func(req *execinfrapb.SetupFlowRequest) (*client.Txn, error) {
+	makeLeaf := func(req *execinfrapb.SetupFlowRequest) (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
 		if tis == nil {
 			// This must be a flow running for some bulk-io operation that doesn't use
@@ -232,11 +232,11 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		return client.NewLeafTxn(ctx, ds.FlowDB, req.Flow.Gateway, tis), nil
+		return kv.NewLeafTxn(ctx, ds.FlowDB, req.Flow.Gateway, tis), nil
 	}
 
 	var evalCtx *tree.EvalContext
-	var leafTxn *client.Txn
+	var leafTxn *kv.Txn
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
 		evalCtx.Mon = &monitor
@@ -369,7 +369,7 @@ func (ds *ServerImpl) setupFlow(
 	// that have no remote flows and also no concurrency, the txn comes from
 	// localState.Txn. Otherwise, we create a txn based on the request's
 	// LeafTxnInputState.
-	var txn *client.Txn
+	var txn *kv.Txn
 	if localState.IsLocal && !f.ConcurrentExecution() {
 		txn = localState.Txn
 	} else {
@@ -440,7 +440,7 @@ type LocalState struct {
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.
 	// If there is concurrency, a LeafTxn will be created.
-	Txn *client.Txn
+	Txn *kv.Txn
 
 	/////////////////////////////////////////////
 	// Fields below are empty if IsLocal == false
@@ -590,7 +590,7 @@ var _ sqlutil.InternalExecutor = &lazyInternalExecutor{}
 func (ie *lazyInternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *client.Txn,
+	txn *kv.Txn,
 	opts sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
@@ -602,7 +602,7 @@ func (ie *lazyInternalExecutor) QueryRowEx(
 }
 
 func (ie *lazyInternalExecutor) QueryRow(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (tree.Datums, error) {
 	ie.once.Do(func() {
 		ie.InternalExecutor = ie.newInternalExecutor()

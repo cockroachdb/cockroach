@@ -16,8 +16,8 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,7 +38,7 @@ type Job struct {
 	registry *Registry
 
 	id  *int64
-	txn *client.Txn
+	txn *kv.Txn
 	mu  struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
@@ -66,7 +66,7 @@ type Record struct {
 // See Registry.CreateStartableJob
 type StartableJob struct {
 	*Job
-	txn        *client.Txn
+	txn        *kv.Txn
 	resumer    Resumer
 	resumerCtx context.Context
 	cancel     context.CancelFunc
@@ -174,7 +174,7 @@ func (j *Job) Created(ctx context.Context) error {
 
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
-	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusPending && md.Status != StatusRunning {
 			return errors.Errorf("job with status %s cannot be marked started", md.Status)
 		}
@@ -190,14 +190,14 @@ func (j *Job) Started(ctx context.Context) error {
 // CheckStatus verifies the status of the job and returns an error if the job's
 // status isn't Running or Reverting.
 func (j *Job) CheckStatus(ctx context.Context) error {
-	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, _ *JobUpdater) error {
+	return j.Update(ctx, func(_ *kv.Txn, md JobMetadata, _ *JobUpdater) error {
 		return md.CheckRunningOrReverting()
 	})
 }
 
 // CheckTerminalStatus returns true if the job is in a terminal status.
 func (j *Job) CheckTerminalStatus(ctx context.Context) bool {
-	err := j.Update(ctx, func(_ *client.Txn, md JobMetadata, _ *JobUpdater) error {
+	err := j.Update(ctx, func(_ *kv.Txn, md JobMetadata, _ *JobUpdater) error {
 		if !md.Status.Terminal() {
 			return &InvalidStatusError{md.ID, md.Status, "checking that job status is success", md.Payload.Error}
 		}
@@ -211,7 +211,7 @@ func (j *Job) CheckTerminalStatus(ctx context.Context) bool {
 // It sets the job's RunningStatus field to the value returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.
 func (j *Job) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn) error {
-	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func (j *Job) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn
 
 // SetDescription updates the description of a created job.
 func (j *Job) SetDescription(ctx context.Context, updateFn DescriptionUpdateFn) error {
-	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		prev := md.Payload.Description
 		desc, err := updateFn(ctx, prev)
 		if err != nil {
@@ -274,7 +274,7 @@ type HighWaterProgressedFn func(ctx context.Context, details jobspb.ProgressDeta
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgressedFn) error {
-	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgr
 // job's HighWater field to the value returned by progressedFn and persists
 // progressedFn's modifications to the job's progress details, if any.
 func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterProgressedFn) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -323,8 +323,8 @@ func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterPro
 // Paused sets the status of the tracked job to paused. It does not directly
 // pause the job; instead, it expects the job to call job.Progressed soon,
 // observe a "job is paused" error, and abort further work.
-func (j *Job) Paused(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) Paused(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusPaused {
 			// Already paused - do nothing.
 			return nil
@@ -347,7 +347,7 @@ func (j *Job) Paused(ctx context.Context, fn func(context.Context, *client.Txn) 
 // expires the job's lease so that a Registry adoption loop detects it and
 // resumes it.
 func (j *Job) resumed(ctx context.Context) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusRunning || md.Status == StatusReverting {
 			// Already resumed - do nothing.
 			return nil
@@ -376,10 +376,8 @@ func (j *Job) resumed(ctx context.Context) error {
 // Further the node the runs the job will actively cancel it when it notices
 // that it is in state StatusCancelRequested and will move it to state
 // StatusReverting.
-func (j *Job) cancelRequested(
-	ctx context.Context, fn func(context.Context, *client.Txn) error,
-) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Payload.Noncancelable {
 			return errors.Newf("job %d: not cancelable", j.ID())
 		}
@@ -407,10 +405,8 @@ func (j *Job) cancelRequested(
 // not directly pause the job; it expects the node that runs the job will
 // actively cancel it when it notices that it is in state StatusPauseRequested
 // and will move it to state StatusPaused.
-func (j *Job) pauseRequested(
-	ctx context.Context, fn func(context.Context, *client.Txn) error,
-) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) pauseRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
 			return nil
 		}
@@ -429,9 +425,9 @@ func (j *Job) pauseRequested(
 
 // Reverted sets the status of the tracked job to reverted.
 func (j *Job) Reverted(
-	ctx context.Context, err error, fn func(context.Context, *client.Txn) error,
+	ctx context.Context, err error, fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusReverting {
 			return nil
 		}
@@ -460,8 +456,8 @@ func (j *Job) Reverted(
 }
 
 // Canceled sets the status of the tracked job to cancel.
-func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) canceled(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusCanceled {
 			return nil
 		}
@@ -482,9 +478,9 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn
 
 // Failed marks the tracked job as having failed with the given error.
 func (j *Job) Failed(
-	ctx context.Context, err error, fn func(context.Context, *client.Txn) error,
+	ctx context.Context, err error, fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		// TODO(spaskob): should we fail if the terminal state is not StatusFailed?
 		if md.Status.Terminal() {
 			// Already done - do nothing.
@@ -505,8 +501,8 @@ func (j *Job) Failed(
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
-func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusSucceeded {
 			return nil
 		}
@@ -531,7 +527,7 @@ func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Tx
 
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		md.Payload.Details = jobspb.WrapPayloadDetails(details)
 		ju.UpdatePayload(md.Payload)
 		return nil
@@ -540,7 +536,7 @@ func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 
 // SetProgress sets the details field of the currently running tracked job.
 func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		md.Progress.Details = jobspb.WrapProgressDetails(details)
 		ju.UpdateProgress(md.Progress)
 		return nil
@@ -588,12 +584,12 @@ func (j *Job) FractionCompleted() float32 {
 // WithTxn sets the transaction that this Job will use for its next operation.
 // If the transaction is nil, the Job will create a one-off transaction instead.
 // If you use WithTxn, this Job will no longer be threadsafe.
-func (j *Job) WithTxn(txn *client.Txn) *Job {
+func (j *Job) WithTxn(txn *kv.Txn) *Job {
 	j.txn = txn
 	return j
 }
 
-func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
+func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
 	if j.txn != nil {
 		defer func() { j.txn = nil }()
 		// Don't run fn in a retry loop because we need retryable errors to
@@ -625,7 +621,7 @@ func HasJobNotFoundError(err error) bool {
 func (j *Job) load(ctx context.Context) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
 			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
@@ -658,7 +654,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 
 	j.mu.payload.Lease = lease
 
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Note: although the following uses ReadTimestamp and
 		// ReadTimestamp can diverge from the value of now() throughout a
 		// transaction, this may be OK -- we merely required ModifiedMicro
@@ -687,7 +683,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 	log.Infof(ctx, "job %d: adopting", *j.ID())
-	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if !md.Payload.Lease.Equal(oldLease) {
 			return errors.Errorf("current lease %v did not match expected lease %v",
 				md.Payload.Lease, oldLease)
@@ -737,7 +733,7 @@ func (j *Job) CurrentStatus(ctx context.Context) (Status, error) {
 		return "", errors.New("job has not been created")
 	}
 	var statusString tree.DString
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, *j.ID())
 		if err != nil {

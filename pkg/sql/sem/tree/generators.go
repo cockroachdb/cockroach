@@ -13,7 +13,7 @@ package tree
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -48,7 +48,7 @@ type ValueGenerator interface {
 	//
 	// txn represents the txn that the generator will run inside of. The generator
 	// is expected to hold on to this txn and use it in Next() calls.
-	Start(ctx context.Context, txn *client.Txn) error
+	Start(ctx context.Context, txn *kv.Txn) error
 
 	// Next determines whether there is a row of data available.
 	Next(context.Context) (bool, error)

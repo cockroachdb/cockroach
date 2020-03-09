@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -58,7 +58,7 @@ const (
 // truncated by removing unneeded entries.
 type raftLogQueue struct {
 	*baseQueue
-	db *client.DB
+	db *kv.DB
 
 	logSnapshots util.EveryN
 }
@@ -70,7 +70,7 @@ type raftLogQueue struct {
 // log short overall and allowing slower followers to catch up before they get
 // cut off by a truncation and need a snapshot. See newTruncateDecision for
 // details on this decision making process.
-func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
+func newRaftLogQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *raftLogQueue {
 	rlq := &raftLogQueue{
 		db:           db,
 		logSnapshots: util.Every(10 * time.Second),
@@ -572,7 +572,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 		} else {
 			log.VEvent(ctx, 1, decision.String())
 		}
-		b := &client.Batch{}
+		b := &kv.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
 			RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 			Index:         decision.NewFirstIndex,

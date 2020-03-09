@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,7 +56,7 @@ type TableStatisticsCache struct {
 		numInternalQueries int64
 	}
 	Gossip      *gossip.Gossip
-	ClientDB    *client.DB
+	ClientDB    *kv.DB
 	SQLExecutor sqlutil.InternalExecutor
 }
 
@@ -77,7 +77,7 @@ type cacheEntry struct {
 // NewTableStatisticsCache creates a new TableStatisticsCache that can hold
 // statistics for <cacheSize> tables.
 func NewTableStatisticsCache(
-	cacheSize int, g *gossip.Gossip, db *client.DB, sqlExecutor sqlutil.InternalExecutor,
+	cacheSize int, g *gossip.Gossip, db *kv.DB, sqlExecutor sqlutil.InternalExecutor,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		Gossip:      g,

@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -132,7 +132,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	// We update the descriptor to the new name, but also leave the mapping of the
 	// old name to the id, so that the name is not reused until the schema changer
 	// has made sure it's not in use any more.
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}

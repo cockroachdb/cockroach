@@ -14,8 +14,8 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -243,7 +243,7 @@ type fkResolver map[string]*sqlbase.MutableTableDescriptor
 var _ sql.SchemaResolver = fkResolver{}
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) Txn() *client.Txn {
+func (r fkResolver) Txn() *kv.Txn {
 	return nil
 }
 

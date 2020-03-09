@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -426,10 +426,10 @@ type leaseManager interface {
 // db is defined just to allow us to use a fake client.DB when testing this
 // package.
 type db interface {
-	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]client.KeyValue, error)
-	Get(ctx context.Context, key interface{}) (client.KeyValue, error)
+	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
+	Get(ctx context.Context, key interface{}) (kv.KeyValue, error)
 	Put(ctx context.Context, key, value interface{}) error
-	Txn(ctx context.Context, retryable func(ctx context.Context, txn *client.Txn) error) error
+	Txn(ctx context.Context, retryable func(ctx context.Context, txn *kv.Txn) error) error
 }
 
 // Manager encapsulates the necessary functionality for handling migrations
@@ -446,7 +446,7 @@ type Manager struct {
 // NewManager initializes and returns a new Manager object.
 func NewManager(
 	stopper *stop.Stopper,
-	db *client.DB,
+	db *kv.DB,
 	executor *sql.InternalExecutor,
 	clock *hlc.Clock,
 	testingKnobs MigrationManagerTestingKnobs,
@@ -667,7 +667,7 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		tKey := sqlbase.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(), desc.GetID(), nil)
@@ -726,7 +726,7 @@ func createProtectedTimestampsRecordsTable(ctx context.Context, r runner) error 
 
 func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 
-	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 
 		// Retrieve the existing namespace table's descriptor and change its name to
@@ -893,7 +893,7 @@ func initializeClusterSecret(ctx context.Context, r runner) error {
 
 func populateVersionSetting(ctx context.Context, r runner) error {
 	var v roachpb.Version
-	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
 	}); err != nil {
 		return err

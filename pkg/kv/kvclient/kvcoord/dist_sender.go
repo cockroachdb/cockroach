@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -224,7 +224,7 @@ type DistSender struct {
 	disableParallelBatches bool
 }
 
-var _ client.Sender = &DistSender{}
+var _ kv.Sender = &DistSender{}
 
 // DistSenderConfig holds configuration and auxiliary objects that can be passed
 // to NewDistSender.
@@ -380,7 +380,7 @@ func (ds *DistSender) RangeLookup(
 	// RangeDescriptor is not on the first range we send the lookup too, we'll
 	// still find it when we scan to the next range. This addresses the issue
 	// described in #18032 and #16266, allowing us to support meta2 splits.
-	return client.RangeLookup(ctx, ds, key.AsRawKey(), rc, rangeLookupPrefetchCount, useReverseScan)
+	return kv.RangeLookup(ctx, ds, key.AsRawKey(), rc, rangeLookupPrefetchCount, useReverseScan)
 }
 
 // FirstRange implements the RangeDescriptorDB interface.

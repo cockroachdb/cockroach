@@ -13,7 +13,7 @@ package ptstorage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -21,18 +21,18 @@ import (
 
 // WithDatabase wraps s such that any calls made with a nil *Txn will be wrapped
 // in a call to db.Txn. This is often convenient in testing.
-func WithDatabase(s protectedts.Storage, db *client.DB) protectedts.Storage {
+func WithDatabase(s protectedts.Storage, db *kv.DB) protectedts.Storage {
 	return &storageWithDatabase{s: s, db: db}
 }
 
 type storageWithDatabase struct {
-	db *client.DB
+	db *kv.DB
 	s  protectedts.Storage
 }
 
-func (s *storageWithDatabase) Protect(ctx context.Context, txn *client.Txn, r *ptpb.Record) error {
+func (s *storageWithDatabase) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
 	if txn == nil {
-		return s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return s.s.Protect(ctx, txn, r)
 		})
 	}
@@ -40,10 +40,10 @@ func (s *storageWithDatabase) Protect(ctx context.Context, txn *client.Txn, r *p
 }
 
 func (s *storageWithDatabase) GetRecord(
-	ctx context.Context, txn *client.Txn, id uuid.UUID,
+	ctx context.Context, txn *kv.Txn, id uuid.UUID,
 ) (r *ptpb.Record, err error) {
 	if txn == nil {
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			r, err = s.s.GetRecord(ctx, txn, id)
 			return err
 		})
@@ -52,20 +52,18 @@ func (s *storageWithDatabase) GetRecord(
 	return s.s.GetRecord(ctx, txn, id)
 }
 
-func (s *storageWithDatabase) MarkVerified(
-	ctx context.Context, txn *client.Txn, id uuid.UUID,
-) error {
+func (s *storageWithDatabase) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
 	if txn == nil {
-		return s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return s.s.Release(ctx, txn, id)
 		})
 	}
 	return s.s.Release(ctx, txn, id)
 }
 
-func (s *storageWithDatabase) Release(ctx context.Context, txn *client.Txn, id uuid.UUID) error {
+func (s *storageWithDatabase) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
 	if txn == nil {
-		return s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return s.s.Release(ctx, txn, id)
 		})
 	}
@@ -73,10 +71,10 @@ func (s *storageWithDatabase) Release(ctx context.Context, txn *client.Txn, id u
 }
 
 func (s *storageWithDatabase) GetMetadata(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *kv.Txn,
 ) (md ptpb.Metadata, err error) {
 	if txn == nil {
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			md, err = s.s.GetMetadata(ctx, txn)
 			return err
 		})
@@ -86,10 +84,10 @@ func (s *storageWithDatabase) GetMetadata(
 }
 
 func (s *storageWithDatabase) GetState(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *kv.Txn,
 ) (state ptpb.State, err error) {
 	if txn == nil {
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			state, err = s.s.GetState(ctx, txn)
 			return err
 		})

@@ -24,8 +24,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
@@ -87,7 +87,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5)
 	ts := clocks[0].Now()
-	if _, err := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
+	if _, err := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,7 +141,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	clockOffset := clock.MaxOffset() / numCmds
 	for i := int64(1); i <= numCmds; i++ {
 		ts := ts1.Add(i*clockOffset.Nanoseconds(), 0)
-		if _, err := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
+		if _, err := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -152,7 +152,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	_, pErr := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, incArgs)
+	_, pErr := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, incArgs)
 	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Fatalf("unexpected error %v", pErr)
 	}
@@ -260,7 +260,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		errChan <- store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		errChan <- store.DB().Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			epoch++
 
 			if epoch == 1 {
@@ -324,7 +324,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
 	}
-	if _, err := client.SendWrappedWith(
+	if _, err := kv.SendWrappedWith(
 		context.Background(), store.TestSender(), h, &roachpb.GetRequest{RequestHeader: requestHeader},
 	); err != nil {
 		t.Fatalf("failed to get: %+v", err)
@@ -334,7 +334,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(restartKey)},
 		Value:         roachpb.MakeValueFromBytes([]byte("restart-value")),
 	}
-	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
+	if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
 		t.Fatalf("failed to put: %+v", err)
 	}
 
@@ -349,12 +349,12 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manual.Increment(100)
 
 	h.Timestamp = cfg.Clock.Now()
-	if _, err := client.SendWrappedWith(
+	if _, err := kv.SendWrappedWith(
 		context.Background(), store.TestSender(), h, &roachpb.GetRequest{RequestHeader: requestHeader},
 	); err == nil {
 		t.Fatal("unexpected success of get")
 	}
-	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
+	if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
 		t.Fatalf("failed to put: %+v", err)
 	}
 
@@ -395,7 +395,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, split := range splits {
-		_, pErr := client.SendWrapped(context.Background(), store.TestSender(), split)
+		_, pErr := kv.SendWrapped(context.Background(), store.TestSender(), split)
 		if pErr != nil {
 			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, pErr)
 		}
@@ -409,7 +409,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 	testutils.SucceedsSoon(t, func() error {
-		_, pErr := client.SendWrapped(context.Background(), store.TestSender(), &scanArgs)
+		_, pErr := kv.SendWrapped(context.Background(), store.TestSender(), &scanArgs)
 		return pErr.GoError()
 	})
 
@@ -480,7 +480,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("key=%s", test.key), func(t *testing.T) {
-			rs, preRs, err := client.RangeLookup(context.Background(), store.TestSender(),
+			rs, preRs, err := kv.RangeLookup(context.Background(), store.TestSender(),
 				test.key.AsRawKey(), roachpb.READ_UNCOMMITTED, test.maxResults-1, true /* prefetchReverse */)
 			if err != nil {
 				t.Fatalf("LookupRange error: %+v", err)
@@ -561,7 +561,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	// First, do a write; we'll use it to determine when the dust has settled.
 	l.leftKey = roachpb.Key("a")
 	incArgs := incrementArgs(l.leftKey, 1)
-	if _, pErr := client.SendWrapped(context.Background(), l.mtc.distSenders[0], incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), l.mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -596,7 +596,7 @@ func (l *leaseTransferTest) sendRead(storeIdx int) *roachpb.Error {
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	_, pErr := client.SendWrappedWith(
+	_, pErr := kv.SendWrappedWith(
 		context.Background(),
 		l.mtc.senders[storeIdx],
 		roachpb.Header{RangeID: desc.RangeID, Replica: replicaDesc},
@@ -931,7 +931,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	mtc.Start(t, 2)
 
 	// Do a write on node1 to establish a key with its timestamp @t=100.
-	if _, pErr := client.SendWrapped(
+	if _, pErr := kv.SendWrapped(
 		context.Background(), mtc.distSenders[0], putArgs(keyA, []byte("value")),
 	); pErr != nil {
 		t.Fatal(pErr)
@@ -967,7 +967,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	// we would end up incorrectly reading nothing for keyA. Instead we
 	// expect to see an uncertainty interval error.
 	h := roachpb.Header{Txn: &txn}
-	if _, pErr := client.SendWrappedWith(
+	if _, pErr := kv.SendWrappedWith(
 		context.Background(), mtc.distSenders[0], h, getArgs(keyA),
 	); !testutils.IsPError(pErr, "uncertainty") {
 		t.Fatalf("expected an uncertainty interval error; got %v", pErr)
@@ -1012,7 +1012,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Split the key space at key "a".
 	splitKey := roachpb.RKey("a")
 	splitArgs := adminSplitArgs(splitKey.AsRawKey())
-	if _, pErr := client.SendWrapped(
+	if _, pErr := kv.SendWrapped(
 		context.Background(), mtc.stores[0].TestSender(), splitArgs,
 	); pErr != nil {
 		t.Fatal(pErr)
@@ -1113,7 +1113,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	key := []byte("a")
 	// Send a read, to acquire a lease.
 	getArgs := getArgs(key)
-	if _, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), getArgs); err != nil {
+	if _, err := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), getArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1138,7 +1138,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	// Send another read and check that the pre-existing lease has not been used.
 	// Concretely, we check that a new lease is requested.
-	if _, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), getArgs); err != nil {
+	if _, err := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), getArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Check that the Send above triggered a lease acquisition.
@@ -1201,7 +1201,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 		}
-		if _, pErr := client.SendWrappedWith(context.Background(), s.DB().NonTransactionalSender(),
+		if _, pErr := kv.SendWrappedWith(context.Background(), s.DB().NonTransactionalSender(),
 			roachpb.Header{UserPriority: 42},
 			&getReq); pErr != nil {
 			errChan <- pErr.GoError()
@@ -1244,7 +1244,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			}
 			leaseReq.PrevLease = curLease
 
-			_, pErr := client.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq)
+			_, pErr := kv.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
 				log.Infof(context.Background(), "retrying lease after %s", pErr)
 				continue
@@ -1268,7 +1268,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 // LeaseInfo runs a LeaseInfoRequest using the specified server.
 func LeaseInfo(
 	t *testing.T,
-	db *client.DB,
+	db *kv.DB,
 	rangeDesc roachpb.RangeDescriptor,
 	readConsistency roachpb.ReadConsistencyType,
 ) roachpb.LeaseInfoResponse {
@@ -1277,7 +1277,7 @@ func LeaseInfo(
 			Key: rangeDesc.StartKey.AsRawKey(),
 		},
 	}
-	reply, pErr := client.SendWrappedWith(context.Background(), db.NonTransactionalSender(), roachpb.Header{
+	reply, pErr := kv.SendWrappedWith(context.Background(), db.NonTransactionalSender(), roachpb.Header{
 		ReadConsistency: readConsistency,
 	}, leaseInfoReq)
 	if pErr != nil {
@@ -1377,7 +1377,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 			Key: rangeDesc.StartKey.AsRawKey(),
 		},
 	}
-	reply, pErr := client.SendWrappedWith(
+	reply, pErr := kv.SendWrappedWith(
 		context.Background(), s, roachpb.Header{
 			RangeID:         rangeDesc.RangeID,
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -1431,7 +1431,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 			Key: key,
 		},
 	}
-	_, pErr := client.SendWrappedWith(
+	_, pErr := kv.SendWrappedWith(
 		context.Background(),
 		s.DB().NonTransactionalSender(),
 		roachpb.Header{UserPriority: 42},
@@ -1462,7 +1462,7 @@ func TestRangeInfo(t *testing.T) {
 	// Split the key space at key "a".
 	splitKey := roachpb.RKey("a")
 	splitArgs := adminSplitArgs(splitKey.AsRawKey())
-	if _, pErr := client.SendWrapped(
+	if _, pErr := kv.SendWrapped(
 		context.Background(), mtc.stores[0].TestSender(), splitArgs,
 	); pErr != nil {
 		t.Fatal(pErr)
@@ -1487,7 +1487,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify range info is not set if unrequested.
 	getArgs := getArgs(splitKey.AsRawKey())
-	reply, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], getArgs)
+	reply, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], getArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1499,7 +1499,7 @@ func TestRangeInfo(t *testing.T) {
 	h := roachpb.Header{
 		ReturnRangeInfo: true,
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, getArgs)
+	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, getArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1515,7 +1515,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify range info on a put request.
 	putArgs := putArgs(splitKey.AsRawKey(), []byte("foo"))
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, putArgs)
+	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, putArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1530,7 +1530,7 @@ func TestRangeInfo(t *testing.T) {
 		},
 		Target: rhsLease.Replica.StoreID,
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, adminArgs)
+	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, adminArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1547,7 +1547,7 @@ func TestRangeInfo(t *testing.T) {
 	}
 	txn := roachpb.MakeTransaction("test", roachpb.KeyMin, 1, mtc.clock.Now(), 0)
 	h.Txn = &txn
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
+	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1572,7 +1572,7 @@ func TestRangeInfo(t *testing.T) {
 			EndKey: roachpb.KeyMax,
 		},
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &revScanArgs)
+	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &revScanArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1601,7 +1601,7 @@ func TestRangeInfo(t *testing.T) {
 			t.Fatalf("unable to transfer lease to replica %s: %+v", r, err)
 		}
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
+	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1810,7 +1810,7 @@ func TestClearRange(t *testing.T) {
 
 	clearRange := func(start, end roachpb.Key) {
 		t.Helper()
-		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
+		if _, err := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    start,
 				EndKey: end,
@@ -1900,17 +1900,17 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// First, do a couple of writes; we'll use these to determine when
 	// the dust has settled.
 	incA := incrementArgs(keyA, 1)
-	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), incA); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), incA); pErr != nil {
 		t.Fatal(pErr)
 	}
 	incC := incrementArgs(keyC, 2)
-	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), incC); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), incC); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Split the system range from the rest of the keyspace.
 	splitArgs := adminSplitArgs(keys.SystemMax)
-	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1929,7 +1929,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// and the write will be attempted on the new leaseholder (node 2).
 	// It should not succeed because it should run into the timestamp cache.
 	db := mtc.dbs[0]
-	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+	txnOld := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	// Perform a write with txnOld so that its timestamp gets set.
 	if _, err := txnOld.Inc(ctx, keyB, 3); err != nil {
@@ -1948,7 +1948,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// we're regression testing against here still existed, we would not have
 	// to do this.
 	hb, hbH := heartbeatArgs(txnOld.TestingCloneTxn(), mtc.clock.Now())
-	if _, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1967,7 +1967,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		RaftMessageHandler: store2,
 	})
 
-	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), incC); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), incC); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(keyC, []int64{4, 4, 2})
@@ -1981,7 +1981,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	}
 	truncArgs := truncateLogArgs(index+1, rangeID)
 	truncArgs.Key = keyA
-	if _, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), truncArgs); err != nil {
+	if _, err := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), truncArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2735,7 +2735,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 		})
 		// Make a magical context which will allow us to use atomic replica changes.
-		ctx := client.ChangeReplicasCanMixAddAndRemoveContext(context.Background())
+		ctx := kv.ChangeReplicasCanMixAddAndRemoveContext(context.Background())
 		defer tc.Stopper().Stop(ctx)
 
 		// We want to first get into a joint consensus scenario.
@@ -2942,9 +2942,9 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 // getRangeInfo retreives range info by performing a get against the provided
 // key and setting the ReturnRangeInfo flag to true.
 func getRangeInfo(
-	ctx context.Context, db *client.DB, key roachpb.Key,
+	ctx context.Context, db *kv.DB, key roachpb.Key,
 ) (ri *roachpb.RangeInfo, err error) {
-	err = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		b.Header.ReturnRangeInfo = true
 		b.AddRawRequest(roachpb.NewGet(key))

@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -310,7 +310,7 @@ type tableLookupFn func(ID) (*TableDescriptor, error)
 
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc *TableDescriptor) GetConstraintInfo(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *kv.Txn,
 ) (map[string]ConstraintDetail, error) {
 	var tableLookup tableLookupFn
 	if txn != nil {
@@ -514,7 +514,7 @@ func FindFKOriginIndex(
 // because the marshaling is not guaranteed to be stable and also because it's
 // sensitive to things like missing vs default values of fields.
 func ConditionalGetTableDescFromTxn(
-	ctx context.Context, txn *client.Txn, expectation *TableDescriptor,
+	ctx context.Context, txn *kv.Txn, expectation *TableDescriptor,
 ) (*roachpb.Value, error) {
 	key := MakeDescMetadataKey(expectation.ID)
 	existingKV, err := txn.Get(ctx, key)

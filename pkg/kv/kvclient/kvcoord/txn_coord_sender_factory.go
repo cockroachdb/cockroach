@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,7 +28,7 @@ type TxnCoordSenderFactory struct {
 	log.AmbientContext
 
 	st                *cluster.Settings
-	wrapped           client.Sender
+	wrapped           kv.Sender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	linearizable      bool // enables linearizable behavior
@@ -38,7 +38,7 @@ type TxnCoordSenderFactory struct {
 	testingKnobs ClientTestingKnobs
 }
 
-var _ client.TxnSenderFactory = &TxnCoordSenderFactory{}
+var _ kv.TxnSenderFactory = &TxnCoordSenderFactory{}
 
 // TxnCoordSenderFactoryConfig holds configuration and auxiliary objects that can be passed
 // to NewTxnCoordSenderFactory.
@@ -59,7 +59,7 @@ type TxnCoordSenderFactoryConfig struct {
 // NewTxnCoordSenderFactory creates a new TxnCoordSenderFactory. The
 // factory creates new instances of TxnCoordSenders.
 func NewTxnCoordSenderFactory(
-	cfg TxnCoordSenderFactoryConfig, wrapped client.Sender,
+	cfg TxnCoordSenderFactoryConfig, wrapped kv.Sender,
 ) *TxnCoordSenderFactory {
 	tcf := &TxnCoordSenderFactory{
 		AmbientContext:    cfg.AmbientCtx,
@@ -87,19 +87,19 @@ func NewTxnCoordSenderFactory(
 // RootTransactionalSender is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) RootTransactionalSender(
 	txn *roachpb.Transaction, pri roachpb.UserPriority,
-) client.TxnSender {
+) kv.TxnSender {
 	return newRootTxnCoordSender(tcf, txn, pri)
 }
 
 // LeafTransactionalSender is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) LeafTransactionalSender(
 	tis *roachpb.LeafTxnInputState,
-) client.TxnSender {
+) kv.TxnSender {
 	return newLeafTxnCoordSender(tcf, tis)
 }
 
 // NonTransactionalSender is part of the TxnSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) NonTransactionalSender() client.Sender {
+func (tcf *TxnCoordSenderFactory) NonTransactionalSender() kv.Sender {
 	return tcf.wrapped
 }
 

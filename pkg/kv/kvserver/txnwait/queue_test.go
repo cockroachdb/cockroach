@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -164,7 +164,7 @@ func TestIsPushed(t *testing.T) {
 	}
 }
 
-func makeConfig(s client.SenderFunc) Config {
+func makeConfig(s kv.SenderFunc) Config {
 	var cfg Config
 	cfg.RangeDesc = &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax,
@@ -174,8 +174,8 @@ func makeConfig(s client.SenderFunc) Config {
 	cfg.Stopper = stop.NewStopper()
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {
-		factory := client.NonTransactionalFactoryFunc(s)
-		cfg.DB = client.NewDB(testutils.MakeAmbientCtx(), factory, cfg.Clock)
+		factory := kv.NonTransactionalFactoryFunc(s)
+		cfg.DB = kv.NewDB(testutils.MakeAmbientCtx(), factory, cfg.Clock)
 	}
 	return cfg
 }
@@ -223,7 +223,7 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 // released.
 func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var mockSender client.SenderFunc
+	var mockSender kv.SenderFunc
 	cfg := makeConfig(func(
 		ctx context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {

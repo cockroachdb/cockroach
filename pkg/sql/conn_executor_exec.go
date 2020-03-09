@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -427,7 +427,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// that all uses of SQL execution initialize the client.Txn using a
 	// single/common function. That would be where the stepping mode
 	// gets enabled once for all SQL statements executed "underneath".
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, client.SteppingEnabled)
+	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 	defer func() { _ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode) }()
 
 	// Then we create a sequencing point.
@@ -614,7 +614,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
-	ex.state.mu.txn = client.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
 	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}

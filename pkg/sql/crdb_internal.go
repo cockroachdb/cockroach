@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -2146,7 +2146,7 @@ func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]NamespaceKey,
 
 // TestingGetAllNames is a wrapper for getAllNames.
 func TestingGetAllNames(
-	ctx context.Context, txn *client.Txn, executor *InternalExecutor,
+	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
 ) (map[sqlbase.ID]NamespaceKey, error) {
 	return getAllNames(ctx, txn, executor)
 }
@@ -2154,7 +2154,7 @@ func TestingGetAllNames(
 // getAllNames is the testable implementation of getAllNames.
 // It is public so that it can be tested outside the sql package.
 func getAllNames(
-	ctx context.Context, txn *client.Txn, executor *InternalExecutor,
+	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
 ) (map[sqlbase.ID]NamespaceKey, error) {
 	namespace := map[sqlbase.ID]NamespaceKey{}
 	rows, err := executor.Query(

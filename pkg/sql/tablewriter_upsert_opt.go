@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -116,7 +116,7 @@ var _ tableWriter = &optTableUpserter{}
 
 // init is part of the tableWriter interface.
 func (tu *optTableUpserter) init(
-	ctx context.Context, txn *client.Txn, evalCtx *tree.EvalContext,
+	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext,
 ) error {
 	tu.tableWriterBase.init(txn)
 	tableDesc := tu.tableDesc()
@@ -295,7 +295,7 @@ func (tu *optTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error 
 // there was no conflict. If the RETURNING clause was specified, then the
 // inserted row is stored in the rowsUpserted collection.
 func (tu *optTableUpserter) insertNonConflictingRow(
-	ctx context.Context, b *client.Batch, insertRow tree.Datums, overwrite, traceKV bool,
+	ctx context.Context, b *kv.Batch, insertRow tree.Datums, overwrite, traceKV bool,
 ) error {
 	// Perform the insert proper.
 	if err := tu.ri.InsertRow(
@@ -341,7 +341,7 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 // rowsUpserted collection.
 func (tu *optTableUpserter) updateConflictingRow(
 	ctx context.Context,
-	b *client.Batch,
+	b *kv.Batch,
 	fetchRow tree.Datums,
 	updateValues tree.Datums,
 	tableDesc *sqlbase.ImmutableTableDescriptor,

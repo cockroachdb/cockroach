@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -248,7 +248,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 }
 
 // deleteSpans adds each input span to a DelRange command in the given batch.
-func (d *deleteRangeNode) deleteSpans(params runParams, b *client.Batch, spans roachpb.Spans) {
+func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roachpb.Spans) {
 	ctx := params.ctx
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 	for _, span := range spans {
@@ -264,7 +264,7 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *client.Batch, spans r
 // encountered during result processing, they're appended to the resumeSpans
 // input parameter.
 func (d *deleteRangeNode) processResults(
-	results []client.Result, resumeSpans []roachpb.Span,
+	results []kv.Result, resumeSpans []roachpb.Span,
 ) (roachpb.Spans, error) {
 	for _, r := range results {
 		var prev []byte

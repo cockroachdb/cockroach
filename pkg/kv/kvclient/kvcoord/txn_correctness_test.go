@@ -23,7 +23,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -55,16 +55,16 @@ func (re *retryError) Error() string {
 // enforce an ordering. If a previous wait channel is set, the
 // command waits on it before execution.
 type cmd struct {
-	name        string                                                   // name of the cmd for debug output
-	key, endKey string                                                   // key and optional endKey
-	debug       string                                                   // optional debug string
-	txnIdx      int                                                      // transaction index in the history
-	historyIdx  int                                                      // this suffixes key so tests get unique keys
-	expRetry    bool                                                     // true if we expect a retry
-	fn          func(ctx context.Context, c *cmd, txn *client.Txn) error // execution function
-	ch          chan error                                               // channel for other commands to wait
-	prev        *cmd                                                     // this command must wait on previous command before executing
-	env         map[string]int64                                         // contains all previously read values
+	name        string                                               // name of the cmd for debug output
+	key, endKey string                                               // key and optional endKey
+	debug       string                                               // optional debug string
+	txnIdx      int                                                  // transaction index in the history
+	historyIdx  int                                                  // this suffixes key so tests get unique keys
+	expRetry    bool                                                 // true if we expect a retry
+	fn          func(ctx context.Context, c *cmd, txn *kv.Txn) error // execution function
+	ch          chan error                                           // channel for other commands to wait
+	prev        *cmd                                                 // this command must wait on previous command before executing
+	env         map[string]int64                                     // contains all previously read values
 }
 
 func (c *cmd) init(prev *cmd) {
@@ -84,7 +84,7 @@ func (c *cmd) clone() *cmd {
 	return &clone
 }
 
-func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
+func (c *cmd) execute(txn *kv.Txn, t *testing.T) (string, error) {
 	if c.prev != nil {
 		if log.V(2) {
 			log.Infof(context.Background(), "%s waiting on %s", c, c.prev)
@@ -143,7 +143,7 @@ func (c *cmd) String() string {
 }
 
 // readCmd reads a value from the db and stores it in the env.
-func readCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+func readCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	r, err := txn.Get(ctx, c.getKey())
 	if err != nil {
 		return err
@@ -158,17 +158,17 @@ func readCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
 }
 
 // deleteCmd deletes the value at the given key from the db.
-func deleteCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+func deleteCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	return txn.Del(ctx, c.getKey())
 }
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
-func deleteRngCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+func deleteRngCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	return txn.DelRange(ctx, c.getKey(), c.getEndKey())
 }
 
 // scanCmd reads the values from the db from [key, endKey).
-func scanCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+func scanCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	rows, err := txn.Scan(ctx, c.getKey(), c.getEndKey(), 0)
 	if err != nil {
 		return err
@@ -187,7 +187,7 @@ func scanCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
 // incCmd adds one to the value of c.key in the env (as determined by
 // a previous read or write, or else assumed to be zero) and writes it
 // to the db.
-func incCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+func incCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	val, ok := c.env[c.key]
 	if !ok {
 		panic(fmt.Sprintf("can't increment key %q; not yet read", c.key))
@@ -205,7 +205,7 @@ func incCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
 // and writes the value to the db. "c.endKey" here needs to be parsed
 // in the context of this command, which is a "+"-separated list of
 // keys from the env or numeric constants to sum.
-func writeCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+func writeCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	sum := int64(0)
 	for _, sp := range strings.Split(c.endKey, "+") {
 		if constant, err := strconv.Atoi(sp); err != nil {
@@ -220,12 +220,12 @@ func writeCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
 }
 
 // commitCmd commits the transaction.
-func commitCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+func commitCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	return txn.Commit(ctx)
 }
 
 type cmdSpec struct {
-	fn func(ctx context.Context, c *cmd, txn *client.Txn) error
+	fn func(ctx context.Context, c *cmd, txn *kv.Txn) error
 	re *regexp.Regexp
 }
 
@@ -580,7 +580,7 @@ func newHistoryVerifier(
 	}
 }
 
-func (hv *historyVerifier) run(db *client.DB, t *testing.T) {
+func (hv *historyVerifier) run(db *kv.DB, t *testing.T) {
 	log.Infof(context.Background(), "verifying all possible histories for the %q anomaly", hv.name)
 	enumPri := enumeratePriorities(len(hv.txns), []enginepb.TxnPriority{1, enginepb.MaxTxnPriority})
 	enumHis := enumerateHistories(hv.txns, hv.equal)
@@ -604,7 +604,7 @@ func (hv *historyVerifier) run(db *client.DB, t *testing.T) {
 //
 // This process continues recursively if there are further retries.
 func (hv *historyVerifier) runHistoryWithRetry(
-	priorities []enginepb.TxnPriority, cmds []*cmd, db *client.DB, t *testing.T,
+	priorities []enginepb.TxnPriority, cmds []*cmd, db *kv.DB, t *testing.T,
 ) error {
 	if err := hv.runHistory(priorities, cmds, db, t); err != nil {
 		if log.V(1) {
@@ -638,7 +638,7 @@ func (hv *historyVerifier) runHistoryWithRetry(
 }
 
 func (hv *historyVerifier) runHistory(
-	priorities []enginepb.TxnPriority, cmds []*cmd, db *client.DB, t *testing.T,
+	priorities []enginepb.TxnPriority, cmds []*cmd, db *kv.DB, t *testing.T,
 ) error {
 	hv.idx++
 	if t.Failed() {
@@ -727,11 +727,11 @@ func (hv *historyVerifier) runHistory(
 }
 
 func (hv *historyVerifier) runCmds(
-	txnName string, cmds []*cmd, db *client.DB, t *testing.T,
+	txnName string, cmds []*cmd, db *kv.DB, t *testing.T,
 ) (string, map[string]int64, error) {
 	var strs []string
 	env := map[string]int64{}
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetDebugName(txnName)
 		for _, c := range cmds {
 			c.historyIdx = hv.idx
@@ -749,7 +749,7 @@ func (hv *historyVerifier) runCmds(
 }
 
 func (hv *historyVerifier) runTxn(
-	txnIdx int, priority enginepb.TxnPriority, cmds []*cmd, db *client.DB, t *testing.T,
+	txnIdx int, priority enginepb.TxnPriority, cmds []*cmd, db *kv.DB, t *testing.T,
 ) error {
 	var retry int
 	txnName := fmt.Sprintf("txn %d", txnIdx+1)
@@ -763,7 +763,7 @@ func (hv *historyVerifier) runTxn(
 		prev.ch <- err
 	}
 
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		// If this is 2nd attempt, and a retry wasn't expected, return a
 		// retry error which results in further histories being enumerated.
 		if retry++; retry > 1 {
@@ -802,7 +802,7 @@ func (hv *historyVerifier) runTxn(
 }
 
 func (hv *historyVerifier) runCmd(
-	txn *client.Txn, txnIdx, retry int, c *cmd, t *testing.T,
+	txn *kv.Txn, txnIdx, retry int, c *cmd, t *testing.T,
 ) (string, error) {
 	fmtStr, err := c.execute(txn, t)
 	cmdStr := fmt.Sprintf(fmtStr, txnIdx+1, retry)

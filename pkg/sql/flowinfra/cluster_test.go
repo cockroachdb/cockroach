@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -94,7 +94,7 @@ func TestClusterFlow(t *testing.T) {
 		now,
 		0, // maxOffset
 	)
-	txn := client.NewTxnFromProto(ctx, kvDB, tc.Server(0).NodeID(), now, client.RootTxn, &txnProto)
+	txn := kv.NewTxnFromProto(ctx, kvDB, tc.Server(0).NodeID(), now, kv.RootTxn, &txnProto)
 	leafInputState := txn.GetLeafTxnInputState(ctx)
 
 	tr1 := execinfrapb.TableReaderSpec{
@@ -416,9 +416,9 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		now,
 		0, // maxOffset
 	)
-	txn := client.NewTxnFromProto(
+	txn := kv.NewTxnFromProto(
 		context.TODO(), tc.Server(0).DB(), tc.Server(0).NodeID(),
-		now, client.RootTxn, &txnProto)
+		now, kv.RootTxn, &txnProto)
 	leafInputState := txn.GetLeafTxnInputState(context.TODO())
 
 	req := execinfrapb.SetupFlowRequest{
@@ -731,9 +731,9 @@ func BenchmarkInfrastructure(b *testing.B) {
 						now,
 						0, // maxOffset
 					)
-					txn := client.NewTxnFromProto(
+					txn := kv.NewTxnFromProto(
 						context.TODO(), tc.Server(0).DB(), tc.Server(0).NodeID(),
-						now, client.RootTxn, &txnProto)
+						now, kv.RootTxn, &txnProto)
 					leafInputState := txn.GetLeafTxnInputState(context.TODO())
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{

@@ -13,7 +13,7 @@ package row
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,7 +30,7 @@ import (
 // txn should be passed as argument.
 type fkExistenceCheckBaseHelper struct {
 	// txn is the current KV transaction.
-	txn *client.Txn
+	txn *kv.Txn
 
 	// dir indicates the direction of the check.
 	//
@@ -117,7 +117,7 @@ type fkExistenceCheckBaseHelper struct {
 //   TODO(knz): this should become homogeneous across the 3 packages
 //   sql, sqlbase, row. The proliferation is annoying.
 func makeFkExistenceCheckBaseHelper(
-	txn *client.Txn,
+	txn *kv.Txn,
 	otherTables FkTableMetadata,
 	ref *sqlbase.ForeignKeyConstraint,
 	searchIdx *sqlbase.IndexDescriptor,

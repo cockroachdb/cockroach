@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -65,7 +65,7 @@ func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
 	ctx context.Context,
 	snapshot storage.Reader,
 	start, end roachpb.RKey,
-	db *client.DB,
+	db *kv.DB,
 	_ *mon.BytesMonitor,
 	_ int64,
 	now hlc.Timestamp,
@@ -119,7 +119,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	for _, k := range splitKeys {
 		repl := store.LookupReplica(roachpb.RKey(k))
 		args := adminSplitArgs(k)
-		if _, pErr := client.SendWrappedWith(ctx, store, roachpb.Header{
+		if _, pErr := kv.SendWrappedWith(ctx, store, roachpb.Header{
 			RangeID: repl.RangeID,
 		}, args); pErr != nil {
 			t.Fatal(pErr)

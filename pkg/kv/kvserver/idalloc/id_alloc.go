@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -34,7 +34,7 @@ type Allocator struct {
 	log.AmbientContext
 
 	idKey     atomic.Value
-	db        *client.DB
+	db        *kv.DB
 	blockSize uint32      // Block allocation size
 	ids       chan uint32 // Channel of available IDs
 	stopper   *stop.Stopper
@@ -47,11 +47,7 @@ type Allocator struct {
 // internally by the allocator that can't be generated). The first value
 // returned is the existing value + 1, or 1 if the key did not previously exist.
 func NewAllocator(
-	ambient log.AmbientContext,
-	idKey roachpb.Key,
-	db *client.DB,
-	blockSize uint32,
-	stopper *stop.Stopper,
+	ambient log.AmbientContext, idKey roachpb.Key, db *kv.DB, blockSize uint32, stopper *stop.Stopper,
 ) (*Allocator, error) {
 	if blockSize == 0 {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", blockSize)
@@ -92,7 +88,7 @@ func (ia *Allocator) start() {
 		for {
 			var newValue int64
 			var err error
-			var res client.KeyValue
+			var res kv.KeyValue
 			for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 				idKey := ia.idKey.Load().(roachpb.Key)
 				if err := ia.stopper.RunTask(ctx, "storage.Allocator: allocating block", func(ctx context.Context) {

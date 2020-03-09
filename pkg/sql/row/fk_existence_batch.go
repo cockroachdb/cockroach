@@ -13,7 +13,7 @@ package row
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -31,7 +31,7 @@ type fkExistenceBatchChecker struct {
 	//
 	// TODO(knz): Don't do this. txn objects, like contexts,
 	// should not be captured in structs.
-	txn *client.Txn
+	txn *kv.Txn
 
 	// batch is the accumulated batch of existence checks so far.
 	batch roachpb.BatchRequest

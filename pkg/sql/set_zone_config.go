@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -825,7 +825,7 @@ func validateZoneAttrsAndLocalities(
 
 func writeZoneConfig(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	targetID sqlbase.ID,
 	table *sqlbase.TableDescriptor,
 	zone *zonepb.ZoneConfig,
@@ -861,9 +861,7 @@ func writeZoneConfig(
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
 // getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
 // zone config exists for the given ID, it returns nil.
-func getZoneConfigRaw(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
-) (*zonepb.ZoneConfig, error) {
+func getZoneConfigRaw(ctx context.Context, txn *kv.Txn, id sqlbase.ID) (*zonepb.ZoneConfig, error) {
 	kv, err := txn.Get(ctx, config.MakeZoneKey(uint32(id)))
 	if err != nil {
 		return nil, err
@@ -886,7 +884,7 @@ func getZoneConfigRaw(
 // reuse an existing client.Txn safely.
 func removeIndexZoneConfigs(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	tableID sqlbase.ID,
 	indexDescs []sqlbase.IndexDescriptor,

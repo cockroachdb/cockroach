@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -35,7 +35,7 @@ var _ SchemaAccessor = &LogicalSchemaAccessor{}
 
 // IsValidSchema implements the DatabaseLister interface.
 func (l *LogicalSchemaAccessor) IsValidSchema(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
 	if _, ok := l.vt.getVirtualSchemaEntry(scName); ok {
 		return true, sqlbase.InvalidID, nil
@@ -48,7 +48,7 @@ func (l *LogicalSchemaAccessor) IsValidSchema(
 // GetObjectNames implements the DatabaseLister interface.
 func (l *LogicalSchemaAccessor) GetObjectNames(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	dbDesc *DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
@@ -72,7 +72,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 // GetObjectDesc implements the ObjectAccessor interface.
 func (l *LogicalSchemaAccessor) GetObjectDesc(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	settings *cluster.Settings,
 	name *ObjectName,
 	flags tree.ObjectLookupFlags,

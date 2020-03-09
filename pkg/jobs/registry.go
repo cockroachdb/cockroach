@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -95,7 +95,7 @@ type NodeLiveness interface {
 type Registry struct {
 	ac         log.AmbientContext
 	stopper    *stop.Stopper
-	db         *client.DB
+	db         *kv.DB
 	ex         sqlutil.InternalExecutor
 	clock      *hlc.Clock
 	nodeID     *base.NodeIDContainer
@@ -152,7 +152,7 @@ func MakeRegistry(
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
-	db *client.DB,
+	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 	nodeID *base.NodeIDContainer,
 	settings *cluster.Settings,
@@ -231,7 +231,7 @@ func (r *Registry) CreateAndStartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
 	var rj *StartableJob
-	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		rj, err = r.CreateStartableJobWithTxn(ctx, record, txn, resultsCh)
 		return err
 	}); err != nil {
@@ -329,9 +329,7 @@ func (r *Registry) NewJob(record Record) *Job {
 // CreateJobWithTxn creates a job to be started later with StartJob.
 // It stores the job in the jobs table, marks it pending and gives the
 // current node a lease.
-func (r *Registry) CreateJobWithTxn(
-	ctx context.Context, record Record, txn *client.Txn,
-) (*Job, error) {
+func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.Txn) (*Job, error) {
 	j := r.NewJob(record)
 	if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
 		return nil, err
@@ -353,7 +351,7 @@ func (r *Registry) CreateJobWithTxn(
 // back then the caller must call CleanupOnRollback to unregister the job from
 // the Registry.
 func (r *Registry) CreateStartableJobWithTxn(
-	ctx context.Context, record Record, txn *client.Txn, resultsCh chan<- tree.Datums,
+	ctx context.Context, record Record, txn *kv.Txn, resultsCh chan<- tree.Datums,
 ) (*StartableJob, error) {
 	j, err := r.CreateJobWithTxn(ctx, record, txn)
 	if err != nil {
@@ -391,7 +389,7 @@ func (r *Registry) LoadJob(ctx context.Context, jobID int64) (*Job, error) {
 // LoadJobWithTxn does the same as above, but using the transaction passed in
 // the txn argument. Passing a nil transaction is equivalent to calling LoadJob
 // in that a transaction will be automatically created.
-func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *client.Txn) (*Job, error) {
+func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *kv.Txn) (*Job, error) {
 	j := &Job{
 		id:       &jobID,
 		registry: r,
@@ -522,7 +520,7 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 	}
 	for _, id := range payload.DescriptorIDs {
 		pendingMutations := false
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			td, err := sqlbase.GetTableDescFromID(ctx, txn, id)
 			if err != nil {
 				return err
@@ -597,7 +595,7 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 
 // getJobFn attempts to get a resumer from the given job id. If the job id
 // does not have a resumer then it returns an error message suitable for users.
-func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Job, Resumer, error) {
+func (r *Registry) getJobFn(ctx context.Context, txn *kv.Txn, id int64) (*Job, Resumer, error) {
 	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
 		return nil, nil, err
@@ -610,7 +608,7 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 }
 
 // CancelRequested marks the job as cancel-requested using the specified txn (may be nil).
-func (r *Registry) CancelRequested(ctx context.Context, txn *client.Txn, id int64) error {
+func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		// Special case schema change jobs to mark the job as canceled.
@@ -635,7 +633,7 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *client.Txn, id int6
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
-func (r *Registry) PauseRequested(ctx context.Context, txn *client.Txn, id int64) error {
+func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
@@ -644,7 +642,7 @@ func (r *Registry) PauseRequested(ctx context.Context, txn *client.Txn, id int64
 }
 
 // Resume resumes the paused job with id using the specified txn (may be nil).
-func (r *Registry) Resume(ctx context.Context, txn *client.Txn, id int64) error {
+func (r *Registry) Resume(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
@@ -990,7 +988,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			// if multiple nodes execute this.
 			const updateStmt = `UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`
 			updateArgs := []interface{}{StatusFailed, payloadBytes, *id}
-			err = r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			err = r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				_, err := r.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
 				return err
 			})
@@ -1032,7 +1030,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		resumeCtx, cancel := r.makeCtx()
 
 		if pauseRequested := status == StatusPauseRequested; pauseRequested {
-			if err := job.Paused(ctx, func(context.Context, *client.Txn) error {
+			if err := job.Paused(ctx, func(context.Context, *kv.Txn) error {
 				r.unregister(*id)
 				return nil
 			}); err != nil {
@@ -1044,7 +1042,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		}
 
 		if cancelRequested := status == StatusCancelRequested; cancelRequested {
-			if err := job.Reverted(ctx, errJobCanceled, func(context.Context, *client.Txn) error {
+			if err := job.Reverted(ctx, errJobCanceled, func(context.Context, *kv.Txn) error {
 				// Unregister the job in case it is running on the node.
 				// Unregister is a no-op for jobs that are not running.
 				r.unregister(*id)

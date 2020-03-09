@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +50,7 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	db := tc.Server(0).DB()
 
-	txn := client.NewTxn(ctx, db, tc.Server(0).NodeID())
+	txn := kv.NewTxn(ctx, db, tc.Server(0).NodeID())
 	it := resolver.NewSpanResolverIterator(txn)
 
 	tableDesc := sqlbase.GetTableDescriptor(db, "test", "t")

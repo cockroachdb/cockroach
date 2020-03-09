@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -46,7 +46,7 @@ func TestEagerReplication(t *testing.T) {
 
 	key := roachpb.Key("a")
 	args := adminSplitArgs(key)
-	_, pErr := client.SendWrapped(ctx, store.TestSender(), args)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}

@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -102,7 +102,7 @@ var tableNames = map[string]bool{
 
 // Format for any key:
 //   <table-name>/<index-id>/<index-col1>/.../#/<table-name>/<index-id>/....
-func encodeTestKey(kvDB *client.DB, keyStr string) (roachpb.Key, error) {
+func encodeTestKey(kvDB *kv.DB, keyStr string) (roachpb.Key, error) {
 	var key []byte
 	tokens := strings.Split(keyStr, "/")
 
@@ -131,7 +131,7 @@ func encodeTestKey(kvDB *client.DB, keyStr string) (roachpb.Key, error) {
 	return key, nil
 }
 
-func decodeTestKey(kvDB *client.DB, key roachpb.Key) (string, error) {
+func decodeTestKey(kvDB *kv.DB, key roachpb.Key) (string, error) {
 	var out []byte
 
 	keyStr := roachpb.PrettyPrintKey(nil /* valDirs */, key)
@@ -151,7 +151,7 @@ func decodeTestKey(kvDB *client.DB, key roachpb.Key) (string, error) {
 				return "", err
 			}
 
-			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 				desc, err := sqlbase.GetTableDescFromID(context.TODO(), txn, sqlbase.ID(descID))
 				if err != nil {
 					return err
@@ -441,7 +441,7 @@ type testPartition struct {
 	spans [][2]string
 }
 
-func makeSpanPartitions(kvDB *client.DB, testParts []testPartition) ([]SpanPartition, error) {
+func makeSpanPartitions(kvDB *kv.DB, testParts []testPartition) ([]SpanPartition, error) {
 	spanParts := make([]SpanPartition, len(testParts))
 
 	for i, testPart := range testParts {

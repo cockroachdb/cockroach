@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -43,7 +43,7 @@ func (*tableDeleter) desc() string { return "deleter" }
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 // init is part of the tableWriter interface.
-func (td *tableDeleter) init(_ context.Context, txn *client.Txn, _ *tree.EvalContext) error {
+func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext) error {
 	td.tableWriterBase.init(txn)
 	return nil
 }
@@ -253,7 +253,7 @@ func (td *tableDeleter) clearIndex(ctx context.Context, idx *sqlbase.IndexDescri
 
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.AddRawRequest(&roachpb.ClearRangeRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    sp.Key,

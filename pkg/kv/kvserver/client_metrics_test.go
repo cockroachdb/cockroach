@@ -16,8 +16,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -265,7 +265,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Perform a split, which has special metrics handling.
 	splitArgs := adminSplitArgs(roachpb.Key("m"))
-	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -293,7 +293,7 @@ func TestStoreMetrics(t *testing.T) {
 	verifyStats(t, mtc, 0, 1, 2)
 
 	// Create a transaction statement that fails. Regression test for #4969.
-	if err := mtc.dbs[0].Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := mtc.dbs[0].Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		var expVal roachpb.Value
 		expVal.SetInt(6)

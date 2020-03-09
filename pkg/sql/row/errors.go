@@ -14,7 +14,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -47,7 +47,7 @@ func (f *singleKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
 
 // ConvertBatchError returns a user friendly constraint violation error.
 func ConvertBatchError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *client.Batch,
+	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
 ) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
