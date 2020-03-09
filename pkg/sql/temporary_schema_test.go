@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql_test
+package sql
 
 import (
 	"context"
@@ -16,14 +16,19 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,16 +95,11 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	require.NoError(
 		t,
 		kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			err = sql.TestingCleanupSchemaObjects(
+			err = cleanupSchemaObjects(
 				ctx,
-				s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-				func(
-					ctx context.Context, _ string, _ *kv.Txn, query string, _ ...interface{},
-				) (int, error) {
-					_, err := conn.ExecContext(ctx, query)
-					return 0, err
-				},
+				s.ExecutorConfig().(ExecutorConfig).Settings,
 				txn,
+				s.InternalExecutor().(*InternalExecutor),
 				namesToID["defaultdb"],
 				schemaName,
 			)
@@ -110,9 +110,17 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 
 	for _, name := range selectableTempNames {
 		// Ensure all the entries for the given temporary structures are gone.
-		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", schemaName, name))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), fmt.Sprintf(`relation "%s.%s" does not exist`, schemaName, name))
+		// This can take a longer amount of time if the job takes time / lease doesn't expire in time.
+		testutils.SucceedsSoon(t, func() error {
+			_, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", schemaName, name))
+			if err != nil {
+				if !strings.Contains(err.Error(), fmt.Sprintf(`relation "%s.%s" does not exist`, schemaName, name)) {
+					return errors.Errorf("expected %s.%s error to resolve relation not existing", schemaName, name)
+				}
+				return nil //nolint:returnerrcheck
+			}
+			return errors.Errorf("expected %s.%s to be deleted", schemaName, name)
+		})
 	}
 
 	// Check perm_table performs correctly, and has the right schema.
@@ -126,4 +134,82 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	).Scan(&colDefault)
 	require.NoError(t, err)
 	assert.False(t, colDefault.Valid)
+}
+
+func TestTemporaryObjectCleaner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	numNodes := 3
+	ch := make(chan time.Time)
+	finishedCh := make(chan struct{})
+	knobs := base.TestingKnobs{
+		SQLExecutor: &ExecutorTestingKnobs{
+			DisableTempObjectsCleanupOnSessionExit: true,
+			TempObjectsCleanupCh:                   ch,
+			OnTempObjectsCleanupDone: func() {
+				finishedCh <- struct{}{}
+			},
+		},
+	}
+	tc := serverutils.StartTestCluster(
+		t,
+		numNodes,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "defaultdb",
+				Knobs:       knobs,
+			},
+		},
+	)
+	defer tc.Stopper().Stop(context.TODO())
+
+	// Start and close two temporary schemas.
+	for _, dbID := range []int{0, 1} {
+		db := tc.ServerConn(dbID)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sqlDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+		// Close the client connection. Normally the temporary data would immediately
+		// be cleaned up on session exit, but this is disabled via the
+		// DisableTempObjectsCleanupOnSessionExit testing knob.
+		require.NoError(t, db.Close())
+	}
+
+	// Sanity check: there should still be all temporary schemas present from above.
+	// dbConn 2 should have a db connection living longer, which we don't delete.
+	db := tc.ServerConn(2)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+	sqlDB.Exec(t, `CREATE TEMP TABLE t (x INT); INSERT INTO t VALUES (1)`)
+	tempSchemaQuery := `SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`
+	var tempSchemaCount int
+	sqlDB.QueryRow(t, tempSchemaQuery).Scan(&tempSchemaCount)
+	require.Equal(t, tempSchemaCount, 3)
+
+	// Verify that the asynchronous cleanup job kicks in and removes the temporary
+	// data.
+	testutils.SucceedsSoon(t, func() error {
+		// Now force a cleanup run (by default, it is every 30mins).
+		// Send this to every node, in case one is not the leaseholder.
+		// This needs to be sent on each run, in case the lease master
+		// has not been decided.
+		for i := 0; i < numNodes; i++ {
+			ch <- timeutil.Now()
+		}
+		// Block until all nodes have responded.
+		// This prevents the stress tests running into #28033, where
+		// ListSessions races with the QueryRow.
+		for i := 0; i < numNodes; i++ {
+			<-finishedCh
+		}
+		sqlDB.QueryRow(t, tempSchemaQuery).Scan(&tempSchemaCount)
+		if tempSchemaCount != 1 {
+			return errors.Errorf("expected 1 temp schemas, found %d", tempSchemaCount)
+		}
+		return nil
+	})
+	var tRowCount int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM t").Scan(&tRowCount)
+	require.Equal(t, 1, tRowCount)
+	require.NoError(t, db.Close())
 }

@@ -1551,6 +1551,23 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Temporary Objects Cleanup"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Active Cleaners",
+				Metrics: []string{"sql.temp_object_cleaner.active_cleaners"},
+			},
+			{
+				Title: "Deletion Rate",
+				Metrics: []string{
+					"sql.temp_object_cleaner.schemas_to_delete",
+					"sql.temp_object_cleaner.schemas_deletion_success",
+					"sql.temp_object_cleaner.schemas_deletion_error",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL"}},
 		Charts: []chartDescription{
 			{
