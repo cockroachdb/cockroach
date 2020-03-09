@@ -105,10 +105,10 @@ func retrieveUserAndPassword(
 			return contextutil.RunWithTimeout(ctx, "get-user-timeout", timeout, fn)
 		}
 	}
-	var isRole bool
+
 	// Perform the lookup with a timeout.
 	err = runFn(func(ctx context.Context) error {
-		const getHashedPassword = `SELECT "hashedPassword", "isRole" FROM system.users ` +
+		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 			`WHERE username=$1`
 		values, err := ie.QueryRowEx(
 			ctx, "get-hashed-pwd", nil, /* txn */
@@ -120,7 +120,6 @@ func retrieveUserAndPassword(
 		if values != nil {
 			exists = true
 			hashedPassword = []byte(*(values[0].(*tree.DBytes)))
-			isRole = bool(*(values[1].(*tree.DBool)))
 		}
 
 		if !exists {
@@ -140,14 +139,14 @@ func retrieveUserAndPassword(
 			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
 		}
 
-		// To support users created before 20.1, allow all USERS to login
-		// if NOLOGIN is not found. Only allow roles to LOGIN if login is found.
-		var noLoginFound = false
+		// To support users created before 20.1, allow all USERS/ROLES to login
+		// if NOLOGIN is not found.
+		canLogin = true
 		for _, row := range loginDependencies {
 			option := string(tree.MustBeDString(row[0]))
 
 			if option == "NOLOGIN" {
-				noLoginFound = true
+				canLogin = false
 			}
 
 			if option == "VALID UNTIL" {
@@ -165,8 +164,6 @@ func retrieveUserAndPassword(
 				}
 			}
 		}
-
-		canLogin = !noLoginFound && !isRole
 
 		return nil
 	})
