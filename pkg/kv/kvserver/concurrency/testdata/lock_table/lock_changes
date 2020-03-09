@@ -20,28 +20,14 @@ acquire r=req1 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 2, info: epoch: 0, seqs: [2]
-local: num=0
-
-print
-----
-global: num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 2, info: epoch: 0, seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
 local: num=0
 
 release txn=txn2 span=a,c
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 2, info: epoch: 0, seqs: [2]
-local: num=0
-
-print
-----
-global: num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 2, info: epoch: 0, seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
 local: num=0
 
 # ---------------------------------------------------------------------------------
@@ -58,18 +44,11 @@ acquire r=req2 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: epoch: 1, seqs: [0]
-local: num=0
-
-print
-----
-global: num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: epoch: 1, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [0]
 local: num=0
 
 # ---------------------------------------------------------------------------------
-# Reader waits until it the timestamp of the lock is updated.
+# Reader waits until the timestamp of the lock is updated.
 # ---------------------------------------------------------------------------------
 
 new-request r=req3 txn=txn2 ts=12 spans=r@a
@@ -87,7 +66,7 @@ print
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: epoch: 1, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 1, seqs: [0]
    waiting readers:
     req: 1, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 1
@@ -103,15 +82,13 @@ acquire r=req4 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, seq: 1, info: epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, info: unrepl epoch: 1, seqs: [0, 1]
 local: num=0
 
-print
+guard-state r=req3
 ----
-global: num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, seq: 1, info: epoch: 1, seqs: [0, 1]
-local: num=0
+new: state=doneWaiting
+
 
 # ---------------------------------------------------------------------------------
 # Discovery of replicated lock that was already held as unreplicated. The waiters
@@ -134,7 +111,7 @@ add-discovered r=req5 k=a txn=txn1
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, seq: 1, info: epoch: 1, seqs: [1], epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
