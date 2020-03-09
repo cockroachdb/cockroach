@@ -12,10 +12,9 @@ import { isUndefined } from "lodash";
 
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import {DiagnosticStatuses} from "src/views/statements/diagnostics/diagnosticStatuses";
 
-export type DiagnosticsStatuses = "READY" | "WAITING FOR QUERY" | "ERROR";
-
-export function getDiagnosticsStatus(diagnosticsRequest: IStatementDiagnosticsReport): DiagnosticsStatuses {
+export function getDiagnosticsStatus(diagnosticsRequest: IStatementDiagnosticsReport): DiagnosticStatuses {
   if (diagnosticsRequest.completed) {
     return "READY";
   }
