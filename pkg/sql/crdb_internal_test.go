@@ -302,7 +302,7 @@ func TestCrdbInternalJobsOOM(t *testing.T) {
 	// connection, but small enough to overflow easily. It's set to be comfortably
 	// large enough that the server can start up with a bit of
 	// extra space to overflow.
-	const lowMemoryBudget = 500000
+	const lowMemoryBudget = 250000
 	const fieldSize = 10000
 	const numRows = 10
 	const statement = "SELECT count(*) FROM crdb_internal.jobs"
@@ -324,8 +324,12 @@ VALUES ($1, 'StatusRunning', repeat('a', $2)::BYTES, repeat('a', $2)::BYTES)`, i
 		defer s.Stopper().Stop(context.Background())
 
 		insertRows(sqlDB)
-		if _, err := sqlDB.Exec(statement); err.(*pq.Error).Code != pgcode.OutOfMemory {
-			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
+		_, err := sqlDB.Exec(statement)
+		if err == nil {
+			t.Fatalf("Expected \"%s\" to consume too much memory, found no error", statement)
+		}
+		if pErr, ok := err.(*pq.Error); !ok || pErr.Code != pgcode.OutOfMemory {
+			t.Fatalf("Expected \"%s\" to consume too much memory, found unexpected error %+v", statement, pErr)
 		}
 	})
 
