@@ -34,7 +34,7 @@ export function* createDiagnosticsReportSaga(action: PayloadAction<DiagnosticsRe
     yield call(createStatementDiagnosticsReport, diagnosticsReportRequest);
     yield put(createStatementDiagnosticsReportCompleteAction());
     yield put(invalidateStatementDiagnosticsRequests());
-    // PUT expects action wih `type` field which isn't defined in `refresh` ThunkAction interface
+    // PUT expects action with `type` field which isn't defined in `refresh` ThunkAction interface
     yield put(refreshStatementDiagnosticsRequests() as any);
     yield put(createStatementDiagnosticsAlertLocalSetting.set({ show: true, status: "SUCCESS"}));
   } catch (e) {

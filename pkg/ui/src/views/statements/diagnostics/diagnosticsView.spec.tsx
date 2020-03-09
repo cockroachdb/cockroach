@@ -41,6 +41,7 @@ describe("DiagnosticsView", () => {
           activate={activateFn}
           hasData={false}
           diagnosticsReports={[]}
+          dismissAlertMessage={() => {}}
         />);
     });
 
@@ -68,6 +69,7 @@ describe("DiagnosticsView", () => {
           activate={activateFn}
           hasData={true}
           diagnosticsReports={diagnosticsRequests}
+          dismissAlertMessage={() => {}}
         />),
       );
     });
@@ -93,6 +95,7 @@ describe("DiagnosticsView", () => {
           activate={activateFn}
           hasData={true}
           diagnosticsReports={diagnosticsRequests}
+          dismissAlertMessage={() => {}}
         />),
       );
 
