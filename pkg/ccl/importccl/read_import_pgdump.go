@@ -450,12 +450,7 @@ func (m *pgDumpReader) readFiles(
 }
 
 func (m *pgDumpReader) readFile(
-	ctx context.Context,
-	input *fileReader,
-	inputIdx int32,
-	inputName string,
-	resumePos int64,
-	rejected chan string,
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
 	var inserts, count int64
 	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
@@ -551,7 +546,7 @@ func (m *pgDumpReader) readFile(
 				row, err := ps.Next()
 				// We expect an explicit copyDone here. io.EOF is unexpected.
 				if err == io.EOF {
-					return makeRowErr(inputName, count, pgcode.ProtocolViolation,
+					return makeRowErr("", count, pgcode.ProtocolViolation,
 						"unexpected EOF")
 				}
 				if row == errCopyDone {
@@ -559,7 +554,7 @@ func (m *pgDumpReader) readFile(
 				}
 				count++
 				if err != nil {
-					return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
+					return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 				}
 				if !importing {
 					continue
@@ -570,7 +565,7 @@ func (m *pgDumpReader) readFile(
 				switch row := row.(type) {
 				case copyData:
 					if expected, got := len(conv.VisibleCols), len(row); expected != got {
-						return makeRowErr(inputName, count, pgcode.Syntax,
+						return makeRowErr("", count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}
 					for i, s := range row {
@@ -580,7 +575,7 @@ func (m *pgDumpReader) readFile(
 							conv.Datums[i], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
 							if err != nil {
 								col := conv.VisibleCols[i]
-								return wrapRowErr(err, inputName, count, pgcode.Syntax,
+								return wrapRowErr(err, "", count, pgcode.Syntax,
 									"parse %q as %s", col.Name, col.Type.SQLString())
 							}
 						}
@@ -589,7 +584,7 @@ func (m *pgDumpReader) readFile(
 						return err
 					}
 				default:
-					return makeRowErr(inputName, count, pgcode.Uncategorized,
+					return makeRowErr("", count, pgcode.Uncategorized,
 						"unexpected: %v", row)
 				}
 			}
@@ -642,7 +637,7 @@ func (m *pgDumpReader) readFile(
 			}
 			key, val, err := sql.MakeSequenceKeyVal(seq.Desc, val, isCalled)
 			if err != nil {
-				return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
+				return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 			}
 			kv := roachpb.KeyValue{Key: key}
 			kv.Value.SetInt(val)

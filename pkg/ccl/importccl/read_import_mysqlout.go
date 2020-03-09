@@ -336,12 +336,7 @@ func (d *delimitedConsumer) FillDatums(
 }
 
 func (d *mysqloutfileReader) readFile(
-	ctx context.Context,
-	input *fileReader,
-	inputIdx int32,
-	inputName string,
-	resumePos int64,
-	rejected chan string,
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
 	producer := &delimitedProducer{
 		importCtx: d.importCtx,
