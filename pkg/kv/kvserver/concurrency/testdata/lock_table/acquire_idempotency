@@ -25,14 +25,14 @@ acquire r=req1 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 1
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1]
 local: num=0
 
 dequeue r=req1
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 1
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1]
 local: num=0
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=2
@@ -49,14 +49,14 @@ acquire r=req2 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 2
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2]
 local: num=0
 
 dequeue r=req2
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 2
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2]
 local: num=0
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=4
@@ -73,14 +73,14 @@ acquire r=req3 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 4
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
 local: num=0
 
 dequeue r=req3
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 4
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
 local: num=0
 
 # -------------------------------------------------------------
@@ -101,14 +101,14 @@ acquire r=req3 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 4
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
 local: num=0
 
 dequeue r=req3
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 4
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
 local: num=0
 
 # -------------------------------------------------------------
@@ -129,14 +129,14 @@ acquire r=req4 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 4
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
 local: num=0
 
 dequeue r=req4
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 4
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
 local: num=0
 
 # -------------------------------------------------------------
@@ -163,7 +163,7 @@ dequeue r=req5
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 4
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
 local: num=0
 
 # -------------------------------------------------------------
@@ -184,12 +184,12 @@ acquire r=req6 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 5
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4, 5]
 local: num=0
 
 dequeue r=req6
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, seq: 5
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [1, 2, 4, 5]
 local: num=0

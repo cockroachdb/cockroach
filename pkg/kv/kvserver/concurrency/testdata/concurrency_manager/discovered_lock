@@ -28,7 +28,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
 local: num=0
 
 sequence req=req1

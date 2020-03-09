@@ -22,38 +22,38 @@ acquire r=req1 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 acquire r=req1 k=b durability=u
 ----
 global: num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 acquire r=req1 k=c durability=u
 ----
 global: num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 dequeue r=req1
 ----
 global: num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # Next, two different transactional requests wait at a and b.
@@ -93,18 +93,18 @@ print
 ----
 global: num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 4, txn: none
    distinguished req: 2
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 5, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 5
@@ -117,14 +117,14 @@ release txn=txn1 span=a,d
 ----
 global: num=3
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, seq: 0
    queued writers:
     active: true req: 4, txn: none
    distinguished req: 4
  lock: "b"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 guard-state r=req2
@@ -156,15 +156,15 @@ print
 ----
 global: num=3
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, seq: 0
    queued writers:
     active: true req: 4, txn: none
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 4
  lock: "b"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 # Release the reservation at a. The first waiter is non-transactional so it will not acquire the
@@ -175,11 +175,11 @@ dequeue r=req2
 ----
 global: num=3
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
  lock: "b"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 guard-state r=req4
@@ -194,14 +194,14 @@ print
 ----
 global: num=3
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
  lock: "b"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
    queued writers:
     active: true req: 4, txn: none
    distinguished req: 4
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 # Release the reservation at b. The non-transactional waiter will be done at b, and when it gets
@@ -211,9 +211,9 @@ dequeue r=req3
 ----
 global: num=2
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 guard-state r=req4
@@ -228,9 +228,9 @@ print
 ----
 global: num=2
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 # Non-transactional request scans again and proceeds to evaluation and discovers a lock at c
@@ -243,9 +243,9 @@ add-discovered r=req4 k=c txn=txn2
 ----
 global: num=2
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 4, txn: none
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
@@ -273,9 +273,9 @@ release txn=txn2 span=c
 ----
 global: num=2
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 guard-state r=req4
@@ -292,16 +292,16 @@ dequeue r=req4
 ----
 global: num=2
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
  lock: "c"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+  res: req: 5, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0, seq: 0
 local: num=0
 
 dequeue r=req5
 ----
 global: num=1
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, seq: 0
 local: num=0
 
 dequeue r=req6

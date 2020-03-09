@@ -76,7 +76,7 @@ release txn=<name> span=<start>[,<end>]
 
  Releases locks for the named transaction.
 
-update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>]
+update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>] [ignored-seqs=<int>[-<int>][,<int>[-<int>]]]
 ----
 <error string>
 
@@ -126,16 +126,20 @@ func TestLockTableBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
 		var lt lockTable
-		txnsByName := make(map[string]*enginepb.TxnMeta)
-		txnCounter := uint128.FromInts(0, 0)
-		requestsByName := make(map[string]Request)
-		guardsByReqName := make(map[string]lockTableGuard)
+		var txnsByName map[string]*enginepb.TxnMeta
+		var txnCounter uint128.Uint128
+		var requestsByName map[string]Request
+		var guardsByReqName map[string]lockTableGuard
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
 				lt = &lockTableImpl{maxLocks: int64(maxLocks)}
+				txnsByName = make(map[string]*enginepb.TxnMeta)
+				txnCounter = uint128.FromInts(0, 0)
+				requestsByName = make(map[string]Request)
+				guardsByReqName = make(map[string]lockTableGuard)
 				return ""
 
 			case "new-txn":
@@ -264,15 +268,42 @@ func TestLockTableBasic(t *testing.T) {
 				ts := scanTimestamp(t, d)
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
-				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID}
+				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID, Sequence: txnMeta.Sequence}
 				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
 				txnMeta.WriteTimestamp = ts
 				txnsByName[txnName] = txnMeta
 				var s string
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
+				var ignored []enginepb.IgnoredSeqNumRange
+				if d.HasArg("ignored-seqs") {
+					var seqsStr string
+					d.ScanArgs(t, "ignored-seqs", &seqsStr)
+					parts := strings.Split(seqsStr, ",")
+					for _, p := range parts {
+						pair := strings.Split(p, "-")
+						if len(pair) != 1 && len(pair) != 2 {
+							d.Fatalf(t, "error parsing %s", parts)
+						}
+						startNum, err := strconv.ParseInt(pair[0], 10, 32)
+						if err != nil {
+							d.Fatalf(t, "error parsing ignored seqnums: %s", err)
+						}
+						ignoredRange := enginepb.IgnoredSeqNumRange{
+							Start: enginepb.TxnSeq(startNum), End: enginepb.TxnSeq(startNum)}
+						if len(pair) == 2 {
+							endNum, err := strconv.ParseInt(pair[1], 10, 32)
+							if err != nil {
+								d.Fatalf(t, "error parsing ignored seqnums: %s", err)
+							}
+							ignoredRange.End = enginepb.TxnSeq(endNum)
+						}
+						ignored = append(ignored, ignoredRange)
+					}
+				}
 				// TODO(sbhola): also test STAGING.
-				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.PENDING}
+				intent := &roachpb.LockUpdate{
+					Span: span, Txn: *txnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
