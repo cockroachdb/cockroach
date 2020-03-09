@@ -92,8 +92,21 @@ type treeMu struct {
 // request ScanAndEnqueue() and CurState() must be called by the same
 // thread.
 //
-// Mutex ordering: treeMu.mu > lockState.mu > lockTableGuardImpl.mu
+// Mutex ordering:   lockTableImpl.enabledMu
+//                 > treeMu.mu
+//                 > lockState.mu
+//                 > lockTableGuardImpl.mu
 type lockTableImpl struct {
+	// Is the lockTable enabled? When enabled, the lockTable tracks locks and
+	// allows requests to queue in wait-queues on these locks. When disabled,
+	// no locks or wait-queues are maintained.
+	//
+	// enabledMu is held in read-mode when determining whether the lockTable
+	// is enabled and when acting on that information (e.g. adding new locks).
+	// It is held in write-mode when enabling or disabling the lockTable.
+	enabled   bool
+	enabledMu syncutil.RWMutex
+
 	// A sequence number is assigned to each request seen by the lockTable. This
 	// is to preserve fairness despite the design choice of allowing
 	// out-of-order evaluation of requests with overlapping spans where the
@@ -1636,6 +1649,12 @@ func (t *treeMu) nextLockSeqNum() uint64 {
 
 // ScanAndEnqueue implements the lockTable interface.
 func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTableGuard {
+	// NOTE: there is no need to synchronize with enabledMu here. ScanAndEnqueue
+	// scans the lockTable and enters any conflicting lock wait-queues, but a
+	// disabled lockTable will be empty. If the scan's btree snapshot races with
+	// a concurrent call to clear/disable then it might enter some wait-queues,
+	// but it will quickly be released from them.
+
 	var g *lockTableGuardImpl
 	if guard == nil {
 		g = newLockTableGuardImpl()
@@ -1683,6 +1702,10 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 
 // Dequeue implements the lockTable interface.
 func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
+	// NOTE: there is no need to synchronize with enabledMu here. Dequeue only
+	// accesses state already held by the guard and does not add anything to the
+	// lockTable.
+
 	g := guard.(*lockTableGuardImpl)
 	defer releaseLockTableGuardImpl(g)
 
@@ -1708,6 +1731,12 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 
 // AddDiscoveredLock implements the lockTable interface.
 func (t *lockTableImpl) AddDiscoveredLock(intent *roachpb.Intent, guard lockTableGuard) error {
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		// If not enabled, don't track any locks.
+		return nil
+	}
 	g := guard.(*lockTableGuardImpl)
 	key := intent.Key
 	ss := spanset.SpanGlobal
@@ -1742,6 +1771,12 @@ func (t *lockTableImpl) AddDiscoveredLock(intent *roachpb.Intent, guard lockTabl
 func (t *lockTableImpl) AcquireLock(
 	txn *enginepb.TxnMeta, key roachpb.Key, strength lock.Strength, durability lock.Durability,
 ) error {
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		// If not enabled, don't track any locks.
+		return nil
+	}
 	if strength != lock.Exclusive {
 		return errors.Errorf("caller violated contract")
 	}
@@ -1868,6 +1903,11 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*lockState) {
 
 // UpdateLocks implements the lockTable interface.
 func (t *lockTableImpl) UpdateLocks(up *roachpb.LockUpdate) error {
+	// NOTE: there is no need to synchronize with enabledMu here. Update only
+	// accesses locks already in the lockTable, but a disabled lockTable will be
+	// empty. If the lock-table scan below races with a concurrent call to clear
+	// then it might update a few locks, but they will quickly be cleared.
+
 	span := up.Span
 	ss := spanset.SpanGlobal
 	if keys.IsLocal(span.Key) {
@@ -1924,7 +1964,31 @@ func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
 	return nil
 }
 
-func (t *lockTableImpl) Clear() {
+// Enable implements the lockTable interface.
+func (t *lockTableImpl) Enable() {
+	// Avoid disrupting other requests if the lockTable is already enabled.
+	// NOTE: This may be a premature optimization, but it can't hurt.
+	t.enabledMu.RLock()
+	enabled := t.enabled
+	t.enabledMu.RUnlock()
+	if enabled {
+		return
+	}
+	t.enabledMu.Lock()
+	t.enabled = true
+	t.enabledMu.Unlock()
+}
+
+// Clear implements the lockTable interface.
+func (t *lockTableImpl) Clear(disable bool) {
+	// If disabling, lock the entire table to prevent concurrent accesses
+	// from adding state to the table as we clear it. If not, there's no
+	// need to synchronize with enabledMu because we're only removing state.
+	if disable {
+		t.enabledMu.Lock()
+		defer t.enabledMu.Unlock()
+		t.enabled = false
+	}
 	t.tryClearLocks(true /* force */)
 }
 

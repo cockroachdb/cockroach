@@ -1,0 +1,642 @@
+# Disable transaction pushes through this test. Synchronous transaction pushes
+# are not immediately terminated when the concurrency manager's lock-table is
+# cleared. This is fine from a correctness perspective because it doesn't matter
+# which lock-table is initiating a synchronous transaction push, but it makes it
+# harder to observe requests responding to lock-table state transitions.
+debug-disable-txn-pushes
+----
+
+# -------------------------------------------------------------
+# OnRangeLeaseUpdated - losing this lease disables the
+# lock-table and acquiring the lease enables the lock-table.
+#
+# Setup: txn1 acquires lock
+#        
+# Test:  txn2 enters lock's wait-queue
+#        replica loses lease
+#        txn2 proceeds
+#        txn2 discovers txn1's lock      (ignored)
+#        txn2 re-sequences
+#        txn1 lock is released           (ignored)
+#        txn2 proceeds and acquires lock (ignored)
+#
+#        replica acquire lease
+#        txn3 discovers txn2's lock      (not ignored)
+#        txn3 queue's on txn2's lock
+#        txn2's lock is released         (not ignored)
+#        txn3 proceeds and acquires lock (not ignored)
+# -------------------------------------------------------------
+
+subtest on_range_lease_updated
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req3 txn=txn3 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired txn=txn1 key=k
+----
+[-] acquire lock: txn1 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 2
+local: num=0
+
+# Replica loses lease.
+on-lease-updated leaseholder=false
+----
+[-] transfer lease: released
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+handle-write-intent-error req=req2 txn=txn1 key=k
+----
+[-] handle write intent error req2: handling conflicting intents on "k"
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+sequence req=req2
+----
+[3] sequence req2: re-sequencing request
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+on-lock-updated txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn1 @ k
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+on-lock-acquired txn=txn2 key=k
+----
+[-] acquire lock: txn2 @ k
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+# Replica acquires lease.
+on-lease-updated leaseholder=true
+----
+[-] transfer lease: acquired
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+sequence req=req3
+----
+[4] sequence req3: sequencing request
+[4] sequence req3: acquiring latches
+[4] sequence req3: scanning lock table for conflicting locks
+[4] sequence req3: sequencing complete, returned guard
+
+handle-write-intent-error req=req3 txn=txn2 key=k
+----
+[-] handle write intent error req3: handling conflicting intents on "k"
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
+local: num=0
+
+sequence req=req3
+----
+[5] sequence req3: re-sequencing request
+[5] sequence req3: acquiring latches
+[5] sequence req3: scanning lock table for conflicting locks
+[5] sequence req3: waiting in lock wait-queues
+[5] sequence req3: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+   distinguished req: 3
+local: num=0
+
+on-lock-updated txn=txn2 key=k status=committed
+----
+[-] update lock: committing txn2 @ k
+[5] sequence req3: acquiring latches
+[5] sequence req3: scanning lock table for conflicting locks
+[5] sequence req3: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+local: num=0
+
+on-lock-acquired txn=txn3 key=k
+----
+[-] acquire lock: txn3 @ k
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+reset namespace
+----
+
+subtest end
+
+# -------------------------------------------------------------
+# OnRangeSplit - a Range split clears the lock-table but does
+# not disable it.
+#
+# Setup: txn1 acquires lock
+#
+# Test:  txn2 enters lock's wait-queue
+#        range is split
+#        txn2 proceeds
+#        txn2 discovers txn1's lock      (not ignored)
+#        txn2 queue's on txn1's lock
+#        txn1 lock is released           (not ignored)
+#        txn2 proceeds and acquires lock (not ignored)
+# -------------------------------------------------------------
+
+subtest on_range_split
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired txn=txn1 key=k
+----
+[-] acquire lock: txn1 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 5, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 5
+local: num=0
+
+on-split
+----
+[-] split range: complete
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+handle-write-intent-error req=req2 txn=txn1 key=k
+----
+[-] handle write intent error req2: handling conflicting intents on "k"
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 5, txn: 00000002-0000-0000-0000-000000000000
+local: num=0
+
+sequence req=req2
+----
+[3] sequence req2: re-sequencing request
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: waiting in lock wait-queues
+[3] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+on-lock-updated txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn1 @ k
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  res: req: 5, txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+local: num=0
+
+on-lock-acquired txn=txn2 key=k
+----
+[-] acquire lock: txn2 @ k
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+subtest end
+
+# -------------------------------------------------------------
+# OnRangeMerge - a Range merge clears the lock-table and
+# disables it.
+#
+# Setup: txn1 acquires lock
+#        
+# Test:  txn2 enters lock's wait-queue
+#        range is merged
+#        txn2 proceeds
+#        txn2 discovers txn1's lock      (ignored)
+#        txn2 re-sequences
+#        txn1 lock is released           (ignored)
+#        txn2 proceeds and acquires lock (ignored)
+# -------------------------------------------------------------
+
+subtest on_range_merge
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired txn=txn1 key=k
+----
+[-] acquire lock: txn1 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 7, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 7
+local: num=0
+
+on-merge
+----
+[-] merge range: complete
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+handle-write-intent-error req=req2 txn=txn1 key=k
+----
+[-] handle write intent error req2: handling conflicting intents on "k"
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+sequence req=req2
+----
+[3] sequence req2: re-sequencing request
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+on-lock-updated txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn1 @ k
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+on-lock-acquired txn=txn2 key=k
+----
+[-] acquire lock: txn2 @ k
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+subtest end
+
+# -------------------------------------------------------------
+# OnReplicaSnapshotApplied - applying a snapshot clears the
+# lock-table but does not disable it.
+#
+# Setup: txn1 acquires lock
+#
+# Test:  txn2 enters lock's wait-queue
+#        replica applies snapshot
+#        txn2 proceeds
+#        txn2 discovers txn1's lock      (not ignored)
+#        txn2 queue's on txn1's lock
+#        txn1 lock is released           (not ignored)
+#        txn2 proceeds and acquires lock (not ignored)
+# -------------------------------------------------------------
+
+subtest on_replica_snapshot_applied
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired txn=txn1 key=k
+----
+[-] acquire lock: txn1 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 9, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 9
+local: num=0
+
+on-snapshot-applied
+----
+[-] snapshot replica: applied
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+handle-write-intent-error req=req2 txn=txn1 key=k
+----
+[-] handle write intent error req2: handling conflicting intents on "k"
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 9, txn: 00000002-0000-0000-0000-000000000000
+local: num=0
+
+sequence req=req2
+----
+[3] sequence req2: re-sequencing request
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: waiting in lock wait-queues
+[3] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+on-lock-updated txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn1 @ k
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  res: req: 9, txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
+local: num=0
+
+on-lock-acquired txn=txn2 key=k
+----
+[-] acquire lock: txn2 @ k
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+subtest end
