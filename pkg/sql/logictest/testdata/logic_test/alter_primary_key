@@ -961,3 +961,18 @@ t2  CREATE TABLE t2 (
     FAMILY fam_0_x (x),
     FAMILY fam_1_y (y)
 ) INTERLEAVE IN PARENT t (x)
+
+# Regression for #45889.
+statement ok
+DROP TABLE IF EXISTS t CASCADE;
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 2);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH BUCKET_COUNT=3
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
+   FAMILY "primary" (crdb_internal_x_shard_2, x, crdb_internal_x_shard_3)
+)
