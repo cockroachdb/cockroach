@@ -151,6 +151,15 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
   return encodedRequest.buffer.slice(encodedRequest.byteOffset, encodedRequest.byteOffset + encodedRequest.byteLength);
 }
 
+export class RequestError extends Error {
+  status: number;
+  constructor(statusText: string, status: number) {
+    super(statusText);
+    this.status = status;
+    this.name = "RequestError";
+  }
+}
+
 // timeoutFetch is a wrapper around fetch that provides timeout and protocol
 // buffer marshaling and unmarshalling.
 //
@@ -182,7 +191,7 @@ function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends 
 
   return withTimeout(fetch(url, params), timeout).then((res) => {
     if (!res.ok) {
-      throw Error(res.statusText);
+      throw new RequestError(res.statusText, res.status);
     }
     return res.arrayBuffer().then((buffer) => builder.decode(new Uint8Array(buffer)));
   });

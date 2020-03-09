@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-
+import React, { ReactNode } from "react";
+import { RequestError } from "src/util/api";
 import spinner from "assets/spinner.gif";
+import { adminUIAccess } from "src/util/docs";
 import "./index.styl";
 
 interface LoadingProps {
@@ -43,6 +44,24 @@ function getValidErrorsList (errors?: Error | Error[] | null): Error[] | null {
 }
 
 /**
+ * getDetails produces a hint for the given error object.
+ */
+function getDetails (error: Error): ReactNode {
+  if (error instanceof RequestError) {
+     if (error.status === 403) {
+       return (
+         <p>
+           Insufficient privileges to view this resource. <a href={adminUIAccess} target="_blank">
+             Learn more
+           </a>
+         </p>
+       );
+     }
+  }
+  return <p>no details available</p>;
+}
+
+/**
  * Loading will display a background image instead of the content if the
  * loading prop is true.
  */
@@ -64,9 +83,8 @@ export default function Loading(props: LoadingProps) {
         <p>{errorCountMessage} while loading this data:</p>
         <ul>
           {errors.map((error, idx) => (
-            <li key={idx}>
-              <pre>{error.message}</pre>
-            </li>
+            <li key={idx}><b>{error.message}</b>
+            {getDetails(error)}</li>
           ))}
         </ul>
       </div>
