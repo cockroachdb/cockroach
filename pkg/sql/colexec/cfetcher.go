@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -446,7 +446,7 @@ func (rf *cFetcher) Init(
 // times.
 func (rf *cFetcher) StartScan(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	spans roachpb.Spans,
 	limitBatches bool,
 	limitHint int64,

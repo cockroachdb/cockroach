@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -28,7 +28,7 @@ import (
 )
 
 // getRangeKeys returns the end keys of all ranges.
-func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
+func getRangeKeys(db *kv.DB) ([]roachpb.Key, error) {
 	rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
 	return ret, nil
 }
 
-func getNumRanges(db *client.DB) (int, error) {
+func getNumRanges(db *kv.DB) (int, error) {
 	rows, err := getRangeKeys(db)
 	if err != nil {
 		return 0, err

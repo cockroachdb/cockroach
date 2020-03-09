@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -120,7 +120,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)

@@ -17,7 +17,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -47,7 +47,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Write a single value to ensure we have a leader.
 	pArgs := putArgs([]byte("key"), []byte("value"))
-	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,7 +71,7 @@ func TestRaftLogQueue(t *testing.T) {
 	value := bytes.Repeat([]byte("a"), 1000) // 1KB
 	for size := int64(0); size < 2*maxBytes; size += int64(len(value)) {
 		pArgs = putArgs([]byte(fmt.Sprintf("key-%d", size)), value)
-		if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
+		if _, err := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -11,8 +11,8 @@ package changefeedccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -89,7 +89,7 @@ func distChangefeedFlow(
 	}
 
 	// Changefeed flows handle transactional consistency themselves.
-	var noTxn *client.Txn
+	var noTxn *kv.Txn
 	gatewayNodeID := execCfg.NodeID.Get()
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
@@ -195,10 +195,10 @@ func distChangefeedFlow(
 }
 
 func fetchSpansForTargets(
-	ctx context.Context, db *client.DB, targets jobspb.ChangefeedTargets, ts hlc.Timestamp,
+	ctx context.Context, db *kv.DB, targets jobspb.ChangefeedTargets, ts hlc.Timestamp,
 ) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
-	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		spans = nil
 		txn.SetFixedTimestamp(ctx, ts)
 		// Note that all targets are currently guaranteed to be tables.

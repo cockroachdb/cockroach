@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -39,7 +39,7 @@ type SchemaResolver interface {
 	tree.TableNameExistingResolver
 	tree.TableNameTargetResolver
 
-	Txn() *client.Txn
+	Txn() *kv.Txn
 	LogicalSchemaAccessor() SchemaAccessor
 	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
@@ -67,7 +67,7 @@ func (p *planner) ResolveUncachedDatabaseByName(
 // explicit schema and catalog name.
 func GetObjectNames(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	sc SchemaResolver,
 	dbDesc *DatabaseDescriptor,
 	scName string,
@@ -397,7 +397,7 @@ func (p *planner) getQualifiedTableName(
 // returned will be nil.
 func findTableContainingIndex(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	sc SchemaResolver,
 	dbName, scName string,
 	idxName tree.UnrestrictedName,
@@ -467,7 +467,7 @@ func expandMutableIndexName(
 
 func expandIndexName(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	sc SchemaResolver,
 	index *tree.TableIndexName,
 	requireTable bool,

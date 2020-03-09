@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,7 +31,7 @@ import (
 
 // Cache implements protectedts.Cache.
 type Cache struct {
-	db       *client.DB
+	db       *kv.DB
 	storage  protectedts.Storage
 	stopper  *stop.Stopper
 	settings *cluster.Settings
@@ -56,7 +56,7 @@ type Cache struct {
 
 // Config configures a Cache.
 type Config struct {
-	DB       *client.DB
+	DB       *kv.DB
 	Storage  protectedts.Storage
 	Settings *cluster.Settings
 }
@@ -211,7 +211,7 @@ func (c *Cache) doUpdate(ctx context.Context) error {
 		state          ptpb.State
 		ts             hlc.Timestamp
 	)
-	err := c.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+	err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		// NB: because this is a read-only transaction, the commit will be a no-op;
 		// returning nil here means the transaction will commit and will never need
 		// to change its read timestamp.

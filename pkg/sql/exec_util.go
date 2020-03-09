@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -550,7 +550,7 @@ type ExecutorConfig struct {
 	DefaultZoneConfig *zonepb.ZoneConfig
 	Locality          roachpb.Locality
 	AmbientCtx        log.AmbientContext
-	DB                *client.DB
+	DB                *kv.DB
 	Gossip            *gossip.Gossip
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context

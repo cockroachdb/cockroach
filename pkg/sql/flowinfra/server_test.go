@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -61,7 +61,7 @@ func TestServer(t *testing.T) {
 		OutputColumns: []uint32{0, 1}, // a
 	}
 
-	txn := client.NewTxn(ctx, kvDB, s.NodeID())
+	txn := kv.NewTxn(ctx, kvDB, s.NodeID())
 	leafInputState := txn.GetLeafTxnInputState(ctx)
 
 	req := &execinfrapb.SetupFlowRequest{

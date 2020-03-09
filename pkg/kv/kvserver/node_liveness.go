@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
@@ -150,7 +150,7 @@ type HeartbeatCallback func(context.Context)
 type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
 	clock             *hlc.Clock
-	db                *client.DB
+	db                *kv.DB
 	engines           []storage.Engine
 	gossip            *gossip.Gossip
 	livenessThreshold time.Duration
@@ -178,7 +178,7 @@ type NodeLiveness struct {
 func NewNodeLiveness(
 	ambient log.AmbientContext,
 	clock *hlc.Clock,
-	db *client.DB,
+	db *kv.DB,
 	engines []storage.Engine,
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
@@ -824,7 +824,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		}
 	}
 
-	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		key := keys.NodeLivenessKey(update.NodeID)
 		val := update.Liveness

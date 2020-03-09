@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -99,7 +99,7 @@ func TestDBAddSSTable(t *testing.T) {
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.
-func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store *kvserver.Store) {
+func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kvserver.Store) {
 	{
 		key := storage.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)

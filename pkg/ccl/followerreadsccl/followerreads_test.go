@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -154,11 +154,11 @@ func TestOracleFactory(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	c := client.NewDB(log.AmbientContext{
+	c := kv.NewDB(log.AmbientContext{
 		Tracer: tracing.NewTracer(),
-	}, client.MockTxnSenderFactory{},
+	}, kv.MockTxnSenderFactory{},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond))
-	txn := client.NewTxn(context.TODO(), c, 0)
+	txn := kv.NewTxn(context.TODO(), c, 0)
 	of := replicaoracle.NewOracleFactory(followerReadAwareChoice, replicaoracle.Config{
 		Settings:   st,
 		RPCContext: rpcContext,

@@ -17,8 +17,8 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -147,10 +147,10 @@ type TxnCoordSender struct {
 
 	// typ specifies whether this transaction is the top level,
 	// or one of potentially many distributed transactions.
-	typ client.TxnType
+	typ kv.TxnType
 }
 
-var _ client.TxnSender = &TxnCoordSender{}
+var _ kv.TxnSender = &TxnCoordSender{}
 
 // txnInterceptors are pluggable request interceptors that transform requests
 // and responses and can perform operations in the context of a transaction. A
@@ -194,7 +194,7 @@ type txnInterceptor interface {
 
 func newRootTxnCoordSender(
 	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, pri roachpb.UserPriority,
-) client.TxnSender {
+) kv.TxnSender {
 	txn.AssertInitialized(context.TODO())
 
 	if txn.Status != roachpb.PENDING {
@@ -205,7 +205,7 @@ func newRootTxnCoordSender(
 	}
 
 	tcs := &TxnCoordSender{
-		typ:                   client.RootTxn,
+		typ:                   kv.RootTxn,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.txnState = txnPending
@@ -241,7 +241,7 @@ func newRootTxnCoordSender(
 		clock:   tcs.clock,
 		txn:     &tcs.mu.txn,
 	}
-	tcs.initCommonInterceptors(tcf, txn, client.RootTxn, riGen)
+	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn, riGen)
 
 	// Once the interceptors are initialized, piece them all together in the
 	// correct order.
@@ -279,7 +279,7 @@ func newRootTxnCoordSender(
 }
 
 func (tc *TxnCoordSender) initCommonInterceptors(
-	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, typ client.TxnType, riGen RangeIteratorGen,
+	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, typ kv.TxnType, riGen RangeIteratorGen,
 ) {
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:    tcf.st,
@@ -292,13 +292,13 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		// because those are the only places where we have all of the
 		// refresh spans. If this is a leaf, as in a distributed sql flow,
 		// we need to propagate the error to the root for an epoch restart.
-		canAutoRetry:     typ == client.RootTxn,
+		canAutoRetry:     typ == kv.RootTxn,
 		autoRetryCounter: tc.metrics.AutoRetries,
 	}
 	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped:                 tc.wrapped,
 		mu:                      &tc.mu.Mutex,
-		allowConcurrentRequests: typ == client.LeafTxn,
+		allowConcurrentRequests: typ == kv.LeafTxn,
 	}
 	tc.interceptorAlloc.txnSeqNumAllocator.writeSeq = txn.Sequence
 }
@@ -315,7 +315,7 @@ func (tc *TxnCoordSender) connectInterceptors() {
 
 func newLeafTxnCoordSender(
 	tcf *TxnCoordSenderFactory, tis *roachpb.LeafTxnInputState,
-) client.TxnSender {
+) kv.TxnSender {
 	txn := &tis.Txn
 	// 19.2 roots might have this flag set. In 20.1, the flag is only set by the
 	// server and terminated by the client in the span refresher interceptor. If
@@ -334,7 +334,7 @@ func newLeafTxnCoordSender(
 	}
 
 	tcs := &TxnCoordSender{
-		typ:                   client.LeafTxn,
+		typ:                   kv.LeafTxn,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.txnState = txnPending
@@ -351,7 +351,7 @@ func newLeafTxnCoordSender(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		riGen = ds.rangeIteratorGen
 	}
-	tcs.initCommonInterceptors(tcf, txn, client.LeafTxn, riGen)
+	tcs.initCommonInterceptors(tcf, txn, kv.LeafTxn, riGen)
 
 	// Per-interceptor leaf initialization. If/when more interceptors
 	// need leaf initialization, this should be turned into an interface
@@ -603,7 +603,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// See the comment on txnHeartbeater.mu.finalizedStatus for more details.
 		abortedErr := roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
-		if tc.typ == client.LeafTxn {
+		if tc.typ == kv.LeafTxn {
 			// Leaf txns return raw retriable errors (which get handled by the
 			// root) rather than TransactionRetryWithProtoRefreshError.
 			return abortedErr
@@ -752,7 +752,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 	}
 
 	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-		if tc.typ == client.LeafTxn {
+		if tc.typ == kv.LeafTxn {
 			// Leaves handle retriable errors differently than roots. The leaf
 			// transaction is not supposed to be used any more after a retriable
 			// error. Separately, the error needs to make its way back to the root.
@@ -963,7 +963,7 @@ func (tc *TxnCoordSender) Active() bool {
 
 // GetLeafTxnInputState is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnInputState(
-	ctx context.Context, opt client.TxnStatusOpt,
+	ctx context.Context, opt kv.TxnStatusOpt,
 ) (roachpb.LeafTxnInputState, error) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -990,7 +990,7 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 
 // GetLeafTxnFinalState is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnFinalState(
-	ctx context.Context, opt client.TxnStatusOpt,
+	ctx context.Context, opt kv.TxnStatusOpt,
 ) (roachpb.LeafTxnFinalState, error) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1018,11 +1018,11 @@ func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	return tfs, nil
 }
 
-func (tc *TxnCoordSender) checkTxnStatusLocked(ctx context.Context, opt client.TxnStatusOpt) error {
+func (tc *TxnCoordSender) checkTxnStatusLocked(ctx context.Context, opt kv.TxnStatusOpt) error {
 	switch opt {
-	case client.AnyTxnStatus:
+	case kv.AnyTxnStatus:
 		// Nothing to check.
-	case client.OnlyPending:
+	case kv.OnlyPending:
 		// Check the coordinator's proto status.
 		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
 		if rejectErr != nil {
@@ -1093,7 +1093,7 @@ func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string)
 
 // Step is part of the TxnSender interface.
 func (tc *TxnCoordSender) Step(ctx context.Context) error {
-	if tc.typ != client.RootTxn {
+	if tc.typ != kv.RootTxn {
 		return errors.WithContextTags(
 			errors.AssertionFailedf("cannot call Step() in leaf txn"), ctx)
 	}
@@ -1104,9 +1104,9 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 
 // ConfigureStepping is part of the TxnSender interface.
 func (tc *TxnCoordSender) ConfigureStepping(
-	ctx context.Context, mode client.SteppingMode,
-) (prevMode client.SteppingMode) {
-	if tc.typ != client.RootTxn {
+	ctx context.Context, mode kv.SteppingMode,
+) (prevMode kv.SteppingMode) {
+	if tc.typ != kv.RootTxn {
 		panic(errors.WithContextTags(
 			errors.AssertionFailedf("cannot call ConfigureStepping() in leaf txn"), ctx))
 	}
@@ -1116,10 +1116,10 @@ func (tc *TxnCoordSender) ConfigureStepping(
 }
 
 // GetSteppingMode is part of the TxnSender interface.
-func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode client.SteppingMode) {
-	curMode = client.SteppingDisabled
+func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.SteppingMode) {
+	curMode = kv.SteppingDisabled
 	if tc.interceptorAlloc.txnSeqNumAllocator.steppingModeEnabled {
-		curMode = client.SteppingEnabled
+		curMode = kv.SteppingEnabled
 	}
 	return curMode
 }

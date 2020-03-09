@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -45,7 +45,7 @@ type TimeSeriesDataStore interface {
 		storage.Reader,
 		roachpb.RKey,
 		roachpb.RKey,
-		*client.DB,
+		*kv.DB,
 		*mon.BytesMonitor,
 		int64,
 		hlc.Timestamp,
@@ -81,14 +81,14 @@ type timeSeriesMaintenanceQueue struct {
 	*baseQueue
 	tsData         TimeSeriesDataStore
 	replicaCountFn func() int
-	db             *client.DB
+	db             *kv.DB
 	mem            mon.BytesMonitor
 }
 
 // newTimeSeriesMaintenanceQueue returns a new instance of
 // timeSeriesMaintenanceQueue.
 func newTimeSeriesMaintenanceQueue(
-	store *Store, db *client.DB, g *gossip.Gossip, tsData TimeSeriesDataStore,
+	store *Store, db *kv.DB, g *gossip.Gossip, tsData TimeSeriesDataStore,
 ) *timeSeriesMaintenanceQueue {
 	q := &timeSeriesMaintenanceQueue{
 		tsData:         tsData,

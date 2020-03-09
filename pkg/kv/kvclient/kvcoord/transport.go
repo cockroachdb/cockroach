@@ -15,7 +15,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -303,7 +303,7 @@ func (h byHealth) Less(i, j int) bool { return h[i].healthy && !h[j].healthy }
 // SenderTransportFactory wraps a client.Sender for use as a KV
 // Transport. This is useful for tests that want to use DistSender
 // without a full RPC stack.
-func SenderTransportFactory(tracer opentracing.Tracer, sender client.Sender) TransportFactory {
+func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
 		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
 	) (Transport, error) {
@@ -315,7 +315,7 @@ func SenderTransportFactory(tracer opentracing.Tracer, sender client.Sender) Tra
 
 type senderTransport struct {
 	tracer  opentracing.Tracer
-	sender  client.Sender
+	sender  kv.Sender
 	replica roachpb.ReplicaDescriptor
 
 	called bool

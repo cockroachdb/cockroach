@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -61,7 +61,7 @@ func TestReconciler(t *testing.T) {
 		Cache:    ptp,
 		StatusFuncs: ptreconcile.StatusFuncs{
 			testTaskType: func(
-				ctx context.Context, txn *client.Txn, meta []byte,
+				ctx context.Context, txn *kv.Txn, meta []byte,
 			) (shouldRemove bool, err error) {
 				state.mu.Lock()
 				defer state.mu.Unlock()
@@ -83,7 +83,7 @@ func TestReconciler(t *testing.T) {
 			{Key: keys.MinKey, EndKey: keys.MaxKey},
 		},
 	}
-	require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return ptp.Protect(ctx, txn, &rec1)
 	}))
 
@@ -111,7 +111,7 @@ func TestReconciler(t *testing.T) {
 			}
 			return nil
 		})
-		require.Regexp(t, protectedts.ErrNotExists, s0.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		require.Regexp(t, protectedts.ErrNotExists, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			_, err := ptp.GetRecord(ctx, txn, rec1.ID)
 			return err
 		}))

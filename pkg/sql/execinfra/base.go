@@ -15,7 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -262,8 +262,8 @@ func SendTraceData(ctx context.Context, dst RowReceiver) {
 // a node, and so it's possible for multiple processors to send the same
 // LeafTxnFinalState. The root TxnCoordSender doesn't care if it receives the same
 // thing multiple times.
-func GetLeafTxnFinalState(ctx context.Context, txn *client.Txn) *roachpb.LeafTxnFinalState {
-	if txn.Type() != client.LeafTxn {
+func GetLeafTxnFinalState(ctx context.Context, txn *kv.Txn) *roachpb.LeafTxnFinalState {
+	if txn.Type() != kv.LeafTxn {
 		return nil
 	}
 	txnMeta, err := txn.GetLeafTxnFinalState(ctx)

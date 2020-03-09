@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,14 +45,14 @@ func TestTxnDBBasics(t *testing.T) {
 	for _, commit := range []bool{true, false} {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
-		err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			// Put transactional value.
 			if err := txn.Put(ctx, key, value); err != nil {
 				return err
 			}
 
 			// Attempt to read in another txn.
-			conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			conflictTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 			conflictTxn.TestingSetPriority(enginepb.MaxTxnPriority)
 			if gr, err := conflictTxn.Get(ctx, key); err != nil {
 				return err
@@ -107,7 +107,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 			key := roachpb.Key("key")
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+				if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 					b := txn.NewBatch()
 					b.Put(key, fmt.Sprintf("value-%d", i))
 					return txn.CommitInBatch(ctx, b)
@@ -136,13 +136,13 @@ func TestLostUpdate(t *testing.T) {
 	start := make(chan struct{})
 	go func() {
 		<-start
-		done <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		done <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			return txn.Put(ctx, key, "hi")
 		})
 	}()
 
 	firstAttempt := true
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		// Issue a read to get initial value.
 		gr, err := txn.Get(ctx, key)
 		if err != nil {
@@ -200,7 +200,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer s.Stop()
 
 	pushByReading := func(key roachpb.Key) {
-		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 				t.Fatal(err)
 			}
@@ -211,7 +211,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 		}
 	}
 	abortByWriting := func(key roachpb.Key) {
-		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 				t.Fatal(err)
 			}
@@ -224,7 +224,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	// Try both read and write.
 	for _, read := range []bool{true, false} {
 		var iteration int
-		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			defer func() { iteration++ }()
 			key := roachpb.Key(fmt.Sprintf("read=%t", read))
 
@@ -278,14 +278,14 @@ func TestTxnTimestampRegression(t *testing.T) {
 
 	keyA := "a"
 	keyB := "b"
-	err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		// Put transactional value.
 		if err := txn.Put(ctx, keyA, "value1"); err != nil {
 			return err
 		}
 
 		// Attempt to read in another txn (this will push timestamp of transaction).
-		conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+		conflictTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 		conflictTxn.TestingSetPriority(enginepb.MaxTxnPriority)
 		if _, err := conflictTxn.Get(context.TODO(), keyA); err != nil {
 			return err
@@ -318,7 +318,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	ch := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			// Put transactional value.
 			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
@@ -336,7 +336,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	<-ch
 	// Delay for longer than the cache window.
 	s.Manual.Increment((tscache.MinRetentionWindow + time.Second).Nanoseconds())
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		// Attempt to get first keyB.
 		gr1, err := txn.Get(ctx, keyB)
 		if err != nil {
@@ -370,7 +370,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -383,7 +383,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	ch := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			// Put transactional value.
 			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
@@ -400,7 +400,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 		// First get keyC, value will be nil.
 		gr1, err := txn.Get(ctx, keyC)
 		if err != nil {
@@ -459,7 +459,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	errChan := make(chan error)
 	var count int
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 			count++
 			// Use a low priority for the transaction so that it can be pushed.
 			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
@@ -524,7 +524,7 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 	// Launch goroutine to write the three keys on three successive epochs.
 	go func() {
 		var count int
-		err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Read the write skew key, which will be written by another goroutine
 			// to ensure transaction restarts.
 			if _, err := txn.Get(ctx, writeSkewKey); err != nil {
@@ -609,7 +609,7 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 	injected := false
 	var refreshTS hlc.Timestamp
 	errKey := roachpb.Key("inject_err")
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
 				if injected {
@@ -629,7 +629,7 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 	})
 	defer s.Stop()
 
-	err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := txn.Get(ctx, errKey)
 		if err != nil {
 			return err
@@ -674,7 +674,7 @@ func TestTxnLeavesIntentBehindAfterWriteTooOldError(t *testing.T) {
 	require.Error(t, err, "WriteTooOld")
 
 	// Check that the intent was left behind.
-	b := client.Batch{}
+	b := kv.Batch{}
 	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
 	b.Get(key)
 	require.NoError(t, s.DB.Run(ctx, &b))

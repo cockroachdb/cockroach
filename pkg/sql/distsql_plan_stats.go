@@ -14,9 +14,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -226,7 +226,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
-	txn *client.Txn,
+	txn *kv.Txn,
 	job *jobs.Job,
 	resultRows *RowResultWriter,
 ) error {

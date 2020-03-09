@@ -18,8 +18,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -1531,7 +1531,7 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 
 // MaybeIncrementVersion increments the version of a descriptor if necessary.
 func (desc *MutableTableDescriptor) MaybeIncrementVersion(
-	ctx context.Context, txn *client.Txn, settings *cluster.Settings,
+	ctx context.Context, txn *kv.Txn, settings *cluster.Settings,
 ) error {
 	// Already incremented, no-op.
 	if desc.Version == desc.ClusterVersion.Version+1 {
@@ -1558,7 +1558,7 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *TableDescriptor) Validate(ctx context.Context, txn *client.Txn) error {
+func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn) error {
 	err := desc.ValidateTable()
 	if err != nil {
 		return err
@@ -1571,7 +1571,7 @@ func (desc *TableDescriptor) Validate(ctx context.Context, txn *client.Txn) erro
 
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
-func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *client.Txn) error {
+func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *kv.Txn) error {
 	// Check that parent DB exists.
 	{
 		res, err := txn.Get(ctx, MakeDescMetadataKey(desc.ParentID))

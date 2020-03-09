@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1668,14 +1668,14 @@ func (s *adminServer) DecommissionStatus(
 	// Compute the replica counts for the target nodes only. This map doubles as
 	// a lookup table to check whether we care about a given node.
 	var replicaCounts map[roachpb.NodeID]int64
-	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const pageSize = 10000
 		replicaCounts = make(map[roachpb.NodeID]int64)
 		for _, nodeID := range nodeIDs {
 			replicaCounts[nodeID] = 0
 		}
 		return txn.Iterate(ctx, keys.MetaMin, keys.MetaMax, pageSize,
-			func(rows []client.KeyValue) error {
+			func(rows []kv.KeyValue) error {
 				rangeDesc := roachpb.RangeDescriptor{}
 				for _, row := range rows {
 					if err := row.ValueProto(&rangeDesc); err != nil {
@@ -1835,7 +1835,7 @@ func (s *adminServer) DataDistribution(
 	}
 
 	// Get replica counts.
-	if err := s.server.db.Txn(ctx, func(txnCtx context.Context, txn *client.Txn) error {
+	if err := s.server.db.Txn(ctx, func(txnCtx context.Context, txn *kv.Txn) error {
 		acct := s.memMonitor.MakeBoundAccount()
 		defer acct.Close(txnCtx)
 

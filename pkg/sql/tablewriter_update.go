@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,7 +32,7 @@ var _ tableWriter = &tableUpdater{}
 func (*tableUpdater) desc() string { return "updater" }
 
 // init is part of the tableWriter interface.
-func (tu *tableUpdater) init(_ context.Context, txn *client.Txn, _ *tree.EvalContext) error {
+func (tu *tableUpdater) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
 	return nil
 }

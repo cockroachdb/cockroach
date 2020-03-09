@@ -16,7 +16,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -74,7 +74,7 @@ func buildStatementBundle(
 	statement := tree.AsString(plan.stmt.AST)
 	description := "query support bundle"
 
-	err = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Insert the bundle into system.statement_bundle_chunks.
 		// TODO(radu): split in chunks.
 		row, err := ie.QueryRowEx(

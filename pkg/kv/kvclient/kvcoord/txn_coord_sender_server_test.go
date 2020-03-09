@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
@@ -72,7 +72,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 
 	push := func(ctx context.Context, key roachpb.Key) error {
 		// Conflicting transaction that pushes the above transaction.
-		conflictTxn := client.NewTxn(ctx, origDB, 0 /* gatewayNodeID */)
+		conflictTxn := kv.NewTxn(ctx, origDB, 0 /* gatewayNodeID */)
 		// We need to explicitly set a high priority for the push to happen.
 		if err := conflictTxn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
@@ -97,8 +97,8 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	db := client.NewDB(ambient, tsf, s.Clock())
-	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+	db := kv.NewDB(ambient, tsf, s.Clock())
+	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	if err := txn.Put(ctx, key, "val"); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestNoDuplicateHeartbeatLoops(t *testing.T) {
 	}
 
 	var attempts int
-	err := db.Txn(txnCtx, func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(txnCtx, func(ctx context.Context, txn *kv.Txn) error {
 		attempts++
 		if attempts == 1 {
 			if err := push(context.Background() /* keep the contexts separate */, key); err != nil {

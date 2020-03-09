@@ -26,7 +26,7 @@ import (
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -101,7 +101,7 @@ func (s *Store) ConsistencyQueueShouldQueue(
 // range which contains the given key.
 func (s *Store) LogReplicaChangeTest(
 	ctx context.Context,
-	txn *client.Txn,
+	txn *kv.Txn,
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
@@ -499,7 +499,7 @@ func WriteRandomDataToRange(
 		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
-		if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+		if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 			RangeID: rangeID,
 		}, &pArgs); pErr != nil {
 			t.Fatal(pErr)

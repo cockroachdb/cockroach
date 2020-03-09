@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -401,7 +401,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
-				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID()),
+				Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID: s.NodeID(),
 			}
 
@@ -531,7 +531,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
-				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID()),
+				Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID: s.NodeID(),
 			}
 
@@ -582,9 +582,9 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	ctx, sp := tracing.StartSnowballTrace(ctx, tracer, "test flow ctx")
 	defer sp.Finish()
 
-	rootTxn := client.NewTxn(ctx, s.DB(), s.NodeID())
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
-	leafTxn := client.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
 
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

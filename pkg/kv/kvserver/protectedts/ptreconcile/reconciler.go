@@ -17,8 +17,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -42,7 +42,7 @@ var ReconcileInterval = settings.RegisterPublicNonNegativeDurationSetting(
 // StatusFunc is used to check on the status of a Record based on its Meta
 // field.
 type StatusFunc func(
-	ctx context.Context, txn *client.Txn, meta []byte,
+	ctx context.Context, txn *kv.Txn, meta []byte,
 ) (shouldRemove bool, _ error)
 
 // StatusFuncs maps from MetaType to a StatusFunc.
@@ -53,7 +53,7 @@ type Config struct {
 	Settings *cluster.Settings
 	// Stores is used to ensure that we only run the reconciliation loop on
 	Stores  *kvserver.Stores
-	DB      *client.DB
+	DB      *kv.DB
 	Storage protectedts.Storage
 	Cache   protectedts.Cache
 
@@ -68,7 +68,7 @@ type Config struct {
 type Reconciler struct {
 	settings    *cluster.Settings
 	localStores *kvserver.Stores
-	db          *client.DB
+	db          *kv.DB
 	cache       protectedts.Cache
 	pts         protectedts.Storage
 	metrics     Metrics
@@ -165,7 +165,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			return true
 		}
 		var didRemove bool
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			didRemove = false // reset for retries
 			shouldRemove, err := task(ctx, txn, rec.Meta)
 			if err != nil {

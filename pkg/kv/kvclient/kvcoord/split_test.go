@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -40,7 +40,7 @@ import (
 // random values. If not nil, txnChannel is written to non-blockingly
 // every time a new transaction starts.
 func startTestWriter(
-	db *client.DB,
+	db *kv.DB,
 	i int64,
 	valBytes int32,
 	wg *sync.WaitGroup,
@@ -62,7 +62,7 @@ func startTestWriter(
 			return
 		default:
 			first := true
-			err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:
@@ -236,7 +236,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // on the same splitKey succeeds.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -263,7 +263,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 //    the sticky bit of that range, but no range is split.
 func TestRangeSplitsStickyBit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,

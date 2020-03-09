@@ -13,7 +13,7 @@ package ts
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -49,7 +49,7 @@ func (tsdb *DB) MaintainTimeSeries(
 	ctx context.Context,
 	snapshot storage.Reader,
 	start, end roachpb.RKey,
-	db *client.DB,
+	db *kv.DB,
 	mem *mon.BytesMonitor,
 	budgetBytes int64,
 	now hlc.Timestamp,

@@ -13,15 +13,13 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // ScanMetaKVs returns the meta KVs for the ranges that touch the given span.
-func ScanMetaKVs(
-	ctx context.Context, txn *client.Txn, span roachpb.Span,
-) ([]client.KeyValue, error) {
+func ScanMetaKVs(ctx context.Context, txn *kv.Txn, span roachpb.Span) ([]kv.KeyValue, error) {
 	metaStart := keys.RangeMetaKey(keys.MustAddr(span.Key).Next())
 	metaEnd := keys.RangeMetaKey(keys.MustAddr(span.EndKey))
 

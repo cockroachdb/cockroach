@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -110,7 +110,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 
 	execCfg := params.extendedEvalCtx.ExecCfg
 	var expectedEncodedValue string
-	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var reportedValue string
 		if n.value == nil {
 			reportedValue = "DEFAULT"

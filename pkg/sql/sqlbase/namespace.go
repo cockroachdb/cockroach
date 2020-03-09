@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -59,7 +59,7 @@ import (
 // RemoveObjectNamespaceEntry removes entries from both the deprecated and
 // new system.namespace table (if one exists).
 func RemoveObjectNamespaceEntry(
-	ctx context.Context, txn *client.Txn, parentID ID, parentSchemaID ID, name string, KVTrace bool,
+	ctx context.Context, txn *kv.Txn, parentID ID, parentSchemaID ID, name string, KVTrace bool,
 ) error {
 	b := txn.NewBatch()
 	var toDelete []DescriptorKey
@@ -89,23 +89,21 @@ func RemoveObjectNamespaceEntry(
 // RemovePublicTableNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for public tables.
 func RemovePublicTableNamespaceEntry(
-	ctx context.Context, txn *client.Txn, parentID ID, name string,
+	ctx context.Context, txn *kv.Txn, parentID ID, name string,
 ) error {
 	return RemoveObjectNamespaceEntry(ctx, txn, parentID, keys.PublicSchemaID, name, false /* KVTrace */)
 }
 
 // RemoveSchemaNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for schemas.
-func RemoveSchemaNamespaceEntry(
-	ctx context.Context, txn *client.Txn, parentID ID, name string,
-) error {
+func RemoveSchemaNamespaceEntry(ctx context.Context, txn *kv.Txn, parentID ID, name string) error {
 	return RemoveObjectNamespaceEntry(ctx, txn, parentID, keys.RootNamespaceID, name, false /* KVTrace */)
 }
 
 // RemoveDatabaseNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for databases.
 func RemoveDatabaseNamespaceEntry(
-	ctx context.Context, txn *client.Txn, name string, KVTrace bool,
+	ctx context.Context, txn *kv.Txn, name string, KVTrace bool,
 ) error {
 	return RemoveObjectNamespaceEntry(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name, KVTrace)
 }
@@ -151,7 +149,7 @@ func MakeDatabaseNameKey(
 // (parentID, parentSchemaID, name) supplied. If cluster version < 20.1,
 // the parentSchemaID is ignored.
 func LookupObjectID(
-	ctx context.Context, txn *client.Txn, parentID ID, parentSchemaID ID, name string,
+	ctx context.Context, txn *kv.Txn, parentID ID, parentSchemaID ID, name string,
 ) (bool, ID, error) {
 	var key DescriptorKey
 	if parentID == keys.RootNamespaceID {
@@ -205,12 +203,12 @@ func LookupObjectID(
 
 // LookupPublicTableID is a wrapper around LookupObjectID for public tables.
 func LookupPublicTableID(
-	ctx context.Context, txn *client.Txn, parentID ID, name string,
+	ctx context.Context, txn *kv.Txn, parentID ID, name string,
 ) (bool, ID, error) {
 	return LookupObjectID(ctx, txn, parentID, keys.PublicSchemaID, name)
 }
 
 // LookupDatabaseID is  a wrapper around LookupObjectID for databases.
-func LookupDatabaseID(ctx context.Context, txn *client.Txn, name string) (bool, ID, error) {
+func LookupDatabaseID(ctx context.Context, txn *kv.Txn, name string) (bool, ID, error) {
 	return LookupObjectID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
 }

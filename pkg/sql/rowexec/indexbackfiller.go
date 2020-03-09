@@ -13,7 +13,7 @@ package rowexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -159,7 +159,7 @@ func (ib *indexBackfiller) runChunk(
 
 	start := timeutil.Now()
 	var entries []sqlbase.IndexEntry
-	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
 
 		// TODO(knz): do KV tracing in DistSQL processors.

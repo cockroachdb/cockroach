@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -89,12 +89,12 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 
 	require.NoError(
 		t,
-		kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			err = sql.TestingCleanupSchemaObjects(
 				ctx,
 				s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 				func(
-					ctx context.Context, _ string, _ *client.Txn, query string, _ ...interface{},
+					ctx context.Context, _ string, _ *kv.Txn, query string, _ ...interface{},
 				) (int, error) {
 					_, err := conn.ExecContext(ctx, query)
 					return 0, err

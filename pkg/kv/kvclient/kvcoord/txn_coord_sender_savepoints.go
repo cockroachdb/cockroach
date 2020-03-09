@@ -13,7 +13,7 @@ package kvcoord
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -46,7 +46,7 @@ type savepoint struct {
 	refreshSpanBytes int64
 }
 
-var _ client.SavepointToken = (*savepoint)(nil)
+var _ kv.SavepointToken = (*savepoint)(nil)
 
 // statically allocated savepoint marking the beginning of a transaction. Used
 // to avoid allocations for such savepoints.
@@ -58,8 +58,8 @@ func (s *savepoint) Initial() bool {
 }
 
 // CreateSavepoint is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (client.SavepointToken, error) {
-	if tc.typ != client.RootTxn {
+func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (kv.SavepointToken, error) {
+	if tc.typ != kv.RootTxn {
 		return nil, errors.AssertionFailedf("cannot get savepoint in non-root txn")
 	}
 
@@ -93,8 +93,8 @@ func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (client.Savepoint
 }
 
 // RollbackToSavepoint is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s client.SavepointToken) error {
-	if tc.typ != client.RootTxn {
+func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.SavepointToken) error {
+	if tc.typ != kv.RootTxn {
 		return errors.AssertionFailedf("cannot rollback savepoint in non-root txn")
 	}
 
@@ -145,8 +145,8 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s client.Save
 }
 
 // ReleaseSavepoint is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s client.SavepointToken) error {
-	if tc.typ != client.RootTxn {
+func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointToken) error {
+	if tc.typ != kv.RootTxn {
 		return errors.AssertionFailedf("cannot release savepoint in non-root txn")
 	}
 

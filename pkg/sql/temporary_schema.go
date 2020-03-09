@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -47,7 +47,7 @@ func (p *planner) createSchemaWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", schemaNameKey, schemaID)
 	}
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	b.CPut(schemaNameKey, schemaID, nil)
 
 	return p.txn.Run(ctx, b)
@@ -63,7 +63,7 @@ func temporarySchemaName(sessionID ClusterWideID) string {
 // getTemporaryObjectNames returns all the temporary objects under the
 // temporary schema of the given dbID.
 func getTemporaryObjectNames(
-	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, tempSchemaName string,
+	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, tempSchemaName string,
 ) (TableNames, error) {
 	dbDesc, err := MustGetDatabaseDescByID(ctx, txn, dbID)
 	if err != nil {
@@ -90,7 +90,7 @@ func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID Cl
 	}
 	ie := MakeInternalExecutor(ctx, server, MemoryMetrics{}, server.cfg.Settings)
 	ie.SetSessionData(sd)
-	return server.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return server.cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		dbIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn)
@@ -117,8 +117,8 @@ func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID Cl
 func TestingCleanupSchemaObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
-	execQuery func(context.Context, string, *client.Txn, string, ...interface{}) (int, error),
-	txn *client.Txn,
+	execQuery func(context.Context, string, *kv.Txn, string, ...interface{}) (int, error),
+	txn *kv.Txn,
 	dbID sqlbase.ID,
 	schemaName string,
 ) error {
@@ -129,8 +129,8 @@ func TestingCleanupSchemaObjects(
 func cleanupSchemaObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
-	execQuery func(context.Context, string, *client.Txn, string, ...interface{}) (int, error),
-	txn *client.Txn,
+	execQuery func(context.Context, string, *kv.Txn, string, ...interface{}) (int, error),
+	txn *kv.Txn,
 	dbID sqlbase.ID,
 	schemaName string,
 ) error {

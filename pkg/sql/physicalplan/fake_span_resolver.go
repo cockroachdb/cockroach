@@ -15,8 +15,8 @@ import (
 	"context"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,7 +54,7 @@ type fakeSpanResolverIterator struct {
 	// scans are performed in the context of this txn - the same one using the
 	// results of the resolver - so that using the resolver doesn't introduce
 	// conflicts.
-	txn *client.Txn
+	txn *kv.Txn
 	err error
 
 	// ranges are ordered by the key; the start key of the first one is the
@@ -64,7 +64,7 @@ type fakeSpanResolverIterator struct {
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
-func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *client.Txn) SpanResolverIterator {
+func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
 	return &fakeSpanResolverIterator{fsr: fsr, txn: txn}
 }
 

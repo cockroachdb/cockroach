@@ -22,9 +22,9 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1967,7 +1967,7 @@ func TestStartableJob(t *testing.T) {
 		Progress:      jobspb.RestoreProgress{},
 	}
 	createStartableJob := func(t *testing.T) (sj *jobs.StartableJob) {
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
 			return err
 		}))

@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -48,7 +48,7 @@ func (e TableEvent) Timestamp() hlc.Timestamp {
 
 // Config configures a SchemaFeed.
 type Config struct {
-	DB       *client.DB
+	DB       *kv.DB
 	Clock    *hlc.Clock
 	Settings *cluster.Settings
 	Targets  jobspb.ChangefeedTargets
@@ -87,7 +87,7 @@ type Config struct {
 // lowest timestamp where at least one table doesn't meet the invariant.
 type SchemaFeed struct {
 	filter   tableEventFilter
-	db       *client.DB
+	db       *kv.DB
 	clock    *hlc.Clock
 	settings *cluster.Settings
 	targets  jobspb.ChangefeedTargets
@@ -185,7 +185,7 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescTs := tf.mu.highWater
 	tf.mu.Unlock()
 	var initialDescs []*sqlbase.TableDescriptor
-	initialTableDescsFn := func(ctx context.Context, txn *client.Txn) error {
+	initialTableDescsFn := func(ctx context.Context, txn *kv.Txn) error {
 		initialDescs = initialDescs[:0]
 		txn.SetFixedTimestamp(ctx, initialTableDescTs)
 		// Note that all targets are currently guaranteed to be tables.
@@ -446,10 +446,7 @@ func (tf *SchemaFeed) validateTable(ctx context.Context, desc *sqlbase.TableDesc
 }
 
 func fetchTableDescriptorVersions(
-	ctx context.Context,
-	db *client.DB,
-	startTS, endTS hlc.Timestamp,
-	targets jobspb.ChangefeedTargets,
+	ctx context.Context, db *kv.DB, startTS, endTS hlc.Timestamp, targets jobspb.ChangefeedTargets,
 ) ([]*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
@@ -465,7 +462,7 @@ func fetchTableDescriptorVersions(
 		ReturnSST:     true,
 		OmitChecksum:  true,
 	}
-	res, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+	res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if log.V(2) {
 		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
 	}

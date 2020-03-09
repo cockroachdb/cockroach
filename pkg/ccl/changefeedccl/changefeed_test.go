@@ -28,10 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -796,7 +796,7 @@ func fetchDescVersionModificationTime(
 	}
 	clock := hlc.NewClock(hlc.UnixNano, time.Minute)
 	hh := roachpb.Header{Timestamp: clock.Now()}
-	res, pErr := client.SendWrappedWith(context.Background(),
+	res, pErr := kv.SendWrappedWith(context.Background(),
 		f.Server().DB().NonTransactionalSender(), hh, req)
 	if pErr != nil {
 		t.Fatal(pErr.GoError())

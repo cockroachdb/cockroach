@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -59,7 +59,7 @@ func TestExportCmd(t *testing.T) {
 			ReturnSST:      true,
 			TargetFileSize: ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
 		}
-		return client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
+		return kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 	}
 
 	exportAndSlurpOne := func(
@@ -272,7 +272,7 @@ func TestExportGCThreshold(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
-	_, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
+	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 	if !testutils.IsPError(pErr, "must be after replica GC threshold") {
 		t.Fatalf(`expected "must be after replica GC threshold" error got: %+v`, pErr)
 	}

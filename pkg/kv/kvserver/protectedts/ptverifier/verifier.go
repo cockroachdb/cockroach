@@ -13,7 +13,7 @@ package ptverifier
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,12 +24,12 @@ import (
 
 // verifier implements protectedts.Verifier.
 type verifier struct {
-	db *client.DB
+	db *kv.DB
 	s  protectedts.Storage
 }
 
 // New returns a new Verifier.
-func New(db *client.DB, s protectedts.Storage) protectedts.Verifier {
+func New(db *kv.DB, s protectedts.Storage) protectedts.Verifier {
 	return &verifier{db: db, s: s}
 }
 
@@ -57,7 +57,7 @@ func (v *verifier) Verify(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	// Mark the record as verified.
-	return errors.Wrapf(v.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return errors.Wrapf(v.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return v.s.MarkVerified(ctx, txn, id)
 	}), "failed to mark %v as verified", id)
 }
@@ -65,9 +65,9 @@ func (v *verifier) Verify(ctx context.Context, id uuid.UUID) error {
 // getRecordWithTimestamp fetches the record with the provided id and returns
 // the hlc timestamp at which that read occurred.
 func getRecordWithTimestamp(
-	ctx context.Context, s protectedts.Storage, db *client.DB, id uuid.UUID,
+	ctx context.Context, s protectedts.Storage, db *kv.DB, id uuid.UUID,
 ) (r *ptpb.Record, readAt hlc.Timestamp, err error) {
-	if err = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		r, err = s.GetRecord(ctx, txn, id)
 		readAt = txn.ReadTimestamp()
 		return err
@@ -77,10 +77,10 @@ func getRecordWithTimestamp(
 	return r, readAt, nil
 }
 
-func makeVerificationBatch(r *ptpb.Record, aliveAt hlc.Timestamp) client.Batch {
+func makeVerificationBatch(r *ptpb.Record, aliveAt hlc.Timestamp) kv.Batch {
 	// Need to perform validation, build a batch and run it.
 	mergedSpans, _ := roachpb.MergeSpans(r.Spans)
-	var b client.Batch
+	var b kv.Batch
 	for _, s := range mergedSpans {
 		var req roachpb.AdminVerifyProtectedTimestampRequest
 		req.RecordAliveAt = aliveAt
@@ -93,7 +93,7 @@ func makeVerificationBatch(r *ptpb.Record, aliveAt hlc.Timestamp) client.Batch {
 	return b
 }
 
-func parseResponse(b *client.Batch, r *ptpb.Record) error {
+func parseResponse(b *kv.Batch, r *ptpb.Record) error {
 	rawResponse := b.RawResponse()
 	var failed []roachpb.RangeDescriptor
 	for _, r := range rawResponse.Responses {

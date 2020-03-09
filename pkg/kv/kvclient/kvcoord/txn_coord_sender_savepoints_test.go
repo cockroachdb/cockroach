@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,8 +57,8 @@ func TestSavepoints(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		// Transient state during the test.
-		sp := make(map[string]client.SavepointToken)
-		var txn *client.Txn
+		sp := make(map[string]kv.SavepointToken)
+		var txn *kv.Txn
 
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			var buf strings.Builder
@@ -77,7 +77,7 @@ func TestSavepoints(t *testing.T) {
 
 			switch td.Cmd {
 			case "begin":
-				txn = client.NewTxn(ctx, db, 0)
+				txn = kv.NewTxn(ctx, db, 0)
 				ptxn()
 
 			case "commit":

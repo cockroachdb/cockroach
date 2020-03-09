@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +25,7 @@ func PlanAndRunCTAS(
 	ctx context.Context,
 	dsp *DistSQLPlanner,
 	planner *planner,
-	txn *client.Txn,
+	txn *kv.Txn,
 	isLocal bool,
 	in planNode,
 	out execinfrapb.ProcessorCoreUnion,

@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -403,7 +403,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if _, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
+		if _, err := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
 			RangeID:         rangeID, // Not used in this test, but why not.
 			ReadConsistency: consistency,
 		}, args); err != nil {
@@ -538,7 +538,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	txn.UpdateObservedTimestamp(1, hlc.MaxTimestamp)
 
 	put := roachpb.NewPut(roachpb.Key("don't"), roachpb.Value{})
-	if _, pErr := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
 		Txn: &txn,
 	}, put); pErr != nil {
 		t.Fatal(pErr)
@@ -599,7 +599,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
-	if _, pErr := client.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+	if _, pErr := kv.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
 		t.Fatalf("unexpected error: %v", pErr)
 	}
 	if first {
@@ -689,7 +689,7 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 		ds := NewDistSender(cfg, g)
 		v := roachpb.MakeValueFromString("value")
 		put := roachpb.NewPut(roachpb.Key("a"), v)
-		if _, pErr := client.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+		if _, pErr := kv.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
 			t.Fatalf("%d: unexpected error: %v", i, pErr)
 		}
 		if got := ds.Metrics().InLeaseTransferBackoffs.Count(); got != c.expected {
@@ -829,7 +829,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 	// Error on descriptor lookup, second attempt successful.
-	if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), ds, put); pErr != nil {
 		t.Errorf("unexpected error: %s", pErr)
 	}
 	if len(errs) != 0 {
@@ -885,7 +885,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: SenderTransportFactory(
 				tracing.NewTracer(),
-				client.SenderFunc(sender),
+				kv.SenderFunc(sender),
 			),
 		},
 		RangeDescriptorDB: rDB,
@@ -1018,7 +1018,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
-		if _, pErr := client.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
+		if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
 		if _, ok := ds.leaseHolderCache.Lookup(context.TODO(), 1); ok != !tc.shouldClearLeaseHolder {
@@ -1086,7 +1086,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	key := roachpb.Key("a")
 	put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
-	if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), ds, put); pErr != nil {
 		t.Errorf("put encountered unexpected error: %s", pErr)
 	}
 	if count != 3 {
@@ -1126,7 +1126,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if client.TestingIsRangeLookup(ba) {
+		if kv.TestingIsRangeLookup(ba) {
 			if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
 				br := &roachpb.BatchResponse{}
 				r := &roachpb.ScanResponse{}
@@ -1185,7 +1185,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
-	if _, err := client.SendWrapped(context.Background(), ds, scan); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -1224,7 +1224,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if client.TestingIsRangeLookup(ba) {
+		if kv.TestingIsRangeLookup(ba) {
 			if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
 				br := &roachpb.BatchResponse{}
 				r := &roachpb.ScanResponse{}
@@ -1281,7 +1281,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
-	if _, err := client.SendWrapped(context.Background(), ds, scan); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -1399,7 +1399,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
-	sr, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{MaxSpanRequestKeys: 1}, scan)
+	sr, err := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{MaxSpanRequestKeys: 1}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1486,7 +1486,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 	}
 	ds = NewDistSender(cfg, g)
 	get := roachpb.NewGet(roachpb.Key("b"))
-	_, err := client.SendWrapped(context.Background(), ds, get)
+	_, err := kv.SendWrapped(context.Background(), ds, get)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1555,7 +1555,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 		})
 	}
 
-	sender := client.SenderFunc(
+	sender := kv.SenderFunc(
 		func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			rb := args.CreateReply()
 			return rb, nil
@@ -1707,7 +1707,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
 	// Set the Txn info to avoid an OpRequiresTxnError.
-	reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
+	reply, err := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
 		MaxSpanRequestKeys: 10,
 		Txn:                &roachpb.Transaction{},
 	}, scan)
@@ -1752,7 +1752,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	rScan := &roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
-	if _, err := client.SendWrapped(context.Background(), ds, rScan); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), ds, rScan); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1781,9 +1781,9 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Prepare the test function
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	doCheck := func(sender client.Sender, fakeTime hlc.Timestamp) {
+	doCheck := func(sender kv.Sender, fakeTime hlc.Timestamp) {
 		ds.transportFactory = SenderTransportFactory(tracing.NewTracer(), sender)
-		_, err := client.SendWrapped(context.Background(), ds, put)
+		_, err := kv.SendWrapped(context.Background(), ds, put)
 		if err != nil && err != expectedErr {
 			t.Fatal(err)
 		}
@@ -1795,7 +1795,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Test timestamp propagation on valid BatchResults.
 	fakeTime := ds.clock.Now().Add(10000000000 /*10s*/, 0)
-	replyNormal := client.SenderFunc(
+	replyNormal := kv.SenderFunc(
 		func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			rb := args.CreateReply()
 			rb.Now = fakeTime
@@ -1805,7 +1805,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Test timestamp propagation on errors.
 	fakeTime = ds.clock.Now().Add(10000000000 /*10s*/, 0)
-	replyError := client.SenderFunc(
+	replyError := kv.SenderFunc(
 		func(_ context.Context, _ roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			pErr := expectedErr
 			pErr.Now = fakeTime
@@ -2594,7 +2594,7 @@ func TestSenderTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	transport, err := SenderTransportFactory(
 		tracing.NewTracer(),
-		client.SenderFunc(
+		kv.SenderFunc(
 			func(
 				_ context.Context,
 				_ roachpb.BatchRequest,
@@ -3059,7 +3059,7 @@ func TestCanSendToFollower(t *testing.T) {
 		ds.clusterID = &base.ClusterIDContainer{}
 		// set 2 to be the leaseholder
 		ds.LeaseHolderCache().Update(context.TODO(), 2, 2)
-		if _, pErr := client.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
+		if _, pErr := kv.SendWrappedWith(context.Background(), ds, c.header, c.msg); !testutils.IsPError(pErr, "boom") {
 			t.Fatalf("%d: unexpected error: %v", i, pErr)
 		}
 		if sentTo.NodeID != c.expectedNode {
@@ -3132,7 +3132,7 @@ func TestEvictMetaRange(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !client.TestingIsRangeLookup(ba) {
+			if !kv.TestingIsRangeLookup(ba) {
 				return ba.CreateReply(), nil
 			}
 
@@ -3223,7 +3223,7 @@ func TestEvictMetaRange(t *testing.T) {
 		ds := NewDistSender(cfg, g)
 
 		scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), false)
-		if _, pErr := client.SendWrapped(context.Background(), ds, scan); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
 
@@ -3239,7 +3239,7 @@ func TestEvictMetaRange(t *testing.T) {
 		isStale = true
 
 		scan = roachpb.NewScan(roachpb.Key("b"), roachpb.Key("c"), false)
-		if _, pErr := client.SendWrapped(context.Background(), ds, scan); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
 
@@ -3397,7 +3397,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 			br.Error = roachpb.NewError(err)
 			return br, nil
 		}
-		if !client.TestingIsRangeLookup(ba) {
+		if !kv.TestingIsRangeLookup(ba) {
 			// Return a SendError so DistSender retries the first range lookup in the
 			// user key-space for both batches.
 			if atomic.AddInt32(&sendErrors, 1) <= 2 {
@@ -3470,7 +3470,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 	putFn := func(key, value string) {
 		defer batchWaitGroup.Done()
 		put := roachpb.NewPut(roachpb.Key(key), roachpb.MakeValueFromString("c"))
-		if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), ds, put); pErr != nil {
 			t.Errorf("put encountered error: %s", pErr)
 		}
 	}

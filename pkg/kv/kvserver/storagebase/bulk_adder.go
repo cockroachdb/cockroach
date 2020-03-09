@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -61,7 +61,7 @@ type BulkAdderOptions struct {
 
 // BulkAdderFactory describes a factory function for BulkAdders.
 type BulkAdderFactory func(
-	ctx context.Context, db *client.DB, timestamp hlc.Timestamp, opts BulkAdderOptions,
+	ctx context.Context, db *kv.DB, timestamp hlc.Timestamp, opts BulkAdderOptions,
 ) (BulkAdder, error)
 
 // BulkAdder describes a bulk-adding helper that can be used to add lots of KVs.

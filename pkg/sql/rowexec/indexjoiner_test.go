@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -154,7 +154,7 @@ func TestIndexJoiner(t *testing.T) {
 				Table:    *c.desc,
 				IndexIdx: 0,
 			}
-			txn := client.NewTxn(context.Background(), s.DB(), s.NodeID())
+			txn := kv.NewTxn(context.Background(), s.DB(), s.NodeID())
 			runProcessorTest(
 				t,
 				execinfrapb.ProcessorCoreUnion{JoinReader: &spec},

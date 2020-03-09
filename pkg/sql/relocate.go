@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -145,7 +145,7 @@ func (n *relocateNode) Close(ctx context.Context) {
 }
 
 func lookupRangeDescriptor(
-	ctx context.Context, db *client.DB, rowKey []byte,
+	ctx context.Context, db *kv.DB, rowKey []byte,
 ) (roachpb.RangeDescriptor, error) {
 	startKey := keys.RangeMetaKey(keys.MustAddr(rowKey))
 	endKey := keys.Meta2Prefix.PrefixEnd()

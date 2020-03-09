@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -310,7 +310,7 @@ func TestMixedDirections(t *testing.T) {
 }
 
 func setupRanges(
-	db *gosql.DB, s *server.TestServer, cdb *client.DB, t *testing.T,
+	db *gosql.DB, s *server.TestServer, cdb *kv.DB, t *testing.T,
 ) ([]roachpb.RangeDescriptor, *sqlbase.TableDescriptor) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)

@@ -120,4 +120,4 @@ allows writes to the same range to be batched together. In cases where the
 entire transaction affects only a single range, transactions can commit in a
 single round trip.
 */
-package client
+package kv

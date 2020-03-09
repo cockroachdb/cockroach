@@ -14,7 +14,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -260,7 +260,7 @@ type savepoint struct {
 	// client.SavepointToken.Initial()).
 	commitOnRelease bool
 
-	kvToken client.SavepointToken
+	kvToken kv.SavepointToken
 
 	// The number of DDL statements that had been executed in the transaction (at
 	// the time the savepoint was created). We refuse to roll back a savepoint if

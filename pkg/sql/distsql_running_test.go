@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -60,7 +60,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
-		client.NewTxn(ctx, db, s.NodeID()),
+		kv.NewTxn(ctx, db, s.NodeID()),
 		security.RootUser,
 		&MemoryMetrics{},
 		&execCfg,
@@ -75,7 +75,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	push := func(ctx context.Context, key roachpb.Key) error {
 		// Conflicting transaction that pushes another transaction.
-		conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+		conflictTxn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		// We need to explicitly set a high priority for the push to happen.
 		if err := conflictTxn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
@@ -101,13 +101,13 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := client.NewDB(ambient, tsf, s.Clock())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
 	runningCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
 	defer cancel()
-	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *client.Txn) error {
+	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *kv.Txn) error {
 		iter++
 		if iter == 1 {
 			// On the first iteration, abort the txn.
@@ -193,7 +193,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	txn := client.NewTxn(ctx, db, s.NodeID())
+	txn := kv.NewTxn(ctx, db, s.NodeID())
 
 	// We're going to use a rowResultWriter to which only errors will be passed.
 	rw := newCallbackResultWriter(nil /* fn */)

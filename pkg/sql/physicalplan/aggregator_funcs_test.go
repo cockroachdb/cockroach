@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -53,7 +53,7 @@ var (
 func runTestFlow(
 	t *testing.T,
 	srv serverutils.TestServerInterface,
-	txn *client.Txn,
+	txn *kv.Txn,
 	procs ...execinfrapb.ProcessorSpec,
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsql.ServerImpl)
@@ -152,7 +152,7 @@ func checkDistAggregationInfo(
 		}
 	}
 
-	txn := client.NewTxn(ctx, srv.DB(), srv.NodeID())
+	txn := kv.NewTxn(ctx, srv.DB(), srv.NodeID())
 
 	// First run a flow that aggregates all the rows without any local stages.
 

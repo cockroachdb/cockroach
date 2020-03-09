@@ -18,8 +18,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -3241,7 +3241,7 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 
 // NewPlanningCtx returns a new PlanningCtx.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
-	ctx context.Context, evalCtx *extendedEvalContext, txn *client.Txn,
+	ctx context.Context, evalCtx *extendedEvalContext, txn *kv.Txn,
 ) *PlanningCtx {
 	planCtx := dsp.newLocalPlanningCtx(ctx, evalCtx)
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)

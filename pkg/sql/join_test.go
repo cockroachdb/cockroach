@@ -13,14 +13,14 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
-func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
+func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 	desc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 	p := planner{}
@@ -53,7 +53,7 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 	return scan, nil
 }
 
-func newTestJoinNode(kvDB *client.DB, leftName, rightName string) (*joinNode, error) {
+func newTestJoinNode(kvDB *kv.DB, leftName, rightName string) (*joinNode, error) {
 	left, err := newTestScanNode(kvDB, leftName)
 	if err != nil {
 		return nil, err

@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -90,7 +90,7 @@ func (s *Server) gcSystemLog(
 
 	for {
 		var rowsAffected int64
-		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			row, err := s.internalExecutor.QueryRowEx(
 				ctx,

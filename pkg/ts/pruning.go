@@ -13,8 +13,8 @@ package ts
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -111,11 +111,11 @@ func (tsdb *DB) findTimeSeries(
 // As range deletion of inline data is an idempotent operation, it is safe to
 // run this operation concurrently on multiple nodes at the same time.
 func (tsdb *DB) pruneTimeSeries(
-	ctx context.Context, db *client.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
+	ctx context.Context, db *kv.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
 ) error {
 	thresholds := tsdb.computeThresholds(now.WallTime)
 
-	b := &client.Batch{}
+	b := &kv.Batch{}
 	for _, timeSeries := range timeSeriesList {
 		// Time series data for a specific resolution falls in a contiguous key
 		// range, and can be deleted with a DelRange command.

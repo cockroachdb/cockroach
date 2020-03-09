@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -92,7 +92,7 @@ type fakeDB struct {
 
 func (f *fakeDB) Scan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
-) ([]client.KeyValue, error) {
+) ([]kv.KeyValue, error) {
 	if f.scanErr != nil {
 		return nil, f.scanErr
 	}
@@ -102,9 +102,9 @@ func (f *fakeDB) Scan(
 	if !bytes.Equal(end.(roachpb.Key), keys.MigrationKeyMax) {
 		return nil, errors.Errorf("expected end key %q, got %q", keys.MigrationKeyMax, end)
 	}
-	var results []client.KeyValue
+	var results []kv.KeyValue
 	for k, v := range f.kvs {
-		results = append(results, client.KeyValue{
+		results = append(results, kv.KeyValue{
 			Key:   []byte(k),
 			Value: &roachpb.Value{RawBytes: v},
 		})
@@ -112,8 +112,8 @@ func (f *fakeDB) Scan(
 	return results, nil
 }
 
-func (f *fakeDB) Get(ctx context.Context, key interface{}) (client.KeyValue, error) {
-	return client.KeyValue{}, errors.New("unimplemented")
+func (f *fakeDB) Get(ctx context.Context, key interface{}) (kv.KeyValue, error) {
+	return kv.KeyValue{}, errors.New("unimplemented")
 }
 
 func (f *fakeDB) Put(ctx context.Context, key, value interface{}) error {
@@ -126,7 +126,7 @@ func (f *fakeDB) Put(ctx context.Context, key, value interface{}) error {
 	return nil
 }
 
-func (f *fakeDB) Txn(context.Context, func(context.Context, *client.Txn) error) error {
+func (f *fakeDB) Txn(context.Context, func(context.Context, *kv.Txn) error) error {
 	return errors.New("unimplemented")
 }
 
@@ -402,7 +402,7 @@ type migrationTest struct {
 	oldMigrations []migrationDescriptor
 	server        serverutils.TestServerInterface
 	sqlDB         *sqlutils.SQLRunner
-	kvDB          *client.DB
+	kvDB          *kv.DB
 	memMetrics    *sql.MemoryMetrics
 }
 
@@ -725,7 +725,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 
 	deprecatedKey := sqlbase.MakeDescMetadataKey(keys.DeprecatedNamespaceTableID)
 	desc := &sqlbase.Descriptor{}
-	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 		require.NoError(t, err)
 		desc.Table(ts).Name = sqlbase.NamespaceTable.Name
@@ -735,7 +735,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 	// Run the migration.
 	require.NoError(t, mt.runMigration(ctx, migration))
 
-	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check that the persisted descriptors now match our in-memory versions,
 		// ignoring create and modification times.
 		{

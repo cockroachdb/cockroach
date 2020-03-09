@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
@@ -84,7 +84,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 
 	// Write something to the DB.
 	putArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), putArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), putArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,7 +96,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 			EndKey: []byte("aa"),
 		},
 	}
-	if _, err := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{
+	if _, err := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{
 		Timestamp: mtc.stores[0].Clock().Now(),
 	}, &checkArgs); err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 			EndKey: []byte("b"),
 		},
 	}
-	if _, err := client.SendWrapped(ctx, mtc.Store(0).TestSender(), &checkArgs); err != nil {
+	if _, err := kv.SendWrapped(ctx, mtc.Store(0).TestSender(), &checkArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -261,11 +261,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Write something to the DB.
 	pArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("c"), []byte("d"))
-	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +278,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			},
 			Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
 		}
-		resp, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), &checkArgs)
+		resp, err := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), &checkArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -423,8 +423,8 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	key := []byte("a")
 
-	computeDelta := func(db *client.DB) enginepb.MVCCStats {
-		var b client.Batch
+	computeDelta := func(db *kv.DB) enginepb.MVCCStats {
+		var b kv.Batch
 		b.AddRawRequest(&roachpb.RecomputeStatsRequest{
 			RequestHeader: roachpb.RequestHeader{Key: key},
 			DryRun:        true,

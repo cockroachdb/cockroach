@@ -13,7 +13,7 @@ package kvcoord
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
@@ -152,17 +152,17 @@ func (s *txnSeqNumAllocator) stepLocked(ctx context.Context) error {
 // behavior needed to provide the documented API semantics of
 // sender.ConfigureStepping() (see client/sender.go).
 func (s *txnSeqNumAllocator) configureSteppingLocked(
-	newMode client.SteppingMode,
-) (prevMode client.SteppingMode) {
+	newMode kv.SteppingMode,
+) (prevMode kv.SteppingMode) {
 	prevEnabled := s.steppingModeEnabled
-	enabled := newMode == client.SteppingEnabled
+	enabled := newMode == kv.SteppingEnabled
 	s.steppingModeEnabled = enabled
 	if !prevEnabled && enabled {
 		s.readSeq = s.writeSeq
 	}
-	prevMode = client.SteppingDisabled
+	prevMode = kv.SteppingDisabled
 	if prevEnabled {
-		prevMode = client.SteppingEnabled
+		prevMode = kv.SteppingEnabled
 	}
 	return prevMode
 }
