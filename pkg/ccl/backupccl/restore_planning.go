@@ -194,19 +194,14 @@ func allocateTableRewrites(
 	// the backup. This generator keeps produced the next descriptor ID.
 	var tempSysDBID sqlbase.ID
 	if descriptorCoverage == tree.AllDescriptors {
-		var err error
-		numberOfIncrements := maxDescIDInBackup - uint32(sql.MaxDefaultDescriptorID)
-		// We need to increment this key this many times rather than settings
-		// it since the interface does not expect it to be set. See client.Inc()
-		// for more information.
-		// TODO(pbardea): Follow up too see if there is a way to just set this
-		//   since for clusters with many descrirptors we'd want to avoid
-		//   incrementing it 10,000+ times.
-		for i := uint32(0); i <= numberOfIncrements; i++ {
-			_, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
-			if err != nil {
-				return nil, err
-			}
+		numberOfIncrements := int64(maxDescIDInBackup - uint32(sql.MaxDefaultDescriptorID))
+		// TODO(pbardea): I think for now, full cluster restore needs to consider
+		//  that no descriptor has ever been created on the target cluster since
+		//  some descriptors may still be GC'ing and will cause issues for the
+		//  restore.
+		_, err := kv.IncrementValRetryable(ctx, p.ExecCfg().DB, keys.DescIDGenerator, numberOfIncrements)
+		if err != nil {
+			return nil, err
 		}
 
 		// Generate one more desc ID for the ID of the temporary system db.
