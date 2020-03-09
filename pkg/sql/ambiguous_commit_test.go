@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -34,7 +34,7 @@ import (
 )
 
 type interceptingTransport struct {
-	kv.Transport
+	kvcoord.Transport
 	sendNext func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 }
 
@@ -80,11 +80,11 @@ func TestAmbiguousCommit(t *testing.T) {
 			return nil
 		}
 
-		params.Knobs.KVClient = &kv.ClientTestingKnobs{
+		params.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
 			TransportFactory: func(
-				opts kv.SendOptions, nodeDialer *nodedialer.Dialer, replicas kv.ReplicaSlice,
-			) (kv.Transport, error) {
-				transport, err := kv.GRPCTransportFactory(opts, nodeDialer, replicas)
+				opts kvcoord.SendOptions, nodeDialer *nodedialer.Dialer, replicas kvcoord.ReplicaSlice,
+			) (kvcoord.Transport, error) {
+				transport, err := kvcoord.GRPCTransportFactory(opts, nodeDialer, replicas)
 				return &interceptingTransport{
 					Transport: transport,
 					sendNext: func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {

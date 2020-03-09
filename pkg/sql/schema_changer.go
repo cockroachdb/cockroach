@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -139,8 +139,8 @@ type SchemaChanger struct {
 	// rollback job for the rollback of the schema change.
 	job *jobs.Job
 	// Caches updated by DistSQL.
-	rangeDescriptorCache *kv.RangeDescriptorCache
-	leaseHolderCache     *kv.LeaseHolderCache
+	rangeDescriptorCache *kvcoord.RangeDescriptorCache
+	leaseHolderCache     *kvcoord.LeaseHolderCache
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
@@ -477,8 +477,8 @@ func (sc *SchemaChanger) truncateTable(
 
 	var n int
 	lastKey := tableSpan.Key
-	ri := kv.NewRangeIterator(sc.execCfg.DistSender)
-	for ri.Seek(ctx, tableSpan.Key, kv.Ascending); ; ri.Next(ctx) {
+	ri := kvcoord.NewRangeIterator(sc.execCfg.DistSender)
+	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
 		if !ri.Valid() {
 			return ri.Error().GoError()
 		}

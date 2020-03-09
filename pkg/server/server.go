@@ -38,8 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -176,8 +176,8 @@ type Server struct {
 	nodeDialer       *nodedialer.Dialer
 	nodeLiveness     *kvserver.NodeLiveness
 	storePool        *kvserver.StorePool
-	tcsFactory       *kv.TxnCoordSenderFactory
-	distSender       *kv.DistSender
+	tcsFactory       *kvcoord.TxnCoordSenderFactory
+	distSender       *kvcoord.DistSender
 	db               *client.DB
 	pgServer         *pgwire.Server
 	distSQLServer    *distsql.ServerImpl
@@ -321,16 +321,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// However, on a single-node setup (such as a test), retries will never
 	// succeed because the only server has been shut down; thus, the
 	// DistSender needs to know that it should not retry in this situation.
-	var clientTestingKnobs kv.ClientTestingKnobs
+	var clientTestingKnobs kvcoord.ClientTestingKnobs
 	if kvKnobs := s.cfg.TestingKnobs.KVClient; kvKnobs != nil {
-		clientTestingKnobs = *kvKnobs.(*kv.ClientTestingKnobs)
+		clientTestingKnobs = *kvKnobs.(*kvcoord.ClientTestingKnobs)
 	}
 	retryOpts := s.cfg.RetryOptions
 	if retryOpts == (retry.Options{}) {
 		retryOpts = base.DefaultRetryOptions()
 	}
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
-	distSenderCfg := kv.DistSenderConfig{
+	distSenderCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:      s.cfg.AmbientCtx,
 		Settings:        st,
 		Clock:           s.clock,
@@ -339,12 +339,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TestingKnobs:    clientTestingKnobs,
 		NodeDialer:      s.nodeDialer,
 	}
-	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
+	s.distSender = kvcoord.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
 
-	txnMetrics := kv.MakeTxnMetrics(s.cfg.HistogramWindowInterval())
+	txnMetrics := kvcoord.MakeTxnMetrics(s.cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(txnMetrics)
-	txnCoordSenderFactoryCfg := kv.TxnCoordSenderFactoryConfig{
+	txnCoordSenderFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
 		AmbientCtx:   s.cfg.AmbientCtx,
 		Settings:     st,
 		Clock:        s.clock,
@@ -353,7 +353,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Metrics:      txnMetrics,
 		TestingKnobs: clientTestingKnobs,
 	}
-	s.tcsFactory = kv.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)
+	s.tcsFactory = kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)
 
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &s.nodeIDContainer

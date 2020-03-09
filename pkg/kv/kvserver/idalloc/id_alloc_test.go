@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	// Import to set ZoneConfigHook.
@@ -38,7 +38,7 @@ func newTestAllocator(t testing.TB) (*localtestcluster.LocalTestCluster, *idallo
 		DisableLivenessHeartbeat: true,
 		DontCreateSystemRanges:   true,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), kv.InitFactoryForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 	idAlloc, err := idalloc.NewAllocator(
 		s.Cfg.AmbientCtx,
 		keys.RangeIDGenerator,
