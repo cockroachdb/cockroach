@@ -300,6 +300,11 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 			ht.computeBuckets(
 				ctx, ht.probeScratch.next[1:], ht.keyTypes, ht.probeScratch.keys, batch.Length(), batch.Selection())
 			copy(ht.probeScratch.hashBuffer, ht.probeScratch.next[1:])
+
+			for _, hash := range ht.probeScratch.hashBuffer[:batch.Length()] {
+				ht.probeScratch.first[hash] = 0
+			}
+
 			ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1, batch.Length())
 
 			ht.removeDuplicates(batch, ht.probeScratch.keys, ht.probeScratch.first, ht.probeScratch.next, ht.checkProbeForDistinct)
@@ -447,13 +452,19 @@ func (ht *hashTable) computeBuckets(
 func (ht *hashTable) buildNextChains(
 	ctx context.Context, first, next []uint64, offset, batchSize int,
 ) {
-	for id := offset; id < offset+batchSize; id++ {
+	for id := offset + batchSize - 1; id >= offset; id-- {
 		ht.cancelChecker.check(ctx)
 		// keyID is stored into corresponding hash bucket at the front of the next
 		// chain.
 		hash := next[id]
-		next[id] = first[hash]
-		first[hash] = uint64(id)
+		firstKeyID := first[hash]
+		if firstKeyID == 0 || uint64(id) < firstKeyID {
+			next[id] = first[hash]
+			first[hash] = uint64(id)
+		} else {
+			next[id] = next[firstKeyID]
+			next[firstKeyID] = uint64(id)
+		}
 	}
 }
 
