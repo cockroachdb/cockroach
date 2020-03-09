@@ -462,6 +462,8 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		t.Fatalf("recommission failed: %v", err)
 	}
 
+	// TODO(knz): quit --decommission is deprecated in 20.1. Remove
+	// this part of the roachtest in 20.2.
 	t.l.Printf("decommissioning third node via `quit --decommission`\n")
 	func() {
 		// This should not take longer than five minutes, and if it does, it's
