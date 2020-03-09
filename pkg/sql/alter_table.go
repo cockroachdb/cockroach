@@ -15,9 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -132,12 +130,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	var droppedViews []string
 	tn := params.p.ResolvedName(n.n.Table)
 
-	// We use an increment based for loop here against len(n.n.Cmds)
-	// because the evaluation of some commands involves translation
-	// into new commands to evaluate. n.n.Cmds might change in each
-	// iteration, so do not take pointers into it.
-	for i := 0; i < len(n.n.Cmds); i++ {
-		cmd := n.n.Cmds[i]
+	for i, cmd := range n.n.Cmds {
 		telemetry.Inc(cmd.TelemetryCounter())
 
 		if !n.tableDesc.HasPrimaryKey() && !isAlterCmdValidWithoutPrimaryKey(cmd) {
@@ -265,10 +258,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 						Sharded:    d.Sharded,
 						Interleave: d.Interleave,
 					}
-					// Insert the alterPK command to be processed after this command.
-					n.n.Cmds = append(n.n.Cmds, nil)
-					copy(n.n.Cmds[i+2:], n.n.Cmds[i+1:])
-					n.n.Cmds[i+1] = alterPK
+					if err := params.p.AlterPrimaryKey(params.ctx, n.tableDesc, alterPK); err != nil {
+						return err
+					}
 					continue
 				}
 				idx := sqlbase.IndexDescriptor{
@@ -380,301 +372,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAlterPrimaryKey:
-			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
-			if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionPrimaryKeyChanges) {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"all nodes are not the correct version for primary key changes")
-			}
-
-			if t.Sharded != nil {
-				if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionHashShardedIndexes) {
-					return invalidClusterForShardedIndexError
-				}
-				if !params.p.EvalContext().SessionData.HashShardedIndexesEnabled {
-					return hashShardedIndexesDisabledError
-				}
-				if t.Interleave != nil {
-					return pgerror.Newf(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
-				}
-			}
-
-			if n.tableDesc.IsNewTable() {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"cannot create table and change it's primary key in the same transaction")
-			}
-
-			// Ensure that other schema changes on this table are not currently
-			// executing, and that other schema changes have not been performed
-			// in the current transaction.
-			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
-			for i := range n.tableDesc.Mutations {
-				mut := &n.tableDesc.Mutations[i]
-				if mut.MutationID == currentMutationID {
-					return unimplemented.NewWithIssuef(
-						45510, "cannot perform a primary key change on %s "+
-							"with other schema changes on %s in the same transaction", n.tableDesc.Name, n.tableDesc.Name)
-				}
-				if mut.MutationID < currentMutationID {
-					// We can handle indexes being deleted concurrently. We do this
-					// in order to not be blocked on index drops created by a previous
-					// primary key change. If we errored out when seeing a previous
-					// index drop, then users would see a confusing message that a
-					// schema change is in progress when it doesn't seem like one is.
-					// TODO (rohany): This feels like such a hack until (#45150) is fixed.
-					if mut.GetIndex() != nil && mut.Direction == sqlbase.DescriptorMutation_DROP {
-						continue
-					}
-					return unimplemented.NewWithIssuef(
-						45510, "table %s is currently undergoing a schema change", n.tableDesc.Name)
-				}
-			}
-
-			for _, elem := range t.Columns {
-				col, dropped, err := n.tableDesc.FindColumnByName(elem.Column)
-				if err != nil {
-					return err
-				}
-				if dropped {
-					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-						"column %q is being dropped", col.Name)
-				}
-				if col.Nullable {
-					return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", col.Name)
-				}
-			}
-
-			// Disable primary key changes on tables that are interleaved parents.
-			if len(n.tableDesc.PrimaryIndex.InterleavedBy) != 0 {
-				var sb strings.Builder
-				sb.WriteString("[")
-				comma := ", "
-				for i := range n.tableDesc.PrimaryIndex.InterleavedBy {
-					interleave := &n.tableDesc.PrimaryIndex.InterleavedBy[i]
-					if i != 0 {
-						sb.WriteString(comma)
-					}
-					childTable, err := params.p.Tables().getTableVersionByID(
-						params.ctx,
-						params.p.Txn(),
-						interleave.Table,
-						tree.ObjectLookupFlags{},
-					)
-					if err != nil {
-						return err
-					}
-					sb.WriteString(childTable.Name)
-				}
-				sb.WriteString("]")
-				return errors.Newf(
-					"cannot change primary key of table %s because table(s) %s are interleaved into it",
-					n.tableDesc.Name,
-					sb.String(),
-				)
-			}
-
-			nameExists := func(name string) bool {
-				_, _, err := n.tableDesc.FindIndexByName(name)
-				return err == nil
-			}
-
-			// Make a new index that is suitable to be a primary index.
-			name := sqlbase.GenerateUniqueConstraintName(
-				"new_primary_key",
-				nameExists,
-			)
-			newPrimaryIndexDesc := &sqlbase.IndexDescriptor{
-				Name:              name,
-				Unique:            true,
-				CreatedExplicitly: true,
-				EncodingType:      sqlbase.PrimaryIndexEncoding,
-				Type:              sqlbase.IndexDescriptor_FORWARD,
-				Version:           sqlbase.SecondaryIndexFamilyFormatVersion,
-			}
-
-			// If the new index is requested to be sharded, set up the index descriptor
-			// to be sharded, and add the new shard column if it is missing.
-			if t.Sharded != nil {
-				shardCol, newColumn, err := setupShardedIndex(
-					params.ctx,
-					params.EvalContext().Settings,
-					params.SessionData().HashShardedIndexesEnabled,
-					&t.Columns,
-					t.Sharded.ShardBuckets,
-					n.tableDesc,
-					newPrimaryIndexDesc,
-					false, /* isNewTable */
-				)
-				if err != nil {
-					return err
-				}
-				if newColumn {
-					if err := setupFamilyAndConstraintForShard(
-						params,
-						n.tableDesc,
-						shardCol,
-						newPrimaryIndexDesc.Sharded.ColumnNames,
-						newPrimaryIndexDesc.Sharded.ShardBuckets,
-					); err != nil {
-						return err
-					}
-				}
-			}
-
-			if err := newPrimaryIndexDesc.FillColumns(t.Columns); err != nil {
+			if err := params.p.AlterPrimaryKey(params.ctx, n.tableDesc, t); err != nil {
 				return err
 			}
-			if err := n.tableDesc.AddIndexMutation(newPrimaryIndexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
-				return err
-			}
-			if err := n.tableDesc.AllocateIDs(); err != nil {
-				return err
-			}
-
-			// Ensure that the new primary index stores all columns in the table. We can't
-			// use AllocateID's to fill the stored columns here because it assumes
-			// that the indexed columns are n.PrimaryIndex.ColumnIDs, but here we want
-			// to consider the indexed columns to be newPrimaryIndexDesc.ColumnIDs.
-			newPrimaryIndexDesc.StoreColumnNames, newPrimaryIndexDesc.StoreColumnIDs = nil, nil
-			for _, col := range n.tableDesc.Columns {
-				containsCol := false
-				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
-					if colID == col.ID {
-						containsCol = true
-						break
-					}
-				}
-				if !containsCol {
-					newPrimaryIndexDesc.StoreColumnIDs = append(newPrimaryIndexDesc.StoreColumnIDs, col.ID)
-					newPrimaryIndexDesc.StoreColumnNames = append(newPrimaryIndexDesc.StoreColumnNames, col.Name)
-				}
-			}
-
-			if t.Interleave != nil {
-				if err := params.p.addInterleave(params.ctx, n.tableDesc, newPrimaryIndexDesc, t.Interleave); err != nil {
-					return err
-				}
-				if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, newPrimaryIndexDesc); err != nil {
-					return err
-				}
-			}
-
-			// Since we are potentially dropping indexes here, make sure to upgrade any potentially out of
-			// date foreign key representations on old tables.
-			if err := params.p.MaybeUpgradeDependentOldForeignKeyVersionTables(params.ctx, n.tableDesc); err != nil {
-				return err
-			}
-
-			// Create a new index that indexes everything the old primary index
-			// does, but doesn't store anything. We only recreate the index if
-			// the table has a primary key (no DROP PRIMARY KEY statements have
-			// been executed), and the primary key is not the default rowid key.
-			if n.tableDesc.HasPrimaryKey() && !n.tableDesc.IsPrimaryIndexDefaultRowID() {
-				oldPrimaryIndexCopy := protoutil.Clone(&n.tableDesc.PrimaryIndex).(*sqlbase.IndexDescriptor)
-				// Clear the name of the index so that it gets generated by AllocateIDs.
-				oldPrimaryIndexCopy.Name = ""
-				oldPrimaryIndexCopy.StoreColumnIDs = nil
-				oldPrimaryIndexCopy.StoreColumnNames = nil
-				// Make the copy of the old primary index not-interleaved. This decision
-				// can be revisited based on user experience.
-				oldPrimaryIndexCopy.Interleave = sqlbase.InterleaveDescriptor{}
-				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
-					return err
-				}
-			}
-
-			// We have to rewrite all indexes that either:
-			// * depend on uniqueness from the old primary key (inverted, non-unique, or unique with nulls).
-			// * don't store or index all columns in the new primary key.
-			shouldRewriteIndex := func(idx *sqlbase.IndexDescriptor) bool {
-				shouldRewrite := false
-				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
-					if !idx.ContainsColumnID(colID) {
-						shouldRewrite = true
-						break
-					}
-				}
-				if idx.Unique {
-					for _, colID := range idx.ColumnIDs {
-						col, err := n.tableDesc.FindColumnByID(colID)
-						if err != nil {
-							panic(err)
-						}
-						if col.Nullable {
-							shouldRewrite = true
-							break
-						}
-					}
-				}
-				return shouldRewrite || !idx.Unique || idx.Type == sqlbase.IndexDescriptor_INVERTED
-			}
-			var indexesToRewrite []*sqlbase.IndexDescriptor
-			for i := range n.tableDesc.Indexes {
-				idx := &n.tableDesc.Indexes[i]
-				if idx.ID != newPrimaryIndexDesc.ID && shouldRewriteIndex(idx) {
-					indexesToRewrite = append(indexesToRewrite, idx)
-				}
-			}
-
-			// TODO (rohany): this loop will be unused until #45510 is resolved.
-			for i := range n.tableDesc.Mutations {
-				mut := &n.tableDesc.Mutations[i]
-				// If there is an index that is getting built right now that started in a previous txn, we
-				// need to potentially rebuild that index as well.
-				if idx := mut.GetIndex(); mut.MutationID < currentMutationID && idx != nil &&
-					mut.Direction == sqlbase.DescriptorMutation_ADD && shouldRewriteIndex(idx) {
-					indexesToRewrite = append(indexesToRewrite, idx)
-				}
-			}
-
-			// Queue up a mutation for each index that needs to be rewritten.
-			// This new index will have an altered ExtraColumnIDs to allow it to be rewritten
-			// using the unique-ifying columns from the new table.
-			var oldIndexIDs, newIndexIDs []sqlbase.IndexID
-			for _, idx := range indexesToRewrite {
-				// Clone the index that we want to rewrite.
-				newIndex := protoutil.Clone(idx).(*sqlbase.IndexDescriptor)
-				basename := newIndex.Name + "_rewrite_for_primary_key_change"
-				newIndex.Name = sqlbase.GenerateUniqueConstraintName(basename, nameExists)
-				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
-					return err
-				}
-				// If the index that we are rewriting is interleaved, we need to setup the rewritten
-				// index to be interleaved as well. Since we cloned the index, the interleave descriptor
-				// on the new index is already set up. So, we just need to add the backreference from the
-				// parent to this new index.
-				if len(newIndex.Interleave.Ancestors) != 0 {
-					if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, newIndex); err != nil {
-						return err
-					}
-				}
-				oldIndexIDs = append(oldIndexIDs, idx.ID)
-				newIndexIDs = append(newIndexIDs, newIndex.ID)
-			}
-
-			swapArgs := &sqlbase.PrimaryKeySwap{
-				OldPrimaryIndexId: n.tableDesc.PrimaryIndex.ID,
-				NewPrimaryIndexId: newPrimaryIndexDesc.ID,
-				NewIndexes:        newIndexIDs,
-				OldIndexes:        oldIndexIDs,
-			}
-			n.tableDesc.AddPrimaryKeySwapMutation(swapArgs)
-
-			// Mark the primary key of the table as valid.
-			n.tableDesc.PrimaryIndex.Disabled = false
-
-			// N.B. We don't schedule index deletions here because the existing indexes need to be visible to the user
-			// until the primary key swap actually occurs. Deletions will get enqueued in the phase when the swap happens.
-
 			// Mark descriptorChanged so that a mutation job is scheduled at the end of startExec.
 			descriptorChanged = true
-
-			// Send a notice to users about the async cleanup jobs.
-			params.p.noticeSender.AppendNotice(
-				pgerror.Noticef(
-					"primary key changes spawn async cleanup jobs. Future schema changes on %q may be delayed as these jobs finish",
-					n.tableDesc.Name,
-				),
-			)
 
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
