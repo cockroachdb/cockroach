@@ -33,14 +33,11 @@ import (
 type verifyColOperatorArgs struct {
 	// anyOrder determines whether the results should be matched in order (when
 	// anyOrder is false) or as sets (when anyOrder is true).
-	anyOrder bool
-	// colsForEqCheck (when non-nil) specifies the column indices that should be
-	// used for equality check. If it is nil, then the whole rows are compared.
-	colsForEqCheck []uint32
-	inputTypes     [][]types.T
-	inputs         []sqlbase.EncDatumRows
-	outputTypes    []types.T
-	pspec          *execinfrapb.ProcessorSpec
+	anyOrder    bool
+	inputTypes  [][]types.T
+	inputs      []sqlbase.EncDatumRows
+	outputTypes []types.T
+	pspec       *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
 	forceDiskSpill bool
 	// numForcedRepartitions specifies a number of "repartitions" that a
@@ -56,12 +53,6 @@ type verifyColOperatorArgs struct {
 // and the corresponding columnar operator and verifies that the results match.
 func verifyColOperator(args verifyColOperatorArgs) error {
 	const floatPrecision = 0.0000001
-	if args.colsForEqCheck == nil {
-		args.colsForEqCheck = make([]uint32, len(args.outputTypes))
-		for i := range args.colsForEqCheck {
-			args.colsForEqCheck[i] = uint32(i)
-		}
-	}
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -163,9 +154,9 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	defer outColOp.ConsumerClosed()
 
 	printRowForChecking := func(r sqlbase.EncDatumRow) []string {
-		res := make([]string, len(args.colsForEqCheck))
-		for i, col := range args.colsForEqCheck {
-			res[i] = r[col].String(&args.outputTypes[col])
+		res := make([]string, len(args.outputTypes))
+		for i, col := range r {
+			res[i] = col.String(&args.outputTypes[i])
 		}
 		return res
 	}
@@ -174,12 +165,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	for {
 		rowProc, metaProc := outProc.Next()
 		if rowProc != nil {
-			row := printRowForChecking(rowProc)
-			if len(row) != len(args.colsForEqCheck) {
-				return errors.Errorf("unexpectedly processor returned a row of"+
-					"different length\n%s", row)
-			}
-			procRows = append(procRows, row)
+			procRows = append(procRows, printRowForChecking(rowProc))
 		}
 		if metaProc != nil {
 			if metaProc.Err == nil {
@@ -190,11 +176,6 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		}
 		rowColOp, metaColOp := outColOp.Next()
 		if rowColOp != nil {
-			row := printRowForChecking(rowColOp)
-			if len(row) != len(args.colsForEqCheck) {
-				return errors.Errorf("unexpectedly columnar operator returned a row of "+
-					"different length\n%s", row)
-			}
 			colOpRows = append(colOpRows, printRowForChecking(rowColOp))
 		}
 		if metaColOp != nil {
@@ -290,8 +271,8 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 					continue
 				}
 				foundDifference := false
-				for k, col := range args.colsForEqCheck {
-					match, err := datumsMatch(expStrRow[k], retStrRow[k], &args.outputTypes[col])
+				for k, typ := range args.outputTypes {
+					match, err := datumsMatch(expStrRow[k], retStrRow[k], &typ)
 					if err != nil {
 						return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 							expStrRow, retStrRow, err.Error())
@@ -317,8 +298,8 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		for i, expStrRow := range procRows {
 			retStrRow := colOpRows[i]
 			// anyOrder is false, so the result rows must match in the same order.
-			for k, col := range args.colsForEqCheck {
-				match, err := datumsMatch(expStrRow[k], retStrRow[k], &args.outputTypes[col])
+			for k, typ := range args.outputTypes {
+				match, err := datumsMatch(expStrRow[k], retStrRow[k], &typ)
 				if err != nil {
 					return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 						expStrRow, retStrRow, err.Error())
