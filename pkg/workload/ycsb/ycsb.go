@@ -39,29 +39,29 @@ const (
 
 	usertableSchemaRelational = `(
 		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
-		FIELD0 TEXT,
-		FIELD1 TEXT,
-		FIELD2 TEXT,
-		FIELD3 TEXT,
-		FIELD4 TEXT,
-		FIELD5 TEXT,
-		FIELD6 TEXT,
-		FIELD7 TEXT,
-		FIELD8 TEXT,
-		FIELD9 TEXT
+		FIELD0 TEXT NOT NULL,
+		FIELD1 TEXT NOT NULL,
+		FIELD2 TEXT NOT NULL,
+		FIELD3 TEXT NOT NULL,
+		FIELD4 TEXT NOT NULL,
+		FIELD5 TEXT NOT NULL,
+		FIELD6 TEXT NOT NULL,
+		FIELD7 TEXT NOT NULL,
+		FIELD8 TEXT NOT NULL,
+		FIELD9 TEXT NOT NULL
 	)`
 	usertableSchemaRelationalWithFamilies = `(
 		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
-		FIELD0 TEXT,
-		FIELD1 TEXT,
-		FIELD2 TEXT,
-		FIELD3 TEXT,
-		FIELD4 TEXT,
-		FIELD5 TEXT,
-		FIELD6 TEXT,
-		FIELD7 TEXT,
-		FIELD8 TEXT,
-		FIELD9 TEXT,
+		FIELD0 TEXT NOT NULL,
+		FIELD1 TEXT NOT NULL,
+		FIELD2 TEXT NOT NULL,
+		FIELD3 TEXT NOT NULL,
+		FIELD4 TEXT NOT NULL,
+		FIELD5 TEXT NOT NULL,
+		FIELD6 TEXT NOT NULL,
+		FIELD7 TEXT NOT NULL,
+		FIELD8 TEXT NOT NULL,
+		FIELD9 TEXT NOT NULL,
 		FAMILY (ycsb_key),
 		FAMILY (FIELD0),
 		FAMILY (FIELD1),
@@ -90,6 +90,7 @@ type ycsb struct {
 	recordCount int
 	json        bool
 	families    bool
+	sfu         bool
 	splits      int
 
 	workload                                                        string
@@ -120,6 +121,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
 		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data`)
 		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family`)
+		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write transactions`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
 		g.flags.StringVar(&g.requestDistribution, `request-distribution`, ``, `Distribution for request key generation [zipfian, uniform, latest]. The default for workloads A, B, C, E, and F is zipfian, and the default for workload D is latest.`)
@@ -210,7 +212,7 @@ func (g *ycsb) Tables() []workload.Table {
 		if g.json {
 			return []interface{}{key, "{}"}
 		}
-		return []interface{}{key, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
+		return []interface{}{key, "", "", "", "", "", "", "", "", "", ""}
 	}
 	if g.json {
 		usertable.Schema = usertableSchemaJSON
@@ -252,7 +254,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return workload.QueryLoad{}, err
 	}
 
-	readFieldStmts := make([]*gosql.Stmt, numTableFields)
+	readFieldForUpdateStmts := make([]*gosql.Stmt, numTableFields)
 	for i := 0; i < numTableFields; i++ {
 		var q string
 		if g.json {
@@ -260,12 +262,15 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		} else {
 			q = fmt.Sprintf(`SELECT field%d FROM usertable WHERE ycsb_key = $1`, i)
 		}
+		if g.sfu {
+			q = fmt.Sprintf(`%s FOR UPDATE`, q)
+		}
 
 		stmt, err := db.Prepare(q)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
-		readFieldStmts[i] = stmt
+		readFieldForUpdateStmts[i] = stmt
 	}
 
 	scanStmt, err := db.Prepare(`SELECT * FROM usertable WHERE ycsb_key >= $1 LIMIT $2`)
@@ -354,21 +359,21 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
 		w := &ycsbWorker{
-			config:          g,
-			hists:           reg.GetHandle(),
-			db:              db,
-			readStmt:        readStmt,
-			readFieldStmts:  readFieldStmts,
-			scanStmt:        scanStmt,
-			insertStmt:      insertStmt,
-			updateStmts:     updateStmts,
-			rowIndex:        rowIndex,
-			rowCounter:      rowCounter,
-			nextInsertIndex: nil,
-			requestGen:      requestGen,
-			scanLengthGen:   scanLengthGen,
-			rng:             rng,
-			hashFunc:        fnv.New64(),
+			config:                  g,
+			hists:                   reg.GetHandle(),
+			db:                      db,
+			readStmt:                readStmt,
+			readFieldForUpdateStmts: readFieldForUpdateStmts,
+			scanStmt:                scanStmt,
+			insertStmt:              insertStmt,
+			updateStmts:             updateStmts,
+			rowIndex:                rowIndex,
+			rowCounter:              rowCounter,
+			nextInsertIndex:         nil,
+			requestGen:              requestGen,
+			scanLengthGen:           scanLengthGen,
+			rng:                     rng,
+			hashFunc:                fnv.New64(),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
@@ -386,10 +391,10 @@ type ycsbWorker struct {
 	db     *gosql.DB
 	// Statement to read all the fields of a row. Used for read requests.
 	readStmt *gosql.Stmt
-	// Statements to read a specific field of a row. Used for read-modify-write
-	// requests.
-	readFieldStmts       []*gosql.Stmt
-	scanStmt, insertStmt *gosql.Stmt
+	// Statements to read a specific field of a row in preparation for
+	// updating it. Used for read-modify-write requests.
+	readFieldForUpdateStmts []*gosql.Stmt
+	scanStmt, insertStmt    *gosql.Stmt
 	// In normal mode this is one statement per field, since the field name
 	// cannot be parametrized. In JSON mode it's a single statement.
 	updateStmts []*gosql.Stmt
@@ -585,7 +590,8 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 	args[0] = key
 	err := crdb.ExecuteTx(ctx, yw.db, nil, func(tx *gosql.Tx) error {
 		var oldValue []byte
-		if err := tx.StmtContext(ctx, yw.readFieldStmts[fieldIdx]).QueryRowContext(ctx, key).Scan(&oldValue); err != nil {
+		readStmt := yw.readFieldForUpdateStmts[fieldIdx]
+		if err := tx.StmtContext(ctx, readStmt).QueryRowContext(ctx, key).Scan(&oldValue); err != nil {
 			return err
 		}
 		var updateStmt *gosql.Stmt
