@@ -17,7 +17,7 @@ testing and don't care about data persistence, you can do so with just a single
 command instead of following this guide (which sets up a more reliable cluster):
 
 ```shell
-kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start --insecure
+kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start-single-node --insecure --logtostderr
 ```
 
 ## Limitations
