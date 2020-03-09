@@ -249,6 +249,12 @@ func GetJSONProtoWithAdminOption(
 	return httputil.GetJSON(httpClient, ts.AdminURL()+path, response)
 }
 
+// PostJSONProto uses the supplied client to POST the URL specified by the parameters
+// and unmarshals the result into response.
+func PostJSONProto(ts TestServerInterface, path string, request, response protoutil.Message) error {
+	return PostJSONProtoWithAdminOption(ts, path, request, response, true)
+}
+
 // PostJSONProtoWithAdminOption is like PostJSONProto but the caller
 // can customize whether the request is performed with admin
 // privilege.

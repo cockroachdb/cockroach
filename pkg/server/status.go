@@ -143,6 +143,7 @@ type statusServer struct {
 	sessionRegistry          *sql.SessionRegistry
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester sql.StmtDiagnosticsRequester
+	internalExecutor         *sql.InternalExecutor
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -160,22 +161,24 @@ func newStatusServer(
 	stores *kvserver.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
+	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
-		AmbientContext:  ambient,
-		st:              st,
-		cfg:             cfg,
-		admin:           adminServer,
-		db:              db,
-		gossip:          gossip,
-		metricSource:    metricSource,
-		nodeLiveness:    nodeLiveness,
-		storePool:       storePool,
-		rpcCtx:          rpcCtx,
-		stores:          stores,
-		stopper:         stopper,
-		sessionRegistry: sessionRegistry,
+		AmbientContext:   ambient,
+		st:               st,
+		cfg:              cfg,
+		admin:            adminServer,
+		db:               db,
+		gossip:           gossip,
+		metricSource:     metricSource,
+		nodeLiveness:     nodeLiveness,
+		storePool:        storePool,
+		rpcCtx:           rpcCtx,
+		stores:           stores,
+		stopper:          stopper,
+		sessionRegistry:  sessionRegistry,
+		internalExecutor: internalExecutor,
 	}
 
 	return server

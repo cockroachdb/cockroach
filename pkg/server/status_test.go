@@ -63,6 +63,12 @@ func getStatusJSONProto(
 	return serverutils.GetJSONProto(ts, statusPrefix+path, response)
 }
 
+func postStatusJSONProto(
+	ts serverutils.TestServerInterface, path string, request, response protoutil.Message,
+) error {
+	return serverutils.PostJSONProto(ts, statusPrefix+path, request, response)
+}
+
 func getStatusJSONProtoWithAdminOption(
 	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
@@ -1501,5 +1507,76 @@ func TestListSessionsSecurity(t *testing.T) {
 			t.Errorf("unexpected failure listing sessions for %q; error: %v; response errors: %v",
 				user, err, resp.Errors)
 		}
+	}
+}
+
+func TestCreateStatementDiagnosticsReport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: "INSERT INTO test VALUES (_)",
+	}
+	var resp serverpb.CreateStatementDiagnosticsReportResponse
+	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	var respGet serverpb.StatementDiagnosticsReportsResponse
+	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+		t.Fatal(err)
+	}
+
+	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
+		t.Fatal("statement diagnostics request was not persisted")
+	}
+}
+
+func TestStatementDiagnosticsCompleted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: "INSERT INTO test VALUES (_)",
+	}
+	var resp serverpb.CreateStatementDiagnosticsReportResponse
+	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = db.Exec("INSERT INTO test VALUES (1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var respGet serverpb.StatementDiagnosticsReportsResponse
+	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+		t.Fatal(err)
+	}
+
+	if respGet.Reports[0].Completed != true {
+		t.Fatal("statement diagnostics was not captured")
+	}
+
+	var diagRespGet serverpb.StatementDiagnosticsResponse
+	diagPath := fmt.Sprintf("stmtdiag/%d", respGet.Reports[0].StatementDiagnosticsId)
+	if err := getStatusJSONProto(s, diagPath, &diagRespGet); err != nil {
+		t.Fatal(err)
+	}
+
+	json := diagRespGet.Diagnostics.Trace
+	if json == "" ||
+		!strings.Contains(json, "traced statement") ||
+		!strings.Contains(json, "statement execution committed the txn") {
+		t.Fatal("statement diagnostics did not capture a trace")
 	}
 }

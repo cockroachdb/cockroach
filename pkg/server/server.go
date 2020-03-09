@@ -688,6 +688,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.node.stores,
 		s.stopper,
 		s.sessionRegistry,
+		internalExecutor,
 	)
 	s.authentication = newAuthenticationServer(s)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
