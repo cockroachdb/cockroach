@@ -177,7 +177,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 
 	seed := rand.Int()
 	rng := rand.New(rand.NewSource(int64(seed)))
-	nRuns := 10
+	nRuns := 150
 	nRows := 10
 	maxCols := 3
 	maxNum := 3
@@ -239,12 +239,11 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						Core:  execinfrapb.ProcessorCoreUnion{Distinct: spec},
 					}
 					args := verifyColOperatorArgs{
-						anyOrder:       true,
-						colsForEqCheck: distinctCols,
-						inputTypes:     [][]types.T{inputTypes},
-						inputs:         []sqlbase.EncDatumRows{rows},
-						outputTypes:    inputTypes,
-						pspec:          pspec,
+						anyOrder:    false,
+						inputTypes:  [][]types.T{inputTypes},
+						inputs:      []sqlbase.EncDatumRows{rows},
+						outputTypes: inputTypes,
+						pspec:       pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
 						fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v ---\n",
