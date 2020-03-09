@@ -75,13 +75,19 @@ function renderNodeLiveness(props: NodeLivenessProps) {
     "node-liveness",
     "cluster-summary__metric",
     "suspect-nodes",
-    { "warning": suspectNodes > 0 },
+    {
+      "warning": suspectNodes > 0,
+      "disabled": suspectNodes === 0,
+    },
   );
   const deadClasses = classNames(
     "node-liveness",
     "cluster-summary__metric",
     "dead-nodes",
-    { "alert": deadNodes > 0 },
+    {
+      "alert": deadNodes > 0,
+      "disabled": deadNodes === 0,
+    },
   );
   return [
     <h3 className="node-liveness cluster-summary__title">Node Status</h3>,
@@ -118,13 +124,19 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
     "replication-status",
     "cluster-summary__metric",
     "under-replicated-ranges",
-    { "warning": underReplicatedRanges > 0 },
+    {
+      "warning": underReplicatedRanges > 0,
+      "disabled": underReplicatedRanges === 0,
+    },
   );
   const unavailableClasses = classNames(
     "replication-status",
     "cluster-summary__metric",
     "unavailable-ranges",
-    { "alert": unavailableRanges > 0 },
+    {
+      "alert": unavailableRanges > 0,
+      "disabled": unavailableRanges === 0,
+    },
   );
   return [
     <h3 className="replication-status cluster-summary__title">Replication Status</h3>,
