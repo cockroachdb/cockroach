@@ -9,11 +9,11 @@
 // licenses/APL.txt.
 
 /*
-Package client and its KV API have been deprecated for external usage. Please use
+Package kv and its KV API have been deprecated for external usage. Please use
 a postgres-compatible SQL driver (e.g. github.com/lib/pq). For more details, see
 http://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/.
 
-Package client provides clients for accessing the various externally-facing
+Package kv provides clients for accessing the various externally-facing
 Cockroach database endpoints.
 
 DB Client
