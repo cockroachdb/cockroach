@@ -165,6 +165,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					seqName,
 					n.tableDesc.Temporary,
 					seqOpts,
+					tree.AsStringWithFQNames(n.n, params.Ann()),
 				); err != nil {
 					return err
 				}
@@ -186,7 +187,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				for _, changedSeqDesc := range changedSeqDescs {
-					if err := params.p.writeSchemaChange(params.ctx, changedSeqDesc, sqlbase.InvalidMutationID); err != nil {
+					if err := params.p.writeSchemaChange(
+						params.ctx, changedSeqDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+					); err != nil {
 						return err
 					}
 				}
@@ -354,7 +357,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
-					if err := params.p.writeSchemaChange(params.ctx, updated, sqlbase.InvalidMutationID); err != nil {
+					if err := params.p.writeSchemaChange(
+						params.ctx, updated, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+					); err != nil {
 						return err
 					}
 				}
@@ -1071,17 +1076,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 	mutationID := sqlbase.InvalidMutationID
 	if addedMutations {
-		var err error
-		mutationID, err = params.p.createOrUpdateSchemaChangeJob(
-			params.ctx, n.tableDesc,
-			tree.AsStringWithFQNames(n.n, params.Ann()),
-		)
-		if err != nil {
-			return err
-		}
+		mutationID = n.tableDesc.ClusterVersion.NextMutationID
 	}
-
-	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
+	if err := params.p.writeSchemaChange(
+		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
 		return err
 	}
 
@@ -1233,7 +1232,10 @@ func applyColumnMutation(
 				return err
 			}
 			for _, changedSeqDesc := range changedSeqDescs {
-				if err := params.p.writeSchemaChange(params.ctx, changedSeqDesc, sqlbase.InvalidMutationID); err != nil {
+				// TODO (lucy): Have more consistent/informative names for dependent jobs.
+				if err := params.p.writeSchemaChange(
+					params.ctx, changedSeqDesc, sqlbase.InvalidMutationID, "updating dependent sequence",
+				); err != nil {
 					return err
 				}
 			}
@@ -1476,7 +1478,10 @@ func (p *planner) updateFKBackReferenceName(
 		backref := &referencedTableDesc.InboundFKs[i]
 		if backref.Name == ref.Name && backref.OriginTableID == tableDesc.ID {
 			backref.Name = newName
-			return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID)
+			// TODO (lucy): Have more consistent/informative names for dependent jobs.
+			return p.writeSchemaChange(
+				ctx, referencedTableDesc, sqlbase.InvalidMutationID, "updating referenced table",
+			)
 		}
 	}
 	return errors.Errorf("missing backreference for foreign key %s", ref.Name)

@@ -9,13 +9,21 @@ GRANT ALL ON DATABASE test TO testuser
 statement ok
 CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (1); CREATE INDEX ON t(x)
 
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TTT
-SELECT job_type, description, user_name FROM [SHOW JOBS]
+SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE description != 'updating privileges'
 ----
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
 
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TTT
-SELECT job_type, description, user_name FROM crdb_internal.jobs
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE description != 'updating privileges'
 ----
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
 
@@ -37,13 +45,21 @@ statement ok
 CREATE TABLE u(x INT); INSERT INTO u(x) VALUES (1); CREATE INDEX ON u(x);
 
 
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TTT
-SELECT job_type, description, user_name FROM [SHOW JOBS]
+SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE description != 'updating privileges'
 ----
 SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
 
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TTT
-SELECT job_type, description, user_name FROM crdb_internal.jobs
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE description != 'updating privileges'
 ----
 SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
 
@@ -51,14 +67,22 @@ SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
 
 user root
 
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TTT
-SELECT job_type, description, user_name FROM [SHOW JOBS]
+SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE description != 'updating privileges'
 ----
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
 SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
 
+# The "updating privileges" clause in the SELECT statement is for excluding jobs
+# run by an unrelated startup migration.
+# TODO (lucy): Update this if/when we decide to change how these jobs queued by
+# the startup migration are handled.
 query TTT
-SELECT job_type, description, user_name FROM crdb_internal.jobs
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE description != 'updating privileges'
 ----
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
 SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser

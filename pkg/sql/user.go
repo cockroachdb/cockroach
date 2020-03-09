@@ -214,5 +214,7 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
+	return p.writeSchemaChange(
+		ctx, tableDesc, sqlbase.InvalidMutationID, "updating version for role membership table",
+	)
 }

@@ -641,7 +641,7 @@ message TableDescriptor {
     // Nanoseconds since the Unix epoch.
     optional int64 expiration_time = 2 [(gogoproto.nullable) = false];
   }
-  optional SchemaChangeLease lease = 15;
+  optional SchemaChangeLease lease = 15 [deprecated = true];
   // An id for the next group of mutations to be applied together.
   optional uint32 next_mutation_id = 16 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextMutationID", (gogoproto.casttype) = "MutationID"];
@@ -905,12 +905,12 @@ message TableDescriptor {
     optional int64 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID",
                                 (gogoproto.casttype) = "IndexID"];
 
-    optional int64 drop_time = 2 [(gogoproto.nullable) = false];
+    optional int64 drop_time = 2 [(gogoproto.nullable) = false, deprecated = true];
 
     // The job id for a mutation job is the id in the system.jobs table of the
     // schema change job executing the mutation referenced by mutation_id.
     optional int64 job_id = 3 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "JobID"];
+                              (gogoproto.customname) = "JobID", deprecated = true];
   }
 
   // The schema elements that have been dropped and whose underlying

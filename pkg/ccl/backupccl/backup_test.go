@@ -1177,9 +1177,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
 	serverArgs.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: func() error {
-			return errors.New("async schema changer disabled")
-		},
+		// TODO (lucy): if/when this test gets reinstated, figure out what knobs are
+		// needed.
 	}
 
 	// PAUSE JOB and CANCEL JOB are racy in that it's hard to guarantee that the
@@ -1352,9 +1351,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: func() error {
-			return errors.New("async schema changer disabled")
-		},
+		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 	}
 
 	const numAccounts = 1000
@@ -1399,9 +1396,7 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		AsyncExecNotification: func() error {
-			return errors.New("async schema changer disabled")
-		},
+		// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 	}
 
 	const numAccounts = 1000
@@ -3438,10 +3433,17 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
 
 	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`, localFoo, "data 2")
-	sqlDB.CheckQueryResults(t, "SELECT description FROM [SHOW JOBS] ORDER BY description", [][]string{
-		{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history"},
-		{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
-	})
+	// The "updating privileges" clause in the SELECT statement is for excluding jobs
+	// run by an unrelated startup migration.
+	// TODO (lucy): Update this if/when we decide to change how these jobs queued by
+	// the startup migration are handled.
+	sqlDB.CheckQueryResults(
+		t, "SELECT description FROM [SHOW JOBS] WHERE description != 'updating privileges' ORDER BY description",
+		[][]string{
+			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history"},
+			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
+		},
+	)
 }
 
 func TestBackupCreatedStats(t *testing.T) {

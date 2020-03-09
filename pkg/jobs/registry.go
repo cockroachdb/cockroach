@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -104,6 +105,27 @@ type Registry struct {
 	metrics    Metrics
 	adoptionCh chan struct{}
 
+	// sessionBoundInternalExecutorFactory provides a way for jobs to create
+	// internal executors. This is rarely needed, and usually job resumers should
+	// use the internal executor from the PlanHookState. The intended user of this
+	// interface is the schema change job resumer, which needs to set the
+	// tableCollectionModifier on the internal executor to different values in
+	// multiple concurrent queries. This situation is an exception to the internal
+	// executor generally being a stateless wrapper, and makes it impossible to
+	// reuse the same internal executor across all the queries (without
+	// refactoring to get rid of the tableCollectionModifier field, which we
+	// should do eventually).
+	//
+	// Note that, while this API is not ideal, internal executors are basically
+	// lightweight wrappers requiring no additional teardown. There's not much
+	// cost incurred in creating these.
+	//
+	// TODO (lucy): We should refactor and get rid of the tableCollectionModifier
+	// field. Modifying the TableCollection is basically a per-query operation
+	// and should be a per-query setting. #34304 is the issue for creating/
+	// improving this API.
+	sessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile string
 
@@ -176,6 +198,16 @@ func MakeRegistry(
 	r.mu.jobs = make(map[int64]context.CancelFunc)
 	r.metrics.InitHooks(histogramWindowInterval)
 	return r
+}
+
+// SetSessionBoundInternalExecutorFactory sets the
+// SessionBoundInternalExecutorFactory that will be used by the job registry
+// executor. We expose this separately from the constructor to avoid a circular
+// dependency.
+func (r *Registry) SetSessionBoundInternalExecutorFactory(
+	factory sqlutil.SessionBoundInternalExecutorFactory,
+) {
+	r.sessionBoundInternalExecutorFactory = factory
 }
 
 // MetricsStruct returns the metrics for production monitoring of each job type.
@@ -298,6 +330,10 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		j, err := r.LoadJob(ctx, id)
 		if err != nil {
 			return errors.Wrapf(err, "Job %d could not be loaded. The job may not have succeeded", jobs[i])
+		}
+		if j.Payload().FinalResumeError != nil {
+			decodedErr := errors.DecodeError(ctx, *j.Payload().FinalResumeError)
+			return decodedErr
 		}
 		if j.Payload().Error != "" {
 			return errors.New(fmt.Sprintf("Job %d failed with error %s", jobs[i], j.Payload().Error))
@@ -455,12 +491,12 @@ func (r *Registry) Start(
 		}
 	})
 
-	maybeAdoptJobs := func(ctx context.Context) {
+	maybeAdoptJobs := func(ctx context.Context, randomizeJobOrder bool) {
 		if r.adoptionDisabled(ctx) {
 			r.cancelAll(ctx)
 			return
 		}
-		if err := r.maybeAdoptJob(ctx, nl); err != nil {
+		if err := r.maybeAdoptJob(ctx, nl, randomizeJobOrder); err != nil {
 			log.Errorf(ctx, "error while adopting jobs: %s", err)
 		}
 	}
@@ -471,9 +507,10 @@ func (r *Registry) Start(
 			case <-stopper.ShouldStop():
 				return
 			case <-r.adoptionCh:
-				maybeAdoptJobs(ctx)
+				// Try to adopt the most recently created job.
+				maybeAdoptJobs(ctx, false /* randomizeJobOrder */)
 			case <-time.After(adoptInterval):
-				maybeAdoptJobs(ctx)
+				maybeAdoptJobs(ctx, true /* randomizeJobOrder */)
 			}
 		}
 	})
@@ -742,6 +779,8 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
+		// TODO(spaskob,lucy): Add metrics on job retries. Consider having a backoff
+		// mechanism (possibly combined with a retry limit).
 		if e, ok := err.(retryJobError); ok {
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
 		}
@@ -859,9 +898,15 @@ func (r *Registry) resume(
 			}
 			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, finalResumeError)
 			if err != nil {
-				if errors.HasAssertionFailure(err) {
-					log.ReportOrPanic(ctx, nil, err.Error())
-				}
+				// TODO (lucy): This needs to distinguish between assertion errors in
+				// the job registry and assertion errors in job execution returned from
+				// Resume() or OnFailOrCancel(), and only fail on the former. We have
+				// tests that purposely introduce bad state in order to produce
+				// assertion errors, which shouldn't cause the test to panic. For now,
+				// comment this out.
+				// if errors.HasAssertionFailure(err) {
+				// 	log.ReportOrPanic(ctx, nil, err.Error())
+				// }
 				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 			}
 			status, err := job.CurrentStatus(ctx)
@@ -893,7 +938,9 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 	return false
 }
 
-func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
+func (r *Registry) maybeAdoptJob(
+	ctx context.Context, nl NodeLiveness, randomizeJobOrder bool,
+) error {
 	const stmt = `
 SELECT id, payload, progress IS NULL, status
 FROM system.jobs
@@ -904,6 +951,11 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed querying for jobs")
+	}
+
+	if randomizeJobOrder {
+		rand.Seed(timeutil.Now().UnixNano())
+		rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
 	}
 
 	type nodeStatus struct {
