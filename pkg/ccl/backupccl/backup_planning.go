@@ -40,6 +40,7 @@ import (
 const (
 	backupOptRevisionHistory = "revision_history"
 	backupOptEncPassphrase   = "encryption_passphrase"
+	backupOptWithPrivileges  = "privileges"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
 )

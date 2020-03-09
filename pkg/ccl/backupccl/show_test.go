@@ -228,6 +228,30 @@ COMMENT ON INDEX tablea_b_idx IS 'index'`
 		}
 	}
 
+	// Show privileges of descriptors that are backed up.
+	{
+		showPrivs := localFoo + "/show_privs"
+		sqlDB.Exec(t, `CREATE TABLE data.top_secret (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t, `CREATE USER agent_bond`)
+		sqlDB.Exec(t, `CREATE USER agent_thomas`)
+		sqlDB.Exec(t, `CREATE USER agent_m`)
+		sqlDB.Exec(t, `CREATE ROLE agents`)
+		sqlDB.Exec(t, `GRANT agents TO agent_bond`)
+		sqlDB.Exec(t, `GRANT agents TO agent_thomas`)
+		sqlDB.Exec(t, `GRANT ALL ON data.top_secret TO agent_m`)
+		sqlDB.Exec(t, `GRANT INSERT on data.top_secret TO agents`)
+		sqlDB.Exec(t, `GRANT SELECT on data.top_secret TO agent_bond`)
+		sqlDB.Exec(t, `GRANT UPDATE on data.top_secret TO agent_bond`)
+		sqlDB.Exec(t, `BACKUP data.top_secret TO $1;`, showPrivs)
+
+		want := `admin has [ALL], agent_bond has [SELECT, UPDATE], agent_m has [ALL], agents has [INSERT], root has [ALL]`
+
+		showBackupRows := sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s' WITH privileges`, showPrivs))
+		privs := showBackupRows[0][6]
+		if !eqWhitespace(privs, want) {
+			t.Fatalf("mismatched privileges: %s, want %s", privs, want)
+		}
+	}
 }
 
 func eqWhitespace(a, b string) bool {
