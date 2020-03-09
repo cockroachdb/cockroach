@@ -54,8 +54,8 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 // that the shard column's value is within [0..ShardBuckets-1]. This method is called when
 // a `CREATE INDEX` statement is issued for the creation of a sharded index that *does
 // not* re-use a pre-existing shard column.
-func setupFamilyAndConstraintForShard(
-	params runParams,
+func (p *planner) setupFamilyAndConstraintForShard(
+	ctx context.Context,
 	tableDesc *MutableTableDescriptor,
 	shardCol *sqlbase.ColumnDescriptor,
 	idxColumns []string,
@@ -80,7 +80,7 @@ func setupFamilyAndConstraintForShard(
 	if err != nil {
 		return err
 	}
-	info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+	info, err := tableDesc.GetConstraintInfo(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -96,8 +96,8 @@ func setupFamilyAndConstraintForShard(
 	}
 	// Avoid creating duplicate check constraints.
 	if _, ok := inuseNames[ckName]; !ok {
-		ck, err := MakeCheckConstraint(params.ctx, tableDesc, ckDef, inuseNames,
-			&params.p.semaCtx, params.p.tableName)
+		ck, err := MakeCheckConstraint(ctx, tableDesc, ckDef, inuseNames,
+			&p.semaCtx, p.tableName)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func MakeIndexDescriptor(
 			return nil, err
 		}
 		if newColumn {
-			if err := setupFamilyAndConstraintForShard(params, tableDesc, shardCol,
+			if err := params.p.setupFamilyAndConstraintForShard(params.ctx, tableDesc, shardCol,
 				indexDesc.Sharded.ColumnNames, indexDesc.Sharded.ShardBuckets); err != nil {
 				return nil, err
 			}
