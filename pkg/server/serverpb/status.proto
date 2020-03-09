@@ -325,10 +325,16 @@ message LogFileRequest {
   string file = 2;
 }
 
+enum StacksType {
+  GOROUTINE_STACKS = 0;
+  THREAD_STACKS = 1;
+}
+
 message StacksRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+  StacksType type = 2;
 }
 
 // Represents the type of file.
