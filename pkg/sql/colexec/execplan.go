@@ -119,6 +119,14 @@ type NewColOperatorArgs struct {
 		// sorter it is merging already created partitions into new one before
 		// proceeding to the next partition from the input).
 		NumForcedRepartitions int
+		// DelegateFDAcquisitions should be observed by users of a
+		// PartitionedDiskQueue. During normal operations, these should acquire the
+		// maximum number of file descriptors they will use from FDSemaphore up
+		// front. Setting this testing knob to true disables that behavior and
+		// lets the PartitionedDiskQueue interact with the semaphore as partitions
+		// are opened/closed, which ensures that the number of open files never
+		// exceeds what is expected.
+		DelegateFDAcquisitions bool
 	}
 }
 
@@ -388,6 +396,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				args.TestingKnobs.NumForcedRepartitions,
+				args.TestingKnobs.DelegateFDAcquisitions,
 				diskQueueCfg,
 				args.FDSemaphore,
 			)
@@ -779,6 +788,7 @@ func NewColOperator(
 							diskQueueCfg,
 							args.FDSemaphore,
 							args.TestingKnobs.NumForcedRepartitions,
+							args.TestingKnobs.DelegateFDAcquisitions,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,

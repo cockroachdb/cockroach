@@ -120,7 +120,21 @@ type externalSorter struct {
 	firstPartitionIdx   int
 	maxNumberPartitions int
 
+	// fdState is used to acquire file descriptors up front.
+	fdState struct {
+		fdSemaphore semaphore.Semaphore
+		acquiredFDs int
+	}
+
 	emitter Operator
+
+	testingKnobs struct {
+		// delegateFDAcquisitions if true, means that a test wants to force the
+		// PartitionedDiskQueues to track the number of file descriptors the hash
+		// joiner will open/close. This disables the default behavior of acquiring
+		// all file descriptors up front in Next.
+		delegateFDAcquisitions bool
+	}
 }
 
 var _ Operator = &externalSorter{}
@@ -143,6 +157,9 @@ var _ Operator = &externalSorter{}
 // - maxNumberPartitions (when non-zero) overrides the semi-dynamically
 // computed maximum number of partitions to have at once. It should be
 // non-zero only in tests.
+// - delegateFDAcquisitions specifies whether the external sorter should let
+// the partitioned disk queue acquire file descriptors instead of acquiring
+// them up front in Next.
 func newExternalSorter(
 	ctx context.Context,
 	unlimitedAllocator *Allocator,
@@ -152,6 +169,7 @@ func newExternalSorter(
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
+	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 ) Operator {
@@ -178,16 +196,26 @@ func newExternalSorter(
 	if maxNumberPartitions < 2 {
 		maxNumberPartitions = 2
 	}
-	return &externalSorter{
+	partitionedDiskQueueSemaphore := fdSemaphore
+	if !delegateFDAcquisitions {
+		// To avoid deadlocks with other disk queues, we manually attempt to acquire
+		// the maximum number of descriptors all at once in Next. Passing in a nil
+		// semaphore indicates that the caller will do the acquiring.
+		partitionedDiskQueueSemaphore = nil
+	}
+	es := &externalSorter{
 		OneInputNode:        NewOneInputNode(inMemSorter),
 		unlimitedAllocator:  unlimitedAllocator,
 		memoryLimit:         memoryLimit,
 		inMemSorter:         inMemSorter,
-		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition),
+		partitioner:         colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition),
 		inputTypes:          inputTypes,
 		ordering:            ordering,
 		maxNumberPartitions: maxNumberPartitions,
 	}
+	es.fdState.fdSemaphore = fdSemaphore
+	es.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions
+	return es
 }
 
 func (s *externalSorter) Init() {
@@ -231,6 +259,13 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				}
 				s.state = externalSorterNewPartition
 				continue
+			}
+			if !s.testingKnobs.delegateFDAcquisitions && s.fdState.acquiredFDs == 0 {
+				toAcquire := s.maxNumberPartitions
+				if err := s.fdState.fdSemaphore.Acquire(ctx, toAcquire); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
+				s.fdState.acquiredFDs = toAcquire
 			}
 			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
 				execerror.VectorizedInternalPanic(err)
@@ -294,8 +329,14 @@ func (s *externalSorter) Close() error {
 	if s.closed {
 		return nil
 	}
+	if err := s.partitioner.Close(); err != nil {
+		return err
+	}
+	if !s.testingKnobs.delegateFDAcquisitions && s.fdState.acquiredFDs > 0 {
+		s.fdState.fdSemaphore.Release(s.fdState.acquiredFDs)
+	}
 	s.closed = true
-	return s.partitioner.Close()
+	return nil
 }
 
 // createMergerForPartitions creates an ordered synchronizer that will merge

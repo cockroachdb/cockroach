@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
@@ -53,13 +54,15 @@ func TestExternalHashJoiner(t *testing.T) {
 	)
 	// External hash joiner needs at least two partitions per side.
 	const maxNumberPartitions = 4
+	rng, _ := randutil.NewPseudoRand()
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
-				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
+				delegateFDAcquisitions := rng.Float64() < 0.5
+				t.Run(fmt.Sprintf("spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions), func(t *testing.T) {
 					// Unfortunately, there is currently no better way to check that the
 					// external hash joiner does not have leftover file descriptors other
 					// than appending each semaphore used to this slice on construction.
@@ -90,7 +93,7 @@ func TestExternalHashJoiner(t *testing.T) {
 						spec := createSpecForHashJoiner(tc)
 						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(
 							ctx, flowCtx, spec, sources, func() {}, queueCfg,
-							2 /* numForcedPartitions */, sem,
+							2 /* numForcedPartitions */, delegateFDAcquisitions, sem,
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -154,7 +157,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	const maxNumberPartitions = 4
 	hj, accounts, monitors, err := createDiskBackedHashJoiner(
 		ctx, flowCtx, spec, []Operator{leftSource, rightSource},
-		func() { spilled = true }, queueCfg, 0, /* numForcedRepartitions */
+		func() { spilled = true }, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
 		NewTestingSemaphore(maxNumberPartitions),
 	)
 	defer func() {
@@ -253,7 +256,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 							rightSource.reset(nBatches)
 							hj, accounts, monitors, err := createDiskBackedHashJoiner(
 								ctx, flowCtx, spec, []Operator{leftSource, rightSource},
-								func() {}, queueCfg, 0, /* numForcedRepartitions */
+								func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
 								NewTestingSemaphore(VecMaxOpenFDsLimit),
 							)
 							memAccounts = append(memAccounts, accounts...)
@@ -289,6 +292,7 @@ func createDiskBackedHashJoiner(
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	numForcedRepartitions int,
+	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
 	args := NewColOperatorArgs{
@@ -303,6 +307,7 @@ func createDiskBackedHashJoiner(
 	// flowCtx.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
+	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }
