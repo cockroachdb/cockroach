@@ -87,11 +87,12 @@ message ReadImportDataSpec {
 
   message ImportTable {
     optional sqlbase.TableDescriptor desc = 1 [(gogoproto.nullable) = true];
-    // targetCols is used to store the target columns for each existing table
-    // being imported into. These are the columns for which the processor should
+    // targetColIds is used to store the target column ids for each existing table
+    // being imported into. These are the columns ids for which the processor should
     // read and emit data (ignoring data for any other tables or columns outside
     // of the targetCols, that is present in the input).
-    repeated string targetCols = 2 [(gogoproto.nullable) = true];
+    repeated uint32 targetColIds = 3 [(gogoproto.nullable) = true];
+    reserved 2;
   }
 
   // tables supports input formats that can read multiple tables. If it is

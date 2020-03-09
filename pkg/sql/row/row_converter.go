@@ -226,7 +226,7 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 func NewDatumRowConverter(
 	ctx context.Context,
 	tableDesc *sqlbase.TableDescriptor,
-	targetColNames tree.NameList,
+	targetColIds []uint32,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
 ) (*DatumRowConverter, error) {
@@ -242,10 +242,13 @@ func NewDatumRowConverter(
 	// IMPORT INTO allows specifying target columns which could be a subset of
 	// immutDesc.VisibleColumns. If no target columns are specified we assume all
 	// columns of the table descriptor are to be inserted into.
-	if len(targetColNames) != 0 {
-		if targetColDescriptors, err = sqlbase.ProcessTargetColumns(immutDesc, targetColNames,
-			true /* ensureColumns */, false /* allowMutations */); err != nil {
-			return nil, err
+	if len(targetColIds) != 0 {
+		for _, id := range targetColIds {
+			descr, err := immutDesc.FindActiveColumnByID(sqlbase.ColumnID(id))
+			if err != nil {
+				return nil, err
+			}
+			targetColDescriptors = append(targetColDescriptors, *descr)
 		}
 	} else {
 		targetColDescriptors = immutDesc.VisibleColumns()

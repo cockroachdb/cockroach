@@ -375,13 +375,13 @@ func newImportRowError(err error, row string, num int64) error {
 
 // parallelImportContext describes state associated with the import.
 type parallelImportContext struct {
-	walltime   int64                    // Import time stamp.
-	numWorkers int                      // Parallelism
-	batchSize  int                      // Number of records to batch
-	evalCtx    *tree.EvalContext        // Evaluation context.
-	tableDesc  *sqlbase.TableDescriptor // Table descriptor we're importing into.
-	targetCols tree.NameList            // List of columns to import.  nil if importing all columns.
-	kvCh       chan row.KVBatch         // Channel for sending KV batches.
+	walltime     int64                    // Import time stamp.
+	numWorkers   int                      // Parallelism
+	batchSize    int                      // Number of records to batch
+	evalCtx      *tree.EvalContext        // Evaluation context.
+	tableDesc    *sqlbase.TableDescriptor // Table descriptor we're importing into.
+	targetColIds []uint32                 // List of columns to import.  nil if importing all columns.
+	kvCh         chan row.KVBatch         // Channel for sending KV batches.
 }
 
 // importFileContext describes state specific to a file being imported.
@@ -408,7 +408,7 @@ func makeDatumConverter(
 	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
-		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx.Copy(), importCtx.kvCh)
+		ctx, importCtx.tableDesc, importCtx.targetColIds, importCtx.evalCtx.Copy(), importCtx.kvCh)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}

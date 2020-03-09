@@ -36,17 +36,17 @@ func newCSVInputReader(
 	walltime int64,
 	parallelism int,
 	tableDesc *sqlbase.TableDescriptor,
-	targetCols tree.NameList,
+	targetColIds []uint32,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {
 	return &csvInputReader{
 		importCtx: &parallelImportContext{
-			walltime:   walltime,
-			numWorkers: parallelism,
-			evalCtx:    evalCtx,
-			tableDesc:  tableDesc,
-			targetCols: targetCols,
-			kvCh:       kvCh,
+			walltime:     walltime,
+			numWorkers:   parallelism,
+			evalCtx:      evalCtx,
+			tableDesc:    tableDesc,
+			targetColIds: targetColIds,
+			kvCh:         kvCh,
 		},
 		opts: opts,
 	}
@@ -89,14 +89,14 @@ func (c *csvInputReader) readFile(
 }
 
 type csvRowProducer struct {
-	importCtx       *parallelImportContext
-	opts            *roachpb.CSVOptions
-	csv             *csv.Reader
-	rowNum          int64
-	err             error
-	record          []string
-	progress        func() float32
-	expectedColumns tree.NameList
+	importCtx  *parallelImportContext
+	opts       *roachpb.CSVOptions
+	csv        *csv.Reader
+	rowNum     int64
+	err        error
+	record     []string
+	progress   func() float32
+	numColumns int
 }
 
 var _ importRowProducer = &csvRowProducer{}
@@ -135,19 +135,15 @@ func strRecord(record []string, sep rune) string {
 // Row() implements importRowProducer interface.
 func (p *csvRowProducer) Row() (interface{}, error) {
 	p.rowNum++
-	expectedColsLen := len(p.expectedColumns)
-	if expectedColsLen == 0 {
-		expectedColsLen = len(p.importCtx.tableDesc.VisibleColumns())
-	}
 
-	if len(p.record) == expectedColsLen {
+	if len(p.record) == p.numColumns {
 		// Expected number of columns.
-	} else if len(p.record) == expectedColsLen+1 && p.record[expectedColsLen] == "" {
+	} else if len(p.record) == p.numColumns+1 && p.record[p.numColumns] == "" {
 		// Line has the optional trailing comma, ignore the empty field.
-		p.record = p.record[:expectedColsLen]
+		p.record = p.record[:p.numColumns]
 	} else {
 		return nil, newImportRowError(
-			errors.Errorf("expected %d fields, got %d", expectedColsLen, len(p.record)),
+			errors.Errorf("expected %d fields, got %d", p.numColumns, len(p.record)),
 			strRecord(p.record, p.opts.Comma),
 			p.rowNum)
 
@@ -209,12 +205,19 @@ func newCSVPipeline(c *csvInputReader, input *fileReader) (*csvRowProducer, *csv
 	cr.LazyQuotes = !c.opts.StrictQuotes
 	cr.Comment = c.opts.Comment
 
+	var numCols int
+	if c.importCtx.targetColIds == nil {
+		numCols = len(c.importCtx.tableDesc.VisibleColumns())
+	} else {
+		numCols = len(c.importCtx.targetColIds)
+	}
+
 	producer := &csvRowProducer{
-		importCtx:       c.importCtx,
-		opts:            &c.opts,
-		csv:             cr,
-		progress:        func() float32 { return input.ReadFraction() },
-		expectedColumns: c.importCtx.targetCols,
+		importCtx:  c.importCtx,
+		opts:       &c.opts,
+		csv:        cr,
+		progress:   func() float32 { return input.ReadFraction() },
+		numColumns: numCols,
 	}
 	consumer := &csvRowConsumer{
 		importCtx: c.importCtx,

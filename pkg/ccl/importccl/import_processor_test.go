@@ -827,18 +827,18 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 		t.Fatalf("Unsupported input format: %v", format)
 	}
 
-	targetCols := make([]string, len(descr.Columns))
+	targetColIds := make([]uint32, len(descr.Columns))
 	numCols := 0
 	for i, col := range descr.Columns {
 		if !col.Hidden {
-			targetCols[i] = col.Name
+			targetColIds[i] = uint32(col.ID)
 			numCols++
 		}
 	}
 	assert.True(t, numCols > 0)
 
 	spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
-		"simple": {Desc: descr, TargetCols: targetCols[0:numCols]},
+		"simple": {Desc: descr, TargetColIds: targetColIds},
 	}
 
 	for id, path := range inputs {
