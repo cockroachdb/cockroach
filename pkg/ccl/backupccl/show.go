@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -50,8 +51,15 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	expected := map[string]sql.KVStringOptValidate{backupOptEncPassphrase: sql.KVStringOptRequireValue}
+	expected := map[string]sql.KVStringOptValidate{
+		backupOptEncPassphrase:  sql.KVStringOptRequireValue,
+		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
+	}
 	optsFn, err := p.TypeAsStringOpts(backup.Options, expected)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+	opts, err := optsFn()
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -63,7 +71,7 @@ func showBackupPlanHook(
 	case tree.BackupFileDetails:
 		shower = backupShowerFiles
 	default:
-		shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas)
+		shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas, opts)
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -72,11 +80,6 @@ func showBackupPlanHook(
 		defer tracing.FinishSpan(span)
 
 		str, err := toFn()
-		if err != nil {
-			return err
-		}
-
-		opts, err := optsFn()
 		if err != nil {
 			return err
 		}
@@ -146,7 +149,7 @@ type backupShower struct {
 	fn     func([]BackupManifest) []tree.Datums
 }
 
-func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
+func backupShowerHeaders(showSchemas bool, opts map[string]string) sqlbase.ResultColumns {
 	baseHeaders := sqlbase.ResultColumns{
 		{Name: "database_name", Typ: types.String},
 		{Name: "table_name", Typ: types.String},
@@ -159,12 +162,17 @@ func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
 	if showSchemas {
 		baseHeaders = append(baseHeaders, sqlbase.ResultColumn{Name: "create_statement", Typ: types.String})
 	}
+	if _, shouldShowPrivleges := opts[backupOptWithPrivileges]; shouldShowPrivleges {
+		baseHeaders = append(baseHeaders, sqlbase.ResultColumn{Name: "privileges", Typ: types.String})
+	}
 	return baseHeaders
 }
 
-func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas bool) backupShower {
+func backupShowerDefault(
+	ctx context.Context, p sql.PlanHookState, showSchemas bool, opts map[string]string,
+) backupShower {
 	return backupShower{
-		header: backupShowerHeaders(showSchemas),
+		header: backupShowerHeaders(showSchemas, opts),
 		fn: func(manifests []BackupManifest) []tree.Datums {
 			var rows []tree.Datums
 			for _, manifest := range manifests {
@@ -215,6 +223,9 @@ func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas b
 							}
 							row = append(row, tree.NewDString(schema))
 						}
+						if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
+							row = append(row, tree.NewDString(showPrivileges(descriptor)))
+						}
 						rows = append(rows, row)
 					}
 				}
@@ -222,6 +233,41 @@ func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas b
 			return rows
 		},
 	}
+}
+
+func showPrivileges(descriptor sqlbase.Descriptor) string {
+	var privStringBuilder strings.Builder
+	var privDesc *sqlbase.PrivilegeDescriptor
+	if db := descriptor.GetDatabase(); db != nil {
+		privDesc = db.GetPrivileges()
+	} else if table := descriptor.Table(hlc.Timestamp{}); table != nil {
+		privDesc = table.GetPrivileges()
+	}
+	if privDesc == nil {
+		return ""
+	}
+	for _, userPriv := range privDesc.Show() {
+		user := userPriv.User
+		privs := userPriv.Privileges
+		privStringBuilder.WriteString("GRANT ")
+		if len(privs) == 0 {
+			continue
+		}
+
+		for j, priv := range privs {
+			if j != 0 {
+				privStringBuilder.WriteString(", ")
+			}
+			privStringBuilder.WriteString(priv)
+		}
+		privStringBuilder.WriteString(" ON ")
+		privStringBuilder.WriteString(descriptor.GetName())
+		privStringBuilder.WriteString(" TO ")
+		privStringBuilder.WriteString(user)
+		privStringBuilder.WriteString("; ")
+	}
+
+	return privStringBuilder.String()
 }
 
 var backupShowerRanges = backupShower{
