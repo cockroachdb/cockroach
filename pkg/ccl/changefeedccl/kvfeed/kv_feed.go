@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -83,7 +83,7 @@ func Run(ctx context.Context, cfg Config) error {
 	var pff physicalFeedFactory
 	{
 		sender := cfg.DB.NonTransactionalSender()
-		distSender := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+		distSender := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 		pff = rangefeedFactory(distSender.RangeFeed)
 	}
 	bf := func() EventBuffer {

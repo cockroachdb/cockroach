@@ -15,7 +15,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -72,7 +72,7 @@ var _ storagebase.BulkAdder = &BufferingAdder{}
 func MakeBulkAdder(
 	ctx context.Context,
 	db SSTSender,
-	rangeCache *kv.RangeDescriptorCache,
+	rangeCache *kvcoord.RangeDescriptorCache,
 	settings *cluster.Settings,
 	timestamp hlc.Timestamp,
 	opts storagebase.BulkAdderOptions,

@@ -10,7 +10,7 @@
 
 // +build race
 
-package kv
+package kvcoord
 
 import (
 	"context"

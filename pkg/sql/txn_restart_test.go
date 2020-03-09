@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1164,7 +1164,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	}
 
 	const refreshAttempts = 3
-	clientTestingKnobs := &kv.ClientTestingKnobs{
+	clientTestingKnobs := &kvcoord.ClientTestingKnobs{
 		MaxTxnRefreshAttempts: refreshAttempts,
 	}
 

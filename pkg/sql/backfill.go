@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -751,7 +751,7 @@ func (sc *SchemaChanger) nRanges(
 	for _, span := range spans {
 		// For each span, iterate the spanResolver until it's exhausted, storing
 		// the found range ids in the map to de-duplicate them.
-		spanResolver.Seek(ctx, span, kv.Ascending)
+		spanResolver.Seek(ctx, span, kvcoord.Ascending)
 		for {
 			if !spanResolver.Valid() {
 				return 0, spanResolver.Error()

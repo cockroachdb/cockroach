@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -112,7 +112,7 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 // time series DB.
 func (tm *testModelRunner) Start() {
 	tm.LocalTestCluster.Start(tm.t, testutils.NewNodeTestBaseContext(),
-		kv.InitFactoryForLocalTestCluster)
+		kvcoord.InitFactoryForLocalTestCluster)
 	tm.DB = NewDB(tm.LocalTestCluster.DB, tm.Cfg.Settings)
 }
 

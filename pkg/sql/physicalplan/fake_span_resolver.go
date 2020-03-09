@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -71,7 +71,7 @@ func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *client.Txn) SpanResolv
 // Seek is part of the SpanResolverIterator interface. Each Seek call generates
 // a random distribution of the given span.
 func (fit *fakeSpanResolverIterator) Seek(
-	ctx context.Context, span roachpb.Span, scanDir kv.ScanDirection,
+	ctx context.Context, span roachpb.Span, scanDir kvcoord.ScanDirection,
 ) {
 	// Set aside the last range from the previous seek.
 	var prevRange fakeRange
@@ -138,7 +138,7 @@ func (fit *fakeSpanResolverIterator) Seek(
 	}
 	splits = append(splits, span.EndKey)
 
-	if scanDir == kv.Descending {
+	if scanDir == kvcoord.Descending {
 		// Reverse the order of the splits.
 		for i := 0; i < len(splits)/2; i++ {
 			j := len(splits) - i - 1
@@ -204,9 +204,9 @@ func (fit *fakeSpanResolverIterator) Desc() roachpb.RangeDescriptor {
 }
 
 // ReplicaInfo is part of the SpanResolverIterator interface.
-func (fit *fakeSpanResolverIterator) ReplicaInfo(_ context.Context) (kv.ReplicaInfo, error) {
+func (fit *fakeSpanResolverIterator) ReplicaInfo(_ context.Context) (kvcoord.ReplicaInfo, error) {
 	n := fit.ranges[0].replica
-	return kv.ReplicaInfo{
+	return kvcoord.ReplicaInfo{
 		ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: n.NodeID},
 		NodeDesc:          n,
 	}, nil

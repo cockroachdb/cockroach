@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -90,8 +90,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	// Make a db with a short heartbeat interval, so that the aborted txn finds
 	// out quickly.
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tsf := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			// Short heartbeat interval.
 			HeartbeatInterval: time.Millisecond,
@@ -99,7 +99,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		s.DistSenderI().(*kv.DistSender),
+		s.DistSenderI().(*kvcoord.DistSender),
 	)
 	shortDB := client.NewDB(ambient, tsf, s.Clock())
 
@@ -122,7 +122,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 			// Now wait until the heartbeat loop notices that the transaction is aborted.
 			testutils.SucceedsSoon(t, func() error {
-				if txn.Sender().(*kv.TxnCoordSender).IsTracking() {
+				if txn.Sender().(*kvcoord.TxnCoordSender).IsTracking() {
 					return fmt.Errorf("txn heartbeat loop running")
 				}
 				return nil

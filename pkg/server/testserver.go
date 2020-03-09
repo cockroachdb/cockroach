@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -645,8 +645,8 @@ func (ts *TestServer) DistSenderI() interface{} {
 
 // DistSender is like DistSenderI(), but returns the real type instead of
 // interface{}.
-func (ts *TestServer) DistSender() *kv.DistSender {
-	return ts.DistSenderI().(*kv.DistSender)
+func (ts *TestServer) DistSender() *kvcoord.DistSender {
+	return ts.DistSenderI().(*kvcoord.DistSender)
 }
 
 // SQLServer is part of TestServerInterface.

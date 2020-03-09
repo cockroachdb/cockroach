@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kv_test
+package kvcoord_test
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -86,8 +86,8 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 
 	// Make a db with a short heartbeat interval.
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tsf := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			// Short heartbeat interval.
 			HeartbeatInterval: time.Millisecond,
@@ -95,7 +95,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		s.DistSenderI().(*kv.DistSender),
+		s.DistSenderI().(*kvcoord.DistSender),
 	)
 	db := client.NewDB(ambient, tsf, s.Clock())
 	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
@@ -112,7 +112,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 
 	// Now wait until the heartbeat loop notices that the transaction is aborted.
 	testutils.SucceedsSoon(t, func() error {
-		if txn.Sender().(*kv.TxnCoordSender).IsTracking() {
+		if txn.Sender().(*kvcoord.TxnCoordSender).IsTracking() {
 			return fmt.Errorf("txn heartbeat loop running")
 		}
 		return nil
