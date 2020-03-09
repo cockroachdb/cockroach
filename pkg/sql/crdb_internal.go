@@ -433,7 +433,6 @@ func tsOrNull(micros int64) tree.Datum {
 
 // TODO(tbg): prefix with kv_.
 var crdbInternalJobsTable = virtualSchemaTable{
-	comment: `decoded job metadata from system.jobs (KV scan)`,
 	schema: `
 CREATE TABLE crdb_internal.jobs (
 	job_id             		INT,
@@ -453,11 +452,12 @@ CREATE TABLE crdb_internal.jobs (
 	error              		STRING,
 	coordinator_id     		INT
 )`,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	comment: `decoded job metadata from system.jobs (KV scan)`,
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
 		currentUser := p.SessionData().User
 		isAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
@@ -468,7 +468,7 @@ CREATE TABLE crdb_internal.jobs (
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			query)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// Attempt to account for the memory of the retrieved rows and the data
@@ -481,116 +481,121 @@ CREATE TABLE crdb_internal.jobs (
 		// and other virtual table queries but that's a bigger task.
 		ba := p.ExtendedEvalContext().Mon.MakeBoundAccount()
 		defer ba.Close(ctx)
+		var totalMem int64
 		for _, r := range rows {
-			var rowSize int64
 			for _, d := range r {
-				// NB: Add the datum size twice to count the fact that we already allocated
-				// it once and we're about to unmarshal it and keep that around.
-				rowSize += int64(d.Size()) * 2
-			}
-			if err := ba.Grow(ctx, rowSize); err != nil {
-				return err
+				totalMem += int64(d.Size())
 			}
 		}
+		if err := ba.Grow(ctx, totalMem); err != nil {
+			return nil, err
+		}
 
-		for _, r := range rows {
-			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
-
-			var jobType, description, statement, username, descriptorIDs, started, runningStatus,
-				finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
-				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
-
-			// Extract data from the payload.
-			payload, err := jobs.UnmarshalPayload(payloadBytes)
-
-			// We filter out masked rows before we allocate all the
-			// datums. Needless allocate when not necessary.
-			sameUser := payload != nil && payload.Username == currentUser
-			if canAccess := isAdmin || sameUser; !canAccess {
-				// This user is neither an admin nor the user who created the
-				// job. They cannot see this row.
-				continue
-			}
-
-			if err != nil {
-				errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
-			} else {
-				jobType = tree.NewDString(payload.Type().String())
-				description = tree.NewDString(payload.Description)
-				statement = tree.NewDString(payload.Statement)
-				username = tree.NewDString(payload.Username)
-				descriptorIDsArr := tree.NewDArray(types.Int)
-				for _, descID := range payload.DescriptorIDs {
-					if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
-						return err
-					}
+		// We'll reuse this container on each loop.
+		container := make(tree.Datums, 0, 16)
+		return func() (datums tree.Datums, e error) {
+			// Loop while we need to skip a row.
+			for {
+				if len(rows) == 0 {
+					return nil, nil
 				}
-				descriptorIDs = descriptorIDsArr
-				started = tsOrNull(payload.StartedMicros)
-				finished = tsOrNull(payload.FinishedMicros)
-				if payload.Lease != nil {
-					leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
-				}
-				errorStr = tree.NewDString(payload.Error)
-			}
+				r := rows[0]
+				rows = rows[1:]
+				id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
-			// Extract data from the progress field.
-			if progressBytes != tree.DNull {
-				progress, err := jobs.UnmarshalProgress(progressBytes)
+				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
+					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
+					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
+
+				// Extract data from the payload.
+				payload, err := jobs.UnmarshalPayload(payloadBytes)
+
+				// We filter out masked rows before we allocate all the
+				// datums. Needless allocate when not necessary.
+				sameUser := payload != nil && payload.Username == currentUser
+				if canAccess := isAdmin || sameUser; !canAccess {
+					// This user is neither an admin nor the user who created the
+					// job. They cannot see this row.
+					continue
+				}
+
 				if err != nil {
-					baseErr := ""
-					if s, ok := errorStr.(*tree.DString); ok {
-						baseErr = string(*s)
-						if baseErr != "" {
-							baseErr += "\n"
+					errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
+				} else {
+					jobType = tree.NewDString(payload.Type().String())
+					description = tree.NewDString(payload.Description)
+					statement = tree.NewDString(payload.Statement)
+					username = tree.NewDString(payload.Username)
+					descriptorIDsArr := tree.NewDArray(types.Int)
+					for _, descID := range payload.DescriptorIDs {
+						if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
+							return nil, err
 						}
 					}
-					errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
-				} else {
-					// Progress contains either fractionCompleted for traditional jobs,
-					// or the highWaterTimestamp for change feeds.
-					if highwater := progress.GetHighWater(); highwater != nil {
-						highWaterTimestamp = tree.TimestampToDecimal(*highwater)
-					} else {
-						fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
+					descriptorIDs = descriptorIDsArr
+					started = tsOrNull(payload.StartedMicros)
+					finished = tsOrNull(payload.FinishedMicros)
+					if payload.Lease != nil {
+						leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
 					}
-					modified = tsOrNull(progress.ModifiedMicros)
+					errorStr = tree.NewDString(payload.Error)
+				}
 
-					if len(progress.RunningStatus) > 0 {
-						if s, ok := status.(*tree.DString); ok {
-							if jobs.Status(string(*s)) == jobs.StatusRunning {
-								runningStatus = tree.NewDString(progress.RunningStatus)
+				// Extract data from the progress field.
+				if progressBytes != tree.DNull {
+					progress, err := jobs.UnmarshalProgress(progressBytes)
+					if err != nil {
+						baseErr := ""
+						if s, ok := errorStr.(*tree.DString); ok {
+							baseErr = string(*s)
+							if baseErr != "" {
+								baseErr += "\n"
+							}
+						}
+						errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
+					} else {
+						// Progress contains either fractionCompleted for traditional jobs,
+						// or the highWaterTimestamp for change feeds.
+						if highwater := progress.GetHighWater(); highwater != nil {
+							highWaterTimestamp = tree.TimestampToDecimal(*highwater)
+						} else {
+							fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
+						}
+						modified = tsOrNull(progress.ModifiedMicros)
+
+						if len(progress.RunningStatus) > 0 {
+							if s, ok := status.(*tree.DString); ok {
+								if jobs.Status(string(*s)) == jobs.StatusRunning {
+									runningStatus = tree.NewDString(progress.RunningStatus)
+								}
 							}
 						}
 					}
 				}
-			}
 
-			// Report the data.
-			if err := addRow(
-				id,
-				jobType,
-				description,
-				statement,
-				username,
-				descriptorIDs,
-				status,
-				runningStatus,
-				created,
-				started,
-				finished,
-				modified,
-				fractionCompleted,
-				highWaterTimestamp,
-				errorStr,
-				leaseNode,
-			); err != nil {
-				return err
+				container = container[:0]
+				container = append(container,
+					id,
+					jobType,
+					description,
+					statement,
+					username,
+					descriptorIDs,
+					status,
+					runningStatus,
+					created,
+					started,
+					finished,
+					modified,
+					fractionCompleted,
+					highWaterTimestamp,
+					errorStr,
+					leaseNode,
+				)
+				return container, nil
 			}
-		}
-
-		return nil
+		}, nil
 	},
 }
 
