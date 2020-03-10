@@ -12,12 +12,17 @@ import { Tooltip } from "antd";
 import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router-dom";
+
 import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
 import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
+import { Anchor } from "src/components";
 import "./statements.styl";
+import { DiagnosticStatusBadge } from "oss/src/views/statements/diagnostics/diagnosticStatusBadge";
+import { cockroach } from "src/js/protos";
+import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -28,6 +33,7 @@ export interface AggregateStatistics {
   stats: StatementStatistics;
   drawer?: boolean;
   firstCellBordered?: boolean;
+  diagnosticsReport?: IStatementDiagnosticsReport;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
@@ -61,8 +67,12 @@ export function shortStatement(summary: StatementSummary, original: string) {
     default: return original;
   }
 }
-export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string, search?: string)
-    : ColumnDescriptor<AggregateStatistics>[] {
+
+export function makeStatementsColumns(
+  statements: AggregateStatistics[],
+  selectedApp: string,
+  search?: string,
+  activateDiagnostics?: (statement: string) => void): ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
@@ -85,7 +95,31 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
     },
   ];
 
-  return original.concat(makeCommonColumns(statements));
+  const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
+      title: "Diagnostics",
+      cell: (stmt) => {
+        if (stmt.diagnosticsReport) {
+          return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"} />;
+        }
+        return (
+          <Anchor
+            onClick={() => activateDiagnostics(stmt.label)}
+          >
+            Activate
+          </Anchor>
+        );
+      },
+      sort: (stmt) => {
+        if (stmt.diagnosticsReport) {
+          return stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY";
+        }
+        return null;
+      },
+  };
+
+  return original
+    .concat(makeCommonColumns(statements))
+    .concat([diagnosticsColumn]);
 }
 
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
