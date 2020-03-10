@@ -179,6 +179,13 @@ export default function Debug() {
           <DebugTableLink name="Raft Messages" url="#/raft/messages/all" />
           <DebugTableLink name="Raft for all ranges" url="#/raft/ranges" />
         </DebugTableRow>
+        <DebugTableRow title="Statements">
+          <DebugTableLink
+            name="Statement diagnostics history"
+            url="#/reports/statements/diagnosticshistory"
+            note="#/reports/statements/diagnosticshistory"
+          />
+        </DebugTableRow>
       </DebugTable>
       <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
         <DebugTableRow title="Tracing">

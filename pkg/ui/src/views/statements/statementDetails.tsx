@@ -16,7 +16,7 @@ import { connect } from "react-redux";
 import { Link, RouteComponentProps, match as Match, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { refreshStatements } from "src/redux/apiReducers";
+import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -42,7 +42,11 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import { approximify, latencyBreakdown, longToInt, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
+import DiagnosticsView from "./diagnostics";
 import classNames from "classnames";
+import {
+  selectDiagnosticsReportsCountByStatementFingerprint,
+} from "src/redux/statements/statementsSelectors";
 import { Button, BackIcon } from "oss/src/components/button";
 
 const { TabPane } = Tabs;
@@ -81,7 +85,9 @@ interface StatementDetailsOwnProps {
   statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
   refreshStatements: typeof refreshStatements;
+  refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
   nodesSummary: NodesSummary;
+  diagnosticsCount: number;
 }
 
 type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
@@ -161,10 +167,12 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
 
   componentWillMount() {
     this.props.refreshStatements();
+    this.props.refreshStatementDiagnosticsRequests();
   }
 
   componentWillReceiveProps() {
     this.props.refreshStatements();
+    this.props.refreshStatementDiagnosticsRequests();
   }
 
   prevPage = () => this.props.history.goBack();
@@ -199,6 +207,8 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
   }
 
   renderContent = () => {
+    const { diagnosticsCount } = this.props;
+
     if (!this.props.statement) {
       return null;
     }
@@ -314,7 +324,10 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             </Col>
           </Row>
         </TabPane>
-        <TabPane tab="Logical Plan" key="2">
+        <TabPane tab={`Diagnostics ${diagnosticsCount > 0 ? `(${diagnosticsCount})` : ""}`} key="2">
+          <DiagnosticsView statementFingerprint={statement} />
+        </TabPane>
+        <TabPane tab="Logical Plan" key="3">
           <SummaryCard>
             <PlanView
               title="Logical Plan"
@@ -322,7 +335,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             />
           </SummaryCard>
         </TabPane>
-        <TabPane tab="Execution Stats" key="3">
+        <TabPane tab="Execution Stats" key="4">
           <SummaryCard>
             <h2 className="base-heading summary--card__title">
               Execution Latency By Phase
@@ -493,14 +506,19 @@ export const selectStatement = createSelector(
   },
 );
 
-const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => ({
-  statement: selectStatement(state, props),
-  statementsError: state.cachedData.statements.lastError,
-  nodeNames: nodeDisplayNameByIDSelector(state),
-});
+const mapStateToProps = (state: AdminUIState, props: StatementDetailsProps) => {
+  const statement = selectStatement(state, props);
+  return {
+    statement,
+    statementsError: state.cachedData.statements.lastError,
+    nodeNames: nodeDisplayNameByIDSelector(state),
+    diagnosticsCount: selectDiagnosticsReportsCountByStatementFingerprint(state, statement?.statement),
+  };
+};
 
 const mapDispatchToProps = {
   refreshStatements,
+  refreshStatementDiagnosticsRequests,
 };
 
 // tslint:disable-next-line:variable-name
