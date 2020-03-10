@@ -57,10 +57,6 @@ interface StatementsPageProps {
   refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
   dismissAlertMessage: () => void;
 }
-type PaginationSettings = {
-  pageSize: number;
-  current: number;
-};
 
 interface StatementsPageState {
   sortSetting: SortSetting;
