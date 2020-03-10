@@ -295,6 +295,9 @@ func readMysqlCreateTable(
 	var names []string
 	for {
 		stmt, err := mysql.ParseNextStrictDDL(tokens)
+		if err == nil {
+			err = tokens.LastError
+		}
 		if err == io.EOF {
 			break
 		}
