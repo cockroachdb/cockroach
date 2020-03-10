@@ -205,6 +205,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"druidia", "12345", "", "", nil},
 
 		{"richardc", "12345", "NOLOGIN", "", nil},
+		{"before_epoch", "12345", "", "VALID UNTIL '1969-01-01'", nil},
 		{"epoch", "12345", "", "VALID UNTIL '1970-01-01'", nil},
 		{"cockroach", "12345", "", "VALID UNTIL '2100-01-01'", nil},
 		{"cthon98", "12345", "", "VALID UNTIL NULL", nil},
@@ -245,6 +246,7 @@ func TestVerifyPassword(t *testing.T) {
 
 		{"richardc", "12345", false,
 			"richardc does not have login privilege"},
+		{"before_epoch", "12345", false, ""},
 		{"epoch", "12345", false, ""},
 		{"cockroach", "12345", true, ""},
 		{"toolate", "12345", false, ""},
