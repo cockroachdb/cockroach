@@ -779,6 +779,43 @@ REVOKE admin FROM public
 
 # Test "WITH CREATEROLE" option
 
+statement ok
+CREATE USER testuser
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role        member     isAdmin
+admin       root       true
+
+
+user testuser
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE rolef
+
+user root
+
+statement ok
+ALTER ROLE testuser CREATEROLE
+
+user testuser
+
+statement ok
+CREATE ROLE rolef
+
+statement ok
+ALTER ROLE rolef LOGIN
+
+statement ok
+DROP ROLE rolef
+
+# Testing invalid CREATEROLE combinations
+user root
+
+statement ok
+ALTER ROLE testuser NOCREATEROLE
+
 statement error pq: conflicting role options
 CREATE ROLE rolewithcreate WITH NOCREATEROLE CREATEROLE
 
@@ -820,9 +857,6 @@ CREATE ROLE IF NOT EXISTS anotherrolewithcreate2 CREATEROLE
 
 statement ok
 CREATE ROLE IF NOT EXISTS rolewithoutcreate2 WITH NOCREATEROLE
-
-statement ok
-CREATE USER testuser
 
 query TTB colnames
 SELECT * FROM system.role_members
@@ -1024,3 +1058,4 @@ CREATE ROLE thisshouldntwork LOGIN NOLOGIN
 
 statement error pq: redundant role options
 CREATE ROLE thisshouldntwork LOGIN LOGIN
+
